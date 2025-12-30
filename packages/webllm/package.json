@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "WebLLM provider for @localmode - LLM inference with quantized models",
   "license": "MIT",
+  "author": "LocalMode",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -32,7 +36,7 @@
     "clean": "rm -rf dist node_modules"
   },
   "peerDependencies": {
-    "@localmode/core": "*",
+    "@localmode/core": "^1.0.0",
     "@mlc-ai/web-llm": "^0.2.0"
   },
   "devDependencies": {

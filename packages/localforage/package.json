@@ -1,6 +1,7 @@
 {
   "name": "@localmode/localforage",
-  "version": "1.0.0",
+  "version": "0.0.0-dev",
+  "private": true,
   "description": "Cross-browser storage adapter with automatic fallback using localforage",
   "license": "MIT",
   "author": "LocalMode",

@@ -4,6 +4,9 @@
   "description": "Local-first AI utilities for the browser. Zero dependencies. Privacy-first.",
   "license": "MIT",
   "author": "LocalMode",
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/LocalMode-AI/LocalMode.git",

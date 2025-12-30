@@ -1,6 +1,7 @@
 {
   "name": "@localmode/dexie",
-  "version": "1.0.0",
+  "version": "0.0.0-dev",
+  "private": true,
   "description": "Dexie.js storage adapter for @localmode - enhanced IndexedDB with versioning",
   "license": "MIT",
   "author": "LocalMode",
