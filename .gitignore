@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Misc
+*.pem
+.turbo
+
+.cursor/
+.cursor
+
+# ═════════════════════════════════════════════════════════════════════
+# UNPUBLISHED / WORK IN PROGRESS
+# Append _WIP or _IGNORE to any directory or file to exclude from git
+# ═════════════════════════════════════════════════════════════════════
+*_WIP/
+*_WIP
+*_IGNORE/
+*_IGNORE
