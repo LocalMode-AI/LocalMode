@@ -94,26 +94,17 @@ importers:
         specifier: ^3.9.0
         version: 3.10.0(react-hook-form@7.69.0(react@19.2.3))
       '@localmode/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@localmode/dexie':
-        specifier: workspace:*
-        version: link:../../packages/dexie
-      '@localmode/idb':
-        specifier: workspace:*
-        version: link:../../packages/idb
-      '@localmode/localforage':
-        specifier: workspace:*
-        version: link:../../packages/localforage
+        specifier: ^1.0.0
+        version: 1.0.0
       '@localmode/pdfjs':
-        specifier: workspace:*
-        version: link:../../packages/pdfjs
+        specifier: ^1.0.0
+        version: 1.0.0(@localmode/core@1.0.0)(pdfjs-dist@4.10.38)
       '@localmode/transformers':
-        specifier: workspace:*
-        version: link:../../packages/transformers
+        specifier: ^1.0.0
+        version: 1.0.0(@huggingface/transformers@3.8.1)(@localmode/core@1.0.0)
       '@localmode/webllm':
-        specifier: workspace:*
-        version: link:../../packages/webllm
+        specifier: ^1.0.0
+        version: 1.0.0(@localmode/core@1.0.0)(@mlc-ai/web-llm@0.2.80)
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
@@ -1025,6 +1016,27 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@localmode/core@1.0.0':
+    resolution: {integrity: sha512-yooc8Z5paaN5NAjG2XgY0vJBAQAwBWg/jdCU+QuLIeK9hvvTuckcDSydLQgrCAJkWcstdi5ZdtqsLNXhqtq/sg==}
+
+  '@localmode/pdfjs@1.0.0':
+    resolution: {integrity: sha512-o1GzpMr/HA2YFIhjsrd+ok45kh2A/bzhSO/e4AHqiRjC75Q+KvhhSOCfbAQlqsJ1fpQZOtYH3Dl9B9tBOWiBUQ==}
+    peerDependencies:
+      '@localmode/core': ^1.0.0
+      pdfjs-dist: ^4.0.0
+
+  '@localmode/transformers@1.0.0':
+    resolution: {integrity: sha512-Da/SSSspyonrOXaxrCYecDhVgEV3JdRLtHPYCvPXW7nzkpxHVvY36x/6dC+L26uPv/F2EiUqk1cT/dRRXFXALQ==}
+    peerDependencies:
+      '@huggingface/transformers': ^3.0.0
+      '@localmode/core': ^1.0.0
+
+  '@localmode/webllm@1.0.0':
+    resolution: {integrity: sha512-n5D1ggqFxAUOKcUj7t08KITw4tJUgeePyVaxTgw1lTT1Q195qNMuHqx+o6CkuQ8tkAEQicwms3oEw2GkMFgqwg==}
+    peerDependencies:
+      '@localmode/core': ^1.0.0
+      '@mlc-ai/web-llm': ^0.2.0
 
   '@manypkg/find-root@1.1.0':
     resolution: {integrity: sha512-mki5uBvhHzO8kYYix/WRy2WX8S3B5wdVSc9D6KcU5lQNglP2yt58/VfLuAK49glRXChosY8ap2oJ1qgma3GUVA==}
@@ -4485,6 +4497,23 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@localmode/core@1.0.0': {}
+
+  '@localmode/pdfjs@1.0.0(@localmode/core@1.0.0)(pdfjs-dist@4.10.38)':
+    dependencies:
+      '@localmode/core': 1.0.0
+      pdfjs-dist: 4.10.38
+
+  '@localmode/transformers@1.0.0(@huggingface/transformers@3.8.1)(@localmode/core@1.0.0)':
+    dependencies:
+      '@huggingface/transformers': 3.8.1
+      '@localmode/core': 1.0.0
+
+  '@localmode/webllm@1.0.0(@localmode/core@1.0.0)(@mlc-ai/web-llm@0.2.80)':
+    dependencies:
+      '@localmode/core': 1.0.0
+      '@mlc-ai/web-llm': 0.2.80
 
   '@manypkg/find-root@1.1.0':
     dependencies:

@@ -10,13 +10,10 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@localmode/core": "workspace:*",
-    "@localmode/transformers": "workspace:*",
-    "@localmode/webllm": "workspace:*",
-    "@localmode/pdfjs": "workspace:*",
-    "@localmode/dexie": "workspace:*",
-    "@localmode/idb": "workspace:*",
-    "@localmode/localforage": "workspace:*",
+    "@localmode/core": "^1.0.0",
+    "@localmode/transformers": "^1.0.0",
+    "@localmode/webllm": "^1.0.0",
+    "@localmode/pdfjs": "^1.0.0",
     "next": "16.1.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
