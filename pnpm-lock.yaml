@@ -30,7 +30,7 @@ importers:
         specifier: ^1.1.0
         version: 1.6.1(@types/node@20.19.27)(jsdom@27.4.0)(lightningcss@1.30.2)
 
-  apps/local-chat_WIP:
+  apps/_local-chat_WIP:
     dependencies:
       '@localmode/core':
         specifier: workspace:*
@@ -77,7 +77,7 @@ importers:
         version: 9.39.2(jiti@2.6.1)
       eslint-config-next:
         specifier: 16.1.1
-        version: 16.1.1(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
+        version: 16.1.1(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
       postcss:
         specifier: ^8
         version: 8.5.6
@@ -88,7 +88,7 @@ importers:
         specifier: ^5
         version: 5.9.3
 
-  apps/nextjs:
+  apps/showcase-nextjs:
     dependencies:
       '@hookform/resolvers':
         specifier: ^3.9.0
@@ -168,7 +168,7 @@ importers:
         version: 9.39.2(jiti@2.6.1)
       eslint-config-next:
         specifier: 16.1.1
-        version: 16.1.1(@typescript-eslint/parser@8.51.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
+        version: 16.1.1(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
       prettier:
         specifier: ^3.3.0
         version: 3.7.4
@@ -6758,7 +6758,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.0
-      '@types/node': 20.19.27
+      '@types/node': 25.0.3
       long: 5.3.2
 
   punycode@2.3.1: {}
