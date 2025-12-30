@@ -1,0 +1,61 @@
+{
+  "name": "@localmode/pdfjs",
+  "version": "1.0.0",
+  "description": "PDF text extraction for @localmode using PDF.js",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist node_modules"
+  },
+  "peerDependencies": {
+    "@localmode/core": "*",
+    "pdfjs-dist": "^4.0.0"
+  },
+  "devDependencies": {
+    "@localmode/core": "workspace:*",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "keywords": [
+    "pdf",
+    "document",
+    "text-extraction",
+    "local-first",
+    "privacy",
+    "rag",
+    "offline"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LocalMode-AI/LocalMode.git",
+    "directory": "packages/pdfjs"
+  },
+  "homepage": "https://github.com/LocalMode-AI/LocalMode#readme",
+  "bugs": {
+    "url": "https://github.com/LocalMode-AI/LocalMode/issues"
+  }
+}

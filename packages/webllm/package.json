@@ -1,0 +1,62 @@
+{
+  "name": "@localmode/webllm",
+  "version": "1.0.0",
+  "description": "WebLLM provider for @localmode - LLM inference with quantized models",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist node_modules"
+  },
+  "peerDependencies": {
+    "@localmode/core": "*",
+    "@mlc-ai/web-llm": "^0.2.0"
+  },
+  "devDependencies": {
+    "@localmode/core": "workspace:*",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "keywords": [
+    "llm",
+    "webllm",
+    "local-first",
+    "privacy",
+    "ai",
+    "language-model",
+    "text-generation",
+    "offline"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LocalMode-AI/LocalMode.git",
+    "directory": "packages/webllm"
+  },
+  "homepage": "https://github.com/LocalMode-AI/LocalMode#readme",
+  "bugs": {
+    "url": "https://github.com/LocalMode-AI/LocalMode/issues"
+  }
+}

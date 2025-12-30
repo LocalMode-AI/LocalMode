@@ -1,0 +1,38 @@
+{
+  "name": "LocalMode",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local-first AI toolkit for the browser",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LocalMode-AI/LocalMode.git"
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm -r dev",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "pnpm run build && changeset publish",
+    "size": "pnpm run size --workspace=@localmode/core",
+    "clean": "pnpm -r clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.1",
+    "@types/node": "^20.10.0",
+    "eslint": "^8.55.0",
+    "jsdom": "^27.3.0",
+    "prettier": "^3.1.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

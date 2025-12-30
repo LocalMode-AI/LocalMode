@@ -1,0 +1,233 @@
+@import 'tailwindcss';
+@plugin "daisyui";
+
+@theme {
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), monospace;
+
+  /* Reference colors */
+  --color-poster-primary: #3b82f6;
+  --color-poster-primary-dark: #1d4ed8;
+  --color-poster-secondary: #e2e8f0;
+  --color-poster-accent-purple: #8b5cf6;
+  --color-poster-accent-pink: #ec4899;
+  --color-poster-accent-teal: #14b8a6;
+  --color-poster-accent-orange: #f97316;
+  --color-poster-surface: #27272a;
+  --color-poster-surface-lighter: #3f3f46;
+  --color-poster-bg: #18181b;
+  --color-poster-text-main: #fafafa;
+  --color-poster-text-sub: #d4d4d8;
+  --color-poster-border: #52525b;
+
+  /* Blue theme alternative colors */
+  /* --color-poster-surface: #1e293b;
+  --color-poster-surface-lighter: #334155;
+  --color-poster-bg: #0f172a;
+  --color-poster-text-main: #f8fafc;
+  --color-poster-text-sub: #cbd5e1;
+  --color-poster-border: #475569; */
+}
+
+:root {
+  /* Default to dark theme colors from reference */
+  --background: #18181b;
+  --foreground: #fafafa;
+
+  /* Blue theme alternative colors */
+  /* --background: #0f172a;
+  --foreground: #f8fafc; */
+
+  /* Map DaisyUI semantic colors to Poster Theme */
+  --b1: 240 5% 16%; /* poster-surface (#27272a) */
+  --b2: 240 6% 10%; /* poster-bg (#18181b) */
+  --b3: 240 5% 26%; /* poster-surface-lighter (#3f3f46) */
+  --bc: 0 0% 98%; /* poster-text-main (#fafafa) */
+
+  --p: 217 91% 60%; /* poster-primary (#3b82f6) */
+  --pc: 0 0% 100%; /* white text on primary */
+
+  --s: 240 5% 90%; /* poster-secondary (#e4e4e7) */
+  --sc: 240 6% 10%; /* dark text on secondary */
+
+  --a: 262 83% 58%; /* poster-accent-purple (#8b5cf6) used as accent */
+  --ac: 0 0% 100%; /* white text on accent */
+
+  --n: 240 5% 26%; /* neutral -> poster-surface-lighter */
+  --nc: 0 0% 98%; /* text on neutral */
+
+  /* Blue theme alternative colors */
+  /* --b1: 222 30% 18%;  */
+  /* poster-surface (#1e293b) */
+  /* --b2: 222 47% 11%;  */
+  /* poster-bg (#0f172a) */
+  /* --b3: 215 25% 27%;  */
+  /* poster-surface-lighter (#334155) */
+  /* --bc: 210 40% 98%;  */
+  /* poster-text-main (#f8fafc) */
+
+  /* --p: 217 91% 60%;  */
+  /* poster-primary (#3b82f6) */
+  /* --pc: 0 0% 100%;  */
+  /* white text on primary */
+
+  /* --s: 210 40% 96%;  */
+  /* poster-secondary (#e2e8f0) */
+  /* --sc: 222 47% 11%;  */
+  /* dark text on secondary */
+
+  /* --a: 262 83% 58%;  */
+  /* poster-accent-purple (#8b5cf6) used as accent */
+  /* --ac: 0 0% 100%;  */
+  /* white text on accent */
+
+  /* --n: 215 25% 27%;  */
+  /* neutral -> poster-surface-lighter */
+  /* --nc: 210 40% 98%;  */
+  /* text on neutral */
+
+  /* Additional Accents mapped to utility classes if needed, but Daisy UI focuses on p, s, a */
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+.bg-grid {
+  /* Base grid pattern */
+  background-image:
+    /* Radial gradient for depth/spotlight effect from top center */
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(59, 130, 246, 0.15) 0%, transparent 50%),
+    /* Secondary radial for ambient glow */
+    radial-gradient(ellipse 60% 40% at 50% 100%, rgba(139, 92, 246, 0.08) 0%, transparent 40%),
+    /* Primary grid lines - slightly brighter */
+    linear-gradient(rgba(59, 130, 246, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59, 130, 246, 0.08) 1px, transparent 1px),
+    /* Secondary larger grid for depth */
+    linear-gradient(rgba(139, 92, 246, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139, 92, 246, 0.04) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    100% 100%,
+    32px 32px,
+    32px 32px,
+    128px 128px,
+    128px 128px;
+  background-position:
+    0 0,
+    0 0,
+    -1px -1px,
+    -1px -1px,
+    -1px -1px,
+    -1px -1px;
+  /* Perspective transform for 3D depth */
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.8) 0%,
+    rgba(0, 0, 0, 0.6) 30%,
+    rgba(0, 0, 0, 0.3) 70%,
+    rgba(0, 0, 0, 0.1) 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.8) 0%,
+    rgba(0, 0, 0, 0.6) 30%,
+    rgba(0, 0, 0, 0.3) 70%,
+    rgba(0, 0, 0, 0.1) 100%
+  );
+}
+
+/* Animated gradient orbs for extra depth */
+.bg-grid::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle 600px at 20% 20%, rgba(59, 130, 246, 0.06) 0%, transparent 50%),
+    radial-gradient(circle 400px at 80% 60%, rgba(139, 92, 246, 0.05) 0%, transparent 40%),
+    radial-gradient(circle 300px at 40% 80%, rgba(20, 184, 166, 0.04) 0%, transparent 35%);
+  animation: gradientShift 20s ease-in-out infinite;
+}
+
+@keyframes gradientShift {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05) translateY(-10px);
+  }
+}
+
+/* Custom scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Animation utilities */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translateY(-15px) scale(1.2);
+    opacity: 1;
+  }
+}
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.5;
+    filter: blur(4px);
+  }
+  50% {
+    opacity: 1;
+    filter: blur(6px);
+  }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}

@@ -1,0 +1,64 @@
+{
+  "name": "@localmode/dexie",
+  "version": "1.0.0",
+  "description": "Dexie.js storage adapter for @localmode - enhanced IndexedDB with versioning",
+  "license": "MIT",
+  "author": "LocalMode",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LocalMode-AI/LocalMode.git",
+    "directory": "packages/dexie"
+  },
+  "homepage": "https://github.com/LocalMode-AI/LocalMode#readme",
+  "bugs": {
+    "url": "https://github.com/LocalMode-AI/LocalMode/issues"
+  },
+  "keywords": [
+    "dexie",
+    "indexeddb",
+    "storage",
+    "local-first",
+    "vector-database",
+    "offline"
+  ],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "peerDependencies": {
+    "@localmode/core": "^1.0.0",
+    "dexie": "^4.0.0"
+  },
+  "devDependencies": {
+    "@localmode/core": "workspace:*",
+    "dexie": "^4.2.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  }
+}

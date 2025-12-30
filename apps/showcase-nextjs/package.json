@@ -1,0 +1,45 @@
+{
+  "name": "@localmode/showcase-nextjs",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@localmode/core": "workspace:*",
+    "@localmode/transformers": "workspace:*",
+    "@localmode/webllm": "workspace:*",
+    "@localmode/pdfjs": "workspace:*",
+    "@localmode/dexie": "workspace:*",
+    "@localmode/idb": "workspace:*",
+    "@localmode/localforage": "workspace:*",
+    "next": "16.1.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "daisyui": "^5.0.0",
+    "tailwindcss": "^4.0.0",
+    "zustand": "^5.0.9",
+    "zod": "^4.2.1",
+    "lucide-react": "^0.562.0",
+    "react-hook-form": "^7.53.0",
+    "@hookform/resolvers": "^3.9.0",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.5.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "babel-plugin-react-compiler": "1.0.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.1",
+    "typescript": "^5",
+    "prettier": "^3.3.0",
+    "prettier-plugin-tailwindcss": "^0.6.0"
+  }
+}

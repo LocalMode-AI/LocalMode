@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#1d4ed8"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded rectangle background -->
+  <rect x="16" y="16" width="480" height="480" rx="96" ry="96" fill="url(#bgGradient)"/>
+  <!-- Border -->
+  <rect x="16" y="16" width="480" height="480" rx="96" ry="96" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="8"/>
+  <!-- CloudOff icon (scaled and centered) -->
+  <g transform="translate(128, 128) scale(10.67)" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="m2 2 20 20"/>
+    <path d="M5.782 5.782A7 7 0 0 0 9 19h8.5a4.5 4.5 0 0 0 1.307-.193"/>
+    <path d="M21.532 16.5A4.5 4.5 0 0 0 17.5 10h-1.79A7.008 7.008 0 0 0 10 5.07"/>
+  </g>
+</svg>
