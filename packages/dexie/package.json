@@ -56,7 +56,7 @@
     "dexie": "^4.2.1"
   },
   "peerDependencies": {
-    "@localmode/core": "^1.0.0"
+    "@localmode/core": "^1.0.1"
   },
   "devDependencies": {
     "@localmode/core": "workspace:*",
