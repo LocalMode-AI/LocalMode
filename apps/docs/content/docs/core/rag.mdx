@@ -1,0 +1,499 @@
+---
+title: RAG
+description: Build retrieval-augmented generation pipelines with chunking, ingestion, and hybrid search.
+icon: Layers
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { Steps, Step } from 'fumadocs-ui/components/steps';
+import { Accordions, Accordion } from 'fumadocs-ui/components/accordion';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+
+RAG (Retrieval-Augmented Generation) combines vector search with language models to answer questions from your documents. LocalMode provides all the building blocks: chunking, ingestion, semantic search, reranking, and hybrid search.
+
+## RAG Pipeline Overview
+
+<Steps>
+
+<Step>
+### Chunk Documents
+
+Split documents into smaller, semantically meaningful pieces.
+
+```ts
+import { chunk } from '@localmode/core';
+
+const chunks = chunk(documentText, {
+  strategy: 'recursive',
+  size: 512,
+  overlap: 50,
+});
+```
+
+</Step>
+
+<Step>
+### Generate Embeddings & Store
+
+Create embeddings and store in a vector database.
+
+```ts
+import { ingest, createVectorDB } from '@localmode/core';
+
+const db = await createVectorDB({ name: 'docs', dimensions: 384 });
+await ingest({ db, model: embeddingModel, documents: chunks });
+```
+
+</Step>
+
+<Step>
+### Search & Retrieve
+
+Find relevant chunks using semantic search.
+
+```ts
+import { semanticSearch } from '@localmode/core';
+
+const results = await semanticSearch({
+  db,
+  model: embeddingModel,
+  query: userQuestion,
+  k: 10,
+});
+```
+
+</Step>
+
+<Step>
+### Rerank for Precision
+
+Optionally rerank results for better accuracy.
+
+```ts
+import { rerank } from '@localmode/core';
+
+const reranked = await rerank({
+  model: rerankerModel,
+  query: userQuestion,
+  documents: results.map((r) => r.metadata.text),
+  topK: 5,
+});
+```
+
+</Step>
+
+<Step>
+### Generate Answer
+
+Use an LLM to generate an answer from the context.
+
+```ts
+import { streamText } from '@localmode/core';
+
+const stream = await streamText({
+  model: llm,
+  prompt: `Context:\n${context}\n\nQuestion: ${userQuestion}`,
+});
+```
+
+</Step>
+
+</Steps>
+
+## Chunking
+
+Split documents into smaller pieces for better retrieval:
+
+<Accordions>
+
+<Accordion title="Recursive Chunking (General Text)">
+
+Best for general text documents. Tries separators in order: paragraphs → lines → sentences → words.
+
+```ts {3-7}
+import { chunk } from '@localmode/core';
+
+const chunks = chunk(documentText, {
+  strategy: 'recursive',
+  size: 512, // Target chunk size in characters
+  overlap: 50, // Overlap between chunks
+});
+
+chunks.forEach((c, i) => {
+  console.log(`Chunk ${i}: ${c.text.substring(0, 50)}...`);
+  console.log(`  Start: ${c.startIndex}, End: ${c.endIndex}`);
+});
+```
+
+**Custom Separators:**
+
+```ts
+const chunks = chunk(text, {
+  strategy: 'recursive',
+  size: 512,
+  separators: ['\n\n', '\n', '. ', ' '], // Try these in order
+});
+```
+
+</Accordion>
+
+<Accordion title="Markdown Chunking">
+
+Respects markdown structure—keeps headers with their content.
+
+```ts
+const chunks = chunk(markdownText, {
+  strategy: 'markdown',
+  size: 512,
+  overlap: 50,
+});
+```
+
+</Accordion>
+
+<Accordion title="Code Chunking">
+
+Respects code structure—keeps functions and classes intact.
+
+```ts
+const chunks = chunk(sourceCode, {
+  strategy: 'code',
+  size: 512,
+  overlap: 50,
+  language: 'typescript',
+});
+```
+
+Supported languages: `typescript`, `javascript`, `python`, `java`, `go`, `rust`, and more.
+
+</Accordion>
+
+</Accordions>
+
+### ChunkOptions
+
+<TypeTable
+  type={{
+    strategy: {
+      description: 'Chunking strategy to use',
+      type: "'recursive' | 'markdown' | 'code'",
+      required: true,
+    },
+    size: {
+      description: 'Target chunk size in characters',
+      type: 'number',
+      required: true,
+    },
+    overlap: {
+      description: 'Overlap between chunks',
+      type: 'number',
+      default: '0',
+    },
+    language: {
+      description: 'Programming language (for code strategy)',
+      type: 'string',
+    },
+    separators: {
+      description: 'Custom separators (for recursive strategy)',
+      type: 'string[]',
+    },
+  }}
+/>
+
+## Ingestion
+
+Ingest documents into a vector database:
+
+```typescript
+import { createVectorDB, ingest } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const db = await createVectorDB({ name: 'docs', dimensions: 384 });
+
+await ingest({
+  db,
+  model,
+  documents: [
+    { text: 'First document...', metadata: { source: 'doc1.txt' } },
+    { text: 'Second document...', metadata: { source: 'doc2.txt' } },
+  ],
+});
+```
+
+### With Automatic Chunking
+
+```typescript
+await ingest({
+  db,
+  model,
+  documents: [{ text: longDocument, metadata: { source: 'book.txt' } }],
+  chunkOptions: {
+    strategy: 'recursive',
+    size: 512,
+    overlap: 50,
+  },
+});
+```
+
+### With Progress Tracking
+
+```typescript
+await ingest({
+  db,
+  model,
+  documents: largeDocumentArray,
+  onProgress: (progress) => {
+    console.log(`Ingested ${progress.completed}/${progress.total} documents`);
+  },
+});
+```
+
+## Semantic Search
+
+Search for relevant chunks:
+
+```typescript
+import { semanticSearch } from '@localmode/core';
+
+const results = await semanticSearch({
+  db,
+  model,
+  query: 'What are the benefits of machine learning?',
+  k: 5,
+});
+
+results.forEach((r) => {
+  console.log(`Score: ${r.score.toFixed(3)}`);
+  console.log(`Text: ${r.metadata.text}`);
+});
+```
+
+## Reranking
+
+Improve results with cross-encoder reranking:
+
+```typescript
+import { rerank } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+
+// Get initial results
+const results = await semanticSearch({ db, model, query, k: 20 });
+
+// Rerank for better accuracy
+const reranked = await rerank({
+  model: rerankerModel,
+  query,
+  documents: results.map((r) => r.metadata.text as string),
+  topK: 5,
+});
+
+reranked.forEach((r) => {
+  console.log(`Score: ${r.score.toFixed(3)}`);
+  console.log(`Text: ${r.document.substring(0, 100)}...`);
+});
+```
+
+<Callout type="tip" title="When to Use Reranking">
+  Reranking improves accuracy but adds latency. Use it when: - Accuracy is more important than speed
+  - You're building a Q&A system - Initial results may have false positives
+</Callout>
+
+## BM25 Keyword Search
+
+For exact keyword matching:
+
+```typescript
+import { createBM25 } from '@localmode/core';
+
+const bm25 = createBM25(documents.map((d) => d.text));
+
+const keywordResults = bm25.search('machine learning');
+
+keywordResults.forEach((r) => {
+  console.log(`Score: ${r.score.toFixed(3)}, Index: ${r.index}`);
+});
+```
+
+## Hybrid Search
+
+Combine semantic and keyword search:
+
+```typescript
+import { semanticSearch, createBM25, hybridFuse } from '@localmode/core';
+
+// Semantic search
+const semanticResults = await semanticSearch({ db, model, query, k: 20 });
+
+// BM25 keyword search
+const bm25 = createBM25(documents.map((d) => d.text));
+const keywordResults = bm25.search(query);
+
+// Combine with fusion
+const hybridResults = hybridFuse({
+  semantic: semanticResults.map((r) => ({
+    id: r.id,
+    score: r.score,
+  })),
+  keyword: keywordResults.map((r) => ({
+    id: documents[r.index].id,
+    score: r.score,
+  })),
+  k: 10,
+  alpha: 0.7, // Weight for semantic (0.7 = 70% semantic, 30% keyword)
+});
+```
+
+### Reciprocal Rank Fusion
+
+Alternative fusion method:
+
+```typescript
+import { reciprocalRankFusion } from '@localmode/core';
+
+const fused = reciprocalRankFusion({
+  rankings: [semanticResults.map((r) => r.id), keywordResults.map((r) => documents[r.index].id)],
+  k: 10,
+  constant: 60, // RRF constant (default: 60)
+});
+```
+
+## Complete RAG Pipeline
+
+Here's a complete example:
+
+```typescript
+import { createVectorDB, chunk, ingest, semanticSearch, rerank, streamText } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+import { webllm } from '@localmode/webllm';
+
+// 1. Setup models
+const embeddingModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+const llm = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+
+// 2. Create database
+const db = await createVectorDB({ name: 'knowledge-base', dimensions: 384 });
+
+// 3. Ingest documents
+async function ingestDocuments(documents: Array<{ text: string; source: string }>) {
+  for (const doc of documents) {
+    const chunks = chunk(doc.text, {
+      strategy: 'recursive',
+      size: 512,
+      overlap: 50,
+    });
+
+    await ingest({
+      db,
+      model: embeddingModel,
+      documents: chunks.map((c) => ({
+        text: c.text,
+        metadata: {
+          source: doc.source,
+          start: c.startIndex,
+          end: c.endIndex,
+        },
+      })),
+    });
+  }
+}
+
+// 4. Query function
+async function query(question: string) {
+  // Retrieve
+  const results = await semanticSearch({
+    db,
+    model: embeddingModel,
+    query: question,
+    k: 10,
+  });
+
+  // Rerank
+  const reranked = await rerank({
+    model: rerankerModel,
+    query: question,
+    documents: results.map((r) => r.metadata.text as string),
+    topK: 3,
+  });
+
+  // Generate
+  const context = reranked.map((r) => r.document).join('\n\n---\n\n');
+
+  const stream = await streamText({
+    model: llm,
+    prompt: `You are a helpful assistant. Answer based only on the context provided.
+If the answer is not in the context, say "I don't have that information."
+
+Context:
+${context}
+
+Question: ${question}
+
+Answer:`,
+  });
+
+  return stream;
+}
+
+// Usage
+const stream = await query('What is machine learning?');
+for await (const chunk of stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+## Document Loaders
+
+Load documents from various formats:
+
+```typescript
+import { TextLoader, JSONLoader, CSVLoader, HTMLLoader } from '@localmode/core';
+import { PDFLoader } from '@localmode/pdfjs';
+
+// Text files
+const textLoader = new TextLoader();
+const { documents: textDocs } = await textLoader.load(textBlob);
+
+// JSON
+const jsonLoader = new JSONLoader({ textField: 'content' });
+const { documents: jsonDocs } = await jsonLoader.load(jsonBlob);
+
+// CSV
+const csvLoader = new CSVLoader({ textColumn: 'description' });
+const { documents: csvDocs } = await csvLoader.load(csvBlob);
+
+// HTML
+const htmlLoader = new HTMLLoader({ selector: 'article' });
+const { documents: htmlDocs } = await htmlLoader.load(htmlBlob);
+
+// PDF
+const pdfLoader = new PDFLoader({ splitByPage: true });
+const { documents: pdfDocs } = await pdfLoader.load(pdfBlob);
+```
+
+## Best Practices
+
+<Callout type="tip" title="RAG Best Practices">
+  1. **Chunk size** - 256-512 chars works well for most cases
+  2. **Overlap** - 10-20% overlap helps maintain context
+  3. **Reranking** - Always rerank for Q&A applications
+  4. **Hybrid search** - Combine semantic + keyword for robust results
+  5. **Context window** - Don't exceed LLM's context limit
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Text Generation"
+    href="/docs/core/generation"
+    description="Generate and stream text with LLMs."
+  />
+  <Card title="WebLLM" href="/docs/webllm" description="Run LLMs locally in the browser." />
+</Cards>

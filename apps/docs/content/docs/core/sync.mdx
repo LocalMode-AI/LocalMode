@@ -1,0 +1,435 @@
+---
+title: Cross-Tab Sync
+description: Synchronize VectorDB state across browser tabs
+icon: RefreshCw
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Steps } from 'fumadocs-ui/components/steps';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+
+LocalMode provides cross-tab synchronization to keep VectorDB instances in sync across multiple browser tabs. This prevents data inconsistencies when users have your app open in multiple tabs.
+
+## Overview
+
+Cross-tab sync uses two browser APIs:
+
+- **Web Locks API** — Prevents concurrent writes from corrupting data
+- **BroadcastChannel API** — Notifies other tabs when data changes
+
+<Callout type="info">
+  Both APIs have fallbacks for unsupported browsers. If unavailable, operations proceed without
+  synchronization (safe for single-tab usage).
+</Callout>
+
+## Quick Start
+
+<Steps>
+
+### Create a Lock Manager
+
+The lock manager ensures only one tab can write at a time.
+
+```ts {3}
+import { getLockManager } from '@localmode/core';
+
+const locks = getLockManager('my-database');
+```
+
+### Create a Broadcaster
+
+The broadcaster notifies other tabs of changes.
+
+```ts {3}
+import { createBroadcaster } from '@localmode/core';
+
+const broadcaster = createBroadcaster('my-database');
+```
+
+### Use Locks for Write Operations
+
+Wrap write operations in locks to prevent conflicts.
+
+```ts
+await locks.withWriteLock('documents', async () => {
+  await db.add({
+    id: 'doc-1',
+    vector: embedding,
+    metadata: { text: 'Hello world' },
+  });
+
+  // Notify other tabs
+  broadcaster.notifyDocumentAdded('default', 'doc-1');
+});
+```
+
+### Subscribe to Changes
+
+React to changes from other tabs.
+
+```ts
+broadcaster.on('document_added', (message) => {
+  console.log(`Document ${message.documentId} added in another tab`);
+  // Refresh your UI or invalidate cache
+});
+```
+
+</Steps>
+
+## Lock Manager API
+
+### `getLockManager(dbName)`
+
+Creates or retrieves a lock manager for a database.
+
+```ts
+import { getLockManager } from '@localmode/core';
+
+const locks = getLockManager('my-database');
+```
+
+### Lock Methods
+
+<TypeTable
+  type={{
+    'withLock(resource, callback, options?)': {
+      description: 'Acquire a lock and execute callback',
+      type: 'Promise<T>',
+    },
+    'withReadLock(resource, callback)': {
+      description: 'Acquire a shared (read) lock',
+      type: 'Promise<T>',
+    },
+    'withWriteLock(resource, callback)': {
+      description: 'Acquire an exclusive (write) lock',
+      type: 'Promise<T>',
+    },
+    'tryLock(resource, callback, mode?)': {
+      description: 'Try to acquire lock immediately, returns null if unavailable',
+      type: 'Promise<T | null>',
+    },
+    'getLockState()': {
+      description: 'Get current lock state for debugging',
+      type: 'Promise<{ held: string[], pending: string[] }>',
+    },
+  }}
+/>
+
+### Lock Options
+
+<TypeTable
+  type={{
+    mode: {
+      description: "Lock mode: 'shared' for reads, 'exclusive' for writes",
+      type: "'shared' | 'exclusive'",
+      default: "'exclusive'",
+    },
+    timeout: {
+      description: 'Timeout in milliseconds (0 = no timeout)',
+      type: 'number',
+      default: '0',
+    },
+    ifAvailable: {
+      description: 'Fail immediately if lock not available',
+      type: 'boolean',
+      default: 'false',
+    },
+    signal: {
+      description: 'AbortSignal to cancel the lock request',
+      type: 'AbortSignal',
+    },
+  }}
+/>
+
+### Lock Examples
+
+<Tabs items={['Read Lock', 'Write Lock', 'Try Lock', 'Timeout']}>
+<Tab value="Read Lock">
+
+Multiple tabs can hold read locks simultaneously:
+
+```ts
+// Read lock - multiple tabs can read at once
+const data = await locks.withReadLock('documents', async () => {
+  return await db.search(queryVector, { k: 10 });
+});
+```
+
+</Tab>
+<Tab value="Write Lock">
+
+Write locks are exclusive—only one tab can hold the lock:
+
+```ts
+// Write lock - exclusive access
+await locks.withWriteLock('documents', async () => {
+  await db.add({ id: 'doc-1', vector, metadata });
+});
+```
+
+</Tab>
+<Tab value="Try Lock">
+
+Non-blocking lock attempt—useful for optional optimizations:
+
+```ts
+// Try to get lock, return null if unavailable
+const result = await locks.tryLock('documents', async () => {
+  await db.add({ id: 'doc-1', vector, metadata });
+  return 'success';
+});
+
+if (result === null) {
+  console.log('Another tab is writing, try again later');
+}
+```
+
+</Tab>
+<Tab value="Timeout">
+
+Fail if lock isn't acquired within timeout:
+
+```ts
+try {
+  await locks.withLock(
+    'documents',
+    async () => {
+      await db.add({ id: 'doc-1', vector, metadata });
+    },
+    { timeout: 5000 } // 5 second timeout
+  );
+} catch (error) {
+  console.error('Lock timeout - another tab is holding the lock');
+}
+```
+
+</Tab>
+</Tabs>
+
+## Broadcaster API
+
+### `createBroadcaster(dbName)`
+
+Creates a broadcaster for cross-tab communication.
+
+```ts
+import { createBroadcaster } from '@localmode/core';
+
+const broadcaster = createBroadcaster('my-database');
+```
+
+### Notification Methods
+
+<TypeTable
+  type={{
+    'notifyDocumentAdded(collectionId, documentId)': {
+      description: 'Notify that a document was added',
+      type: 'void',
+    },
+    'notifyDocumentUpdated(collectionId, documentId)': {
+      description: 'Notify that a document was updated',
+      type: 'void',
+    },
+    'notifyDocumentDeleted(collectionId, documentId)': {
+      description: 'Notify that a document was deleted',
+      type: 'void',
+    },
+    'notifyDocumentsDeleted(collectionId, documentIds)': {
+      description: 'Notify that multiple documents were deleted',
+      type: 'void',
+    },
+    'notifyCollectionCleared(collectionId)': {
+      description: 'Notify that a collection was cleared',
+      type: 'void',
+    },
+    'notifyDatabaseCleared()': {
+      description: 'Notify that the database was cleared',
+      type: 'void',
+    },
+    'notifyIndexUpdated(collectionId)': {
+      description: 'Notify that an index was rebuilt',
+      type: 'void',
+    },
+  }}
+/>
+
+### Event Types
+
+Subscribe to specific event types:
+
+```ts
+type BroadcastMessageType =
+  | 'document_added'
+  | 'document_updated'
+  | 'document_deleted'
+  | 'documents_deleted'
+  | 'collection_cleared'
+  | 'database_cleared'
+  | 'index_updated'
+  | 'leader_elected'
+  | 'leader_ping';
+```
+
+### Subscription Methods
+
+```ts
+// Subscribe to specific event
+const unsubscribe = broadcaster.on('document_added', (message) => {
+  console.log('Document added:', message.documentId);
+});
+
+// Subscribe to all events
+const unsubscribeAll = broadcaster.onAny((message) => {
+  console.log('Event:', message.type);
+});
+
+// Clean up
+unsubscribe();
+unsubscribeAll();
+```
+
+### Message Structure
+
+<TypeTable
+  type={{
+    type: {
+      description: 'Event type',
+      type: 'BroadcastMessageType',
+    },
+    dbName: {
+      description: 'Database name',
+      type: 'string',
+    },
+    collectionId: {
+      description: 'Collection ID (if applicable)',
+      type: 'string | undefined',
+    },
+    documentId: {
+      description: 'Document ID (for single-document events)',
+      type: 'string | undefined',
+    },
+    documentIds: {
+      description: 'Document IDs (for multi-document events)',
+      type: 'string[] | undefined',
+    },
+    timestamp: {
+      description: 'Event timestamp',
+      type: 'number',
+    },
+    tabId: {
+      description: 'ID of the tab that sent the message',
+      type: 'string',
+    },
+  }}
+/>
+
+## Leader Election
+
+For tasks that should only run in one tab (like background sync), use leader election:
+
+```ts
+const broadcaster = createBroadcaster('my-database');
+
+// Try to become the leader
+const isLeader = await broadcaster.electLeader();
+
+if (isLeader) {
+  console.log('This tab is the leader');
+  // Start background sync, cleanup tasks, etc.
+  startBackgroundSync();
+}
+
+// Check leader status
+if (broadcaster.getIsLeader()) {
+  // Run leader-only tasks
+}
+
+// Resign leadership (e.g., before tab closes)
+broadcaster.resignLeadership();
+```
+
+<Callout type="tip">
+  Leader election uses localStorage to coordinate between tabs. The leader sends periodic
+  heartbeats—if a leader doesn't ping for 10 seconds, another tab can take over.
+</Callout>
+
+## Full Integration Example
+
+```ts
+import { createVectorDB, getLockManager, createBroadcaster, embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Setup
+const db = await createVectorDB({ name: 'documents', dimensions: 384 });
+const locks = getLockManager('documents');
+const broadcaster = createBroadcaster('documents');
+const embeddingModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+
+// Subscribe to changes from other tabs
+broadcaster.on('document_added', async ({ documentId }) => {
+  console.log(`Refresh UI - document ${documentId} added in another tab`);
+  // Optionally refresh your document list or clear caches
+});
+
+broadcaster.on('database_cleared', () => {
+  console.log('Database was cleared in another tab');
+  // Reset your UI state
+});
+
+// Add document with synchronization
+async function addDocument(text: string) {
+  const { embedding } = await embed({
+    model: embeddingModel,
+    value: text,
+  });
+
+  const id = crypto.randomUUID();
+
+  await locks.withWriteLock('documents', async () => {
+    await db.add({
+      id,
+      vector: embedding,
+      metadata: { text, createdAt: Date.now() },
+    });
+
+    // Notify other tabs
+    broadcaster.notifyDocumentAdded('default', id);
+  });
+
+  return id;
+}
+
+// Clean up on page unload
+window.addEventListener('beforeunload', () => {
+  broadcaster.close();
+});
+```
+
+## Browser Compatibility
+
+| Feature          | Chrome | Edge | Firefox | Safari |
+| ---------------- | ------ | ---- | ------- | ------ |
+| Web Locks API    | 69+    | 79+  | 96+     | 15.4+  |
+| BroadcastChannel | 54+    | 79+  | 38+     | 15.4+  |
+
+<Callout type="warn">
+  If these APIs are unavailable (e.g., in older browsers or certain WebView environments),
+  operations proceed without synchronization. This is safe for single-tab usage but may cause issues
+  with multiple tabs.
+</Callout>
+
+### Feature Detection
+
+```ts
+import { LockManager, Broadcaster } from '@localmode/core';
+
+if (LockManager.isSupported()) {
+  console.log('Web Locks API available');
+}
+
+if (Broadcaster.isSupported()) {
+  console.log('BroadcastChannel API available');
+}
+```

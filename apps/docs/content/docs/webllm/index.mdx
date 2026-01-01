@@ -1,0 +1,500 @@
+---
+title: 'Overview'
+description: WebLLM provider for local LLM inference in the browser.
+icon: Bot
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { Accordions, Accordion } from 'fumadocs-ui/components/accordion';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+# @localmode/webllm
+
+Run large language models locally in the browser using WebGPU. Uses 4-bit quantized models for efficient inference.
+
+## Features
+
+- 🚀 **WebGPU Acceleration** — Native GPU performance in the browser
+- 🔒 **Private** — Models run entirely on-device
+- 📦 **Cached** — Models stored in browser cache after first download
+- ⚡ **Streaming** — Real-time token generation
+
+## Installation
+
+<Tabs items={['pnpm', 'npm', 'yarn']}>
+  <Tab value="pnpm">```bash pnpm install @localmode/webllm @localmode/core ```</Tab>
+  <Tab value="npm">```bash npm install @localmode/webllm @localmode/core ```</Tab>
+  <Tab value="yarn">```bash yarn add @localmode/webllm @localmode/core ```</Tab>
+</Tabs>
+
+## Quick Start
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+
+const stream = await streamText({
+  model,
+  prompt: 'Explain quantum computing in simple terms.',
+});
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+## Available Models
+
+<Accordions>
+
+<Accordion title="Llama 3.2 Models (Recommended)">
+
+| Model                               | Size   | Context | Best For                              |
+| ----------------------------------- | ------ | ------- | ------------------------------------- |
+| `Llama-3.2-1B-Instruct-q4f16_1-MLC` | ~700MB | 4K      | Testing, simple tasks, fast responses |
+| `Llama-3.2-3B-Instruct-q4f16_1-MLC` | ~1.8GB | 4K      | General purpose, production           |
+
+<Callout type="tip">
+  Llama 3.2 models are the best all-around choice for browser LLM applications. Start with 1B for
+  testing, use 3B in production.
+</Callout>
+
+</Accordion>
+
+<Accordion title="Phi Models (Reasoning & Coding)">
+
+| Model                                | Size   | Context | Best For                         |
+| ------------------------------------ | ------ | ------- | -------------------------------- |
+| `Phi-3.5-mini-instruct-q4f16_1-MLC`  | ~2.4GB | 4K      | Reasoning, coding, complex tasks |
+| `Phi-3-mini-4k-instruct-q4f16_1-MLC` | ~2.2GB | 4K      | Reasoning, coding                |
+
+<Callout type="info">
+  Phi models excel at reasoning and code generation, often outperforming larger models on these
+  tasks.
+</Callout>
+
+</Accordion>
+
+<Accordion title="Qwen Models (Multilingual)">
+
+| Model                               | Size | Context | Best For                      |
+| ----------------------------------- | ---- | ------- | ----------------------------- |
+| `Qwen2.5-1.5B-Instruct-q4f16_1-MLC` | ~1GB | 4K      | Multilingual, Chinese support |
+| `Qwen2.5-3B-Instruct-q4f16_1-MLC`   | ~2GB | 4K      | Better multilingual quality   |
+
+<Callout type="info">
+  Qwen models have strong multilingual capabilities, especially for Chinese and Asian languages.
+</Callout>
+
+</Accordion>
+
+<Accordion title="SmolLM Models (Ultra-Compact)">
+
+| Model                               | Size   | Context | Best For                            |
+| ----------------------------------- | ------ | ------- | ----------------------------------- |
+| `SmolLM2-1.7B-Instruct-q4f16_1-MLC` | ~1.1GB | 2K      | Low-memory devices, quick inference |
+| `SmolLM2-360M-Instruct-q4f16_1-MLC` | ~250MB | 2K      | Ultra-fast, minimal memory          |
+
+<Callout type="warn">
+  SmolLM models are optimized for size, not quality. Use for simple tasks or when resources are very
+  limited.
+</Callout>
+
+</Accordion>
+
+<Accordion title="Gemma Models">
+
+| Model                       | Size   | Context | Best For                         |
+| --------------------------- | ------ | ------- | -------------------------------- |
+| `gemma-2-2b-it-q4f16_1-MLC` | ~1.3GB | 8K      | Longer context, Google ecosystem |
+
+</Accordion>
+
+</Accordions>
+
+<Callout type="info" title="Model Selection Guide">
+  - **Testing**: `Llama-3.2-1B-Instruct` - fastest to download and run 
+  - **Production**: `Llama-3.2-3B-Instruct` or `Phi-3.5-mini` - best quality 
+  - **Code/Reasoning**: `Phi-3.5-mini` - specialized for these tasks 
+  - **Multilingual**: `Qwen2.5-1.5B-Instruct` - 100+ languages 
+  - **Low Memory**: `SmolLM2-360M-Instruct` - ~250MB
+</Callout>
+
+## Text Generation
+
+### Streaming
+
+```typescript
+import { streamText } from '@localmode/core';
+
+const stream = await streamText({
+  model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
+  prompt: 'Write a haiku about programming.',
+});
+
+let fullText = '';
+for await (const chunk of stream) {
+  fullText += chunk.text;
+  // Update UI with each chunk
+}
+
+// Or get full text at once
+const text = await stream.text;
+```
+
+### Non-Streaming
+
+```typescript
+import { generateText } from '@localmode/core';
+
+const { text, usage } = await generateText({
+  model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
+  prompt: 'What is the capital of France?',
+});
+
+console.log(text);
+console.log('Tokens used:', usage.totalTokens);
+```
+
+## Configuration
+
+### Model Options
+
+```ts {2-6}
+const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC', {
+  systemPrompt: 'You are a helpful coding assistant.',
+  temperature: 0.7,
+  maxTokens: 1024,
+  topP: 0.9,
+});
+```
+
+<TypeTable
+  type={{
+    systemPrompt: {
+      description: 'System message prepended to all conversations',
+      type: 'string',
+    },
+    temperature: {
+      description: 'Randomness in generation (0.0 = deterministic, 2.0 = very random)',
+      type: 'number',
+      default: '1.0',
+    },
+    maxTokens: {
+      description: 'Maximum tokens to generate',
+      type: 'number',
+      default: 'Model max',
+    },
+    topP: {
+      description: 'Nucleus sampling (0.0-1.0)',
+      type: 'number',
+      default: '1.0',
+    },
+    frequencyPenalty: {
+      description: 'Penalty for repeated tokens',
+      type: 'number',
+      default: '0.0',
+    },
+    presencePenalty: {
+      description: 'Penalty for new topics',
+      type: 'number',
+      default: '0.0',
+    },
+  }}
+/>
+
+### Custom Provider
+
+```typescript
+import { createWebLLM } from '@localmode/webllm';
+
+const myWebLLM = createWebLLM({
+  onProgress: (progress) => {
+    console.log(`Loading: ${(progress.progress * 100).toFixed(1)}%`);
+    console.log(`Status: ${progress.text}`);
+  },
+});
+
+const model = myWebLLM.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+```
+
+## Model Preloading
+
+Preload models during app initialization:
+
+```typescript
+import { preloadModel, isModelCached } from '@localmode/webllm';
+
+// Check if already cached
+if (!(await isModelCached('Llama-3.2-1B-Instruct-q4f16_1-MLC'))) {
+  // Show loading UI
+  await preloadModel('Llama-3.2-1B-Instruct-q4f16_1-MLC', {
+    onProgress: (progress) => {
+      updateLoadingBar(progress.progress * 100);
+    },
+  });
+}
+
+// Model is ready for instant inference
+```
+
+## Model Management
+
+### Available Models Registry
+
+Access model metadata programmatically:
+
+```typescript
+import { WEBLLM_MODELS, type WebLLMModelId } from '@localmode/webllm';
+
+// Get all available models
+const modelIds = Object.keys(WEBLLM_MODELS) as WebLLMModelId[];
+
+// Access model info
+const llama = WEBLLM_MODELS['Llama-3.2-1B-Instruct-q4f16_1-MLC'];
+console.log(llama.name);          // 'Llama 3.2 1B Instruct'
+console.log(llama.contextLength); // 4096
+console.log(llama.size);          // '~700MB'
+console.log(llama.sizeBytes);     // 734003200
+console.log(llama.description);   // 'Fast, lightweight model...'
+```
+
+### Model Categorization
+
+Categorize models by size for UI display:
+
+```typescript
+import { getModelCategory, WEBLLM_MODELS, type WebLLMModelId } from '@localmode/webllm';
+
+// Get category based on model size
+const modelId: WebLLMModelId = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
+const sizeBytes = WEBLLM_MODELS[modelId].sizeBytes;
+const category = getModelCategory(sizeBytes);
+
+console.log(category); // 'small' | 'medium' | 'large'
+
+// Use for UI grouping
+function getModelsByCategory() {
+  const categories = { small: [], medium: [], large: [] };
+  
+  for (const [id, info] of Object.entries(WEBLLM_MODELS)) {
+    const cat = getModelCategory(info.sizeBytes);
+    categories[cat].push({ id, ...info });
+  }
+  
+  return categories;
+}
+```
+
+### Delete Cached Models
+
+Remove models from browser cache to free up storage:
+
+```typescript
+import { deleteModelCache, isModelCached } from '@localmode/webllm';
+
+// Delete a specific model's cache
+await deleteModelCache('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+
+// Verify deletion
+const stillCached = await isModelCached('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+console.log(stillCached); // false
+```
+
+<Callout type="tip" title="Storage Management">
+  LLM models can be large (700MB - 4GB). Use `deleteModelCache()` to let users
+  free up storage when they no longer need a model.
+</Callout>
+
+### Type-Safe Model IDs
+
+Use the `WebLLMModelId` type for type-safe model selection:
+
+```typescript
+import type { WebLLMModelId } from '@localmode/webllm';
+
+// Type-safe function that only accepts valid model IDs
+function selectModel(modelId: WebLLMModelId) {
+  return webllm.languageModel(modelId);
+}
+
+// ✅ Valid
+selectModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+
+// ❌ TypeScript error: invalid model ID
+selectModel('invalid-model-name');
+```
+
+## Chat Application
+
+```typescript
+import { streamText } from '@localmode/core';
+
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+async function chat(messages: Message[], userMessage: string) {
+  const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC', {
+    systemPrompt: 'You are a helpful assistant.',
+  });
+
+  // Build conversation prompt
+  const prompt = messages
+    .map((m) => `${m.role}: ${m.content}`)
+    .concat([`user: ${userMessage}`, 'assistant:'])
+    .join('\n');
+
+  const stream = await streamText({
+    model,
+    prompt,
+    stopSequences: ['user:', '\n\n'],
+  });
+
+  let response = '';
+  for await (const chunk of stream) {
+    response += chunk.text;
+    // Update UI
+  }
+
+  return response;
+}
+```
+
+## RAG Integration
+
+Combine with retrieval for document-grounded chat:
+
+```typescript
+import { semanticSearch, rerank, streamText } from '@localmode/core';
+
+async function ragChat(query: string, db: VectorDB) {
+  // 1. Retrieve context
+  const results = await semanticSearch({
+    db,
+    model: embeddingModel,
+    query,
+    k: 10,
+  });
+
+  // 2. Rerank for relevance
+  const reranked = await rerank({
+    model: rerankerModel,
+    query,
+    documents: results.map((r) => r.metadata.text as string),
+    topK: 3,
+  });
+
+  const context = reranked.map((r) => r.document).join('\n\n---\n\n');
+
+  // 3. Generate with context
+  const llm = webllm.languageModel('Llama-3.2-3B-Instruct-q4f16_1-MLC');
+
+  const stream = await streamText({
+    model: llm,
+    prompt: `You are a helpful assistant. Answer based only on the provided context.
+If the answer is not in the context, say "I don't have that information."
+
+Context:
+${context}
+
+Question: ${query}
+
+Answer:`,
+  });
+
+  return stream;
+}
+```
+
+## Requirements
+
+<Callout type="warn" title="WebGPU Required">
+  WebLLM requires WebGPU support. Check availability:
+  
+  ```typescript
+  import { isWebGPUSupported } from '@localmode/core';
+  
+  if (!isWebGPUSupported()) {
+    console.warn('WebGPU not available. LLM features disabled.');
+  }
+  ```
+</Callout>
+
+### Browser Support
+
+| Browser     | Support           |
+| ----------- | ----------------- |
+| Chrome 113+ | ✅                |
+| Edge 113+   | ✅                |
+| Firefox     | ❌ (Nightly only) |
+| Safari 18+  | ✅                |
+| iOS Safari  | ✅ (iOS 26+)      |
+
+### Hardware Requirements
+
+- **GPU**: Any modern GPU with WebGPU support
+- **VRAM**: Depends on model (1-3GB for 1-3B models)
+- **RAM**: 4GB minimum, 8GB+ recommended
+
+## Best Practices
+
+<Callout type="tip" title="WebLLM Tips">
+  1. **Preload models** - Load during app init for instant inference 
+  2. **Start small** - Use 1B models for testing, larger for production 
+  3. **Stream responses** - Better UX than waiting for complete response 
+  4. **Handle errors** - GPU errors, OOM, etc. can occur 
+  5. **Check capabilities** - Verify WebGPU before showing LLM features
+</Callout>
+
+## Error Handling
+
+```typescript
+import { streamText, GenerationError } from '@localmode/core';
+
+try {
+  const stream = await streamText({
+    model,
+    prompt: 'Hello',
+  });
+
+  for await (const chunk of stream) {
+    // ...
+  }
+} catch (error) {
+  if (error instanceof GenerationError) {
+    if (error.code === 'WEBGPU_NOT_SUPPORTED') {
+      console.error('WebGPU not available');
+    } else if (error.code === 'MODEL_LOAD_FAILED') {
+      console.error('Failed to load model');
+    } else if (error.code === 'OUT_OF_MEMORY') {
+      console.error('Not enough GPU memory');
+    }
+  }
+}
+```
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Text Generation"
+    href="/docs/core/generation"
+    description="Learn about streaming and generation options."
+  />
+  <Card
+    title="RAG"
+    href="/docs/core/rag"
+    description="Build retrieval-augmented generation pipelines."
+  />
+  <Card
+    title="Capabilities"
+    href="/docs/core/capabilities"
+    description="Detect WebGPU and other features."
+  />
+</Cards>

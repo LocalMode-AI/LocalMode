@@ -1,0 +1,310 @@
+---
+title: Getting Started
+description: Install LocalMode and build your first local AI application.
+icon: Rocket
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { Steps } from 'fumadocs-ui/components/steps';
+import { Files, File, Folder } from 'fumadocs-ui/components/files';
+
+This guide will walk you through installing LocalMode and building your first local-first AI application.
+
+## Installation
+
+<Steps>
+
+### Install packages
+
+The minimum setup requires `@localmode/core` and at least one provider:
+
+<Tabs items={['pnpm', 'npm', 'yarn']}>
+  <Tab value="pnpm">```bash pnpm install @localmode/core @localmode/transformers ```</Tab>
+  <Tab value="npm">```bash npm install @localmode/core @localmode/transformers ```</Tab>
+  <Tab value="yarn">```bash yarn add @localmode/core @localmode/transformers ```</Tab>
+</Tabs>
+
+All underlying ML dependencies (like `@huggingface/transformers`) are automatically installed with the provider packages.
+
+### Configure bundler (if needed)
+
+For **Next.js**, add to `next.config.js`:
+
+```javascript title="next.config.js"
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      sharp$: false,
+      'onnxruntime-node$': false,
+    };
+    return config;
+  },
+  experimental: {
+    serverComponentsExternalPackages: ['sharp', 'onnxruntime-node'],
+  },
+};
+
+module.exports = nextConfig;
+```
+
+For **Vite**, models work out of the box. For workers, you may need:
+
+```typescript title="vite.config.ts"
+export default defineConfig({
+  optimizeDeps: {
+    exclude: ['@huggingface/transformers'],
+  },
+});
+```
+
+</Steps>
+
+## Your First Embedding
+
+Let's create your first embedding:
+
+```typescript title="first-embedding.ts"
+import { embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Create embedding model
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+
+// Generate embedding
+const { embedding, usage } = await embed({
+  model,
+  value: 'Hello, world!',
+});
+
+console.log('Embedding dimensions:', embedding.length); // 384
+console.log('Tokens used:', usage.tokens);
+```
+
+<Callout type="info" title="First Load">
+  The first time you use a model, it downloads from HuggingFace Hub and caches in IndexedDB.
+  Subsequent loads are instant.
+</Callout>
+
+## Build a Semantic Search App
+
+Here's a complete example of building semantic search:
+
+```typescript title="semantic-search.ts"
+import { createVectorDB, embed, embedMany, semanticSearch } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// 1. Setup
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const db = await createVectorDB({
+  name: 'my-documents',
+  dimensions: 384,
+});
+
+// 2. Sample documents
+const documents = [
+  'Machine learning is a subset of artificial intelligence.',
+  'Neural networks are inspired by biological neurons.',
+  'Deep learning uses multiple layers of neural networks.',
+  'Natural language processing handles human language.',
+  'Computer vision enables machines to interpret images.',
+];
+
+// 3. Generate embeddings
+const { embeddings } = await embedMany({
+  model,
+  values: documents,
+});
+
+// 4. Store in vector database
+await db.addMany(
+  documents.map((text, i) => ({
+    id: `doc-${i}`,
+    vector: embeddings[i],
+    metadata: { text },
+  }))
+);
+
+// 5. Search
+const results = await semanticSearch({
+  db,
+  model,
+  query: 'How do neural networks work?',
+  k: 3,
+});
+
+console.log('Results:');
+results.forEach((r, i) => {
+  console.log(`${i + 1}. ${r.metadata.text} (score: ${r.score.toFixed(3)})`);
+});
+```
+
+Output:
+
+```
+Results:
+1. Neural networks are inspired by biological neurons. (score: 0.842)
+2. Deep learning uses multiple layers of neural networks. (score: 0.756)
+3. Machine learning is a subset of artificial intelligence. (score: 0.623)
+```
+
+## Add RAG with Chunking
+
+For longer documents, use chunking:
+
+```typescript title="rag-example.ts"
+import { createVectorDB, chunk, ingest, semanticSearch, rerank } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Setup
+const embeddingModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+
+const db = await createVectorDB({
+  name: 'documents',
+  dimensions: 384,
+});
+
+// Load and chunk a document
+const documentText = `
+  Machine learning is revolutionizing how we build software...
+  (your long document here)
+`;
+
+const chunks = chunk(documentText, {
+  strategy: 'recursive',
+  size: 512,
+  overlap: 50,
+});
+
+// Ingest with automatic embedding
+await ingest({
+  db,
+  model: embeddingModel,
+  documents: chunks.map((c) => ({
+    text: c.text,
+    metadata: { start: c.startIndex, end: c.endIndex },
+  })),
+});
+
+// Search and rerank for better accuracy
+const query = 'What are the applications of machine learning?';
+
+const searchResults = await semanticSearch({
+  db,
+  model: embeddingModel,
+  query,
+  k: 10, // Get more candidates for reranking
+});
+
+const reranked = await rerank({
+  model: rerankerModel,
+  query,
+  documents: searchResults.map((r) => r.metadata.text as string),
+  topK: 3,
+});
+
+console.log('Top results after reranking:');
+reranked.forEach((r, i) => {
+  console.log(`${i + 1}. Score: ${r.score.toFixed(3)}`);
+  console.log(`   ${r.document.substring(0, 100)}...`);
+});
+```
+
+## Add LLM Generation
+
+Combine with WebLLM for complete RAG:
+
+```typescript title="rag-with-llm.ts"
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+// After getting search results...
+const context = reranked.map((r) => r.document).join('\n\n');
+
+const llm = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+
+const stream = await streamText({
+  model: llm,
+  prompt: `Based on the following context, answer the question.
+
+Context:
+${context}
+
+Question: ${query}
+
+Answer:`,
+});
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+## Project Structure
+
+A typical LocalMode project might look like:
+
+<Files>
+  <Folder name="src" defaultOpen>
+    <Folder name="lib" defaultOpen>
+      <File name="ai.ts" />
+      <File name="db.ts" />
+    </Folder>
+    <Folder name="components">
+      <File name="SearchBox.tsx" />
+      <File name="ResultsList.tsx" />
+    </Folder>
+    <File name="App.tsx" />
+  </Folder>
+  <File name="package.json" />
+</Files>
+
+```typescript title="src/lib/ai.ts"
+import { transformers } from '@localmode/transformers';
+import { webllm } from '@localmode/webllm';
+
+// Singleton instances for reuse
+export const embeddingModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+export const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+export const llm = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+```
+
+```typescript title="src/lib/db.ts"
+import { createVectorDB } from '@localmode/core';
+
+let dbInstance: Awaited<ReturnType<typeof createVectorDB>> | null = null;
+
+export async function getDB() {
+  if (!dbInstance) {
+    dbInstance = await createVectorDB({
+      name: 'my-app',
+      dimensions: 384,
+    });
+  }
+  return dbInstance;
+}
+```
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core Package"
+    href="/docs/core"
+    description="Deep dive into embeddings, vector DB, RAG, and more."
+  />
+  <Card
+    title="Transformers Provider"
+    href="/docs/transformers"
+    description="All available ML models for classification, vision, audio."
+  />
+  <Card
+    title="WebLLM Provider"
+    href="/docs/webllm"
+    description="Run LLMs locally with streaming generation."
+  />
+</Cards>

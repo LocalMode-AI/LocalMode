@@ -15,24 +15,116 @@ HuggingFace Transformers.js provider for LocalMode AI Engine - run ML models loc
 ## Installation
 
 ```bash
-# Preferred: pnpm
-pnpm install @localmode/transformers @localmode/core @xenova/transformers
-
-# Alternative: npm
-npm install @localmode/transformers @localmode/core @xenova/transformers
+pnpm install @localmode/transformers @localmode/core
 ```
 
-## Quick Start
+## Overview
+
+`@localmode/transformers` provides model implementations for the interfaces defined in `@localmode/core`. It wraps HuggingFace Transformers.js to enable local ML inference in the browser.
+
+---
+
+## ✅ Live Features
+
+These features are production-ready and actively used in applications.
+
+### Embeddings
+
+Generate text embeddings for semantic search, clustering, and similarity.
 
 ```typescript
+import { embed, embedMany } from '@localmode/core';
 import { transformers } from '@localmode/transformers';
-import {
-  classify,
-  extractEntities,
-  transcribe,
-  classifyImage,
-  captionImage,
-} from '@localmode/core';
+
+// Create embedding model
+const embeddingModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+
+// Single embedding
+const { embedding } = await embed({
+  model: embeddingModel,
+  value: 'Hello world',
+});
+
+// Batch embeddings
+const { embeddings } = await embedMany({
+  model: embeddingModel,
+  values: ['Hello', 'World', 'How are you?'],
+});
+```
+
+| Method                            | Interface        | Description     |
+| --------------------------------- | ---------------- | --------------- |
+| `transformers.embedding(modelId)` | `EmbeddingModel` | Text embeddings |
+
+**Recommended Models:**
+
+- `Xenova/all-MiniLM-L6-v2` - Fast, general-purpose (~22MB)
+- `Xenova/paraphrase-multilingual-MiniLM-L12-v2` - 50+ languages
+
+### Reranking
+
+Improve RAG accuracy by reranking search results.
+
+```typescript
+import { rerank } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+
+const { results } = await rerank({
+  model: rerankerModel,
+  query: 'What is machine learning?',
+  documents: ['ML is a subset of AI...', 'Python is a language...', 'Neural networks...'],
+  topK: 5,
+});
+
+console.log(results); // Sorted by relevance score
+```
+
+| Method                           | Interface       | Description        |
+| -------------------------------- | --------------- | ------------------ |
+| `transformers.reranker(modelId)` | `RerankerModel` | Document reranking |
+
+**Recommended Models:**
+
+- `Xenova/ms-marco-MiniLM-L-6-v2` - Document reranking for RAG
+
+### Model Utilities
+
+Manage model loading and caching.
+
+```typescript
+import { preloadModel, isModelCached, getModelStorageUsage } from '@localmode/transformers';
+
+// Check if model is cached
+const cached = await isModelCached('Xenova/all-MiniLM-L6-v2');
+
+// Preload model with progress
+await preloadModel('Xenova/all-MiniLM-L6-v2', {
+  onProgress: (p) => console.log(`${p.progress}% loaded`),
+});
+
+// Check storage usage
+const usage = await getModelStorageUsage();
+```
+
+---
+
+## 🚧 Coming Soon
+
+These features have interfaces defined and implementations available, but are under active development and testing.
+
+### Classification & NLP
+
+| Method                                     | Interface                     | Description                   |
+| ------------------------------------------ | ----------------------------- | ----------------------------- |
+| `transformers.classifier(modelId)`         | `ClassificationModel`         | Text classification           |
+| `transformers.zeroShotClassifier(modelId)` | `ZeroShotClassificationModel` | Zero-shot text classification |
+| `transformers.ner(modelId)`                | `NERModel`                    | Named Entity Recognition      |
+
+```typescript
+import { classify, extractEntities } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
 
 // Text Classification
 const sentiment = await classify({
@@ -48,6 +140,27 @@ const entities = await extractEntities({
 });
 console.log(entities.entities);
 // [{ entity: 'John', type: 'PER', ... }, { entity: 'Microsoft', type: 'ORG', ... }, ...]
+```
+
+### Translation & Summarization
+
+| Method                                    | Interface                | Description             |
+| ----------------------------------------- | ------------------------ | ----------------------- |
+| `transformers.translator(modelId)`        | `TranslationModel`       | Text translation        |
+| `transformers.summarizer(modelId)`        | `SummarizationModel`     | Text summarization      |
+| `transformers.fillMask(modelId)`          | `FillMaskModel`          | Masked token prediction |
+| `transformers.questionAnswering(modelId)` | `QuestionAnsweringModel` | Extractive QA           |
+
+### Audio
+
+| Method                               | Interface           | Description                  |
+| ------------------------------------ | ------------------- | ---------------------------- |
+| `transformers.speechToText(modelId)` | `SpeechToTextModel` | Speech-to-text transcription |
+| `transformers.textToSpeech(modelId)` | `TextToSpeechModel` | Text-to-speech synthesis     |
+
+```typescript
+import { transcribe, synthesizeSpeech } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
 
 // Speech-to-Text
 const transcription = await transcribe({
@@ -56,6 +169,31 @@ const transcription = await transcribe({
   returnTimestamps: true,
 });
 console.log(transcription.text);
+
+// Text-to-Speech
+const { audio, sampleRate } = await synthesizeSpeech({
+  model: transformers.textToSpeech('Xenova/speecht5_tts'),
+  text: 'Hello, how are you?',
+});
+```
+
+### Vision
+
+| Method                                          | Interface                          | Description                             |
+| ----------------------------------------------- | ---------------------------------- | --------------------------------------- |
+| `transformers.imageClassifier(modelId)`         | `ImageClassificationModel`         | Image classification                    |
+| `transformers.zeroShotImageClassifier(modelId)` | `ZeroShotImageClassificationModel` | Zero-shot image classification          |
+| `transformers.captioner(modelId)`               | `ImageCaptionModel`                | Image captioning                        |
+| `transformers.segmenter(modelId)`               | `SegmentationModel`                | Image segmentation                      |
+| `transformers.objectDetector(modelId)`          | `ObjectDetectionModel`             | Object detection                        |
+| `transformers.imageFeatures(modelId)`           | `ImageFeatureModel`                | Image feature extraction                |
+| `transformers.imageToImage(modelId)`            | `ImageToImageModel`                | Image transformation / super resolution |
+| `transformers.ocr(modelId)`                     | `OCRModel`                         | OCR (TrOCR)                             |
+| `transformers.documentQA(modelId)`              | `DocumentQAModel`                  | Document/Table question answering       |
+
+```typescript
+import { classifyImage, captionImage } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
 
 // Image Classification
 const classification = await classifyImage({
@@ -72,255 +210,106 @@ const caption = await captionImage({
 console.log(caption.caption);
 ```
 
-## Available Model Types
+---
 
-### Text/NLP Models (P1)
+## All Recommended Models
 
-| Method                                     | Interface                     | Description                   |
-| ------------------------------------------ | ----------------------------- | ----------------------------- |
-| `transformers.classifier(modelId)`         | `ClassificationModel`         | Text classification           |
-| `transformers.zeroShotClassifier(modelId)` | `ZeroShotClassificationModel` | Zero-shot text classification |
-| `transformers.ner(modelId)`                | `NERModel`                    | Named Entity Recognition      |
-| `transformers.reranker(modelId)`           | `RerankerModel`               | Document reranking            |
-| `transformers.embedding(modelId)`          | `EmbeddingModel`              | Text embeddings               |
+### Live Features
 
-### Text/NLP Models (P2)
+#### Embeddings
 
-| Method                                    | Interface                | Description             |
-| ----------------------------------------- | ------------------------ | ----------------------- |
-| `transformers.translator(modelId)`        | `TranslationModel`       | Text translation        |
-| `transformers.summarizer(modelId)`        | `SummarizationModel`     | Text summarization      |
-| `transformers.fillMask(modelId)`          | `FillMaskModel`          | Masked token prediction |
-| `transformers.questionAnswering(modelId)` | `QuestionAnsweringModel` | Extractive QA           |
+- `Xenova/all-MiniLM-L6-v2` - Fast, general-purpose (~22MB)
+- `Xenova/paraphrase-multilingual-MiniLM-L12-v2` - 50+ languages
 
-### Vision Models (P1)
+#### Reranking
 
-| Method                                          | Interface                          | Description                    |
-| ----------------------------------------------- | ---------------------------------- | ------------------------------ |
-| `transformers.imageClassifier(modelId)`         | `ImageClassificationModel`         | Image classification           |
-| `transformers.zeroShotImageClassifier(modelId)` | `ZeroShotImageClassificationModel` | Zero-shot image classification |
-| `transformers.captioner(modelId)`               | `ImageCaptionModel`                | Image captioning               |
+- `Xenova/ms-marco-MiniLM-L-6-v2` - Document reranking for RAG
 
-### Vision Models (P2)
+---
 
-| Method                                 | Interface              | Description                             |
-| -------------------------------------- | ---------------------- | --------------------------------------- |
-| `transformers.segmenter(modelId)`      | `SegmentationModel`    | Image segmentation                      |
-| `transformers.objectDetector(modelId)` | `ObjectDetectionModel` | Object detection                        |
-| `transformers.imageFeatures(modelId)`  | `ImageFeatureModel`    | Image feature extraction                |
-| `transformers.imageToImage(modelId)`   | `ImageToImageModel`    | Image transformation / super resolution |
-| `transformers.ocr(modelId)`            | `OCRModel`             | OCR (TrOCR)                             |
-| `transformers.documentQA(modelId)`     | `DocumentQAModel`      | Document/Table question answering       |
+### Coming Soon Features
 
-### Audio Models (P1 & P2)
-
-| Method                               | Interface           | Description                   |
-| ------------------------------------ | ------------------- | ----------------------------- |
-| `transformers.speechToText(modelId)` | `SpeechToTextModel` | Speech-to-text transcription  |
-| `transformers.textToSpeech(modelId)` | `TextToSpeechModel` | Text-to-speech synthesis (P2) |
-
-## Recommended Models
-
-### Text Classification
+#### Text Classification
 
 - `Xenova/distilbert-base-uncased-finetuned-sst-2-english` - Sentiment analysis
 - `Xenova/twitter-roberta-base-sentiment-latest` - Twitter sentiment
 
-### Named Entity Recognition
+#### Named Entity Recognition
 
 - `Xenova/bert-base-NER` - Standard NER (PER, ORG, LOC, MISC)
 
-### Reranking
-
-- `Xenova/ms-marco-MiniLM-L-6-v2` - Document reranking for RAG
-
-### Translation (P2)
+#### Translation
 
 - `Xenova/opus-mt-en-de` - English to German
 - `Xenova/opus-mt-en-fr` - English to French
 - `Xenova/nllb-200-distilled-600M` - 200 languages
 
-### Summarization (P2)
+#### Summarization
 
 - `Xenova/bart-large-cnn` - News summarization
 - `Xenova/distilbart-cnn-12-6` - Fast summarization
 
-### Fill-Mask (P2)
+#### Fill-Mask
 
 - `Xenova/bert-base-uncased` - General purpose
 - `Xenova/roberta-base` - Better for some tasks
 
-### Question Answering (P2)
+#### Question Answering
 
 - `Xenova/distilbert-base-cased-distilled-squad` - SQuAD trained
 - `Xenova/roberta-base-squad2` - SQuAD 2.0 trained
 
-### Speech-to-Text
+#### Speech-to-Text
 
 - `Xenova/whisper-tiny` - Fast, smaller size (~70MB)
 - `Xenova/whisper-small` - Better accuracy (~240MB)
 
-### Text-to-Speech (P2)
+#### Text-to-Speech
 
 - `Xenova/speecht5_tts` - Natural speech synthesis
 
-### Image Classification
+#### Image Classification
 
 - `Xenova/vit-base-patch16-224` - General image classification
 - `Xenova/clip-vit-base-patch32` - Zero-shot image classification
 
-### Image Captioning
+#### Image Captioning
 
 - `Xenova/blip-image-captioning-base` - High-quality captions
 
-### Image Segmentation (P2)
+#### Image Segmentation
 
 - `Xenova/segformer-b0-finetuned-ade-512-512` - Fast segmentation
 - `Xenova/detr-resnet-50-panoptic` - Panoptic segmentation
 
-### Object Detection (P2)
+#### Object Detection
 
 - `Xenova/detr-resnet-50` - COCO objects
 - `Xenova/yolos-tiny` - Fast detection
 
-### Image Features (P2)
+#### Image Features
 
 - `Xenova/clip-vit-base-patch32` - Image embeddings
 - `Xenova/dinov2-small` - Self-supervised features
 
-### OCR (P2)
+#### OCR
 
 - `Xenova/trocr-base-handwritten` - Handwritten text
 - `Xenova/trocr-base-printed` - Printed text
 
-### Document QA (P2)
+#### Document QA
 
 - `Xenova/donut-base-finetuned-docvqa` - Document QA
 - `Xenova/tapas-base-finetuned-wtq` - Table QA
-
-### Embeddings
-
-- `Xenova/all-MiniLM-L6-v2` - Fast, general-purpose (~22MB)
-- `Xenova/paraphrase-multilingual-MiniLM-L12-v2` - 50+ languages
-
-## P2 Feature Examples
-
-### Translation
-
-```typescript
-import { translate } from '@localmode/core';
-import { transformers } from '@localmode/transformers';
-
-const { translatedText } = await translate({
-  model: transformers.translator('Xenova/opus-mt-en-de'),
-  text: 'Hello world!',
-  targetLanguage: 'de',
-});
-console.log(translatedText); // "Hallo Welt!"
-```
-
-### Summarization
-
-```typescript
-import { summarize } from '@localmode/core';
-import { transformers } from '@localmode/transformers';
-
-const { summary } = await summarize({
-  model: transformers.summarizer('Xenova/bart-large-cnn'),
-  text: longArticle,
-  maxLength: 100,
-});
-```
-
-### Image Segmentation
-
-```typescript
-import { segmentImage } from '@localmode/core';
-import { transformers } from '@localmode/transformers';
-
-const { masks } = await segmentImage({
-  model: transformers.segmenter('Xenova/segformer-b0-finetuned-ade-512-512'),
-  image: imageBlob,
-});
-
-for (const mask of masks) {
-  console.log(mask.label, mask.score);
-}
-```
-
-### Object Detection
-
-```typescript
-import { detectObjects } from '@localmode/core';
-import { transformers } from '@localmode/transformers';
-
-const { objects } = await detectObjects({
-  model: transformers.objectDetector('Xenova/detr-resnet-50'),
-  image: imageBlob,
-  threshold: 0.5,
-});
-
-for (const obj of objects) {
-  console.log(`${obj.label}: ${obj.box.x},${obj.box.y}`);
-}
-```
-
-### Text-to-Speech
-
-```typescript
-import { synthesizeSpeech } from '@localmode/core';
-import { transformers } from '@localmode/transformers';
-
-const { audio, sampleRate } = await synthesizeSpeech({
-  model: transformers.textToSpeech('Xenova/speecht5_tts'),
-  text: 'Hello, how are you?',
-});
-
-// Play with Web Audio API
-const ctx = new AudioContext();
-const buffer = ctx.createBuffer(1, audio.length, sampleRate);
-buffer.getChannelData(0).set(audio);
-const source = ctx.createBufferSource();
-source.buffer = buffer;
-source.connect(ctx.destination);
-source.start();
-```
-
-### OCR
-
-```typescript
-import { extractText } from '@localmode/core';
-import { transformers } from '@localmode/transformers';
-
-const { text, regions } = await extractText({
-  model: transformers.ocr('Xenova/trocr-base-printed'),
-  image: documentImage,
-});
-console.log(text);
-```
-
-### Question Answering
-
-```typescript
-import { answerQuestion } from '@localmode/core';
-import { transformers } from '@localmode/transformers';
-
-const { answers } = await answerQuestion({
-  model: transformers.questionAnswering('Xenova/distilbert-base-cased-distilled-squad'),
-  question: 'What is the capital of France?',
-  context: 'Paris is the capital and largest city of France.',
-});
-console.log(answers[0].answer); // "Paris"
-```
 
 ## Advanced Usage
 
 ### Custom Model Options
 
 ```typescript
-const model = transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english', {
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2', {
   quantized: true, // Use quantized model (smaller, faster)
-  revision: 'main', // Model revision
+  device: 'webgpu', // Use WebGPU for acceleration (falls back to WASM)
 });
 ```
 
@@ -329,9 +318,9 @@ const model = transformers.classifier('Xenova/distilbert-base-uncased-finetuned-
 Pass provider-specific options to core functions:
 
 ```typescript
-const result = await classify({
-  model: transformers.classifier('Xenova/model'),
-  text: 'Hello world',
+const { embedding } = await embed({
+  model: transformers.embedding('Xenova/all-MiniLM-L6-v2'),
+  value: 'Hello world',
   providerOptions: {
     transformers: {
       // Any Transformers.js specific options
@@ -345,16 +334,19 @@ const result = await classify({
 For better UX, preload models before use:
 
 ```typescript
-// Models are automatically cached after first load
-const classifier = transformers.classifier(
-  'Xenova/distilbert-base-uncased-finetuned-sst-2-english'
-);
+import { preloadModel, isModelCached } from '@localmode/transformers';
+import { embed } from '@localmode/core';
 
-// First call downloads the model
-const result = await classify({ model: classifier, text: 'Hello' });
+// Check and preload if needed
+if (!(await isModelCached('Xenova/all-MiniLM-L6-v2'))) {
+  await preloadModel('Xenova/all-MiniLM-L6-v2', {
+    onProgress: (p) => console.log(`Loading: ${p.progress}%`),
+  });
+}
 
 // Subsequent calls are instant (loaded from cache)
-const result2 = await classify({ model: classifier, text: 'World' });
+const embeddingModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const { embedding } = await embed({ model: embeddingModel, value: 'Hello' });
 ```
 
 ## Browser Compatibility
@@ -365,7 +357,7 @@ const result2 = await classify({ model: classifier, text: 'World' });
 | Edge 113+   | ✅     | ✅   | Same as Chrome               |
 | Firefox     | ❌     | ✅   | WASM only                    |
 | Safari 18+  | ✅     | ✅   | WebGPU available             |
-| iOS Safari  | ❌     | ✅   | WASM only                    |
+| iOS Safari  | ✅     | ✅   | WebGPU available (iOS 26+)   |
 
 ## Performance Tips
 

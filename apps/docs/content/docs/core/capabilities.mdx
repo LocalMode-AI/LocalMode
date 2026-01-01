@@ -1,0 +1,328 @@
+---
+title: Capabilities
+description: Detect device capabilities and provide appropriate fallbacks.
+icon: Monitor
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+LocalMode provides utilities to detect device capabilities and choose appropriate fallbacks.
+
+## Full Capability Report
+
+Get a comprehensive report of available features:
+
+```ts
+import { detectCapabilities } from '@localmode/core';
+
+const capabilities = await detectCapabilities();
+```
+
+### Capabilities Object
+
+<TypeTable
+  type={{
+    webgpu: {
+      description: 'WebGPU available for GPU acceleration',
+      type: 'boolean',
+    },
+    webgl: {
+      description: 'WebGL available for graphics',
+      type: 'boolean',
+    },
+    wasm: {
+      description: 'WebAssembly supported',
+      type: 'boolean',
+    },
+    simd: {
+      description: 'WASM SIMD instructions available',
+      type: 'boolean',
+    },
+    threads: {
+      description: 'Multi-threading supported',
+      type: 'boolean',
+    },
+    indexedDB: {
+      description: 'IndexedDB available for storage',
+      type: 'boolean',
+    },
+    webWorkers: {
+      description: 'Web Workers supported',
+      type: 'boolean',
+    },
+    webLocks: {
+      description: 'Web Locks API available',
+      type: 'boolean',
+    },
+    broadcastChannel: {
+      description: 'BroadcastChannel API available',
+      type: 'boolean',
+    },
+    crypto: {
+      description: 'Web Crypto API available',
+      type: 'boolean',
+    },
+    sharedArrayBuffer: {
+      description: 'SharedArrayBuffer available (requires COOP/COEP headers)',
+      type: 'boolean',
+    },
+    memory: {
+      description: 'Memory information',
+      type: '{ total: number; available: number }',
+    },
+    gpu: {
+      description: 'GPU information',
+      type: '{ vendor: string; renderer: string }',
+    },
+  }}
+/>
+
+## Individual Feature Checks
+
+### WebGPU
+
+```typescript
+import { isWebGPUSupported } from '@localmode/core';
+
+if (isWebGPUSupported()) {
+  // Use WebGPU-accelerated models
+  console.log('WebGPU available!');
+} else {
+  // Fall back to WASM
+  console.log('Using WASM fallback');
+}
+```
+
+### IndexedDB
+
+```typescript
+import { isIndexedDBSupported } from '@localmode/core';
+
+if (isIndexedDBSupported()) {
+  // Use IndexedDB storage
+} else {
+  // Use memory storage (Safari private browsing)
+}
+```
+
+### Web Workers
+
+```typescript
+import { isWebWorkersSupported } from '@localmode/core';
+
+if (isWebWorkersSupported()) {
+  // Offload to worker
+  const db = await createVectorDBWithWorker({ name: 'db', dimensions: 384 });
+} else {
+  // Use main thread
+  const db = await createVectorDB({ name: 'db', dimensions: 384 });
+}
+```
+
+### Web Locks
+
+```typescript
+import { isWebLocksSupported } from '@localmode/core';
+
+if (isWebLocksSupported()) {
+  // Use Web Locks for cross-tab coordination
+} else {
+  // Use fallback lock manager
+}
+```
+
+### Crypto
+
+```typescript
+import { isCryptoSupported } from '@localmode/core';
+
+if (isCryptoSupported()) {
+  // Use Web Crypto API for encryption
+} else {
+  // Encryption not available
+}
+```
+
+### Cross-Origin Isolation
+
+```typescript
+import { isCrossOriginIsolated } from '@localmode/core';
+
+if (isCrossOriginIsolated()) {
+  // SharedArrayBuffer available
+  // Better worker performance
+} else {
+  // Some features limited
+}
+```
+
+## Model Support Check
+
+Check if a specific model is supported:
+
+```typescript
+import { checkModelSupport } from '@localmode/core';
+
+const support = await checkModelSupport('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+
+if (support.supported) {
+  console.log('Model can run on this device');
+} else {
+  console.log('Issues:', support.issues);
+  // ['Insufficient GPU memory', 'WebGPU not available']
+}
+```
+
+## Recommended Fallbacks
+
+Get fallback recommendations:
+
+```typescript
+import { getRecommendedFallbacks } from '@localmode/core';
+
+const fallbacks = await getRecommendedFallbacks();
+
+console.log(fallbacks);
+// {
+//   embedding: 'Xenova/all-MiniLM-L6-v2',      // Smaller model for limited devices
+//   llm: 'SmolLM2-1.7B-Instruct-q4f16_1-MLC', // Compact LLM
+//   storage: 'memory',                         // If IndexedDB unavailable
+//   compute: 'wasm',                           // If WebGPU unavailable
+// }
+```
+
+## Capability-Based Model Selection
+
+Choose models based on device capabilities:
+
+```typescript
+import { detectCapabilities } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+import { webllm } from '@localmode/webllm';
+
+const capabilities = await detectCapabilities();
+
+// Choose embedding model
+const embeddingModel = capabilities.webgpu
+  ? transformers.embedding('Xenova/all-MiniLM-L12-v2') // Larger, better
+  : transformers.embedding('Xenova/all-MiniLM-L6-v2'); // Smaller, faster
+
+// Choose LLM
+let llm;
+if (capabilities.webgpu && capabilities.memory?.available > 2048) {
+  llm = webllm.languageModel('Llama-3.2-3B-Instruct-q4f16_1-MLC');
+} else if (capabilities.webgpu) {
+  llm = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+} else {
+  console.warn('WebGPU not available, LLM features disabled');
+  llm = null;
+}
+```
+
+## Browser Compatibility
+
+| Feature           | Chrome | Edge   | Firefox | Safari |
+| ----------------- | ------ | ------ | ------- | ------ |
+| WebGPU            | 113+   | 113+   | Nightly | 18+    |
+| WASM              | 80+    | 80+    | 75+     | 14+    |
+| IndexedDB         | ✅     | ✅     | ✅      | ✅\*   |
+| Web Workers       | ✅     | ✅     | ✅      | ⚠️     |
+| Web Locks         | ✅     | ✅     | ✅      | 15.4+  |
+| SharedArrayBuffer | ✅\*\* | ✅\*\* | ✅\*\*  | ✅\*\* |
+
+<Callout type="info" title="Notes">
+  * Safari private browsing blocks IndexedDB ** Requires cross-origin isolation headers
+</Callout>
+
+## Handling Limited Devices
+
+Gracefully handle limited capabilities:
+
+```typescript
+import { detectCapabilities, isWebGPUSupported } from '@localmode/core';
+
+async function initializeAI() {
+  const capabilities = await detectCapabilities();
+  const features = {
+    embeddings: true,
+    vectorSearch: true,
+    llm: false,
+    persistence: true,
+  };
+
+  // Check WebGPU for LLM
+  if (!isWebGPUSupported()) {
+    console.warn('WebGPU not available. LLM features disabled.');
+    features.llm = false;
+  } else if (capabilities.memory?.available < 1024) {
+    console.warn('Low GPU memory. LLM may be slow.');
+  } else {
+    features.llm = true;
+  }
+
+  // Check IndexedDB for persistence
+  if (!capabilities.indexedDB) {
+    console.warn('IndexedDB not available. Data will not persist.');
+    features.persistence = false;
+  }
+
+  return features;
+}
+
+// Usage
+const features = await initializeAI();
+
+if (features.llm) {
+  // Show LLM features in UI
+} else {
+  // Hide or disable LLM features
+}
+```
+
+## Device Information
+
+Get GPU and memory information:
+
+```typescript
+import { detectCapabilities } from '@localmode/core';
+
+const { gpu, memory } = await detectCapabilities();
+
+if (gpu) {
+  console.log('GPU Vendor:', gpu.vendor);
+  console.log('GPU Renderer:', gpu.renderer);
+}
+
+if (memory) {
+  console.log('Total Memory:', memory.total, 'MB');
+  console.log('Available Memory:', memory.available, 'MB');
+}
+```
+
+## Best Practices
+
+<Callout type="tip" title="Capability Tips">
+  1. **Check early** - Detect capabilities at app startup 
+  2. **Provide fallbacks** - Always have a fallback for each feature 
+  3. **Inform users** - Show warnings for limited functionality 
+  4. **Test everywhere** - Test on various devices and browsers 
+  5. **Graceful degradation** - Core features should work everywhere
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Getting Started"
+    href="/docs/getting-started"
+    description="Set up your first LocalMode project."
+  />
+  <Card
+    title="Transformers"
+    href="/docs/transformers"
+    description="Learn about available ML models."
+  />
+</Cards>

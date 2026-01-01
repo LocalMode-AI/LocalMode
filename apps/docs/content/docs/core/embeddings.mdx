@@ -1,0 +1,358 @@
+---
+title: Embeddings
+description: Generate embeddings for text and perform semantic search.
+icon: Cpu
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+Embeddings convert text into numerical vectors that capture semantic meaning. Use them for similarity search, clustering, and RAG applications.
+
+## embed()
+
+Generate an embedding for a single value:
+
+<Tabs items={['Basic Usage', 'With AbortSignal']}>
+<Tab value="Basic Usage">
+
+```ts {5-8}
+import { embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+
+const { embedding, usage, response } = await embed({
+  model,
+  value: 'Hello, world!',
+});
+
+console.log('Dimensions:', embedding.length); // 384
+console.log('Tokens:', usage.tokens); // 4
+console.log('Model:', response.modelId); // 'Xenova/all-MiniLM-L6-v2'
+```
+
+</Tab>
+<Tab value="With AbortSignal">
+
+```ts {3,7}
+const controller = new AbortController();
+
+setTimeout(() => controller.abort(), 5000); // Cancel after 5s
+
+const { embedding } = await embed({
+  model,
+  value: 'Hello, world!',
+  abortSignal: controller.signal,
+});
+```
+
+</Tab>
+</Tabs>
+
+### EmbedOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The embedding model to use',
+      type: 'EmbeddingModel | string',
+      required: true,
+    },
+    value: {
+      description: 'The text to embed',
+      type: 'string',
+      required: true,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure',
+      type: 'number',
+      default: '2',
+    },
+  }}
+/>
+
+### EmbedResult
+
+<TypeTable
+  type={{
+    embedding: {
+      description: 'The embedding vector',
+      type: 'Float32Array',
+    },
+    usage: {
+      description: 'Token usage information',
+      type: '{ tokens: number }',
+    },
+    response: {
+      description: 'Response metadata',
+      type: '{ modelId: string; timestamp: Date }',
+    },
+  }}
+/>
+
+## embedMany()
+
+Generate embeddings for multiple values efficiently:
+
+<Tabs items={['Basic', 'With Progress', 'With Cancellation']}>
+<Tab value="Basic">
+
+```ts {3-6}
+import { embedMany } from '@localmode/core';
+
+const { embeddings, usage } = await embedMany({
+  model,
+  values: ['Hello', 'World', 'AI', 'Machine Learning'],
+});
+
+console.log('Count:', embeddings.length); // 4
+console.log('Total tokens:', usage.tokens); // ~8
+```
+
+</Tab>
+<Tab value="With Progress">
+
+```ts {4-6}
+const { embeddings } = await embedMany({
+  model,
+  values: largeArrayOfTexts,
+  onProgress: (progress) => {
+    console.log(`Processed ${progress.completed}/${progress.total}`);
+  },
+});
+```
+
+</Tab>
+<Tab value="With Cancellation">
+
+```ts {1,4,10}
+const controller = new AbortController();
+
+// Cancel after 5 seconds
+setTimeout(() => controller.abort(), 5000);
+
+try {
+  const { embeddings } = await embedMany({
+    model,
+    values: largeArray,
+    abortSignal: controller.signal,
+  });
+} catch (error) {
+  if (error.name === 'AbortError') {
+    console.log('Operation cancelled');
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+### EmbedManyOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The embedding model to use',
+      type: 'EmbeddingModel | string',
+      required: true,
+    },
+    values: {
+      description: 'Array of texts to embed',
+      type: 'string[]',
+      required: true,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    onProgress: {
+      description: 'Progress callback',
+      type: '(progress: { completed: number; total: number }) => void',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure',
+      type: 'number',
+      default: '2',
+    },
+  }}
+/>
+
+## streamEmbedMany()
+
+Stream embeddings as they're generated:
+
+```typescript
+import { streamEmbedMany } from '@localmode/core';
+
+const stream = streamEmbedMany({
+  model,
+  values: texts,
+});
+
+for await (const { index, embedding } of stream) {
+  console.log(`Embedding ${index}:`, embedding.length);
+}
+```
+
+## semanticSearch()
+
+Search for semantically similar documents:
+
+```typescript
+import { semanticSearch, createVectorDB } from '@localmode/core';
+
+const db = await createVectorDB({ name: 'docs', dimensions: 384 });
+
+// Add documents to the database first...
+
+const results = await semanticSearch({
+  db,
+  model,
+  query: 'What is machine learning?',
+  k: 5,
+});
+
+results.forEach((result) => {
+  console.log(`Score: ${result.score.toFixed(3)}`);
+  console.log(`Text: ${result.metadata.text}`);
+});
+```
+
+### With Filters
+
+```typescript
+const results = await semanticSearch({
+  db,
+  model,
+  query: 'AI applications',
+  k: 5,
+  filter: {
+    category: { $eq: 'technology' },
+    year: { $gte: 2023 },
+  },
+});
+```
+
+### Options
+
+```typescript
+interface SemanticSearchOptions {
+  db: VectorDB;
+  model: EmbeddingModel;
+  query: string;
+  k?: number;
+  filter?: FilterExpression;
+  abortSignal?: AbortSignal;
+}
+```
+
+## Distance Functions
+
+Compare vectors directly:
+
+```typescript
+import { cosineSimilarity, euclideanDistance, dotProduct } from '@localmode/core';
+
+const similarity = cosineSimilarity(embedding1, embedding2);
+console.log('Similarity:', similarity); // 0.0 to 1.0
+
+const distance = euclideanDistance(embedding1, embedding2);
+console.log('Distance:', distance);
+
+const dot = dotProduct(embedding1, embedding2);
+console.log('Dot product:', dot);
+```
+
+## Middleware
+
+Wrap embedding models with middleware for caching, logging, etc.:
+
+```typescript
+import { wrapEmbeddingModel, cachingMiddleware, loggingMiddleware } from '@localmode/core';
+
+const baseModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+
+const model = wrapEmbeddingModel(baseModel, [
+  cachingMiddleware({ maxSize: 1000 }),
+  loggingMiddleware({ logger: console.log }),
+]);
+
+// Now all embed calls will be cached and logged
+const { embedding } = await embed({ model, value: 'Hello' });
+```
+
+See [Middleware](/docs/core/middleware) for more details.
+
+## Implementing Custom Models
+
+Create your own embedding model by implementing the `EmbeddingModel` interface:
+
+```typescript
+import type { EmbeddingModel, DoEmbedOptions } from '@localmode/core';
+
+class MyCustomEmbedder implements EmbeddingModel {
+  readonly modelId = 'custom:my-embedder';
+  readonly provider = 'custom';
+  readonly dimensions = 768;
+  readonly maxEmbeddingsPerCall = 100;
+  readonly supportsParallelCalls = true;
+
+  async doEmbed(options: DoEmbedOptions) {
+    const { values } = options;
+
+    // Your embedding logic here
+    const embeddings = values.map(() => new Float32Array(768));
+
+    return {
+      embeddings,
+      usage: { tokens: values.length * 10 },
+    };
+  }
+}
+
+// Use with core functions
+const model = new MyCustomEmbedder();
+const { embedding } = await embed({ model, value: 'Hello' });
+```
+
+## Best Practices
+
+<Callout type="tip" title="Performance Tips">
+  1. **Batch embeddings** - Use `embedMany()` instead of multiple `embed()` calls
+  2. **Use caching** - Add `cachingMiddleware()` for repeated queries
+  3. **Choose the right model** - Smaller models (MiniLM-L6) are faster, larger ones more accurate
+  4. **Preload models** - Load models during app initialization
+</Callout>
+
+### Recommended Models
+
+| Model                                          | Dimensions | Size   | Use Case              |
+| ---------------------------------------------- | ---------- | ------ | --------------------- |
+| `Xenova/all-MiniLM-L6-v2`                      | 384        | ~22MB  | General purpose, fast |
+| `Xenova/all-MiniLM-L12-v2`                     | 384        | ~33MB  | Better accuracy       |
+| `Xenova/paraphrase-multilingual-MiniLM-L12-v2` | 384        | ~117MB | 50+ languages         |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Vector Database"
+    href="/docs/core/vector-db"
+    description="Store and search embeddings efficiently."
+  />
+  <Card
+    title="RAG"
+    href="/docs/core/rag"
+    description="Build retrieval-augmented generation pipelines."
+  />
+</Cards>

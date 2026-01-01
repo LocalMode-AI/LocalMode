@@ -1,0 +1,297 @@
+---
+title: Text Generation
+description: Generate and stream text with language models.
+icon: MessageSquare
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+Generate text using local language models with streaming support.
+
+## streamText()
+
+Stream text generation for real-time responses:
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+
+const stream = await streamText({
+  model,
+  prompt: 'Explain quantum computing in simple terms.',
+});
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+### With System Prompt
+
+```typescript
+const stream = await streamText({
+  model,
+  system: 'You are a helpful coding assistant. Be concise.',
+  prompt: 'Write a function to reverse a string in TypeScript.',
+});
+```
+
+### Options
+
+```typescript
+interface StreamTextOptions {
+  model: LanguageModel;
+  prompt: string;
+  system?: string;
+  maxTokens?: number;
+  temperature?: number;
+  topP?: number;
+  stopSequences?: string[];
+  abortSignal?: AbortSignal;
+}
+```
+
+### Stream Properties
+
+```typescript
+const stream = await streamText({ model, prompt: 'Hello' });
+
+// Iterate over text chunks
+for await (const chunk of stream) {
+  console.log(chunk.text);      // The generated text piece
+  console.log(chunk.isLast);    // Whether this is the last chunk
+}
+
+// Get full text after streaming
+const fullText = await stream.text;
+
+// Get usage statistics
+const usage = await stream.usage;
+console.log('Tokens:', usage.totalTokens);
+```
+
+## generateText()
+
+Generate complete text without streaming:
+
+```typescript
+import { generateText } from '@localmode/core';
+
+const { text, usage } = await generateText({
+  model,
+  prompt: 'Write a haiku about programming.',
+});
+
+console.log(text);
+console.log('Tokens used:', usage.totalTokens);
+```
+
+### Options
+
+```typescript
+interface GenerateTextOptions {
+  model: LanguageModel;
+  prompt: string;
+  system?: string;
+  maxTokens?: number;
+  temperature?: number;
+  topP?: number;
+  stopSequences?: string[];
+  abortSignal?: AbortSignal;
+}
+```
+
+### Return Value
+
+```typescript
+interface GenerateTextResult {
+  text: string;
+  usage: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  response: {
+    modelId: string;
+    timestamp: Date;
+  };
+}
+```
+
+## Cancellation
+
+Cancel generation mid-stream:
+
+```typescript
+const controller = new AbortController();
+
+// Cancel after 5 seconds
+setTimeout(() => controller.abort(), 5000);
+
+try {
+  const stream = await streamText({
+    model,
+    prompt: 'Write a long essay...',
+    abortSignal: controller.signal,
+  });
+
+  for await (const chunk of stream) {
+    process.stdout.write(chunk.text);
+  }
+} catch (error) {
+  if (error.name === 'AbortError') {
+    console.log('\nGeneration cancelled');
+  }
+}
+```
+
+## Temperature & Sampling
+
+Control randomness in generation:
+
+```typescript
+// More deterministic (good for factual responses)
+const stream = await streamText({
+  model,
+  prompt: 'What is 2 + 2?',
+  temperature: 0.1,
+});
+
+// More creative (good for stories, brainstorming)
+const stream = await streamText({
+  model,
+  prompt: 'Write a creative story about a robot.',
+  temperature: 0.9,
+});
+
+// Nucleus sampling
+const stream = await streamText({
+  model,
+  prompt: 'Continue this sentence: The future of AI is...',
+  topP: 0.9,  // Consider tokens making up 90% of probability
+});
+```
+
+| Parameter | Description | Range | Default |
+|-----------|-------------|-------|---------|
+| `temperature` | Randomness | 0.0 - 2.0 | 1.0 |
+| `topP` | Nucleus sampling | 0.0 - 1.0 | 1.0 |
+| `maxTokens` | Max generation length | 1 - model max | Model default |
+
+## Stop Sequences
+
+Stop generation at specific patterns:
+
+```typescript
+const stream = await streamText({
+  model,
+  prompt: 'List three fruits:\n1.',
+  stopSequences: ['\n4.', '\n\n'],  // Stop before 4th item or double newline
+});
+```
+
+## Chat-Style Prompts
+
+Build chat applications:
+
+```typescript
+function buildPrompt(messages: Array<{ role: string; content: string }>) {
+  return messages
+    .map((m) => `${m.role}: ${m.content}`)
+    .join('\n') + '\nassistant:';
+}
+
+const messages = [
+  { role: 'user', content: 'Hello!' },
+  { role: 'assistant', content: 'Hi! How can I help you today?' },
+  { role: 'user', content: 'What is TypeScript?' },
+];
+
+const stream = await streamText({
+  model,
+  system: 'You are a helpful programming assistant.',
+  prompt: buildPrompt(messages),
+  stopSequences: ['user:', '\n\n'],
+});
+```
+
+## RAG Integration
+
+Combine with retrieval:
+
+```typescript
+import { semanticSearch, streamText } from '@localmode/core';
+
+async function ragQuery(question: string) {
+  // Retrieve context
+  const results = await semanticSearch({ db, model: embeddingModel, query: question, k: 3 });
+  const context = results.map((r) => r.metadata.text).join('\n\n');
+
+  // Generate answer
+  const stream = await streamText({
+    model: llm,
+    system: 'Answer based only on the provided context.',
+    prompt: `Context:\n${context}\n\nQuestion: ${question}\n\nAnswer:`,
+  });
+
+  return stream;
+}
+```
+
+## Implementing Custom Models
+
+Create your own language model:
+
+```typescript
+import type { LanguageModel, GenerateTextOptions, StreamTextOptions } from '@localmode/core';
+
+class MyLanguageModel implements LanguageModel {
+  readonly modelId = 'custom:my-model';
+  readonly provider = 'custom';
+
+  async doGenerateText(options: GenerateTextOptions) {
+    // Your generation logic
+    return {
+      text: 'Generated text...',
+      usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+    };
+  }
+
+  async doStreamText(options: StreamTextOptions) {
+    // Return an async generator
+    return (async function* () {
+      yield { text: 'Hello', isLast: false };
+      yield { text: ' world!', isLast: true };
+    })();
+  }
+}
+```
+
+## Best Practices
+
+<Callout type="tip" title="Generation Tips">
+  1. **Stream for UX** — Always use `streamText()` for user-facing apps
+  2. **Set max tokens** — Prevent runaway generation
+  3. **Use system prompts** — Guide model behavior consistently
+  4. **Handle errors** — Wrap generation in try-catch
+  5. **Provide cancellation** — Let users abort long generations
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="WebLLM"
+    href="/docs/webllm"
+    description="Learn about available models and configuration."
+  />
+  <Card
+    title="RAG"
+    href="/docs/core/rag"
+    description="Build retrieval-augmented generation pipelines."
+  />
+</Cards>

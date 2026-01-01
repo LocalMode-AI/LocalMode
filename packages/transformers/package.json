@@ -12,7 +12,7 @@
     "url": "https://github.com/LocalMode-AI/LocalMode.git",
     "directory": "packages/transformers"
   },
-  "homepage": "https://github.com/LocalMode-AI/LocalMode#readme",
+  "homepage": "https://localmode.dev/docs/transformers",
   "bugs": {
     "url": "https://github.com/LocalMode-AI/LocalMode/issues"
   },
@@ -61,18 +61,14 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
-  "peerDependencies": {
-    "@localmode/core": "^1.0.0",
-    "@huggingface/transformers": "^3.0.0"
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1"
   },
-  "peerDependenciesMeta": {
-    "@huggingface/transformers": {
-      "optional": false
-    }
+  "peerDependencies": {
+    "@localmode/core": "^1.0.0"
   },
   "devDependencies": {
     "@localmode/core": "workspace:*",
-    "@huggingface/transformers": "^3.8.1",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"
   }

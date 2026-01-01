@@ -2,9 +2,6 @@
 
 > 🚧 **In Development** — This package is under active development and not yet used in production applications. API may change.
 
-Dexie.js storage adapter for @localmode - enhanced IndexedDB with versioning and migrations.
-
-[![npm](https://img.shields.io/npm/v/@localmode/dexie)](https://www.npmjs.com/package/@localmode/dexie)
 [![license](https://img.shields.io/npm/l/@localmode/dexie)](../../LICENSE)
 
 ## Features
@@ -17,11 +14,7 @@ Dexie.js storage adapter for @localmode - enhanced IndexedDB with versioning and
 ## Installation
 
 ```bash
-# Preferred: pnpm
-pnpm install @localmode/dexie @localmode/core dexie
-
-# Alternative: npm
-npm install @localmode/dexie @localmode/core dexie
+pnpm install @localmode/dexie @localmode/core
 ```
 
 ## Quick Start

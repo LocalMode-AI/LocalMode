@@ -8,11 +8,7 @@ WebLLM provider for local-first LLM inference. Uses 4-bit quantized models for e
 ## Installation
 
 ```bash
-# Preferred: pnpm
-pnpm install @localmode/webllm @localmode/core @mlc-ai/web-llm
-
-# Alternative: npm
-npm install @localmode/webllm @localmode/core @mlc-ai/web-llm
+pnpm install @localmode/webllm @localmode/core
 ```
 
 ## Quick Start

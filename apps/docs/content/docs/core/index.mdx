@@ -1,0 +1,401 @@
+---
+title: 'Overview'
+description: Zero-dependency core package with all LocalMode functionality.
+icon: Box
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { Steps, Step } from 'fumadocs-ui/components/steps';
+
+# @localmode/core
+
+The core package contains **all functions, interfaces, types, and utilities** for building local-first AI applications. It has **zero external dependencies** — everything is implemented using native browser APIs.
+
+<Callout type="info" title="Zero Dependencies">
+  `@localmode/core` has no `dependencies` in its `package.json`. All functionality uses native Web
+  APIs: IndexedDB, Web Crypto, Web Workers, BroadcastChannel, and more.
+</Callout>
+
+## Installation
+
+<Tabs items={['pnpm', 'npm', 'yarn']}>
+  <Tab value="pnpm">```bash pnpm install @localmode/core ```</Tab>
+  <Tab value="npm">```bash npm install @localmode/core ```</Tab>
+  <Tab value="yarn">```bash yarn add @localmode/core ```</Tab>
+</Tabs>
+
+## Quick Start
+
+<Steps>
+
+<Step>
+### Install Dependencies
+
+```bash
+pnpm install @localmode/core @localmode/transformers
+```
+
+</Step>
+
+<Step>
+### Create an Embedding Model
+
+```ts {3}
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+```
+
+</Step>
+
+<Step>
+### Generate Embeddings
+
+```ts {1,3-6}
+import { embed } from '@localmode/core';
+
+const { embedding, usage } = await embed({
+  model,
+  value: 'Hello, world!',
+});
+```
+
+</Step>
+
+<Step>
+### Store and Search
+
+```ts
+import { createVectorDB } from '@localmode/core';
+
+const db = await createVectorDB({ name: 'docs', dimensions: 384 });
+
+await db.add({ id: 'doc-1', vector: embedding, metadata: { text: 'Hello' } });
+
+const results = await db.search(queryVector, { k: 5 });
+```
+
+</Step>
+
+</Steps>
+
+## Features
+
+### ✅ Production Ready
+
+These features are stable and ready for production use:
+
+| Feature             | Description                                             |
+| ------------------- | ------------------------------------------------------- |
+| **Vector Database** | HNSW index for fast approximate nearest neighbor search |
+| **Embeddings**      | `embed()`, `embedMany()`, `semanticSearch()` functions  |
+| **Reranking**       | `rerank()` for improved RAG accuracy                    |
+| **RAG Utilities**   | Text chunking (recursive, markdown, code-aware)         |
+| **Text Generation** | `streamText()` with async iteration                     |
+| **Storage**         | IndexedDB persistence with memory fallback              |
+| **Capabilities**    | WebGPU, IndexedDB, Workers detection                    |
+| **Security**        | Encryption, PII redaction                               |
+| **Middleware**      | Caching, logging, retry, validation                     |
+
+### 🚧 Coming Soon
+
+| Feature            | Description                                    |
+| ------------------ | ---------------------------------------------- |
+| **Classification** | `classify()`, `classifyZeroShot()`             |
+| **NER**            | `extractEntities()`                            |
+| **Audio**          | `transcribe()`, `synthesizeSpeech()`           |
+| **Vision**         | Image classification, captioning, segmentation |
+| **Translation**    | `translate()`                                  |
+| **Summarization**  | `summarize()`                                  |
+| **OCR**            | `extractText()`                                |
+| **Document QA**    | `askDocument()`, `askTable()`                  |
+
+## Architecture
+
+LocalMode follows a **function-first API** design:
+
+```typescript
+// ✅ Top-level functions (correct)
+const { embedding } = await embed({ model, value: 'Hello' });
+
+// ❌ Class methods (wrong)
+const embedder = new Embedder(model);
+await embedder.embed('Hello');
+```
+
+All functions accept a **single options object** and return **structured results**:
+
+```typescript
+interface EmbedResult {
+  embedding: Float32Array;
+  usage: { tokens: number };
+  response: { modelId: string; timestamp: Date };
+}
+```
+
+## Quick Reference
+
+<Cards>
+  <Card
+    title="Embeddings"
+    href="/docs/core/embeddings"
+    description="Generate embeddings, batch processing, semantic search."
+  />
+  <Card
+    title="Reranking"
+    href="/docs/core/reranking"
+    description="Improve RAG accuracy by reranking retrieved documents."
+  />
+  <Card
+    title="Vector Database"
+    href="/docs/core/vector-db"
+    description="Create, query, and persist vector databases."
+  />
+  <Card title="RAG" href="/docs/core/rag" description="Chunking, ingestion, hybrid search." />
+  <Card
+    title="Storage"
+    href="/docs/core/storage"
+    description="IndexedDB, memory storage, persistence."
+  />
+  <Card
+    title="Middleware"
+    href="/docs/core/middleware"
+    description="Caching, logging, retry, validation."
+  />
+  <Card
+    title="Security"
+    href="/docs/core/security"
+    description="Encryption, PII redaction, key management."
+  />
+  <Card
+    title="Cross-Tab Sync"
+    href="/docs/core/sync"
+    description="Locks and BroadcastChannel for multi-tab apps."
+  />
+  <Card
+    title="Events"
+    href="/docs/core/events"
+    description="Type-safe event system for reactive updates."
+  />
+  <Card
+    title="Testing"
+    href="/docs/core/testing"
+    description="Mock utilities for testing LocalMode applications."
+  />
+</Cards>
+
+## Core Exports
+
+### Embeddings
+
+```typescript
+import {
+  embed,
+  embedMany,
+  streamEmbedMany,
+  semanticSearch,
+  wrapEmbeddingModel,
+} from '@localmode/core';
+```
+
+### Vector Database
+
+```typescript
+import {
+  createVectorDB,
+  createVectorDBWithWorker,
+  HNSWIndex,
+  cosineSimilarity,
+  euclideanDistance,
+  dotProduct,
+} from '@localmode/core';
+```
+
+### RAG Utilities
+
+```typescript
+import {
+  chunk,
+  recursiveChunk,
+  markdownChunk,
+  codeChunk,
+  ingest,
+  createBM25,
+  hybridFuse,
+  reciprocalRankFusion,
+} from '@localmode/core';
+```
+
+### Text Generation
+
+```typescript
+import { streamText, generateText } from '@localmode/core';
+```
+
+### Classification
+
+```typescript
+import {
+  classify,
+  classifyMany,
+  classifyZeroShot,
+  extractEntities,
+  extractEntitiesMany,
+  rerank,
+} from '@localmode/core';
+```
+
+### Storage
+
+```typescript
+import {
+  IndexedDBStorage,
+  MemoryStorage,
+  createStorage,
+  getStorageQuota,
+  requestPersistence,
+  cleanup,
+} from '@localmode/core';
+```
+
+### Capabilities
+
+```typescript
+import {
+  detectCapabilities,
+  isWebGPUSupported,
+  isIndexedDBSupported,
+  checkModelSupport,
+  getRecommendedFallbacks,
+} from '@localmode/core';
+```
+
+### Middleware
+
+```typescript
+import {
+  wrapEmbeddingModel,
+  wrapVectorDB,
+  cachingMiddleware,
+  loggingMiddleware,
+  retryMiddleware,
+  rateLimitMiddleware,
+  validationMiddleware,
+  piiRedactionMiddleware,
+  encryptionMiddleware,
+} from '@localmode/core';
+```
+
+### Security
+
+```typescript
+import { encrypt, decrypt, deriveKey, isCryptoSupported, redactPII } from '@localmode/core';
+```
+
+### Cross-Tab Sync
+
+```typescript
+import { createBroadcaster, createLockManager, isWebLocksSupported } from '@localmode/core';
+```
+
+### Network
+
+```typescript
+import {
+  getNetworkStatus,
+  onNetworkChange,
+  isOnline,
+  isOffline,
+  waitForOnline,
+} from '@localmode/core';
+```
+
+### Events
+
+```typescript
+import { createEventEmitter, globalEventBus } from '@localmode/core';
+```
+
+### Errors
+
+```typescript
+import {
+  LocalModeError,
+  EmbeddingError,
+  ModelNotFoundError,
+  StorageError,
+  QuotaExceededError,
+  ValidationError,
+  formatErrorForUser,
+} from '@localmode/core';
+```
+
+### Testing Utilities
+
+```typescript
+import {
+  createMockEmbeddingModel,
+  createMockStorage,
+  createMockVectorDB,
+  createTestVector,
+  createSeededRandom,
+} from '@localmode/core';
+```
+
+## Type Definitions
+
+All interfaces are exported for implementing custom providers:
+
+```typescript
+import type {
+  // Models
+  EmbeddingModel,
+  ClassificationModel,
+  ZeroShotClassificationModel,
+  NERModel,
+  RerankerModel,
+  LanguageModel,
+  SpeechToTextModel,
+  TextToSpeechModel,
+  ImageClassificationModel,
+  ImageCaptionModel,
+  SegmentationModel,
+  ObjectDetectionModel,
+  TranslationModel,
+  SummarizationModel,
+  FillMaskModel,
+  QuestionAnsweringModel,
+  OCRModel,
+  DocumentQAModel,
+
+  // Storage
+  Storage,
+  StoredDocument,
+
+  // Vector DB
+  VectorDB,
+  VectorDBConfig,
+  SearchResult,
+
+  // Middleware
+  EmbeddingModelMiddleware,
+  VectorDBMiddleware,
+} from '@localmode/core';
+```
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Embeddings"
+    href="/docs/core/embeddings"
+    description="Start generating embeddings."
+  />
+  <Card
+    title="Vector Database"
+    href="/docs/core/vector-db"
+    description="Create and query vector databases."
+  />
+</Cards>

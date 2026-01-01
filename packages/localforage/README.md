@@ -4,7 +4,6 @@
 
 Cross-browser storage adapter with automatic fallback from IndexedDB to WebSQL to localStorage.
 
-[![npm](https://img.shields.io/npm/v/@localmode/localforage)](https://www.npmjs.com/package/@localmode/localforage)
 [![license](https://img.shields.io/npm/l/@localmode/localforage)](../../LICENSE)
 
 ## Features
@@ -17,11 +16,7 @@ Cross-browser storage adapter with automatic fallback from IndexedDB to WebSQL t
 ## Installation
 
 ```bash
-# Preferred: pnpm
-pnpm install @localmode/localforage @localmode/core localforage
-
-# Alternative: npm
-npm install @localmode/localforage @localmode/core localforage
+pnpm install @localmode/localforage @localmode/core
 ```
 
 ## Quick Start

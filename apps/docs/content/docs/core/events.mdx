@@ -1,0 +1,410 @@
+---
+title: Events
+description: Type-safe event system for reactive updates
+icon: Radio
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Steps } from 'fumadocs-ui/components/steps';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+LocalMode provides a type-safe event system for building reactive applications. Subscribe to VectorDB lifecycle events, embedding operations, and custom events for real-time UI updates.
+
+## Overview
+
+The event system enables:
+
+- **Reactive UI updates** — Re-render components when data changes
+- **Cross-component communication** — Notify different parts of your app
+- **Debugging & logging** — Track all database operations
+- **Custom integrations** — Build workflows on top of database events
+
+## Quick Start
+
+```ts {1,4-6,9}
+import { createEventEmitter, VectorDBEvents } from '@localmode/core';
+
+// Create an event emitter
+const events = createEventEmitter<VectorDBEvents>();
+
+// Subscribe to events
+events.on('add', ({ id }) => {
+  console.log('Document added:', id);
+});
+
+// Emit events
+events.emit('add', { id: 'doc-1' });
+```
+
+## Creating Event Emitters
+
+### Typed Event Emitter
+
+```ts
+import { createEventEmitter, VectorDBEvents } from '@localmode/core';
+
+// Create with built-in VectorDB event types
+const dbEvents = createEventEmitter<VectorDBEvents>();
+
+// Or create a new EventEmitter class directly
+import { EventEmitter } from '@localmode/core';
+const emitter = new EventEmitter<VectorDBEvents>();
+```
+
+### Custom Event Types
+
+```ts
+import { EventEmitter } from '@localmode/core';
+
+// Define your custom event types
+interface MyAppEvents {
+  userLogin: { userId: string; timestamp: Date };
+  searchPerformed: { query: string; resultCount: number };
+  documentProcessed: { docId: string; chunks: number };
+}
+
+const appEvents = new EventEmitter<MyAppEvents>();
+
+// Type-safe subscriptions
+appEvents.on('userLogin', ({ userId, timestamp }) => {
+  console.log(`User ${userId} logged in at ${timestamp}`);
+});
+
+// Type-safe emissions
+appEvents.emit('userLogin', {
+  userId: 'user-123',
+  timestamp: new Date(),
+});
+```
+
+## VectorDB Events
+
+Built-in event types for VectorDB operations:
+
+<TypeTable
+  type={{
+    add: {
+      description: 'Emitted when a document is added',
+      type: '{ id: string; collection?: string }',
+    },
+    addMany: {
+      description: 'Emitted when multiple documents are added',
+      type: '{ ids: string[]; collection?: string }',
+    },
+    get: {
+      description: 'Emitted after a document is retrieved',
+      type: '{ id: string; found: boolean }',
+    },
+    update: {
+      description: 'Emitted when a document is updated',
+      type: '{ id: string; collection?: string }',
+    },
+    delete: {
+      description: 'Emitted when a document is deleted',
+      type: '{ id: string }',
+    },
+    deleteMany: {
+      description: 'Emitted when multiple documents are deleted',
+      type: '{ ids: string[] }',
+    },
+    search: {
+      description: 'Emitted after a search operation',
+      type: '{ resultsCount: number; k: number; durationMs: number }',
+    },
+    clear: {
+      description: 'Emitted when the database is cleared',
+      type: '{ documentCount: number }',
+    },
+    error: {
+      description: 'Emitted on any error',
+      type: '{ operation: string; error: Error }',
+    },
+    open: {
+      description: 'Emitted when database is opened',
+      type: '{ name: string }',
+    },
+    close: {
+      description: 'Emitted when database is closed',
+      type: '{ name: string }',
+    },
+  }}
+/>
+
+## Embedding Events
+
+Event types for embedding operations:
+
+<TypeTable
+  type={{
+    embedStart: {
+      description: 'Emitted before embedding starts',
+      type: '{ valueCount: number }',
+    },
+    embedComplete: {
+      description: 'Emitted after embedding completes',
+      type: '{ valueCount: number; durationMs: number; tokens: number }',
+    },
+    embedError: {
+      description: 'Emitted on embedding error',
+      type: '{ error: Error }',
+    },
+    modelLoad: {
+      description: 'Emitted when model is loaded',
+      type: '{ modelId: string; durationMs: number }',
+    },
+    modelLoadError: {
+      description: 'Emitted when model loading fails',
+      type: '{ modelId: string; error: Error }',
+    },
+  }}
+/>
+
+## Event Methods
+
+### `on(event, callback)`
+
+Subscribe to an event. Returns an unsubscribe function.
+
+```ts
+const unsubscribe = events.on('add', ({ id }) => {
+  console.log('Added:', id);
+});
+
+// Later: unsubscribe
+unsubscribe();
+```
+
+### `once(event, callback)`
+
+Subscribe for a single emission only.
+
+```ts
+events.once('modelLoad', ({ modelId }) => {
+  console.log('Model loaded (first time only):', modelId);
+});
+```
+
+### `emit(event, data)`
+
+Emit an event synchronously.
+
+```ts
+events.emit('add', { id: 'doc-1', collection: 'default' });
+```
+
+### `emitAsync(event, data)`
+
+Emit an event and wait for all async handlers to complete.
+
+```ts
+await events.emitAsync('add', { id: 'doc-1' });
+// All handlers (including async ones) have completed
+```
+
+### `off(event?)`
+
+Remove listeners.
+
+```ts
+// Remove all listeners for specific event
+events.off('add');
+
+// Remove all listeners for all events
+events.off();
+```
+
+### Utility Methods
+
+```ts
+// Get listener count
+const count = events.listenerCount('add');
+
+// Check if there are any listeners
+const hasListeners = events.hasListeners('add');
+
+// Get all event names with listeners
+const eventNames = events.eventNames();
+```
+
+## Global Event Bus
+
+LocalMode provides a global event bus for app-wide events:
+
+```ts
+import { globalEventBus } from '@localmode/core';
+
+// Subscribe anywhere in your app
+globalEventBus.on('add', ({ id }) => {
+  console.log('Document added somewhere:', id);
+});
+
+// Useful for:
+// - Debugging all database operations
+// - Syncing state across components
+// - Global logging
+```
+
+<Callout type="info">
+  The global event bus receives events from all VectorDB instances, making it useful for centralized
+  logging and state management.
+</Callout>
+
+## Event Middleware
+
+Create middleware that emits events for VectorDB operations:
+
+```ts
+import { wrapVectorDB, createEventEmitter, eventMiddleware } from '@localmode/core';
+
+// Create event emitter
+const events = createEventEmitter();
+
+// Subscribe to events
+events.on('add', ({ id }) => console.log('Added:', id));
+events.on('delete', ({ id }) => console.log('Deleted:', id));
+
+// Create DB with event middleware
+const db = wrapVectorDB({
+  db: baseDb,
+  middleware: eventMiddleware(events),
+});
+
+// Now all operations emit events automatically
+await db.add({ id: 'doc-1', vector, metadata });
+// Console: "Added: doc-1"
+```
+
+## React Integration
+
+### Custom Hook
+
+```tsx
+import { useEffect, useState } from 'react';
+import { createEventEmitter, VectorDBEvents } from '@localmode/core';
+
+const events = createEventEmitter<VectorDBEvents>();
+
+function useVectorDBEvents() {
+  const [documentCount, setDocumentCount] = useState(0);
+  const [lastOperation, setLastOperation] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsubscribeAdd = events.on('add', () => {
+      setDocumentCount((c) => c + 1);
+      setLastOperation('add');
+    });
+
+    const unsubscribeDelete = events.on('delete', () => {
+      setDocumentCount((c) => c - 1);
+      setLastOperation('delete');
+    });
+
+    const unsubscribeClear = events.on('clear', () => {
+      setDocumentCount(0);
+      setLastOperation('clear');
+    });
+
+    return () => {
+      unsubscribeAdd();
+      unsubscribeDelete();
+      unsubscribeClear();
+    };
+  }, []);
+
+  return { documentCount, lastOperation };
+}
+```
+
+### Search Analytics
+
+```tsx
+function SearchAnalytics() {
+  const [searches, setSearches] = useState<
+    Array<{
+      query: string;
+      results: number;
+      duration: number;
+    }>
+  >([]);
+
+  useEffect(() => {
+    return globalEventBus.on('search', ({ resultsCount, k, durationMs }) => {
+      setSearches((prev) => [
+        ...prev.slice(-99), // Keep last 100
+        { query: 'unknown', results: resultsCount, duration: durationMs },
+      ]);
+    });
+  }, []);
+
+  const avgDuration = searches.reduce((sum, s) => sum + s.duration, 0) / searches.length;
+
+  return (
+    <div>
+      <p>Total searches: {searches.length}</p>
+      <p>Average duration: {avgDuration.toFixed(2)}ms</p>
+    </div>
+  );
+}
+```
+
+## Full Example
+
+```ts
+import {
+  createVectorDB,
+  embed,
+  createEventEmitter,
+  VectorDBEvents,
+  EmbeddingEvents,
+} from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Create event emitters
+const dbEvents = createEventEmitter<VectorDBEvents>();
+const embedEvents = createEventEmitter<EmbeddingEvents>();
+
+// Set up logging
+dbEvents.on('add', ({ id }) => console.log(`[DB] Added: ${id}`));
+dbEvents.on('search', ({ resultsCount, durationMs }) => {
+  console.log(`[DB] Search: ${resultsCount} results in ${durationMs}ms`);
+});
+dbEvents.on('error', ({ operation, error }) => {
+  console.error(`[DB] Error in ${operation}:`, error);
+});
+
+embedEvents.on('embedStart', ({ valueCount }) => {
+  console.log(`[Embed] Starting ${valueCount} values`);
+});
+embedEvents.on('embedComplete', ({ valueCount, durationMs, tokens }) => {
+  console.log(`[Embed] Completed ${valueCount} values in ${durationMs}ms (${tokens} tokens)`);
+});
+embedEvents.on('modelLoad', ({ modelId, durationMs }) => {
+  console.log(`[Embed] Model ${modelId} loaded in ${durationMs}ms`);
+});
+
+// Create database
+const db = await createVectorDB({ name: 'documents', dimensions: 384 });
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+
+// Manually emit events (or use middleware)
+async function addDocument(text: string) {
+  const id = crypto.randomUUID();
+
+  embedEvents.emit('embedStart', { valueCount: 1 });
+  const start = performance.now();
+
+  const { embedding, usage } = await embed({ model, value: text });
+
+  embedEvents.emit('embedComplete', {
+    valueCount: 1,
+    durationMs: performance.now() - start,
+    tokens: usage.tokens,
+  });
+
+  await db.add({ id, vector: embedding, metadata: { text } });
+  dbEvents.emit('add', { id });
+
+  return id;
+}
+```

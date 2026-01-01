@@ -1,0 +1,247 @@
+---
+title: Reranking
+description: Improve RAG accuracy with cross-encoder reranking.
+icon: ArrowUpDown
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Reranking uses cross-encoder models to improve the relevance of search results. It's particularly useful for RAG pipelines.
+
+## Why Reranking?
+
+Bi-encoder (embedding) models are fast but may miss subtle relevance signals. Cross-encoder rerankers consider query-document pairs together for better accuracy.
+
+```
+Query: "How does photosynthesis work?"
+
+Initial Ranking (embeddings):
+1. "Photosynthesis is a process used by plants" ✓
+2. "The synthesis of proteins requires energy" ✗
+3. "Plants convert sunlight into chemical energy" ✓
+
+After Reranking:
+1. "Plants convert sunlight into chemical energy" ✓ (more specific)
+2. "Photosynthesis is a process used by plants" ✓
+3. "The synthesis of proteins requires energy" ✗
+```
+
+## Basic Usage
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { rerank } from '@localmode/core';
+
+const model = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+
+const results = await rerank({
+  model,
+  query: 'What is machine learning?',
+  documents: [
+    'Machine learning is a subset of artificial intelligence.',
+    'The weather forecast predicts rain tomorrow.',
+    'Deep learning uses neural networks to learn patterns.',
+    'I went to the grocery store yesterday.',
+  ],
+  topK: 2,
+});
+
+results.forEach((r, i) => {
+  console.log(`${i + 1}. Score: ${r.score.toFixed(3)}`);
+  console.log(`   ${r.document}`);
+});
+
+// Output:
+// 1. Score: 0.892
+//    Machine learning is a subset of artificial intelligence.
+// 2. Score: 0.756
+//    Deep learning uses neural networks to learn patterns.
+```
+
+## With Semantic Search
+
+Typical RAG reranking pattern:
+
+```typescript
+import { semanticSearch, rerank } from '@localmode/core';
+
+async function searchWithReranking(query: string) {
+  // Step 1: Fast semantic search (retrieve many candidates)
+  const candidates = await semanticSearch({
+    db,
+    model: embeddingModel,
+    query,
+    k: 20,  // Get more candidates than needed
+  });
+
+  // Step 2: Rerank for accuracy (keep top results)
+  const reranked = await rerank({
+    model: rerankerModel,
+    query,
+    documents: candidates.map((c) => c.metadata.text as string),
+    topK: 5,
+  });
+
+  // Step 3: Map back to original results with metadata
+  return reranked.map((r) => ({
+    ...candidates[r.originalIndex],
+    rerankerScore: r.score,
+  }));
+}
+```
+
+## Rerank Result Structure
+
+```typescript
+interface RerankResult {
+  document: string;       // The document text
+  score: number;          // Relevance score (higher = more relevant)
+  originalIndex: number;  // Index in the original documents array
+}
+```
+
+## Recommended Models
+
+| Model | Size | Speed | Quality |
+|-------|------|-------|---------|
+| `Xenova/ms-marco-MiniLM-L-6-v2` | ~22MB | ⚡⚡⚡ | Good |
+| `Xenova/ms-marco-MiniLM-L-12-v2` | ~33MB | ⚡⚡ | Better |
+
+## Complete RAG Example
+
+```typescript
+import {
+  createVectorDB,
+  chunk,
+  ingest,
+  semanticSearch,
+  rerank,
+  streamText,
+} from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+import { webllm } from '@localmode/webllm';
+
+// Setup models
+const embeddingModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+const llm = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+
+// Setup database
+const db = await createVectorDB({ name: 'docs', dimensions: 384 });
+
+// RAG query function
+async function ragQuery(question: string) {
+  // 1. Retrieve (fast, approximate)
+  const candidates = await semanticSearch({
+    db,
+    model: embeddingModel,
+    query: question,
+    k: 15,
+  });
+
+  // 2. Rerank (slower, accurate)
+  const reranked = await rerank({
+    model: rerankerModel,
+    query: question,
+    documents: candidates.map((c) => c.metadata.text as string),
+    topK: 3,
+  });
+
+  // 3. Generate answer
+  const context = reranked.map((r) => r.document).join('\n\n');
+
+  const stream = await streamText({
+    model: llm,
+    prompt: `Answer based on the context:
+
+Context:
+${context}
+
+Question: ${question}
+
+Answer:`,
+  });
+
+  return stream;
+}
+```
+
+## When to Use Reranking
+
+<Callout type="info" title="Use Reranking When">
+  - Building Q&A or chatbot applications
+  - Initial search returns many similar results
+  - Accuracy matters more than latency
+  - Documents have subtle relevance differences
+</Callout>
+
+<Callout type="warn" title="Skip Reranking When">
+  - Latency is critical (real-time applications)
+  - Results are clearly distinct
+  - Simple keyword matching is sufficient
+  - Processing very large result sets
+</Callout>
+
+## Performance Optimization
+
+```typescript
+// Balance between accuracy and speed
+const reranked = await rerank({
+  model: rerankerModel,
+  query,
+  documents: candidates.slice(0, 10),  // Limit candidates
+  topK: 3,
+});
+
+// For large result sets, rerank in batches
+async function rerankLargeResultSet(query: string, documents: string[], topK: number) {
+  const batchSize = 50;
+  const batches = [];
+  
+  for (let i = 0; i < documents.length; i += batchSize) {
+    const batch = documents.slice(i, i + batchSize);
+    const result = await rerank({
+      model: rerankerModel,
+      query,
+      documents: batch,
+      topK: Math.min(topK, batch.length),
+    });
+    batches.push(result.map((r) => ({
+      ...r,
+      originalIndex: r.originalIndex + i,
+    })));
+  }
+
+  // Merge and re-sort
+  return batches
+    .flat()
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK);
+}
+```
+
+## Best Practices
+
+<Callout type="tip" title="Reranking Tips">
+  1. **Retrieve more, rerank less** — Get 3-5x more candidates than needed
+  2. **Use appropriate topK** — 3-5 is usually enough for RAG context
+  3. **Cache reranker model** — Load once, reuse for all queries
+  4. **Consider latency budget** — Reranking adds 50-200ms per query
+  5. **Test with/without** — Measure accuracy improvement for your use case
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="RAG"
+    href="/docs/core/rag"
+    description="Complete RAG pipeline guide."
+  />
+  <Card
+    title="Vector Database"
+    href="/docs/core/vector-db"
+    description="Configure search and retrieval."
+  />
+</Cards>

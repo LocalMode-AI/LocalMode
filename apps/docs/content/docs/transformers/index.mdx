@@ -1,0 +1,236 @@
+---
+title: 'Overview'
+description: HuggingFace Transformers.js provider for browser-based ML inference.
+icon: Sparkles
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+
+# @localmode/transformers
+
+HuggingFace Transformers.js provider for LocalMode. Run ML models locally in the browser with WebGPU/WASM acceleration.
+
+## Features
+
+- 🚀 **Browser-Native** — Run ML models directly in the browser
+- 🔒 **Privacy-First** — All processing happens locally
+- 📦 **Model Caching** — Models cached in IndexedDB for instant subsequent loads
+- ⚡ **Optimized** — Uses quantized models for smaller size and faster inference
+
+## Installation
+
+<Tabs items={['pnpm', 'npm', 'yarn']}>
+  <Tab value="pnpm">```bash pnpm install @localmode/transformers @localmode/core ```</Tab>
+  <Tab value="npm">```bash npm install @localmode/transformers @localmode/core ```</Tab>
+  <Tab value="yarn">```bash yarn add @localmode/transformers @localmode/core ```</Tab>
+</Tabs>
+
+## Quick Start
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { embed, rerank } from '@localmode/core';
+
+// Text Embeddings
+const embeddingModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const { embedding } = await embed({ model: embeddingModel, value: 'Hello world' });
+
+// Reranking for RAG
+const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+const { results } = await rerank({
+  model: rerankerModel,
+  query: 'What is machine learning?',
+  documents: ['ML is a subset of AI...', 'Python is a language...'],
+  topK: 5,
+});
+```
+
+## ✅ Live Features
+
+These features are production-ready and fully documented.
+
+<Cards>
+  <Card
+    title="Embeddings"
+    href="/docs/transformers/embeddings"
+    description="Generate text embeddings for semantic search and RAG."
+  />
+  <Card
+    title="Reranking"
+    href="/docs/transformers/reranking"
+    description="Improve RAG accuracy with cross-encoder reranking."
+  />
+</Cards>
+
+| Method                            | Interface        | Description        |
+| --------------------------------- | ---------------- | ------------------ |
+| `transformers.embedding(modelId)` | `EmbeddingModel` | Text embeddings    |
+| `transformers.reranker(modelId)`  | `RerankerModel`  | Document reranking |
+
+### Recommended Models
+
+<Accordions>
+
+<Accordion title="Embeddings">
+
+| Model                                          | Dimensions | Size   | Use Case              |
+| ---------------------------------------------- | ---------- | ------ | --------------------- |
+| `Xenova/all-MiniLM-L6-v2`                      | 384        | ~22MB  | Fast, general-purpose |
+| `Xenova/all-MiniLM-L12-v2`                     | 384        | ~33MB  | Better accuracy       |
+| `Xenova/paraphrase-multilingual-MiniLM-L12-v2` | 384        | ~117MB | 50+ languages         |
+
+</Accordion>
+
+<Accordion title="Reranking">
+
+| Model                           | Use Case                   | Size   |
+| ------------------------------- | -------------------------- | ------ |
+| `Xenova/ms-marco-MiniLM-L-6-v2` | Document reranking for RAG | ~22MB  |
+| `Xenova/bge-reranker-base`      | Advanced reranking         | ~109MB |
+
+</Accordion>
+
+</Accordions>
+
+## 🚧 Coming Soon
+
+These features have interfaces defined and implementations available, but are under active development and testing. Full documentation will be added once they are production-ready.
+
+<Callout type="warn">
+  The features listed below are not yet production-ready. APIs may change before stable release.
+</Callout>
+
+### Classification & NLP
+
+| Feature                  | Method                                     | Interface                     |
+| ------------------------ | ------------------------------------------ | ----------------------------- |
+| Text Classification      | `transformers.classifier(modelId)`         | `ClassificationModel`         |
+| Zero-Shot Classification | `transformers.zeroShotClassifier(modelId)` | `ZeroShotClassificationModel` |
+| Named Entity Recognition | `transformers.ner(modelId)`                | `NERModel`                    |
+
+### Translation & Text Processing
+
+| Feature            | Method                                    | Interface                |
+| ------------------ | ----------------------------------------- | ------------------------ |
+| Translation        | `transformers.translator(modelId)`        | `TranslationModel`       |
+| Summarization      | `transformers.summarizer(modelId)`        | `SummarizationModel`     |
+| Fill-Mask          | `transformers.fillMask(modelId)`          | `FillMaskModel`          |
+| Question Answering | `transformers.questionAnswering(modelId)` | `QuestionAnsweringModel` |
+
+### Audio
+
+| Feature        | Method                               | Interface           |
+| -------------- | ------------------------------------ | ------------------- |
+| Speech-to-Text | `transformers.speechToText(modelId)` | `SpeechToTextModel` |
+| Text-to-Speech | `transformers.textToSpeech(modelId)` | `TextToSpeechModel` |
+
+### Vision
+
+| Feature                        | Method                                          | Interface                          |
+| ------------------------------ | ----------------------------------------------- | ---------------------------------- |
+| Image Classification           | `transformers.imageClassifier(modelId)`         | `ImageClassificationModel`         |
+| Zero-Shot Image Classification | `transformers.zeroShotImageClassifier(modelId)` | `ZeroShotImageClassificationModel` |
+| Image Captioning               | `transformers.captioner(modelId)`               | `ImageCaptionModel`                |
+| Image Segmentation             | `transformers.segmenter(modelId)`               | `SegmentationModel`                |
+| Object Detection               | `transformers.objectDetector(modelId)`          | `ObjectDetectionModel`             |
+| OCR                            | `transformers.ocr(modelId)`                     | `OCRModel`                         |
+| Document QA                    | `transformers.documentQA(modelId)`              | `DocumentQAModel`                  |
+
+## Model Options
+
+Configure model loading:
+
+```typescript
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2', {
+  quantized: true, // Use quantized model (smaller, faster)
+  revision: 'main', // Model revision
+  progress: (p) => {
+    console.log(`Loading: ${(p.progress * 100).toFixed(1)}%`);
+  },
+});
+```
+
+## Model Utilities
+
+Manage model loading and caching:
+
+```typescript
+import { preloadModel, isModelCached, getModelStorageUsage } from '@localmode/transformers';
+
+// Check if model is cached
+const cached = await isModelCached('Xenova/all-MiniLM-L6-v2');
+
+// Preload model with progress
+await preloadModel('Xenova/all-MiniLM-L6-v2', {
+  onProgress: (p) => console.log(`${p.progress}% loaded`),
+});
+
+// Check storage usage
+const usage = await getModelStorageUsage();
+```
+
+### WebGPU Detection
+
+Detect WebGPU availability for optimal device selection:
+
+```typescript
+import { isWebGPUAvailable, getOptimalDevice } from '@localmode/transformers';
+
+// Check if WebGPU is available
+const webgpuAvailable = await isWebGPUAvailable();
+
+if (webgpuAvailable) {
+  console.log('WebGPU available, using GPU acceleration');
+} else {
+  console.log('Falling back to WASM');
+}
+
+// Get optimal device automatically
+const device = await getOptimalDevice(); // 'webgpu' or 'wasm'
+
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2', {
+  device, // Uses WebGPU if available, otherwise WASM
+});
+```
+
+## Browser Compatibility
+
+| Browser     | WebGPU | WASM | Notes                        |
+| ----------- | ------ | ---- | ---------------------------- |
+| Chrome 113+ | ✅     | ✅   | Best performance with WebGPU |
+| Edge 113+   | ✅     | ✅   | Same as Chrome               |
+| Firefox     | ❌     | ✅   | WASM only                    |
+| Safari 18+  | ✅     | ✅   | WebGPU available             |
+| iOS Safari  | ✅     | ✅   | WebGPU available (iOS 26+)   |
+
+## Performance Tips
+
+<Callout type="tip" title="Performance">
+  1. **Use quantized models** - Smaller and faster with minimal quality loss
+  2. **Preload models** - Load during app init for instant inference
+  3. **Use WebGPU when available** - 3-5x faster than WASM
+  4. **Batch operations** - Process multiple inputs together
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Embeddings"
+    href="/docs/transformers/embeddings"
+    description="Generate text embeddings for semantic search."
+  />
+  <Card
+    title="Reranking"
+    href="/docs/transformers/reranking"
+    description="Improve RAG accuracy with reranking."
+  />
+  <Card
+    title="Core Package"
+    href="/docs/core"
+    description="Learn about the core LocalMode functions."
+  />
+</Cards>

@@ -4,7 +4,6 @@
 
 Minimal IndexedDB storage adapter using the idb library - the lightest option at ~3KB.
 
-[![npm](https://img.shields.io/npm/v/@localmode/idb)](https://www.npmjs.com/package/@localmode/idb)
 [![license](https://img.shields.io/npm/l/@localmode/idb)](../../LICENSE)
 
 ## Features
@@ -17,11 +16,7 @@ Minimal IndexedDB storage adapter using the idb library - the lightest option at
 ## Installation
 
 ```bash
-# Preferred: pnpm
-pnpm install @localmode/idb @localmode/core idb
-
-# Alternative: npm
-npm install @localmode/idb @localmode/core idb
+pnpm install @localmode/idb @localmode/core
 ```
 
 ## Quick Start

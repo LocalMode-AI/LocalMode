@@ -10,7 +10,7 @@
     "url": "https://github.com/LocalMode-AI/LocalMode.git",
     "directory": "packages/idb"
   },
-  "homepage": "https://github.com/LocalMode-AI/LocalMode#readme",
+  "homepage": "https://localmode.dev/docs/core/storage",
   "bugs": {
     "url": "https://github.com/LocalMode-AI/LocalMode/issues"
   },
@@ -54,10 +54,13 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@localmode/core": "workspace:*",
     "idb": "^8.0.3"
   },
+  "peerDependencies": {
+    "@localmode/core": "^1.0.0"
+  },
   "devDependencies": {
+    "@localmode/core": "workspace:*",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"
   }

@@ -1,0 +1,415 @@
+---
+title: Network Logging
+description: Monitor and log network requests including model downloads
+icon: Wifi
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Steps } from 'fumadocs-ui/components/steps';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+LocalMode provides network logging utilities to monitor downloads, track progress, and debug network issues. This is especially useful for tracking model downloads and displaying progress to users.
+
+## Overview
+
+The network logging system tracks:
+
+- Model downloads with progress
+- API requests (if any external services are used)
+- Upload/download byte counts
+- Request timing and statistics
+
+<Callout type="info">
+  Network logging is opt-in and local-only. No data is sent anywhere—this is purely for local
+  debugging and UI progress indicators.
+</Callout>
+
+## Quick Start
+
+```ts {1,4,7-9}
+import { onNetworkRequest, getNetworkStats } from '@localmode/core';
+
+// Subscribe to network events
+const unsubscribe = onNetworkRequest((entry) => {
+  if (entry.category === 'model' && entry.state === 'in-progress') {
+    console.log(`Downloading: ${entry.url} (${entry.progress}%)`);
+  }
+});
+
+// Later: get statistics
+const stats = getNetworkStats();
+console.log(`Downloaded: ${stats.totalDownloadBytes} bytes`);
+
+// Clean up when done
+unsubscribe();
+```
+
+## Creating a Network Logger
+
+```ts
+import { createNetworkLogger } from '@localmode/core';
+
+const logger = createNetworkLogger({
+  maxEntries: 500, // Keep last 500 entries
+  logHeaders: false, // Don't log request headers
+  categories: ['model'], // Only log model downloads
+});
+```
+
+### Configuration Options
+
+<TypeTable
+  type={{
+    maxEntries: {
+      description: 'Maximum number of log entries to keep',
+      type: 'number',
+      default: '1000',
+    },
+    persistLogs: {
+      description: 'Whether to persist logs to IndexedDB',
+      type: 'boolean',
+      default: 'false',
+    },
+    logHeaders: {
+      description: 'Whether to include request/response headers',
+      type: 'boolean',
+      default: 'false',
+    },
+    logBody: {
+      description: 'Whether to include request body (careful with memory)',
+      type: 'boolean',
+      default: 'false',
+    },
+    categories: {
+      description: 'Categories to log (empty = all)',
+      type: 'string[]',
+      default: '[]',
+    },
+    minLevel: {
+      description: 'Minimum log level',
+      type: "'debug' | 'info' | 'warn' | 'error'",
+      default: "'info'",
+    },
+    filter: {
+      description: 'Custom filter function',
+      type: '(entry: NetworkLogEntry) => boolean',
+    },
+  }}
+/>
+
+## Subscribing to Events
+
+### Real-time Progress Updates
+
+```ts
+import { onNetworkRequest } from '@localmode/core';
+
+const unsubscribe = onNetworkRequest((entry) => {
+  switch (entry.state) {
+    case 'pending':
+      console.log(`Starting: ${entry.url}`);
+      break;
+    case 'in-progress':
+      console.log(`Progress: ${entry.progress}%`);
+      updateProgressBar(entry.progress);
+      break;
+    case 'completed':
+      console.log(`Completed: ${entry.url} (${entry.duration}ms)`);
+      break;
+    case 'failed':
+      console.error(`Failed: ${entry.url} - ${entry.error}`);
+      break;
+  }
+});
+```
+
+### Model Download Progress UI
+
+```ts
+import { onNetworkRequest } from '@localmode/core';
+
+function ModelDownloadProgress() {
+  const [progress, setProgress] = useState<number | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onNetworkRequest((entry) => {
+      if (entry.category === 'model') {
+        if (entry.state === 'in-progress') {
+          setDownloading(true);
+          setProgress(entry.progress ?? 0);
+        } else if (entry.state === 'completed' || entry.state === 'failed') {
+          setDownloading(false);
+          setProgress(null);
+        }
+      }
+    });
+
+    return unsubscribe;
+  }, []);
+
+  if (!downloading) return null;
+
+  return (
+    <div className="progress-bar">
+      <div style={{ width: `${progress}%` }} />
+      <span>{progress}%</span>
+    </div>
+  );
+}
+```
+
+## Retrieving Logs
+
+### Get All Logs
+
+```ts
+import { getNetworkLogs } from '@localmode/core';
+
+const logs = getNetworkLogs();
+console.log(`Total requests: ${logs.length}`);
+```
+
+### Filter Logs
+
+```ts
+import { getNetworkLogs } from '@localmode/core';
+
+// Get model downloads only
+const modelLogs = getNetworkLogs({
+  category: 'model',
+});
+
+// Get failed requests
+const failedLogs = getNetworkLogs({
+  state: 'failed',
+});
+
+// Get recent requests (last hour)
+const recentLogs = getNetworkLogs({
+  since: new Date(Date.now() - 60 * 60 * 1000),
+  limit: 50,
+  order: 'desc',
+});
+
+// Filter by URL pattern
+const huggingFaceLogs = getNetworkLogs({
+  urlPattern: /huggingface\.co/,
+});
+```
+
+### Filter Options
+
+<TypeTable
+  type={{
+    category: {
+      description: 'Filter by category',
+      type: 'string',
+    },
+    state: {
+      description: 'Filter by request state',
+      type: "'pending' | 'in-progress' | 'completed' | 'failed' | 'aborted'",
+    },
+    urlPattern: {
+      description: 'Filter by URL pattern',
+      type: 'string | RegExp',
+    },
+    since: {
+      description: 'Filter by minimum timestamp',
+      type: 'Date',
+    },
+    until: {
+      description: 'Filter by maximum timestamp',
+      type: 'Date',
+    },
+    limit: {
+      description: 'Maximum number of entries to return',
+      type: 'number',
+    },
+    order: {
+      description: 'Sort order',
+      type: "'asc' | 'desc'",
+      default: "'desc'",
+    },
+  }}
+/>
+
+## Network Statistics
+
+```ts
+import { getNetworkStats } from '@localmode/core';
+
+const stats = getNetworkStats();
+
+console.log(`Total requests: ${stats.totalRequests}`);
+console.log(`Completed: ${stats.completedRequests}`);
+console.log(`Failed: ${stats.failedRequests}`);
+console.log(`Downloaded: ${(stats.totalDownloadBytes / 1024 / 1024).toFixed(2)} MB`);
+console.log(`Average speed: ${(stats.averageSpeed / 1024).toFixed(2)} KB/s`);
+console.log(`Requests/min: ${stats.requestsPerMinute}`);
+
+// Stats by category
+console.log('By category:', stats.byCategory);
+
+// Stats by HTTP status
+console.log('By status:', stats.byStatus);
+```
+
+### Stats Structure
+
+<TypeTable
+  type={{
+    totalRequests: {
+      description: 'Total number of requests logged',
+      type: 'number',
+    },
+    completedRequests: {
+      description: 'Number of completed requests',
+      type: 'number',
+    },
+    failedRequests: {
+      description: 'Number of failed requests',
+      type: 'number',
+    },
+    totalDownloadBytes: {
+      description: 'Total bytes downloaded',
+      type: 'number',
+    },
+    totalUploadBytes: {
+      description: 'Total bytes uploaded',
+      type: 'number',
+    },
+    totalDuration: {
+      description: 'Total duration of all requests (ms)',
+      type: 'number',
+    },
+    averageSpeed: {
+      description: 'Average transfer speed (bytes/second)',
+      type: 'number',
+    },
+    requestsPerMinute: {
+      description: 'Request rate in last minute',
+      type: 'number',
+    },
+    byCategory: {
+      description: 'Statistics grouped by category',
+      type: 'Record<string, { requests, downloadBytes, uploadBytes }>',
+    },
+    byStatus: {
+      description: 'Request counts grouped by HTTP status code',
+      type: 'Record<number, number>',
+    },
+  }}
+/>
+
+## Clearing Logs
+
+```ts
+import { clearNetworkLogs } from '@localmode/core';
+
+// Clear all logs
+clearNetworkLogs();
+
+// Clear logs older than 7 days
+clearNetworkLogs({ olderThan: '7d' });
+
+// Clear logs older than specific date
+clearNetworkLogs({ olderThan: new Date('2024-01-01') });
+```
+
+Duration formats: `s` (seconds), `m` (minutes), `h` (hours), `d` (days), `w` (weeks)
+
+## Log Entry Structure
+
+<TypeTable
+  type={{
+    id: {
+      description: 'Unique identifier for this log entry',
+      type: 'string',
+    },
+    timestamp: {
+      description: 'When the request started',
+      type: 'Date',
+    },
+    type: {
+      description: 'Request type',
+      type: "'download' | 'upload'",
+    },
+    url: {
+      description: 'Request URL',
+      type: 'string',
+    },
+    method: {
+      description: 'HTTP method',
+      type: "'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD' | 'PATCH'",
+    },
+    status: {
+      description: 'HTTP status code (if completed)',
+      type: 'number | undefined',
+    },
+    statusText: {
+      description: 'HTTP status text (if completed)',
+      type: 'string | undefined',
+    },
+    requestSize: {
+      description: 'Request body size in bytes',
+      type: 'number | undefined',
+    },
+    responseSize: {
+      description: 'Response body size in bytes',
+      type: 'number | undefined',
+    },
+    duration: {
+      description: 'Request duration in milliseconds',
+      type: 'number | undefined',
+    },
+    progress: {
+      description: 'Download/upload progress (0-100)',
+      type: 'number | undefined',
+    },
+    state: {
+      description: 'Current state of the request',
+      type: "'pending' | 'in-progress' | 'completed' | 'failed' | 'aborted'",
+    },
+    error: {
+      description: 'Error message (if failed)',
+      type: 'string | undefined',
+    },
+    category: {
+      description: "Category for grouping (e.g., 'model', 'data', 'api')",
+      type: 'string',
+    },
+    metadata: {
+      description: 'Additional metadata',
+      type: 'Record<string, unknown> | undefined',
+    },
+  }}
+/>
+
+## Wrapping Fetch
+
+For full request logging, wrap the global fetch:
+
+```ts
+import { wrapFetchWithLogging, unwrapFetch, isFetchWrapped } from '@localmode/core';
+
+// Wrap global fetch
+wrapFetchWithLogging({
+  category: 'api',
+  logHeaders: true,
+});
+
+// Now all fetch calls are logged
+await fetch('https://api.example.com/data');
+
+// Check if fetch is wrapped
+console.log(isFetchWrapped()); // true
+
+// Restore original fetch
+unwrapFetch();
+```
+
+<Callout type="warn">
+  Wrapping fetch affects all requests in your application. Use with care in production environments.
+</Callout>

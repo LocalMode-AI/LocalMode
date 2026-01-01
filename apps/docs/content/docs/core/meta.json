@@ -1,0 +1,21 @@
+{
+  "title": "Core",
+  "icon": "Box",
+  "pages": [
+    "index",
+    "embeddings",
+    "reranking",
+    "vector-db",
+    "rag",
+    "generation",
+    "storage",
+    "middleware",
+    "security",
+    "capabilities",
+    "sync",
+    "network",
+    "events",
+    "testing",
+    "coming-soon"
+  ]
+}

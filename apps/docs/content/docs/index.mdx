@@ -1,0 +1,196 @@
+---
+title: Introduction
+description: Local-first AI utilities for the browser. Zero dependencies. Privacy-first.
+icon: House
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { Steps } from 'fumadocs-ui/components/steps';
+
+# LocalMode
+
+**LocalMode** is a modular, local-first AI engine for the browser. Run embeddings, vector search, RAG pipelines, text classification, speech-to-text, image recognition, and LLM inference - all directly in the browser with zero server dependencies.
+
+<Callout type="info" title="Privacy by Default">
+  All processing happens locally. No data ever leaves the user's device. Zero telemetry. Zero
+  tracking.
+</Callout>
+
+## Why LocalMode?
+
+- **🔒 Privacy-First** — Data never leaves the device
+- **⚡ Zero Dependencies** — Core package has no external dependencies
+- **📱 Offline-Ready** — Works without network after first model download
+- **🎯 Type-Safe** — Full TypeScript support with comprehensive types
+- **🔌 Modular** — Use only what you need
+
+## Packages
+
+<Cards>
+  <Card
+    title="@localmode/core"
+    href="/docs/core"
+    description="Vector DB, embeddings, RAG, storage, middleware, security — all core functionality with zero dependencies."
+  />
+  <Card
+    title="@localmode/transformers"
+    href="/docs/transformers"
+    description="HuggingFace Transformers.js provider for classification, NER, vision, audio, and more."
+  />
+  <Card
+    title="@localmode/webllm"
+    href="/docs/webllm"
+    description="WebLLM provider for local LLM inference with streaming support."
+  />
+  <Card
+    title="@localmode/pdfjs"
+    href="/docs/pdfjs"
+    description="PDF text extraction for document processing pipelines."
+  />
+</Cards>
+
+## Quick Start
+
+<Steps>
+
+### Install packages
+
+<Tabs items={['pnpm', 'npm', 'yarn']}>
+  <Tab value="pnpm">```bash pnpm install @localmode/core @localmode/transformers ```</Tab>
+  <Tab value="npm">```bash npm install @localmode/core @localmode/transformers ```</Tab>
+  <Tab value="yarn">```bash yarn add @localmode/core @localmode/transformers ```</Tab>
+</Tabs>
+
+### Create embeddings
+
+```typescript
+import { embed, embedMany } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Create embedding model
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+
+// Embed single value
+const { embedding } = await embed({
+  model,
+  value: 'Hello, world!',
+});
+
+// Embed multiple values
+const { embeddings } = await embedMany({
+  model,
+  values: ['Hello', 'World', 'AI'],
+});
+```
+
+### Create vector database
+
+```typescript
+import { createVectorDB } from '@localmode/core';
+
+const db = await createVectorDB({
+  name: 'my-documents',
+  dimensions: 384, // Matches all-MiniLM-L6-v2
+});
+
+// Add documents
+await db.addMany([
+  { id: 'doc-1', vector: embeddings[0], metadata: { text: 'Hello' } },
+  { id: 'doc-2', vector: embeddings[1], metadata: { text: 'World' } },
+]);
+
+// Search
+const results = await db.search(embedding, { k: 5 });
+```
+
+### Build a RAG pipeline
+
+```typescript
+import { chunk, ingest, semanticSearch } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+
+// Chunk document
+const chunks = chunk(documentText, {
+  strategy: 'recursive',
+  size: 512,
+  overlap: 50,
+});
+
+// Ingest into vector DB
+await ingest({
+  db,
+  model,
+  documents: chunks.map((c) => ({
+    text: c.text,
+    metadata: { source: 'my-document.pdf' },
+  })),
+});
+
+// Search
+const results = await semanticSearch({
+  db,
+  model,
+  query: 'What is machine learning?',
+  k: 5,
+});
+```
+
+</Steps>
+
+## Architecture
+
+LocalMode follows a **"zero-dependency core, thin provider wrappers"** architecture:
+
+```
++-------------------------------------------------------------+
+|                    Your Application                         |
++-------------------------------------------------------------+
+|                    @localmode/core                          |
+|  +----------+ +----------+ +----------+ +----------------+  |
+|  | VectorDB | |Embeddings| |   RAG    | | Storage/Security| |
+|  +----------+ +----------+ +----------+ +----------------+  |
++-------------------------------------------------------------+
+|              Provider Packages (thin wrappers)              |
+|  +----------------+ +------------+ +------------------+     |
+|  |  @localmode/   | | @localmode/| |   @localmode/    |     |
+|  |  transformers  | |   webllm   | |      pdfjs       |     |
+|  +----------------+ +------------+ +------------------+     |
++-------------------------------------------------------------+
+|                    Browser APIs                             |
+|        IndexedDB • WebGPU • WASM • Web Workers              |
++-------------------------------------------------------------+
+```
+
+## Browser Compatibility
+
+| Browser     | WebGPU  | WASM | IndexedDB | Web Workers |
+| ----------- | ------- | ---- | --------- | ----------- |
+| Chrome 80+  | 113+    | ✅   | ✅        | ✅          |
+| Edge 80+    | 113+    | ✅   | ✅        | ✅          |
+| Firefox 75+ | Nightly | ✅   | ✅        | ✅          |
+| Safari 14+  | 18+     | ✅   | ✅        | ⚠️          |
+
+<Callout type="warn" title="Platform Notes">
+  - **Safari/iOS**: Private browsing blocks IndexedDB - use `MemoryStorage` fallback
+  - **Firefox**: WebGPU only in Nightly - WASM fallback is automatic
+  - **SharedArrayBuffer**: Requires cross-origin isolation for some features
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Getting Started"
+    href="/docs/getting-started"
+    description="Full installation guide and first steps."
+  />
+  <Card
+    title="Core Concepts"
+    href="/docs/core"
+    description="Learn about embeddings, vector DB, and RAG."
+  />
+</Cards>

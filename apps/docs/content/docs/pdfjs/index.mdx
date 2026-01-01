@@ -1,0 +1,371 @@
+---
+title: 'Overview'
+description: PDF text extraction for document processing pipelines.
+icon: FileText
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { Steps, Step } from 'fumadocs-ui/components/steps';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+# @localmode/pdfjs
+
+PDF text extraction using PDF.js for local document processing. Extract text, metadata, and structure from PDFs entirely in the browser.
+
+## Features
+
+- 📄 **Full PDF Support** — Extract text from any PDF document
+- 🔒 **Password Protected** — Handle encrypted PDFs
+- 📑 **Page-Level Control** — Process specific pages or split by page
+- 📊 **Metadata Extraction** — Get title, author, dates, etc.
+
+## Installation
+
+<Tabs items={['pnpm', 'npm', 'yarn']}>
+  <Tab value="pnpm">```bash pnpm install @localmode/pdfjs @localmode/core ```</Tab>
+  <Tab value="npm">```bash npm install @localmode/pdfjs @localmode/core ```</Tab>
+  <Tab value="yarn">```bash yarn add @localmode/pdfjs @localmode/core ```</Tab>
+</Tabs>
+
+## Quick Start
+
+```typescript
+import { extractPDFText } from '@localmode/pdfjs';
+
+// From file input
+const file = document.getElementById('fileInput').files[0];
+
+const { text, pageCount, metadata } = await extractPDFText(file);
+
+console.log(`Extracted ${pageCount} pages`);
+console.log('Title:', metadata?.title);
+console.log('Text:', text);
+```
+
+## API Reference
+
+### extractPDFText()
+
+Extract text from a PDF file:
+
+```ts {3-8}
+import { extractPDFText } from '@localmode/pdfjs';
+
+const result = await extractPDFText(pdfBlob, {
+  maxPages: 10, // Limit pages to extract
+  includePageNumbers: true, // Add [Page N] headers
+  pageSeparator: '\n---\n', // Separator between pages
+  password: 'secret', // For encrypted PDFs
+});
+
+console.log(result.text); // Full extracted text
+console.log(result.pageCount); // Total number of pages
+console.log(result.pages); // Array of page texts
+console.log(result.metadata); // PDF metadata
+```
+
+#### Options
+
+<TypeTable
+  type={{
+    maxPages: {
+      description: 'Maximum number of pages to extract',
+      type: 'number',
+      default: 'All pages',
+    },
+    startPage: {
+      description: 'Page to start extraction from (0-indexed)',
+      type: 'number',
+      default: '0',
+    },
+    includePageNumbers: {
+      description: 'Add [Page N] headers to output',
+      type: 'boolean',
+      default: 'false',
+    },
+    pageSeparator: {
+      description: 'String to separate pages in output',
+      type: 'string',
+      default: "'\\n\\n'",
+    },
+    password: {
+      description: 'Password for encrypted PDFs',
+      type: 'string',
+    },
+  }}
+/>
+
+#### Return Value
+
+<TypeTable
+  type={{
+    text: {
+      description: 'Full extracted text from all pages',
+      type: 'string',
+    },
+    pages: {
+      description: 'Array of text for each page',
+      type: 'string[]',
+    },
+    pageCount: {
+      description: 'Total number of pages in the PDF',
+      type: 'number',
+    },
+    metadata: {
+      description: 'PDF metadata (title, author, etc.)',
+      type: 'PDFMetadata | undefined',
+    },
+  }}
+/>
+
+### PDFLoader
+
+Document loader for integration with LocalMode core:
+
+```typescript
+import { PDFLoader } from '@localmode/pdfjs';
+import { loadDocument } from '@localmode/core';
+
+const loader = new PDFLoader({
+  splitByPage: false, // Single doc or one per page
+  maxPages: undefined, // All pages
+  includePageNumbers: true,
+  password: undefined,
+});
+
+const { documents } = await loadDocument(loader, pdfBlob);
+
+for (const doc of documents) {
+  console.log(doc.text);
+  console.log(doc.metadata);
+}
+```
+
+### Split by Page
+
+Create separate documents for each page:
+
+```typescript
+import { PDFLoader } from '@localmode/pdfjs';
+
+const loader = new PDFLoader({ splitByPage: true });
+const { documents } = await loadDocument(loader, pdfBlob);
+
+console.log(`Loaded ${documents.length} pages`);
+
+documents.forEach((doc, i) => {
+  console.log(`Page ${i + 1}: ${doc.text.substring(0, 100)}...`);
+  console.log(`  Metadata:`, doc.metadata);
+});
+```
+
+### Utility Functions
+
+```typescript
+import { getPDFPageCount, isPDF } from '@localmode/pdfjs';
+
+// Get page count without full extraction
+const pageCount = await getPDFPageCount(pdfBlob);
+console.log(`PDF has ${pageCount} pages`);
+
+// Check if file is a PDF
+if (await isPDF(file)) {
+  // Process as PDF
+} else {
+  // Handle other file types
+}
+```
+
+## RAG Pipeline Integration
+
+Build a PDF-powered RAG system:
+
+```typescript
+import { PDFLoader } from '@localmode/pdfjs';
+import { createVectorDB, chunk, ingest, semanticSearch, streamText } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+import { webllm } from '@localmode/webllm';
+
+// Setup
+const embeddingModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const llm = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+const db = await createVectorDB({ name: 'pdf-docs', dimensions: 384 });
+
+// Load and process PDF
+async function ingestPDF(file: File) {
+  const loader = new PDFLoader({ splitByPage: true });
+  const { documents } = await loadDocument(loader, file);
+
+  // Chunk each page
+  const allChunks = documents.flatMap((doc, pageIndex) =>
+    chunk(doc.text, {
+      strategy: 'recursive',
+      size: 512,
+      overlap: 50,
+    }).map((c) => ({
+      text: c.text,
+      metadata: {
+        filename: file.name,
+        page: pageIndex + 1,
+        start: c.startIndex,
+        end: c.endIndex,
+      },
+    }))
+  );
+
+  // Ingest into vector DB
+  await ingest({
+    db,
+    model: embeddingModel,
+    documents: allChunks,
+  });
+
+  return allChunks.length;
+}
+
+// Query
+async function queryPDF(question: string) {
+  const results = await semanticSearch({
+    db,
+    model: embeddingModel,
+    query: question,
+    k: 3,
+  });
+
+  const context = results.map((r) => `[Page ${r.metadata.page}]\n${r.metadata.text}`).join('\n\n');
+
+  const stream = await streamText({
+    model: llm,
+    prompt: `Answer based on the PDF content:
+
+${context}
+
+Question: ${question}
+
+Answer:`,
+  });
+
+  return stream;
+}
+```
+
+## File Upload Component
+
+React example:
+
+```typescript
+import { useState } from 'react';
+import { extractPDFText } from '@localmode/pdfjs';
+
+function PDFUploader() {
+  const [text, setText] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLoading(true);
+    try {
+      const { text, pageCount } = await extractPDFText(file);
+      setText(text);
+      console.log(`Extracted ${pageCount} pages`);
+    } catch (error) {
+      console.error('Failed to extract PDF:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div>
+      <input type="file" accept=".pdf" onChange={handleFile} />
+      {loading && <p>Extracting text...</p>}
+      {text && <pre>{text}</pre>}
+    </div>
+  );
+}
+```
+
+## Handling Large PDFs
+
+For large PDFs, process in chunks:
+
+```typescript
+import { extractPDFText, getPDFPageCount } from '@localmode/pdfjs';
+
+async function processLargePDF(file: File, batchSize = 10) {
+  const totalPages = await getPDFPageCount(file);
+  const allText: string[] = [];
+
+  for (let start = 0; start < totalPages; start += batchSize) {
+    const { pages } = await extractPDFText(file, {
+      startPage: start,
+      maxPages: batchSize,
+    });
+
+    allText.push(...pages);
+
+    console.log(
+      `Processed pages ${start + 1}-${Math.min(start + batchSize, totalPages)} of ${totalPages}`
+    );
+  }
+
+  return allText.join('\n\n');
+}
+```
+
+## Password-Protected PDFs
+
+```typescript
+import { extractPDFText } from '@localmode/pdfjs';
+
+try {
+  const { text } = await extractPDFText(encryptedPDF, {
+    password: userProvidedPassword,
+  });
+  console.log(text);
+} catch (error) {
+  if (error.message.includes('password')) {
+    // Prompt user for password
+  }
+}
+```
+
+## Metadata Extraction
+
+```typescript
+const { metadata } = await extractPDFText(file);
+
+if (metadata) {
+  console.log('Title:', metadata.title);
+  console.log('Author:', metadata.author);
+  console.log('Subject:', metadata.subject);
+  console.log('Creator:', metadata.creator);
+  console.log('Creation Date:', metadata.creationDate);
+  console.log('Modification Date:', metadata.modDate);
+}
+```
+
+## Best Practices
+
+<Callout type="tip" title="PDF Tips">
+  1. **Split by page** - Better for RAG; maintains page context
+  2. **Use page numbers** - Include in metadata for citations
+  3. **Handle errors** - Corrupted PDFs, wrong passwords, etc.
+  4. **Chunk appropriately** - 256-512 chars works well for most PDFs
+  5. **Check file size** - Large PDFs may need batched processing
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card title="RAG" href="/docs/core/rag" description="Build document Q&A systems." />
+  <Card
+    title="Vector Database"
+    href="/docs/core/vector-db"
+    description="Store and search PDF content."
+  />
+</Cards>

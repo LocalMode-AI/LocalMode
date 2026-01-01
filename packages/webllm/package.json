@@ -35,9 +35,11 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist node_modules"
   },
+  "dependencies": {
+    "@mlc-ai/web-llm": "^0.2.80"
+  },
   "peerDependencies": {
-    "@localmode/core": "^1.0.0",
-    "@mlc-ai/web-llm": "^0.2.0"
+    "@localmode/core": "^1.0.0"
   },
   "devDependencies": {
     "@localmode/core": "workspace:*",
@@ -59,7 +61,7 @@
     "url": "https://github.com/LocalMode-AI/LocalMode.git",
     "directory": "packages/webllm"
   },
-  "homepage": "https://github.com/LocalMode-AI/LocalMode#readme",
+  "homepage": "https://localmode.dev/docs/webllm",
   "bugs": {
     "url": "https://github.com/LocalMode-AI/LocalMode/issues"
   }

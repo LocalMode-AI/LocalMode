@@ -10,6 +10,7 @@ import {
   WifiOff,
   Coins,
   CloudOff,
+  Mail,
 } from 'lucide-react';
 
 export function Footer() {
@@ -121,6 +122,15 @@ export function Footer() {
                 >
                   <Code2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
                   <span>Code Examples</span>
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="mailto:info@localmode.ai"
+                  className="flex items-center gap-2 text-sm text-poster-text-sub/70 hover:text-poster-primary transition-colors group"
+                >
+                  <Mail className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                  <span>Contact</span>
                 </Link>
               </li>
             </ul>

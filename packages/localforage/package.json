@@ -10,7 +10,7 @@
     "url": "https://github.com/LocalMode-AI/LocalMode.git",
     "directory": "packages/localforage"
   },
-  "homepage": "https://github.com/LocalMode-AI/LocalMode#readme",
+  "homepage": "https://localmode.dev/docs/core/storage",
   "bugs": {
     "url": "https://github.com/LocalMode-AI/LocalMode/issues"
   },
@@ -55,10 +55,13 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@localmode/core": "workspace:*",
     "localforage": "^1.10.0"
   },
+  "peerDependencies": {
+    "@localmode/core": "^1.0.0"
+  },
   "devDependencies": {
+    "@localmode/core": "workspace:*",
     "@types/localforage": "^0.0.34",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"

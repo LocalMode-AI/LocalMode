@@ -1,0 +1,362 @@
+---
+title: Storage
+description: Persistent storage with IndexedDB and memory fallbacks.
+icon: HardDrive
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+LocalMode provides flexible storage options for persisting vector databases and application data.
+
+## Storage Options
+
+<Tabs items={['IndexedDB (Default)', 'Memory Storage']}>
+<Tab value="IndexedDB (Default)">
+
+The default storage uses IndexedDB for persistence:
+
+```ts {3-6}
+import { IndexedDBStorage, createVectorDB } from '@localmode/core';
+
+const storage = new IndexedDBStorage({
+  name: 'my-app',
+  storeName: 'vectors', // Optional, defaults to 'store'
+});
+
+// Or use default (IndexedDB) automatically:
+const db = await createVectorDB({
+  name: 'documents',
+  dimensions: 384,
+  // Uses IndexedDBStorage by default
+});
+```
+
+Data persists across page reloads and browser restarts.
+
+</Tab>
+<Tab value="Memory Storage">
+
+For temporary data or environments without IndexedDB:
+
+```ts {3,4}
+import { MemoryStorage, createVectorDB } from '@localmode/core';
+
+const db = await createVectorDB({
+  name: 'temp',
+  dimensions: 384,
+  storage: new MemoryStorage(),
+});
+
+// ⚠️ Data is lost on page reload
+```
+
+Useful for:
+
+- Testing and development
+- Temporary caches
+- Safari private browsing fallback
+
+</Tab>
+</Tabs>
+
+<Callout type="warn">
+  Safari's private browsing mode blocks IndexedDB. Use `MemoryStorage` as a fallback or detect this
+  condition with `isIndexedDBSupported()`.
+</Callout>
+
+## Storage Interface
+
+All storage adapters implement this interface:
+
+<TypeTable
+  type={{
+    'get(key)': {
+      description: 'Retrieve a document by key',
+      type: 'Promise<StoredDocument | undefined>',
+    },
+    'set(key, value)': {
+      description: 'Store a document with the given key',
+      type: 'Promise<void>',
+    },
+    'delete(key)': {
+      description: 'Delete a document by key',
+      type: 'Promise<void>',
+    },
+    'keys()': {
+      description: 'Get all stored keys',
+      type: 'Promise<string[]>',
+    },
+    'clear()': {
+      description: 'Delete all documents',
+      type: 'Promise<void>',
+    },
+    'close()': {
+      description: 'Close the storage connection',
+      type: 'Promise<void>',
+    },
+  }}
+/>
+
+### StoredDocument
+
+<TypeTable
+  type={{
+    id: {
+      description: 'Unique document identifier',
+      type: 'string',
+    },
+    vector: {
+      description: 'Embedding vector',
+      type: 'Float32Array',
+    },
+    metadata: {
+      description: 'Additional document metadata',
+      type: 'Record<string, unknown>',
+    },
+  }}
+/>
+
+## Third-Party Adapters
+
+### Dexie.js
+
+```typescript
+import { DexieStorage } from '@localmode/dexie';
+import { createVectorDB } from '@localmode/core';
+
+const db = await createVectorDB({
+  name: 'dexie-db',
+  dimensions: 384,
+  storage: new DexieStorage({
+    name: 'my-app',
+    version: 1,
+  }),
+});
+```
+
+### idb
+
+```typescript
+import { IDBStorage } from '@localmode/idb';
+import { createVectorDB } from '@localmode/core';
+
+const db = await createVectorDB({
+  name: 'idb-db',
+  dimensions: 384,
+  storage: new IDBStorage({
+    name: 'my-app',
+  }),
+});
+```
+
+### localForage
+
+```typescript
+import { LocalForageStorage } from '@localmode/localforage';
+import { createVectorDB } from '@localmode/core';
+
+const db = await createVectorDB({
+  name: 'lf-db',
+  dimensions: 384,
+  storage: new LocalForageStorage({
+    name: 'my-app',
+    driver: 'INDEXEDDB',
+  }),
+});
+```
+
+## Custom Storage
+
+Implement your own storage adapter:
+
+```typescript
+import type { Storage, StoredDocument } from '@localmode/core';
+
+class MyCustomStorage implements Storage {
+  private data = new Map<string, StoredDocument>();
+
+  async get(key: string) {
+    return this.data.get(key);
+  }
+
+  async set(key: string, value: StoredDocument) {
+    this.data.set(key, value);
+  }
+
+  async delete(key: string) {
+    this.data.delete(key);
+  }
+
+  async keys() {
+    return Array.from(this.data.keys());
+  }
+
+  async clear() {
+    this.data.clear();
+  }
+
+  async close() {
+    // Cleanup if needed
+  }
+}
+```
+
+## Storage Fallback
+
+Automatically fallback when IndexedDB is unavailable:
+
+```typescript
+import { createStorageWithFallback, IndexedDBStorage, MemoryStorage } from '@localmode/core';
+
+const storage = await createStorageWithFallback({
+  providers: [() => new IndexedDBStorage({ name: 'app' }), () => new MemoryStorage()],
+  onFallback: (error, index) => {
+    console.warn(`Storage provider ${index} failed:`, error.message);
+  },
+});
+
+const db = await createVectorDB({
+  name: 'robust-db',
+  dimensions: 384,
+  storage,
+});
+```
+
+## Quota Management
+
+Monitor and manage storage quota:
+
+```typescript
+import { getStorageQuota, requestPersistence } from '@localmode/core';
+
+// Check available quota
+const quota = await getStorageQuota();
+console.log('Used:', quota.usage);
+console.log('Available:', quota.quota);
+console.log('Percent used:', ((quota.usage / quota.quota) * 100).toFixed(1) + '%');
+
+// Request persistent storage (won't be auto-cleared)
+const isPersisted = await requestPersistence();
+if (isPersisted) {
+  console.log('Storage is now persistent');
+}
+```
+
+### Quota Warnings
+
+```typescript
+import { checkQuotaWithWarnings } from '@localmode/core';
+
+const { ok, warning, quota } = await checkQuotaWithWarnings({
+  warningThreshold: 0.8, // Warn at 80% usage
+});
+
+if (warning) {
+  console.warn('Storage is almost full!', quota);
+}
+```
+
+## Cleanup
+
+Remove old or unused data:
+
+```typescript
+import { cleanup } from '@localmode/core';
+
+// Clean up databases older than 30 days
+await cleanup({
+  maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days in ms
+  onDelete: (name) => console.log(`Deleted: ${name}`),
+});
+
+// Clean up to free space
+await cleanup({
+  targetFreeSpace: 100 * 1024 * 1024, // 100MB
+});
+```
+
+## Cross-Tab Synchronization
+
+Keep data in sync across browser tabs:
+
+```typescript
+import { createBroadcaster } from '@localmode/core';
+
+const broadcaster = createBroadcaster('my-app-sync');
+
+// Listen for changes from other tabs
+broadcaster.subscribe((message) => {
+  if (message.type === 'document-added') {
+    console.log('New document added in another tab:', message.id);
+    // Refresh your UI
+  }
+});
+
+// Broadcast changes to other tabs
+await db.add({ id: 'new-doc', vector, metadata });
+broadcaster.publish({
+  type: 'document-added',
+  id: 'new-doc',
+});
+```
+
+### Web Locks
+
+Prevent concurrent writes:
+
+```typescript
+import { createLockManager } from '@localmode/core';
+
+const locks = createLockManager();
+
+// Acquire exclusive lock before writing
+await locks.withLock('db-write', async () => {
+  await db.addMany(documents);
+});
+
+// Other tabs wait for lock to be released
+```
+
+## Feature Detection
+
+Check storage capabilities:
+
+```typescript
+import { isIndexedDBSupported, isWebLocksSupported } from '@localmode/core';
+
+if (!isIndexedDBSupported()) {
+  console.warn('IndexedDB not available, using memory storage');
+}
+
+if (!isWebLocksSupported()) {
+  console.warn('Web Locks not available, using fallback');
+}
+```
+
+## Best Practices
+
+<Callout type="tip" title="Storage Tips">
+  1. **Always use fallbacks** - Safari private browsing blocks IndexedDB
+  2. **Request persistence** - Prevent auto-clearing of important data
+  3. **Monitor quota** - Show warnings before storage is full
+  4. **Clean up** - Remove old data periodically
+  5. **Use locks** - Prevent race conditions across tabs
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Security"
+    href="/docs/core/security"
+    description="Encrypt sensitive data before storing."
+  />
+  <Card
+    title="Middleware"
+    href="/docs/core/middleware"
+    description="Add caching and logging to storage operations."
+  />
+</Cards>

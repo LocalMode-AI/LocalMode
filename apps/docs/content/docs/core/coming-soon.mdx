@@ -1,0 +1,169 @@
+---
+title: Coming Soon
+description: Features under active development
+icon: Construction
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+These features have interfaces defined in `@localmode/core` and are under active development. Provider implementations in `@localmode/transformers` and `@localmode/webllm` are in progress.
+
+<Callout type="warn">
+  The features listed below are not yet production-ready. APIs may change before the stable release.
+</Callout>
+
+## Classification & NLP
+
+<Cards>
+  <Card title="Text Classification" href="#">
+    `classify()`, `classifyMany()` — Sentiment analysis, emotion detection, topic classification
+  </Card>
+  <Card title="Zero-Shot Classification" href="#">
+    `classifyZeroShot()` — Classify text into arbitrary labels without fine-tuning
+  </Card>
+  <Card title="Named Entity Recognition" href="#">
+    `extractEntities()`, `extractEntitiesMany()` — Extract people, organizations, locations, dates
+  </Card>
+</Cards>
+
+### Interfaces
+
+```ts
+import type { ClassificationModel, ZeroShotClassificationModel, NERModel } from '@localmode/core';
+```
+
+---
+
+## Audio Processing
+
+<Cards>
+  <Card title="Speech-to-Text" href="#">
+    `transcribe()` — Transcription with Whisper models, word-level timestamps
+  </Card>
+  <Card title="Text-to-Speech" href="#">
+    `synthesizeSpeech()` — Generate speech audio from text
+  </Card>
+</Cards>
+
+### Interfaces
+
+```ts
+import type { SpeechToTextModel, TextToSpeechModel } from '@localmode/core';
+```
+
+---
+
+## Vision
+
+<Cards>
+  <Card title="Image Classification" href="#">
+    `classifyImage()`, `classifyImageZeroShot()` — Categorize images
+  </Card>
+  <Card title="Image Captioning" href="#">
+    `captionImage()` — Generate descriptions with BLIP models
+  </Card>
+  <Card title="Object Detection" href="#">
+    `detectObjects()` — Detect objects with bounding boxes
+  </Card>
+  <Card title="Image Segmentation" href="#">
+    `segmentImage()` — Background removal, semantic segmentation
+  </Card>
+  <Card title="Image Features" href="#">
+    `extractImageFeatures()` — Feature vectors for image similarity search
+  </Card>
+  <Card title="Image Transformation" href="#">
+    `imageToImage()` — Super resolution, style transfer
+  </Card>
+</Cards>
+
+### Interfaces
+
+```ts
+import type {
+  ImageClassificationModel,
+  ZeroShotImageClassificationModel,
+  ImageCaptionModel,
+  ObjectDetectionModel,
+  SegmentationModel,
+  ImageFeatureModel,
+  ImageToImageModel,
+} from '@localmode/core';
+```
+
+---
+
+## Text Processing
+
+<Cards>
+  <Card title="Translation" href="#">
+    `translate()` — Multi-language translation
+  </Card>
+  <Card title="Summarization" href="#">
+    `summarize()` — Extractive and abstractive summarization
+  </Card>
+  <Card title="Fill-Mask" href="#">
+    `fillMask()` — BERT-style masked token prediction
+  </Card>
+  <Card title="Question Answering" href="#">
+    `answerQuestion()` — Extractive QA from context
+  </Card>
+</Cards>
+
+### Interfaces
+
+```ts
+import type {
+  TranslationModel,
+  SummarizationModel,
+  FillMaskModel,
+  QuestionAnsweringModel,
+} from '@localmode/core';
+```
+
+---
+
+## Document Understanding
+
+<Cards>
+  <Card title="OCR" href="#">
+    `extractText()` — Optical character recognition from images
+  </Card>
+  <Card title="Document QA" href="#">
+    `askDocument()` — Question answering on document images (invoices, forms)
+  </Card>
+  <Card title="Table QA" href="#">
+    `askTable()` — Question answering on tabular data
+  </Card>
+</Cards>
+
+### Interfaces
+
+```ts
+import type { OCRModel, DocumentQAModel, TableQAModel } from '@localmode/core';
+```
+
+---
+
+## Advanced RAG
+
+<Cards>
+  <Card title="BM25 Search" href="#">
+    `createBM25()` — Keyword-based search for hybrid retrieval
+  </Card>
+  <Card title="Hybrid Search" href="#">
+    `hybridSearch()`, `reciprocalRankFusion()` — Combine vector and keyword search
+  </Card>
+</Cards>
+
+---
+
+## Text Generation
+
+<Cards>
+  <Card title="Complete Generation" href="#">
+    `generateText()` — Non-streaming text generation (streaming via `streamText()` is available now)
+  </Card>
+</Cards>
+
+---

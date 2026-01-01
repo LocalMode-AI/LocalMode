@@ -1,0 +1,440 @@
+---
+title: Vector Database
+description: Create, query, and persist vector databases with HNSW indexing.
+icon: Database
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { Accordions, Accordion } from 'fumadocs-ui/components/accordion';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+LocalMode includes a high-performance vector database with HNSW (Hierarchical Navigable Small World) indexing for fast approximate nearest neighbor search.
+
+## Creating a Database
+
+```ts {3-6}
+import { createVectorDB } from '@localmode/core';
+
+const db = await createVectorDB({
+  name: 'my-documents',
+  dimensions: 384, // Must match your embedding model
+});
+```
+
+### VectorDBConfig
+
+<TypeTable
+  type={{
+    name: {
+      description: 'Database name (used for persistence)',
+      type: 'string',
+      required: true,
+    },
+    dimensions: {
+      description: 'Vector dimensions (must match embedding model)',
+      type: 'number',
+      required: true,
+    },
+    storage: {
+      description: 'Custom storage adapter',
+      type: 'Storage',
+      default: 'IndexedDBStorage',
+    },
+    distance: {
+      description: 'Distance metric for similarity',
+      type: "'cosine' | 'euclidean' | 'dot'",
+      default: "'cosine'",
+    },
+    hnswConfig: {
+      description: 'HNSW index configuration',
+      type: '{ m?: number; efConstruction?: number; efSearch?: number }',
+    },
+  }}
+/>
+
+### With Custom Storage
+
+```typescript
+import { createVectorDB, MemoryStorage } from '@localmode/core';
+
+// Use memory storage (no persistence)
+const db = await createVectorDB({
+  name: 'temp-db',
+  dimensions: 384,
+  storage: new MemoryStorage(),
+});
+
+// Or use a third-party adapter
+import { DexieStorage } from '@localmode/dexie';
+
+const db = await createVectorDB({
+  name: 'dexie-db',
+  dimensions: 384,
+  storage: new DexieStorage({ name: 'my-app' }),
+});
+```
+
+## Adding Documents
+
+### Single Document
+
+```typescript
+await db.add({
+  id: 'doc-1',
+  vector: embedding, // Float32Array
+  metadata: {
+    text: 'Original document text',
+    source: 'file.pdf',
+    page: 1,
+  },
+});
+```
+
+### Multiple Documents
+
+```typescript
+await db.addMany([
+  { id: 'doc-1', vector: embeddings[0], metadata: { text: 'First' } },
+  { id: 'doc-2', vector: embeddings[1], metadata: { text: 'Second' } },
+  { id: 'doc-3', vector: embeddings[2], metadata: { text: 'Third' } },
+]);
+```
+
+<Callout type="warn" title="Dimension Mismatch">
+  The vector dimensions must match the `dimensions` specified when creating the database. Using a
+  different size will throw a `DimensionMismatchError`.
+</Callout>
+
+## Searching
+
+### Basic Search
+
+```typescript
+const results = await db.search(queryVector, { k: 5 });
+
+results.forEach((result) => {
+  console.log(`ID: ${result.id}`);
+  console.log(`Score: ${result.score.toFixed(4)}`);
+  console.log(`Metadata:`, result.metadata);
+});
+```
+
+### With Filters
+
+Filter results by metadata:
+
+```typescript
+const results = await db.search(queryVector, {
+  k: 10,
+  filter: {
+    source: { $eq: 'manual.pdf' },
+  },
+});
+```
+
+### Filter Operators
+
+<Accordions>
+
+<Accordion title="Comparison Operators">
+
+| Operator | Description           | Example                          |
+| -------- | --------------------- | -------------------------------- |
+| `$eq`    | Equals                | `{ status: { $eq: 'active' } }`  |
+| `$ne`    | Not equals            | `{ status: { $ne: 'deleted' } }` |
+| `$gt`    | Greater than          | `{ price: { $gt: 100 } }`        |
+| `$gte`   | Greater than or equal | `{ year: { $gte: 2020 } }`       |
+| `$lt`    | Less than             | `{ count: { $lt: 10 } }`         |
+| `$lte`   | Less than or equal    | `{ score: { $lte: 0.5 } }`       |
+
+</Accordion>
+
+<Accordion title="Array Operators">
+
+| Operator | Description           | Example                                  |
+| -------- | --------------------- | ---------------------------------------- |
+| `$in`    | Value is in array     | `{ category: { $in: ['tech', 'ai'] } }`  |
+| `$nin`   | Value is not in array | `{ tag: { $nin: ['draft', 'hidden'] } }` |
+
+</Accordion>
+
+<Accordion title="String Operators">
+
+| Operator      | Description        | Example                              |
+| ------------- | ------------------ | ------------------------------------ |
+| `$contains`   | String contains    | `{ text: { $contains: 'machine' } }` |
+| `$startsWith` | String starts with | `{ name: { $startsWith: 'doc-' } }`  |
+
+</Accordion>
+
+<Accordion title="Logical Operators (Compound Filters)">
+
+**AND conditions:**
+
+```ts
+const results = await db.search(queryVector, {
+  k: 10,
+  filter: {
+    $and: [
+      { category: { $eq: 'technology' } },
+      { year: { $gte: 2023 } },
+      { status: { $ne: 'draft' } },
+    ],
+  },
+});
+```
+
+**OR conditions:**
+
+```ts
+const results = await db.search(queryVector, {
+  k: 10,
+  filter: {
+    $or: [{ priority: { $eq: 'high' } }, { featured: { $eq: true } }],
+  },
+});
+```
+
+</Accordion>
+
+</Accordions>
+
+## Updating Documents
+
+```typescript
+// Update metadata only (vector unchanged)
+await db.update('doc-1', {
+  metadata: { ...existingMetadata, status: 'reviewed' },
+});
+
+// Update vector and metadata
+await db.update('doc-1', {
+  vector: newEmbedding,
+  metadata: { text: 'Updated text' },
+});
+```
+
+## Deleting Documents
+
+```typescript
+// Delete single document
+await db.delete('doc-1');
+
+// Delete multiple documents
+await db.deleteMany(['doc-1', 'doc-2', 'doc-3']);
+
+// Clear all documents
+await db.clear();
+```
+
+### Delete by Filter
+
+Delete documents matching a metadata filter:
+
+```typescript
+// Delete all documents with a specific documentId
+const deletedCount = await db.deleteWhere({
+  documentId: 'doc-123',
+});
+
+console.log(`Deleted ${deletedCount} documents`);
+
+// Delete documents matching multiple criteria
+const count = await db.deleteWhere({
+  $and: [
+    { source: { $eq: 'old-import.pdf' } },
+    { status: { $eq: 'archived' } },
+  ],
+});
+```
+
+<Callout type="tip" title="Batch Deletion">
+  Use `deleteWhere()` when you need to remove multiple documents by metadata
+  (e.g., all chunks from a specific file). It's more efficient than deleting
+  documents one by one.
+</Callout>
+
+## Getting Documents
+
+```typescript
+// Get by ID
+const doc = await db.get('doc-1');
+if (doc) {
+  console.log(doc.id, doc.vector, doc.metadata);
+}
+
+// Check if exists
+const exists = await db.has('doc-1');
+
+// Get all IDs
+const ids = await db.keys();
+
+// Get count
+const count = await db.size();
+```
+
+## Persistence
+
+By default, the vector database uses IndexedDB for persistence:
+
+```typescript
+const db = await createVectorDB({
+  name: 'persistent-db',
+  dimensions: 384,
+});
+
+// Add documents
+await db.addMany(documents);
+
+// Data persists across page reloads!
+// On next load, just create with same name:
+const db2 = await createVectorDB({
+  name: 'persistent-db', // Same name
+  dimensions: 384,
+});
+
+// All documents are still there
+const count = await db2.size();
+```
+
+### Memory-Only Mode
+
+For temporary data or testing:
+
+```typescript
+import { MemoryStorage } from '@localmode/core';
+
+const db = await createVectorDB({
+  name: 'temp',
+  dimensions: 384,
+  storage: new MemoryStorage(),
+});
+
+// Data lost on page reload
+```
+
+## Web Worker Mode
+
+Offload database operations to a Web Worker for better main thread performance:
+
+```typescript
+import { createVectorDBWithWorker } from '@localmode/core';
+
+const db = await createVectorDBWithWorker({
+  name: 'worker-db',
+  dimensions: 384,
+});
+
+// Same API, but operations run in a worker
+const results = await db.search(queryVector, { k: 5 });
+```
+
+<Callout type="info" title="Worker Benefits">
+  Worker mode prevents blocking the main thread during: - Large batch insertions - Complex searches
+  - Index rebuilding
+</Callout>
+
+## HNSW Configuration
+
+Tune the HNSW index for your use case:
+
+```typescript
+const db = await createVectorDB({
+  name: 'tuned-db',
+  dimensions: 384,
+  hnswConfig: {
+    // More connections = better accuracy, more memory
+    m: 32, // Default: 16
+
+    // Higher = better index quality, slower builds
+    efConstruction: 400, // Default: 200
+
+    // Higher = better search accuracy, slower searches
+    efSearch: 100, // Default: 50
+  },
+});
+```
+
+### Configuration Guidelines
+
+| Use Case           | m   | efConstruction | efSearch |
+| ------------------ | --- | -------------- | -------- |
+| Fast, low memory   | 8   | 100            | 30       |
+| Balanced (default) | 16  | 200            | 50       |
+| High accuracy      | 32  | 400            | 100      |
+| Maximum accuracy   | 48  | 500            | 200      |
+
+## Middleware
+
+Add middleware for logging, encryption, etc.:
+
+```typescript
+import { wrapVectorDB, loggingMiddleware } from '@localmode/core';
+
+const baseDB = await createVectorDB({ name: 'db', dimensions: 384 });
+
+const db = wrapVectorDB(baseDB, {
+  beforeSearch: async (vector, options) => {
+    console.log('Searching with k =', options.k);
+    return { vector, options };
+  },
+  afterSearch: async (results) => {
+    console.log('Found', results.length, 'results');
+    return results;
+  },
+});
+```
+
+## Type Safety
+
+Full TypeScript support for metadata:
+
+```typescript
+interface MyMetadata {
+  text: string;
+  source: string;
+  page: number;
+  tags: string[];
+}
+
+const db = await createVectorDB<MyMetadata>({
+  name: 'typed-db',
+  dimensions: 384,
+});
+
+// Type-safe add
+await db.add({
+  id: 'doc-1',
+  vector: embedding,
+  metadata: {
+    text: 'Hello',
+    source: 'file.pdf',
+    page: 1,
+    tags: ['intro'],
+  },
+});
+
+// Type-safe search results
+const results = await db.search(queryVector, { k: 5 });
+results.forEach((r) => {
+  // r.metadata is typed as MyMetadata
+  console.log(r.metadata.text);
+});
+```
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="RAG"
+    href="/docs/core/rag"
+    description="Build retrieval-augmented generation pipelines."
+  />
+  <Card
+    title="Storage"
+    href="/docs/core/storage"
+    description="Learn about storage options and persistence."
+  />
+</Cards>

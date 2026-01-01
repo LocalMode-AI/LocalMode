@@ -1,0 +1,5 @@
+{
+  "title": "Transformers",
+  "icon": "Sparkles",
+  "pages": ["index", "embeddings", "reranking"]
+}

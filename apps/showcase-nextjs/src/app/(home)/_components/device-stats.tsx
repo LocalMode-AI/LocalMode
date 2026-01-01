@@ -28,7 +28,7 @@ const FEATURE_INFO: Record<
     importance:
       'Enables 10-100x faster AI model inference by running computations on your GPU instead of CPU.',
     howToEnable:
-      'Use Chrome 113+, Edge 113+, or enable "WebGPU" flag in chrome://flags. Safari support is experimental.',
+      'Use Chrome 113+, Edge 113+, Safari 18+ (macOS 15+ / iOS 26+), or enable "WebGPU" flag in chrome://flags.',
   },
   WASM: {
     name: 'WebAssembly',

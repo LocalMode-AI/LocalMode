@@ -1,0 +1,297 @@
+---
+title: Security
+description: Encryption, PII redaction, and security best practices.
+icon: Shield
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+LocalMode provides built-in security utilities for encryption, key management, and PII redaction.
+
+<Callout type="info" title="Zero Telemetry">
+  LocalMode has **zero telemetry**. No data ever leaves your device. All processing happens locally
+  in the browser.
+</Callout>
+
+## Encryption
+
+Encrypt sensitive data using Web Crypto API:
+
+```typescript
+import { encrypt, decrypt, deriveKey } from '@localmode/core';
+
+// Derive a key from a password
+const key = await deriveKey('user-password', 'unique-salt');
+
+// Encrypt data
+const { ciphertext, iv } = await encrypt(key, 'sensitive data');
+
+// Decrypt data
+const decrypted = await decrypt(key, ciphertext, iv);
+console.log(decrypted); // 'sensitive data'
+```
+
+### Key Derivation
+
+Use PBKDF2 to derive keys from passwords:
+
+```ts {3-6}
+import { deriveKey } from '@localmode/core';
+
+const key = await deriveKey(password, salt, {
+  iterations: 100000, // Higher = more secure, slower
+  keyLength: 256, // AES-256
+});
+```
+
+<Callout type="warn">
+  Always use at least 100,000 iterations for PBKDF2. Lower values make brute-force attacks easier.
+</Callout>
+
+### Encryption Options
+
+```ts
+const { ciphertext, iv } = await encrypt(key, data, {
+  algorithm: 'AES-GCM', // Default, recommended
+});
+```
+
+<Callout type="info">
+  AES-GCM provides authenticated encryption—it protects both confidentiality and integrity. Use
+  AES-CBC only for compatibility with legacy systems.
+</Callout>
+
+## Key Management
+
+Store keys securely:
+
+```typescript
+import { KeyStore } from '@localmode/core';
+
+const keyStore = new KeyStore({
+  name: 'my-app-keys',
+});
+
+// Store a key
+await keyStore.set('encryption-key', key);
+
+// Retrieve a key
+const storedKey = await keyStore.get('encryption-key');
+
+// Delete a key
+await keyStore.delete('encryption-key');
+```
+
+<Callout type="warn" title="Key Storage">
+  Keys stored in IndexedDB are accessible to JavaScript. For sensitive applications, consider using
+  hardware-backed keys via WebAuthn.
+</Callout>
+
+## Encrypting Embeddings
+
+Encrypt embeddings before storage:
+
+```typescript
+import { wrapEmbeddingModel, encryptionMiddleware, deriveKey } from '@localmode/core';
+
+const key = await deriveKey('user-password', 'salt');
+
+const model = wrapEmbeddingModel(baseModel, [encryptionMiddleware({ key })]);
+
+// Embeddings are automatically encrypted
+const { embedding } = await embed({ model, value: 'sensitive text' });
+```
+
+## PII Redaction
+
+Remove personally identifiable information before processing:
+
+```typescript
+import { redactPII } from '@localmode/core';
+
+const text = 'Contact John at john@example.com or call 555-123-4567';
+
+const redacted = redactPII(text, {
+  patterns: ['email', 'phone'],
+  replacement: '[REDACTED]',
+});
+
+console.log(redacted);
+// 'Contact John at [REDACTED] or call [REDACTED]'
+```
+
+### Available Patterns
+
+| Pattern      | Description             | Example             |
+| ------------ | ----------------------- | ------------------- |
+| `email`      | Email addresses         | john@example.com    |
+| `phone`      | Phone numbers           | 555-123-4567        |
+| `ssn`        | Social Security numbers | 123-45-6789         |
+| `creditCard` | Credit card numbers     | 4111-1111-1111-1111 |
+| `ip`         | IP addresses            | 192.168.1.1         |
+| `address`    | Street addresses        | 123 Main St         |
+
+### Custom Patterns
+
+```typescript
+const redacted = redactPII(text, {
+  patterns: ['email', 'phone'],
+  custom: [
+    {
+      name: 'employeeId',
+      regex: /EMP-\d{6}/g,
+    },
+  ],
+  replacement: (match, pattern) => `[${pattern.toUpperCase()}]`,
+});
+```
+
+### PII Middleware
+
+Automatically redact PII before embedding:
+
+```typescript
+import { wrapEmbeddingModel, piiRedactionMiddleware } from '@localmode/core';
+
+const model = wrapEmbeddingModel(baseModel, [
+  piiRedactionMiddleware({
+    patterns: ['email', 'phone', 'ssn'],
+    replacement: '[REDACTED]',
+  }),
+]);
+
+// PII is automatically redacted before embedding
+const { embedding } = await embed({
+  model,
+  value: 'Email me at john@example.com',
+});
+// Actually embeds: 'Email me at [REDACTED]'
+```
+
+## Feature Detection
+
+Check security feature availability:
+
+```typescript
+import { isCryptoSupported, isCrossOriginIsolated } from '@localmode/core';
+
+if (!isCryptoSupported()) {
+  console.warn('Web Crypto API not available');
+}
+
+if (!isCrossOriginIsolated()) {
+  console.warn('SharedArrayBuffer not available');
+}
+```
+
+## Security Best Practices
+
+<Callout type="tip" title="Security Checklist">
+  1. **Never store passwords** - Use key derivation
+  2. **Unique salts** - Generate random salts for each key
+  3. **High iterations** - Use at least 100,000 PBKDF2 iterations
+  4. **Redact PII** - Always redact before processing user data
+  5. **Zero telemetry** - LocalMode never phones home
+</Callout>
+
+### Secure RAG Pipeline
+
+```typescript
+import {
+  wrapEmbeddingModel,
+  piiRedactionMiddleware,
+  encryptionMiddleware,
+  deriveKey,
+} from '@localmode/core';
+
+// Setup secure model
+const key = await deriveKey(userPassword, uniqueSalt);
+
+const secureModel = wrapEmbeddingModel(baseModel, [
+  piiRedactionMiddleware({
+    patterns: ['email', 'phone', 'ssn', 'creditCard'],
+  }),
+  encryptionMiddleware({ key }),
+]);
+
+// All embeddings are PII-redacted and encrypted
+const { embedding } = await embed({
+  model: secureModel,
+  value: userInput,
+});
+```
+
+## Content Security Policy
+
+For maximum security, configure CSP headers:
+
+```typescript
+// next.config.js
+const securityHeaders = [
+  {
+    key: 'Content-Security-Policy',
+    value: [
+      "default-src 'self'",
+      "script-src 'self' 'wasm-unsafe-eval'", // Required for WASM
+      "worker-src 'self' blob:", // Required for workers
+      "connect-src 'self' https://huggingface.co https://cdn-lfs.huggingface.co",
+    ].join('; '),
+  },
+];
+```
+
+## Cross-Origin Isolation
+
+Some features require cross-origin isolation:
+
+```typescript
+// Check if isolated
+if (crossOriginIsolated) {
+  // SharedArrayBuffer available
+  // Better performance for workers
+}
+
+// Enable via headers:
+// Cross-Origin-Opener-Policy: same-origin
+// Cross-Origin-Embedder-Policy: require-corp
+```
+
+## Audit Logging
+
+Log security-relevant events:
+
+```typescript
+import { wrapEmbeddingModel, loggingMiddleware } from '@localmode/core';
+
+const model = wrapEmbeddingModel(baseModel, [
+  loggingMiddleware({
+    logger: (event) => {
+      // Log to secure audit trail
+      auditLog.log({
+        timestamp: new Date().toISOString(),
+        action: 'embedding',
+        model: event.modelId,
+        inputCount: event.inputCount,
+        // Don't log actual input values!
+      });
+    },
+  }),
+]);
+```
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Middleware"
+    href="/docs/core/middleware"
+    description="Add security middleware to your pipeline."
+  />
+  <Card
+    title="Storage"
+    href="/docs/core/storage"
+    description="Learn about secure storage options."
+  />
+</Cards>

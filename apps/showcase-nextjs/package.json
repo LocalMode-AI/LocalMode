@@ -1,5 +1,5 @@
 {
-  "name": "@localmode/showcase-nextjs",
+  "name": "showcase-nextjs",
   "version": "1.0.0",
   "private": true,
   "scripts": {

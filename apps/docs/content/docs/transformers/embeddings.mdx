@@ -1,0 +1,210 @@
+---
+title: Embeddings
+description: Generate text embeddings for semantic search and similarity.
+icon: Hash
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+Generate dense vector representations of text for semantic search, clustering, and similarity matching.
+
+## Basic Usage
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { embed, embedMany } from '@localmode/core';
+
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+
+// Single embedding
+const { embedding } = await embed({
+  model,
+  value: 'Machine learning is fascinating',
+});
+
+console.log('Dimensions:', embedding.length); // 384
+
+// Batch embeddings
+const { embeddings } = await embedMany({
+  model,
+  values: ['Hello', 'World', 'AI'],
+});
+```
+
+## Recommended Models
+
+| Model | Dimensions | Size | Speed | Use Case |
+|-------|------------|------|-------|----------|
+| `Xenova/all-MiniLM-L6-v2` | 384 | 22MB | ⚡⚡⚡ | General purpose, fastest |
+| `Xenova/all-MiniLM-L12-v2` | 384 | 33MB | ⚡⚡ | Better accuracy |
+| `Xenova/all-mpnet-base-v2` | 768 | 110MB | ⚡ | Highest quality |
+| `Xenova/paraphrase-multilingual-MiniLM-L12-v2` | 384 | 117MB | ⚡⚡ | 50+ languages |
+| `Xenova/e5-small-v2` | 384 | 33MB | ⚡⚡⚡ | E5 family, fast |
+| `Xenova/bge-small-en-v1.5` | 384 | 33MB | ⚡⚡⚡ | BGE family |
+
+## With Vector Database
+
+```typescript
+import { createVectorDB, embed, embedMany, semanticSearch } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const db = await createVectorDB({ name: 'docs', dimensions: 384 });
+
+// Index documents
+const documents = [
+  'Machine learning enables computers to learn from data',
+  'Deep learning uses neural networks with many layers',
+  'Natural language processing analyzes human language',
+];
+
+const { embeddings } = await embedMany({ model, values: documents });
+
+await db.addMany(
+  documents.map((text, i) => ({
+    id: `doc-${i}`,
+    vector: embeddings[i],
+    metadata: { text },
+  }))
+);
+
+// Search
+const results = await semanticSearch({
+  db,
+  model,
+  query: 'How do neural networks work?',
+  k: 3,
+});
+```
+
+## Progress Tracking
+
+```typescript
+const { embeddings } = await embedMany({
+  model,
+  values: largeDocumentArray,
+  onProgress: (progress) => {
+    const percent = (progress.completed / progress.total * 100).toFixed(1);
+    console.log(`Embedding: ${percent}%`);
+  },
+});
+```
+
+## Model Configuration
+
+```typescript
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2', {
+  quantized: true,     // Use quantized model (default: true)
+  revision: 'main',    // Model revision
+  progress: (p) => {
+    console.log(`Loading model: ${(p.progress * 100).toFixed(1)}%`);
+  },
+});
+```
+
+## Multilingual Embeddings
+
+For multilingual applications:
+
+```typescript
+const model = transformers.embedding('Xenova/paraphrase-multilingual-MiniLM-L12-v2');
+
+const { embeddings } = await embedMany({
+  model,
+  values: [
+    'Hello world',           // English
+    'Bonjour le monde',      // French
+    'Hola mundo',            // Spanish
+    'こんにちは世界',          // Japanese
+    'مرحبا بالعالم',         // Arabic
+  ],
+});
+
+// All embeddings are in the same vector space
+// Cross-lingual similarity works!
+```
+
+## Comparison: Model Quality vs Speed
+
+```typescript
+import { cosineSimilarity } from '@localmode/core';
+
+// Test sentences
+const s1 = 'The cat sits on the mat';
+const s2 = 'A feline rests on a rug';
+const s3 = 'The stock market crashed yesterday';
+
+// Fast model
+const fastModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const { embeddings: fastEmbeddings } = await embedMany({
+  model: fastModel,
+  values: [s1, s2, s3],
+});
+
+// Quality model
+const qualityModel = transformers.embedding('Xenova/all-mpnet-base-v2');
+const { embeddings: qualityEmbeddings } = await embedMany({
+  model: qualityModel,
+  values: [s1, s2, s3],
+});
+
+// Compare similarities
+console.log('Fast model:');
+console.log('  s1-s2:', cosineSimilarity(fastEmbeddings[0], fastEmbeddings[1]).toFixed(3));
+console.log('  s1-s3:', cosineSimilarity(fastEmbeddings[0], fastEmbeddings[2]).toFixed(3));
+
+console.log('Quality model:');
+console.log('  s1-s2:', cosineSimilarity(qualityEmbeddings[0], qualityEmbeddings[1]).toFixed(3));
+console.log('  s1-s3:', cosineSimilarity(qualityEmbeddings[0], qualityEmbeddings[2]).toFixed(3));
+```
+
+## Caching Embeddings
+
+Use caching middleware to avoid recomputation:
+
+```typescript
+import { wrapEmbeddingModel, cachingMiddleware } from '@localmode/core';
+
+const baseModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+
+const model = wrapEmbeddingModel(baseModel, [
+  cachingMiddleware({
+    maxSize: 10000,
+    storage: 'indexeddb',
+    dbName: 'embedding-cache',
+  }),
+]);
+
+// First call computes embedding
+const { embedding: e1 } = await embed({ model, value: 'Hello' });
+
+// Second call returns from cache (instant)
+const { embedding: e2 } = await embed({ model, value: 'Hello' });
+```
+
+## Best Practices
+
+<Callout type="tip" title="Embedding Tips">
+  1. **Match dimensions** — Ensure your vector DB dimensions match the model
+  2. **Batch when possible** — `embedMany()` is more efficient than multiple `embed()` calls
+  3. **Cache embeddings** — Use caching middleware for repeated queries
+  4. **Normalize if needed** — Some models benefit from L2 normalization
+  5. **Choose model wisely** — Balance quality vs speed for your use case
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Vector Database"
+    href="/docs/core/vector-db"
+    description="Store and search embeddings."
+  />
+  <Card
+    title="RAG"
+    href="/docs/core/rag"
+    description="Build retrieval-augmented generation pipelines."
+  />
+</Cards>

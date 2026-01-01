@@ -1,0 +1,299 @@
+---
+title: Reranking
+description: Improve RAG accuracy by reranking retrieved documents
+icon: ArrowUpDown
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Steps } from 'fumadocs-ui/components/steps';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+Reranking improves the accuracy of RAG (Retrieval-Augmented Generation) pipelines by re-scoring documents based on their relevance to a query. After initial vector search retrieves candidates, reranking provides more precise ordering.
+
+## Why Rerank?
+
+<Callout type="info">
+  Vector search retrieves documents based on embedding similarity, but rerankers use cross-attention
+  to directly score query-document pairs, often producing more accurate rankings for the final
+  generation step.
+</Callout>
+
+Typical RAG pipeline:
+
+1. **Retrieve** — Get 20-50 candidates via vector search (fast, approximate)
+2. **Rerank** — Score and reorder candidates (precise, slower)
+3. **Generate** — Use top 5-10 documents for LLM context
+
+## Basic Usage
+
+```ts {5-9}
+import { rerank } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Create reranker model
+const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+
+const { results } = await rerank({
+  model: rerankerModel,
+  query: 'What is machine learning?',
+  documents: [
+    'Machine learning is a type of artificial intelligence...',
+    'Cooking pasta requires boiling water...',
+    'Deep learning is a subset of machine learning...',
+  ],
+  topK: 2,
+});
+
+// results: [
+//   { index: 0, score: 0.95, text: 'Machine learning is a type of...' },
+//   { index: 2, score: 0.88, text: 'Deep learning is a subset of...' }
+// ]
+```
+
+## RAG Pipeline Example
+
+<Steps>
+
+### Perform Initial Vector Search
+
+Retrieve more candidates than you need—reranking will filter to the best ones.
+
+```ts
+import { semanticSearch, createVectorDB, embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const embeddingModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+
+// Get 20 candidates from vector search
+const { embedding: queryVector } = await embed({
+  model: embeddingModel,
+  value: 'What is machine learning?',
+});
+
+const candidates = await db.search(queryVector, { k: 20 });
+```
+
+### Rerank the Candidates
+
+Score each document against the query for precise relevance ranking.
+
+```ts
+const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+
+const { results } = await rerank({
+  model: rerankerModel,
+  query: 'What is machine learning?',
+  documents: candidates.map((c) => c.metadata.text),
+  topK: 5, // Keep only top 5 after reranking
+});
+```
+
+### Use Top Results for Generation
+
+Pass the reranked documents as context to your LLM.
+
+```ts
+const context = results.map((r) => r.text).join('\n\n');
+
+const response = await streamText({
+  model: languageModel,
+  prompt: `Based on the following context, answer the question.
+
+Context:
+${context}
+
+Question: What is machine learning?`,
+});
+```
+
+</Steps>
+
+## API Reference
+
+### `rerank(options)`
+
+Reranks documents by relevance to a query.
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The reranker model to use (RerankerModel instance or string ID)',
+      type: 'RerankerModel | string',
+      required: true,
+    },
+    query: {
+      description: 'The query to rank documents against',
+      type: 'string',
+      required: true,
+    },
+    documents: {
+      description: 'Array of document texts to rerank',
+      type: 'string[]',
+      required: true,
+    },
+    topK: {
+      description: 'Number of top results to return (default: all documents)',
+      type: 'number',
+      required: false,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure (default: 2)',
+      type: 'number',
+      required: false,
+    },
+  }}
+/>
+
+### Return Type: `RerankResult`
+
+<TypeTable
+  type={{
+    results: {
+      description: 'Reranked documents sorted by score (highest first)',
+      type: 'RankedDocument[]',
+    },
+    usage: {
+      description: 'Usage information including inputTokens and durationMs',
+      type: 'RerankUsage',
+    },
+    response: {
+      description: 'Response metadata including modelId and timestamp',
+      type: 'RerankResponse',
+    },
+  }}
+/>
+
+### `RankedDocument`
+
+<TypeTable
+  type={{
+    index: {
+      description: 'Original index in the input documents array',
+      type: 'number',
+    },
+    score: {
+      description: 'Relevance score (higher is more relevant)',
+      type: 'number',
+    },
+    text: {
+      description: 'The document text',
+      type: 'string',
+    },
+  }}
+/>
+
+## Supported Models
+
+<Tabs items={['Cross-Encoders', 'Model Recommendations']}>
+<Tab value="Cross-Encoders">
+
+Cross-encoder models score query-document pairs directly:
+
+| Model                            | Size  | Speed  | Quality | Use Case        |
+| -------------------------------- | ----- | ------ | ------- | --------------- |
+| `Xenova/ms-marco-MiniLM-L-6-v2`  | 23MB  | Fast   | Good    | General purpose |
+| `Xenova/ms-marco-MiniLM-L-12-v2` | 33MB  | Medium | Better  | Higher accuracy |
+| `Xenova/bge-reranker-base`       | 110MB | Slower | Best    | Maximum quality |
+
+</Tab>
+<Tab value="Model Recommendations">
+
+Choose based on your needs:
+
+- **Speed-critical**: Use `ms-marco-MiniLM-L-6-v2` for fast inference
+- **Balanced**: Use `ms-marco-MiniLM-L-12-v2` for good accuracy with reasonable speed
+- **Quality-critical**: Use `bge-reranker-base` when accuracy matters most
+
+<Callout type="tip">
+  Start with `ms-marco-MiniLM-L-6-v2`—it's a great balance of speed and quality for most
+  applications.
+</Callout>
+
+</Tab>
+</Tabs>
+
+## Cancellation Support
+
+All reranking operations support `AbortSignal` for cancellation:
+
+```ts
+const controller = new AbortController();
+
+// Cancel after 5 seconds
+setTimeout(() => controller.abort(), 5000);
+
+try {
+  const { results } = await rerank({
+    model: rerankerModel,
+    query: 'What is AI?',
+    documents: largeDocumentSet,
+    abortSignal: controller.signal,
+  });
+} catch (error) {
+  if (error.name === 'AbortError') {
+    console.log('Reranking was cancelled');
+  }
+}
+```
+
+## Performance Tips
+
+<Callout type="tip">
+
+**Optimize your reranking pipeline:**
+
+1. **Limit candidates**: Retrieve 20-50 candidates, not hundreds
+2. **Use topK**: Only return the documents you need
+3. **Batch when possible**: Rerank multiple queries together if your use case allows
+4. **Cache results**: Consider caching reranked results for repeated queries
+
+</Callout>
+
+## Custom Reranker Implementation
+
+Implement the `RerankerModel` interface to create custom rerankers:
+
+```ts
+import type { RerankerModel, DoRerankOptions, DoRerankResult } from '@localmode/core';
+
+class MyCustomReranker implements RerankerModel {
+  readonly modelId = 'custom:my-reranker';
+  readonly provider = 'custom';
+
+  async doRerank(options: DoRerankOptions): Promise<DoRerankResult> {
+    const { query, documents, topK } = options;
+
+    // Your scoring logic here
+    const scored = documents.map((doc, index) => ({
+      index,
+      score: this.scoreDocument(query, doc),
+      text: doc,
+    }));
+
+    // Sort by score descending
+    scored.sort((a, b) => b.score - a.score);
+
+    // Apply topK
+    const results = topK ? scored.slice(0, topK) : scored;
+
+    return {
+      results,
+      usage: {
+        inputTokens: query.length + documents.join('').length,
+        durationMs: 0,
+      },
+    };
+  }
+
+  private scoreDocument(query: string, document: string): number {
+    // Implement your scoring logic
+    return 0.5;
+  }
+}
+```

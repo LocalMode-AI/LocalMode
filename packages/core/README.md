@@ -16,6 +16,16 @@ pnpm install @localmode/core
 npm install @localmode/core
 ```
 
+## Related Packages
+
+| Package                                                                        | Description                          |
+| ------------------------------------------------------------------------------ | ------------------------------------ |
+| [`@localmode/transformers`](https://npmjs.com/package/@localmode/transformers) | HuggingFace Transformers.js provider |
+| [`@localmode/webllm`](https://npmjs.com/package/@localmode/webllm)             | WebLLM provider for local LLMs       |
+| [`@localmode/pdfjs`](https://npmjs.com/package/@localmode/pdfjs)               | PDF text extraction                  |
+
+---
+
 ## Overview
 
 `@localmode/core` is a **zero-dependency** package containing all functions, interfaces, types, and utilities for building local-first AI applications. Provider packages (like `@localmode/transformers` and `@localmode/webllm`) implement these interfaces with specific ML frameworks.
@@ -590,19 +600,6 @@ const { embedding } = await embed({
 - **No network requests** - Core package makes zero network calls
 - **Data stays local** - All processing happens in your browser
 - **Open source** - Audit the code yourself
-
----
-
-## Related Packages
-
-| Package                   | Description                          |
-| ------------------------- | ------------------------------------ |
-| `@localmode/transformers` | HuggingFace Transformers.js provider |
-| `@localmode/webllm`       | WebLLM provider for local LLMs       |
-| `@localmode/pdfjs`        | PDF text extraction                  |
-| `@localmode/dexie`        | Dexie.js storage adapter             |
-| `@localmode/idb`          | idb storage adapter                  |
-| `@localmode/localforage`  | localForage storage adapter          |
 
 ---
 

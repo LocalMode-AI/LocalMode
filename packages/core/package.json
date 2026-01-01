@@ -12,7 +12,7 @@
     "url": "https://github.com/LocalMode-AI/LocalMode.git",
     "directory": "packages/core"
   },
-  "homepage": "https://github.com/LocalMode-AI/LocalMode#readme",
+  "homepage": "https://localmode.dev/docs/core",
   "bugs": {
     "url": "https://github.com/LocalMode-AI/LocalMode/issues"
   },

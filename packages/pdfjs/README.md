@@ -8,11 +8,7 @@ PDF text extraction for local-first document processing. Uses PDF.js for efficie
 ## Installation
 
 ```bash
-# Preferred: pnpm
-pnpm install @localmode/pdfjs @localmode/core pdfjs-dist
-
-# Alternative: npm
-npm install @localmode/pdfjs @localmode/core pdfjs-dist
+pnpm install @localmode/pdfjs @localmode/core
 ```
 
 ## Quick Start

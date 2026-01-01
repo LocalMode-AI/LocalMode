@@ -1,0 +1,634 @@
+---
+title: Testing Utilities
+description: Mock implementations and helpers for testing LocalMode applications
+icon: FlaskConical
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Steps } from 'fumadocs-ui/components/steps';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { Accordion, Accordions } from 'fumadocs-ui/components/accordion';
+
+LocalMode provides comprehensive mock utilities for testing applications without loading real ML models. These mocks are deterministic, configurable, and match the exact API of real implementations.
+
+## Overview
+
+Testing utilities include:
+
+- **Mock models** — Embedding, classification, NER, vision, audio, LLM, and more
+- **Mock storage** — In-memory storage for unit tests
+- **Mock VectorDB** — Full-featured database mock
+- **Test helpers** — Seeded random generators, test vectors, spies
+
+<Callout type="info">
+  All mocks produce deterministic output when given the same inputs and seed, making tests
+  reproducible.
+</Callout>
+
+## Mock Embedding Model
+
+The most commonly used mock for testing embedding-related features.
+
+```ts
+import { createMockEmbeddingModel, embed } from '@localmode/core';
+
+const model = createMockEmbeddingModel({
+  dimensions: 384,
+  seed: 42, // Deterministic embeddings
+});
+
+const { embedding } = await embed({
+  model,
+  value: 'Hello world',
+});
+
+// embedding is a Float32Array of length 384
+// Same input + seed always produces same output
+```
+
+### Configuration Options
+
+<TypeTable
+  type={{
+    dimensions: {
+      description: 'Number of embedding dimensions',
+      type: 'number',
+      default: '384',
+    },
+    delay: {
+      description: 'Simulated delay in milliseconds',
+      type: 'number',
+      default: '0',
+    },
+    failCount: {
+      description: 'Number of times to fail before succeeding',
+      type: 'number',
+      default: '0',
+    },
+    failError: {
+      description: 'Error to throw when failing',
+      type: 'Error',
+    },
+    modelId: {
+      description: 'Model identifier',
+      type: 'string',
+      default: "'mock:test-model'",
+    },
+    seed: {
+      description: 'Seed for deterministic embeddings',
+      type: 'number',
+      default: '42',
+    },
+    onEmbed: {
+      description: 'Callback to track embed calls',
+      type: '(options) => void',
+    },
+  }}
+/>
+
+### Testing Failure Handling
+
+```ts
+const failingModel = createMockEmbeddingModel({
+  failCount: 2, // Fail first 2 attempts
+  failError: new Error('Model load failed'),
+});
+
+// First two calls will fail, third will succeed
+try {
+  await embed({ model: failingModel, value: 'test' });
+} catch (error) {
+  console.log('First attempt failed');
+}
+```
+
+### Tracking Calls
+
+```ts
+const calls: string[][] = [];
+
+const model = createMockEmbeddingModel({
+  onEmbed: ({ values }) => {
+    calls.push(values);
+  },
+});
+
+await embed({ model, value: 'test 1' });
+await embed({ model, value: 'test 2' });
+
+console.log(calls); // [['test 1'], ['test 2']]
+console.log(model.callCount); // 2
+
+// Reset for next test
+model.resetCallCount();
+```
+
+## All Mock Models
+
+<Accordions>
+
+<Accordion title="Mock Classification Model">
+
+```ts
+import { createMockClassificationModel } from '@localmode/core';
+
+const model = createMockClassificationModel({
+  labels: ['positive', 'negative', 'neutral'],
+  defaultScore: 0.9,
+});
+
+// Uses simple heuristics:
+// - "great", "good", "love" → positive
+// - "bad", "terrible", "hate" → negative
+// - Other → neutral
+```
+
+<TypeTable
+  type={{
+    labels: {
+      description: 'Available classification labels',
+      type: 'string[]',
+      default: "['positive', 'negative', 'neutral']",
+    },
+    delay: {
+      description: 'Simulated delay in milliseconds',
+      type: 'number',
+      default: '0',
+    },
+    defaultLabel: {
+      description: 'Default label to return',
+      type: 'string',
+    },
+    defaultScore: {
+      description: 'Default confidence score',
+      type: 'number',
+      default: '0.9',
+    },
+  }}
+/>
+
+</Accordion>
+
+<Accordion title="Mock NER Model">
+
+```ts
+import { createMockNERModel } from '@localmode/core';
+
+const model = createMockNERModel({
+  entityTypes: ['PERSON', 'ORG', 'LOC', 'DATE'],
+});
+
+// Recognizes common test entities:
+// PERSON: John, Jane, Bob, Alice, Mike, Sarah
+// ORG: Microsoft, Google, Apple, Amazon, OpenAI, Meta
+// LOC: Seattle, New York, London, Paris, Tokyo, Berlin
+// DATE: Years (2024), dates (1/1/2024), month names
+```
+
+<TypeTable
+  type={{
+    entityTypes: {
+      description: 'Entity types to detect',
+      type: 'string[]',
+      default: "['PERSON', 'ORG', 'LOC', 'DATE']",
+    },
+    delay: {
+      description: 'Simulated delay in milliseconds',
+      type: 'number',
+      default: '0',
+    },
+  }}
+/>
+
+</Accordion>
+
+<Accordion title="Mock Speech-to-Text Model">
+
+```ts
+import { createMockSpeechToTextModel } from '@localmode/core';
+
+const model = createMockSpeechToTextModel({
+  mockText: 'This is the transcription.',
+  languages: ['en', 'es', 'fr'],
+});
+
+const result = await model.doTranscribe({
+  audio: audioBlob,
+  returnTimestamps: true,
+});
+// result.text = 'This is the transcription.'
+// result.segments = [{ start: 0, end: 0.5, text: 'This' }, ...]
+```
+
+<TypeTable
+  type={{
+    languages: {
+      description: 'Supported languages',
+      type: 'string[]',
+      default: "['en']",
+    },
+    delay: {
+      description: 'Simulated delay in milliseconds',
+      type: 'number',
+      default: '0',
+    },
+    mockText: {
+      description: 'Text to return',
+      type: 'string',
+      default: "'This is a test transcription.'",
+    },
+  }}
+/>
+
+</Accordion>
+
+<Accordion title="Mock Text-to-Speech Model">
+
+```ts
+import { createMockTextToSpeechModel } from '@localmode/core';
+
+const model = createMockTextToSpeechModel({
+  sampleRate: 16000,
+});
+
+const { audio, sampleRate } = await model.doSynthesize({
+  text: 'Hello world',
+});
+// audio is a Blob with silent audio data
+```
+
+<TypeTable
+  type={{
+    delay: {
+      description: 'Simulated delay in milliseconds',
+      type: 'number',
+      default: '0',
+    },
+    sampleRate: {
+      description: 'Audio sample rate',
+      type: 'number',
+      default: '16000',
+    },
+  }}
+/>
+
+</Accordion>
+
+<Accordion title="Mock Language Model">
+
+```ts
+import { createMockLanguageModel } from '@localmode/core';
+
+const model = createMockLanguageModel({
+  mockResponse: 'This is the generated response.',
+  contextLength: 4096,
+});
+
+// Non-streaming
+const result = await model.doGenerate({ prompt: 'Hello' });
+
+// Streaming
+for await (const chunk of model.doStream({ prompt: 'Hello' })) {
+  console.log(chunk.text);
+}
+```
+
+<TypeTable
+  type={{
+    delay: {
+      description: 'Simulated delay in milliseconds',
+      type: 'number',
+      default: '0',
+    },
+    mockResponse: {
+      description: 'Text to generate',
+      type: 'string',
+      default: "'This is a mock response.'",
+    },
+    contextLength: {
+      description: 'Context window size',
+      type: 'number',
+      default: '4096',
+    },
+  }}
+/>
+
+</Accordion>
+
+<Accordion title="Mock Translation Model">
+
+```ts
+import { createMockTranslationModel } from '@localmode/core';
+
+const model = createMockTranslationModel({
+  translationPrefix: '[translated]',
+});
+
+const { translations } = await model.doTranslate({
+  texts: ['Hello', 'World'],
+});
+// translations = ['[translated] Hello', '[translated] World']
+```
+
+</Accordion>
+
+<Accordion title="Mock Summarization Model">
+
+```ts
+import { createMockSummarizationModel } from '@localmode/core';
+
+const model = createMockSummarizationModel();
+
+const { summaries } = await model.doSummarize({
+  texts: ['This is a long document. It has many sentences.'],
+});
+// summaries = ['This is a long document.'] (first sentence)
+```
+
+</Accordion>
+
+<Accordion title="Mock Vision Models">
+
+```ts
+import {
+  createMockImageCaptionModel,
+  createMockSegmentationModel,
+  createMockObjectDetectionModel,
+  createMockImageFeatureModel,
+  createMockImageToImageModel,
+} from '@localmode/core';
+
+// Image captioning
+const captioner = createMockImageCaptionModel({
+  mockCaption: 'A photo showing test content.',
+});
+
+// Object detection
+const detector = createMockObjectDetectionModel();
+// Returns: [{ label: 'person', score: 0.95, box: {...} }, ...]
+
+// Segmentation
+const segmenter = createMockSegmentationModel();
+// Returns masks with 'background' and 'object' labels
+
+// Image features
+const featureExtractor = createMockImageFeatureModel({
+  dimensions: 512,
+});
+
+// Image-to-image
+const transformer = createMockImageToImageModel({
+  taskType: 'upscale',
+});
+```
+
+</Accordion>
+
+<Accordion title="Mock QA Models">
+
+```ts
+import {
+  createMockQuestionAnsweringModel,
+  createMockDocumentQAModel,
+  createMockFillMaskModel,
+  createMockOCRModel,
+} from '@localmode/core';
+
+// Question answering
+const qaModel = createMockQuestionAnsweringModel();
+
+// Document QA (images)
+const docQA = createMockDocumentQAModel();
+
+// Fill-mask (BERT-style)
+const fillMask = createMockFillMaskModel({
+  mockPredictions: [
+    { token: 'great', score: 0.85 },
+    { token: 'wonderful', score: 0.1 },
+  ],
+});
+
+// OCR
+const ocrModel = createMockOCRModel({
+  mockText: 'Extracted text from image.',
+});
+```
+
+</Accordion>
+
+</Accordions>
+
+## Mock Storage
+
+In-memory storage that implements the Storage interface:
+
+```ts
+import { createMockStorage } from '@localmode/core';
+
+const storage = createMockStorage();
+
+await storage.set('key', {
+  id: 'doc-1',
+  vector: new Float32Array(384),
+  metadata: { text: 'Hello' },
+});
+
+const doc = await storage.get('key');
+const keys = await storage.keys();
+
+// Access internal data for assertions
+const allData = storage.getData(); // Map<string, StoredDocument>
+console.log(storage.size); // 1
+
+await storage.clear();
+```
+
+## Mock VectorDB
+
+Full-featured VectorDB mock with search support:
+
+```ts
+import { createMockVectorDB, createTestVector } from '@localmode/core';
+
+const db = createMockVectorDB({
+  name: 'test-db',
+  dimensions: 384,
+  delay: 0, // Optional delay for async operations
+});
+
+// Add documents
+await db.add({
+  id: 'doc-1',
+  vector: createTestVector(384, 1),
+  metadata: { text: 'Hello world', category: 'greeting' },
+});
+
+// Search with filters
+const results = await db.search(queryVector, {
+  k: 10,
+  threshold: 0.5,
+  filter: { category: 'greeting' },
+});
+
+// Filter operators supported: $eq, $ne, $gt, $gte, $lt, $lte, $in, $nin
+await db.search(queryVector, {
+  filter: {
+    score: { $gte: 0.8 },
+    category: { $in: ['greeting', 'farewell'] },
+  },
+});
+```
+
+## Test Vectors
+
+Create deterministic test vectors:
+
+```ts
+import { createTestVector, createTestVectors } from '@localmode/core';
+
+// Single vector (same seed = same vector)
+const vector1 = createTestVector(384, 42);
+const vector2 = createTestVector(384, 42);
+// vector1 and vector2 are identical
+
+// Multiple vectors
+const vectors = createTestVectors(100, 384, 0);
+// 100 vectors with seeds 0-99
+
+// Unnormalized vectors
+const rawVector = createTestVector(384, 42, false);
+```
+
+## Seeded Random
+
+For reproducible random numbers in tests:
+
+```ts
+import { createSeededRandom } from '@localmode/core';
+
+const rng = createSeededRandom(42);
+
+const value1 = rng(); // Always same value for seed 42
+const value2 = rng(); // Next value in sequence
+
+// Reset by creating new RNG with same seed
+const rng2 = createSeededRandom(42);
+// rng2() produces same sequence as rng
+```
+
+## Test Helpers
+
+### Wait for Condition
+
+```ts
+import { waitFor } from '@localmode/core';
+
+// Wait for async condition
+await waitFor(
+  () => document.querySelector('.loaded') !== null,
+  5000, // timeout
+  50 // check interval
+);
+
+// Wait for async function
+await waitFor(async () => (await db.count()) > 0);
+```
+
+### Deferred Promises
+
+```ts
+import { createDeferred } from '@localmode/core';
+
+const { promise, resolve, reject } = createDeferred<string>();
+
+// Later...
+resolve('success');
+// or: reject(new Error('failed'));
+
+const result = await promise;
+```
+
+### Spy Functions
+
+```ts
+import { createSpy } from '@localmode/core';
+
+const spy = createSpy<(x: number, y: number) => void>();
+
+spy(1, 2);
+spy(3, 4);
+
+console.log(spy.callCount); // 2
+console.log(spy.calls); // [[1, 2], [3, 4]]
+
+spy.reset();
+console.log(spy.callCount); // 0
+```
+
+## Vitest Example
+
+```ts
+import { describe, it, expect, beforeEach } from 'vitest';
+import {
+  createMockEmbeddingModel,
+  createMockVectorDB,
+  createTestVector,
+  embed,
+} from '@localmode/core';
+
+describe('Semantic Search', () => {
+  let model: ReturnType<typeof createMockEmbeddingModel>;
+  let db: ReturnType<typeof createMockVectorDB>;
+
+  beforeEach(() => {
+    model = createMockEmbeddingModel({ dimensions: 384, seed: 42 });
+    db = createMockVectorDB({ dimensions: 384 });
+  });
+
+  it('should find similar documents', async () => {
+    // Arrange
+    await db.add({
+      id: 'doc-1',
+      vector: createTestVector(384, 1),
+      metadata: { text: 'Machine learning is AI' },
+    });
+
+    // Act
+    const { embedding } = await embed({ model, value: 'What is ML?' });
+    const results = await db.search(embedding, { k: 5 });
+
+    // Assert
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe('doc-1');
+    expect(results[0].score).toBeGreaterThan(0);
+  });
+
+  it('should support AbortSignal', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(embed({ model, value: 'test', abortSignal: controller.signal })).rejects.toThrow();
+  });
+
+  it('should handle failures with retry', async () => {
+    const failingModel = createMockEmbeddingModel({
+      failCount: 1,
+      failError: new Error('Temporary failure'),
+    });
+
+    // First call fails, second succeeds
+    await expect(embed({ model: failingModel, value: 'test', maxRetries: 0 })).rejects.toThrow(
+      'Temporary failure'
+    );
+
+    // With retry, should succeed
+    const result = await embed({
+      model: failingModel,
+      value: 'test',
+      maxRetries: 2,
+    });
+    expect(result.embedding).toBeInstanceOf(Float32Array);
+  });
+});
+```
