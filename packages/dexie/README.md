@@ -4,6 +4,9 @@
 
 [![license](https://img.shields.io/npm/l/@localmode/dexie)](../../LICENSE)
 
+[![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev)
+[![Demo](https://img.shields.io/badge/Demo-LocalMode.ai-purple)](https://localmode.ai)
+
 ## Features
 
 - 📦 **Schema Versioning** - Built-in migration support

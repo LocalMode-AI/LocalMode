@@ -6,6 +6,10 @@ Local-first AI utilities for the browser. Zero dependencies. Privacy-first.
 [![bundle size](https://img.shields.io/bundlephobia/minzip/@localmode/core)](https://bundlephobia.com/package/@localmode/core)
 [![license](https://img.shields.io/npm/l/@localmode/core)](../../LICENSE)
 
+[![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev)
+[![Demo](https://img.shields.io/badge/Demo-LocalMode.ai-purple)](https://localmode.ai)
+
+
 ## Installation
 
 ```bash

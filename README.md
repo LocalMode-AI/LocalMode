@@ -24,15 +24,15 @@ LocalMode is a monorepo of packages for building AI-powered applications that ru
 
 ## 📦 Packages
 
-| Package                                                        | Description                                                                  | Status            |
-| -------------------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------- |
-| [`@localmode/core`](./packages/core/README.md)                 | Zero-dependency core with VectorDB, embeddings, chunking, and all interfaces | ✅ Stable         |
-| [`@localmode/transformers`](./packages/transformers/README.md) | HuggingFace Transformers.js provider for ML models                           | ✅ Stable         |
-| [`@localmode/webllm`](./packages/webllm/README.md)             | WebLLM provider for local LLM inference                                      | ✅ Stable         |
-| [`@localmode/pdfjs`](./packages/pdfjs/README.md)               | PDF text extraction with PDF.js                                              | ✅ Stable         |
-| [`@localmode/dexie`](./packages/dexie/README.md)               | Dexie.js storage adapter                                                     | 🚧 In Development |
-| [`@localmode/idb`](./packages/idb/README.md)                   | idb storage adapter                                                          | 🚧 In Development |
-| [`@localmode/localforage`](./packages/localforage/README.md)   | localForage storage adapter                                                  | 🚧 In Development |
+| Package                                                        | Version                                                                                                      | Description                                                                  |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| [`@localmode/core`](./packages/core/README.md)                 | [![npm](https://img.shields.io/npm/v/@localmode/core.svg)](https://www.npmjs.com/package/@localmode/core)                 | Zero-dependency core with VectorDB, embeddings, chunking, and all interfaces |
+| [`@localmode/transformers`](./packages/transformers/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/transformers.svg)](https://www.npmjs.com/package/@localmode/transformers) | HuggingFace Transformers.js provider for ML models                           |
+| [`@localmode/webllm`](./packages/webllm/README.md)             | [![npm](https://img.shields.io/npm/v/@localmode/webllm.svg)](https://www.npmjs.com/package/@localmode/webllm)             | WebLLM provider for local LLM inference                                      |
+| [`@localmode/pdfjs`](./packages/pdfjs/README.md)               | [![npm](https://img.shields.io/npm/v/@localmode/pdfjs.svg)](https://www.npmjs.com/package/@localmode/pdfjs)               | PDF text extraction with PDF.js                                              |
+| [`@localmode/dexie`](./packages/dexie/README.md)               | 🚧                                                                                                           | Dexie.js storage adapter                                                     |
+| [`@localmode/idb`](./packages/idb/README.md)                   | 🚧                                                                                                           | idb storage adapter                                                          |
+| [`@localmode/localforage`](./packages/localforage/README.md)   | 🚧                                                                                                           | localForage storage adapter                                                  |
 
 ---
 

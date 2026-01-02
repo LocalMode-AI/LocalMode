@@ -6,6 +6,9 @@ Cross-browser storage adapter with automatic fallback from IndexedDB to WebSQL t
 
 [![license](https://img.shields.io/npm/l/@localmode/localforage)](../../LICENSE)
 
+[![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev)
+[![Demo](https://img.shields.io/badge/Demo-LocalMode.ai-purple)](https://localmode.ai)
+
 ## Features
 
 - 🔄 **Auto-Fallback** - IndexedDB → WebSQL → localStorage

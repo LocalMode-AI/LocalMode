@@ -5,6 +5,9 @@ WebLLM provider for local-first LLM inference. Uses 4-bit quantized models for e
 [![npm](https://img.shields.io/npm/v/@localmode/webllm)](https://www.npmjs.com/package/@localmode/webllm)
 [![license](https://img.shields.io/npm/l/@localmode/webllm)](../../LICENSE)
 
+[![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev)
+[![Demo](https://img.shields.io/badge/Demo-LocalMode.ai-purple)](https://localmode.ai)
+
 ## Installation
 
 ```bash

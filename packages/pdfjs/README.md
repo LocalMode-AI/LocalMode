@@ -5,6 +5,9 @@ PDF text extraction for local-first document processing. Uses PDF.js for efficie
 [![npm](https://img.shields.io/npm/v/@localmode/pdfjs)](https://www.npmjs.com/package/@localmode/pdfjs)
 [![license](https://img.shields.io/npm/l/@localmode/pdfjs)](../../LICENSE)
 
+[![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev)
+[![Demo](https://img.shields.io/badge/Demo-LocalMode.ai-purple)](https://localmode.ai)
+
 ## Installation
 
 ```bash

@@ -135,7 +135,7 @@ export default async function HomePage() {
       <section className="relative flex flex-col items-center justify-center px-6 py-24 text-center overflow-hidden">
         <div className="inline-flex items-center gap-2 px-4 py-2 mb-6 text-sm font-medium rounded-full border border-fd-border text-fd-foreground">
           <Package className="w-4 h-4" />
-          <span>v1.0 — Local-First AI for the Web</span>
+          <span>Local-First AI for the Web</span>
         </div>
 
         <h1 className="max-w-4xl text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">

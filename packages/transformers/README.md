@@ -5,6 +5,9 @@ HuggingFace Transformers.js provider for LocalMode AI Engine - run ML models loc
 [![npm](https://img.shields.io/npm/v/@localmode/transformers)](https://www.npmjs.com/package/@localmode/transformers)
 [![license](https://img.shields.io/npm/l/@localmode/transformers)](../../LICENSE)
 
+[![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev)
+[![Demo](https://img.shields.io/badge/Demo-LocalMode.ai-purple)](https://localmode.ai)
+
 ## Features
 
 - 🚀 **Browser-Native** - Run ML models directly in the browser with WebGPU/WASM
