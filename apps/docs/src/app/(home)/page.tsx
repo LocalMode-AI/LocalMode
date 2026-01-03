@@ -221,7 +221,7 @@ export default async function HomePage() {
       </section>
 
       {/* Code Examples */}
-      <section className="px-6 py-20 bg-fd-muted/30">
+      <section className="px-4 sm:px-6 py-20 bg-fd-muted/30">
         <div className="max-w-7xl mx-auto">
           <h2 className="text-3xl font-bold text-center mb-4">Simple, Powerful API</h2>
           <p className="text-center text-fd-muted-foreground mb-12">
@@ -230,37 +230,45 @@ export default async function HomePage() {
 
           <div className="grid gap-12 lg:grid-cols-2">
             {/* Core + Transformers Example */}
-            <div className="space-y-4">
+            <div className="space-y-4 min-w-0">
               <h3 className="text-xl font-semibold text-center mb-4">Embeddings & Vector Search</h3>
-              <HighlightedCode
-                code={terminalCodeTransformers}
-                lang="bash"
-                title="Terminal"
-                icon={<Terminal className="w-4 h-4" />}
-              />
-              <HighlightedCode
-                code={exampleCodeTransformers}
-                lang="typescript"
-                title="embeddings.ts"
-                icon={<Code className="w-4 h-4" />}
-              />
+              <div className="overflow-x-auto">
+                <HighlightedCode
+                  code={terminalCodeTransformers}
+                  lang="bash"
+                  title="Terminal"
+                  icon={<Terminal className="w-4 h-4" />}
+                />
+              </div>
+              <div className="overflow-x-auto">
+                <HighlightedCode
+                  code={exampleCodeTransformers}
+                  lang="typescript"
+                  title="embeddings.ts"
+                  icon={<Code className="w-4 h-4" />}
+                />
+              </div>
             </div>
 
             {/* Core + WebLLM Example */}
-            <div className="space-y-4">
+            <div className="space-y-4 min-w-0">
               <h3 className="text-xl font-semibold text-center mb-4">Local LLM Inference</h3>
-              <HighlightedCode
-                code={terminalCodeWebLLM}
-                lang="bash"
-                title="Terminal"
-                icon={<Terminal className="w-4 h-4" />}
-              />
-              <HighlightedCode
-                code={exampleCodeWebLLM}
-                lang="typescript"
-                title="chat.ts"
-                icon={<Code className="w-4 h-4" />}
-              />
+              <div className="overflow-x-auto">
+                <HighlightedCode
+                  code={terminalCodeWebLLM}
+                  lang="bash"
+                  title="Terminal"
+                  icon={<Terminal className="w-4 h-4" />}
+                />
+              </div>
+              <div className="overflow-x-auto">
+                <HighlightedCode
+                  code={exampleCodeWebLLM}
+                  lang="typescript"
+                  title="chat.ts"
+                  icon={<Code className="w-4 h-4" />}
+                />
+              </div>
             </div>
           </div>
         </div>
