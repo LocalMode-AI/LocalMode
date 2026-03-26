@@ -1,6 +1,6 @@
 {
   "name": "@localmode/react",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "React hooks for @localmode — useChat, useEmbed, useClassify, and more",
   "license": "MIT",
   "author": "LocalMode",
@@ -72,7 +72,7 @@
   },
   "dependencies": {},
   "peerDependencies": {
-    "@localmode/core": ">=1.0.0",
+    "@localmode/core": ">=2.0.0",
     "react": ">=18.0.0"
   },
   "devDependencies": {

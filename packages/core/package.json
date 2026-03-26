@@ -1,6 +1,6 @@
 {
   "name": "@localmode/core",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "description": "Local-first AI utilities for the browser. Zero dependencies. Privacy-first.",
   "license": "MIT",
   "author": "LocalMode",
