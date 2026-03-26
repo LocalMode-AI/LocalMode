@@ -1,0 +1,92 @@
+---
+title: Image Captioning
+description: Generate text descriptions of images with Florence-2.
+icon: Camera
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Generate natural language descriptions of images using vision-language models like Florence-2.
+
+<Callout type="info">
+  For full API reference (`captionImage()`, options, result types, and custom providers), see the [Core Vision](/docs/core/vision) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [Image Captioner](https://localmode.ai/image-captioner) for a working demo.
+</Callout>
+
+## Recommended Models
+
+| Model | Size | Speed | Use Case |
+|-------|------|-------|----------|
+| `onnx-community/Florence-2-base-ft` | ~460MB | ⚡⚡ | Captioning, OCR, detection, and document QA |
+
+## File Upload Example
+
+Based on the [Image Captioner](https://localmode.ai/image-captioner) showcase app:
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { captionImage } from '@localmode/core';
+
+const model = transformers.captioner('onnx-community/Florence-2-base-ft');
+
+async function handleImageUpload(file: File) {
+  const dataUrl = await new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.readAsDataURL(file);
+  });
+
+  const { caption } = await captionImage({
+    model,
+    image: dataUrl,
+    abortSignal: controller.signal,
+  });
+
+  return caption;
+}
+```
+
+## Image Input Formats
+
+The `image` parameter accepts:
+- `string` — Data URL (`data:image/jpeg;base64,...`) or regular URL
+- `Blob` — Image blob from file input or fetch
+
+## Best Practices
+
+<Callout type="tip" title="Captioning Tips">
+  1. **Use JPEG/PNG/WebP** — These formats are well-supported
+  2. **Resize large images** — Smaller images process faster with similar quality
+  3. **Cache the model** — Load once, caption many images
+  4. **Handle errors** — Invalid or corrupted images will throw
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Image Captioner | Generate natural language descriptions of images | [Demo](https://localmode.ai/image-captioner) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/image-captioner) |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core Vision API"
+    href="/docs/core/vision"
+    description="Full API reference including captionImage()."
+  />
+  <Card
+    title="Object Detection"
+    href="/docs/transformers/object-detection"
+    description="Detect objects with bounding boxes."
+  />
+  <Card
+    title="Image Features"
+    href="/docs/transformers/image-features"
+    description="Extract feature vectors for image search."
+  />
+</Cards>

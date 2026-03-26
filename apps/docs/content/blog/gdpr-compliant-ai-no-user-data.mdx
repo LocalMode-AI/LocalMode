@@ -1,0 +1,359 @@
+---
+title: "Build a GDPR-Compliant AI Feature Without Touching User Data"
+description: "On-device browser inference eliminates the data processor relationship, cross-border transfers, and DPA negotiations that cloud AI demands. Four technical patterns -- PII redaction, encrypted vectors, differential privacy, and local classification -- show how to architect AI features that satisfy GDPR Articles 5, 25, 28, and 35 by design."
+author: LocalMode
+date: 2026-02-05
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Every time your application sends user text to an AI API, you create a data processing relationship governed by GDPR Article 28. You need a Data Processing Agreement. You need to assess cross-border transfer mechanisms under Chapter V. You need to document the legal basis, conduct a DPIA if the processing is high-risk, and explain to your DPO why personal data is traveling to a server you do not control.
+
+What if the data never left the browser?
+
+This post examines how running ML inference entirely on the user's device changes the GDPR compliance analysis. We walk through four concrete technical patterns that implement privacy-by-design principles using real, working code. We are engineers, not lawyers -- nothing here constitutes legal advice. Consult qualified counsel for your specific situation. But the architectural choices you make determine which GDPR obligations apply in the first place, and choosing on-device inference removes several of the hardest ones.
+
+<Callout type="warn" title="Not legal advice">
+  This post discusses technical architecture and its relationship to GDPR obligations. It is not legal advice. Consult a qualified data protection lawyer or your DPO for guidance specific to your processing activities.
+</Callout>
+
+---
+
+## How On-Device Inference Changes the GDPR Analysis
+
+When you call `fetch('https://api.openai.com/v1/embeddings', { body: userText })`, the user's personal data crosses a network boundary. That single line triggers a cascade of GDPR obligations. When you call `embed({ model, value: userText })` and the model runs in a WebAssembly sandbox inside the browser, the data never crosses any boundary at all.
+
+Here is what that architectural difference means for each key GDPR provision.
+
+### No Data Processor, No Article 28 Complexity
+
+GDPR [Article 4(7)](https://gdpr-info.eu/art-4-gdpr/) defines a "controller" as the entity that determines the purposes and means of processing. [Article 28](https://gdpr-info.eu/art-28-gdpr/) imposes obligations whenever a controller engages a "processor" -- a separate entity that processes personal data on the controller's behalf.
+
+With cloud AI, the API provider is a data processor. You must execute a Data Processing Agreement (DPA), verify the processor's sub-processors, ensure they implement Article 32 security measures, and maintain documentation of the entire chain. With on-device inference, no personal data reaches any third party. There is no processor relationship to govern. The user's browser is not a separate legal entity -- it is the user's own terminal equipment.
+
+### No Cross-Border Transfer, No Chapter V
+
+GDPR [Article 44](https://gdpr-info.eu/art-44-gdpr/) and the rest of Chapter V require that any transfer of personal data to a third country maintains an adequate level of protection. In practice, this means adequacy decisions, Standard Contractual Clauses (SCCs), or Binding Corporate Rules -- each with ongoing compliance overhead.
+
+When inference happens in the browser, data does not leave the device. There is no transfer to assess. This eliminates one of the most operationally burdensome aspects of using US-based AI providers from European applications.
+
+### Data Minimization by Architecture
+
+[Article 5(1)(c)](https://gdpr-info.eu/art-5-gdpr/) requires that personal data be "adequate, relevant and limited to what is necessary." On-device processing achieves data minimization at the infrastructure level: the application processes exactly the data it needs, where it needs it, and retains nothing on any remote server. No data is "collected" in the GDPR sense of transferring it to a controller's or processor's systems.
+
+### Data Protection by Design and by Default
+
+[Article 25](https://gdpr-info.eu/art-25-gdpr/) requires controllers to implement "appropriate technical and organisational measures" to protect data, both at the time of design and during processing. The EDPB's [Guidelines 4/2019](https://www.edpb.europa.eu/sites/default/files/files/file1/edpb_guidelines_201904_dataprotection_by_design_and_by_default_v2.0_en.pdf) explicitly mention pseudonymization, encryption, and data minimization as examples.
+
+On-device inference is a textbook implementation of this principle: the architecture itself prevents unauthorized access because the data never traverses a network where it could be intercepted or logged.
+
+---
+
+## GDPR Compliance Comparison: Cloud AI vs. Local AI
+
+| GDPR Provision | Cloud AI API | On-Device (LocalMode) |
+|---|---|---|
+| **Art. 28 -- Processor obligations** | DPA required with AI vendor; must verify sub-processors, security measures, breach notification | No processor relationship. No DPA needed. |
+| **Art. 44-49 -- Cross-border transfers** | SCCs or adequacy decision required (most AI APIs are US-based) | No transfer. Data stays on-device. |
+| **Art. 5(1)(c) -- Data minimization** | All input data sent to remote server; vendor may retain for abuse monitoring | Only local processing. No remote retention. |
+| **Art. 5(1)(f) -- Integrity & confidentiality** | Depends on vendor's security posture; shared responsibility | User's device is the sole perimeter. Encryption under user's control. |
+| **Art. 25 -- Privacy by design** | Must evaluate vendor's privacy measures; limited architectural control | Architecture prevents data exposure by default. |
+| **Art. 35 -- DPIA** | Likely required for systematic profiling or large-scale processing via AI | Scope reduced: no third-party access, no cross-border risk. DPIA still recommended but simpler. |
+| **EU AI Act -- High-risk classification** | Provider and deployer both have obligations for high-risk systems | Deployer obligations remain, but no data flows to a provider to assess. |
+
+---
+
+## Four Technical Patterns for Privacy-by-Design AI
+
+The following patterns use real API signatures from `@localmode/core` (version 1.0.2, zero runtime dependencies). Every function shown here runs entirely in the browser.
+
+### Pattern 1: PII Detection and Redaction Before Processing
+
+Even with on-device inference, defense in depth matters. If your application stores embeddings in IndexedDB, those vectors could theoretically be reconstructed into source text via embedding inversion attacks. Redacting PII before embedding ensures that even a compromised vector database reveals nothing personally identifiable.
+
+```typescript
+import { redactPII } from '@localmode/core';
+
+// Redact PII - replaces sensitive data with category markers
+const result = redactPII('Contact john@example.com or call 555-123-4567');
+console.log(result.text); // "Contact [EMAIL_REDACTED] or call [PHONE_REDACTED]"
+
+// Redact PII with category-specific replacements
+const redacted = redactPII('Patient SSN: 123-45-6789, email: dr.smith@hospital.org', {
+  emails: true,
+  ssn: true,
+  phones: true,
+  creditCards: true,
+  customPatterns: [
+    { pattern: /MRN-\d{8}/g, replacement: '[MRN_REDACTED]' },
+  ],
+});
+// Result: 'Patient SSN: [SSN_REDACTED], email: [EMAIL_REDACTED]'
+```
+
+To apply redaction automatically before every embedding operation, use the middleware:
+
+```typescript
+import { embed, wrapEmbeddingModel, piiRedactionMiddleware } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const safeModel = wrapEmbeddingModel({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  middleware: piiRedactionMiddleware({
+    emails: true,
+    phones: true,
+    ssn: true,
+    creditCards: true,
+  }),
+});
+
+// PII is stripped before the text reaches the model
+const { embedding } = await embed({
+  model: safeModel,
+  value: 'Contact john@example.com at 555-123-4567',
+});
+// The model actually embeds: 'Contact [EMAIL_REDACTED] at [PHONE_REDACTED]'
+```
+
+**GDPR relevance**: This implements the Article 5(1)(c) data minimization principle at the application layer. Even though the model runs locally, the stored vector contains no PII signal. The [Document Redactor](https://localmode.ai/document-redactor) showcase app demonstrates this pattern with NER-based entity detection and downloadable redacted output.
+
+### Pattern 2: Encrypted Vector Storage
+
+[Article 5(1)(f)](https://gdpr-info.eu/art-5-gdpr/) requires "appropriate security of the personal data, including protection against unauthorised or unlawful processing." IndexedDB data is accessible to any JavaScript running on the same origin. Encryption at rest addresses this.
+
+```typescript
+import {
+  createVectorDB,
+  wrapVectorDB,
+  encryptionMiddleware,
+  deriveEncryptionKey,
+} from '@localmode/core';
+
+// Derive AES-256-GCM key from user password via PBKDF2 (100K iterations)
+const { key, salt } = await deriveEncryptionKey('user-chosen-password');
+
+// Store salt for future sessions (the salt is not secret)
+localStorage.setItem('encryption-salt', salt);
+
+// Create an encrypted vector database
+const db = await createVectorDB({ name: 'medical-notes', dimensions: 384 });
+const encryptedDb = wrapVectorDB({
+  db,
+  middleware: encryptionMiddleware({
+    key,
+    encryptVectors: true,    // AES-GCM encrypt each Float32Array
+    encryptMetadata: true,   // Encrypt all metadata fields
+    excludeFields: ['type'], // Leave non-sensitive fields for filtering
+  }),
+});
+
+// Data is encrypted before IndexedDB write, decrypted on read
+await encryptedDb.add({
+  id: 'note-1',
+  vector: embedding,
+  metadata: { patient: 'John Doe', diagnosis: 'Type 2 diabetes', type: 'clinical' },
+});
+
+// Search works transparently -- results are decrypted automatically
+const results = await encryptedDb.search(queryVector, { k: 5 });
+```
+
+All cryptographic operations use the Web Crypto API (`crypto.subtle`). No cryptographic dependencies are bundled -- `@localmode/core` has zero runtime dependencies.
+
+**GDPR relevance**: Encryption at rest is explicitly cited in Article 32(1)(a) as an appropriate technical measure. The [Encrypted Vault](https://localmode.ai/encrypted-vault) showcase app demonstrates password-based encryption with PBKDF2 key derivation and lock/unlock lifecycle.
+
+### Pattern 3: Differential Privacy for Embeddings
+
+PII redaction is deterministic -- it catches known patterns. Differential privacy adds a mathematical guarantee: even if an attacker has access to the stored vectors and knows every other record in the database, they cannot determine whether any specific individual's data was included.
+
+```typescript
+import {
+  embed,
+  wrapEmbeddingModel,
+  dpEmbeddingMiddleware,
+  createPrivacyBudget,
+} from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Create a privacy budget that persists across browser sessions
+const budget = await createPrivacyBudget({
+  maxEpsilon: 10.0,          // Total privacy budget
+  persistKey: 'app-budget',  // Survives page reloads via IndexedDB
+  onExhausted: 'block',      // Throws PrivacyBudgetExhaustedError when spent
+});
+
+// Wrap the model with calibrated Gaussian noise
+const privateModel = wrapEmbeddingModel({
+  model: transformers.embedding('Xenova/all-MiniLM-L6-v2'),
+  middleware: dpEmbeddingMiddleware({
+    epsilon: 1.0,            // Per-query privacy cost
+    delta: 1e-5,             // Probability of guarantee failure
+    mechanism: 'gaussian',   // Gaussian noise via Box-Muller transform
+  }, budget),                // Budget tracks cumulative epsilon
+});
+
+// Each embed call adds calibrated noise and consumes epsilon
+const { embedding } = await embed({
+  model: privateModel,
+  value: 'Patient diagnosed with condition X',
+});
+
+console.log(budget.remaining()); // 9.0
+console.log(budget.consumed());  // 1.0
+```
+
+The noise is calibrated using the analytic Gaussian mechanism: `sigma = (sensitivity * sqrt(2 * ln(1.25 / delta))) / epsilon`. For normalized embedding models (L2 norm = 1), sensitivity is bounded at 2.0. All randomness comes from `crypto.getRandomValues()` -- never `Math.random()`.
+
+**GDPR relevance**: Differential privacy provides a formal, quantifiable privacy guarantee that maps directly to the "appropriate technical measures" language in Articles 25 and 32. The privacy budget tracker enforces a ceiling on cumulative information leakage across all queries.
+
+### Pattern 4: Local Classification With Zero Data Export
+
+For classification tasks -- sentiment analysis, content moderation, document categorization -- on-device inference means the text is never serialized, transmitted, or logged anywhere outside the browser process.
+
+```typescript
+import { classify } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { label, score } = await classify({
+  model: transformers.classifier(
+    'Xenova/distilbert-base-uncased-finetuned-sst-2-english'
+  ),
+  text: 'The patient reports significant improvement after treatment',
+  abortSignal: controller.signal, // Cancellable
+});
+
+console.log(label); // 'POSITIVE'
+console.log(score); // 0.9987
+// The text never left the browser. No network request was made.
+// No log entry exists on any server. No DPA is needed.
+```
+
+**GDPR relevance**: This is the cleanest case. The processing is entirely local. No personal data is transmitted to any third party. The controller (your application) processes data on the data subject's own device. Article 28 does not apply because there is no processor. Chapter V does not apply because there is no transfer.
+
+---
+
+## Addressing Remaining Compliance Questions
+
+On-device inference eliminates many GDPR obligations, but it does not eliminate all of them. Three areas require careful consideration.
+
+### IndexedDB Storage and the ePrivacy Directive
+
+Article 5(3) of the [ePrivacy Directive](https://gdpr.eu/cookies/) (2002/58/EC, as amended) requires consent for storing information on a user's terminal equipment, unless the storage is "strictly necessary" for a service explicitly requested by the user. This applies to cookies, localStorage, and IndexedDB alike.
+
+If your application stores embeddings or model outputs in IndexedDB to provide a feature the user explicitly requested (such as local search over their own documents), this likely falls under the "strictly necessary" exemption. If you store data for analytics or profiling purposes, consent is required. The EDPB's [October 2024 guidelines](https://www.edpb.europa.eu/system/files/2024-10/edpb_guidelines_202302_technical_scope_art_53_eprivacydirective_v2_en_0.pdf) on the technical scope of Article 5(3) confirm that the provision applies to all client-side storage technologies, not only cookies.
+
+### Model Downloads and Legitimate Interest
+
+The initial model download (typically 30-400 MB from HuggingFace Hub or your own CDN) is a network request. However, model weight files do not contain personal data -- they are static artifacts trained on public datasets. The download is functionally equivalent to loading any other application asset (JavaScript bundles, fonts, images). No personal data is transmitted during model downloads. After the first download, models are cached locally and all subsequent inference is fully offline.
+
+### DPIA Considerations Under Article 35
+
+[Article 35](https://gdpr-info.eu/art-35-gdpr/) requires a Data Protection Impact Assessment when processing is "likely to result in a high risk to the rights and freedoms of natural persons," particularly for systematic and extensive profiling or large-scale processing of special categories of data.
+
+On-device processing significantly reduces the scope of a DPIA: there is no third-party data access to assess, no cross-border transfer risk, and no centralized database of user data that could be breached. However, if your application performs automated decision-making that affects users (Article 22), or processes health, biometric, or other special category data (Article 9), a DPIA is still advisable. The good news is that the technical risk section of the DPIA becomes substantially simpler when you can document that personal data never leaves the user's device.
+
+### The EU AI Act
+
+The [EU AI Act](https://artificialintelligenceact.eu/high-level-summary/) (Regulation 2024/1689), which becomes fully applicable on 2 August 2026, classifies AI systems by risk tier. If your use case falls under a high-risk category (Annex III -- including employment, credit scoring, and certain healthcare applications), you have deployer obligations regardless of where inference runs. However, on-device inference simplifies compliance with several requirements: data governance (Article 10) is simpler when no centralized data pipeline exists, and transparency obligations (Article 13) are easier to meet when you can state that no user data is transmitted to any AI provider.
+
+---
+
+## Combining All Four Patterns
+
+For maximum defense in depth, compose all four patterns into a single pipeline:
+
+```typescript
+import {
+  embed,
+  classify,
+  wrapEmbeddingModel,
+  createVectorDB,
+  wrapVectorDB,
+  piiRedactionMiddleware,
+  dpEmbeddingMiddleware,
+  encryptionMiddleware,
+  createPrivacyBudget,
+  deriveEncryptionKey,
+} from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// 1. Encryption key from user password
+const { key } = await deriveEncryptionKey(userPassword, storedSalt);
+
+// 2. Privacy budget
+const budget = await createPrivacyBudget({
+  maxEpsilon: 50.0,
+  persistKey: 'secure-pipeline',
+  onExhausted: 'block',
+});
+
+// 3. Embedding model with PII redaction + differential privacy
+const secureModel = wrapEmbeddingModel({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  middleware: piiRedactionMiddleware({ emails: true, phones: true, ssn: true }),
+});
+
+const privateModel = wrapEmbeddingModel({
+  model: secureModel,
+  middleware: dpEmbeddingMiddleware({ epsilon: 1.0 }, budget),
+});
+
+// 4. Encrypted vector database
+const db = await createVectorDB({ name: 'records', dimensions: 384 });
+const encryptedDb = wrapVectorDB({
+  db,
+  middleware: encryptionMiddleware({ key }),
+});
+
+// Pipeline: classify locally, embed with PII redaction + DP noise, store encrypted
+const { label } = await classify({
+  model: transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english'),
+  text: userInput,
+});
+
+const { embedding } = await embed({ model: privateModel, value: userInput });
+await encryptedDb.add({
+  id: crypto.randomUUID(),
+  vector: embedding,
+  metadata: { category: label },
+});
+```
+
+At the end of this pipeline:
+- PII was stripped before the text reached the embedding model
+- Calibrated Gaussian noise was added to the embedding vector
+- The noisy vector was encrypted with AES-256-GCM before IndexedDB storage
+- Classification happened entirely on-device with no network request
+- No personal data was transmitted to any third party
+
+---
+
+## Methodology
+
+This post references the following legal sources. All GDPR article texts are from Regulation (EU) 2016/679 of the European Parliament and of the Council of 27 April 2016.
+
+- [GDPR Article 4 -- Definitions (including Art. 4(7) "controller")](https://gdpr-info.eu/art-4-gdpr/)
+- [GDPR Article 5 -- Principles (including Art. 5(1)(c) data minimization, Art. 5(1)(f) integrity and confidentiality)](https://gdpr-info.eu/art-5-gdpr/)
+- [GDPR Article 25 -- Data protection by design and by default](https://gdpr-info.eu/art-25-gdpr/)
+- [GDPR Article 28 -- Processor](https://gdpr-info.eu/art-28-gdpr/)
+- [GDPR Article 35 -- Data protection impact assessment](https://gdpr-info.eu/art-35-gdpr/)
+- [GDPR Article 44 -- General principle for transfers](https://gdpr-info.eu/art-44-gdpr/)
+- [GDPR Chapter V -- Transfers of personal data to third countries](https://gdpr-info.eu/chapter-5/)
+- [EDPB Guidelines 4/2019 on Article 25 Data Protection by Design and by Default](https://www.edpb.europa.eu/sites/default/files/files/file1/edpb_guidelines_201904_dataprotection_by_design_and_by_default_v2.0_en.pdf)
+- [EDPB Guidelines 2/2023 on Technical Scope of Art. 5(3) of ePrivacy Directive (v2.0, October 2024)](https://www.edpb.europa.eu/system/files/2024-10/edpb_guidelines_202302_technical_scope_art_53_eprivacydirective_v2_en_0.pdf)
+- [ePrivacy Directive 2002/58/EC -- Cookies and storage rules](https://gdpr.eu/cookies/)
+- [EU AI Act -- High-level summary and risk classification](https://artificialintelligenceact.eu/high-level-summary/)
+- [EU AI Act -- Annex III: High-Risk AI Systems](https://artificialintelligenceact.eu/annex/3/)
+- [CNIL -- Practice guide for the security of personal data (2024 edition)](https://www.cnil.fr/en/practice-guide-security-personal-data-2024-edition)
+- [European Commission -- Standard Contractual Clauses (SCCs)](https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/standard-contractual-clauses-scc_en)
+- [European Commission -- What is a data controller or data processor?](https://commission.europa.eu/law/law-topic/data-protection/rules-business-and-organisations/obligations/controllerprocessor/what-data-controller-or-data-processor_en)
+
+All code examples use API signatures from [`@localmode/core`](https://www.npmjs.com/package/@localmode/core) (zero runtime dependencies) and [`@localmode/transformers`](https://www.npmjs.com/package/@localmode/transformers). The [Document Redactor](https://localmode.ai/document-redactor) and [Encrypted Vault](https://localmode.ai/encrypted-vault) showcase apps demonstrate these patterns in a running application.
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

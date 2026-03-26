@@ -55,7 +55,7 @@ function resolveModel(modelOrId: TableQAModel | string): TableQAModel {
  * import { transformers } from '@localmode/transformers';
  *
  * const { answer, cells, usage } = await askTable({
- *   model: transformers.tableQA('Xenova/tapas-base-finetuned-wtq'),
+ *   model: transformers.tableQA('onnx-community/Florence-2-base-ft'),
  *   table: {
  *     headers: ['Name', 'Age', 'City'],
  *     rows: [
@@ -73,7 +73,7 @@ function resolveModel(modelOrId: TableQAModel | string): TableQAModel {
  * @example Aggregation queries
  * ```ts
  * const { answer, aggregator } = await askTable({
- *   model: transformers.tableQA('Xenova/tapas-base-finetuned-wtq'),
+ *   model: transformers.tableQA('onnx-community/Florence-2-base-ft'),
  *   table: salesData,
  *   question: 'What is the total revenue?',
  * });

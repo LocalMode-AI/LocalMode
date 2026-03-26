@@ -6,9 +6,9 @@
  * @packageDocumentation
  */
 
-import type { TransformersProvider, TransformersProviderSettings, ModelSettings } from './types.js';
+import type { TransformersProvider, TransformersProviderSettings, ModelSettings, LanguageModelSettings } from './types.js';
 import {
-  // P0/P1 implementations
+  // Core implementations
   createEmbeddingModel,
   createClassificationModel,
   createZeroShotModel,
@@ -18,7 +18,7 @@ import {
   createImageClassificationModel,
   createZeroShotImageModel,
   createCaptionModel,
-  // P2 implementations
+  // Extended implementations
   createSegmentationModel,
   createObjectDetectionModel,
   createImageFeatureModel,
@@ -30,6 +30,14 @@ import {
   createQuestionAnsweringModel,
   createOCRModel,
   createDocumentQAModel,
+  // Multimodal
+  createCLIPEmbeddingModel,
+  // Audio Classification & Depth Estimation
+  createAudioClassificationModel,
+  createZeroShotAudioClassificationModel,
+  createDepthEstimationModel,
+  // Language Model (TJS v4)
+  createLanguageModel,
 } from './implementations/index.js';
 
 /**
@@ -47,7 +55,7 @@ import {
  *   onProgress: (p) => console.log(`Loading: ${p.progress}%`),
  * });
  *
- * const embedder = myTransformers.embedding('Xenova/all-MiniLM-L6-v2');
+ * const embedder = myTransformers.embedding('Xenova/bge-small-en-v1.5');
  * ```
  *
  * @example With worker
@@ -60,7 +68,7 @@ import {
 export function createTransformers(settings?: TransformersProviderSettings): TransformersProvider {
   const defaultSettings = {
     device: settings?.device,
-    quantized: settings?.quantized ?? true,
+    quantized: settings?.quantized ?? false,
     onProgress: settings?.onProgress,
   };
 
@@ -129,7 +137,7 @@ export function createTransformers(settings?: TransformersProviderSettings): Tra
     },
 
     // ═══════════════════════════════════════════════════════════════
-    // P2 MODEL FACTORIES
+    // EXTENDED MODEL FACTORIES
     // ═══════════════════════════════════════════════════════════════
 
     segmenter(modelId: string, modelSettings?: ModelSettings) {
@@ -208,6 +216,53 @@ export function createTransformers(settings?: TransformersProviderSettings): Tra
         ...modelSettings,
       });
     },
+
+    // ═══════════════════════════════════════════════════════════════
+    // MULTIMODAL MODEL FACTORIES
+    // ═══════════════════════════════════════════════════════════════
+
+    multimodalEmbedding(modelId: string, modelSettings?: ModelSettings) {
+      return createCLIPEmbeddingModel(modelId, {
+        ...defaultSettings,
+        ...modelSettings,
+      });
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // AUDIO CLASSIFICATION & DEPTH ESTIMATION
+    // ═══════════════════════════════════════════════════════════════
+
+    audioClassifier(modelId: string, modelSettings?: ModelSettings) {
+      return createAudioClassificationModel(modelId, {
+        ...defaultSettings,
+        ...modelSettings,
+      });
+    },
+
+    zeroShotAudioClassifier(modelId: string, modelSettings?: ModelSettings) {
+      return createZeroShotAudioClassificationModel(modelId, {
+        ...defaultSettings,
+        ...modelSettings,
+      });
+    },
+
+    depthEstimator(modelId: string, modelSettings?: ModelSettings) {
+      return createDepthEstimationModel(modelId, {
+        ...defaultSettings,
+        ...modelSettings,
+      });
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // LANGUAGE MODEL FACTORY (Experimental — TJS v4)
+    // ═══════════════════════════════════════════════════════════════
+
+    languageModel(modelId: string, modelSettings?: LanguageModelSettings) {
+      return createLanguageModel(modelId, {
+        ...defaultSettings,
+        ...modelSettings,
+      });
+    },
   };
 }
 
@@ -222,7 +277,7 @@ export function createTransformers(settings?: TransformersProviderSettings): Tra
  * import { embed } from '@localmode/core';
  *
  * const { embedding } = await embed({
- *   model: transformers.embedding('Xenova/all-MiniLM-L6-v2'),
+ *   model: transformers.embedding('Xenova/bge-small-en-v1.5'),
  *   value: 'Hello world',
  * });
  * ```

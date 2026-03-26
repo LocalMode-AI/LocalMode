@@ -12,19 +12,19 @@
  *
  * // Embeddings
  * const { embedding } = await embed({
- *   model: transformers.embedding('Xenova/all-MiniLM-L6-v2'),
+ *   model: transformers.embedding('Xenova/bge-small-en-v1.5'),
  *   value: 'Hello world',
  * });
  *
  * // Classification
  * const { label } = await classify({
- *   model: transformers.classifier('Xenova/distilbert-sst-2'),
+ *   model: transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english'),
  *   text: 'I love this!',
  * });
  *
  * // Speech-to-text
  * const { text } = await transcribe({
- *   model: transformers.speechToText('Xenova/whisper-tiny'),
+ *   model: transformers.speechToText('onnx-community/moonshine-tiny-ONNX'),
  *   audio: audioBlob,
  * });
  * ```
@@ -38,7 +38,7 @@
  *   onProgress: (p) => console.log(`Loading: ${p.progress}%`),
  * });
  *
- * const model = myTransformers.embedding('Xenova/all-MiniLM-L6-v2');
+ * const model = myTransformers.embedding('Xenova/bge-small-en-v1.5');
  * ```
  */
 
@@ -58,6 +58,7 @@ export type {
   TransformersDevice,
   ModelSettings,
   ModelLoadProgress,
+  LanguageModelSettings,
 } from './types.js';
 
 // ═══════════════════════════════════════════════════════════════
@@ -85,9 +86,23 @@ export {
   NER_MODELS,
   RERANKER_MODELS,
   SPEECH_TO_TEXT_MODELS,
+  TEXT_TO_SPEECH_MODELS,
   IMAGE_CLASSIFICATION_MODELS,
   ZERO_SHOT_IMAGE_MODELS,
   IMAGE_CAPTION_MODELS,
+  MULTIMODAL_EMBEDDING_MODELS,
+  TRANSLATION_MODELS,
+  SUMMARIZATION_MODELS,
+  FILL_MASK_MODELS,
+  QUESTION_ANSWERING_MODELS,
+  OBJECT_DETECTION_MODELS,
+  SEGMENTATION_MODELS,
+  OCR_MODELS,
+  DOCUMENT_QA_MODELS,
+  IMAGE_TO_IMAGE_MODELS,
+  IMAGE_FEATURE_MODELS,
+  TRANSFORMERS_LLM_MODELS,
+  getLLMModelCategory,
 } from './models.js';
 
 // ═══════════════════════════════════════════════════════════════
@@ -104,5 +119,7 @@ export {
   TransformersImageClassificationModel,
   TransformersZeroShotImageModel,
   TransformersCaptionModel,
+  TransformersCLIPEmbeddingModel,
+  TransformersLanguageModel,
 } from './implementations/index.js';
 

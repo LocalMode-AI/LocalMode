@@ -1,0 +1,156 @@
+---
+title: Multimodal Embeddings
+description: CLIP and SigLIP models for cross-modal text-image search with Transformers.js.
+icon: Layers
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+Use CLIP and SigLIP models to embed text and images into the same vector space, enabling cross-modal similarity search entirely in the browser.
+
+<Callout type="info" title="Core API Reference">
+  For full API reference, options, result types, and custom providers, see the [Core Multimodal Embeddings](/docs/core/multimodal-embeddings) guide.
+</Callout>
+
+## Getting Started
+
+```bash
+pnpm install @localmode/core @localmode/transformers
+```
+
+```ts
+import { embed, embedImage, cosineSimilarity } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.multimodalEmbedding('Xenova/clip-vit-base-patch32');
+
+// Text and images share the same vector space
+const { embedding: textVec } = await embed({ model, value: 'a golden retriever' });
+const { embedding: imgVec } = await embedImage({ model, image: dogPhoto });
+
+const similarity = cosineSimilarity(textVec, imgVec);
+console.log(`Match: ${(similarity * 100).toFixed(1)}%`);
+```
+
+## Recommended Models
+
+| Model | Dimensions | Size | Notes |
+|-------|-----------|------|-------|
+| `Xenova/clip-vit-base-patch32` | 512 | ~340MB | Fast, good general quality |
+| `Xenova/clip-vit-base-patch16` | 512 | ~340MB | Better accuracy, slightly slower |
+| `Xenova/siglip-base-patch16-224` | 768 | ~400MB | Improved CLIP variant |
+
+## Provider Configuration
+
+```ts
+import { createTransformers } from '@localmode/transformers';
+
+const myTransformers = createTransformers({
+  device: 'webgpu',  // Use WebGPU for faster inference
+  quantized: true,    // Use quantized models (default)
+  onProgress: (p) => console.log(`Loading: ${p.progress}%`),
+});
+
+const model = myTransformers.multimodalEmbedding('Xenova/clip-vit-base-patch32');
+```
+
+### Per-Model Settings
+
+```ts
+const model = transformers.multimodalEmbedding('Xenova/clip-vit-base-patch32', {
+  device: 'wasm',     // Override device for this model
+  quantized: false,    // Use full-precision weights
+  onProgress: (p) => updateUI(p),
+});
+```
+
+## Lazy Encoder Loading
+
+The CLIP model has separate text and vision encoders. They load lazily:
+
+- **Text encoder** loads on the first `embed()` / `doEmbed()` call
+- **Vision encoder** loads on the first `embedImage()` / `doEmbedImage()` call
+
+This means if you only use text embeddings, the vision encoder is never downloaded, saving bandwidth and memory.
+
+## Recipes
+
+### Image Search Engine
+
+Index product images and search with natural language:
+
+```ts
+import { embed, embedImage, createVectorDB } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.multimodalEmbedding('Xenova/clip-vit-base-patch32');
+const db = await createVectorDB({ name: 'products', dimensions: 512 });
+
+// Index: embed each product image
+for (const product of catalog) {
+  const { embedding } = await embedImage({ model, image: product.imageBlob });
+  await db.add({
+    id: product.id,
+    vector: embedding,
+    metadata: { name: product.name, price: product.price },
+  });
+}
+
+// Search: find products matching text
+const { embedding: queryVec } = await embed({ model, value: 'red leather handbag' });
+const results = await db.search(queryVec, { k: 10 });
+```
+
+### Reverse Image Search
+
+Find similar images using an image query:
+
+```ts
+import { embedImage, embedManyImages } from '@localmode/core';
+
+const model = transformers.multimodalEmbedding('Xenova/clip-vit-base-patch32');
+
+// Embed query image
+const { embedding: queryVec } = await embedImage({ model, image: queryPhoto });
+
+// Compare against indexed images
+const results = await db.search(queryVec, { k: 5 });
+```
+
+### Batch Image Indexing
+
+```ts
+import { embedManyImages } from '@localmode/core';
+
+const { embeddings } = await embedManyImages({
+  model,
+  images: productImages, // Array of Blobs or URLs
+});
+
+// Store all embeddings
+for (let i = 0; i < embeddings.length; i++) {
+  await db.add({
+    id: `product-${i}`,
+    vector: embeddings[i],
+    metadata: { index: i },
+  });
+}
+```
+
+## Image Input Formats
+
+The `ImageInput` type accepts:
+
+| Format | Example | Notes |
+|--------|---------|-------|
+| `Blob` | `new Blob([data], { type: 'image/jpeg' })` | Most common from file inputs |
+| `string` (URL) | `'https://example.com/photo.jpg'` | Fetched automatically |
+| `string` (data URI) | `'data:image/png;base64,...'` | From canvas or file reader |
+| `ArrayBuffer` | `await file.arrayBuffer()` | Raw binary data |
+
+## Tips
+
+- **L2 normalization**: Both text and image embeddings are L2-normalized by the provider, so cosine similarity gives well-calibrated cross-modal scores.
+- **Memory**: CLIP loads two separate encoders. On memory-constrained devices, consider using only one modality at a time.
+- **Batch size**: The default `maxEmbeddingsPerCall` is 32. For large batches, use `embedManyImages()` which handles batching automatically.

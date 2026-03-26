@@ -1,0 +1,212 @@
+---
+title: Document Loaders
+description: Load and parse documents from various sources for RAG pipelines.
+icon: FileText
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Load documents from various formats (text, JSON, CSV, HTML) for processing in RAG pipelines. All loaders are zero-dependency and run entirely in the browser.
+
+## Quick Start
+
+```typescript
+import { loadDocument, loadDocuments } from '@localmode/core';
+
+// Auto-detect format and load
+const docs = await loadDocument(myFile);
+
+// Load with explicit type
+const csvDocs = await loadDocument(csvFile, { loader: 'csv', textColumn: 'content' });
+
+// Batch load multiple sources
+const allDocs = await loadDocuments([file1, file2, file3]);
+```
+
+## Built-in Loaders
+
+### TextLoader
+
+Load plain text content:
+
+```typescript
+import { TextLoader, createTextLoader } from '@localmode/core';
+
+const loader = new TextLoader();
+const docs = await loader.load('Hello world');
+
+// Or with options
+const loader2 = createTextLoader({ trim: true, separator: '\n\n' });
+```
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `separator` | `string` | - | Split text by separator into multiple documents |
+| `trim` | `boolean` | `false` | Trim whitespace from content |
+| `encoding` | `string` | `'utf-8'` | Text encoding |
+| `maxSize` | `number` | - | Maximum file size in bytes |
+| `abortSignal` | `AbortSignal` | - | Cancellation signal |
+
+### JSONLoader
+
+Extract text from JSON structures:
+
+```typescript
+import { JSONLoader, createJSONLoader } from '@localmode/core';
+
+const loader = new JSONLoader();
+const docs = await loader.load(jsonBlob);
+
+// Extract specific fields
+const loader2 = createJSONLoader({
+  textFields: ['title', 'body'],
+  fieldSeparator: '\n\n',
+  recordsPath: 'data.articles',
+});
+```
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `textFields` | `string[]` | - | Fields to extract text from |
+| `extractAllStrings` | `boolean` | `false` | Extract from all string fields |
+| `fieldSeparator` | `string` | `' '` | Separator when combining fields |
+| `recordsPath` | `string` | - | Path to array of records (e.g., `'data.items'`) |
+
+### CSVLoader
+
+Load CSV/TSV data:
+
+```typescript
+import { CSVLoader, createCSVLoader } from '@localmode/core';
+
+const loader = createCSVLoader({
+  textColumn: 'content',
+  idColumn: 'id',
+  hasHeader: true,
+});
+const docs = await loader.load(csvFile);
+```
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `textColumn` | `string \| number` | - | Column for text content |
+| `textColumns` | `(string \| number)[]` | - | Multiple columns to combine |
+| `columnSeparator` | `string` | `' '` | Separator for combined columns |
+| `idColumn` | `string \| number` | - | Column for document IDs |
+| `columnDelimiter` | `string` | `','` | Column delimiter |
+| `rowDelimiter` | `string` | `'\n'` | Row delimiter |
+| `hasHeader` | `boolean` | `true` | First row is header |
+| `skipEmpty` | `boolean` | `false` | Skip empty rows |
+
+### HTMLLoader
+
+Extract text from HTML content:
+
+```typescript
+import { HTMLLoader, createHTMLLoader } from '@localmode/core';
+
+const loader = createHTMLLoader({
+  selector: 'article',
+  extractMetadata: true,
+  ignoreTags: ['script', 'style', 'nav'],
+});
+const docs = await loader.load(htmlString);
+```
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `selector` | `string` | - | CSS selector to extract from |
+| `selectors` | `string[]` | - | Multiple selectors |
+| `extractMetadata` | `boolean` | `false` | Extract metadata from `<head>` |
+| `preserveFormatting` | `boolean` | `false` | Preserve paragraph breaks |
+| `ignoreTags` | `string[]` | - | Tags to ignore |
+
+## DocumentLoader Interface
+
+Implement custom loaders for any format:
+
+```typescript
+import type { DocumentLoader, LoaderSource, LoadedDocument, LoaderOptions } from '@localmode/core';
+
+class MyCustomLoader implements DocumentLoader {
+  readonly supports = ['.custom', 'application/x-custom'];
+
+  canLoad(source: LoaderSource): boolean {
+    if (source instanceof File) {
+      return source.name.endsWith('.custom');
+    }
+    return false;
+  }
+
+  async load(source: LoaderSource, options?: LoaderOptions): Promise<LoadedDocument[]> {
+    const text = /* parse your format */;
+    return [{
+      id: crypto.randomUUID(),
+      text,
+      metadata: { source: 'custom-file', mimeType: 'application/x-custom' },
+    }];
+  }
+}
+```
+
+### LoadedDocument
+
+```typescript
+interface LoadedDocument {
+  id: string;
+  text: string;
+  metadata: {
+    source: string;
+    mimeType?: string;
+    title?: string;
+    pageCount?: number;
+    sizeBytes?: number;
+    [key: string]: unknown;
+  };
+}
+```
+
+## Loader Registry
+
+Create a custom registry with your own loaders for automatic format detection:
+
+```typescript
+import { createLoaderRegistry, TextLoader, JSONLoader, CSVLoader } from '@localmode/core';
+
+const registry = createLoaderRegistry([
+  new TextLoader(),
+  new JSONLoader(),
+  new CSVLoader(),
+  new MyCustomLoader(), // Your custom loader
+]);
+
+// Auto-detect format
+const docs = await registry.load(someFile);
+
+// Batch load
+const allDocs = await registry.loadMany([file1, file2, file3]);
+
+// Check which loader handles a source
+const loader = registry.getLoader(someFile);
+```
+
+## Accepted Source Types
+
+All loaders accept these source types:
+
+| Source Type | Description |
+| --- | --- |
+| `string` | Raw text content |
+| `Blob` | Binary blob |
+| `ArrayBuffer` | Raw binary data |
+| `File` | Browser File object (from input or drag-and-drop) |
+| `{ type: 'url', url: string }` | URL to fetch |
+| `{ type: 'custom', data: unknown }` | Custom source data |
+
+## Next Steps
+
+<Cards>
+  <Card title="RAG" href="/docs/core/rag" description="Chunk and search loaded documents." />
+  <Card title="PDF.js" href="/docs/pdfjs" description="Load PDF documents with @localmode/pdfjs." />
+</Cards>

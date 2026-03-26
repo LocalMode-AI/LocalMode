@@ -6,6 +6,7 @@
  * @packageDocumentation
  */
 
+import { WEBLLM_MODELS } from './models.js';
 import type { WebLLMLoadProgress } from './types.js';
 
 /**
@@ -18,7 +19,7 @@ import type { WebLLMLoadProgress } from './types.js';
  * ```ts
  * import { isModelCached } from '@localmode/webllm';
  *
- * if (await isModelCached('Llama-3.2-1B-Instruct-q4f16')) {
+ * if (await isModelCached('Llama-3.2-1B-Instruct-q4f16_1-MLC')) {
  *   console.log('Model already downloaded!');
  * }
  * ```
@@ -43,7 +44,7 @@ export async function isModelCached(modelId: string): Promise<boolean> {
  * ```ts
  * import { preloadModel } from '@localmode/webllm';
  *
- * await preloadModel('Llama-3.2-1B-Instruct-q4f16', {
+ * await preloadModel('Llama-3.2-1B-Instruct-q4f16_1-MLC', {
  *   onProgress: (p) => console.log(`Loading: ${p.progress}%`),
  * });
  * ```
@@ -83,7 +84,7 @@ export async function preloadModel(
  * ```ts
  * import { deleteModelCache } from '@localmode/webllm';
  *
- * await deleteModelCache('Llama-3.2-1B-Instruct-q4f16');
+ * await deleteModelCache('Llama-3.2-1B-Instruct-q4f16_1-MLC');
  * console.log('Model cache cleared!');
  * ```
  */
@@ -108,17 +109,8 @@ export async function deleteModelCache(modelId: string): Promise<void> {
  * @returns Estimated size in bytes, or undefined if unknown
  */
 export function getModelSize(modelId: string): number | undefined {
-  const sizes: Record<string, number> = {
-    'Llama-3.2-1B-Instruct-q4f16': 700 * 1024 * 1024,
-    'Llama-3.2-3B-Instruct-q4f16': 1800 * 1024 * 1024,
-    'Phi-3.5-mini-instruct-q4f16': 2400 * 1024 * 1024,
-    'Qwen2.5-1.5B-Instruct-q4f16': 1000 * 1024 * 1024,
-    'Qwen2.5-3B-Instruct-q4f16': 2000 * 1024 * 1024,
-    'SmolLM2-1.7B-Instruct-q4f16': 1100 * 1024 * 1024,
-    'gemma-2-2b-it-q4f16_1': 1500 * 1024 * 1024,
-  };
-
-  return sizes[modelId];
+  const entry = WEBLLM_MODELS[modelId as keyof typeof WEBLLM_MODELS];
+  return entry?.sizeBytes;
 }
 
 /**

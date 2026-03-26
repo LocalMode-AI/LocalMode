@@ -1,18 +1,12 @@
 # @localmode/dexie
 
-> 🚧 **In Development** — This package is under active development and not yet used in production applications. API may change.
+Dexie.js storage adapter for LocalMode — enhanced IndexedDB with schema versioning and transactions.
 
+[![npm](https://img.shields.io/npm/v/@localmode/dexie)](https://www.npmjs.com/package/@localmode/dexie)
 [![license](https://img.shields.io/npm/l/@localmode/dexie)](../../LICENSE)
 
-[![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev)
+[![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev/docs/dexie)
 [![Demo](https://img.shields.io/badge/Demo-LocalMode.ai-purple)](https://localmode.ai)
-
-## Features
-
-- 📦 **Schema Versioning** - Built-in migration support
-- ⚡ **Transaction Support** - Atomic batch operations
-- 🔍 **Better Queries** - Indexed fields for faster lookups
-- 🛠️ **Developer-Friendly** - Excellent TypeScript support
 
 ## Installation
 
@@ -24,150 +18,68 @@ pnpm install @localmode/dexie @localmode/core
 
 ```typescript
 import { DexieStorage } from '@localmode/dexie';
+import { createVectorDB } from '@localmode/core';
 
-// Create storage instance
-const storage = new DexieStorage({
+const storage = new DexieStorage({ name: 'my-app' });
+
+const db = await createVectorDB({
   name: 'my-app',
-  version: 1,
-});
-
-// Store documents and vectors
-await storage.setDocument('doc-1', {
-  metadata: { title: 'Hello' },
-});
-
-await storage.setVector('doc-1', new Float32Array([0.1, 0.2, 0.3]));
-
-// Retrieve data
-const doc = await storage.getDocument('doc-1');
-const vector = await storage.getVector('doc-1');
-```
-
-## Batch Operations
-
-```typescript
-// Add multiple items in a single transaction
-await storage.addMany([
-  { id: 'doc-1', vector: embedding1, metadata: { title: 'First' } },
-  { id: 'doc-2', vector: embedding2, metadata: { title: 'Second' } },
-  { id: 'doc-3', vector: embedding3, metadata: { title: 'Third' } },
-]);
-
-// Delete multiple items
-await storage.deleteMany(['doc-1', 'doc-2']);
-```
-
-## Collections
-
-```typescript
-// Create a collection
-await storage.setCollection('my-collection', {
-  name: 'My Collection',
   dimensions: 384,
-  distanceFunction: 'cosine',
-  createdAt: Date.now(),
-  updatedAt: Date.now(),
-  documentCount: 0,
+  storage,
 });
 
-// Get all collections
-const collections = await storage.getAllCollections();
+// Use db.add(), db.search(), etc.
 ```
 
-## Index Storage
-
-```typescript
-// Store serialized HNSW index
-await storage.setIndex('main-index', {
-  data: serializedIndexData,
-  metadata: {
-    dimensions: 384,
-    nodeCount: 1000,
-    m: 16,
-    efConstruction: 200,
-  },
-});
-
-// Retrieve index
-const index = await storage.getIndex('main-index');
-```
-
-## API Reference
+## API
 
 ### Constructor
 
 ```typescript
-new DexieStorage(options: DexieStorageOptions)
+new DexieStorage({ name: string })
 ```
 
-**Options:**
+### StorageAdapter Methods
 
-- `name` - Database name (required)
-- `version` - Schema version for migrations (default: 1)
-- `autoOpen` - Auto-open on first operation (default: true)
+`DexieStorage` implements the `StorageAdapter` interface from `@localmode/core`:
 
-### Document Operations
-
-- `getDocument(id)` - Get document by ID
-- `setDocument(id, doc)` - Create or update document
-- `deleteDocument(id)` - Delete document
-- `getDocumentIds()` - Get all document IDs
-- `getDocumentCount()` - Get document count
-- `clearDocuments()` - Delete all documents
-
-### Vector Operations
-
-- `getVector(id)` - Get vector by document ID
-- `setVector(id, vector, collection?)` - Store vector
-- `deleteVector(id)` - Delete vector
-- `getAllVectors(collection?)` - Get all vectors
-- `clearVectors()` - Delete all vectors
-
-### Index Operations
-
-- `getIndex(id)` - Get serialized index
-- `setIndex(id, index)` - Store serialized index
-- `deleteIndex(id)` - Delete index
-
-### Collection Operations
-
-- `getCollection(id)` - Get collection metadata
-- `setCollection(id, collection)` - Create/update collection
-- `deleteCollection(id)` - Delete collection
-- `getAllCollections()` - List all collections
-
-### Batch Operations
-
-- `addMany(items)` - Add multiple documents and vectors atomically
-- `deleteMany(ids)` - Delete multiple items atomically
-- `clearAll()` - Clear all data
-
-### Utility Methods
-
-- `open()` - Explicitly open database
-- `close()` - Close database connection
-- `exists()` - Check if database exists
-- `delete()` - Delete entire database
+| Method | Description |
+|--------|-------------|
+| `open()` / `close()` | Manage database connection |
+| `addDocument(doc)` | Add/upsert a document |
+| `getDocument(id)` | Get document by ID (returns `null` if missing) |
+| `deleteDocument(id)` | Delete a document |
+| `getAllDocuments(collectionId)` | Get all documents in a collection |
+| `countDocuments(collectionId)` | Count documents in a collection |
+| `addVector(vec)` | Add/upsert a vector |
+| `getVector(id)` | Get vector as `Float32Array \| null` |
+| `deleteVector(id)` | Delete a vector |
+| `getAllVectors(collectionId)` | Get all vectors as `Map<string, Float32Array>` |
+| `saveIndex(collectionId, index)` | Save serialized HNSW index |
+| `loadIndex(collectionId)` | Load serialized HNSW index |
+| `deleteIndex(collectionId)` | Delete an index |
+| `createCollection(collection)` | Create a collection |
+| `getCollection(id)` | Get collection by ID |
+| `getCollectionByName(name)` | Get collection by name |
+| `getAllCollections()` | List all collections |
+| `deleteCollection(id)` | Delete a collection |
+| `clear()` | Clear all data |
+| `clearCollection(collectionId)` | Clear a specific collection |
+| `estimateSize()` | Estimate storage size in bytes |
 
 ## Why Dexie?
 
-Dexie.js provides several advantages over raw IndexedDB:
+| Feature | IndexedDBStorage (built-in) | DexieStorage |
+|---------|---------------------------|--------------|
+| Bundle size | 0KB (built-in) | ~15KB |
+| Schema versioning | Manual migrations | Built-in |
+| Transactions | Manual | Automatic |
+| Queries | Basic | Indexed |
+| TypeScript | Good | Excellent |
 
-1. **Promise-based API** - No callback hell
-2. **Transaction handling** - Automatic transaction management
-3. **Schema versioning** - Built-in migration support
-4. **Indexed queries** - Fast lookups on indexed fields
-5. **TypeScript support** - Excellent type inference
+## Acknowledgments
 
-## Comparison with Built-in Storage
-
-| Feature      | IndexedDBStorage | DexieStorage |
-| ------------ | ---------------- | ------------ |
-| Bundle size  | 0KB              | ~15KB        |
-| Versioning   | Manual           | Built-in     |
-| Transactions | Manual           | Automatic    |
-| Queries      | Basic            | Advanced     |
-| TypeScript   | Good             | Excellent    |
+This package is built on [Dexie.js](https://dexie.org/) by [David Fahlander](https://github.com/dfahlander) — a minimalistic IndexedDB wrapper with schema versioning and transactions.
 
 ## License
 

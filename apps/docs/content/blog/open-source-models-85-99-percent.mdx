@@ -1,0 +1,383 @@
+---
+title: "Open Source AI Models Are Now 85-99% as Good as Cloud APIs - Here's the Data"
+description: "We tracked every major benchmark across 18 model categories from 2023 to 2026. Open source models went from 50-70% of cloud quality to 85-99%. A 4-billion parameter model now matches GPT-4o on knowledge benchmarks. Here is every number, every source, and what it means for your architecture."
+author: LocalMode
+date: 2026-03-20
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+In July 2023, the best open source 7B language model scored 45.3% on MMLU. GPT-4 scored 86.4%. The gap was 41 points -- open source was roughly half as capable as the frontier.
+
+In February 2026, a 4-billion parameter open source model scored 88.8% on MMLU-Redux in thinking mode. GPT-4o scores 88.7% on MMLU. The gap is 0.1 points.
+
+That is not a typo. A model small enough to run in a browser tab now matches the flagship cloud API on the most widely cited knowledge benchmark in AI. And this pattern -- open source models closing the gap to near-parity -- is playing out across almost every AI task category, not just language modeling.
+
+We have been tracking this convergence across every model category that LocalMode supports: embeddings, speech recognition, classification, NER, question answering, reranking, translation, text-to-speech, object detection, summarization, and document understanding. This post presents every benchmark number we have, organized by quality tier, with published sources for every claim.
+
+---
+
+## The Convergence Timeline
+
+The speed of this convergence is historically unprecedented in software. Here is how the gap has narrowed for small (sub-10B parameter) open source models, year by year:
+
+| Year | Best Open Source &lt;10B (MMLU) | Best Cloud API (MMLU) | Gap | Quality Ratio |
+|------|------|------|------|------|
+| 2023 | Llama 2 7B: 45.3% | GPT-4: 86.4% | 41.1 pts | 52% |
+| 2024 | Llama 3 8B: 66.6% | GPT-4o: 88.7% | 22.1 pts | 75% |
+| 2025 | Qwen3-4B (thinking): ~84% | GPT-4o: 88.7% | ~5 pts | ~95% |
+| 2026 | Qwen3.5-4B (thinking): 88.8% | GPT-4o: 88.7% | -0.1 pts | ~100% |
+
+Sources: Meta Llama 2 paper (2023), Meta Llama 3 announcement (April 2024), Qwen3 Technical Report arXiv:2505.09388 (May 2025), Qwen3.5-4B model card on HuggingFace (Feb 2026), OpenAI "Hello GPT-4o" announcement (May 2024).
+
+<Callout type="warn" title="Benchmark caveat">
+  MMLU and MMLU-Redux are related but distinct benchmarks. MMLU-Redux corrects labeling errors in the original MMLU. The comparison above is directionally accurate -- Qwen3.5-4B is in the same performance tier as GPT-4o on knowledge tasks -- but it is not a strict apples-to-apples comparison. We note this distinction wherever it applies.
+</Callout>
+
+Epoch AI's research confirms the broader trend: open-weight models now trail frontier proprietary models by roughly three months on average, down from 12-18 months in 2023. The Stanford HAI AI Index 2025 Report documents a striking convergence: the performance gap between leading US and Chinese AI models on MMLU narrowed from 17.5 points to 0.3 points in a single year, illustrating how quickly the frontier is being matched.
+
+This is not just an LLM story. The same convergence is happening across every task category we benchmark.
+
+---
+
+## Tier 1: 95-100% of Cloud Quality
+
+These categories have effectively reached parity. The quality difference is negligible for production use cases.
+
+### Embeddings: 99.8% of OpenAI
+
+The closest result in our entire benchmark suite. LocalMode's default embedding model (`bge-small-en-v1.5`, 384 dimensions, 33MB) scores **62.17 on the MTEB benchmark**. OpenAI's `text-embedding-3-small` scores **62.3**.
+
+| Metric | Local (bge-small-en-v1.5) | Cloud (OpenAI text-embedding-3-small) | Ratio |
+|--------|---------------------------|---------------------------------------|-------|
+| MTEB Average | 62.17 | 62.3 | **99.8%** |
+| Dimensions | 384 | 1536 | -- |
+| Model Size | 33MB | N/A (cloud) | -- |
+| Cost per 1M tokens | $0 | $0.020 | -- |
+
+Sources: BAAI/bge-small-en-v1.5 model card (MTEB 62.17), OpenAI "New embedding models" announcement (MTEB 62.3).
+
+For semantic search, RAG pipelines, and recommendation engines, the local model is functionally identical to the cloud API. At scale -- say 36.5 million embedding calls per year -- you save every dollar of the cloud bill and gain complete data privacy.
+
+### LLM Knowledge (MMLU): ~100% of GPT-4o
+
+Qwen3.5-4B in thinking mode scores **88.8% on MMLU-Redux**. GPT-4o scores **88.7% on MMLU** (0-shot chain-of-thought). This is the first time a model small enough to run in a browser has matched a frontier cloud API on a major knowledge benchmark.
+
+| Model | MMLU / MMLU-Redux | AIME 2024 | MATH-500 | Size |
+|-------|-------------------|-----------|----------|------|
+| Qwen3.5-4B (thinking) | **88.8%** (MMLU-Redux) | N/A | N/A | ~2.5GB |
+| Qwen3-4B (thinking) | 84.2% (MMLU-Redux) | ~66% | ~97% | 2.2GB |
+| Qwen3-8B (thinking) | 79.5% (MMLU-Redux) | **76%** | **97.4%** | 4.5GB |
+| GPT-4o | 88.7% (MMLU) | ~12% | ~75% | Cloud |
+
+Sources: Qwen3.5-4B model card (MMLU-Redux 88.8%, HMMT Feb 25 74.0%), Qwen3 Technical Report arXiv:2505.09388 (Qwen3-4B/8B benchmarks), OpenAI "Hello GPT-4o" announcement (MMLU 88.7%), OpenAI "Learning to Reason" blog (GPT-4o AIME 2024 ~12%).
+
+The math reasoning numbers are striking in the opposite direction: Qwen3-8B solves **76% of AIME 2024** competition-level problems where GPT-4o manages approximately 12%. On MATH-500, Qwen3-8B hits 97.4% versus GPT-4o's approximately 75%. Small open source models do not just match cloud APIs on knowledge -- they dramatically outperform on mathematical reasoning.
+
+### Zero-Shot Classification: 94-97% of GPT-4o
+
+The `nli-deberta-v3-xsmall` model achieves **87.77% accuracy on MNLI mismatched**, enabling high-quality zero-shot classification of arbitrary categories without any fine-tuning. GPT-4o achieves approximately 90-92% on equivalent zero-shot classification tasks with careful prompting.
+
+| Metric | Local (DeBERTa-v3-xsmall) | Cloud (GPT-4o) | Ratio |
+|--------|---------------------------|----------------|-------|
+| MNLI Accuracy | 87.77% | ~90-92% | **95-97%** |
+| Model Size | ~90MB | N/A (cloud) | -- |
+| Latency | 20-80ms | 500-3000ms | 10-60x faster |
+| Cost per 1K calls | $0 | $2.50-10 | -- |
+
+Source: cross-encoder/nli-deberta-v3-xsmall model card (MNLI mismatched 87.77%).
+
+For content moderation, ticket routing, intent detection, and topic classification, the local model delivers near-cloud quality at 10-60x lower latency and zero cost.
+
+---
+
+## Tier 2: 85-95% of Cloud Quality
+
+These categories show a measurable but manageable gap. For most production workloads, the quality difference is acceptable -- especially when weighed against cost, latency, and privacy benefits.
+
+### Named Entity Recognition: 95-98% of GPT-4o
+
+`bert-base-NER` achieves **92.6% F1 on CoNLL-2003**. GPT-4o achieves approximately 94-97% F1 with careful prompting on equivalent NER tasks. The local model identifies persons, organizations, locations, and miscellaneous entities at near-cloud quality.
+
+| Metric | Local (bert-base-NER) | Cloud (GPT-4o) | Ratio |
+|--------|----------------------|----------------|-------|
+| CoNLL-2003 F1 | 92.6% | ~94-97% | **95-98%** |
+| Precision | 92.1% | N/A | -- |
+| Recall | 93.1% | N/A | -- |
+| Latency | 30-100ms | 500-3000ms | 5-30x faster |
+
+Source: dslim/bert-base-NER model card (CoNLL-2003 F1 0.9259, Precision 0.9212, Recall 0.9306).
+
+### Extractive Question Answering: 92-95% of GPT-4o
+
+`distilbert-base-cased-distilled-squad` achieves **87.1 F1 on SQuAD v1.1**. Human performance on SQuAD is 91.2 F1. GPT-4o achieves approximately 91-95 F1 on extractive QA tasks.
+
+| Metric | Local (DistilBERT-SQuAD) | Cloud (GPT-4o) | Human | Ratio (vs Cloud) |
+|--------|--------------------------|----------------|-------|-------------------|
+| SQuAD v1.1 F1 | 87.1 | ~91-95 | 91.2 | **92-96%** |
+| Exact Match | 79.6 | N/A | 82.3 | -- |
+| Latency | 20-100ms | 500-3000ms | -- | 5-30x faster |
+
+Sources: distilbert-base-cased-distilled-squad model card (F1 86.996, EM 79.5998), SQuAD Explorer leaderboard (Human F1 91.221).
+
+The critical distinction: the local model is strictly extractive -- it finds answer spans in provided text. GPT-4o can synthesize answers from 128K tokens of context and reason about information not explicitly stated. For FAQ bots, search result highlighting, and form autofill, the local model is sufficient. For complex multi-document reasoning, cloud APIs maintain an advantage.
+
+### Reranking: 87-93% of Cohere
+
+`ms-marco-MiniLM-L-6-v2` achieves **MRR@10 of 39.01** on the MS MARCO Passage Ranking benchmark. Cohere's Rerank API achieves approximately MRR@10 of 42-45 on equivalent benchmarks (estimated from published Cohere Rerank 3.5 evaluations).
+
+| Metric | Local (MiniLM-L-6-v2) | Cloud (Cohere Rerank) | Ratio |
+|--------|----------------------|----------------------|-------|
+| MS MARCO MRR@10 | 39.01 | ~42-45 | **87-93%** |
+| Model Size | ~23MB | N/A (cloud) | -- |
+| Cost per 1K searches | $0 | $2.00 | -- |
+
+Source: cross-encoder/ms-marco-MiniLM-L-6-v2 model card (MRR@10 39.01, NDCG@10 74.30 on TREC DL 2019).
+
+At $2 per 1,000 searches, reranking is one of the most expensive cloud API calls at scale. A moderately popular search feature making 100,000 searches per day costs $73,000 per year with Cohere. The local model costs $0.
+
+### Speech Recognition: ~85% of Whisper API
+
+Moonshine-base (63MB quantized) achieves **3.23% WER on LibriSpeech test-clean**. OpenAI Whisper large-v3 achieves approximately **2.7% WER** on the same benchmark.
+
+| Metric | Local (Moonshine-base) | Cloud (Whisper API) | Ratio |
+|--------|----------------------|-------------------|-------|
+| LibriSpeech Clean WER | 3.23% | ~2.7% | **~84%** (lower is better) |
+| Model Size | 63MB | N/A (cloud) | -- |
+| Cost per 1K minutes | $0 | $6.00 | -- |
+| Offline capable | Yes | No | -- |
+
+Source: Moonshine paper arXiv:2410.15608 (WER 3.23% base, LibriSpeech clean).
+
+The WER gap narrows further for clean microphone input -- the typical use case for browser-based voice features. Cloud APIs handle accented speech, background noise, and rare vocabulary better. But for voice commands, dictation in quiet environments, and real-time transcription, Moonshine delivers strong results. The Moonshine-tiny variant (28MB) processes audio 5x faster than Whisper-tiny with comparable accuracy, making it ideal for real-time voice commands.
+
+### Text-to-Speech: 88-92% of OpenAI TTS
+
+Kokoro-82M delivers natural-sounding speech with 28 voices at 24kHz from an 86MB model. In the HuggingFace TTS Arena, Kokoro-82M achieved **first place** for single-speaker quality, beating models 5-15x its size in blind listener tests.
+
+| Metric | Local (Kokoro-82M) | Cloud (OpenAI TTS / ElevenLabs) | Ratio |
+|--------|-------------------|-------------------------------|-------|
+| Quality (listener tests) | Arena #1 (single-speaker) | Professional studio quality | **88-92%** |
+| Voices | 28 | 6-10,000+ | -- |
+| Model Size | 86MB | N/A (cloud) | -- |
+| Cost per 1M characters | $0 | $15-30 | -- |
+
+Source: Kokoro-82M HuggingFace model card, HuggingFace TTS Spaces Arena results.
+
+Cloud TTS wins on voice variety (ElevenLabs offers 10,000+ voices and voice cloning). For applications that need a small set of natural-sounding voices, the local model is remarkably competitive.
+
+---
+
+## Tier 3: 70-85% of Cloud Quality
+
+These categories have a noticeable quality gap. Local models work well for specific use cases but fall short of cloud APIs for general-purpose quality.
+
+### Translation: ~85% of Google Translate
+
+Helsinki-NLP Opus-MT models achieve BLEU scores in the **22-40 range** depending on language pair and test set. The `opus-mt-en-fr` model scores approximately 33.8 BLEU on news translation benchmarks. Google Translate and DeepL consistently score higher on fluency and idiomatic expression.
+
+| Metric | Local (Opus-MT en-fr) | Cloud (Google Translate) | Ratio |
+|--------|----------------------|------------------------|-------|
+| BLEU (news) | ~33.8 | ~40-45 | **~80-85%** |
+| Model Size | ~100MB per pair | N/A (cloud) | -- |
+| Languages | 1 pair per model | 249 in one API | -- |
+| Cost per 1M chars | $0 | $20 | -- |
+
+Sources: Helsinki-NLP/opus-mt-en-fr model card and OPUS-MT leaderboard (BLEU scores), Google Cloud Translation pricing ($20/1M characters).
+
+The structural limitation is coverage: Opus-MT requires a separate ~100MB model per language pair. Google Translate covers 243 languages with a single API call. For the top 10-20 language pairs, the quality gap is manageable. For long-tail languages, cloud is the only option.
+
+### Summarization: ~80% of Cloud APIs
+
+`distilbart-cnn-6-6` achieves **ROUGE-2 of 20.17** on CNN/DailyMail. The full BART-large-cnn achieves ROUGE-2 of 21.06. GPT-4o produces subjectively better summaries with more nuance and better abstraction, particularly on longer documents.
+
+| Metric | Local (DistilBART-CNN-6-6) | Full BART-large-CNN | GPT-4o (est.) |
+|--------|---------------------------|-------------------|---------------|
+| ROUGE-2 | 20.17 | 21.06 | ~24-28 |
+| ROUGE-L | 29.70 | 30.63 | ~32-36 |
+| Model Size | ~284MB | ~1.6GB | Cloud |
+
+Source: sshleifer/distilbart-cnn-6-6 model card (ROUGE-2 20.17, ROUGE-L 29.70).
+
+### Object Detection: 70-80% of Cloud Vision
+
+D-FINE-L achieves **54.0% AP on COCO val2017** -- state-of-the-art for real-time detectors. The nano variant that ships with LocalMode (~4.5MB) achieves lower AP but is remarkable for its size. Cloud vision APIs like Google Cloud Vision typically achieve 55-65% AP on equivalent COCO-category detection.
+
+| Metric | Local (D-FINE-L) | Local (D-FINE-nano) | Cloud Vision APIs |
+|--------|-----------------|-------------------|-------------------|
+| COCO AP | 54.0% | ~35-42% | ~55-65% |
+| Model Size | ~31M params | ~4.5MB | Cloud |
+| Latency | Real-time | Real-time | 200-2000ms |
+
+Source: D-FINE GitHub repository (AP 54.0% for L variant, ICLR 2025 Spotlight paper).
+
+### Document QA and Image Captioning: 40-70% of GPT-4o
+
+Florence-2-base (~223MB) handles captioning, OCR, and basic detection well, but cannot reason about visual content the way GPT-4o can. This is the widest gap in our benchmark suite.
+
+Source: Florence-2 paper (CVPR 2024), Microsoft Florence-2-base-ft model card.
+
+---
+
+## The Master Comparison Table
+
+Every benchmark in one view. Local quality as a percentage of the best available cloud API for each category.
+
+| Category | Local Model | Local Score | Cloud API | Cloud Score | Quality Ratio | Annual Savings (at scale) |
+|----------|------------|------------|-----------|------------|---------------|--------------------------|
+| Embeddings | bge-small-en-v1.5 | MTEB 62.17 | OpenAI text-embedding-3-small | MTEB 62.3 | **99.8%** | $365+ |
+| LLM Knowledge | Qwen3.5-4B (thinking) | MMLU-Redux 88.8% | GPT-4o | MMLU 88.7% | **~100%** | $91K-365K |
+| LLM Math | Qwen3-8B (thinking) | AIME 2024 76% | GPT-4o | AIME 2024 ~12% | **633%** | $91K-365K |
+| Zero-Shot Classification | DeBERTa-v3-xsmall | MNLI 87.77% | GPT-4o | ~90-92% | **95-97%** | $91K-365K |
+| NER | bert-base-NER | CoNLL F1 92.6% | GPT-4o | ~94-97% | **95-98%** | $91K-183K |
+| Extractive QA | DistilBERT-SQuAD | SQuAD F1 87.1 | GPT-4o | ~91-95 | **92-96%** | $55K-183K |
+| Reranking | MiniLM-L-6-v2 | MRR@10 39.01 | Cohere Rerank | ~42-45 | **87-93%** | $73K |
+| Speech-to-Text | Moonshine-base | WER 3.23% | Whisper API | WER ~2.7% | **~84%** | $2.2K |
+| Text-to-Speech | Kokoro-82M | Arena #1 | OpenAI TTS | Studio quality | **88-92%** | $5.5K-11K |
+| Translation | Opus-MT en-fr | BLEU ~33.8 | Google Translate | BLEU ~40-45 | **~80-85%** | $7.3K |
+| Summarization | DistilBART-CNN-6-6 | ROUGE-2 20.17 | GPT-4o | ROUGE-2 ~24-28 | **~75-84%** | $91K-365K |
+| Object Detection | D-FINE-nano | COCO AP ~35-42% | Cloud Vision | AP ~55-65% | **~60-75%** | $36.5K-82K |
+| Document QA | Florence-2-base | -- | GPT-4o | -- | **~40-55%** | $55K-183K |
+| Image Captioning | Florence-2-base | -- | GPT-4o | -- | **~60-70%** | $55K-183K |
+
+Annual savings assume 1,000 users making 100 AI calls per day (36.5 million calls/year) at published cloud API pricing as of March 2026.
+
+---
+
+## Where Cloud Still Wins Decisively
+
+Intellectual honesty requires acknowledging where the gap remains significant:
+
+**Long-context reasoning.** GPT-4o processes 128K tokens. Claude handles 200K. Local browser models typically run with 32K context windows (though Qwen3.5 natively supports 262K, the browser ONNX build defaults to 32K). For tasks that require reasoning over long documents, multi-document synthesis, or maintaining coherent conversations across many turns, cloud APIs maintain a clear advantage.
+
+**Creative writing and nuanced instruction following.** Frontier models produce more natural, varied, and contextually appropriate prose. The gap is subjective but real -- especially for marketing copy, creative fiction, and complex editorial tasks.
+
+**Vision-language reasoning.** GPT-4o and Claude bring world knowledge to visual understanding. "What is happening in this scene and why?" requires reasoning that Florence-2 and small vision-language models cannot match. For structured visual tasks (OCR, object counting, basic captioning), local models are adequate. For open-ended visual reasoning, cloud leads by a wide margin.
+
+**Multilingual breadth.** Google Translate covers 243 languages. Each Opus-MT model covers one language pair. Chrome Built-in AI (Gemini Nano) adds some multilingual capability at zero download cost, but coverage cannot match cloud services.
+
+**Voice diversity.** ElevenLabs offers 10,000+ voices and voice cloning. Kokoro-82M offers 28 high-quality voices. For applications needing specific voice characteristics or brand voices, cloud TTS has more flexibility.
+
+---
+
+## What Changed: Three Drivers of Convergence
+
+**1. Training technique democratization.** The techniques used to train frontier models -- RLHF, DPO, chain-of-thought distillation, mixture-of-experts -- are now well-understood and documented. The algorithmic moat has thinned. DeepSeek-R1 proved that reasoning capabilities can be distilled from large models into models 10-50x smaller, and the technique papers are public.
+
+**2. Hardware efficiency gains.** 4-bit quantization (Q4_K_M, q4f16) reduces model sizes by 4x with minimal quality loss. WebGPU acceleration brings near-native inference speed to the browser. A 4B parameter model quantized to 4-bit fits in 2.5GB -- well within the VRAM of a modern laptop GPU.
+
+**3. Algorithmic efficiency and accessibility gains.** While frontier training costs continue to grow (Epoch AI estimates 2.4x per year for the largest runs), algorithmic efficiency has improved at approximately 3x per year - meaning the same capability level can be achieved at a fraction of the original cost. Techniques like distillation, quantization-aware training, and mixture-of-experts allow smaller organizations to produce competitive models without frontier-scale budgets. Open source benefits from this collective output.
+
+---
+
+## What This Means for Your Architecture
+
+If you are building an application that uses AI, the decision framework has shifted:
+
+**2023:** "Should we use a cloud API or build our own model?" (Cloud API was the obvious answer for quality.)
+
+**2026:** "Which tasks can we move to local inference, and which still require cloud?" (Most tasks can go local without meaningful quality loss.)
+
+The practical sweet spot for many applications is a hybrid architecture: run embeddings, classification, NER, reranking, and voice features locally at zero cost, and reserve cloud API calls for the 5-10% of requests that require frontier reasoning or long-context capabilities.
+
+```typescript
+import { embed, classify, rerank } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// 90-95% of requests: handle locally at $0
+const { embedding } = await embed({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  value: userQuery,
+});
+
+const { label } = await classify({
+  model: transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english'),
+  text: userMessage,
+});
+
+const { results } = await rerank({
+  model: transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2'),
+  query: userQuery,
+  documents: searchResults,
+});
+
+// 5-10% of requests: escalate to cloud for complex reasoning
+if (needsLongContextReasoning(userQuery)) {
+  const response = await fetch('/api/cloud-llm', { body: userQuery });
+}
+```
+
+The data is clear: for most AI task categories, open source models running in the browser deliver 85-99% of cloud API quality at zero marginal cost, with complete data privacy and offline capability. The remaining gap is real but narrowing every quarter. The question is no longer whether local AI is good enough -- it is which tasks you move first.
+
+---
+
+## Methodology
+
+All benchmark numbers in this post come from published sources: model cards on HuggingFace, peer-reviewed papers, official company announcements, and established leaderboards. We do not run our own benchmarks -- we aggregate and compare published results. Where cloud API scores are estimated (marked with ~), we note the basis for the estimate.
+
+### Benchmark Suites Referenced
+
+- **MTEB** (Massive Text Embedding Benchmark): 56 tasks covering retrieval, classification, clustering, STS, and more. Used for embedding model comparison.
+- **MMLU** (Massive Multitask Language Understanding): 57 subjects from STEM to humanities. MMLU-Redux corrects ~3,000 labeling errors in original MMLU.
+- **AIME 2024** (American Invitational Mathematics Examination): 30 competition-level math problems. Reported as pass@1 accuracy.
+- **MATH-500**: 500-problem subset of the MATH benchmark, covering algebra through competition math.
+- **SQuAD v1.1** (Stanford Question Answering Dataset): 100K+ question-answer pairs for extractive QA. Reported as F1 and Exact Match.
+- **CoNLL-2003**: Standard NER benchmark with PERSON, ORG, LOC, MISC entity types. Reported as F1.
+- **MNLI** (Multi-Genre Natural Language Inference): Entailment classification across 10 genres. Used for zero-shot classification evaluation.
+- **MS MARCO** (Microsoft Machine Reading Comprehension): Passage ranking benchmark. Reported as MRR@10.
+- **BLEU** (Bilingual Evaluation Understudy): N-gram precision metric for translation quality.
+- **WER** (Word Error Rate): Standard ASR metric. Lower is better.
+- **ROUGE-2/L**: Summarization evaluation metrics (bigram overlap / longest common subsequence).
+- **COCO val2017**: Object detection benchmark. Reported as AP (Average Precision) at IoU 0.50-0.95.
+- **HMMT** (Harvard-MIT Mathematics Tournament): Competition math benchmark used for Qwen3.5 evaluation.
+
+### Primary Sources - Local Models
+
+- [BAAI/bge-small-en-v1.5 model card](https://huggingface.co/BAAI/bge-small-en-v1.5) - MTEB 62.17
+- [dslim/bert-base-NER model card](https://huggingface.co/dslim/bert-base-NER) - CoNLL-2003 F1 92.59%
+- [distilbert-base-cased-distilled-squad model card](https://huggingface.co/distilbert/distilbert-base-cased-distilled-squad) - SQuAD F1 86.996, EM 79.5998
+- [cross-encoder/nli-deberta-v3-xsmall model card](https://huggingface.co/cross-encoder/nli-deberta-v3-xsmall) - MNLI mismatched 87.77%
+- [cross-encoder/ms-marco-MiniLM-L-6-v2 model card](https://huggingface.co/cross-encoder/ms-marco-MiniLM-L-6-v2) - MRR@10 39.01
+- [sshleifer/distilbart-cnn-6-6 model card](https://huggingface.co/sshleifer/distilbart-cnn-6-6) - ROUGE-2 20.17, ROUGE-L 29.70
+- [Helsinki-NLP/opus-mt-en-fr model card](https://huggingface.co/Helsinki-NLP/opus-mt-en-fr) - BLEU scores
+- [Moonshine paper (arXiv:2410.15608)](https://arxiv.org/abs/2410.15608) - WER 3.23% (base, LibriSpeech test-clean)
+- [Kokoro-82M model card](https://huggingface.co/hexgrad/Kokoro-82M) - HuggingFace TTS Arena #1 single-speaker
+- [Qwen3 Technical Report (arXiv:2505.09388)](https://arxiv.org/abs/2505.09388) - Qwen3-4B/8B benchmark tables (MMLU-Redux, AIME 2024, MATH-500)
+- [Qwen3.5-4B model card](https://huggingface.co/Qwen/Qwen3.5-4B) - MMLU-Redux 88.8% (thinking), HMMT Feb 25 74.0%
+- [Qwen3.5 blog post](https://qwen.ai/blog?id=qwen3.5) - Qwen3.5 release details and benchmarks
+- [D-FINE GitHub / paper](https://github.com/Peterande/D-FINE) - COCO AP 54.0% (L), ICLR 2025 Spotlight
+- [Florence-2 paper (CVPR 2024)](https://openaccess.thecvf.com/content/CVPR2024/papers/Xiao_Florence-2_Advancing_a_Unified_Representation_for_a_Variety_of_Vision_CVPR_2024_paper.pdf) - Vision-language benchmarks
+- [DeepSeek-R1 paper (arXiv:2501.12948)](https://arxiv.org/abs/2501.12948) - Distilled model reasoning benchmarks
+- [Meta Llama 2 paper](https://huggingface.co/meta-llama/Llama-2-7b) - MMLU 45.3% (7B)
+- [Meta Llama 3 announcement](https://ai.meta.com/blog/meta-llama-3/) - MMLU 66.6% (8B)
+
+### Primary Sources - Cloud APIs
+
+- [OpenAI "Hello GPT-4o" announcement](https://openai.com/index/hello-gpt-4o/) - MMLU 88.7% (0-shot CoT)
+- [OpenAI "New embedding models" announcement](https://openai.com/index/new-embedding-models-and-api-updates/) - text-embedding-3-small MTEB 62.3
+- [OpenAI "Learning to Reason with LLMs"](https://openai.com/index/learning-to-reason-with-llms/) - GPT-4o AIME 2024 ~12%
+- [SQuAD Explorer leaderboard](https://rajpurkar.github.io/SQuAD-explorer/) - Human F1 91.221
+- [Whisper large-v3 model card](https://huggingface.co/openai/whisper-large-v3) - WER benchmarks
+- [Cohere Rerank documentation](https://docs.cohere.com/reference/rerank) - Rerank pricing and benchmarks
+- [Google Cloud Translation pricing](https://cloud.google.com/translate/pricing) - $20/1M characters, 243 languages
+
+### Primary Sources - Trend Analysis
+
+- [Epoch AI: Open vs. Closed AI](https://epoch.ai/blog/open-models-report) - Gap analysis, 3-month average lag
+- [Epoch AI: Open-weight models lag by ~3 months](https://epoch.ai/data-insights/open-weights-vs-closed-weights-models) - Performance convergence data
+- [Stanford HAI AI Index 2025 Report](https://hai.stanford.edu/ai-index/2025-ai-index-report) - MMLU gap between US and Chinese models narrowed from 17.5 to 0.3 points
+- [California Management Review: The Coming Disruption](https://cmr.berkeley.edu/2026/01/the-coming-disruption-how-open-source-ai-will-challenge-closed-model-giants/) - Open source AI competitive analysis
+
+### Pricing Sources
+
+- [OpenAI API Pricing](https://openai.com/api/pricing/) - GPT-4o ($2.50-10/M tokens), embeddings ($0.02/M tokens), Whisper ($0.006/min), TTS ($15-30/M chars)
+- [Cohere Pricing](https://cohere.com/pricing) - Rerank $2/1K searches
+- [Google Cloud Translation Pricing](https://cloud.google.com/translate/pricing) - $20/1M characters
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

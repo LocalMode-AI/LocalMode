@@ -1,166 +1,132 @@
 /**
  * IDB Storage Implementation
  *
- * Minimal storage adapter using the idb library.
+ * Minimal storage adapter using the idb library (~3KB).
+ * Implements the {@link StorageAdapter} interface from `@localmode/core`.
  *
  * @packageDocumentation
  */
 
-import { openDB, type IDBPDatabase } from 'idb';
+import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
+import type {
+  StorageAdapter,
+  StoredDocument,
+  StoredVector,
+  Collection,
+  SerializedHNSWIndex,
+} from '@localmode/core';
+import type { IDBStorageOptions } from './types.js';
 
 /**
- * Configuration options for IDBStorage.
+ * Internal IDB record types (vector stored as ArrayBuffer for IndexedDB compatibility).
  */
-export interface IDBStorageOptions {
-  /**
-   * Database name.
-   */
-  name: string;
-
-  /**
-   * Database version.
-   * @default 1
-   */
-  version?: number;
-}
-
-/**
- * Stored document interface.
- */
-export interface StoredDocument {
+interface DocumentRecord {
   id: string;
+  collectionId: string;
   metadata?: Record<string, unknown>;
-  createdAt?: number;
-  updatedAt?: number;
+  createdAt: number;
+  updatedAt: number;
 }
 
-/**
- * Stored vector interface.
- */
-export interface StoredVector {
+interface VectorRecord {
   id: string;
-  vector: Float32Array;
-  collection?: string;
+  collectionId: string;
+  vector: ArrayBuffer;
 }
 
-/**
- * Serialized HNSW index.
- */
-export interface SerializedHNSWIndex {
+interface IndexRecord {
+  collectionId: string;
+  data: string; // JSON serialized
+  updatedAt: number;
+}
+
+interface CollectionRecord {
   id: string;
-  data: Uint8Array;
-  metadata?: {
-    dimensions: number;
-    nodeCount: number;
-    m: number;
-    efConstruction: number;
-  };
+  name: string;
+  dimensions: number;
+  createdAt: number;
 }
 
 /**
- * Internal database schema.
+ * Typed IDB database schema.
  */
-interface VectorDBSchema {
+interface VectorDBSchema extends DBSchema {
   documents: {
     key: string;
-    value: {
-      id: string;
-      metadata?: Record<string, unknown>;
-      createdAt: number;
-      updatedAt: number;
-    };
-    indexes: { byUpdatedAt: number };
+    value: DocumentRecord;
+    indexes: { collectionId: string };
   };
   vectors: {
     key: string;
-    value: {
-      id: string;
-      vector: ArrayBuffer;
-      collection?: string;
-    };
-    indexes: { byCollection: string };
+    value: VectorRecord;
+    indexes: { collectionId: string };
   };
   indexes: {
     key: string;
-    value: {
-      id: string;
-      data: ArrayBuffer;
-      metadata?: {
-        dimensions: number;
-        nodeCount: number;
-        m: number;
-        efConstruction: number;
-      };
-      updatedAt: number;
-    };
+    value: IndexRecord;
+  };
+  collections: {
+    key: string;
+    value: CollectionRecord;
+    indexes: { name: string };
   };
 }
 
 /**
- * Minimal IndexedDB storage adapter using the idb library.
+ * Minimal idb storage adapter for VectorDB.
  *
- * idb is a tiny (~3KB) Promise wrapper around IndexedDB that provides
- * a cleaner API while adding minimal overhead.
+ * Provides lightweight IndexedDB storage using the idb library (~3KB),
+ * implementing the core {@link StorageAdapter} interface for use with
+ * `createVectorDB()`.
  *
  * @example
- * ```ts
+ * ```typescript
  * import { IDBStorage } from '@localmode/idb';
+ * import { createVectorDB } from '@localmode/core';
  *
  * const storage = new IDBStorage({ name: 'my-app' });
- * await storage.open();
- *
- * // Store data
- * await storage.setDocument('doc-1', { metadata: { title: 'Hello' } });
- * await storage.setVector('doc-1', new Float32Array([0.1, 0.2, 0.3]));
- *
- * // Retrieve data
- * const doc = await storage.getDocument('doc-1');
- * const vector = await storage.getVector('doc-1');
- *
- * await storage.close();
+ * const db = await createVectorDB({
+ *   name: 'my-app',
+ *   dimensions: 384,
+ *   storage,
+ * });
  * ```
  */
-export class IDBStorage {
+export class IDBStorage implements StorageAdapter {
   private db: IDBPDatabase<VectorDBSchema> | null = null;
-  private dbName: string;
-  private version: number;
+  private readonly dbName: string;
 
   constructor(options: IDBStorageOptions) {
-    this.dbName = `vectordb_${options.name}`;
-    this.version = options.version ?? 1;
+    this.dbName = options.name;
   }
 
-  /**
-   * Open the database connection.
-   */
+  // ============================================
+  // Lifecycle
+  // ============================================
+
   async open(): Promise<void> {
     if (this.db) return;
 
-    this.db = await openDB<VectorDBSchema>(this.dbName, this.version, {
+    this.db = await openDB<VectorDBSchema>(this.dbName, 1, {
       upgrade(db) {
         // Documents store
-        if (!db.objectStoreNames.contains('documents')) {
-          const docStore = db.createObjectStore('documents', { keyPath: 'id' });
-          docStore.createIndex('byUpdatedAt', 'updatedAt');
-        }
+        const docStore = db.createObjectStore('documents', { keyPath: 'id' });
+        docStore.createIndex('collectionId', 'collectionId');
 
         // Vectors store
-        if (!db.objectStoreNames.contains('vectors')) {
-          const vecStore = db.createObjectStore('vectors', { keyPath: 'id' });
-          vecStore.createIndex('byCollection', 'collection');
-        }
+        const vecStore = db.createObjectStore('vectors', { keyPath: 'id' });
+        vecStore.createIndex('collectionId', 'collectionId');
 
-        // Indexes store
-        if (!db.objectStoreNames.contains('indexes')) {
-          db.createObjectStore('indexes', { keyPath: 'id' });
-        }
+        // Indexes store (keyed by collectionId)
+        db.createObjectStore('indexes', { keyPath: 'collectionId' });
+
+        // Collections store
+        const colStore = db.createObjectStore('collections', { keyPath: 'id' });
+        colStore.createIndex('name', 'name', { unique: true });
       },
     });
   }
 
-  /**
-   * Close the database connection.
-   */
   async close(): Promise<void> {
     if (this.db) {
       this.db.close();
@@ -169,7 +135,7 @@ export class IDBStorage {
   }
 
   /**
-   * Ensure database is open.
+   * Ensure database is open, throwing if not.
    */
   private ensureOpen(): IDBPDatabase<VectorDBSchema> {
     if (!this.db) {
@@ -178,279 +144,240 @@ export class IDBStorage {
     return this.db;
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // DOCUMENT OPERATIONS
-  // ═══════════════════════════════════════════════════════════════
+  // ============================================
+  // Document Operations
+  // ============================================
 
-  /**
-   * Get a document by ID.
-   */
-  async getDocument(id: string): Promise<StoredDocument | undefined> {
+  async addDocument(doc: StoredDocument): Promise<void> {
+    const db = this.ensureOpen();
+    await db.put('documents', {
+      id: doc.id,
+      collectionId: doc.collectionId,
+      metadata: doc.metadata,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    });
+  }
+
+  async getDocument(id: string): Promise<StoredDocument | null> {
     const db = this.ensureOpen();
     const record = await db.get('documents', id);
-    if (!record) return undefined;
+    if (!record) return null;
 
     return {
       id: record.id,
+      collectionId: record.collectionId,
       metadata: record.metadata,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     };
   }
 
-  /**
-   * Set (upsert) a document.
-   */
-  async setDocument(id: string, doc: Omit<StoredDocument, 'id'>): Promise<void> {
-    const db = this.ensureOpen();
-    const now = Date.now();
-    const existing = await db.get('documents', id);
-
-    await db.put('documents', {
-      id,
-      metadata: doc.metadata,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    });
-  }
-
-  /**
-   * Delete a document by ID.
-   */
   async deleteDocument(id: string): Promise<void> {
     const db = this.ensureOpen();
     await db.delete('documents', id);
   }
 
-  /**
-   * Get all document IDs.
-   */
-  async getDocumentIds(): Promise<string[]> {
+  async getAllDocuments(collectionId: string): Promise<StoredDocument[]> {
     const db = this.ensureOpen();
-    const keys = await db.getAllKeys('documents');
-    return keys as string[];
+    const records = await db.getAllFromIndex('documents', 'collectionId', collectionId);
+
+    return records.map((r) => ({
+      id: r.id,
+      collectionId: r.collectionId,
+      metadata: r.metadata,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    }));
   }
 
-  /**
-   * Clear all documents.
-   */
-  async clearDocuments(): Promise<void> {
+  async countDocuments(collectionId: string): Promise<number> {
     const db = this.ensureOpen();
-    await db.clear('documents');
+    return db.countFromIndex('documents', 'collectionId', collectionId);
   }
 
-  /**
-   * Get document count.
-   */
-  async getDocumentCount(): Promise<number> {
+  // ============================================
+  // Vector Operations
+  // ============================================
+
+  async addVector(vec: StoredVector): Promise<void> {
     const db = this.ensureOpen();
-    return db.count('documents');
-  }
 
-  // ═══════════════════════════════════════════════════════════════
-  // VECTOR OPERATIONS
-  // ═══════════════════════════════════════════════════════════════
-
-  /**
-   * Get a vector by document ID.
-   */
-  async getVector(id: string): Promise<StoredVector | undefined> {
-    const db = this.ensureOpen();
-    const record = await db.get('vectors', id);
-    if (!record) return undefined;
-
-    return {
-      id: record.id,
-      vector: new Float32Array(record.vector),
-      collection: record.collection,
-    };
-  }
-
-  /**
-   * Set a vector for a document.
-   */
-  async setVector(id: string, vector: Float32Array, collection?: string): Promise<void> {
-    const db = this.ensureOpen();
+    // Copy to standalone ArrayBuffer to avoid shared buffer issues
+    const buffer = new ArrayBuffer(vec.vector.byteLength);
+    new Float32Array(buffer).set(vec.vector);
 
     await db.put('vectors', {
-      id,
-      vector: vector.buffer.slice(
-        vector.byteOffset,
-        vector.byteOffset + vector.byteLength
-      ) as ArrayBuffer,
-      collection,
+      id: vec.id,
+      collectionId: vec.collectionId,
+      vector: buffer,
     });
   }
 
-  /**
-   * Delete a vector by document ID.
-   */
+  async getVector(id: string): Promise<Float32Array | null> {
+    const db = this.ensureOpen();
+    const record = await db.get('vectors', id);
+    if (!record) return null;
+
+    return new Float32Array(record.vector);
+  }
+
   async deleteVector(id: string): Promise<void> {
     const db = this.ensureOpen();
     await db.delete('vectors', id);
   }
 
-  /**
-   * Get all vectors.
-   */
-  async getAllVectors(): Promise<StoredVector[]> {
+  async getAllVectors(collectionId: string): Promise<Map<string, Float32Array>> {
     const db = this.ensureOpen();
-    const records = await db.getAll('vectors');
+    const records = await db.getAllFromIndex('vectors', 'collectionId', collectionId);
 
-    return records.map((record) => ({
-      id: record.id,
-      vector: new Float32Array(record.vector),
-      collection: record.collection,
-    }));
+    const map = new Map<string, Float32Array>();
+    for (const r of records) {
+      map.set(r.id, new Float32Array(r.vector));
+    }
+    return map;
   }
 
-  /**
-   * Clear all vectors.
-   */
-  async clearVectors(): Promise<void> {
+  // ============================================
+  // Index Operations
+  // ============================================
+
+  async saveIndex(collectionId: string, index: SerializedHNSWIndex): Promise<void> {
     const db = this.ensureOpen();
-    await db.clear('vectors');
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // INDEX OPERATIONS
-  // ═══════════════════════════════════════════════════════════════
-
-  /**
-   * Get a serialized HNSW index.
-   */
-  async getIndex(id: string): Promise<SerializedHNSWIndex | undefined> {
-    const db = this.ensureOpen();
-    const record = await db.get('indexes', id);
-    if (!record) return undefined;
-
-    return {
-      id: record.id,
-      data: new Uint8Array(record.data),
-      metadata: record.metadata,
-    };
-  }
-
-  /**
-   * Save a serialized HNSW index.
-   */
-  async setIndex(id: string, index: Omit<SerializedHNSWIndex, 'id'>): Promise<void> {
-    const db = this.ensureOpen();
-
     await db.put('indexes', {
-      id,
-      data: index.data.buffer.slice(
-        index.data.byteOffset,
-        index.data.byteOffset + index.data.byteLength
-      ) as ArrayBuffer,
-      metadata: index.metadata,
+      collectionId,
+      data: JSON.stringify(index),
       updatedAt: Date.now(),
     });
   }
 
-  /**
-   * Delete an index.
-   */
-  async deleteIndex(id: string): Promise<void> {
+  async loadIndex(collectionId: string): Promise<SerializedHNSWIndex | null> {
     const db = this.ensureOpen();
-    await db.delete('indexes', id);
+    const record = await db.get('indexes', collectionId);
+    if (!record) return null;
+
+    try {
+      return JSON.parse(record.data) as SerializedHNSWIndex;
+    } catch {
+      return null;
+    }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // BATCH OPERATIONS
-  // ═══════════════════════════════════════════════════════════════
-
-  /**
-   * Add multiple documents and vectors in a single transaction.
-   */
-  async addMany(
-    items: Array<{
-      id: string;
-      vector: Float32Array;
-      metadata?: Record<string, unknown>;
-      collection?: string;
-    }>
-  ): Promise<void> {
+  async deleteIndex(collectionId: string): Promise<void> {
     const db = this.ensureOpen();
-    const now = Date.now();
-
-    const tx = db.transaction(['documents', 'vectors'], 'readwrite');
-
-    await Promise.all([
-      ...items.map((item) =>
-        tx.objectStore('documents').put({
-          id: item.id,
-          metadata: item.metadata,
-          createdAt: now,
-          updatedAt: now,
-        })
-      ),
-      ...items.map((item) =>
-        tx.objectStore('vectors').put({
-          id: item.id,
-          vector: item.vector.buffer.slice(
-            item.vector.byteOffset,
-            item.vector.byteOffset + item.vector.byteLength
-          ) as ArrayBuffer,
-          collection: item.collection,
-        })
-      ),
-      tx.done,
-    ]);
+    await db.delete('indexes', collectionId);
   }
 
-  /**
-   * Delete multiple documents and vectors.
-   */
-  async deleteMany(ids: string[]): Promise<void> {
+  // ============================================
+  // Collection Operations
+  // ============================================
+
+  async createCollection(collection: Collection): Promise<void> {
     const db = this.ensureOpen();
-
-    const tx = db.transaction(['documents', 'vectors'], 'readwrite');
-
-    await Promise.all([
-      ...ids.map((id) => tx.objectStore('documents').delete(id)),
-      ...ids.map((id) => tx.objectStore('vectors').delete(id)),
-      tx.done,
-    ]);
+    await db.put('collections', {
+      id: collection.id,
+      name: collection.name,
+      dimensions: collection.dimensions,
+      createdAt: collection.createdAt,
+    });
   }
 
-  /**
-   * Clear all data.
-   */
-  async clearAll(): Promise<void> {
+  async getCollection(id: string): Promise<Collection | null> {
     const db = this.ensureOpen();
+    const record = await db.get('collections', id);
+    if (!record) return null;
 
-    const tx = db.transaction(['documents', 'vectors', 'indexes'], 'readwrite');
+    return {
+      id: record.id,
+      name: record.name,
+      dimensions: record.dimensions,
+      createdAt: record.createdAt,
+    };
+  }
+
+  async getCollectionByName(name: string): Promise<Collection | null> {
+    const db = this.ensureOpen();
+    const record = await db.getFromIndex('collections', 'name', name);
+    if (!record) return null;
+
+    return {
+      id: record.id,
+      name: record.name,
+      dimensions: record.dimensions,
+      createdAt: record.createdAt,
+    };
+  }
+
+  async getAllCollections(): Promise<Collection[]> {
+    const db = this.ensureOpen();
+    const records = await db.getAll('collections');
+    return records.map((r) => ({
+      id: r.id,
+      name: r.name,
+      dimensions: r.dimensions,
+      createdAt: r.createdAt,
+    }));
+  }
+
+  async updateCollection(collection: Collection): Promise<void> {
+    const db = this.ensureOpen();
+    await db.put('collections', {
+      id: collection.id,
+      name: collection.name,
+      dimensions: collection.dimensions,
+      createdAt: collection.createdAt,
+    });
+  }
+
+  async deleteCollection(id: string): Promise<void> {
+    const db = this.ensureOpen();
+    await db.delete('collections', id);
+  }
+
+  // ============================================
+  // Utility Operations
+  // ============================================
+
+  async clear(): Promise<void> {
+    const db = this.ensureOpen();
+    const tx = db.transaction(
+      ['documents', 'vectors', 'indexes', 'collections'],
+      'readwrite',
+    );
 
     await Promise.all([
       tx.objectStore('documents').clear(),
       tx.objectStore('vectors').clear(),
       tx.objectStore('indexes').clear(),
+      tx.objectStore('collections').clear(),
       tx.done,
     ]);
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // UTILITY METHODS
-  // ═══════════════════════════════════════════════════════════════
+  async clearCollection(collectionId: string): Promise<void> {
+    const db = this.ensureOpen();
 
-  /**
-   * Delete the database entirely.
-   */
-  async delete(): Promise<void> {
-    if (this.db) {
-      this.db.close();
-      this.db = null;
-    }
+    // Get all document IDs in the collection
+    const docs = await this.getAllDocuments(collectionId);
+    const ids = docs.map((d) => d.id);
 
-    const { deleteDB } = await import('idb');
-    await deleteDB(this.dbName);
+    // Delete documents and vectors in a transaction
+    const tx = db.transaction(['documents', 'vectors'], 'readwrite');
+    await Promise.all([
+      ...ids.map((id) => tx.objectStore('documents').delete(id)),
+      ...ids.map((id) => tx.objectStore('vectors').delete(id)),
+      tx.done,
+    ]);
+
+    // Delete the index
+    await this.deleteIndex(collectionId);
   }
 
-  /**
-   * Get the database name.
-   */
-  get name(): string {
-    return this.dbName;
+  async estimateSize(): Promise<number> {
+    if (typeof navigator !== 'undefined' && navigator.storage?.estimate) {
+      const estimate = await navigator.storage.estimate();
+      return estimate.usage ?? 0;
+    }
+    return 0;
   }
 }

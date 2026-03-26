@@ -1,0 +1,328 @@
+---
+title: 'Advanced'
+description: Pipeline hook, custom composition, and testing patterns.
+icon: Settings
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Advanced Patterns
+
+<Callout type="info" title="See it in action">
+  Try [Email Classifier](https://localmode.ai/email-classifier), [Duplicate Finder](https://localmode.ai/duplicate-finder), and [Cross-Modal Search](https://localmode.ai/cross-modal-search) for working demos of these advanced hooks.
+</Callout>
+
+## usePipeline
+
+Compose multi-step workflows with unified progress and cancellation.
+
+```tsx
+import { usePipeline, embedStep, searchStep, chunkStep } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+
+function RAGPipeline() {
+  const { result, isRunning, progress, execute, cancel } = usePipeline([
+    chunkStep({ size: 512, overlap: 50 }),
+    embedStep(model),
+    searchStep(db, 10),
+  ]);
+
+  return (
+    <div>
+      <button onClick={() => execute(documentText)}>Process</button>
+      {isRunning && <p>Step: {progress?.currentStep} ({progress?.completed}/{progress?.total})</p>}
+      {isRunning && <button onClick={cancel}>Cancel</button>}
+    </div>
+  );
+}
+```
+
+### Custom Steps
+
+```tsx
+const myStep = {
+  name: 'filter-results',
+  execute: async (results, signal) => {
+    signal.throwIfAborted();
+    return results.filter((r) => r.score > 0.8);
+  },
+};
+
+const pipeline = usePipeline([embedStep(model), searchStep(db), myStep]);
+```
+
+## useBatchOperation
+
+Process multiple items concurrently with a shared AbortSignal, per-item results, and progress tracking. Unlike `useOperation` (which auto-aborts on re-execute), `useBatchOperation` runs all items in parallel.
+
+```tsx
+import { useBatchOperation } from '@localmode/react';
+import { classifyImageZeroShot, extractImageFeatures } from '@localmode/core';
+
+function PhotoProcessor() {
+  const batch = useBatchOperation({
+    fn: async (photo: { dataUrl: string }, signal: AbortSignal) => {
+      const classification = await classifyImageZeroShot({
+        model, image: photo.dataUrl, candidateLabels: ['landscape', 'portrait'],
+        abortSignal: signal,
+      });
+      const features = await extractImageFeatures({
+        model: featureModel, image: photo.dataUrl, abortSignal: signal,
+      });
+      return { classification, features };
+    },
+    concurrency: 3, // Process up to 3 photos at once
+  });
+
+  return (
+    <div>
+      <button onClick={() => batch.execute(photos)}>Process All</button>
+      {batch.isRunning && (
+        <p>{batch.progress?.completed}/{batch.progress?.total} done
+          ({batch.progress?.failed} failed)</p>
+      )}
+      {batch.isRunning && <button onClick={batch.cancel}>Cancel</button>}
+      {batch.results.map((r) => (
+        <div key={r.index}>
+          {r.error ? `Failed: ${r.error.message}` : `Done: ${JSON.stringify(r.data)}`}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### Return Value
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `results` | `BatchItemResult<T>[]` | Per-item `{ index, data, error }` |
+| `isRunning` | `boolean` | Whether the batch is active |
+| `progress` | `BatchProgress \| null` | `{ completed, total, succeeded, failed }` |
+| `error` | `Error \| null` | Batch-level error (not per-item) |
+| `execute` | `(items) => Promise` | Start the batch |
+| `cancel` | `() => void` | Cancel all in-flight operations |
+| `reset` | `() => void` | Clear all state |
+
+<Callout type="tip">
+Use `useBatchOperation` when processing multiple files (photo galleries, document batches) where each item needs the same AI operation. For sequential multi-step workflows on a single input, use `usePipeline` instead.
+</Callout>
+
+## useOperationList
+
+Accumulate results into a list from repeated `execute()` calls. Wraps `useOperation` — you get loading/error/cancel for free, plus an `items` array that grows with each success.
+
+```tsx
+import { useOperationList, toAppError } from '@localmode/react';
+import { answerQuestion } from '@localmode/core';
+
+function useQA(model) {
+  const { items: entries, isLoading, error, execute, cancel, clearItems, removeItem } = useOperationList({
+    fn: async ({ question, context }, signal) =>
+      answerQuestion({ model, question, context, abortSignal: signal }),
+    transform: (result, { question }) => ({
+      id: crypto.randomUUID(),
+      question,
+      answer: result.answer,
+      score: result.score,
+    }),
+  });
+
+  const deleteEntry = (id) => removeItem((e) => e.id === id);
+
+  return { entries, isAnswering: isLoading, error: toAppError(error), execute, cancel, clearEntries: clearItems, deleteEntry };
+}
+```
+
+### Transform with Input Args
+
+The `transform` function receives the operation result **and** the original input arguments. This eliminates the need for ref-based workarounds when you need input metadata (file names, question text, etc.) in your list items:
+
+```tsx
+const list = useOperationList({
+  fn: async (input: { document: string; question: string }, signal) =>
+    askDocument({ model, document: input.document, question: input.question, abortSignal: signal }),
+  // transform receives both the result and the input
+  transform: (result, input) => ({
+    id: crypto.randomUUID(),
+    question: input.question,  // Access input directly
+    answer: result.answer,
+  }),
+});
+```
+
+### Item Removal
+
+Remove items from the list using `removeItem(predicate)`:
+
+```tsx
+const { items, removeItem } = useOperationList({ ... });
+
+// Remove by ID
+removeItem((item) => item.id === targetId);
+
+// Or replace the entire list
+setItems(filteredItems);
+```
+
+### Return Value
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `items` | `TItem[]` | Accumulated list of transformed results |
+| `isLoading` | `boolean` | Whether an operation is in progress |
+| `error` | `Error \| null` | Last error (null if none) |
+| `execute` | `(...args) => Promise` | Run the operation — success adds to items |
+| `cancel` | `() => void` | Cancel the current operation |
+| `reset` | `() => void` | Clear error/loading (keeps items) |
+| `clearItems` | `() => void` | Empty the items list |
+| `removeItem` | `(predicate) => void` | Remove items matching predicate |
+| `setItems` | `(items) => void` | Replace the items array |
+
+<Callout type="tip">
+Use `useOperationList` when your UI shows a growing list of results (Q&A entries, captioned images, transcribed notes). For single-result operations, use the domain hooks directly (`useClassify`, `useSummarize`, etc.).
+</Callout>
+
+## useSequentialBatch
+
+Process an array of inputs one at a time with progress tracking and cancellation. Unlike `useBatchOperation` (concurrent), this processes items sequentially in order.
+
+```tsx
+import { useSequentialBatch, toAppError } from '@localmode/react';
+import { classify } from '@localmode/core';
+
+function useSentiment(model) {
+  const [results, setResults] = useState([]);
+  const batch = useSequentialBatch({
+    fn: async (text, signal) => classify({ model, text, abortSignal: signal }),
+  });
+
+  const analyze = async (text) => {
+    const lines = text.split('\n').filter(l => l.trim());
+    const batchResults = await batch.execute(lines);
+    setResults(batchResults.filter(Boolean).map((r, i) => ({
+      text: lines[i], label: r.label, score: r.score,
+    })));
+  };
+
+  return {
+    results,
+    isAnalyzing: batch.isRunning,
+    progress: batch.progress.total > 0 ? batch.progress.current / batch.progress.total : 0,
+    error: toAppError(batch.error),
+    analyze, cancel: batch.cancel,
+  };
+}
+```
+
+### Return Value
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `results` | `(TOutput \| null)[]` | Results array (null for failed items) |
+| `progress` | `{ current, total }` | Items completed / total items |
+| `isRunning` | `boolean` | Whether the batch is running |
+| `error` | `Error \| null` | Batch-level error |
+| `execute` | `(inputs) => Promise` | Process all inputs sequentially |
+| `cancel` | `() => void` | Stop after current item |
+| `reset` | `() => void` | Clear all state |
+
+<Callout type="tip">
+Use `useSequentialBatch` for batch processing where order matters or you need simple `{current, total}` progress. Use `useBatchOperation` for concurrent processing with per-item error tracking.
+</Callout>
+
+## toAppError
+
+Utility to convert `Error | null` to the `AppError` shape expected by UI components.
+
+```tsx
+import { toAppError } from '@localmode/react';
+import type { AppError } from '@localmode/react';
+
+// In a hook's return:
+return {
+  error: toAppError(error),          // { message: '...', recoverable: true } or null
+  error: toAppError(error, false),   // { message: '...', recoverable: false }
+};
+```
+
+All `@localmode/react` hooks return `Error | null`. Components typically expect `{ message, recoverable }`. `toAppError` bridges the gap in one call.
+
+## Composing Multiple Hooks
+
+For apps that need multiple AI operations, compose hooks in a custom hook:
+
+```tsx
+import { useTranscribe, useSummarize } from '@localmode/react';
+
+function useMeetingAssistant(sttModel, summaryModel) {
+  const transcriber = useTranscribe({ model: sttModel });
+  const summarizer = useSummarize({ model: summaryModel });
+
+  const processAudio = async (audio) => {
+    const result = await transcriber.execute(audio);
+    if (result?.text) {
+      await summarizer.execute(result.text);
+    }
+  };
+
+  return {
+    transcript: transcriber.data?.text,
+    summary: summarizer.data?.summary,
+    isProcessing: transcriber.isLoading || summarizer.isLoading,
+    processAudio,
+  };
+}
+```
+
+## Testing
+
+Use mock models from `@localmode/core` with `@testing-library/react`:
+
+```tsx
+import { renderHook, act } from '@testing-library/react';
+import { createMockEmbeddingModel } from '@localmode/core';
+import { useEmbed } from '@localmode/react';
+
+it('embeds text', async () => {
+  const model = createMockEmbeddingModel();
+  const { result } = renderHook(() => useEmbed({ model }));
+
+  await act(async () => {
+    await result.current.execute('Hello');
+  });
+
+  expect(result.current.data?.embedding).toBeInstanceOf(Float32Array);
+});
+```
+
+<Callout type="tip">
+The `@localmode/react/testing` sub-path export provides `renderHookWithMocks` as a convenience wrapper.
+</Callout>
+
+## SSR Safety
+
+All hooks are SSR-safe. During server rendering they return inert default state:
+
+```tsx
+// On the server:
+// data = null, isLoading = false, error = null
+// execute = no-op, cancel = no-op
+```
+
+No `useEffect` or browser APIs are called during SSR. Hooks activate on client hydration.
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Email Classifier | useOperationList for building a growing list of classified emails | [Demo](https://localmode.ai/email-classifier) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/email-classifier) |
+| Voice Notes | useOperationList for accumulating transcription results | [Demo](https://localmode.ai/voice-notes) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/voice-notes) |
+| QA Bot | useOperationList for question-answer entry accumulation | [Demo](https://localmode.ai/qa-bot) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/qa-bot) |
+| Sentiment Analyzer | useSequentialBatch for ordered batch sentiment analysis | [Demo](https://localmode.ai/sentiment-analyzer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/sentiment-analyzer) |
+| Duplicate Finder | useSequentialBatch for sequential image feature extraction | [Demo](https://localmode.ai/duplicate-finder) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/duplicate-finder) |
+| Cross-Modal Search | useBatchOperation for concurrent image embedding | [Demo](https://localmode.ai/cross-modal-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/cross-modal-search) |
+| Smart Gallery | useBatchOperation for parallel image processing | [Demo](https://localmode.ai/smart-gallery) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-gallery) |
+| Product Search | useBatchOperation for batch product catalog indexing | [Demo](https://localmode.ai/product-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/product-search) |

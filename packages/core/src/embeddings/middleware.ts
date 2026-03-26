@@ -40,7 +40,7 @@ import type {
  * };
  *
  * const cachedModel = wrapEmbeddingModel({
- *   model: transformers.embedding('Xenova/all-MiniLM-L6-v2'),
+ *   model: transformers.embedding('Xenova/bge-small-en-v1.5'),
  *   middleware: cachingMiddleware,
  * });
  * ```

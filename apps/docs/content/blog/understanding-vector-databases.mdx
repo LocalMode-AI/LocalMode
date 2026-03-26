@@ -1,0 +1,365 @@
+---
+title: "Understanding Vector Databases: Build One From Scratch, Then Use LocalMode's"
+description: "Vector databases power every semantic search and RAG pipeline, but how do they actually work? This post walks you through building brute-force vector search in 20 lines of JavaScript, explains why it breaks at scale, introduces the HNSW algorithm that fixes it, and then shows how LocalMode's createVectorDB() gives you all of it for free - with persistence, metadata filters, and quantization."
+author: LocalMode
+date: 2026-02-26
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+You have a collection of 50,000 product descriptions, each converted into a 384-dimensional embedding. A user types a search query. You need to find the ten most similar products - by meaning, not keywords.
+
+A regular database cannot help. SQL has no `ORDER BY meaning`. Postgres can sort by numbers, but not by "conceptual closeness across 384 dimensions." You need a different kind of database.
+
+This post will take you from zero to understanding exactly how vector databases work - by building one yourself first, then replacing it with something production-grade.
+
+---
+
+## The Problem: You Cannot `WHERE` Your Way to Meaning
+
+Traditional databases store rows and columns. They answer questions like "give me all users where `age > 30`" in milliseconds because they use B-tree indexes optimized for scalar comparisons.
+
+Embeddings are not scalars. They are arrays of 384 (or 768, or 1024) floating-point numbers. "Similar" does not mean "equal" - it means "close together in high-dimensional space." There is no B-tree for that.
+
+What you need instead is a **nearest neighbor search**: given a query vector, find the k vectors in your collection that are closest to it. The distance metric is typically cosine similarity, which measures the angle between two vectors - identical direction gives a score of 1, orthogonal gives 0, opposite gives -1.
+
+Here is what cosine similarity looks like in code. This is the core algorithm from LocalMode's distance module (simplified - the full version includes a dimension-check guard):
+
+```ts
+function cosineSimilarity(a: Float32Array, b: Float32Array): number {
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+
+  const magnitude = Math.sqrt(normA) * Math.sqrt(normB);
+  return magnitude === 0 ? 0 : dotProduct / magnitude;
+}
+```
+
+Two vectors with similar meaning produce a high score. Two unrelated vectors produce a score near zero. Now the question is: how do you find the highest-scoring vectors in a large collection?
+
+---
+
+## Build It: Brute-Force Vector Search in 20 Lines
+
+The simplest approach is the obvious one. Compare the query against every single vector, score each one, sort by score, and return the top k.
+
+```ts
+function bruteForceSearch(
+  query: Float32Array,
+  vectors: Map<string, Float32Array>,
+  k: number
+) {
+  const scores: Array<{ id: string; score: number }> = [];
+
+  for (const [id, vector] of vectors) {
+    scores.push({ id, score: cosineSimilarity(query, vector) });
+  }
+
+  scores.sort((a, b) => b.score - a.score);
+  return scores.slice(0, k);
+}
+```
+
+This works. For 100 vectors, it is instant. For 1,000, still fine. You could ship this and move on.
+
+But it has a fatal flaw.
+
+---
+
+## Why Brute Force Breaks: O(n) Does Not Scale
+
+Every search compares the query against *every* vector in the collection. That is O(n) per query - linear in the number of documents. Here is what that looks like in practice:
+
+| Collection size | Dimensions | Comparisons per query | Approximate time* |
+|---|---|---|---|
+| 1,000 | 384 | 1,000 | ~1 ms |
+| 10,000 | 384 | 10,000 | ~8 ms |
+| 100,000 | 384 | 100,000 | ~80 ms |
+| 1,000,000 | 384 | 1,000,000 | ~800 ms |
+
+*Approximate wall-clock time in a modern browser. Each comparison involves 384 multiplications and additions.*
+
+At 100K vectors, you are spending 80ms per query just on distance computation. At a million, nearly a second. And this is for a single query - if your app fires a search on every keystroke, it is unusable.
+
+The problem is not that cosine similarity is slow. The problem is that you are computing it against every single vector. What if you could skip most of them?
+
+---
+
+## The Solution: HNSW (Skip Most Vectors, Find the Right Ones Anyway)
+
+The Hierarchical Navigable Small World (HNSW) algorithm is the answer most modern vector databases use. It was published by Malkov and Yashunin in 2016, and LocalMode implements it in pure TypeScript with zero dependencies.
+
+The core idea is surprisingly intuitive. Think of it like navigating a city:
+
+1. **Zoom out**: At the highway level, you have a few major exits. You pick the one closest to your destination.
+2. **Zoom in**: At the local road level, you have more options. You pick the street closest to your target.
+3. **Walk**: At the block level, you check nearby houses until you find the best match.
+
+HNSW builds a multi-layered graph where each layer has progressively more nodes:
+
+```
+Layer 3 (sparse):    [A] -------- [M] ------------ [Z]
+                      |             |                 |
+Layer 2:         [A]--[F]---[M]----[R]------[Z]
+                  |    |     |      |    \    |
+Layer 1:     [A]-[C]-[F]-[H]-[M]-[P]-[R]-[W]-[Z]
+                  |  / |  \ |  / |  \ |  / |  \
+Layer 0:   [A][B][C][D][E][F][G][H][I]...[W][X][Y][Z]
+(all nodes)
+```
+
+**Insertion**: When a new vector is added, a random level is assigned - most nodes land on layer 0, a few reach layer 1, fewer reach layer 2, and so on (exponential decay). The vector is connected to its nearest neighbors at each layer it belongs to.
+
+**Search**: Start at the top layer's entry point. Greedily move to the neighbor closest to the query. When you cannot improve at this layer, drop down and repeat with more neighbors available. At layer 0, do a broader search to collect the final candidates.
+
+The result: instead of checking all n vectors, you check roughly O(log n). For a million vectors, that is about 20 hops instead of 1,000,000 comparisons.
+
+| Collection size | Brute force | HNSW |
+|---|---|---|
+| 10,000 | 10,000 comparisons | ~50-80 |
+| 100,000 | 100,000 comparisons | ~60-100 |
+| 1,000,000 | 1,000,000 comparisons | ~80-120 |
+
+The tradeoff: HNSW is an *approximate* nearest neighbor (ANN) algorithm. It might miss the absolute closest vector occasionally. In practice, recall is typically 95-99% - meaning it finds 95-99 of the true top 100. For semantic search, where the difference between the 1st and 5th closest result is often negligible, this is an excellent trade.
+
+---
+
+## Using LocalMode's VectorDB: All of This, Built In
+
+You do not need to implement HNSW yourself. LocalMode's `createVectorDB()` gives you the full algorithm - with IndexedDB persistence, metadata filters, cross-tab sync, and more - in a few lines:
+
+### Create a Database
+
+```ts
+import { createVectorDB } from '@localmode/core';
+
+const db = await createVectorDB({
+  name: 'products',
+  dimensions: 384,
+});
+```
+
+That single call sets up an HNSW index (default: M=16, efConstruction=200, efSearch=50, cosine distance), an IndexedDB-backed storage layer, and cross-tab locking via Web Locks.
+
+### Add Documents
+
+```ts
+import { embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+const { embedding } = await embed({ model, value: 'Wireless noise-canceling headphones' });
+
+await db.add({
+  id: 'product-1',
+  vector: embedding,
+  metadata: { title: 'Wireless Headphones', category: 'electronics', price: 79.99 },
+});
+```
+
+For bulk ingestion, `addMany()` processes documents in batches with progress tracking:
+
+```ts
+await db.addMany(documents, {
+  batchSize: 100,
+  onProgress: (completed, total) => console.log(`${completed}/${total}`),
+});
+```
+
+### Search
+
+```ts
+const { embedding: queryVec } = await embed({ model, value: 'comfortable headphones for travel' });
+
+const results = await db.search(queryVec, { k: 5 });
+
+results.forEach((r) => {
+  console.log(`${r.score.toFixed(3)} - ${r.metadata?.title}`);
+});
+// 0.891 - Wireless Headphones
+// 0.834 - Travel Comfort Earbuds
+// ...
+```
+
+The query "comfortable headphones for travel" matched "Wireless Headphones" despite zero keyword overlap - and it did so by searching an HNSW graph, not by comparing against every vector.
+
+### Metadata Filters
+
+Real-world searches almost always need filters. "Find similar products, but only in the electronics category under $100." LocalMode supports this natively:
+
+```ts
+const results = await db.search(queryVec, {
+  k: 5,
+  filter: { category: 'electronics', price: { $lt: 100 } },
+  threshold: 0.7,  // minimum similarity score
+});
+```
+
+The filter supports exact match, `$in`, `$nin`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, and `$exists` operators. When you use typed metadata with a generic parameter, filters get full TypeScript autocompletion:
+
+```ts
+import { createVectorDB, jsonSchema } from '@localmode/core';
+import { z } from 'zod';
+
+const db = await createVectorDB<{ title: string; category: string; price: number }>({
+  name: 'products',
+  dimensions: 384,
+  schema: jsonSchema(z.object({
+    title: z.string(),
+    category: z.string(),
+    price: z.number(),
+  })),
+});
+
+// TypeScript knows `filter` keys must be 'title' | 'category' | 'price'
+const results = await db.search(queryVec, {
+  k: 5,
+  filter: { category: 'electronics' },
+});
+```
+
+### Persistence and Offline
+
+Everything is stored in IndexedDB. Close the tab, reopen it, and your vectors are still there. After the initial model download, the entire system - embedding model, vector database, search - works completely offline.
+
+```ts
+// Check how much data is stored
+const stats = await db.stats();
+console.log(`${stats.count} documents, ~${(stats.sizeBytes / 1024 / 1024).toFixed(1)} MB`);
+```
+
+### Semantic Search Shortcut
+
+If you want to skip the manual "embed the query, then search" two-step, `semanticSearch()` combines both:
+
+```ts
+import { semanticSearch } from '@localmode/core';
+
+const { results } = await semanticSearch({
+  db,
+  model,
+  query: 'comfortable headphones for travel',
+  k: 5,
+  filter: { category: 'electronics' },
+});
+```
+
+---
+
+## Going Further
+
+LocalMode's vector database includes several features beyond basic search that become important as your application grows.
+
+### Vector Quantization
+
+At 384 dimensions, each vector occupies 1,536 bytes (384 floats x 4 bytes). At 100K documents, that is 150 MB of vector data alone. Scalar quantization (SQ8) reduces each float to a single byte - a 4x reduction with minimal impact on recall:
+
+```ts
+const db = await createVectorDB({
+  name: 'products',
+  dimensions: 384,
+  quantization: { type: 'scalar' },
+});
+```
+
+For even more aggressive compression, product quantization (PQ) achieves 8-32x reduction by encoding subvectors as codebook indices:
+
+```ts
+const db = await createVectorDB({
+  name: 'products',
+  dimensions: 384,
+  quantization: { type: 'pq', subvectors: 48, centroids: 256 },
+});
+```
+
+### WebGPU-Accelerated Search
+
+On devices with WebGPU support, distance computations can be offloaded to GPU compute shaders. Enable it with a single flag:
+
+```ts
+const db = await createVectorDB({
+  name: 'products',
+  dimensions: 384,
+  enableGPU: true,
+});
+```
+
+If WebGPU is unavailable, the database falls back to CPU silently - no code changes needed.
+
+### Import and Export
+
+Moving vectors between systems is straightforward. Export to CSV or JSONL for compatibility with Pinecone, ChromaDB, or any other vector database:
+
+```ts
+import { exportToCSV, importFrom } from '@localmode/core';
+
+// Export
+const blob = await db.export({ format: 'json' });
+
+// Import from external sources
+await importFrom({ db, content: pineconeExport, format: 'pinecone', model });
+```
+
+### Distance Functions
+
+Cosine similarity is the default, but you can switch to Euclidean distance or dot product depending on your use case:
+
+```ts
+const db = await createVectorDB({
+  name: 'products',
+  dimensions: 384,
+  indexOptions: { distanceFunction: 'euclidean' },
+});
+```
+
+---
+
+## Key Takeaways
+
+| Concept | What it means |
+|---|---|
+| **Brute-force search** | Compare query against every vector. Simple, exact, O(n). Fine for small collections. |
+| **HNSW** | Multi-layered graph that enables O(log n) approximate nearest neighbor search. 95-99% recall. |
+| **M parameter** | Max connections per node. Higher M = better recall, more memory. Default: 16. |
+| **efSearch** | How many candidates to explore during search. Higher = better recall, slower. Default: 50. |
+| **Cosine similarity** | Measures angle between vectors. 1 = identical direction, 0 = unrelated. |
+| **Quantization** | Compress vectors to reduce memory. SQ8: 4x savings. PQ: 8-32x savings. |
+| **Metadata filters** | Post-search filtering by structured metadata fields. Essential for real-world apps. |
+
+---
+
+## What To Explore Next
+
+- **[Vector Database guide](/docs/core/vector-db)** - Full API reference for `createVectorDB()`, typed metadata, HNSW tuning, and WebGPU acceleration
+- **[Embeddings guide](/docs/core/embeddings)** - The `embed()`, `embedMany()`, and `streamEmbedMany()` functions that produce the vectors you store
+- **[RAG pipelines](/docs/core/rag)** - Chunking, ingestion, and retrieval-augmented generation with `ingest()` and `semanticSearch()`
+- **[Vector Quantization](/docs/core/vector-quantization)** - SQ8 and Product Quantization for memory-efficient storage
+- **[What Are Embeddings?](/blog/what-are-embeddings)** - A visual, hands-on guide if you want to understand the vectors themselves
+
+---
+
+## Methodology
+
+This post describes the HNSW algorithm as implemented in LocalMode's core package (`packages/core/src/hnsw/index.ts`), a pure TypeScript implementation based on the original paper by Malkov and Yashunin (2016): ["Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs"](https://arxiv.org/abs/1603.09320).
+
+- Distance functions (`cosineSimilarity`, `euclideanDistance`, `dotProduct`) are from `packages/core/src/hnsw/distance.ts`
+- Default HNSW parameters (M=16, efConstruction=200, efSearch=50) match the library defaults in the `HNSWIndex` constructor
+- Performance estimates for brute-force search are approximate wall-clock times measured in Chrome on an M-series MacBook. Actual times vary by device, browser, and vector dimensions
+- HNSW comparison counts (50-120 at scale) are representative of typical search paths; exact counts depend on graph structure, M, and efSearch settings
+- The ASCII graph is a conceptual illustration of the layered structure; actual HNSW graphs have probabilistic level assignment with exponential decay
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

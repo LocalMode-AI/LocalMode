@@ -365,7 +365,7 @@ import { transformers } from '@localmode/transformers';
 const db = await createVectorDB({ name: 'documents', dimensions: 384 });
 const locks = getLockManager('documents');
 const broadcaster = createBroadcaster('documents');
-const embeddingModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
 
 // Subscribe to changes from other tabs
 broadcaster.on('document_added', async ({ documentId }) => {

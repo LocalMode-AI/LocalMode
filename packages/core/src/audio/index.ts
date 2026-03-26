@@ -13,8 +13,15 @@
 // Speech-to-Text
 export { transcribe, setGlobalSTTProvider } from './transcribe.js';
 
-// Text-to-Speech (P2)
+// Text-to-Speech
 export { synthesizeSpeech, setGlobalTTSProvider } from './synthesize-speech.js';
+
+// Audio Classification
+export {
+  classifyAudio,
+  classifyAudioZeroShot,
+  setGlobalAudioClassificationProvider,
+} from './classify-audio.js';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES

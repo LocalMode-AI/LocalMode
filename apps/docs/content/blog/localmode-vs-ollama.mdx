@@ -1,0 +1,319 @@
+---
+title: "LocalMode vs Ollama: Browser AI vs Desktop AI - Choosing the Right Local Approach"
+description: "A fair, detailed comparison of two great local AI tools: Ollama runs LLMs natively on your desktop with GPU acceleration, while LocalMode runs 25 model types entirely in the browser with zero installation. Learn when to use each - and how they complement each other."
+author: LocalMode
+date: 2026-02-03
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+If you are building AI features without sending data to the cloud, you have likely encountered both Ollama and LocalMode. Both keep data on the device. Both eliminate API costs. Both work offline after initial setup.
+
+But they solve fundamentally different problems, and understanding the distinction will save you from picking the wrong tool - or missing an opportunity to use both.
+
+Ollama is a desktop runtime. It installs a native process on your machine, downloads GGUF model files, and exposes a local REST API. It is excellent at what it does: running large language models with native GPU acceleration on developer machines and servers.
+
+LocalMode is a browser SDK. It runs ML models entirely inside the browser tab using WebGPU and WebAssembly. No installation. No background process. No server - not even a local one. The user opens a webpage and AI is already there.
+
+This post is not a competition. Both tools are open source, both are outstanding, and both have earned their place in the local AI ecosystem. The goal is to help you understand when each one shines and how they can work together.
+
+---
+
+## The Core Architectural Difference
+
+The single most important difference is where the AI runs:
+
+| | Ollama | LocalMode |
+|---|---|---|
+| **Runtime** | Native process (Go binary) | Browser tab (JavaScript) |
+| **Compute** | Direct GPU access (Metal, CUDA, ROCm) | WebGPU or WASM inside browser sandbox |
+| **API** | REST API on `localhost:11434` | JavaScript function calls, no network |
+| **Model format** | GGUF (primary), SafeTensors import | ONNX (Transformers.js), MLC (WebLLM), GGUF (wllama) |
+| **Process model** | One server process, multiple clients | Each browser tab = isolated instance |
+
+Everything else flows from this distinction. Native GPU access means Ollama is faster. Browser sandboxing means LocalMode deploys to anyone with a URL.
+
+---
+
+## Installation and Setup
+
+### Ollama
+
+```bash
+# macOS
+brew install ollama
+
+# Linux
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Then pull a model and start chatting
+ollama pull llama3.1:8b
+ollama run llama3.1:8b
+```
+
+Ollama installs a background service that runs on your machine. On macOS it uses launchd, on Linux it uses systemd. The process listens on port 11434 and manages model files in `~/.ollama/models`. Installation takes a few minutes, and pulling a 7B model downloads 4-5 GB.
+
+### LocalMode
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+```typescript
+import { embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { embedding } = await embed({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  value: 'Hello world',
+});
+```
+
+There is no daemon, no background service, no port to manage. The npm packages provide JavaScript functions that load models directly into the browser. Your end users do not install anything - they visit your web application and the models download into the browser cache on first use.
+
+<Callout type="info" title="Key distinction">
+  Ollama is installed by the **developer or operator** on each machine that needs it. LocalMode is installed by the **developer once** and deployed to every user through the web.
+</Callout>
+
+---
+
+## Model Selection
+
+This is where Ollama has a clear advantage in sheer breadth.
+
+| | Ollama | LocalMode |
+|---|---|---|
+| **LLM models** | 200+ in the registry, plus any custom GGUF | 30 WebLLM + 17 wllama GGUF (curated for browser) |
+| **Max model size** | Limited only by your hardware (70B+ with enough RAM) | Practical limit ~5-9 GB (browser memory constraints) |
+| **Quantization** | Q2 through Q8, FP16, FP32 | Q4 (WebLLM), Q4_K_M (wllama), ONNX quantized |
+| **Model families** | Llama, Qwen, Gemma, Mistral, Phi, DeepSeek, Command-R, Mixtral, CodeLlama, and dozens more | Llama, Qwen, Gemma, Mistral, Phi, DeepSeek, SmolLM, Ministral, TinyLlama |
+| **Custom models** | Import any GGUF or SafeTensors | Use any HuggingFace ONNX model or GGUF via wllama |
+
+Ollama's library includes large models that simply cannot run in a browser: 70B parameter models, mixture-of-experts architectures like Mixtral 8x7B, and high-precision quantizations that require 32+ GB of RAM. If you need Llama 3.1 70B or Command-R+ 104B, Ollama is your tool.
+
+LocalMode's curated catalog focuses on models that are practical for browser delivery - typically 0.5B to 9B parameters at 4-bit quantization, ranging from 78 MB to 5 GB. Every model in the catalog has been tested for browser compatibility and download size.
+
+---
+
+## Capabilities Beyond Chat
+
+This is where the comparison shifts significantly. Ollama is primarily an LLM runtime. LocalMode is a full ML toolkit.
+
+| Capability | Ollama | LocalMode |
+|---|---|---|
+| LLM chat / text generation | Yes (core feature) | Yes (30 WebLLM + 17 wllama + 15 TJS v4 ONNX models) |
+| Embeddings | Yes (`/api/embed`) | Yes (`embed()`, `embedMany()`) |
+| Vision / multimodal | Yes (LLaVA, Llama 4, Gemma 3) | Yes (image classification, captioning, object detection, segmentation, CLIP, depth estimation, image-to-image) |
+| Audio transcription | No (requires external Whisper) | Yes (Moonshine via Transformers.js) |
+| Text-to-speech | No | Yes (SpeechT5, MMS-TTS) |
+| Translation | Via LLM prompting | Yes (dedicated translation models, Chrome AI) |
+| Summarization | Via LLM prompting | Yes (dedicated summarization models, Chrome AI) |
+| Classification | Via LLM prompting | Yes (dedicated classifiers, zero-shot) |
+| Named entity recognition | Via LLM prompting | Yes (dedicated NER models) |
+| OCR | No | Yes (TrOCR models) |
+| Document QA | Via multimodal LLM | Yes (dedicated document QA models) |
+| Question answering | Via LLM prompting | Yes (dedicated extractive QA models) |
+| Fill-mask | No | Yes (BERT-style masked language models) |
+| Reranking | No (experimental, not in stable release) | Yes (cross-encoder reranking models) |
+| Audio classification | No | Yes (audio event detection, zero-shot audio) |
+| Multimodal embeddings | No | Yes (CLIP text+image embeddings) |
+| Vector database | No (requires external) | Yes (built-in HNSW with IndexedDB persistence) |
+| RAG pipeline | Requires orchestration | Yes (built-in chunking, embedding, search, reranking pipeline) |
+| Agent framework | Via tool calling | Yes (built-in ReAct loop with tool registry) |
+
+Ollama handles many of these tasks indirectly by prompting an LLM - "classify this text" or "translate this to French" - and for many use cases that works well. But a dedicated 30 MB classification model will be faster and more accurate for classification than prompting a 4 GB general-purpose LLM, and it will use a fraction of the memory.
+
+LocalMode provides 25 specialized model types through the Transformers.js provider alone, each optimized for its specific task.
+
+---
+
+## Performance
+
+This is Ollama's strongest advantage. Native GPU access is simply faster than browser-sandboxed compute.
+
+| Metric | Ollama | LocalMode |
+|---|---|---|
+| **LLM inference (7B Q4)** | 40-80 tokens/sec (Apple M-series Metal) | 15-40 tokens/sec (WebGPU), 5-15 tokens/sec (WASM) |
+| **Model load time** | Seconds (from disk) | First load: download + compile. Subsequent: seconds (from browser cache) |
+| **GPU utilization** | Direct Metal/CUDA/ROCm access | WebGPU (Chrome 113+), WASM fallback |
+| **Memory efficiency** | OS-level memory management | Browser memory limits (~4-8 GB per tab typical) |
+| **Concurrent models** | Multiple models loaded simultaneously | One model per type typical, managed by browser |
+| **Max context length** | Model-dependent, up to 128K+ | Model-dependent, typically 2K-32K in browser |
+
+On a MacBook Pro with M-series silicon, Ollama running Llama 3.1 8B will generate at roughly 60-80 tokens per second via Metal. The same model through LocalMode's WebLLM provider via WebGPU will achieve approximately 25-40 tokens per second - respectable, but noticeably slower.
+
+For smaller models (1-3B parameters), the gap narrows. And for non-LLM tasks like embeddings, classification, and object detection, LocalMode's Transformers.js performance is often within 80-90% of native speed since these models are much smaller and compute-bound rather than memory-bandwidth-bound.
+
+---
+
+## Deployment and Distribution
+
+This is LocalMode's strongest advantage.
+
+| Scenario | Ollama | LocalMode |
+|---|---|---|
+| **Developer testing** | Excellent - one command to start | Good - run your web app locally |
+| **Team of 10 developers** | Install on each machine | Share a URL |
+| **Deploy to 1,000 end users** | Each user installs Ollama + pulls models | Users open your website |
+| **Enterprise deployment** | IT installs on approved machines | IT approves a URL |
+| **Mobile / tablet** | Not supported | Works in mobile browsers |
+| **Chromebook** | Not supported | Works in Chrome |
+| **Offline after setup** | Yes (models cached on disk) | Yes (models cached in browser) |
+
+The deployment difference becomes dramatic at scale. If you are building a product where end users need local AI, asking every user to install Ollama, pull a model, and keep a background process running is a significant barrier. With LocalMode, you ship a web application. Users open it. AI works.
+
+Consider the math: deploying Ollama to 10,000 users means 10,000 installations to support. Deploying LocalMode to 10,000 users means deploying one web application. Each user's browser becomes their own isolated AI runtime.
+
+---
+
+## Privacy Model
+
+Both tools keep data on the device, but the security models differ.
+
+| | Ollama | LocalMode |
+|---|---|---|
+| **Network surface** | Listens on localhost:11434 (TCP socket) | No network listener, runs in browser sandbox |
+| **Process isolation** | OS-level process | Browser sandbox (same-origin policy) |
+| **Multi-user** | One server, shared by local apps | Each browser tab is fully isolated |
+| **Data at rest** | Model files on disk, conversation data depends on client | Model cache in IndexedDB/OPFS, encrypted storage available |
+| **Encryption** | Depends on client application | Built-in `encrypt()`/`decrypt()` with Web Crypto API |
+| **PII protection** | Depends on client application | Built-in `redactPII()` middleware |
+
+Ollama's localhost API is a feature for developers - it allows you to connect any client to the running model. But in security-sensitive contexts, that open port is something to manage. LocalMode's browser sandbox means there is no port, no process, and no way for other applications on the machine to access the AI or its data.
+
+---
+
+## When to Use Ollama
+
+Ollama is the right choice when:
+
+- **You need the largest models.** If your task requires 13B, 70B, or larger models, Ollama is the only option. Browser memory constraints cap LocalMode at roughly 9B parameters.
+- **Raw speed matters most.** Native Metal/CUDA inference is 2-3x faster than WebGPU for LLM generation. If you are building a tool for your own use or a small team, that speed difference is significant.
+- **You are developing and testing locally.** Ollama's CLI (`ollama run`) is the fastest way to experiment with different models. Pull a model, chat with it, try another one.
+- **You need an OpenAI-compatible API.** Ollama exposes an OpenAI-compatible endpoint, making it a drop-in replacement for cloud APIs in existing codebases.
+- **Your users are technical.** If your audience is developers or ML engineers who already have Ollama installed, there is no deployment friction.
+
+---
+
+## When to Use LocalMode
+
+LocalMode is the right choice when:
+
+- **Your users are non-technical.** End users should not need to install anything. They open a webpage and AI works.
+- **You need more than just LLMs.** If your application requires embeddings, classification, object detection, OCR, speech recognition, translation, or vector search - LocalMode provides all of these as first-class features.
+- **You are building a product, not a tool.** Products ship to users who do not manage infrastructure. Browser delivery eliminates installation support.
+- **You need cross-platform reach.** LocalMode works on Chromebooks, tablets, phones, and any device with a modern browser. Ollama requires macOS, Linux, or Windows.
+- **You want built-in privacy features.** Encryption, PII redaction, and differential privacy middleware are part of the SDK.
+- **Scale means more users, not bigger models.** Every new user brings their own compute. Your server costs stay at zero regardless of whether you have 100 or 100,000 users.
+
+---
+
+## The Complementary Pattern: Use Both
+
+The most powerful approach for many teams is to use Ollama during development and LocalMode in production.
+
+```typescript
+// Development: use Ollama for fast iteration with large models
+// (in a local dev script or notebook)
+const response = await fetch('http://localhost:11434/api/generate', {
+  method: 'POST',
+  body: JSON.stringify({
+    model: 'llama3.1:8b',
+    prompt: 'Classify this support ticket: "My order hasn\'t arrived"',
+    stream: false,
+  }),
+});
+const { response: classification } = await response.json();
+```
+
+```typescript
+// Production: ship the same feature to users via the browser
+import { classifyZeroShot } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { labels } = await classifyZeroShot({
+  model: transformers.zeroShot('Xenova/mobilebert-uncased-mnli'),
+  text: "My order hasn't arrived",
+  candidateLabels: ['shipping', 'billing', 'returns', 'product-question'],
+});
+// Runs in the user's browser. No server. No API key.
+```
+
+The development workflow uses Ollama's large models to validate that local AI can handle your use case. The production deployment uses LocalMode's browser-native models to deliver that capability to every user without infrastructure.
+
+Another complementary pattern: use Ollama on your server for heavy tasks (RAG ingestion with large embedding models, batch processing) and LocalMode in the client for real-time features (search-as-you-type, live classification, on-device chat):
+
+```typescript
+// Server-side: Ollama handles heavy batch embedding
+// (Node.js backend)
+async function ingestDocuments(docs: string[]) {
+  const embeddings = await Promise.all(
+    docs.map(doc =>
+      fetch('http://localhost:11434/api/embed', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'nomic-embed-text', input: doc }),
+      }).then(r => r.json())
+    )
+  );
+  await saveToDatabase(embeddings);
+}
+
+// Client-side: LocalMode handles real-time user interaction
+// (React component)
+import { createVectorDB, semanticSearch } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+const db = await createVectorDB({ name: 'docs', dimensions: 384 });
+
+async function handleSearch(query: string) {
+  const { results } = await semanticSearch({ db, model, query, k: 5 });
+  // Instant results, no network round-trip
+  return results;
+}
+```
+
+---
+
+## Summary Comparison
+
+| Dimension | Ollama | LocalMode |
+|---|---|---|
+| **Best for** | Developers, local experimentation, large models | End-user products, broad ML capabilities, web deployment |
+| **Installation** | CLI install + model pull | `npm install` + browser auto-downloads |
+| **Model count** | 200+ (any GGUF) | 30 WebLLM + 17 wllama + 25 Transformers.js model types |
+| **Max model size** | 70B+ (hardware-limited) | ~9B (browser memory-limited) |
+| **Speed** | Native GPU (fastest) | WebGPU/WASM (60-80% of native for LLMs) |
+| **Capabilities** | LLM, embeddings, vision, reranking, audio | LLM, embeddings, vision, audio, classification, NER, OCR, translation, summarization, TTS, QA, document QA, agents, vector DB, RAG |
+| **Deployment** | Per-machine installation | One URL, works everywhere |
+| **Platform** | macOS, Linux, Windows | Any modern browser (including mobile, Chromebooks) |
+| **Privacy** | Local, but localhost port open | Local, browser-sandboxed, built-in encryption and PII redaction |
+| **Cost at scale** | $0 compute, but IT support per machine | $0 compute, $0 deployment support |
+| **GitHub stars** | 166K+ | Growing |
+| **License** | MIT | MIT |
+
+Both Ollama and LocalMode are excellent tools solving different parts of the local AI problem. Ollama gives developers the fastest path to running large models locally. LocalMode gives developers the fastest path to shipping local AI to their users. The best projects will use the strengths of each.
+
+---
+
+## Methodology
+
+Model counts and capabilities were verified directly from source code and official registries. LocalMode model counts are from the curated catalogs in `packages/webllm/src/models.ts` (30 models), `packages/wllama/src/models.ts` (16 models), and `packages/transformers/src/provider.ts` (25 model type factories). Ollama model counts reference the official model library at [ollama.com/library](https://ollama.com/library). Performance estimates for Ollama are based on community benchmarks for Apple Silicon Metal inference. Performance estimates for LocalMode WebGPU are based on published WebLLM benchmarks for equivalent hardware. The "200+ models" figure for Ollama reflects the registry size as of March 2026.
+
+Sources:
+- [Ollama official website](https://ollama.com/)
+- [Ollama GitHub repository](https://github.com/ollama/ollama)
+- [Ollama API documentation](https://github.com/ollama/ollama/blob/main/docs/api.md)
+- [Ollama model library](https://ollama.com/library)
+- [Ollama system requirements (DeepWiki)](https://deepwiki.com/ollama/ollama/1.2-system-requirements)
+- [Ollama GPU and hardware support (DeepWiki)](https://deepwiki.com/ollama/ollama/6-gpu-and-hardware-support)
+- [Ollama multimodal models blog](https://ollama.com/blog/multimodal-models)
+- [Ollama hardware guide (Arsturn)](https://www.arsturn.com/blog/ollama-hardware-guide-what-you-need-to-run-llms-locally)
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

@@ -19,6 +19,7 @@ import type {
 import { DEFAULT_INGEST_OPTIONS } from './types.js';
 import { chunk } from './chunkers/index.js';
 import { BM25 } from './bm25.js';
+import { computeOptimalBatchSize } from '../capabilities/batch-size.js';
 
 /**
  * Generate a unique ID for a chunk.
@@ -71,7 +72,8 @@ export async function ingest(
   const startTime = Date.now();
   const {
     chunking = { strategy: 'recursive' },
-    batchSize = DEFAULT_INGEST_OPTIONS.batchSize,
+    batchSize: explicitBatchSize,
+    adaptiveBatching,
     onProgress,
     idPrefix = DEFAULT_INGEST_OPTIONS.idPrefix,
     generateEmbeddings = DEFAULT_INGEST_OPTIONS.generateEmbeddings,
@@ -79,6 +81,18 @@ export async function ingest(
     buildBM25Index = DEFAULT_INGEST_OPTIONS.buildBM25Index,
     bm25Options,
   } = options;
+
+  // Determine batch size: explicit > adaptive > default (100)
+  let batchSize: number;
+  if (explicitBatchSize !== undefined) {
+    batchSize = explicitBatchSize;
+  } else if (adaptiveBatching) {
+    batchSize = computeOptimalBatchSize({
+      taskType: 'ingestion',
+    }).batchSize;
+  } else {
+    batchSize = DEFAULT_INGEST_OPTIONS.batchSize;
+  }
 
   // Validate options
   if (generateEmbeddings && !embedder) {

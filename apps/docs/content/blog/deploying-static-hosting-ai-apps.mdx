@@ -1,0 +1,466 @@
+---
+title: "Deploying LocalMode to Cloudflare Pages / Vercel / Netlify: Static Hosting for AI Apps"
+description: "A complete deployment guide for shipping LocalMode AI apps to Vercel, Cloudflare Pages, and Netlify. Covers COOP/COEP headers for multi-threaded WASM, Cache-Control for model files, Content-Security-Policy for WebAssembly, large file handling, and CDN strategy -- with full configuration examples for each platform."
+author: LocalMode
+date: 2026-03-16
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Your LocalMode app runs 32 AI features in the browser. Embeddings, LLM chat, speech-to-text, image segmentation -- all offline, all on-device. You have tested it locally and everything works. Now you need to deploy it.
+
+Here is the good news: LocalMode apps are static. There is no server-side inference. No Python backend. No GPU cluster. No API gateway. The browser downloads the JavaScript bundle, fetches the model weights from a CDN, and runs everything locally. From the hosting platform's perspective, you are deploying a static site that happens to serve some large files.
+
+Here is the bad news: the default configuration on every major hosting platform will break at least one critical feature. Missing COOP/COEP headers will force wllama into single-threaded mode (2-4x slower). A restrictive Content-Security-Policy will block WebAssembly compilation entirely. Default cache headers will force users to re-download 300 MB models on every visit. And platform-specific file size limits can silently prevent you from self-hosting models.
+
+This guide provides the complete, tested configuration for deploying LocalMode apps to Vercel, Cloudflare Pages, and Netlify. Every header, every config file, every gotcha.
+
+---
+
+## Why Headers Matter for Browser AI
+
+Before diving into platform-specific configuration, it helps to understand why three specific HTTP headers determine whether your AI app runs well, runs slowly, or does not run at all.
+
+### Cross-Origin Isolation (COOP + COEP)
+
+`SharedArrayBuffer` is the browser API that enables multi-threaded WebAssembly execution. Without it, [wllama (llama.cpp WASM)](/docs/wllama) falls back to single-threaded mode, and the performance impact is severe -- 2-4x slower inference. The `@localmode/wllama` package [detects this automatically](https://github.com/nicholasgriffintn/LocalMode/blob/main/packages/wllama/src/utils.ts) and emits a console warning:
+
+```
+[wllama] Running in single-threaded mode. For 2-4x faster inference, add CORS headers:
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+```
+
+Modern browsers require two headers to enable `SharedArrayBuffer`:
+
+| Header | Required Value | Purpose |
+|---|---|---|
+| `Cross-Origin-Opener-Policy` | `same-origin` | Isolates the browsing context |
+| `Cross-Origin-Embedder-Policy` | `require-corp` or `credentialless` | Prevents loading cross-origin resources without explicit permission |
+
+Together, these headers make the page [cross-origin isolated](https://web.dev/articles/coop-coep), enabling `SharedArrayBuffer` and multi-threaded WASM. You can check isolation status programmatically:
+
+```typescript
+import { isCrossOriginIsolated } from '@localmode/core';
+
+if (isCrossOriginIsolated()) {
+  console.log('Multi-threaded WASM enabled');
+} else {
+  console.log('Single-threaded fallback -- add COOP/COEP headers');
+}
+```
+
+### Content-Security-Policy for WASM
+
+If your deployment includes a `Content-Security-Policy` header (many platforms add one by default, or your security team requires one), you must allow WebAssembly compilation. The `wasm-unsafe-eval` directive permits WASM without also enabling JavaScript's `eval()`:
+
+```
+Content-Security-Policy: script-src 'self' 'wasm-unsafe-eval';
+```
+
+Without this, the browser will block `WebAssembly.instantiate()` and your models will not load. The `wasm-unsafe-eval` directive is [supported in Chrome 103+, Firefox 102+, and Safari 16+](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/script-src).
+
+### Cache-Control for Model Files
+
+ML model files are large (33 MB for an embedding model, 300 MB for a summarizer, 1-4 GB for an LLM) and immutable -- once a specific quantized version is published, it never changes. The ideal cache behavior is "download once, serve from cache forever." Without explicit `Cache-Control` headers, models may be re-downloaded on every visit, wasting bandwidth and creating a terrible user experience.
+
+---
+
+## Vercel
+
+Vercel is the most natural fit for Next.js apps (including the [LocalMode showcase](https://localmode.ai)). Configuration happens in `next.config.ts` for header rules and `vercel.json` for platform-level overrides.
+
+### next.config.ts: Headers
+
+Add an `async headers()` function to your Next.js configuration. This handles COOP/COEP for cross-origin isolation and CSP for WASM:
+
+```typescript
+import type { NextConfig } from 'next';
+
+const nextConfig: NextConfig = {
+  reactCompiler: true,
+
+  async headers() {
+    return [
+      {
+        // Apply to all routes
+        source: '/(.*)',
+        headers: [
+          // Cross-origin isolation for SharedArrayBuffer (multi-threaded wllama)
+          {
+            key: 'Cross-Origin-Opener-Policy',
+            value: 'same-origin',
+          },
+          {
+            key: 'Cross-Origin-Embedder-Policy',
+            value: 'credentialless',
+          },
+          // Allow WASM compilation without enabling eval()
+          {
+            key: 'Content-Security-Policy',
+            value: "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:;",
+          },
+        ],
+      },
+    ];
+  },
+};
+
+export default nextConfig;
+```
+
+<Callout type="warn" title="credentialless vs require-corp">
+  We use `credentialless` instead of `require-corp` for COEP. The `require-corp` value blocks all cross-origin resources (images, scripts, model files from HuggingFace CDN) unless they include a `Cross-Origin-Resource-Policy` header. Since you do not control HuggingFace's response headers, `credentialless` is the practical choice -- it enables cross-origin isolation while still allowing cross-origin fetches without credentials. All major browsers support `credentialless` as of 2024.
+</Callout>
+
+### vercel.json: Model File Caching
+
+If you self-host model files in your `public/` directory (or proxy them through Vercel), add cache rules:
+
+```json
+{
+  "headers": [
+    {
+      "source": "/models/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        }
+      ]
+    },
+    {
+      "source": "/(.*\\.wasm)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        },
+        {
+          "key": "Content-Type",
+          "value": "application/wasm"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Vercel Limits
+
+| Resource | Limit |
+|---|---|
+| Static asset (individual file) | No hard limit (served from Edge Network) |
+| Deployment source files (CLI) | 100 MB Hobby / 1 GB Pro |
+| Serverless function bundle | 250 MB uncompressed |
+| Edge function | 4 MB |
+
+For most LocalMode deployments, Vercel's limits are not a problem. Model files are fetched from HuggingFace CDN at runtime, not bundled in the deployment. The JavaScript bundle itself is typically under 5 MB.
+
+---
+
+## Cloudflare Pages
+
+Cloudflare Pages offers generous free tiers and a global edge network. Configuration uses a `_headers` file in your build output directory and optional `_redirects` for routing.
+
+### _headers File
+
+Create a `_headers` file (no extension) in your build output directory (typically `out/` for static exports or `dist/`):
+
+```
+# Cross-origin isolation for SharedArrayBuffer (multi-threaded wllama)
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: credentialless
+  Content-Security-Policy: script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:;
+
+# Immutable cache for model files
+/models/*
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+
+# Immutable cache for WASM binaries
+/*.wasm
+  Cache-Control: public, max-age=31536000, immutable
+  Content-Type: application/wasm
+```
+
+### Cloudflare Pages Limits
+
+| Resource | Limit |
+|---|---|
+| Individual file size | **25 MB** |
+| Total deployment size | 25,000 files |
+| Bandwidth | Unlimited (free tier) |
+
+The 25 MB per-file limit is the critical constraint. Most JavaScript bundles and WASM binaries are well under this, but you **cannot self-host model files on Cloudflare Pages**. A single embedding model (33 MB) already exceeds the limit. LLM weights (1-4 GB) are out of the question.
+
+This is not a problem in practice. LocalMode providers (`@localmode/transformers`, `@localmode/webllm`, `@localmode/wllama`) download models from HuggingFace CDN by default. The browser caches them locally in the Cache API or IndexedDB. Your Cloudflare Pages site serves only the application code.
+
+### Optional: R2 for Self-Hosted Models
+
+If you need to self-host models (for air-gapped environments or custom fine-tuned models), use [Cloudflare R2](https://developers.cloudflare.com/r2/) as a storage backend. R2 has no file size limits on individual objects and integrates with Cloudflare's CDN:
+
+```typescript
+// Point wllama at your R2 bucket
+const model = wllama.languageModel(
+  'my-org/custom-model:custom-Q4_K_M.gguf',
+  {
+    modelUrl: 'https://models.your-domain.com/custom-Q4_K_M.gguf',
+  }
+);
+```
+
+Configure R2 bucket CORS to return the right headers:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://your-app.pages.dev"],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "MaxAgeSeconds": 86400
+  }
+]
+```
+
+---
+
+## Netlify
+
+Netlify supports both a `_headers` file and `netlify.toml` configuration. Use whichever fits your workflow; the `netlify.toml` approach is easier to keep in version control.
+
+### netlify.toml
+
+```toml
+[build]
+  command = "npm run build"
+  publish = "out"
+
+# Cross-origin isolation for SharedArrayBuffer
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "credentialless"
+    Content-Security-Policy = "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:;"
+
+# Immutable cache for self-hosted model files
+[[headers]]
+  for = "/models/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+    Access-Control-Allow-Origin = "*"
+
+# Immutable cache for WASM binaries
+[[headers]]
+  for = "/*.wasm"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+```
+
+### Alternative: _headers File
+
+If you prefer the `_headers` approach, create the file in your publish directory:
+
+```
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: credentialless
+  Content-Security-Policy: script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:;
+
+/models/*
+  Cache-Control: public, max-age=31536000, immutable
+  Access-Control-Allow-Origin: *
+
+/*.wasm
+  Cache-Control: public, max-age=31536000, immutable
+```
+
+### Netlify Limits
+
+| Resource | Limit |
+|---|---|
+| Individual file size | No documented hard limit for static assets |
+| Deployment size | Soft limit, can be raised |
+| Large Media | 100 MB per file |
+| Bandwidth | 100 GB/month (free tier) |
+
+Like Cloudflare Pages, the practical approach is to let models load from HuggingFace CDN and serve only your application code from Netlify.
+
+---
+
+## Next.js Static Export vs Server Mode
+
+LocalMode apps are inherently static -- all inference happens in the browser. You have two options for Next.js deployment:
+
+### Static Export (`output: 'export'`)
+
+```typescript
+// next.config.ts
+const nextConfig: NextConfig = {
+  output: 'export',
+  // ...
+};
+```
+
+This generates a fully static site in the `out/` directory. It works on any static host (Cloudflare Pages, Netlify, S3, GitHub Pages) without server infrastructure. The tradeoff: no API routes, no server-side rendering, no ISR.
+
+For a pure LocalMode app, this is usually the right choice. You are not running server-side inference, so you do not need a server.
+
+### Standalone / Server Mode (`output: 'standalone'`)
+
+```typescript
+// next.config.ts
+const nextConfig: NextConfig = {
+  output: 'standalone',
+  // ...
+};
+```
+
+This is what the [LocalMode showcase app](https://localmode.ai) uses. It preserves Next.js server capabilities (SSR for the landing page, metadata generation, dynamic OG images) while all AI features run client-side. Vercel handles this natively. Cloudflare supports it via their [Next.js adapter](https://developers.cloudflare.com/workers/framework-guides/web-apps/nextjs/). Netlify supports it via their [Next.js runtime](https://docs.netlify.com/frameworks/next-js/overview/).
+
+---
+
+## Model CDN Strategy: Self-Host vs HuggingFace
+
+Every LocalMode provider downloads models from a CDN. The question is whose CDN.
+
+### Default: HuggingFace CDN (Recommended)
+
+By default, `@localmode/transformers` fetches from `huggingface.co`, `@localmode/webllm` fetches from `huggingface.co`, and `@localmode/wllama` fetches from `huggingface.co`. The wllama WASM binaries load from `cdn.jsdelivr.net`.
+
+Advantages:
+- Zero storage cost on your hosting platform
+- Models are cached in the user's browser after first download
+- HuggingFace's CDN is designed for serving large ML model files
+- No deployment size limits to worry about
+
+The COEP header `credentialless` is critical here. It allows fetching model files from `huggingface.co` without requiring HuggingFace to send `Cross-Origin-Resource-Policy` headers.
+
+### Self-Hosted Models
+
+For enterprises with compliance requirements, air-gapped environments, or custom fine-tuned models, you may need to self-host. Your options:
+
+| Platform | Self-Hosting Approach |
+|---|---|
+| Vercel | `public/models/` directory (small models only) or external storage (S3, R2) |
+| Cloudflare | R2 bucket with custom domain |
+| Netlify | External storage (25 MB limit makes in-deployment hosting impractical for models) |
+
+Point providers at your custom URL:
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+// Custom model URL for Transformers.js
+const model = transformers.embedding('Xenova/bge-small-en-v1.5', {
+  modelUrl: 'https://models.your-company.com/bge-small-en-v1.5/',
+});
+
+// Custom GGUF URL for wllama
+const llm = wllama.languageModel('custom-model', {
+  modelUrl: 'https://models.your-company.com/custom-Q4_K_M.gguf',
+});
+```
+
+If self-hosting, set these headers on your model storage:
+
+```
+Access-Control-Allow-Origin: https://your-app.com
+Cache-Control: public, max-age=31536000, immutable
+Accept-Ranges: bytes
+```
+
+The `Accept-Ranges: bytes` header enables HTTP Range requests, which are essential for `createModelLoader()`'s chunked download and resume-from-interrupt features.
+
+---
+
+## Verifying Your Configuration
+
+After deploying, verify that all critical headers are set correctly. Open your browser DevTools, navigate to your deployed app, and check the response headers:
+
+```typescript
+// Run in browser console to verify cross-origin isolation
+console.log('Cross-origin isolated:', crossOriginIsolated);
+console.log('SharedArrayBuffer available:', typeof SharedArrayBuffer !== 'undefined');
+```
+
+Or use LocalMode's built-in capability detection:
+
+```typescript
+import { detectCapabilities } from '@localmode/core';
+
+const caps = await detectCapabilities();
+console.log('WASM:', caps.features.wasm);
+console.log('WebGPU:', caps.features.webgpu);
+console.log('SharedArrayBuffer:', caps.features.sharedarraybuffer);
+console.log('Cross-Origin Isolated:', caps.features.crossOriginisolated);
+console.log('IndexedDB:', caps.features.indexeddb);
+```
+
+If `crossOriginisolated` is `false` on your deployed site, your COOP/COEP headers are missing or misconfigured. Check the Network tab in DevTools to inspect the actual response headers.
+
+<Callout type="warn" title="COEP can break third-party embeds">
+  Cross-origin isolation affects the entire page. If your app embeds third-party iframes (analytics widgets, chat widgets, embedded videos), those iframes must also support cross-origin isolation or be loaded with `credentialless` COEP. Test thoroughly after enabling these headers. If a third-party embed breaks, you can scope the COOP/COEP headers to specific routes instead of applying them globally.
+</Callout>
+
+---
+
+## Complete Configuration Reference
+
+Here is a side-by-side summary of the minimum required configuration for each platform:
+
+| Configuration | Vercel | Cloudflare Pages | Netlify |
+|---|---|---|---|
+| Header config file | `next.config.ts` `headers()` | `_headers` | `netlify.toml` or `_headers` |
+| COOP | `same-origin` | `same-origin` | `same-origin` |
+| COEP | `credentialless` | `credentialless` | `credentialless` |
+| CSP for WASM | `wasm-unsafe-eval` | `wasm-unsafe-eval` | `wasm-unsafe-eval` |
+| Model cache | `vercel.json` headers | `_headers` rules | `netlify.toml` headers |
+| Self-host models | `public/` or S3 | R2 bucket | External storage |
+| Max file size (deploy) | 100 MB - 1 GB | 25 MB per file | Soft limit |
+| Static export support | Native | Native | Native |
+| Server mode support | Native | Via adapter | Via runtime |
+
+---
+
+## Checklist: Deploying a LocalMode App
+
+- [ ] **Set COOP/COEP headers** -- `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: credentialless` on all routes
+- [ ] **Add CSP for WASM** -- Include `wasm-unsafe-eval` in `script-src` and `blob:` in `worker-src`
+- [ ] **Set model cache headers** -- `Cache-Control: public, max-age=31536000, immutable` for `/models/*` and `*.wasm` routes
+- [ ] **Verify cross-origin isolation** -- Check `crossOriginIsolated === true` in browser console after deployment
+- [ ] **Test wllama multi-threading** -- Confirm no single-thread warning in console when using GGUF models
+- [ ] **Check file size limits** -- Do not attempt to deploy model files to Cloudflare Pages (25 MB limit)
+- [ ] **Choose model CDN strategy** -- Default HuggingFace CDN for most cases, R2/S3 for enterprise self-hosting
+- [ ] **Test third-party embeds** -- Verify analytics, chat widgets, and iframes still work with COEP enabled
+- [ ] **Enable CORS on model storage** -- If self-hosting models, set `Access-Control-Allow-Origin` and `Accept-Ranges: bytes`
+- [ ] **Test offline behavior** -- After first model download, verify the app works with network disabled
+
+---
+
+## Methodology
+
+- [Cloudflare Pages Headers Documentation](https://developers.cloudflare.com/pages/configuration/headers/) -- `_headers` file syntax and behavior
+- [Cloudflare Pages Limits](https://developers.cloudflare.com/pages/platform/limits/) -- 25 MB per-file limit
+- [Vercel Cache-Control Headers](https://vercel.com/docs/caching/cache-control-headers) -- Edge caching behavior and configuration
+- [Vercel Limits](https://vercel.com/docs/limits) -- Deployment source file and function size limits
+- [Netlify Custom Headers](https://docs.netlify.com/manage/routing/headers/) -- `_headers` file and `netlify.toml` syntax
+- [web.dev: Making Your Website Cross-Origin Isolated](https://web.dev/articles/coop-coep) -- COOP/COEP explainer
+- [MDN: Cross-Origin-Embedder-Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Embedder-Policy) -- COEP header reference
+- [MDN: Content-Security-Policy script-src](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/script-src) -- `wasm-unsafe-eval` directive
+- [Next.js Deployment Guide](https://nextjs.org/docs/app/getting-started/deploying) -- Static export and server mode options
+- [Cloudflare Workers Next.js Guide](https://developers.cloudflare.com/workers/framework-guides/web-apps/nextjs/) -- Next.js adapter for Cloudflare
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 32+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

@@ -132,7 +132,7 @@ export interface DoOCRResult {
  * @example
  * ```ts
  * const { text } = await extractText({
- *   model: transformers.ocr('Xenova/trocr-base-handwritten'),
+ *   model: transformers.ocr('Xenova/trocr-small-printed'),
  *   image: imageBlob,
  * });
  * ```

@@ -4,37 +4,163 @@
  */
 'use client';
 
-import { useRef, useEffect } from 'react';
-import { Send, User, Bot, HardDrive, Square } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Send, User, Bot, HardDrive, Square, Zap, Wrench, CheckCircle, Clock, ChevronDown, ImagePlus, X } from 'lucide-react';
 import { Button, Spinner, IconBox, Badge, Progress } from './ui';
-import { cn, formatRelativeTime } from '../_lib/utils';
+import { cn, formatRelativeTime, getDisplayText } from '../_lib/utils';
 import { useChatStore } from '../_store/chat.store';
 import { useUIStore } from '../_store/ui.store';
 import { useModelStore } from '../_store/model.store';
-import { useChatInput, useChat } from '../_hooks';
-import { CATEGORY_INFO } from '../_lib/constants';
+import { useChatInput } from '../_hooks';
+import { CATEGORY_INFO, AGENT_TOOLS_INFO } from '../_lib/constants';
+import type { ChatMessage, AgentStepDisplay, ChatImageAttachment } from '../_lib/types';
 
 /** Props for the ChatInterface component */
 interface ChatInterfaceProps {
+  /** Chat messages to display */
+  messages: ChatMessage[];
+  /** Whether the model is currently streaming */
+  isStreaming: boolean;
+  /** ID of the message currently being streamed */
+  streamingMessageId: string | null;
+  /** Callback to send a message */
+  sendMessage: (text: string, images?: ChatImageAttachment[]) => Promise<void>;
+  /** Callback to cancel streaming */
+  cancelStreaming: () => void;
   /** Placeholder text for the input field */
   placeholder?: string;
+  /** Whether the selected model supports vision input */
+  supportsVision?: boolean;
+}
+
+/** Get the color class for a tool name badge */
+function getToolColor(toolName: string) {
+  const info = AGENT_TOOLS_INFO.find((t) => t.name === toolName || t.name === toolName.replace('_web', ''));
+  return info?.color ?? 'text-poster-text-sub bg-poster-surface';
+}
+
+/** Render a single collapsible agent step card */
+function AgentStepCard({ step }: { step: AgentStepDisplay }) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (step.type === 'finish') {
+    return (
+      <div className="flex items-center gap-2 py-1 text-xs text-success">
+        <CheckCircle className="w-3 h-3" />
+        <span className="font-medium">Final Answer</span>
+        <span className="text-poster-text-sub/50 ml-auto">
+          <Clock className="w-3 h-3 inline mr-0.5" />
+          {step.durationMs}ms
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-poster-border/20 rounded-lg overflow-hidden mb-1">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-poster-surface/50 transition-colors cursor-pointer"
+      >
+        <Wrench className="w-3 h-3 text-poster-text-sub/60 shrink-0" />
+        <span className="text-poster-text-sub/60">Step {step.index + 1}</span>
+        <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full ${getToolColor(step.toolName ?? '')}`}>
+          {step.toolName}
+        </span>
+        <span className="text-poster-text-sub/50 ml-auto shrink-0">
+          <Clock className="w-3 h-3 inline mr-0.5" />
+          {step.durationMs}ms
+        </span>
+        <ChevronDown className={cn('w-3 h-3 text-poster-text-sub/40 transition-transform', expanded && 'rotate-180')} />
+      </button>
+      {expanded && (
+        <div className="px-3 py-2 border-t border-poster-border/20 bg-poster-surface/30 space-y-1">
+          {step.toolArgs && Object.keys(step.toolArgs).length > 0 && (
+            <div className="text-[10px] text-poster-text-sub/60">
+              <span className="font-semibold">Args: </span>
+              {Object.entries(step.toolArgs).map(([k, v]) => (
+                <span key={k} className="mr-2">
+                  {k}={typeof v === 'string' ? `"${v.length > 80 ? v.slice(0, 80) + '...' : v}"` : JSON.stringify(v)}
+                </span>
+              ))}
+            </div>
+          )}
+          {step.observation && (
+            <div className="text-[10px] text-poster-text-sub leading-relaxed whitespace-pre-wrap">
+              <span className="font-semibold">Result: </span>
+              {step.observation.length > 300 ? step.observation.slice(0, 300) + '...' : step.observation}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Render collapsible agent step cards for an agent-mode assistant message */
+function renderAgentSteps(steps: AgentStepDisplay[]) {
+  return (
+    <div className="mb-2 space-y-0.5">
+      {steps.map((step) => (
+        <AgentStepCard key={step.index} step={step} />
+      ))}
+    </div>
+  );
 }
 
 /** Main chat UI with message history and input */
-export function ChatInterface({ placeholder = 'Type a message...' }: ChatInterfaceProps) {
-  // Get chat state from store
-  const { messages, streamingMessageId, selectedModel, isStreaming } = useChatStore();
+export function ChatInterface({
+  messages,
+  isStreaming,
+  streamingMessageId,
+  sendMessage,
+  cancelStreaming,
+  placeholder = 'Type a message...',
+  supportsVision = false,
+}: ChatInterfaceProps) {
+  // Get UI state from stores
+  const selectedModel = useChatStore((s) => s.selectedModel);
   const { input, isSending } = useUIStore();
   const { loadingModelId, loadProgress, getLoadingModel } = useModelStore();
-  const { sendMessage, cancelStreaming } = useChat();
 
   // Get loading model info
   const loadingModel = getLoadingModel();
   const categoryInfo = loadingModel ? CATEGORY_INFO[loadingModel.category] : null;
 
-  // Setup chat input handling
-  const { textareaRef, handleSubmit, handleKeyDown, handleInputChange, isDisabled, canSubmit } =
-    useChatInput({ onSendMessage: sendMessage });
+  // Setup chat input handling (with image upload integration)
+  const { textareaRef, handleSubmit, handleKeyDown, handleInputChange, isDisabled, canSubmit, imageUpload } =
+    useChatInput({ onSendMessage: sendMessage, isStreaming, supportsVision });
+
+  // Drag-and-drop state
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  /** File input ref for image picker */
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  /** Handle drag over */
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!supportsVision) return;
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  /** Handle drag leave */
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  /** Handle drop */
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (!supportsVision) return;
+    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'));
+    if (files.length > 0) {
+      imageUpload.addImages(files);
+    }
+  };
 
   // Auto-scroll to bottom on new messages
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -200,14 +326,59 @@ export function ChatInterface({ placeholder = 'Type a message...' }: ChatInterfa
                       : 'bg-poster-surface text-poster-text-main border border-poster-border/30'
                   )}
                 >
-                  {message.content ||
-                    (streamingMessageId === message.id && (
-                      <Spinner size="sm" className="text-poster-primary" />
-                    ))}
-                  {streamingMessageId === message.id && message.content && (
+                  {/* Agent step cards (collapsed by default) */}
+                  {message.role === 'assistant' && message.agentSteps && message.agentSteps.length > 0 && (
+                    renderAgentSteps(message.agentSteps)
+                  )}
+                  {/* Image display for multimodal messages */}
+                  {Array.isArray(message.content) && (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {message.content
+                        .filter((p) => p.type === 'image')
+                        .map((p, idx) => (
+                          <img
+                            key={idx}
+                            src={`data:${(p as { mimeType: string; data: string }).mimeType};base64,${(p as { data: string }).data}`}
+                            alt={`Attached image ${idx + 1}`}
+                            className="max-w-48 max-h-48 rounded-lg object-cover"
+                          />
+                        ))}
+                    </div>
+                  )}
+                  {/* Text content */}
+                  {(() => {
+                    const textContent = typeof message.content === 'string' ? message.content : getDisplayText(message.content);
+                    if (textContent && textContent !== 'Thinking...') return textContent;
+                    if (textContent === 'Thinking...' && streamingMessageId === message.id) {
+                      return (
+                        <span className="flex items-center gap-2">
+                          <Spinner size="sm" className="text-poster-primary" />
+                          <span className="text-poster-text-sub/60 text-sm">Thinking...</span>
+                        </span>
+                      );
+                    }
+                    if (!textContent && streamingMessageId === message.id) return <Spinner size="sm" className="text-poster-primary" />;
+                    return textContent;
+                  })()}
+                  {streamingMessageId === message.id && (() => {
+                    const textContent = typeof message.content === 'string' ? message.content : getDisplayText(message.content);
+                    return textContent && textContent !== 'Thinking...';
+                  })() && (
                     <span className="inline-block w-0.5 h-4 bg-poster-primary animate-pulse ml-0.5 align-middle" />
                   )}
                 </div>
+
+                {/* Cached response badge */}
+                {message.role === 'assistant' && message.cached && (
+                  <div className="chat-footer mt-1">
+                    <span className="inline-flex items-center gap-1 text-[10px] text-poster-accent-teal bg-poster-accent-teal/10 px-2 py-0.5 rounded-full">
+                      <Zap className="w-3 h-3" />
+                      Cached{message.cacheDurationMs !== undefined && message.cacheDurationMs > 0
+                        ? ` (${message.cacheDurationMs}ms)`
+                        : ''}
+                    </span>
+                  </div>
+                )}
               </div>
             ))}
         <div ref={messagesEndRef} />
@@ -215,40 +386,119 @@ export function ChatInterface({ placeholder = 'Type a message...' }: ChatInterfa
 
       {/* Input form */}
       <form onSubmit={handleSubmit} className="p-4">
-        <div className="flex w-full bg-poster-surface border border-poster-border/30 rounded-xl p-1 shadow-inner items-stretch gap-1">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            disabled={isDisabled}
-            className="textarea textarea-ghost flex-1 resize-none min-h-10 max-h-40 bg-transparent text-poster-text-main placeholder:text-poster-text-sub/40 focus:bg-transparent focus:outline-none"
-            rows={1}
-          />
-          {isStreaming ? (
-            <button
-              type="button"
-              onClick={cancelStreaming}
-              className="btn btn-sm bg-error hover:bg-error/80 text-white border-none shadow-md self-stretch rounded-lg min-h-0 h-auto px-3"
-              title="Stop generation"
-            >
-              <Square className="w-4 h-4 fill-current" />
+        {/* Image upload error */}
+        {imageUpload.error && (
+          <div className="mb-2 flex items-center gap-2 text-xs text-warning bg-warning/10 px-3 py-1.5 rounded-lg">
+            <span>{imageUpload.error.message}</span>
+            <button type="button" onClick={imageUpload.clearError} className="ml-auto text-warning/60 hover:text-warning">
+              <X className="w-3 h-3" />
             </button>
-          ) : (
-            <Button
-              type="submit"
-              variant="primary"
-              className="bg-poster-primary hover:bg-poster-primary-dark text-white border-none shadow-md self-stretch rounded-lg min-h-0 h-auto px-3"
-              disabled={!canSubmit}
-              loading={isSending}
-            >
-              <Send className="w-4 h-4" />
-            </Button>
+          </div>
+        )}
+
+        <div
+          className={cn(
+            'w-full bg-poster-surface border rounded-xl p-1 shadow-inner transition-colors',
+            isDragOver ? 'border-poster-primary border-dashed bg-poster-primary/5' : 'border-poster-border/30'
           )}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          {/* Image preview thumbnails */}
+          {supportsVision && imageUpload.images.length > 0 && (
+            <div className="flex flex-wrap gap-2 px-2 pt-2 pb-1">
+              {imageUpload.images.map((img, idx) => (
+                <div key={idx} className="relative group">
+                  <img
+                    src={img.previewUrl}
+                    alt={img.name}
+                    className="w-16 h-16 rounded-lg object-cover border border-poster-border/30"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => imageUpload.removeImage(idx)}
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-error text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Drag overlay */}
+          {isDragOver && (
+            <div className="px-3 py-2 text-center text-sm text-poster-primary">
+              <ImagePlus className="w-5 h-5 inline mr-1" />
+              Drop images here
+            </div>
+          )}
+
+          <div className="flex items-stretch gap-1">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              onPaste={supportsVision ? imageUpload.pasteHandler : undefined}
+              placeholder={placeholder}
+              disabled={isDisabled}
+              className="textarea textarea-ghost flex-1 resize-none min-h-10 max-h-40 bg-transparent text-poster-text-main placeholder:text-poster-text-sub/40 focus:bg-transparent focus:outline-none"
+              rows={1}
+            />
+
+            {/* Image upload button (vision models only) */}
+            {supportsVision && !isStreaming && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    if (files.length > 0) imageUpload.addImages(files);
+                    e.target.value = '';
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isDisabled}
+                  className="btn btn-ghost btn-sm self-stretch rounded-lg min-h-0 h-auto px-2 text-poster-text-sub/60 hover:text-poster-primary"
+                  title="Attach images"
+                >
+                  <ImagePlus className="w-4 h-4" />
+                </button>
+              </>
+            )}
+
+            {isStreaming ? (
+              <button
+                type="button"
+                onClick={cancelStreaming}
+                className="btn btn-sm bg-error hover:bg-error/80 text-white border-none shadow-md self-stretch rounded-lg min-h-0 h-auto px-3"
+                title="Stop generation"
+              >
+                <Square className="w-4 h-4 fill-current" />
+              </button>
+            ) : (
+              <Button
+                type="submit"
+                variant="primary"
+                className="bg-poster-primary hover:bg-poster-primary-dark text-white border-none shadow-md self-stretch rounded-lg min-h-0 h-auto px-3"
+                disabled={!canSubmit}
+                loading={isSending}
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
         </div>
         <p className="text-[10px] text-poster-text-sub/40 mt-2 text-center">
-          Press Enter to send, Shift+Enter for new line
+          Press Enter to send, Shift+Enter for new line{supportsVision ? ' · Paste or drop images' : ''}
         </p>
       </form>
     </div>

@@ -1,0 +1,357 @@
+---
+title: "GGUF Models in the Browser: 135,000+ Models Via llama.cpp WASM"
+description: "Run any of 135,000+ GGUF models from HuggingFace directly in the browser using llama.cpp compiled to WebAssembly. No WebGPU required. Inspect model metadata before downloading, check device compatibility, and stream text generation -- all with the same LanguageModel interface you already know."
+author: LocalMode
+date: 2026-03-17
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+If you follow r/LocalLLaMA or spend any time on HuggingFace, you have seen GGUF files everywhere. They are the standard format for running quantized LLMs locally, and there are now over 135,000 GGUF models on HuggingFace alone. Until recently, running them meant installing llama.cpp on your machine, fiddling with command-line flags, and hoping your GPU was compatible.
+
+What if you could point your browser at any GGUF file on HuggingFace, inspect its metadata without downloading the full model, check whether your device can handle it, and then stream a conversation -- all without leaving a browser tab?
+
+That is exactly what `@localmode/wllama` does. It wraps [wllama](https://github.com/ngxson/wllama) (a WebAssembly binding for llama.cpp by ngxson) into the same `LanguageModel` interface used by `@localmode/webllm` and `@localmode/transformers`. The same `streamText()` and `generateText()` calls. The same hooks. The same middleware. But instead of requiring WebGPU, it runs on plain WASM -- meaning it works in every modern browser, including Firefox and Safari.
+
+This post walks through the full stack: what GGUF is, why WASM matters, how to inspect and run models, and what tradeoffs to expect.
+
+---
+
+## What Is GGUF?
+
+GGUF stands for GPT-Generated Unified Format. It was created by Georgi Gerganov (ggerganov), the developer behind llama.cpp, as a successor to the older GGML format. The format was introduced in August 2023 and has since become the dominant standard for distributing quantized LLMs.
+
+Unlike tensor-only formats like safetensors, a single GGUF file bundles everything needed to run a model:
+
+- **Model weights** (quantized to various bit widths)
+- **Architecture metadata** (layer count, head count, embedding dimensions)
+- **Tokenizer vocabulary and configuration**
+- **Context length, quantization type, and author information**
+
+This self-contained design is what makes the "inspect before download" workflow possible. The metadata is stored in the file header, so you can read it with a tiny HTTP Range request without downloading gigabytes of weights.
+
+The GGUF ecosystem on HuggingFace has grown rapidly. As of March 2026, there are over 144,000 GGUF models on the platform, published by quantizers like [bartowski](https://huggingface.co/bartowski) (high-quality quantizations of popular models), [TheBloke](https://huggingface.co/TheBloke) (one of the earliest and most extensive GGUF catalogs), and [unsloth](https://huggingface.co/unsloth) (dynamic quantizations with state-of-the-art accuracy). If a model exists, someone has probably published a GGUF of it.
+
+---
+
+## Why WASM Matters: Universal Browser Support
+
+WebGPU is fast -- but it is not everywhere. As of early 2026, WebGPU is supported in Chrome 113+, Edge 113+, and Safari 18+. Firefox still limits it to Nightly builds. That means a meaningful fraction of your users cannot run WebGPU-based inference at all.
+
+WebAssembly, on the other hand, has been supported in every major browser since 2017. Chrome 57+, Edge 16+, Firefox 52+, Safari 11+, and every iOS browser. If your users have a browser made in the last eight years, they can run WASM.
+
+The `@localmode/wllama` package compiles llama.cpp to WASM via [wllama](https://github.com/ngxson/wllama), ngxson's WebAssembly binding that has gained significant adoption -- Firefox now officially uses wllama as one of its inference engines for their Link Preview feature.
+
+| Feature | @localmode/wllama (WASM) | @localmode/webllm (WebGPU) |
+|---|---|---|
+| Browser support | All modern browsers | WebGPU-capable only |
+| Available models | 160K+ GGUF models | ~30 curated MLC models |
+| Model format | GGUF (universal standard) | MLC (pre-compiled) |
+| GPU required | No | Yes |
+| Inference speed | ~40-50% of WebGPU | Native GPU speed |
+| Multi-threading | With CORS headers | Automatic |
+
+The tradeoff is clear: WASM is slower, but it works everywhere and gives you access to vastly more models. For many applications -- summarization, question answering, writing assistance, code generation -- the latency difference is acceptable, especially when the alternative is "does not work at all" for users without WebGPU.
+
+---
+
+## Inspecting Models Before Downloading
+
+One of the most useful features in `@localmode/wllama` is the GGUF metadata parser. Before committing to a multi-gigabyte download, you can read the model's header with a single HTTP Range request that fetches roughly 4KB of data.
+
+```typescript
+import { parseGGUFMetadata } from '@localmode/wllama';
+
+const metadata = await parseGGUFMetadata(
+  'bartowski/Llama-3.2-1B-Instruct-GGUF:Llama-3.2-1B-Instruct-Q4_K_M.gguf'
+);
+
+console.log(metadata.architecture);   // 'llama'
+console.log(metadata.contextLength);  // 131072
+console.log(metadata.quantization);   // 'Q4_K_M'
+console.log(metadata.parameterCount); // ~1.24 billion
+console.log(metadata.vocabSize);      // 32000
+console.log(metadata.layerCount);     // 22
+console.log(metadata.headCount);      // 32
+console.log(metadata.modelName);      // 'Llama 3.2 1B Instruct'
+```
+
+The parser accepts three URL formats: full HuggingFace URLs, the `repo/name:filename.gguf` shorthand, and any CDN URL that supports Range requests. Under the hood, it uses the `@huggingface/gguf` library to parse the binary header, then maps the raw `general.file_type` integer to a human-readable quantization string (Q4_K_M, Q5_K_M, Q8_0, and so on) using a comprehensive lookup table covering 25 known GGUF quantization types.
+
+---
+
+## Checking Browser Compatibility
+
+Knowing a model's metadata is useful, but the real question is: "Can my device actually run this?" The compatibility checker cross-references the parsed metadata with the current device's capabilities:
+
+```typescript
+import { checkGGUFBrowserCompatFromURL } from '@localmode/wllama';
+
+const result = await checkGGUFBrowserCompatFromURL(
+  'bartowski/Llama-3.2-1B-Instruct-GGUF:Llama-3.2-1B-Instruct-Q4_K_M.gguf'
+);
+
+console.log(result.canRun);             // true
+console.log(result.estimatedRAMHuman);   // '900 MB'
+console.log(result.deviceRAMHuman);      // '8 GB'
+console.log(result.estimatedSpeed);      // '~30-50 tok/s multi-thread'
+console.log(result.hasCORS);             // true (multi-threading available)
+console.log(result.warnings);            // []
+console.log(result.recommendations);     // []
+```
+
+The checker estimates RAM usage (file size multiplied by a 1.2x overhead factor for WASM memory and inference buffers), reads device RAM from `navigator.deviceMemory` where available, queries storage quota from `navigator.storage.estimate()`, and detects whether `SharedArrayBuffer` is available for multi-threaded execution. It generates human-readable warnings and actionable recommendations -- for example, suggesting a Q4_K_M quantization if you are trying to load a Q8_0 that exceeds your RAM, or recommending CORS headers for a 2-4x speed improvement.
+
+This is the same pattern used in the [GGUF Explorer](https://localmode.ai/gguf-explorer) showcase app, where users browse the curated catalog, inspect any model, see compatibility results, and then download and chat -- all in one flow.
+
+---
+
+## The Curated Model Catalog
+
+While you can load any of the 135,000+ GGUF models on HuggingFace, `@localmode/wllama` ships a curated catalog of 17 models that have been tested and verified to work well with the wllama runtime (llama.cpp b7179). All are Q4_K_M quantized for the best size-to-quality ratio in browser environments.
+
+### Tiny (under 500MB)
+
+| Model | Size | Context | Parameters | Best For |
+|---|---|---|---|---|
+| SmolLM2 135M | 70MB | 8K | 135M | Instant loading, testing |
+| SmolLM2 360M | 234MB | 8K | 360M | Very small, fast responses |
+| Qwen 2.5 0.5B | 386MB | 4K | 500M | Tiny with great quality |
+
+### Small (500MB - 1GB)
+
+| Model | Size | Context | Parameters | Best For |
+|---|---|---|---|---|
+| TinyLlama 1.1B Chat | 670MB | 2K | 1.1B | Classic, fast and reliable |
+| Llama 3.2 1B | 750MB | 128K | 1.2B | General purpose, huge context |
+| Qwen 2.5 1.5B | 986MB | 32K | 1.5B | Multilingual |
+
+### Medium (1GB - 2GB)
+
+| Model | Size | Context | Parameters | Best For |
+|---|---|---|---|---|
+| Qwen 2.5 Coder 1.5B | 1.0GB | 32K | 1.5B | Code-specialized |
+| SmolLM2 1.7B | 1.06GB | 8K | 1.7B | Efficient per-param quality |
+| Phi 3.5 Mini | 1.24GB | 4K | 3.8B | Reasoning, coding |
+| Gemma 2 2B IT | 1.3GB | 8K | 2B | Instruction following |
+| Llama 3.2 3B | 1.93GB | 128K | 3.2B | High quality, huge context |
+| Qwen 2.5 3B | 1.94GB | 32K | 3B | High quality multilingual |
+
+### Large (2GB+)
+
+| Model | Size | Context | Parameters | Best For |
+|---|---|---|---|---|
+| Phi-4 Mini | 2.3GB | 4K | 3.8B | Strong reasoning and coding |
+| Qwen 2.5 Coder 7B | 4.5GB | 32K | 7B | Best code generation |
+| Mistral 7B v0.3 | 4.37GB | 32K | 7.2B | Strong general performance |
+| Llama 3.1 8B | 4.92GB | 128K | 8B | Best quality (8GB+ RAM) |
+
+The catalog is accessible programmatically via `WLLAMA_MODELS`, and each entry includes the HuggingFace download URL, architecture, parameter count, and context length. The `getModelCategory()` helper classifies any model by size tier.
+
+---
+
+## Running Models: Same Interface, Different Backend
+
+The key design principle: `@localmode/wllama` implements the same `LanguageModel` interface as `@localmode/webllm` and `@localmode/transformers`. If you have code that calls `streamText()` or `generateText()`, switching to wllama is a one-line change.
+
+### Streaming generation
+
+```typescript
+import { streamText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+const model = wllama.languageModel(
+  'bartowski/Llama-3.2-1B-Instruct-GGUF:Llama-3.2-1B-Instruct-Q4_K_M.gguf'
+);
+
+const result = await streamText({
+  model,
+  prompt: 'Explain quantum computing in simple terms.',
+});
+
+let fullText = '';
+for await (const chunk of result.stream) {
+  fullText += chunk.text;
+  // Update your UI with each token
+}
+```
+
+### Non-streaming generation
+
+```typescript
+import { generateText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+
+const { text, usage } = await generateText({
+  model,
+  prompt: 'What is the capital of France?',
+});
+
+console.log(text);
+console.log('Tokens used:', usage.totalTokens);
+```
+
+### Loading any arbitrary GGUF model
+
+You are not limited to the curated catalog. Pass any HuggingFace GGUF URL:
+
+```typescript
+// HuggingFace shorthand (repo:filename)
+const model = wllama.languageModel(
+  'bartowski/Phi-3.5-mini-instruct-GGUF:Phi-3.5-mini-instruct-Q5_K_M.gguf'
+);
+
+// Full URL
+const model2 = wllama.languageModel(
+  'https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf'
+);
+```
+
+The model is downloaded, cached in the browser's Cache API, and loaded into WASM memory on the first call. Subsequent loads are instant if the model is still cached.
+
+---
+
+## Understanding Quantization Types
+
+If you browse GGUF repositories on HuggingFace, you will see filenames like `Q4_K_M`, `Q5_K_M`, `Q8_0`, and `F16`. These describe how aggressively the model weights have been compressed from their original floating-point precision.
+
+| Format | Bits/Weight | Size (7B model) | Quality | Speed | Use Case |
+|---|---|---|---|---|---|
+| Q2_K | ~2.5 | ~2.5GB | Low | Fastest | Extreme compression, low quality |
+| Q3_K_M | ~3.5 | ~3.3GB | Fair | Fast | Tight memory budgets |
+| **Q4_K_M** | **~4.5** | **~4.1GB** | **Good** | **Good** | **Sweet spot for browser use** |
+| Q5_K_M | ~5.5 | ~4.8GB | Very Good | Moderate | Higher quality when RAM allows |
+| Q6_K | ~6.5 | ~5.5GB | Excellent | Slower | Near-lossless quality |
+| Q8_0 | ~8.5 | ~7.2GB | Near-FP16 | Slow | Maximum quality, high RAM |
+| F16 | 16 | ~14GB | Full | Slowest | Full precision, not for browsers |
+
+The "K" in Q4_K_M and Q5_K_M refers to the "K-quant" family introduced by llama.cpp, which uses per-block scaling and improved handling of weight outliers compared to older methods like Q4_0. The "M" suffix indicates a medium-aggressive tuning -- there are also "S" (small/more aggressive) and "L" (large/less aggressive) variants.
+
+<Callout type="info" title="Practical guidance">
+  **Q4_K_M is the recommended default for browser use.** It provides roughly 75% file size reduction with minimal perceptible quality loss for most tasks. Step up to Q5_K_M if you need better reasoning or coding accuracy and your device has the RAM. Q8_0 is the ceiling for when quality is paramount and memory is not a concern. Avoid Q2_K and Q3_K unless you are severely memory-constrained.
+</Callout>
+
+---
+
+## Multi-Threading and CORS
+
+The wllama WASM runtime supports multi-threaded execution via `SharedArrayBuffer`, which requires the page to be cross-origin isolated. Without the proper headers, wllama falls back to single-threaded mode, which is roughly 2-4x slower.
+
+To enable multi-threading, add these headers to your server:
+
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+In Next.js, this goes in `next.config.js`:
+
+```javascript
+async headers() {
+  return [{
+    source: '/(.*)',
+    headers: [
+      { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+      { key: 'Cross-Origin-Embedder-Policy', value: 'require-corp' },
+    ],
+  }];
+}
+```
+
+You can check the status programmatically:
+
+```typescript
+import { isCrossOriginIsolated } from '@localmode/wllama';
+
+if (isCrossOriginIsolated()) {
+  console.log('Multi-threading enabled');
+} else {
+  console.log('Single-thread fallback -- add CORS headers for 2-4x speed');
+}
+```
+
+---
+
+## Performance: Setting Expectations
+
+Let's be direct about performance. WASM-based inference is slower than WebGPU. Benchmarks consistently show WebGPU delivering 2-5x higher throughput for autoregressive text generation. For a 1B parameter model, you might see 30-50 tokens per second multi-threaded via WASM versus 80-120 tokens per second via WebGPU on the same hardware.
+
+But the comparison misses the point. WASM is not competing with WebGPU -- it is the fallback for when WebGPU is unavailable, and it is the gateway to 135,000+ models that are not available in pre-compiled MLC format. You can even use both together with a fallback pattern:
+
+```typescript
+import { isWebGPUSupported } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+import { wllama } from '@localmode/wllama';
+
+const hasGPU = await isWebGPUSupported();
+
+const model = hasGPU
+  ? webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC')
+  : wllama.languageModel('bartowski/Llama-3.2-1B-Instruct-GGUF:Llama-3.2-1B-Instruct-Q4_K_M.gguf');
+```
+
+This gives your users WebGPU speed when available and WASM universality when not. Both providers implement the same `LanguageModel` interface, so the rest of your application code does not change.
+
+---
+
+## The GGUF Explorer: Try It Live
+
+The [GGUF Explorer](https://localmode.ai/gguf-explorer) showcase app puts all of this together in a three-tab flow:
+
+1. **Browse** -- View the curated catalog of 17 models grouped by size tier (tiny, small, medium, large), or paste any HuggingFace GGUF URL
+2. **Inspect** -- See parsed metadata (architecture, parameters, context length, quantization) and browser compatibility (estimated RAM, device RAM, storage quota, speed estimate, warnings)
+3. **Chat** -- Download the model and start a streaming conversation
+
+The app demonstrates the complete `@localmode/wllama` API surface: `WLLAMA_MODELS` for the catalog, `parseGGUFMetadata()` for inspection, `checkGGUFBrowserCompat()` for compatibility, and `wllama.languageModel()` with `streamText()` for inference. Every operation runs entirely in the browser.
+
+---
+
+## Getting Started
+
+Install the package:
+
+```bash
+pnpm install @localmode/wllama @localmode/core
+```
+
+The minimal example is five lines:
+
+```typescript
+import { streamText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+const result = await streamText({ model, prompt: 'Hello!' });
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+For React applications, the same model works with every hook from `@localmode/react` -- `useChat`, `useGenerateText`, `useStreamText`, and the rest. No additional configuration needed.
+
+---
+
+## Methodology
+
+This article references information from the following sources:
+
+- [llama.cpp](https://github.com/ggml-org/llama.cpp) -- The open-source C/C++ LLM inference framework by ggerganov that defines the GGUF format
+- [GGUF specification on HuggingFace](https://huggingface.co/docs/hub/gguf) -- Official documentation on the GGUF file format and its metadata structure
+- [wllama](https://github.com/ngxson/wllama) -- WebAssembly binding for llama.cpp by ngxson, enabling browser-based inference
+- [HuggingFace GGUF model library](https://huggingface.co/models?library=gguf) -- The source for the 135,000+ GGUF model count (over 160,000 as of March 2026)
+- [bartowski on HuggingFace](https://huggingface.co/bartowski) -- Prolific GGUF quantizer whose models are used in the curated catalog
+- [llama.cpp quantization discussion](https://github.com/ggml-org/llama.cpp/discussions/2094) -- Community benchmarks comparing Q4_K_M, Q5_K_M, Q8_0, and other quantization types
+- [GGUF quantization guide](https://tonisagrista.com/blog/2026/quantization/) -- Practical guide to selecting quantization levels for different use cases
+- [WebGPU vs WebAssembly benchmarks](https://www.sitepoint.com/webgpu-vs-webasm-transformers-js/) -- Performance comparisons between WASM and WebGPU for browser-based ML inference
+- All code examples reference the `@localmode/wllama` package (wrapping `@wllama/wllama` v2.2.1 and `@huggingface/gguf` v0.1.14) and the GGUF Explorer showcase app in the LocalMode repository
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

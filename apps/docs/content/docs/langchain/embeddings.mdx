@@ -1,0 +1,103 @@
+---
+title: 'Embeddings'
+description: LocalModeEmbeddings — use any LocalMode embedding model with LangChain.
+icon: Cpu
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# LocalModeEmbeddings
+
+Drop-in replacement for `OpenAIEmbeddings` or any LangChain `Embeddings` class, backed by local inference.
+
+<Callout type="info" title="See it in action">
+  Try [LangChain RAG](https://localmode.ai/langchain-rag) for a working demo.
+</Callout>
+
+## Constructor
+
+```typescript
+import { LocalModeEmbeddings } from '@localmode/langchain';
+import { transformers } from '@localmode/transformers';
+
+const embeddings = new LocalModeEmbeddings({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+});
+```
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `model` | `EmbeddingModel` | Yes | Any `@localmode/core` `EmbeddingModel` instance |
+
+The constructor also accepts an optional second parameter of LangChain `EmbeddingsParams` for callback configuration.
+
+## Methods
+
+### embedDocuments
+
+Embed multiple texts. Returns `number[][]` (LangChain format).
+
+```typescript
+const vectors = await embeddings.embedDocuments(['Hello world', 'How are you?']);
+// vectors: number[][] — each inner array has 384 dimensions
+```
+
+Internally calls `model.doEmbed({ values: texts })` and converts each `Float32Array` to `number[]` via `Array.from()`. Returns `[]` for empty input without calling the model.
+
+### embedQuery
+
+Embed a single query text. Returns `number[]`.
+
+```typescript
+const queryVector = await embeddings.embedQuery('search term');
+// queryVector: number[] — 384 dimensions
+```
+
+## Supported Models
+
+Any `EmbeddingModel` from `@localmode/transformers`:
+
+| Model | Dimensions | Size | Best For |
+|-------|-----------|------|----------|
+| `Xenova/bge-small-en-v1.5` | 384 | 33MB | English text, fast |
+| `Xenova/all-MiniLM-L6-v2` | 384 | 23MB | English text, smallest |
+| `Xenova/multilingual-e5-small` | 384 | 470MB | 100+ languages |
+
+```typescript
+// English
+const en = new LocalModeEmbeddings({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+});
+
+// Multilingual
+const multi = new LocalModeEmbeddings({
+  model: transformers.embedding('Xenova/multilingual-e5-small'),
+});
+```
+
+<Callout>
+For the full list of embedding models, see the [Transformers Embeddings](/docs/transformers/embeddings) guide.
+</Callout>
+
+## Migration from OpenAI
+
+```diff
+- import { OpenAIEmbeddings } from '@langchain/openai';
++ import { LocalModeEmbeddings } from '@localmode/langchain';
++ import { transformers } from '@localmode/transformers';
+
+- const embeddings = new OpenAIEmbeddings({ modelName: 'text-embedding-3-small' });
++ const embeddings = new LocalModeEmbeddings({
++   model: transformers.embedding('Xenova/bge-small-en-v1.5'),
++ });
+
+// Usage is identical:
+const vectors = await embeddings.embedDocuments(texts);
+const queryVec = await embeddings.embedQuery('search');
+```
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| LangChain RAG | Document embeddings using LocalModeEmbeddings adapter | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |

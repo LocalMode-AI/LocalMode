@@ -1,0 +1,5 @@
+{
+  "title": "LangChain",
+  "icon": "Link",
+  "pages": ["index", "embeddings", "chat", "vector-store", "migration"]
+}

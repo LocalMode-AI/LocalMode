@@ -17,6 +17,7 @@ Open [http://localhost:3000](http://localhost:3000) to view the docs.
 ## Structure
 
 - `content/docs/` — MDX documentation files
+- `content/blog/` — Blog posts
 - `src/app/docs/` — Documentation pages and layout
 - `src/app/(home)/` — Landing page
 

@@ -1,7 +1,6 @@
 {
   "name": "@localmode/localforage",
-  "version": "0.0.0-dev",
-  "private": true,
+  "version": "1.0.0",
   "description": "Cross-browser storage adapter with automatic fallback using localforage",
   "license": "MIT",
   "author": "LocalMode",
@@ -58,11 +57,11 @@
     "localforage": "^1.10.0"
   },
   "peerDependencies": {
-    "@localmode/core": "^1.0.2"
+    "@localmode/core": ">=1.0.0"
   },
   "devDependencies": {
     "@localmode/core": "workspace:*",
-    "@types/localforage": "^0.0.34",
+    "fake-indexeddb": "^6.2.5",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"
   }

@@ -1,0 +1,266 @@
+---
+title: WebGPU Vector Search
+description: Accelerate vector distance computation with GPU compute shaders for 5-50x faster batch search operations.
+icon: Zap
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+LocalMode can optionally use WebGPU compute shaders to accelerate vector distance computation during HNSW search. This is entirely opt-in and falls back to CPU distance functions silently when WebGPU is unavailable.
+
+<Callout type="info" title="See it in action">
+  Try [PDF Search](https://localmode.ai/pdf-search) and [Semantic Search](https://localmode.ai/semantic-search) for working demos of these APIs.
+</Callout>
+
+## Quick Start
+
+Enable GPU acceleration with a single flag:
+
+```ts {4}
+import { createVectorDB } from '@localmode/core';
+
+const db = await createVectorDB({
+  name: 'docs',
+  dimensions: 384,
+  enableGPU: true,
+});
+
+// Search works exactly the same — GPU acceleration is transparent
+const results = await db.search(queryVector, { k: 10 });
+```
+
+<Callout type="info" title="Automatic Fallback">
+If WebGPU is not available (older browsers, Node.js, SSR), the VectorDB automatically uses CPU distance functions. No code changes needed.
+</Callout>
+
+## How It Works
+
+HNSW search computes hundreds of vector distances per query. With GPU acceleration:
+
+1. **Below threshold** (default: 64 candidates) — Uses CPU distance functions (GPU dispatch overhead would dominate)
+2. **Above threshold** — Batches all candidate vectors, dispatches a single GPU compute shader, reads back results
+3. **Result** — Each GPU dispatch computes 256+ distances in parallel, achieving 5-50x speedup for large candidate sets
+
+### WGSL Compute Shaders
+
+Three WGSL compute shaders are compiled at initialization (one per distance metric):
+- **Cosine distance** — `1 - dot(a,b) / (||a|| * ||b||)`
+- **Euclidean distance** — `sqrt(sum((a[d] - b[d])^2))`
+- **Dot product distance** — `-sum(a[d] * b[d])` (negated for HNSW)
+
+Each shader uses `@workgroup_size(256)`, processing 256 distances per workgroup dispatch.
+
+## Configuration
+
+### VectorDB Level
+
+The simplest way to enable GPU acceleration:
+
+```ts
+const db = await createVectorDB({
+  name: 'my-db',
+  dimensions: 384,
+  enableGPU: true,
+});
+```
+
+### HNSW Index Level
+
+For fine-grained control, configure the `gpu` options on the HNSW index:
+
+```ts
+const db = await createVectorDB({
+  name: 'my-db',
+  dimensions: 384,
+  indexOptions: {
+    gpu: {
+      enabled: true,
+      batchThreshold: 128,        // Default: 64
+      onFallback: (reason) => {
+        console.log('GPU fallback:', reason);
+      },
+    },
+  },
+});
+```
+
+When both `enableGPU` and `indexOptions.gpu` are provided, the explicit `indexOptions.gpu` settings take precedence:
+
+```ts
+const db = await createVectorDB({
+  name: 'my-db',
+  dimensions: 384,
+  enableGPU: true,                       // sets gpu.enabled = true
+  indexOptions: {
+    gpu: { batchThreshold: 128 },        // overrides default threshold
+  },
+});
+```
+
+### HNSWGPUOptions
+
+<TypeTable
+  type={{
+    enabled: {
+      description: 'Whether to enable GPU-accelerated distance computation.',
+      type: 'boolean',
+      default: 'false',
+    },
+    batchThreshold: {
+      description: 'Minimum number of candidates to use GPU dispatch. Below this, CPU distance functions are used.',
+      type: 'number',
+      default: '64',
+    },
+    onFallback: {
+      description: 'Callback invoked when falling back to CPU distance computation. Receives a reason string.',
+      type: '(reason: string) => void',
+    },
+  }}
+/>
+
+## Standalone GPU Distance Computer
+
+For use cases outside of VectorDB (e.g., custom similarity search, batch deduplication), use the standalone API:
+
+```ts
+import { createGPUDistanceComputer } from '@localmode/core';
+
+const gpu = await createGPUDistanceComputer({
+  batchThreshold: 32,
+  onFallback: (reason) => console.warn(reason),
+});
+
+// Compute distances between a query and 1000 candidates
+const distances = await gpu.computeDistances(
+  queryVector,
+  candidateVectors,
+  'cosine',
+);
+
+// Clean up GPU resources when done
+gpu.destroy();
+```
+
+### GPUDistanceOptions
+
+<TypeTable
+  type={{
+    batchThreshold: {
+      description: 'Minimum candidates to use GPU. Below this threshold, CPU functions are used.',
+      type: 'number',
+      default: '64',
+    },
+    onFallback: {
+      description: 'Callback when falling back to CPU computation.',
+      type: '(reason: string) => void',
+    },
+  }}
+/>
+
+### GPUDistanceComputer
+
+<TypeTable
+  type={{
+    'computeDistances(query, candidates, metric)': {
+      description: 'Compute distances between the query and all candidates. Returns a Float32Array of distances.',
+      type: 'Promise<Float32Array>',
+    },
+    'destroy()': {
+      description: 'Release all GPU resources. Subsequent computeDistances() calls will throw.',
+      type: 'void',
+    },
+  }}
+/>
+
+## Browser Requirements
+
+| Browser | WebGPU Support | Notes |
+|---------|---------------|-------|
+| Chrome 113+ | Stable | Full support |
+| Edge 113+ | Stable | Full support |
+| Firefox 141+ | Stable | Since late 2025 |
+| Safari 26+ | Stable | WWDC 2025 |
+| Node.js | Not available | CPU fallback |
+
+WebGPU covers approximately 90% of browser traffic.
+
+## Performance Characteristics
+
+| Candidate Count | CPU (384d) | GPU Expected | Speedup |
+|----------------|-----------|-------------|---------|
+| 64 | ~1.2ms | ~0.8ms | 1.5x |
+| 256 | ~5ms | ~0.5ms | 10x |
+| 1024 | ~20ms | ~0.7ms | 28x |
+| 4096 | ~80ms | ~1.5ms | 53x |
+
+<Callout type="warn" title="First Search Overhead">
+The first search after page load includes shader compilation time (1-5ms per pipeline). The browser caches compiled shaders for subsequent page loads.
+</Callout>
+
+### When to Enable GPU
+
+GPU acceleration is most beneficial when:
+- Your index has 10K+ vectors
+- You use `efSearch` values of 100+ (more candidates per search)
+- You perform batch operations (bulk search, reranking, deduplication)
+- Vector dimensions are 384+ (more computation per distance)
+
+For small indexes (< 1K vectors) with default `efSearch: 50`, the overhead of GPU dispatch may not provide a net benefit.
+
+## Resource Management
+
+### Buffer Pooling
+
+The GPU distance manager maintains a buffer pool to minimize GPU memory allocation overhead. Buffers are reused across consecutive search calls. The pool is automatically cleaned up when:
+
+- `db.close()` is called
+- `gpu.destroy()` is called
+- The GPU device is lost (e.g., tab backgrounding)
+
+### GPU Memory
+
+For typical usage (384 dimensions, 256 candidates per dispatch), the buffer pool uses approximately 512KB of GPU memory — negligible compared to model weights.
+
+### Device Lost Recovery
+
+If the GPU device is lost (hardware error, tab backgrounding), the system:
+1. Falls back to CPU for the current operation
+2. Invokes the `onFallback` callback
+3. Attempts to re-acquire the GPU device on the next search
+
+## Fallback Behavior
+
+GPU acceleration falls back to CPU silently in these cases:
+
+| Scenario | Behavior |
+|----------|----------|
+| WebGPU not available | CPU fallback at initialization |
+| Candidate count < batchThreshold | CPU per-pair distance |
+| GPU device lost | CPU fallback + recovery attempt |
+| GPU dispatch error | CPU fallback for that operation |
+| Node.js / SSR environment | CPU fallback |
+
+The `onFallback` callback is invoked in all cases, providing observability without breaking the application.
+
+## Cleanup
+
+Always clean up GPU resources when done:
+
+```ts
+// VectorDB — close() handles GPU cleanup
+await db.close();
+
+// Standalone — call destroy() explicitly
+gpu.destroy();
+```
+
+Failing to clean up may leak GPU buffers until the page is unloaded.
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| PDF Search | GPU-accelerated vector distance for PDF search | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |
+| Semantic Search | WebGPU batch distance computation for large indexes | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |

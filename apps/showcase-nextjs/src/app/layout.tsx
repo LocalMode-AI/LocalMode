@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { Navbar, NetworkMonitorScript } from './(home)/_components';
+import { DevTools } from './_components/devtools';
+import { SuppressOrtWarnings } from './_components/suppress-ort-warnings';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -44,9 +46,11 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
       >
+        <SuppressOrtWarnings />
         <NetworkMonitorScript />
         <Navbar />
         <main className="flex-1">{children}</main>
+        {process.env.NODE_ENV === 'development' && <DevTools />}
       </body>
     </html>
   );

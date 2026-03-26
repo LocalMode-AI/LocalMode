@@ -1,0 +1,105 @@
+---
+title: Zero-Shot Image Classification
+description: Classify images into custom categories using CLIP — no fine-tuning required.
+icon: ScanSearch
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Classify images into arbitrary categories without fine-tuning using CLIP (Contrastive Language-Image Pre-Training) models. Provide any set of candidate labels and the model scores each one against the image.
+
+<Callout type="info">
+  For full API reference (`classifyImageZeroShot()`, options, result types, and custom providers), see the [Core Vision](/docs/core/vision) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [Smart Gallery](https://localmode.ai/smart-gallery) and [Product Search](https://localmode.ai/product-search) for working demos.
+</Callout>
+
+## How It Works
+
+CLIP models learn to associate images with text descriptions. Unlike traditional classifiers trained on fixed categories, CLIP can classify images into any labels you provide at inference time.
+
+```
+┌──────────────┐     ┌──────────────┐
+│  Image       │     │  Text Labels │
+│  Encoder     │     │  Encoder     │
+└──────┬───────┘     └──────┬───────┘
+       │                    │
+       ▼                    ▼
+  [image vector]      [text vectors]
+       │                    │
+       └────── cosine ──────┘
+              similarity
+               scores
+```
+
+## Recommended Models
+
+| Model | Size | Use Case |
+|-------|------|----------|
+| `Xenova/clip-vit-base-patch32` | ~150MB | General zero-shot classification |
+
+## Practical Examples
+
+### Content Moderation
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { classifyImageZeroShot } from '@localmode/core';
+
+const model = transformers.zeroShotImageClassifier('Xenova/clip-vit-base-patch32');
+
+const { labels, scores } = await classifyImageZeroShot({
+  model,
+  image: uploadedImage,
+  candidateLabels: ['safe content', 'inappropriate content', 'violent content'],
+});
+
+const isSafe = labels[0] === 'safe content' && scores[0] > 0.7;
+```
+
+### Product Categorization
+
+```typescript
+const { labels } = await classifyImageZeroShot({
+  model,
+  image: productPhoto,
+  candidateLabels: ['electronics', 'clothing', 'furniture', 'food', 'toys'],
+});
+
+console.log(`Category: ${labels[0]}`);
+```
+
+<Callout type="tip" title="Label Engineering">
+  Results improve with descriptive labels. Use `"a photo of a cat"` instead of just `"cat"`.
+  The model compares image features against text features, so more descriptive labels give better signal.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Smart Gallery | Classify photos into custom categories | [Demo](https://localmode.ai/smart-gallery) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-gallery) |
+| Product Search | Classify products with zero-shot image labels | [Demo](https://localmode.ai/product-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/product-search) |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core Vision API"
+    href="/docs/core/vision"
+    description="Full API reference including classifyImageZeroShot()."
+  />
+  <Card
+    title="Image Classification"
+    href="/docs/transformers/image-classification"
+    description="Classify into predefined ImageNet categories."
+  />
+  <Card
+    title="Image Features"
+    href="/docs/transformers/image-features"
+    description="Extract CLIP feature vectors for similarity search."
+  />
+</Cards>

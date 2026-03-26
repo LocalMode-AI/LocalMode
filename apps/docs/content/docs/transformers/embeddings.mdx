@@ -6,103 +6,60 @@ icon: Hash
 
 import { Callout } from 'fumadocs-ui/components/callout';
 import { Card, Cards } from 'fumadocs-ui/components/card';
-import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 Generate dense vector representations of text for semantic search, clustering, and similarity matching.
 
-## Basic Usage
+<Callout type="info">
+  For full API reference (`embed()`, `embedMany()`, `streamEmbedMany()`, options, result types, middleware, and custom providers), see the [Core Embeddings](/docs/core/embeddings) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [Semantic Search](https://localmode.ai/semantic-search) and [PDF Search](https://localmode.ai/pdf-search) for working demos.
+</Callout>
+
+## Model Configuration
 
 ```typescript
 import { transformers } from '@localmode/transformers';
-import { embed, embedMany } from '@localmode/core';
 
-const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
-
-// Single embedding
-const { embedding } = await embed({
-  model,
-  value: 'Machine learning is fascinating',
-});
-
-console.log('Dimensions:', embedding.length); // 384
-
-// Batch embeddings
-const { embeddings } = await embedMany({
-  model,
-  values: ['Hello', 'World', 'AI'],
+const model = transformers.embedding('Xenova/bge-small-en-v1.5', {
+  quantized: true,     // Use quantized model (default: true)
+  device: 'webgpu',    // 'webgpu' or 'wasm' (auto-detected if omitted)
+  onProgress: (p) => {
+    console.log(`Loading model: ${(p.progress * 100).toFixed(1)}%`);
+  },
 });
 ```
+
+### Device Selection
+
+Choose between WebGPU (faster, requires hardware support) and WASM (universal fallback):
+
+```typescript
+import { transformers, isWebGPUAvailable } from '@localmode/transformers';
+
+const device = (await isWebGPUAvailable()) ? 'webgpu' : 'wasm';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5', {
+  device,
+  quantized: true,
+});
+```
+
+| Device | Performance | Compatibility | When to Use |
+| --- | --- | --- | --- |
+| `'webgpu'` | Fastest (GPU-accelerated) | Chrome 113+, Edge 113+, Safari 18+ | Default when available |
+| `'wasm'` | Good (CPU) | All modern browsers | Universal fallback |
+| *(omitted)* | Auto-detected | - | Recommended for most apps |
 
 ## Recommended Models
 
 | Model | Dimensions | Size | Speed | Use Case |
 |-------|------------|------|-------|----------|
-| `Xenova/all-MiniLM-L6-v2` | 384 | 22MB | ⚡⚡⚡ | General purpose, fastest |
-| `Xenova/all-MiniLM-L12-v2` | 384 | 33MB | ⚡⚡ | Better accuracy |
-| `Xenova/all-mpnet-base-v2` | 768 | 110MB | ⚡ | Highest quality |
+| `Snowflake/snowflake-arctic-embed-xs` | 384 | 23MB | ⚡⚡⚡ | Tiny, best retrieval for size |
+| `Xenova/bge-small-en-v1.5` | 384 | 33MB | ⚡⚡⚡ | General purpose, recommended |
+| `Xenova/bge-base-en-v1.5` | 768 | 110MB | ⚡⚡ | Higher quality |
 | `Xenova/paraphrase-multilingual-MiniLM-L12-v2` | 384 | 117MB | ⚡⚡ | 50+ languages |
-| `Xenova/e5-small-v2` | 384 | 33MB | ⚡⚡⚡ | E5 family, fast |
-| `Xenova/bge-small-en-v1.5` | 384 | 33MB | ⚡⚡⚡ | BGE family |
-
-## With Vector Database
-
-```typescript
-import { createVectorDB, embed, embedMany, semanticSearch } from '@localmode/core';
-import { transformers } from '@localmode/transformers';
-
-const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
-const db = await createVectorDB({ name: 'docs', dimensions: 384 });
-
-// Index documents
-const documents = [
-  'Machine learning enables computers to learn from data',
-  'Deep learning uses neural networks with many layers',
-  'Natural language processing analyzes human language',
-];
-
-const { embeddings } = await embedMany({ model, values: documents });
-
-await db.addMany(
-  documents.map((text, i) => ({
-    id: `doc-${i}`,
-    vector: embeddings[i],
-    metadata: { text },
-  }))
-);
-
-// Search
-const results = await semanticSearch({
-  db,
-  model,
-  query: 'How do neural networks work?',
-  k: 3,
-});
-```
-
-## Progress Tracking
-
-```typescript
-const { embeddings } = await embedMany({
-  model,
-  values: largeDocumentArray,
-  onProgress: (progress) => {
-    const percent = (progress.completed / progress.total * 100).toFixed(1);
-    console.log(`Embedding: ${percent}%`);
-  },
-});
-```
-
-## Model Configuration
-
-```typescript
-const model = transformers.embedding('Xenova/all-MiniLM-L6-v2', {
-  quantized: true,     // Use quantized model (default: true)
-  revision: 'main',    // Model revision
-  progress: (p) => {
-    console.log(`Loading model: ${(p.progress * 100).toFixed(1)}%`);
-  },
-});
-```
 
 ## Multilingual Embeddings
 
@@ -137,7 +94,7 @@ const s2 = 'A feline rests on a rug';
 const s3 = 'The stock market crashed yesterday';
 
 // Fast model
-const fastModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const fastModel = transformers.embedding('Xenova/bge-small-en-v1.5');
 const { embeddings: fastEmbeddings } = await embedMany({
   model: fastModel,
   values: [s1, s2, s3],
@@ -167,7 +124,7 @@ Use caching middleware to avoid recomputation:
 ```typescript
 import { wrapEmbeddingModel, cachingMiddleware } from '@localmode/core';
 
-const baseModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const baseModel = transformers.embedding('Xenova/bge-small-en-v1.5');
 
 const model = wrapEmbeddingModel(baseModel, [
   cachingMiddleware({
@@ -194,9 +151,22 @@ const { embedding: e2 } = await embed({ model, value: 'Hello' });
   5. **Choose model wisely** — Balance quality vs speed for your use case
 </Callout>
 
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Semantic Search | Generate embeddings for document search | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
+| Product Search | Embed product descriptions for catalog search | [Demo](https://localmode.ai/product-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/product-search) |
+| PDF Search | Embed PDF chunks for document retrieval | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |
+
 ## Next Steps
 
 <Cards>
+  <Card
+    title="Core Embeddings API"
+    href="/docs/core/embeddings"
+    description="Full API reference, options, result types, and custom providers."
+  />
   <Card
     title="Vector Database"
     href="/docs/core/vector-db"

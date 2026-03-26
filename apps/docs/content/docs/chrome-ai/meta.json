@@ -1,0 +1,5 @@
+{
+  "title": "Chrome AI",
+  "icon": "Zap",
+  "pages": ["index", "summarization", "translation", "fallbacks"]
+}

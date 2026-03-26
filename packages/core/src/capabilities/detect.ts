@@ -28,6 +28,9 @@ import {
   isServiceWorkerSupported,
   isBroadcastChannelSupported,
   isWebLocksSupported,
+  isChromeAISupported,
+  isSummarizerAPISupported,
+  isTranslatorAPISupported,
 } from './features.js';
 import {
   detectBrowser,
@@ -93,6 +96,9 @@ export async function detectCapabilities(): Promise<DeviceCapabilities> {
       serviceworker: isServiceWorkerSupported(),
       broadcastchannel: isBroadcastChannelSupported(),
       weblocks: isWebLocksSupported(),
+      chromeAI: isChromeAISupported(),
+      chromeAISummarizer: isSummarizerAPISupported(),
+      chromeAITranslator: isTranslatorAPISupported(),
     },
     storage: {
       quotaBytes: storage?.quota ?? 0,
@@ -335,9 +341,9 @@ function getFeatureRecommendations(feature: string): FeatureSupportResult {
  * import { checkModelSupport } from '@localmode/core';
  *
  * const result = await checkModelSupport({
- *   modelId: 'Xenova/whisper-large-v3',
- *   estimatedMemory: 3_000_000_000, // 3GB
- *   estimatedStorage: 1_500_000_000, // 1.5GB
+ *   modelId: 'onnx-community/moonshine-base-ONNX',
+ *   estimatedMemory: 500_000_000, // 500MB
+ *   estimatedStorage: 250_000_000, // 250MB
  * });
  *
  * if (!result.supported) {
@@ -426,25 +432,31 @@ export async function checkModelSupport(
  * Built-in model fallback registry.
  */
 const MODEL_FALLBACKS: Record<string, Array<{ modelId: string; memoryRequired: number; reason: string }>> = {
-  // Whisper models
+  // Speech-to-text models — Moonshine preferred for browser (smaller, no Safari issues)
   'Xenova/whisper-large-v3': [
-    { modelId: 'Xenova/whisper-medium', memoryRequired: 1500, reason: 'Better accuracy than small' },
-    { modelId: 'Xenova/whisper-small', memoryRequired: 500, reason: 'Good balance of speed and accuracy' },
-    { modelId: 'Xenova/whisper-tiny', memoryRequired: 150, reason: 'Fastest, suitable for real-time' },
+    { modelId: 'onnx-community/moonshine-base-ONNX', memoryRequired: 500, reason: 'Best browser STT — small, fast, no Safari issues' },
+    { modelId: 'onnx-community/moonshine-tiny-ONNX', memoryRequired: 150, reason: 'Fastest, suitable for real-time' },
   ],
   'Xenova/whisper-medium': [
-    { modelId: 'Xenova/whisper-small', memoryRequired: 500, reason: 'Smaller with good accuracy' },
-    { modelId: 'Xenova/whisper-tiny', memoryRequired: 150, reason: 'Fastest option' },
+    { modelId: 'onnx-community/moonshine-base-ONNX', memoryRequired: 500, reason: 'Best browser STT — smaller, better compatibility' },
+    { modelId: 'onnx-community/moonshine-tiny-ONNX', memoryRequired: 150, reason: 'Fastest option' },
+  ],
+  'Xenova/whisper-small': [
+    { modelId: 'onnx-community/moonshine-base-ONNX', memoryRequired: 500, reason: 'Better accuracy, similar size' },
+    { modelId: 'onnx-community/moonshine-tiny-ONNX', memoryRequired: 150, reason: 'Fastest, suitable for real-time' },
+  ],
+  'Xenova/whisper-tiny': [
+    { modelId: 'onnx-community/moonshine-tiny-ONNX', memoryRequired: 150, reason: 'Lower error rate, edge-optimized' },
   ],
   // Embedding models
   'Xenova/all-mpnet-base-v2': [
-    { modelId: 'Xenova/all-MiniLM-L6-v2', memoryRequired: 90, reason: 'Smaller with good quality' },
+    { modelId: 'Xenova/bge-small-en-v1.5', memoryRequired: 90, reason: 'Smaller with good quality' },
     { modelId: 'Xenova/paraphrase-MiniLM-L3-v2', memoryRequired: 60, reason: 'Fastest embedding model' },
   ],
   // LLMs
-  'Llama-3.2-3B-Instruct-q4f16': [
-    { modelId: 'Llama-3.2-1B-Instruct-q4f16', memoryRequired: 800, reason: 'Smaller but capable' },
-    { modelId: 'SmolLM2-360M-Instruct-q4f16', memoryRequired: 300, reason: 'Very small, basic tasks' },
+  'Llama-3.2-3B-Instruct-q4f16_1-MLC': [
+    { modelId: 'Llama-3.2-1B-Instruct-q4f16_1-MLC', memoryRequired: 879, reason: 'Smaller but capable' },
+    { modelId: 'SmolLM2-360M-Instruct-q4f16_1-MLC', memoryRequired: 376, reason: 'Very small, basic tasks' },
   ],
 };
 

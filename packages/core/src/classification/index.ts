@@ -38,6 +38,12 @@ export {
 export { rerank, setGlobalRerankerProvider } from './rerank.js';
 
 // ═══════════════════════════════════════════════════════════════
+// FUNCTIONS - DIFFERENTIAL PRIVACY (RANDOMIZED RESPONSE)
+// ═══════════════════════════════════════════════════════════════
+
+export { randomizedResponse, dpClassificationMiddleware } from './dp-response.js';
+
+// ═══════════════════════════════════════════════════════════════
 // TYPES - CLASSIFICATION
 // ═══════════════════════════════════════════════════════════════
 

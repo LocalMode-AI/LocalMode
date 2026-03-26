@@ -1,6 +1,6 @@
 ---
 title: Security
-description: Encryption, PII redaction, and security best practices.
+description: Encryption, PII redaction, key management, and security best practices.
 icon: Shield
 ---
 
@@ -10,6 +10,10 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 LocalMode provides built-in security utilities for encryption, key management, and PII redaction.
 
+<Callout type="info" title="See it in action">
+  Try [Encrypted Vault](https://localmode.ai/encrypted-vault) and [Document Redactor](https://localmode.ai/document-redactor) for working demos of these APIs.
+</Callout>
+
 <Callout type="info" title="Zero Telemetry">
   LocalMode has **zero telemetry**. No data ever leaves your device. All processing happens locally
   in the browser.
@@ -17,71 +21,149 @@ LocalMode provides built-in security utilities for encryption, key management, a
 
 ## Encryption
 
-Encrypt sensitive data using Web Crypto API:
+Encrypt sensitive data using the Web Crypto API. All functions are passphrase-based — no manual key management required:
 
 ```typescript
-import { encrypt, decrypt, deriveKey } from '@localmode/core';
+import { encrypt, decryptString } from '@localmode/core';
 
-// Derive a key from a password
-const key = await deriveKey('user-password', 'unique-salt');
+// Encrypt data with a passphrase
+const encrypted = await encrypt('sensitive data', 'user-password');
 
-// Encrypt data
-const { ciphertext, iv } = await encrypt(key, 'sensitive data');
-
-// Decrypt data
-const decrypted = await decrypt(key, ciphertext, iv);
+// Decrypt back to string
+const decrypted = await decryptString(encrypted, 'user-password');
 console.log(decrypted); // 'sensitive data'
 ```
 
+The `encrypt()` function returns an `EncryptedData` object containing everything needed for decryption:
+
+```typescript
+interface EncryptedData {
+  /** Base64-encoded encrypted data */
+  ciphertext: string;
+  /** Base64-encoded initialization vector */
+  iv: string;
+  /** Key derivation salt */
+  salt: string;
+  /** Algorithm identifier */
+  algorithm: 'AES-GCM';
+  /** Version for future compatibility */
+  version: 1;
+}
+```
+
+### Encryption Functions
+
+| Function | Signature | Description |
+| --- | --- | --- |
+| `encrypt` | `(data: string \| ArrayBuffer, passphrase: string, iterations?: number) => Promise<EncryptedData>` | Encrypt string or binary data |
+| `decrypt` | `(encrypted: EncryptedData, passphrase: string, iterations?: number) => Promise<ArrayBuffer>` | Decrypt to ArrayBuffer |
+| `decryptString` | `(encrypted: EncryptedData, passphrase: string, iterations?: number) => Promise<string>` | Decrypt to string |
+| `encryptVector` | `(vector: Float32Array, passphrase: string, iterations?: number) => Promise<EncryptedData>` | Encrypt embedding vectors |
+| `decryptVector` | `(encrypted: EncryptedData, passphrase: string, iterations?: number) => Promise<Float32Array>` | Decrypt embedding vectors |
+| `encryptJSON` | `(data: unknown, passphrase: string, iterations?: number) => Promise<EncryptedData>` | Encrypt JSON-serializable data |
+| `decryptJSON` | `(encrypted: EncryptedData, passphrase: string, iterations?: number) => Promise<T>` | Decrypt JSON data |
+
 ### Key Derivation
 
-Use PBKDF2 to derive keys from passwords:
+For advanced use cases (e.g., encryption middleware), derive a `CryptoKey` from a passphrase using PBKDF2:
 
-```ts {3-6}
-import { deriveKey } from '@localmode/core';
+```typescript
+import { deriveEncryptionKey } from '@localmode/core';
 
-const key = await deriveKey(password, salt, {
-  iterations: 100000, // Higher = more secure, slower
-  keyLength: 256, // AES-256
-});
+// Generate a new key (random salt created automatically)
+const { key, salt } = await deriveEncryptionKey('user-password');
+
+// Re-derive the same key later using the stored salt
+const { key: sameKey } = await deriveEncryptionKey('user-password', salt);
 ```
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `password` | `string` | required | The passphrase to derive from |
+| `salt` | `string \| Uint8Array` | random | Optional salt — omit to generate a new random salt |
+| `iterations` | `number` | `100000` | PBKDF2 iterations (higher = more secure, slower) |
+
+**Returns:** `Promise<{ key: CryptoKey; salt: string }>` — the derived key and the salt used (as base64, for storage).
 
 <Callout type="warn">
   Always use at least 100,000 iterations for PBKDF2. Lower values make brute-force attacks easier.
 </Callout>
 
-### Encryption Options
-
-```ts
-const { ciphertext, iv } = await encrypt(key, data, {
-  algorithm: 'AES-GCM', // Default, recommended
-});
-```
-
-<Callout type="info">
-  AES-GCM provides authenticated encryption—it protects both confidentiality and integrity. Use
-  AES-CBC only for compatibility with legacy systems.
+<Callout type="info" title="Deprecated: deriveKey">
+  The `deriveKey` export is a deprecated alias for `deriveEncryptionKey`. Use `deriveEncryptionKey` in new code.
 </Callout>
+
+### Passphrase Hashing
+
+Verify passphrases without storing them:
+
+```typescript
+import { hashPassphrase, verifyPassphrase } from '@localmode/core';
+
+const hash = await hashPassphrase('user-password');
+const isValid = await verifyPassphrase('user-password', hash); // true
+```
 
 ## Key Management
 
-Store keys securely:
+The `Keystore` class manages encryption keys in IndexedDB, handling passphrase verification, lock/unlock lifecycle, and metadata tracking:
 
 ```typescript
-import { KeyStore } from '@localmode/core';
+import { createKeystore } from '@localmode/core';
 
-const keyStore = new KeyStore({
-  name: 'my-app-keys',
-});
+const keystore = createKeystore();
 
-// Store a key
-await keyStore.set('encryption-key', key);
+// Initialize encryption for a database
+await keystore.initialize('my-vectors', 'user-password');
 
-// Retrieve a key
-const storedKey = await keyStore.get('encryption-key');
+// Later, unlock with the passphrase
+const valid = await keystore.unlock('my-vectors', 'user-password');
 
-// Delete a key
-await keyStore.delete('encryption-key');
+if (valid) {
+  const passphrase = keystore.getPassphrase();
+  // Use passphrase with encrypt()/decrypt() functions
+}
+
+// Lock when done (clears passphrase from memory)
+keystore.lock();
+```
+
+### Keystore Methods
+
+| Method | Signature | Description |
+| --- | --- | --- |
+| `Keystore.isSupported()` | `() => boolean` | Check if Web Crypto API is available (static) |
+| `initialize` | `(dbName: string, passphrase: string, iterations?: number) => Promise<void>` | Set up encryption for a database |
+| `unlock` | `(dbName: string, passphrase: string) => Promise<boolean>` | Verify passphrase and unlock |
+| `lock` | `() => void` | Clear passphrase from memory |
+| `isUnlocked` | `() => boolean` | Check if keystore is unlocked |
+| `getPassphrase` | `() => string` | Get current passphrase (throws if locked) |
+| `getIterations` | `() => number` | Get PBKDF2 iteration count |
+| `getMetadata` | `(dbName: string) => Promise<KeyMetadata \| null>` | Get key metadata |
+| `hasEncryption` | `(dbName: string) => Promise<boolean>` | Check if database has encryption |
+| `changePassphrase` | `(dbName: string, old: string, new: string) => Promise<boolean>` | Change passphrase |
+| `disable` | `(dbName: string, passphrase: string) => Promise<boolean>` | Disable encryption |
+| `delete` | `(dbName: string) => Promise<void>` | Delete key metadata |
+
+### KeyMetadata
+
+```typescript
+interface KeyMetadata {
+  /** Database this key is for */
+  dbName: string;
+  /** Hash of the passphrase for verification */
+  passphraseHash: string;
+  /** When the key was created */
+  createdAt: number;
+  /** When the key was last used */
+  lastUsedAt: number;
+  /** Number of key derivation iterations */
+  iterations: number;
+  /** Whether encryption is currently enabled */
+  enabled: boolean;
+}
 ```
 
 <Callout type="warn" title="Key Storage">
@@ -91,12 +173,12 @@ await keyStore.delete('encryption-key');
 
 ## Encrypting Embeddings
 
-Encrypt embeddings before storage:
+Encrypt embeddings before storage using middleware:
 
 ```typescript
-import { wrapEmbeddingModel, encryptionMiddleware, deriveKey } from '@localmode/core';
+import { wrapEmbeddingModel, encryptionMiddleware, deriveEncryptionKey } from '@localmode/core';
 
-const key = await deriveKey('user-password', 'salt');
+const { key } = await deriveEncryptionKey('user-password');
 
 const model = wrapEmbeddingModel(baseModel, [encryptionMiddleware({ key })]);
 
@@ -189,8 +271,8 @@ if (!isCrossOriginIsolated()) {
 ## Security Best Practices
 
 <Callout type="tip" title="Security Checklist">
-  1. **Never store passwords** - Use key derivation
-  2. **Unique salts** - Generate random salts for each key
+  1. **Never store passwords** - Use key derivation with `deriveEncryptionKey()`
+  2. **Unique salts** - Omit the salt parameter to auto-generate random salts
   3. **High iterations** - Use at least 100,000 PBKDF2 iterations
   4. **Redact PII** - Always redact before processing user data
   5. **Zero telemetry** - LocalMode never phones home
@@ -203,11 +285,11 @@ import {
   wrapEmbeddingModel,
   piiRedactionMiddleware,
   encryptionMiddleware,
-  deriveKey,
+  deriveEncryptionKey,
 } from '@localmode/core';
 
 // Setup secure model
-const key = await deriveKey(userPassword, uniqueSalt);
+const { key } = await deriveEncryptionKey(userPassword);
 
 const secureModel = wrapEmbeddingModel(baseModel, [
   piiRedactionMiddleware({
@@ -220,6 +302,127 @@ const secureModel = wrapEmbeddingModel(baseModel, [
 const { embedding } = await embed({
   model: secureModel,
   value: userInput,
+});
+```
+
+## Differential Privacy
+
+Add mathematical privacy guarantees to embeddings and classification outputs using calibrated noise mechanisms.
+
+### DP Embeddings
+
+Add noise to embedding vectors so that no single input can be identified:
+
+```typescript
+import { embed, wrapEmbeddingModel, dpEmbeddingMiddleware } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const privateModel = wrapEmbeddingModel({
+  model: transformers.embedding('Xenova/all-MiniLM-L6-v2'),
+  middleware: dpEmbeddingMiddleware({
+    epsilon: 1.0,        // Privacy parameter (lower = more private)
+    delta: 1e-5,         // Probability of privacy failure
+    mechanism: 'gaussian', // or 'laplacian'
+  }),
+});
+
+// Embeddings now have calibrated noise added
+const { embedding } = await embed({
+  model: privateModel,
+  value: 'sensitive medical record',
+});
+```
+
+<Callout type="info" title="Choosing Epsilon">
+  Typical values range from 0.1 (strong privacy, more noise) to 10.0 (weak privacy, less noise).
+  Start with epsilon=1.0 and adjust based on your privacy/utility tradeoff.
+</Callout>
+
+### Privacy Budget
+
+Track cumulative privacy loss across operations:
+
+```typescript
+import { createPrivacyBudget, dpEmbeddingMiddleware, wrapEmbeddingModel } from '@localmode/core';
+
+const budget = await createPrivacyBudget({
+  maxEpsilon: 10.0,
+  persistKey: 'my-app-budget', // Persists across sessions via IndexedDB
+  onExhausted: 'block',       // Throws PrivacyBudgetExhaustedError when exceeded
+});
+
+const privateModel = wrapEmbeddingModel({
+  model: baseModel,
+  middleware: dpEmbeddingMiddleware({ epsilon: 1.0 }, budget),
+});
+
+// Each embed call consumes 1.0 epsilon from the budget
+await embed({ model: privateModel, value: 'query 1' }); // 9.0 remaining
+await embed({ model: privateModel, value: 'query 2' }); // 8.0 remaining
+
+console.log(budget.remaining()); // 8.0
+console.log(budget.isExhausted()); // false
+```
+
+### DP Classification (Randomized Response)
+
+Apply randomized response to classification outputs for plausible deniability:
+
+```typescript
+import { randomizedResponse, dpClassificationMiddleware } from '@localmode/core';
+
+// Direct usage
+const label = randomizedResponse(
+  'positive',                           // True label
+  ['positive', 'negative', 'neutral'], // All possible labels
+  2.0                                   // Epsilon
+);
+
+// As middleware
+const middleware = dpClassificationMiddleware({
+  epsilon: 2.0,
+  labels: ['positive', 'negative', 'neutral'],
+});
+```
+
+### Noise Mechanisms
+
+Two noise mechanisms are available:
+
+| Mechanism | Privacy Guarantee | Best For |
+|-----------|------------------|----------|
+| Gaussian | (epsilon, delta)-DP | General use, continuous data |
+| Laplacian | Pure epsilon-DP | When delta=0 is required |
+
+```typescript
+import { gaussianNoise, laplacianNoise, addNoise } from '@localmode/core';
+
+// Generate noise directly
+const gNoise = gaussianNoise(384, 0.1);   // 384-dim, sigma=0.1
+const lNoise = laplacianNoise(384, 0.5);  // 384-dim, scale=0.5
+
+// Add to an embedding
+const noisyEmbedding = addNoise(embedding, gNoise);
+```
+
+### Combining PII Redaction with DP
+
+For maximum privacy, combine PII redaction (deterministic) with differential privacy (probabilistic):
+
+```typescript
+import {
+  wrapEmbeddingModel,
+  composeEmbeddingMiddleware,
+  piiRedactionMiddleware,
+  dpEmbeddingMiddleware,
+} from '@localmode/core';
+
+const secureModel = wrapEmbeddingModel({
+  model: baseModel,
+  middleware: composeEmbeddingMiddleware([
+    piiRedactionMiddleware({ emails: true, phones: true }),
+    dpEmbeddingMiddleware({ epsilon: 1.0 }),
+  ]),
 });
 ```
 
@@ -295,3 +498,10 @@ const model = wrapEmbeddingModel(baseModel, [
     description="Learn about secure storage options."
   />
 </Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Encrypted Vault | Client-side encryption with Web Crypto API | [Demo](https://localmode.ai/encrypted-vault) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/encrypted-vault) |
+| Document Redactor | PII detection and differential privacy for embeddings | [Demo](https://localmode.ai/document-redactor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/document-redactor) |

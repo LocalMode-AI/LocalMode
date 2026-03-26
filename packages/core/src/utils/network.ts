@@ -247,9 +247,9 @@ export function isConnectionSuitable(): boolean {
  * ```typescript
  * const rec = getConnectionRecommendation();
  * if (rec.useLargeModels) {
- *   loadModel('whisper-large');
+ *   loadModel('moonshine-base-ONNX');
  * } else {
- *   loadModel('whisper-tiny');
+ *   loadModel('moonshine-tiny-ONNX');
  * }
  * ```
  */

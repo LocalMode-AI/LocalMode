@@ -1,6 +1,6 @@
 ---
 title: Text Generation
-description: Generate and stream text with language models.
+description: Generate and stream text with language models. Supports multimodal vision input (images).
 icon: MessageSquare
 ---
 
@@ -8,7 +8,89 @@ import { Callout } from 'fumadocs-ui/components/callout';
 import { Card, Cards } from 'fumadocs-ui/components/card';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
-Generate text using local language models with streaming support.
+Generate text using local language models with streaming support. All three LLM providers use the same `streamText()` and `generateText()` functions from `@localmode/core`.
+
+<Callout type="info" title="See it in action">
+  Try [LLM Chat](https://localmode.ai/llm-chat) and [Research Agent](https://localmode.ai/research-agent) for working demos of these APIs.
+</Callout>
+
+<Callout type="info">
+Need structured JSON output instead of free text? See the [Structured Output](/docs/core/structured-output) guide for `generateObject()` and `streamObject()`.
+</Callout>
+
+## Providers
+
+LocalMode ships three LLM providers. All implement the same `LanguageModel` interface, so you can swap them without changing application code.
+
+<Tabs items={['WebLLM (WebGPU)', 'wllama (WASM)', 'Transformers (ONNX)']}>
+  <Tab value="WebLLM (WebGPU)">
+  ```typescript
+  import { streamText } from '@localmode/core';
+  import { webllm } from '@localmode/webllm';
+
+  const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+  const result = await streamText({ model, prompt: 'Hello!' });
+  ```
+  Fastest inference via WebGPU. 23 curated MLC-compiled models. Requires a WebGPU-capable browser.
+  </Tab>
+  <Tab value="wllama (WASM)">
+  ```typescript
+  import { streamText } from '@localmode/core';
+  import { wllama } from '@localmode/wllama';
+
+  const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+  const result = await streamText({ model, prompt: 'Hello!' });
+  ```
+  Runs llama.cpp via WebAssembly. 135K+ GGUF models from HuggingFace. Works in all modern browsers — no GPU required.
+  </Tab>
+  <Tab value="Transformers (ONNX)">
+  ```typescript
+  import { streamText } from '@localmode/core';
+  import { transformers } from '@localmode/transformers';
+
+  const model = transformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX');
+  const result = await streamText({ model, prompt: 'Hello!' });
+  ```
+  ONNX models via Transformers.js v4 (experimental). WebGPU acceleration with automatic WASM fallback.
+  </Tab>
+</Tabs>
+
+### Provider Comparison
+
+| | WebLLM | wllama | Transformers |
+|---|---|---|---|
+| **Runtime** | MLC WebGPU | llama.cpp WASM | Transformers.js v4 ONNX |
+| **Speed** | 60–100 tok/s | 5–15 tok/s | 40–60 tok/s |
+| **GPU Required** | Yes (WebGPU) | No | No (auto-fallback to WASM) |
+| **Browser Support** | Chrome/Edge 113+, Safari 18+ | All modern browsers | Chrome/Edge 113+, Safari 18+ (WASM everywhere) |
+| **Model Catalog** | 23 curated MLC models | 16 curated + 135K+ GGUF models | 14 curated ONNX models |
+| **Model Format** | MLC (pre-compiled) | GGUF (standard) | ONNX |
+| **Best For** | Maximum speed on GPU-capable devices | Universal compatibility, huge model selection | Broad ONNX ecosystem, WebGPU + WASM flexibility |
+| **Status** | Stable | Stable | Experimental |
+
+### Automatic Fallback
+
+Use `createProviderWithFallback()` to try providers in order — fastest first, most compatible last:
+
+```typescript
+import { createProviderWithFallback } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+import { transformers } from '@localmode/transformers';
+import { wllama } from '@localmode/wllama';
+
+const model = await createProviderWithFallback({
+  providers: [
+    () => webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
+    () => transformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX'),
+    () => wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M'),
+  ],
+  onFallback: (error, idx) => console.warn(`Provider ${idx} failed:`, error),
+});
+```
+
+<Callout type="info">
+For model catalogs, provider-specific configuration, and detailed setup, see the [WebLLM](/docs/webllm), [wllama](/docs/wllama), and [Transformers Text Generation](/docs/transformers/text-generation) guides.
+</Callout>
 
 ## streamText()
 
@@ -20,12 +102,12 @@ import { webllm } from '@localmode/webllm';
 
 const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
 
-const stream = await streamText({
+const result = await streamText({
   model,
   prompt: 'Explain quantum computing in simple terms.',
 });
 
-for await (const chunk of stream) {
+for await (const chunk of result.stream) {
   process.stdout.write(chunk.text);
 }
 ```
@@ -33,7 +115,7 @@ for await (const chunk of stream) {
 ### With System Prompt
 
 ```typescript
-const stream = await streamText({
+const result = await streamText({
   model,
   system: 'You are a helpful coding assistant. Be concise.',
   prompt: 'Write a function to reverse a string in TypeScript.',
@@ -58,19 +140,19 @@ interface StreamTextOptions {
 ### Stream Properties
 
 ```typescript
-const stream = await streamText({ model, prompt: 'Hello' });
+const result = await streamText({ model, prompt: 'Hello' });
 
 // Iterate over text chunks
-for await (const chunk of stream) {
+for await (const chunk of result.stream) {
   console.log(chunk.text);      // The generated text piece
-  console.log(chunk.isLast);    // Whether this is the last chunk
+  console.log(chunk.done);      // Whether this is the final chunk
 }
 
 // Get full text after streaming
-const fullText = await stream.text;
+const fullText = await result.text;
 
 // Get usage statistics
-const usage = await stream.usage;
+const usage = await result.usage;
 console.log('Tokens:', usage.totalTokens);
 ```
 
@@ -110,10 +192,12 @@ interface GenerateTextOptions {
 ```typescript
 interface GenerateTextResult {
   text: string;
+  finishReason: FinishReason;
   usage: {
-    promptTokens: number;
-    completionTokens: number;
+    inputTokens: number;
+    outputTokens: number;
     totalTokens: number;
+    durationMs: number;
   };
   response: {
     modelId: string;
@@ -133,13 +217,13 @@ const controller = new AbortController();
 setTimeout(() => controller.abort(), 5000);
 
 try {
-  const stream = await streamText({
+  const result = await streamText({
     model,
     prompt: 'Write a long essay...',
     abortSignal: controller.signal,
   });
 
-  for await (const chunk of stream) {
+  for await (const chunk of result.stream) {
     process.stdout.write(chunk.text);
   }
 } catch (error) {
@@ -155,21 +239,21 @@ Control randomness in generation:
 
 ```typescript
 // More deterministic (good for factual responses)
-const stream = await streamText({
+const result = await streamText({
   model,
   prompt: 'What is 2 + 2?',
   temperature: 0.1,
 });
 
 // More creative (good for stories, brainstorming)
-const stream = await streamText({
+const result = await streamText({
   model,
   prompt: 'Write a creative story about a robot.',
   temperature: 0.9,
 });
 
 // Nucleus sampling
-const stream = await streamText({
+const result = await streamText({
   model,
   prompt: 'Continue this sentence: The future of AI is...',
   topP: 0.9,  // Consider tokens making up 90% of probability
@@ -187,7 +271,7 @@ const stream = await streamText({
 Stop generation at specific patterns:
 
 ```typescript
-const stream = await streamText({
+const result = await streamText({
   model,
   prompt: 'List three fruits:\n1.',
   stopSequences: ['\n4.', '\n\n'],  // Stop before 4th item or double newline
@@ -211,7 +295,7 @@ const messages = [
   { role: 'user', content: 'What is TypeScript?' },
 ];
 
-const stream = await streamText({
+const result = await streamText({
   model,
   system: 'You are a helpful programming assistant.',
   prompt: buildPrompt(messages),
@@ -232,13 +316,13 @@ async function ragQuery(question: string) {
   const context = results.map((r) => r.metadata.text).join('\n\n');
 
   // Generate answer
-  const stream = await streamText({
+  const result = await streamText({
     model: llm,
     system: 'Answer based only on the provided context.',
     prompt: `Context:\n${context}\n\nQuestion: ${question}\n\nAnswer:`,
   });
 
-  return stream;
+  return result;
 }
 ```
 
@@ -247,29 +331,104 @@ async function ragQuery(question: string) {
 Create your own language model:
 
 ```typescript
-import type { LanguageModel, GenerateTextOptions, StreamTextOptions } from '@localmode/core';
+import type { LanguageModel, DoGenerateOptions, DoStreamOptions, StreamChunk } from '@localmode/core';
 
 class MyLanguageModel implements LanguageModel {
   readonly modelId = 'custom:my-model';
   readonly provider = 'custom';
+  readonly contextLength = 4096;
 
-  async doGenerateText(options: GenerateTextOptions) {
+  async doGenerate(options: DoGenerateOptions) {
     // Your generation logic
     return {
       text: 'Generated text...',
-      usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, durationMs: 100 },
+      response: { modelId: this.modelId, timestamp: new Date() },
     };
   }
 
-  async doStreamText(options: StreamTextOptions) {
-    // Return an async generator
-    return (async function* () {
-      yield { text: 'Hello', isLast: false };
-      yield { text: ' world!', isLast: true };
-    })();
+  async *doStream(options: DoStreamOptions): AsyncIterable<StreamChunk> {
+    yield { text: 'Hello', done: false };
+    yield { text: ' world!', done: true, finishReason: 'stop' };
   }
 }
 ```
+
+## Vision (Multimodal Input)
+
+Send images alongside text to vision-capable language models. Content parts use a discriminated union — `TextPart | ImagePart` — for type-safe multimodal messages.
+
+### Content Part Types
+
+```typescript
+import type { ContentPart, TextPart, ImagePart } from '@localmode/core';
+
+// Text part
+const text: TextPart = { type: 'text', text: 'What is in this image?' };
+
+// Image part (base64-encoded, no data: prefix)
+const image: ImagePart = {
+  type: 'image',
+  data: 'iVBORw0KGgo...', // base64
+  mimeType: 'image/jpeg',
+};
+```
+
+### Sending Images with Messages
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+const model = webllm.languageModel('Phi-3.5-vision-instruct-q4f16_1-MLC');
+
+const result = await streamText({
+  model,
+  prompt: '',
+  messages: [{
+    role: 'user',
+    content: [
+      { type: 'text', text: 'Describe this image in detail.' },
+      { type: 'image', data: base64ImageData, mimeType: 'image/jpeg' },
+    ],
+  }],
+});
+```
+
+### Checking Vision Support
+
+```typescript
+if (model.supportsVision) {
+  // Show image upload UI
+}
+```
+
+### Content Utilities
+
+```typescript
+import { normalizeContent, getTextContent } from '@localmode/core';
+
+// Convert string → ContentPart[]
+normalizeContent('Hello');
+// [{ type: 'text', text: 'Hello' }]
+
+// Extract text from mixed content
+getTextContent([
+  { type: 'text', text: 'Describe' },
+  { type: 'image', data: '...', mimeType: 'image/png' },
+]);
+// 'Describe'
+```
+
+### Supported Vision Models
+
+| Provider | Model | Size | Notes |
+|----------|-------|------|-------|
+| WebLLM | Phi 3.5 Vision | 2.4GB | WebGPU required |
+| Transformers (ONNX) | Qwen3.5 0.8B | ~500MB | Experimental, WebGPU recommended |
+| Transformers (ONNX) | Qwen3.5 2B | ~1.5GB | Experimental, WebGPU recommended |
+| Transformers (ONNX) | Qwen3.5 4B | ~2.5GB | Experimental, WebGPU required |
 
 ## Best Practices
 
@@ -285,9 +444,29 @@ class MyLanguageModel implements LanguageModel {
 
 <Cards>
   <Card
+    title="Semantic Cache"
+    href="/docs/core/semantic-cache"
+    description="Cache LLM responses using embedding similarity for 100-600x speedup."
+  />
+  <Card
+    title="Language Model Middleware"
+    href="/docs/core/language-model-middleware"
+    description="Add caching, logging, and guardrails to language models."
+  />
+  <Card
     title="WebLLM"
     href="/docs/webllm"
-    description="Learn about available models and configuration."
+    description="WebGPU-accelerated LLM inference — 23 curated models."
+  />
+  <Card
+    title="wllama"
+    href="/docs/wllama"
+    description="GGUF models via llama.cpp WASM — universal browser support."
+  />
+  <Card
+    title="Transformers Text Generation"
+    href="/docs/transformers/text-generation"
+    description="ONNX models via Transformers.js v4 (experimental)."
   />
   <Card
     title="RAG"
@@ -295,3 +474,13 @@ class MyLanguageModel implements LanguageModel {
     description="Build retrieval-augmented generation pipelines."
   />
 </Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| LLM Chat | Stream text generation with multiple LLM backends and vision (image input) | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |
+| PDF Search | Generate answers from PDF context with streaming | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |
+| LangChain RAG | Generate answers in a retrieval-augmented pipeline | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |
+| Data Extractor | Extract structured data with generateObject() | [Demo](https://localmode.ai/data-extractor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/data-extractor) |
+| Research Agent | Multi-step reasoning with tool-augmented generation | [Demo](https://localmode.ai/research-agent) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/research-agent) |

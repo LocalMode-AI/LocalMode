@@ -201,7 +201,7 @@ export interface ZeroShotClassificationResultItem {
  * @example
  * ```ts
  * const { label, score } = await classify({
- *   model: transformers.classifier('Xenova/distilbert-sst-2'),
+ *   model: transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english'),
  *   text: 'I love this product!',
  * });
  * ```
@@ -307,7 +307,7 @@ export interface ClassifyManyResult {
  * @example
  * ```ts
  * const { labels, scores } = await classifyZeroShot({
- *   model: transformers.zeroShot('Xenova/bart-large-mnli'),
+ *   model: transformers.zeroShot('Xenova/mobilebert-uncased-mnli'),
  *   text: 'I just bought a new car',
  *   candidateLabels: ['finance', 'automotive', 'travel'],
  * });

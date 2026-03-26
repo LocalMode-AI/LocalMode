@@ -7,6 +7,7 @@
  */
 
 import type { ModelLoadProgress } from './types.js';
+import { TRANSFORMERS_LLM_MODELS } from './models.js';
 
 /**
  * Check if WebGPU is available in the current environment.
@@ -58,7 +59,7 @@ export async function getOptimalDevice(): Promise<'webgpu' | 'wasm'> {
  *
  * @example
  * ```ts
- * if (await isModelCached('Xenova/all-MiniLM-L6-v2')) {
+ * if (await isModelCached('Xenova/bge-small-en-v1.5')) {
  *   console.log('Model is ready');
  * } else {
  *   console.log('Model will be downloaded on first use');
@@ -76,8 +77,8 @@ export async function isModelCached(modelId: string): Promise<boolean> {
     const cache = await caches.open('transformers-cache');
     const keys = await cache.keys();
 
-    // Check if any cached resources match this model
-    return keys.some((request) => request.url.includes(modelId.replace('/', '%2F')));
+    // Check if any cached resources match this model ID in the URL path
+    return keys.some((request) => request.url.includes(modelId));
   } catch {
     return false;
   }
@@ -95,7 +96,7 @@ export async function isModelCached(modelId: string): Promise<boolean> {
  * @example
  * ```ts
  * // Preload during app initialization
- * await preloadModel('Xenova/all-MiniLM-L6-v2', {
+ * await preloadModel('Xenova/bge-small-en-v1.5', {
  *   onProgress: (p) => console.log(`${p.progress}%`),
  * });
  * ```
@@ -160,6 +161,34 @@ export async function preloadModel(
         });
       }
     : undefined;
+
+  // LLM models use @huggingface/transformers-v4 with different loading
+  const isLLMModel = modelId in TRANSFORMERS_LLM_MODELS;
+  if (isLLMModel) {
+    const tjs4 = await import('@huggingface/transformers-v4');
+    const lower = modelId.toLowerCase();
+    const isQwen35 = lower.includes('qwen3.5') || lower.includes('qwen3_5') || lower.includes('qwen35');
+
+    if (isQwen35) {
+      await Promise.all([
+        tjs4.AutoTokenizer.from_pretrained(modelId, {
+          progress_callback: progressCallback,
+        } as Record<string, unknown>),
+        tjs4.AutoModelForCausalLM.from_pretrained(modelId, {
+          dtype: { embed_tokens: 'q4', vision_encoder: 'q4', decoder_model_merged: 'q4' },
+          device: 'webgpu',
+          progress_callback: progressCallback,
+        } as Record<string, unknown>),
+      ]);
+    } else {
+      await tjs4.pipeline('text-generation', modelId, {
+        device: 'webgpu',
+        dtype: 'q4',
+        progress_callback: progressCallback,
+      } as Record<string, unknown>);
+    }
+    return;
+  }
 
   // Create pipeline options - use type assertion as API may vary between versions
   const pipelineOptions: Record<string, unknown> = {

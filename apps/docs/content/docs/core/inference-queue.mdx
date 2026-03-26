@@ -1,0 +1,295 @@
+---
+title: Inference Queue
+description: Priority-based task scheduling for multi-feature AI applications.
+icon: ListOrdered
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+When your application runs multiple AI features concurrently (search, indexing, classification), the inference queue ensures interactive tasks take priority over background work. Tasks execute in priority order with configurable concurrency.
+
+<Callout type="info" title="See it in action">
+  Try [PDF Search](https://localmode.ai/pdf-search) for a working demo of these APIs.
+</Callout>
+
+## createInferenceQueue()
+
+Create a priority-based queue:
+
+```ts {3}
+import { createInferenceQueue } from '@localmode/core';
+
+const queue = createInferenceQueue({ concurrency: 1 });
+```
+
+### InferenceQueueConfig
+
+<TypeTable
+  type={{
+    concurrency: {
+      description: 'Maximum number of tasks executing simultaneously',
+      type: 'number',
+      default: '1',
+    },
+    priorities: {
+      description: 'Priority levels ordered from highest to lowest',
+      type: 'string[]',
+      default: "['interactive', 'background', 'prefetch']",
+    },
+  }}
+/>
+
+## queue.add()
+
+Add a task to the queue. Returns a promise that resolves with the task result:
+
+<Tabs items={['Basic', 'With Priority', 'With AbortSignal']}>
+<Tab value="Basic">
+
+```ts
+import { embed } from '@localmode/core';
+
+// Runs at the highest priority (first in the priorities array)
+const result = await queue.add(
+  () => embed({ model, value: 'search query' })
+);
+console.log(result.embedding.length); // 384
+```
+
+</Tab>
+<Tab value="With Priority">
+
+```ts {4,10}
+// Interactive search — runs first
+const searchResult = await queue.add(
+  () => embed({ model, value: userQuery }),
+  { priority: 'interactive' }
+);
+
+// Background indexing — yields to interactive tasks
+queue.add(
+  () => embedMany({ model, values: newDocuments }),
+  { priority: 'background' }
+);
+
+// Prefetch — lowest priority, runs when idle
+queue.add(
+  () => embedMany({ model, values: predictedQueries }),
+  { priority: 'prefetch' }
+);
+```
+
+</Tab>
+<Tab value="With AbortSignal">
+
+```ts {1,5}
+const controller = new AbortController();
+
+const result = await queue.add(
+  () => embed({ model, value: 'query' }),
+  { priority: 'interactive', abortSignal: controller.signal }
+);
+
+// Cancel before the task starts (removes from queue)
+controller.abort();
+```
+
+</Tab>
+</Tabs>
+
+### QueueAddOptions
+
+<TypeTable
+  type={{
+    priority: {
+      description: 'Priority level for this task',
+      type: 'string',
+      default: 'First priority level',
+    },
+    abortSignal: {
+      description: 'AbortSignal to cancel this task while queued',
+      type: 'AbortSignal',
+      required: false,
+    },
+  }}
+/>
+
+<Callout type="info">
+  If a task is aborted while waiting in the queue, it is removed and its promise rejects with an `AbortError`. Tasks that are already executing are not interrupted by the queue — pass the signal into the task function itself for that.
+</Callout>
+
+## Queue Stats
+
+Monitor queue health with real-time statistics:
+
+```ts
+// Read stats at any time
+const stats = queue.stats;
+console.log(`Pending: ${stats.pending}, Active: ${stats.active}`);
+console.log(`Completed: ${stats.completed}, Failed: ${stats.failed}`);
+console.log(`Avg latency: ${stats.avgLatencyMs}ms`);
+```
+
+### Subscribe to Stats Events
+
+The `stats` event fires after every task completes or fails:
+
+```ts
+const unsubscribe = queue.on('stats', (stats) => {
+  console.log(`Queue: ${stats.pending} pending, ${stats.active} active`);
+  updateProgressBar(stats);
+});
+
+// Later: stop listening
+unsubscribe();
+```
+
+### QueueStats
+
+<TypeTable
+  type={{
+    pending: {
+      description: 'Number of tasks waiting to execute',
+      type: 'number',
+    },
+    active: {
+      description: 'Number of tasks currently executing',
+      type: 'number',
+    },
+    completed: {
+      description: 'Total tasks completed successfully',
+      type: 'number',
+    },
+    failed: {
+      description: 'Total tasks that failed',
+      type: 'number',
+    },
+    avgLatencyMs: {
+      description: 'Average latency in milliseconds for completed tasks',
+      type: 'number',
+    },
+  }}
+/>
+
+## queue.clear() and queue.destroy()
+
+```ts
+// Remove all pending (not yet executing) tasks
+queue.clear();
+
+// Destroy the queue — rejects all pending tasks, prevents new additions
+queue.destroy();
+```
+
+## Example: Interactive Search vs Background Indexing
+
+A common pattern where user-facing search always takes priority over document ingestion:
+
+```ts
+import { createInferenceQueue, embed, embedMany, semanticSearch } from '@localmode/core';
+
+const queue = createInferenceQueue({
+  concurrency: 1, // Single model, one operation at a time
+  priorities: ['interactive', 'background'],
+});
+
+// User searches — interactive priority, runs immediately
+async function search(query: string) {
+  const { embedding } = await queue.add(
+    () => embed({ model, value: query }),
+    { priority: 'interactive' }
+  );
+  return db.search(embedding, { k: 10 });
+}
+
+// Background indexing — yields whenever a search comes in
+async function indexDocuments(texts: string[]) {
+  // Split into small batches so interactive tasks can interleave
+  const batchSize = 10;
+  for (let i = 0; i < texts.length; i += batchSize) {
+    const batch = texts.slice(i, i + batchSize);
+    await queue.add(
+      () => embedMany({ model, values: batch }),
+      { priority: 'background' }
+    );
+  }
+}
+```
+
+## Custom Priority Levels
+
+Define your own priority hierarchy:
+
+```ts
+const queue = createInferenceQueue({
+  concurrency: 2,
+  priorities: ['critical', 'user', 'batch', 'idle'],
+});
+
+// 'critical' tasks always run before 'user', which run before 'batch', etc.
+await queue.add(fn, { priority: 'critical' });
+await queue.add(fn, { priority: 'idle' });
+```
+
+<Callout type="warn">
+  Passing a priority string that is not in the configured `priorities` array will reject the task's promise with an error.
+</Callout>
+
+## React Integration
+
+Use the `useInferenceQueue` hook from `@localmode/react` for queue management in React:
+
+```tsx
+import { useInferenceQueue } from '@localmode/react';
+
+function AIFeature() {
+  const { queue, stats } = useInferenceQueue({ concurrency: 1 });
+
+  const handleSearch = async () => {
+    if (!queue) return;
+    const result = await queue.add(
+      () => embed({ model, value: searchText }),
+      { priority: 'interactive' }
+    );
+    // Use result...
+  };
+
+  return (
+    <div>
+      <button onClick={handleSearch}>Search</button>
+      <p>Pending: {stats.pending} | Active: {stats.active}</p>
+    </div>
+  );
+}
+```
+
+The hook creates the queue on mount, subscribes to stats for reactive updates, and destroys the queue on unmount.
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Pipelines"
+    href="/docs/core/pipelines"
+    description="Compose multi-step AI workflows."
+  />
+  <Card
+    title="Embeddings"
+    href="/docs/core/embeddings"
+    description="Generate embeddings for text and semantic search."
+  />
+  <Card
+    title="Events"
+    href="/docs/core/events"
+    description="Type-safe event system for reactive updates."
+  />
+</Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| PDF Search | Priority queue for embedding and search operations | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |

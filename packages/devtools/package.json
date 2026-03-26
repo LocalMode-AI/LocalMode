@@ -1,0 +1,95 @@
+{
+  "name": "@localmode/devtools",
+  "version": "1.0.0",
+  "description": "In-app DevTools widget for debugging and monitoring LocalMode applications",
+  "license": "MIT",
+  "author": "LocalMode",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LocalMode-AI/LocalMode.git",
+    "directory": "packages/devtools"
+  },
+  "homepage": "https://localmode.dev/docs/devtools",
+  "bugs": {
+    "url": "https://github.com/LocalMode-AI/LocalMode/issues"
+  },
+  "keywords": [
+    "devtools",
+    "devtools-widget",
+    "debugging",
+    "monitoring",
+    "local-first",
+    "ai",
+    "observability",
+    "browser-ai"
+  ],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./widget": {
+      "import": {
+        "types": "./dist/widget.d.ts",
+        "default": "./dist/widget.js"
+      },
+      "require": {
+        "types": "./dist/widget.d.cts",
+        "default": "./dist/widget.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "@localmode/core": ">=1.0.0",
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@localmode/core": "workspace:*",
+    "@testing-library/react": "^16.3.0",
+    "@types/react": "^19.1.4",
+    "@types/react-dom": "^19.1.5",
+    "jsdom": "^26.1.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.3"
+  }
+}

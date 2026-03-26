@@ -11,6 +11,10 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 LocalMode provides a type-safe event system for building reactive applications. Subscribe to VectorDB lifecycle events, embedding operations, and custom events for real-time UI updates.
 
+<Callout type="info" title="See it in action">
+  Try [LLM Chat](https://localmode.ai/llm-chat) for a working demo of these APIs.
+</Callout>
+
 ## Overview
 
 The event system enables:
@@ -385,7 +389,7 @@ embedEvents.on('modelLoad', ({ modelId, durationMs }) => {
 
 // Create database
 const db = await createVectorDB({ name: 'documents', dimensions: 384 });
-const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
 
 // Manually emit events (or use middleware)
 async function addDocument(text: string) {
@@ -408,3 +412,9 @@ async function addDocument(text: string) {
   return id;
 }
 ```
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| LLM Chat | Global event bus for model download and inference events | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |

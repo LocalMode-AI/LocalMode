@@ -1,0 +1,138 @@
+---
+title: 'Embeddings'
+description: Hooks for text embedding and semantic search.
+icon: Cpu
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Embedding Hooks
+
+<Callout type="info" title="See it in action">
+  Try [Semantic Search](https://localmode.ai/semantic-search) and [Product Search](https://localmode.ai/product-search) for working demos of these hooks.
+</Callout>
+
+## useEmbed
+
+Embed a single text value.
+
+```tsx
+import { useEmbed } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+
+function Demo() {
+  const { data, isLoading, error, execute } = useEmbed({ model });
+
+  return (
+    <div>
+      <button onClick={() => execute('Hello world')}>Embed</button>
+      {data && <p>Vector dimensions: {data.embedding.length}</p>}
+    </div>
+  );
+}
+```
+
+Returns `{ embedding: Float32Array, usage: { tokens }, response: { modelId, timestamp } }`.
+
+## useEmbedMany
+
+Embed multiple values in batch.
+
+```tsx
+import { useEmbedMany } from '@localmode/react';
+
+const { data, isLoading, execute } = useEmbedMany({ model });
+
+await execute(['Hello', 'World', 'Foo', 'Bar']);
+// data.embeddings = [Float32Array, Float32Array, ...]
+```
+
+## useSemanticSearch
+
+Combines embedding and vector DB search in one hook.
+
+```tsx
+import { useSemanticSearch } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+import { createVectorDB } from '@localmode/core';
+
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const db = await createVectorDB({ name: 'notes', dimensions: 384 });
+
+function SearchDemo() {
+  const { results, isSearching, search } = useSemanticSearch({
+    model,
+    db,
+    topK: 10,
+  });
+
+  return (
+    <div>
+      <input onChange={(e) => search(e.target.value)} />
+      {results.map((r) => (
+        <div key={r.id}>{r.content} (score: {r.score.toFixed(2)})</div>
+      ))}
+    </div>
+  );
+}
+```
+
+<Callout type="tip">
+For full API reference on `embed()` and `semanticSearch()`, see the [Core Embeddings](/docs/core/embeddings) guide. For recommended models, see the [Transformers Embeddings](/docs/transformers/embeddings) guide.
+</Callout>
+
+## useEmbedImage
+
+Embed a single image into the same vector space as text using CLIP/SigLIP models for cross-modal search.
+
+```tsx
+import { useEmbedImage } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.clipEmbedding('Xenova/clip-vit-base-patch32');
+
+const { data, execute } = useEmbedImage({ model });
+await execute(imageDataUrl);
+// data.embedding = Float32Array(512) — same space as text embeddings
+```
+
+## useEmbedManyImages
+
+Batch image embedding for indexing image collections.
+
+```tsx
+import { useEmbedManyImages } from '@localmode/react';
+
+const { data, execute } = useEmbedManyImages({ model });
+await execute([imageUrl1, imageUrl2, imageUrl3]);
+// data.embeddings = [Float32Array, Float32Array, Float32Array]
+```
+
+## useReindex
+
+Re-embed all documents in a VectorDB when switching embedding models. Supports progress tracking, cancellation, and resume.
+
+```tsx
+import { useReindex } from '@localmode/react';
+
+const { progress, isReindexing, execute, cancel } = useReindex({
+  db: vectorDB,
+  oldModel: transformers.embedding('Xenova/all-MiniLM-L6-v2'),
+  newModel: transformers.embedding('Xenova/bge-small-en-v1.5'),
+});
+
+// progress = { completed: 500, total: 1000, percentage: 50 }
+```
+
+<Callout type="info">
+For multimodal embedding details, see [Multimodal Embeddings](/docs/core/multimodal-embeddings). For drift detection, see [Embedding Drift Detection](/docs/core/embedding-drift).
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Semantic Search | Full-text semantic search with useSemanticSearch | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
+| Product Search | Product catalog search with useSemanticSearch | [Demo](https://localmode.ai/product-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/product-search) |

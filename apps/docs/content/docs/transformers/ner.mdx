@@ -1,0 +1,100 @@
+---
+title: Named Entity Recognition
+description: Extract people, organizations, locations, and other entities from text.
+icon: ScanSearch
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Extract named entities — people, organizations, locations, and miscellaneous entities — from text using token classification models.
+
+<Callout type="info">
+  For full API reference (`extractEntities()`, `extractEntitiesMany()`, options, result types, and custom providers), see the [Core Classification](/docs/core/classification) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [Document Redactor](https://localmode.ai/document-redactor) for a working demo.
+</Callout>
+
+## Recommended Models
+
+| Model | Size | Entity Types | Use Case |
+|-------|------|--------------|----------|
+| `Xenova/bert-base-NER` | ~110MB | PER, ORG, LOC, MISC | General-purpose NER |
+
+## Entity Types
+
+| Type | Description | Examples |
+|------|-------------|----------|
+| `PER` | Person names | Tim Cook, Marie Curie |
+| `ORG` | Organizations | Apple, United Nations |
+| `LOC` | Locations | Cupertino, France |
+| `MISC` | Miscellaneous | English, Nobel Prize |
+
+## Document Redaction Example
+
+Based on the [Document Redactor](https://localmode.ai/document-redactor) showcase app:
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { extractEntities } from '@localmode/core';
+
+const model = transformers.ner('Xenova/bert-base-NER');
+
+const { entities } = await extractEntities({
+  model,
+  text: document,
+  abortSignal: controller.signal,
+});
+
+// Strip BIO prefix from entity types (B-PER → PER, I-ORG → ORG)
+const cleaned = entities.map((e) => ({
+  ...e,
+  type: e.type.replace(/^[BI]-/, ''),
+}));
+
+// Redact entities by replacing with placeholder
+let redacted = document;
+for (const entity of cleaned.reverse()) {
+  redacted =
+    redacted.slice(0, entity.start) +
+    `[${entity.type}]` +
+    redacted.slice(entity.end);
+}
+```
+
+## Best Practices
+
+<Callout type="tip" title="NER Tips">
+  1. **Handle BIO prefixes** — Raw output uses B-/I- prefixes (B-PER, I-PER); strip them for display
+  2. **Use offsets for redaction** — `start`/`end` give exact character positions for replacement
+  3. **Process in reverse** — When redacting, work from end to start to preserve offsets
+  4. **Filter by score** — Low-confidence entities may be false positives
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Document Redactor | Extract and redact named entities from documents | [Demo](https://localmode.ai/document-redactor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/document-redactor) |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core Classification API"
+    href="/docs/core/classification"
+    description="Full API reference including extractEntities()."
+  />
+  <Card
+    title="Classification"
+    href="/docs/transformers/classification"
+    description="Text classification for sentiment and topics."
+  />
+  <Card
+    title="Zero-Shot"
+    href="/docs/transformers/zero-shot"
+    description="Classify into arbitrary labels."
+  />
+</Cards>

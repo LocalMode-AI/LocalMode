@@ -10,6 +10,6 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   outDir: 'dist',
-  external: ['@huggingface/transformers', '@localmode/core'],
+  external: ['@huggingface/transformers', '@huggingface/transformers-v4', '@localmode/core'],
 });
 

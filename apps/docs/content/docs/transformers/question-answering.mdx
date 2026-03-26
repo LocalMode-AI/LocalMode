@@ -1,0 +1,88 @@
+---
+title: Question Answering
+description: Extractive question answering from a given context.
+icon: MessageCircleQuestionMark
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Extract answers directly from a context passage. The model finds the span of text that best answers the question — no generation needed.
+
+<Callout type="info">
+  For full API reference (`answerQuestion()`, `answerQuestionMany()`, options, result types, and custom providers), see the [Core Question Answering](/docs/core/question-answering) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [QA Bot](https://localmode.ai/qa-bot) for a working demo.
+</Callout>
+
+## Recommended Models
+
+| Model | Size | Speed | Use Case |
+|-------|------|-------|----------|
+| `Xenova/distilbert-base-cased-distilled-squad` | ~100MB | ⚡⚡⚡ | Fast extractive QA |
+| `Xenova/distilbert-base-uncased-distilled-squad` | ~100MB | ⚡⚡⚡ | Case-insensitive QA |
+
+## QA Bot Example
+
+Based on the [QA Bot](https://localmode.ai/qa-bot) showcase app:
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { answerQuestion } from '@localmode/core';
+
+const model = transformers.questionAnswering(
+  'Xenova/distilbert-base-cased-distilled-squad'
+);
+
+async function askQuestion(question: string, context: string) {
+  const { answer, score } = await answerQuestion({
+    model,
+    question,
+    context,
+    abortSignal: controller.signal,
+  });
+
+  return {
+    answer,
+    confidence: score,
+    isReliable: score > 0.5,
+  };
+}
+```
+
+## Best Practices
+
+<Callout type="tip" title="QA Tips">
+  1. **Provide focused context** — Shorter, relevant context gives better answers
+  2. **Check the score** — Low scores mean the model is uncertain
+  3. **Extractive only** — Answers are always spans from the context, not generated text
+  4. **Combine with search** — Use semantic search to find relevant context first
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| QA Bot | Answer questions from provided context passages | [Demo](https://localmode.ai/qa-bot) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/qa-bot) |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core Question Answering API"
+    href="/docs/core/question-answering"
+    description="Full API reference, options, result types, and custom providers."
+  />
+  <Card
+    title="Summarization"
+    href="/docs/transformers/summarization"
+    description="Summarize long documents."
+  />
+  <Card
+    title="Document QA"
+    href="/docs/transformers/document-qa"
+    description="Answer questions about document images."
+  />
+</Cards>
