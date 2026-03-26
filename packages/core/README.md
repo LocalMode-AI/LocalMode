@@ -3,7 +3,6 @@
 Local-first AI utilities for the browser. Zero dependencies. Privacy-first.
 
 [![npm](https://img.shields.io/npm/v/@localmode/core)](https://npmjs.com/package/@localmode/core)
-[![bundle size](https://img.shields.io/bundlephobia/minzip/@localmode/core)](https://bundlephobia.com/package/@localmode/core)
 [![license](https://img.shields.io/npm/l/@localmode/core)](../../LICENSE)
 
 [![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev/docs/core)
