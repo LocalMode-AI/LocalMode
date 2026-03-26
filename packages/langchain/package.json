@@ -1,6 +1,6 @@
 {
   "name": "@localmode/langchain",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "LangChain.js adapters for @localmode — drop-in local inference for existing LangChain apps",
   "license": "MIT",
   "author": "LocalMode",
@@ -61,7 +61,7 @@
     "@langchain/core": ">=0.3.0"
   },
   "peerDependencies": {
-    "@localmode/core": ">=1.0.0"
+    "@localmode/core": ">=2.0.0"
   },
   "devDependencies": {
     "@langchain/core": "^0.3.0",

@@ -1,5 +1,16 @@
 # @localmode/pdfjs
 
+## 2.0.0
+
+### Major Changes
+
+- Enhanced PDF text extraction capabilities
+
+### Patch Changes
+
+- Updated dependencies
+  - @localmode/core@2.0.0
+
 ## 1.0.2
 
 ### Patch Changes
