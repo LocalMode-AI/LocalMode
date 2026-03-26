@@ -11,6 +11,10 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 
 LocalMode provides flexible storage options for persisting vector databases and application data.
 
+<Callout type="info" title="See it in action">
+  Try [Encrypted Vault](https://localmode.ai/encrypted-vault) for a working demo of these APIs.
+</Callout>
+
 ## Storage Options
 
 <Tabs items={['IndexedDB (Default)', 'Memory Storage']}>
@@ -18,13 +22,14 @@ LocalMode provides flexible storage options for persisting vector databases and 
 
 The default storage uses IndexedDB for persistence:
 
-```ts {3-6}
+```ts {3-4}
 import { IndexedDBStorage, createVectorDB } from '@localmode/core';
 
-const storage = new IndexedDBStorage({
-  name: 'my-app',
-  storeName: 'vectors', // Optional, defaults to 'store'
-});
+// Basic usage
+const storage = new IndexedDBStorage('my-app');
+
+// With Write-Ahead Log for crash recovery
+const walStorage = new IndexedDBStorage('my-app', { enableWAL: true });
 
 // Or use default (IndexedDB) automatically:
 const db = await createVectorDB({
@@ -33,6 +38,8 @@ const db = await createVectorDB({
   // Uses IndexedDBStorage by default
 });
 ```
+
+The optional `enableWAL` option enables a Write-Ahead Log that records operations before executing them. If the browser crashes mid-write, the WAL replays uncommitted operations on next open, preventing data corruption. Defaults to `false`.
 
 Data persists across page reloads and browser restarts.
 
@@ -67,35 +74,123 @@ Useful for:
   condition with `isIndexedDBSupported()`.
 </Callout>
 
-## Storage Interface
+## Storage Shorthand
 
-All storage adapters implement this interface:
+`createVectorDB()` accepts a `storage` parameter as either a string shorthand or a `StorageAdapter` instance:
+
+```typescript
+import { createVectorDB, MemoryStorage } from '@localmode/core';
+
+// String shorthand (recommended for built-in adapters)
+const db1 = await createVectorDB({ name: 'docs', dimensions: 384, storage: 'memory' });
+const db2 = await createVectorDB({ name: 'docs', dimensions: 384, storage: 'indexeddb' });
+
+// Omitting storage defaults to 'indexeddb'
+const db3 = await createVectorDB({ name: 'docs', dimensions: 384 });
+
+// StorageAdapter instance (for custom or third-party adapters)
+const db4 = await createVectorDB({ name: 'docs', dimensions: 384, storage: new MemoryStorage() });
+```
+
+| Value | Behavior |
+| --- | --- |
+| `'indexeddb'` (default) | Persists data in IndexedDB |
+| `'memory'` | In-memory storage, lost on page reload |
+| `StorageAdapter` instance | Uses the provided adapter (e.g., `DexieStorage`, `IDBStorage`) |
+
+## StorageAdapter Interface
+
+All storage adapters implement the `StorageAdapter` interface:
 
 <TypeTable
   type={{
-    'get(key)': {
-      description: 'Retrieve a document by key',
-      type: 'Promise<StoredDocument | undefined>',
-    },
-    'set(key, value)': {
-      description: 'Store a document with the given key',
-      type: 'Promise<void>',
-    },
-    'delete(key)': {
-      description: 'Delete a document by key',
-      type: 'Promise<void>',
-    },
-    'keys()': {
-      description: 'Get all stored keys',
-      type: 'Promise<string[]>',
-    },
-    'clear()': {
-      description: 'Delete all documents',
+    'open()': {
+      description: 'Open the storage connection',
       type: 'Promise<void>',
     },
     'close()': {
       description: 'Close the storage connection',
       type: 'Promise<void>',
+    },
+    'addDocument(doc)': {
+      description: 'Add or update a document',
+      type: 'Promise<void>',
+    },
+    'getDocument(id)': {
+      description: 'Get a document by ID',
+      type: 'Promise<StoredDocument | null>',
+    },
+    'deleteDocument(id)': {
+      description: 'Delete a document by ID',
+      type: 'Promise<void>',
+    },
+    'getAllDocuments(collectionId)': {
+      description: 'Get all documents in a collection',
+      type: 'Promise<StoredDocument[]>',
+    },
+    'countDocuments(collectionId)': {
+      description: 'Count documents in a collection',
+      type: 'Promise<number>',
+    },
+    'addVector(vec)': {
+      description: 'Add or update a vector',
+      type: 'Promise<void>',
+    },
+    'getVector(id)': {
+      description: 'Get a vector by ID',
+      type: 'Promise<Float32Array | null>',
+    },
+    'deleteVector(id)': {
+      description: 'Delete a vector by ID',
+      type: 'Promise<void>',
+    },
+    'getAllVectors(collectionId)': {
+      description: 'Get all vectors in a collection',
+      type: 'Promise<Map<string, Float32Array>>',
+    },
+    'saveIndex(collectionId, index)': {
+      description: 'Save a serialized HNSW index',
+      type: 'Promise<void>',
+    },
+    'loadIndex(collectionId)': {
+      description: 'Load a serialized HNSW index',
+      type: 'Promise<SerializedHNSWIndex | null>',
+    },
+    'deleteIndex(collectionId)': {
+      description: 'Delete the HNSW index for a collection',
+      type: 'Promise<void>',
+    },
+    'createCollection(collection)': {
+      description: 'Create or update a collection',
+      type: 'Promise<void>',
+    },
+    'getCollection(id)': {
+      description: 'Get a collection by ID',
+      type: 'Promise<Collection | null>',
+    },
+    'getCollectionByName(name)': {
+      description: 'Get a collection by name',
+      type: 'Promise<Collection | null>',
+    },
+    'getAllCollections()': {
+      description: 'Get all collections',
+      type: 'Promise<Collection[]>',
+    },
+    'deleteCollection(id)': {
+      description: 'Delete a collection by ID',
+      type: 'Promise<void>',
+    },
+    'clear()': {
+      description: 'Clear all data across all stores',
+      type: 'Promise<void>',
+    },
+    'clearCollection(collectionId)': {
+      description: 'Clear all data for a specific collection',
+      type: 'Promise<void>',
+    },
+    'estimateSize()': {
+      description: 'Estimate total storage size in bytes',
+      type: 'Promise<number>',
     },
   }}
 />
@@ -108,115 +203,142 @@ All storage adapters implement this interface:
       description: 'Unique document identifier',
       type: 'string',
     },
+    collectionId: {
+      description: 'ID of the collection this document belongs to',
+      type: 'string',
+    },
+    metadata: {
+      description: 'Additional document metadata (optional)',
+      type: 'Record<string, unknown> | undefined',
+    },
+    createdAt: {
+      description: 'Creation timestamp (epoch ms)',
+      type: 'number',
+    },
+    updatedAt: {
+      description: 'Last update timestamp (epoch ms)',
+      type: 'number',
+    },
+  }}
+/>
+
+### StoredVector
+
+<TypeTable
+  type={{
+    id: {
+      description: 'Unique vector identifier (matches document ID)',
+      type: 'string',
+    },
+    collectionId: {
+      description: 'ID of the collection this vector belongs to',
+      type: 'string',
+    },
     vector: {
       description: 'Embedding vector',
       type: 'Float32Array',
-    },
-    metadata: {
-      description: 'Additional document metadata',
-      type: 'Record<string, unknown>',
     },
   }}
 />
 
 ## Third-Party Adapters
 
-### Dexie.js
+LocalMode provides three external storage adapters, each with dedicated documentation:
+
+| Adapter | Package | Bundle Size | Best For |
+| --- | --- | --- | --- |
+| [`DexieStorage`](/docs/dexie) | `@localmode/dexie` | ~15KB | Schema versioning, transactions |
+| [`IDBStorage`](/docs/idb) | `@localmode/idb` | ~3KB | Minimal bundle size |
+| [`LocalForageStorage`](/docs/localforage) | `@localmode/localforage` | ~10KB | Max browser compatibility, auto-fallback |
+
+All adapters implement the same `StorageAdapter` interface and work with `createVectorDB()`:
 
 ```typescript
 import { DexieStorage } from '@localmode/dexie';
-import { createVectorDB } from '@localmode/core';
-
-const db = await createVectorDB({
-  name: 'dexie-db',
-  dimensions: 384,
-  storage: new DexieStorage({
-    name: 'my-app',
-    version: 1,
-  }),
-});
-```
-
-### idb
-
-```typescript
 import { IDBStorage } from '@localmode/idb';
-import { createVectorDB } from '@localmode/core';
-
-const db = await createVectorDB({
-  name: 'idb-db',
-  dimensions: 384,
-  storage: new IDBStorage({
-    name: 'my-app',
-  }),
-});
-```
-
-### localForage
-
-```typescript
 import { LocalForageStorage } from '@localmode/localforage';
 import { createVectorDB } from '@localmode/core';
 
+// Pick any adapter — same API
+const storage = new DexieStorage({ name: 'my-app' });
+// const storage = new IDBStorage({ name: 'my-app' });
+// const storage = new LocalForageStorage({ name: 'my-app' });
+
 const db = await createVectorDB({
-  name: 'lf-db',
+  name: 'documents',
   dimensions: 384,
-  storage: new LocalForageStorage({
-    name: 'my-app',
-    driver: 'INDEXEDDB',
-  }),
+  storage,
 });
 ```
 
+<Callout type="info" title="Choosing an adapter">
+  - **`DexieStorage`** — Best for production apps that need schema versioning and transactional writes. [Learn more](/docs/dexie)
+  - **`IDBStorage`** — Best when bundle size is critical (~3KB). [Learn more](/docs/idb)
+  - **`LocalForageStorage`** — Best for maximum browser compatibility with automatic IndexedDB -> WebSQL -> localStorage fallback. [Learn more](/docs/localforage)
+</Callout>
+
 ## Custom Storage
 
-Implement your own storage adapter:
+Implement your own storage adapter by implementing the `StorageAdapter` interface. Note that `StorageAdapter` is the interface name for custom implementations, while `Storage` is a convenience type alias for the built-in adapters (`IndexedDBStorage | MemoryStorage`).
 
 ```typescript
-import type { Storage, StoredDocument } from '@localmode/core';
+// StorageAdapter — the interface to implement for custom adapters
+// Storage — type alias for built-in implementations (IndexedDBStorage | MemoryStorage)
+import type { StorageAdapter, Storage, StoredDocument, StoredVector, Collection, SerializedHNSWIndex } from '@localmode/core';
 
-class MyCustomStorage implements Storage {
-  private data = new Map<string, StoredDocument>();
+class MyCustomStorage implements StorageAdapter {
+  // Lifecycle
+  async open() { /* initialize connection */ }
+  async close() { /* cleanup */ }
 
-  async get(key: string) {
-    return this.data.get(key);
-  }
+  // Document operations
+  async addDocument(doc: StoredDocument) { /* store document */ }
+  async getDocument(id: string) { /* return doc or null */ return null; }
+  async deleteDocument(id: string) { /* remove document */ }
+  async getAllDocuments(collectionId: string) { return []; }
+  async countDocuments(collectionId: string) { return 0; }
 
-  async set(key: string, value: StoredDocument) {
-    this.data.set(key, value);
-  }
+  // Vector operations
+  async addVector(vec: StoredVector) { /* store vector */ }
+  async getVector(id: string) { /* return Float32Array or null */ return null; }
+  async deleteVector(id: string) { /* remove vector */ }
+  async getAllVectors(collectionId: string) { return new Map(); }
 
-  async delete(key: string) {
-    this.data.delete(key);
-  }
+  // Index operations
+  async saveIndex(collectionId: string, index: SerializedHNSWIndex) { /* persist index */ }
+  async loadIndex(collectionId: string) { /* return index or null */ return null; }
+  async deleteIndex(collectionId: string) { /* remove index */ }
 
-  async keys() {
-    return Array.from(this.data.keys());
-  }
+  // Collection operations
+  async createCollection(collection: Collection) { /* store collection */ }
+  async getCollection(id: string) { return null; }
+  async getCollectionByName(name: string) { return null; }
+  async getAllCollections() { return []; }
+  async deleteCollection(id: string) { /* remove collection */ }
 
-  async clear() {
-    this.data.clear();
-  }
-
-  async close() {
-    // Cleanup if needed
-  }
+  // Utility operations
+  async clear() { /* clear all data */ }
+  async clearCollection(collectionId: string) { /* clear collection data */ }
+  async estimateSize() { return 0; }
 }
 ```
 
 ## Storage Fallback
 
-Automatically fallback when IndexedDB is unavailable:
+Gracefully fallback when IndexedDB is unavailable (e.g., Safari private browsing):
 
 ```typescript
-import { createStorageWithFallback, IndexedDBStorage, MemoryStorage } from '@localmode/core';
+import { IndexedDBStorage, MemoryStorage, createVectorDB } from '@localmode/core';
 
-const storage = await createStorageWithFallback({
-  providers: [() => new IndexedDBStorage({ name: 'app' }), () => new MemoryStorage()],
-  onFallback: (error, index) => {
-    console.warn(`Storage provider ${index} failed:`, error.message);
-  },
-});
+let storage: IndexedDBStorage | MemoryStorage;
+
+try {
+  storage = new IndexedDBStorage('my-app');
+  await storage.open();
+} catch (error) {
+  console.warn('IndexedDB unavailable, falling back to memory:', error);
+  storage = new MemoryStorage();
+}
 
 const db = await createVectorDB({
   name: 'robust-db',
@@ -258,6 +380,122 @@ if (warning) {
   console.warn('Storage is almost full!', quota);
 }
 ```
+
+## Storage Compression
+
+Reduce IndexedDB disk usage by up to 4x without affecting search quality. Storage compression uses SQ8 (scalar quantization to Uint8) to compress vectors before writing to IndexedDB, and decompresses on read. The HNSW index always uses original Float32Array vectors in memory, so **search recall is completely unaffected**.
+
+<Callout type="info" title="Compression vs Quantization">
+Storage compression (`compression`) and vector quantization (`quantization`) are independent features:
+- **Quantization** compresses vectors in the HNSW index, trading recall for storage.
+- **Compression** only reduces disk usage in IndexedDB. No recall impact.
+
+When both are enabled, quantization takes priority and compression is skipped (since vectors are already Uint8).
+</Callout>
+
+### Enable Compression
+
+```typescript
+import { createVectorDB } from '@localmode/core';
+
+const db = await createVectorDB({
+  name: 'docs',
+  dimensions: 384,
+  compression: { type: 'sq8' },
+});
+
+// Use the database normally — compression is transparent
+await db.add({ id: '1', vector: embedding, metadata: { title: 'Hello' } });
+
+// get() returns decompressed Float32Array
+const doc = await db.get('1');
+console.log(doc.vector instanceof Float32Array); // true
+```
+
+### Compression Modes
+
+| Mode | Description | Compression | Best for |
+|------|-------------|------------|----------|
+| `'sq8'` | Standard SQ8 per vector | 4x | General use |
+| `'delta-sq8'` | Delta encoding + SQ8 | 4x (potentially better quantization error) | Batch-inserted similar vectors |
+| `'none'` | No compression (default) | 1x | Maximum precision |
+
+### Compression Statistics
+
+```typescript
+import { createVectorDB, getCompressionStats } from '@localmode/core';
+
+const db = await createVectorDB({
+  name: 'docs',
+  dimensions: 384,
+  compression: { type: 'sq8' },
+});
+
+// ... add vectors ...
+
+const stats = await getCompressionStats(db);
+console.log(stats);
+// {
+//   enabled: true,
+//   type: 'sq8',
+//   vectorCount: 1000,
+//   originalSizeBytes: 1536000,   // 1000 * 384 * 4
+//   compressedSizeBytes: 384000,  // 1000 * 384 * 1
+//   ratio: 4.0,
+//   dimensions: 384,
+// }
+```
+
+### CompressionConfig Options
+
+<TypeTable
+  type={{
+    type: {
+      description: "Compression algorithm: 'sq8', 'delta-sq8', or 'none'.",
+      type: "'sq8' | 'delta-sq8' | 'none'",
+      required: true,
+    },
+    calibrationSamples: {
+      description: 'Maximum number of vectors used for calibration. Default: 1000.',
+      type: 'number',
+      required: false,
+    },
+  }}
+/>
+
+### Standalone Functions
+
+For advanced use cases (e.g., compressing vectors before custom storage, offline processing), the low-level compression functions are available:
+
+```typescript
+import { compressVectors, decompressVectors } from '@localmode/core';
+
+const vectors = [
+  new Float32Array([0.1, -0.5, 0.3, 0.8]),
+  new Float32Array([0.4, 0.2, -0.1, 0.6]),
+];
+
+// Compress
+const block = compressVectors(vectors);
+// block.data[0] is Uint8Array(4), block.calibration contains per-dimension min/max
+
+// Decompress
+const restored = decompressVectors(block, block.calibration);
+// restored[0] ≈ vectors[0] (within range/255 per dimension)
+```
+
+`compressVectors(vectors, calibration?, mode?)` accepts an optional pre-computed calibration and an optional mode (`'sq8'` or `'delta-sq8'`). `decompressVectors(block, calibration)` restores approximate Float32Array vectors from a compressed block.
+
+<Callout type="info">
+When using `createVectorDB({ compression })`, compression and decompression happen automatically on `add()` and `get()`. The standalone functions are only needed for custom workflows.
+</Callout>
+
+### Limitations
+
+- Compression introduces small approximation error (~`range/255` per dimension per vector).
+- Calibration is computed from the first batch of vectors added. If later vectors have significantly different distributions, accuracy may decrease.
+- `delta-sq8` mode benefits most when vectors are batch-inserted in a meaningful order (e.g., from the same model and topic).
+- Export always produces decompressed Float32 vectors for portability.
 
 ## Cleanup
 
@@ -336,6 +574,127 @@ if (!isWebLocksSupported()) {
 }
 ```
 
+## Write-Ahead Log (WAL)
+
+The WAL provides crash recovery for storage operations using a Log-Execute-Commit pattern:
+
+```typescript
+import { WAL, withWAL } from '@localmode/core';
+```
+
+### withWAL Utility
+
+The simplest way to use WAL — wraps an operation with automatic logging and commit:
+
+```typescript
+import { withWAL } from '@localmode/core';
+
+await withWAL(async (wal) => {
+  // Log the operation before executing
+  await wal.log({
+    type: 'add',
+    collection: 'documents',
+    data: { id: 'doc-1', text: 'Hello' },
+  });
+
+  // Execute the actual operation
+  await db.add(document);
+
+  // WAL auto-commits on success, auto-rolls-back on failure
+});
+```
+
+### WAL Class
+
+For more control, use the `WAL` class directly:
+
+```typescript
+import { WAL } from '@localmode/core';
+
+const wal = new WAL('my-database');
+
+// Log operation
+const entryId = await wal.log({
+  type: 'add',
+  collection: 'documents',
+  data: myDocument,
+});
+
+// Execute operation
+await storage.add(myDocument);
+
+// Commit (mark as completed)
+await wal.commit(entryId);
+
+// On crash recovery, replay uncommitted entries
+const pending = await wal.getPending();
+for (const entry of pending) {
+  await replayOperation(entry);
+  await wal.commit(entry.id);
+}
+```
+
+### WAL Operation Types
+
+| Type | Description |
+| --- | --- |
+| `'add'` | Document insertion |
+| `'update'` | Document update |
+| `'delete'` | Document deletion |
+| `'clear'` | Collection clear |
+
+## Migration System
+
+Manage storage schema changes across versions:
+
+```typescript
+import { MigrationManager, getCurrentVersion } from '@localmode/core';
+import type { Migration } from '@localmode/core';
+```
+
+### Running Migrations
+
+```typescript
+import { MigrationManager } from '@localmode/core';
+
+const manager = new MigrationManager('my-database');
+
+// Run all pending migrations
+await manager.migrate();
+
+// Check current version
+const version = await manager.getCurrentVersion();
+console.log(`Database at version ${version}`);
+```
+
+### Migration Type
+
+```typescript
+interface Migration {
+  version: number;
+  description: string;
+  migrate: (db: IDBDatabase, transaction: IDBTransaction) => void | Promise<void>;
+}
+```
+
+### Built-in Migrations
+
+The `MIGRATIONS` array contains all built-in schema migrations for the VectorDB storage layer. These run automatically when opening a database.
+
+```typescript
+import { MIGRATIONS, getCurrentVersion } from '@localmode/core';
+
+console.log(`Latest version: ${getCurrentVersion()}`);
+console.log(`Total migrations: ${MIGRATIONS.length}`);
+```
+
+<Callout type="warn" title="Migration Rules">
+  1. **Never modify existing migrations** — always add new ones
+  2. **Migrations must be idempotent** — safe to run multiple times
+  3. **Test rollback scenarios** — ensure data integrity on failure
+  4. **Version numbers must be sequential** — no gaps allowed
+</Callout>
+
 ## Best Practices
 
 <Callout type="tip" title="Storage Tips">
@@ -344,6 +703,7 @@ if (!isWebLocksSupported()) {
   3. **Monitor quota** - Show warnings before storage is full
   4. **Clean up** - Remove old data periodically
   5. **Use locks** - Prevent race conditions across tabs
+  6. **Use WAL for critical writes** - Protect against crashes during bulk operations
 </Callout>
 
 ## Next Steps
@@ -360,3 +720,9 @@ if (!isWebLocksSupported()) {
     description="Add caching and logging to storage operations."
   />
 </Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Encrypted Vault | Encrypted client-side storage with Web Crypto API | [Demo](https://localmode.ai/encrypted-vault) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/encrypted-vault) |

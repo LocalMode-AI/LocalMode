@@ -1,6 +1,6 @@
 ---
 title: Introduction
-description: Local-first AI utilities for the browser. Zero dependencies. Privacy-first.
+description: Local-first, privacy-first, offline-first AI for the browser. 13 packages. 32 demo apps. Zero cloud dependencies.
 icon: House
 ---
 
@@ -11,43 +11,108 @@ import { Steps } from 'fumadocs-ui/components/steps';
 
 # LocalMode
 
-**LocalMode** is a modular, local-first AI engine for the browser. Run embeddings, vector search, RAG pipelines, text classification, speech-to-text, image recognition, and LLM inference - all directly in the browser with zero server dependencies.
+**LocalMode** is a modular, local-first AI engine for the browser. Run embeddings, vector search, RAG pipelines, LLM chat, agents, structured output, text classification, NER, translation, summarization, speech-to-text, text-to-speech, image captioning, object detection, image segmentation, OCR, document Q&A, multimodal search, and evaluation — all directly in the browser with zero server dependencies.
+
+**13 packages. 32 demo apps. Zero cloud dependencies.**
 
 <Callout type="info" title="Privacy by Default">
   All processing happens locally. No data ever leaves the user's device. Zero telemetry. Zero
-  tracking.
+  tracking. Built-in encryption, PII redaction, and differential privacy.
 </Callout>
 
 ## Why LocalMode?
 
-- **🔒 Privacy-First** — Data never leaves the device
-- **⚡ Zero Dependencies** — Core package has no external dependencies
-- **📱 Offline-Ready** — Works without network after first model download
-- **🎯 Type-Safe** — Full TypeScript support with comprehensive types
-- **🔌 Modular** — Use only what you need
+- **Privacy** — Data never leaves the device. No telemetry, no tracking, no network requests from core.
+- **Offline** — Works without internet after model download. Automatic fallbacks for every capability.
+- **Fast** — No network latency. WebGPU acceleration where available. Instant inference.
+- **Free** — No API costs, no rate limits, unlimited usage.
+- **Universal** — Works in Chrome, Edge, Firefox, and Safari. Adapts to device capabilities.
+- **Interoperable** — Vercel AI SDK patterns. LangChain.js adapters. Import from Pinecone/ChromaDB.
 
 ## Packages
+
+### Core & React
 
 <Cards>
   <Card
     title="@localmode/core"
     href="/docs/core"
-    description="Vector DB, embeddings, RAG, storage, middleware, security — all core functionality with zero dependencies."
+    description="Zero-dependency core — VectorDB (HNSW, typed metadata, WebGPU search, quantization), pipelines, inference queue, model cache, agent framework, evaluation SDK, import/export, middleware, security."
   />
+  <Card
+    title="@localmode/react"
+    href="/docs/react"
+    description="46 React hooks for all core functions — useChat, useEmbed, useClassify, useTranscribe, and more with built-in loading, error handling, and cancellation."
+  />
+</Cards>
+
+### AI Providers
+
+<Cards>
   <Card
     title="@localmode/transformers"
     href="/docs/transformers"
-    description="HuggingFace Transformers.js provider for classification, NER, vision, audio, and more."
+    description="HuggingFace Transformers.js provider — 25 model factories for embeddings, classification, vision, audio, OCR, multimodal (CLIP), and LLM inference via ONNX."
   />
   <Card
     title="@localmode/webllm"
     href="/docs/webllm"
-    description="WebLLM provider for local LLM inference with streaming support."
+    description="WebLLM provider — 30 curated WebGPU models including DeepSeek-R1, Qwen3, Llama 3.2, Phi 3.5 Vision. Fastest LLM inference."
   />
+  <Card
+    title="@localmode/wllama"
+    href="/docs/wllama"
+    description="GGUF model provider via llama.cpp WASM — 135K+ HuggingFace models, GGUF metadata inspection, universal browser support."
+  />
+  <Card
+    title="@localmode/chrome-ai"
+    href="/docs/chrome-ai"
+    description="Chrome Built-in AI provider — zero-download inference via Gemini Nano with automatic fallback."
+  />
+</Cards>
+
+### Ecosystem
+
+<Cards>
+  <Card
+    title="@localmode/ai-sdk"
+    href="/docs/ai-sdk"
+    description="Vercel AI SDK provider — use generateText, streamText, and embed from the ai package with local models."
+  />
+  <Card
+    title="@localmode/langchain"
+    href="/docs/langchain"
+    description="LangChain.js adapters — drop-in local embeddings, chat, vector store, and reranker for existing LangChain apps."
+  />
+  <Card
+    title="@localmode/devtools"
+    href="/docs/devtools"
+    description="In-app DevTools widget for model cache, VectorDB stats, inference queue, and pipeline observability."
+  />
+</Cards>
+
+### Storage & Utilities
+
+<Cards>
   <Card
     title="@localmode/pdfjs"
     href="/docs/pdfjs"
     description="PDF text extraction for document processing pipelines."
+  />
+  <Card
+    title="@localmode/dexie"
+    href="/docs/dexie"
+    description="Enhanced IndexedDB storage with Dexie.js — schema versioning and transactions."
+  />
+  <Card
+    title="@localmode/idb"
+    href="/docs/idb"
+    description="Minimal IndexedDB storage adapter (~3KB) for lightweight apps."
+  />
+  <Card
+    title="@localmode/localforage"
+    href="/docs/localforage"
+    description="Cross-browser storage with automatic IndexedDB/WebSQL/localStorage fallback."
   />
 </Cards>
 
@@ -57,126 +122,240 @@ import { Steps } from 'fumadocs-ui/components/steps';
 
 ### Install packages
 
-<Tabs items={['pnpm', 'npm', 'yarn']}>
+<Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
   <Tab value="pnpm">```bash pnpm install @localmode/core @localmode/transformers ```</Tab>
   <Tab value="npm">```bash npm install @localmode/core @localmode/transformers ```</Tab>
   <Tab value="yarn">```bash yarn add @localmode/core @localmode/transformers ```</Tab>
+  <Tab value="bun">```bash bun add @localmode/core @localmode/transformers ```</Tab>
 </Tabs>
 
-### Create embeddings
+### Semantic search with embeddings
 
 ```typescript
-import { embed, embedMany } from '@localmode/core';
+import { embed, embedMany, createVectorDB, chunk } from '@localmode/core';
 import { transformers } from '@localmode/transformers';
 
 // Create embedding model
-const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
 
-// Embed single value
-const { embedding } = await embed({
-  model,
-  value: 'Hello, world!',
+// Create vector database with typed metadata
+const db = await createVectorDB<{ text: string }>({
+  name: 'docs',
+  dimensions: 384,
 });
 
-// Embed multiple values
+// Chunk and embed documents
+const chunks = chunk(documentText, { size: 512, overlap: 50 });
 const { embeddings } = await embedMany({
   model,
-  values: ['Hello', 'World', 'AI'],
+  values: chunks.map((c) => c.text),
+});
+
+// Store vectors
+await db.addMany(
+  chunks.map((c, i) => ({
+    id: `chunk-${i}`,
+    vector: embeddings[i],
+    metadata: { text: c.text },
+  }))
+);
+
+// Search
+const { embedding: query } = await embed({ model, value: 'What is AI?' });
+const results = await db.search(query, { k: 5 });
+```
+
+### LLM chat with streaming
+
+Three providers implement the same `LanguageModel` interface — choose based on your needs:
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+// Pick any provider — all share the same LanguageModel interface
+const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+// const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+// const model = transformers.languageModel('onnx-community/Qwen3-0.6B-ONNX');
+
+const result = await streamText({
+  model,
+  prompt: 'Explain quantum computing simply',
+  maxTokens: 500,
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+### Structured output
+
+```typescript
+import { generateObject, jsonSchema } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+import { z } from 'zod';
+
+const { object } = await generateObject({
+  model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+  schema: jsonSchema(
+    z.object({
+      name: z.string(),
+      age: z.number(),
+      interests: z.array(z.string()),
+    })
+  ),
+  prompt: 'Generate a profile for a software engineer named Alex',
 });
 ```
 
-### Create vector database
+### React hooks
 
 ```typescript
-import { createVectorDB } from '@localmode/core';
+import { useChat, useEmbed, useClassify } from '@localmode/react';
+import { webllm } from '@localmode/webllm';
 
-const db = await createVectorDB({
-  name: 'my-documents',
-  dimensions: 384, // Matches all-MiniLM-L6-v2
-});
+function ChatApp() {
+  const { messages, sendMessage, isStreaming } = useChat({
+    model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+  });
 
-// Add documents
-await db.addMany([
-  { id: 'doc-1', vector: embeddings[0], metadata: { text: 'Hello' } },
-  { id: 'doc-2', vector: embeddings[1], metadata: { text: 'World' } },
-]);
-
-// Search
-const results = await db.search(embedding, { k: 5 });
-```
-
-### Build a RAG pipeline
-
-```typescript
-import { chunk, ingest, semanticSearch } from '@localmode/core';
-import { transformers } from '@localmode/transformers';
-
-const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
-
-// Chunk document
-const chunks = chunk(documentText, {
-  strategy: 'recursive',
-  size: 512,
-  overlap: 50,
-});
-
-// Ingest into vector DB
-await ingest({
-  db,
-  model,
-  documents: chunks.map((c) => ({
-    text: c.text,
-    metadata: { source: 'my-document.pdf' },
-  })),
-});
-
-// Search
-const results = await semanticSearch({
-  db,
-  model,
-  query: 'What is machine learning?',
-  k: 5,
-});
+  return <ChatUI messages={messages} onSend={sendMessage} loading={isStreaming} />;
+}
 ```
 
 </Steps>
+
+## Features
+
+### Core AI Functions
+
+| Feature | Functions | Description |
+| ------- | --------- | ----------- |
+| **Embeddings** | `embed()`, `embedMany()`, `streamEmbedMany()` | Text embeddings with streaming and batching |
+| **Multimodal Embeddings** | `embedImage()`, `embedManyImages()` | CLIP-based text-image cross-modal search |
+| **Streaming LLM** | `streamText()`, `generateText()` | Streaming and complete text generation |
+| **Structured Output** | `generateObject()`, `streamObject()` | Typed JSON generation with Zod schema validation |
+| **Classification** | `classify()`, `classifyZeroShot()`, `classifyMany()` | Sentiment, intent, topic classification |
+| **NER** | `extractEntities()` | Named entity recognition |
+| **Reranking** | `rerank()` | Document reranking for improved RAG |
+| **Translation** | `translate()` | Multi-language translation (20+ languages) |
+| **Summarization** | `summarize()` | Text summarization |
+| **Question Answering** | `answerQuestion()` | Extractive QA with confidence scores |
+| **Fill-Mask** | `fillMask()` | Masked token prediction (BERT-style) |
+| **OCR** | `extractText()` | Optical character recognition |
+| **Document QA** | `askDocument()`, `askTable()` | Visual document and table understanding |
+| **Audio** | `transcribe()`, `synthesizeSpeech()`, `classifyAudio()` | Speech-to-text, TTS, audio classification |
+| **Vision** | `classifyImage()`, `captionImage()`, `detectObjects()`, `segmentImage()` | Image processing and analysis |
+
+### Vector Database & RAG
+
+| Feature | Functions | Description |
+| ------- | --------- | ----------- |
+| **Vector Database** | `createVectorDB()` | HNSW index, IndexedDB persistence, cross-tab sync, typed metadata |
+| **Semantic Search** | `semanticSearch()`, `streamSemanticSearch()` | Query-time embed + search in one call |
+| **Quantization** | `createVectorDB({ quantization })` | SQ8 (4x) and Product Quantization (8-32x compression) |
+| **WebGPU Search** | `createGPUDistanceComputer()` | WGSL compute shaders for batch distance computation |
+| **Hybrid Search** | `createHybridSearch()`, `reciprocalRankFusion()` | BM25 keyword + vector semantic search fusion |
+| **Chunking** | `chunk()`, `semanticChunk()`, `codeChunk()`, `markdownChunk()` | Recursive, semantic, code-aware, and markdown chunking |
+| **Pipelines** | `createPipeline()` | Composable multi-step workflows with 10 built-in step types |
+| **Inference Queue** | `createInferenceQueue()` | Priority-based task scheduling with concurrency control |
+| **Semantic Cache** | `createSemanticCache()` | Cache LLM responses using embedding similarity |
+| **Import/Export** | `importFrom()`, `exportToCSV()`, `exportToJSONL()` | Migrate vectors from Pinecone, ChromaDB, CSV, JSONL |
+
+### Agents & Evaluation
+
+| Feature | Functions | Description |
+| ------- | --------- | ----------- |
+| **Agent Framework** | `createAgent()`, `runAgent()` | ReAct loop with tool registry and VectorDB-backed memory |
+| **Evaluation SDK** | `evaluateModel()`, `accuracy()`, `bleuScore()`, `ndcg()` | Classification, generation, and retrieval metrics |
+| **Threshold Calibration** | `calibrateThreshold()`, `getDefaultThreshold()` | Empirical similarity thresholds from corpus data |
+| **Model Registry** | `recommendModels()`, `registerModel()` | Curated model catalog with device-aware recommendations |
+| **Adaptive Batching** | `computeOptimalBatchSize()` | Device-aware batch sizing for optimal throughput |
+
+### Security & Privacy
+
+| Feature | Functions | Description |
+| ------- | --------- | ----------- |
+| **Encryption** | `encrypt()`, `decrypt()`, `deriveKey()` | Web Crypto API encryption, PBKDF2 key derivation |
+| **PII Redaction** | `redactPII()`, `piiRedactionMiddleware()` | Named entity based PII detection and redaction |
+| **Differential Privacy** | `dpEmbeddingMiddleware()`, `createPrivacyBudget()` | DP noise injection for embeddings and classification |
+| **Drift Detection** | `checkModelCompatibility()`, `reindexCollection()` | Detect model changes, auto-reindex collections |
+
+## LLM Provider Comparison
+
+| | WebLLM | Wllama | Transformers.js |
+|-|--------|--------|--------------------|
+| **Runtime** | WebGPU | WASM (llama.cpp) | ONNX Runtime |
+| **Models** | 30 curated (MLC) | 135K+ GGUF from HuggingFace | 14 ONNX (TJS v4) |
+| **Speed** | Fastest (GPU) | Good (CPU) | Good (CPU/GPU) |
+| **Vision** | Phi 3.5 Vision | — | Qwen3.5 Vision |
+| **Browser Support** | Chrome/Edge 113+ | All modern browsers | All modern browsers |
+| **Best For** | Maximum performance | Universal compatibility, model variety | Multi-task (embeddings + LLM in one package) |
 
 ## Architecture
 
 LocalMode follows a **"zero-dependency core, thin provider wrappers"** architecture:
 
+```text
+┌───────────────────────────────────────────────────────────────────────┐
+│                          Your Application                             │
+├───────────────────────────────────────────────────────────────────────┤
+│                    @localmode/react  (46 hooks)                       │
+├───────────────────────┬───────────────────────┬───────────────────────┤
+│   @localmode/ai-sdk   │  @localmode/langchain │  @localmode/devtools  │
+├───────────────────────┴───────────────────────┴───────────────────────┤
+│                          @localmode/core                              │
+│                                                                       │
+│  VectorDB       Embeddings       Generation       Agents & Pipelines  │
+│  (HNSW +        + Multimodal     + Structured     + Evaluation        │
+│   WebGPU)                          Output         + Metrics           │
+│                                                                       │
+│  Security       Middleware        Import/Export    Model Cache        │
+│  (DP, PII,      System                            + Registry          │
+│   Crypto)                                                             │
+├───────────────────────────────────────────────────────────────────────┤
+│                        Provider Packages                              │
+│                                                                       │
+│  @localmode/transformers    HF Transformers.js       25 factories     │
+│  @localmode/webllm          WebGPU                      30 models     │
+│  @localmode/wllama          llama.cpp WASM           135K+ models     │
+│  @localmode/chrome-ai       Gemini Nano             zero-download     │
+├───────────────────────────────────────────────────────────────────────┤
+│                          Browser APIs                                 │
+│                                                                       │
+│         WebGPU  ·  IndexedDB  ·  Web Workers  ·  Web Crypto           │
+└───────────────────────────────────────────────────────────────────────┘
 ```
-+-------------------------------------------------------------+
-|                    Your Application                         |
-+-------------------------------------------------------------+
-|                    @localmode/core                          |
-|  +----------+ +----------+ +----------+ +----------------+  |
-|  | VectorDB | |Embeddings| |   RAG    | | Storage/Security| |
-|  +----------+ +----------+ +----------+ +----------------+  |
-+-------------------------------------------------------------+
-|              Provider Packages (thin wrappers)              |
-|  +----------------+ +------------+ +------------------+     |
-|  |  @localmode/   | | @localmode/| |   @localmode/    |     |
-|  |  transformers  | |   webllm   | |      pdfjs       |     |
-|  +----------------+ +------------+ +------------------+     |
-+-------------------------------------------------------------+
-|                    Browser APIs                             |
-|        IndexedDB • WebGPU • WASM • Web Workers              |
-+-------------------------------------------------------------+
-```
+
+## Demo Applications
+
+See LocalMode in action at [localmode.ai](https://localmode.ai) — 32 apps showcasing every feature.
+
+| Category | Apps |
+| -------- | ---- |
+| **Chat & Agents** | [LLM Chat](https://localmode.ai/llm-chat), [Research Agent](https://localmode.ai/research-agent), [GGUF Explorer](https://localmode.ai/gguf-explorer) |
+| **Audio** | [Voice Notes](https://localmode.ai/voice-notes), [Meeting Assistant](https://localmode.ai/meeting-assistant), [Audiobook Creator](https://localmode.ai/audiobook-creator) |
+| **Text & NLP** | [Smart Writer](https://localmode.ai/smart-writer), [Data Extractor](https://localmode.ai/data-extractor), [Sentiment Analyzer](https://localmode.ai/sentiment-analyzer), [Email Classifier](https://localmode.ai/email-classifier), [Translator](https://localmode.ai/translator), [Text Summarizer](https://localmode.ai/text-summarizer), [Q&A Bot](https://localmode.ai/qa-bot), [Smart Autocomplete](https://localmode.ai/smart-autocomplete), [Invoice Q&A](https://localmode.ai/invoice-qa) |
+| **Vision** | [Background Remover](https://localmode.ai/background-remover), [Smart Gallery](https://localmode.ai/smart-gallery), [Product Search](https://localmode.ai/product-search), [Cross-Modal Search](https://localmode.ai/cross-modal-search), [Image Captioner](https://localmode.ai/image-captioner), [OCR Scanner](https://localmode.ai/ocr-scanner), [Object Detector](https://localmode.ai/object-detector), [Duplicate Finder](https://localmode.ai/duplicate-finder), [Photo Enhancer](https://localmode.ai/photo-enhancer) |
+| **RAG & Search** | [PDF Search](https://localmode.ai/pdf-search), [Semantic Search](https://localmode.ai/semantic-search), [LangChain RAG](https://localmode.ai/langchain-rag), [Data Migrator](https://localmode.ai/data-migrator) |
+| **Privacy** | [Document Redactor](https://localmode.ai/document-redactor), [Encrypted Vault](https://localmode.ai/encrypted-vault) |
+| **Developer Tools** | [Model Advisor](https://localmode.ai/model-advisor), [Model Evaluator](https://localmode.ai/model-evaluator) |
 
 ## Browser Compatibility
 
-| Browser     | WebGPU  | WASM | IndexedDB | Web Workers |
-| ----------- | ------- | ---- | --------- | ----------- |
-| Chrome 80+  | 113+    | ✅   | ✅        | ✅          |
-| Edge 80+    | 113+    | ✅   | ✅        | ✅          |
-| Firefox 75+ | Nightly | ✅   | ✅        | ✅          |
-| Safari 14+  | 18+     | ✅   | ✅        | ⚠️          |
+| Browser     | WebGPU  | WASM | IndexedDB | Workers | Chrome AI |
+| ----------- | ------- | ---- | --------- | ------- | --------- |
+| Chrome 138+ | Yes     | Yes  | Yes       | Yes     | Yes       |
+| Edge 138+   | Yes     | Yes  | Yes       | Yes     | Yes       |
+| Firefox 75+ | Nightly | Yes  | Yes       | Yes     | No        |
+| Safari 18+  | Yes     | Yes  | Yes       | Partial | No        |
 
 <Callout type="warn" title="Platform Notes">
-  - **Safari/iOS**: Private browsing blocks IndexedDB - use `MemoryStorage` fallback
-  - **Firefox**: WebGPU only in Nightly - WASM fallback is automatic
+  - **Chrome AI**: Zero-download inference via Gemini Nano (fallback to Transformers.js)
+  - **WebGPU**: 3-5x faster inference (fallback to WASM)
+  - **Safari/iOS**: Private browsing blocks IndexedDB — use `MemoryStorage` fallback
+  - **Firefox**: WebGPU only in Nightly — WASM fallback is automatic
   - **SharedArrayBuffer**: Requires cross-origin isolation for some features
 </Callout>
 
@@ -186,11 +365,31 @@ LocalMode follows a **"zero-dependency core, thin provider wrappers"** architect
   <Card
     title="Getting Started"
     href="/docs/getting-started"
-    description="Full installation guide and first steps."
+    description="Full installation guide, bundler config, and first steps."
   />
   <Card
-    title="Core Concepts"
+    title="Core Package"
     href="/docs/core"
-    description="Learn about embeddings, vector DB, and RAG."
+    description="VectorDB, embeddings, RAG, agents, evaluation, middleware, and security."
+  />
+  <Card
+    title="React Hooks"
+    href="/docs/react"
+    description="46 hooks for chat, embeddings, classification, vision, audio, and more."
+  />
+  <Card
+    title="Transformers Provider"
+    href="/docs/transformers"
+    description="25 model factories for text, vision, audio, and multimodal tasks."
+  />
+  <Card
+    title="WebLLM Provider"
+    href="/docs/webllm"
+    description="30 curated WebGPU models for fastest LLM inference."
+  />
+  <Card
+    title="Wllama Provider"
+    href="/docs/wllama"
+    description="135K+ GGUF models via llama.cpp WASM — universal browser support."
   />
 </Cards>

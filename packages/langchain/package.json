@@ -1,0 +1,73 @@
+{
+  "name": "@localmode/langchain",
+  "version": "1.0.0",
+  "description": "LangChain.js adapters for @localmode — drop-in local inference for existing LangChain apps",
+  "license": "MIT",
+  "author": "LocalMode",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LocalMode-AI/LocalMode.git",
+    "directory": "packages/langchain"
+  },
+  "homepage": "https://localmode.dev/docs/langchain",
+  "bugs": {
+    "url": "https://github.com/LocalMode-AI/LocalMode/issues"
+  },
+  "keywords": [
+    "langchain",
+    "local-first",
+    "privacy",
+    "ai",
+    "embeddings",
+    "llm",
+    "vector-store",
+    "reranker",
+    "offline"
+  ],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@langchain/core": ">=0.3.0"
+  },
+  "peerDependencies": {
+    "@localmode/core": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@langchain/core": "^0.3.0",
+    "@localmode/core": "workspace:*",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.3"
+  }
+}

@@ -1,0 +1,571 @@
+---
+title: "Building a Recommendation Engine in the Browser With Embeddings and Cosine Similarity"
+description: "Build a privacy-first recommendation engine that runs entirely in the browser. Embed your item catalog, compute user preference vectors, and serve personalized 'More Like This,' 'For You,' and 'Trending in Your Taste' recommendations - no servers, no tracking pixels, no data leaving the device."
+author: LocalMode
+date: 2026-02-02
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Netflix, Spotify, and Amazon spend hundreds of millions of dollars per year on recommendation infrastructure. Their systems ingest every click, hover, scroll, and dwell-time event, ship that behavioral data to a server farm, crunch it through collaborative filtering pipelines, and serve the results back - all while building a surveillance profile of every user.
+
+What if the recommendation engine ran in the browser tab? What if user preferences never left the device? What if the entire pipeline - embedding items, building preference vectors, computing similarity, filtering by metadata - cost exactly zero dollars per month?
+
+That is what we are going to build. A content-based recommendation engine using vector embeddings and cosine similarity, running entirely client-side with LocalMode. No API keys. No tracking pixels. No backend. Items go in, personalized recommendations come out - and every byte of user behavior stays on the device where it belongs.
+
+---
+
+## How Embedding-Based Recommendations Work
+
+Traditional recommendation systems fall into two camps. Collaborative filtering says "users who liked item A also liked item B." Content-based filtering says "this item is similar to items you already liked." Collaborative filtering requires a central server that aggregates behavior across all users. Content-based filtering does not - it only needs the items and the current user's signals.
+
+That makes content-based filtering a perfect fit for the browser. Here is the pipeline:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                          Browser Tab                                │
+│                                                                     │
+│  ┌────────────┐    ┌────────────┐    ┌─────────────┐               │
+│  │ Item Catalog│───▶│ embedMany()│───▶│  VectorDB    │               │
+│  │ (products,  │    │ (BGE-small)│    │ (IndexedDB)  │               │
+│  │  articles)  │    └────────────┘    └──────┬──────┘               │
+│  └────────────┘                              │                      │
+│                                              │                      │
+│  ┌────────────┐    ┌────────────┐    ┌──────▼──────┐               │
+│  │ User Signal │───▶│   embed()  │───▶│  db.search() │               │
+│  │ (liked item,│    │  or vector │    │  + metadata  │               │
+│  │  search qry)│    │  averaging │    │   filters    │               │
+│  └────────────┘    └────────────┘    └──────┬──────┘               │
+│                                              │                      │
+│                                     ┌───────▼───────┐              │
+│                                     │ Ranked Results │              │
+│                                     │ (personalized) │              │
+│                                     └───────────────┘              │
+│                                                                     │
+│  Model: BGE-small-en-v1.5 (33MB, downloads once, cached)           │
+│  Storage: IndexedDB (persists across sessions, unlimited*)          │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+Every item in the catalog gets embedded into a 384-dimensional vector that captures its semantic meaning. User signals - a liked item, a search query, a viewing history - are also embedded or averaged into a vector. Finding recommendations is then a nearest-neighbor search: which catalog items are closest to the user's preference vector?
+
+The distance metric that makes this work is cosine similarity. It measures the angle between two vectors, returning a value between -1 and 1. Two items pointing in roughly the same direction in 384-dimensional space have a cosine similarity near 1 - they are semantically related, regardless of whether they share a single keyword.
+
+---
+
+## Step 1: Set Up the Catalog Database
+
+Every recommendation engine starts with a catalog. We will create a typed VectorDB that stores item vectors alongside structured metadata - category, price, rating, and whatever else your domain needs.
+
+```ts
+import { createVectorDB } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Typed metadata for compile-time safety on filters
+interface ItemMetadata {
+  title: string;
+  category: string;
+  price: number;
+  rating: number;
+  tags: string[];
+}
+
+const db = await createVectorDB<ItemMetadata>({
+  name: 'product-catalog',
+  dimensions: 384,         // BGE-small-en-v1.5 output dimensions
+  storage: 'indexeddb',    // Persists across sessions
+});
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+```
+
+The `dimensions` value must match the model output. BGE-small-en-v1.5 produces 384-dimensional vectors. The typed generic `<ItemMetadata>` gives you autocomplete on metadata fields and compile-time errors if your filters reference a field that does not exist.
+
+<Callout type="info" title="Model size">
+  BGE-small-en-v1.5 is 33MB quantized. It downloads once, caches in the browser via the Transformers.js cache, and runs offline after that. For larger catalogs where you need higher recall, BGE-base-en-v1.5 (438MB, 768 dimensions) is a good step up.
+</Callout>
+
+---
+
+## Step 2: Embed and Index the Catalog
+
+With the database ready, embed every item's description and store it with its metadata. The `embedMany()` function handles batching automatically.
+
+```ts
+import { embedMany } from '@localmode/core';
+
+// Your catalog - could come from a CMS, API, or local JSON
+const catalog = [
+  {
+    id: 'jacket-001',
+    description: 'Waterproof insulated puffer jacket for cold weather hiking',
+    category: 'outerwear',
+    price: 89.99,
+    rating: 4.6,
+    tags: ['winter', 'hiking', 'waterproof'],
+  },
+  {
+    id: 'boots-002',
+    description: 'Leather ankle boots with cushioned insole for all-day comfort',
+    category: 'footwear',
+    price: 129.99,
+    rating: 4.3,
+    tags: ['leather', 'comfort', 'casual'],
+  },
+  // ... hundreds or thousands of items
+];
+
+// Embed all descriptions in one batched call
+const { embeddings } = await embedMany({
+  model,
+  values: catalog.map((item) => item.description),
+});
+
+// Store vectors with typed metadata
+await db.addMany(
+  catalog.map((item, i) => ({
+    id: item.id,
+    vector: embeddings[i],
+    metadata: {
+      title: item.description,
+      category: item.category,
+      price: item.price,
+      rating: item.rating,
+      tags: item.tags,
+    },
+  }))
+);
+```
+
+For large catalogs (10,000+ items), use `streamEmbedMany()` to get progress tracking and avoid blocking the main thread:
+
+```ts
+import { streamEmbedMany } from '@localmode/core';
+
+for await (const { embedding, index } of streamEmbedMany({
+  model,
+  values: catalog.map((item) => item.description),
+  batchSize: 32,
+  onBatch: ({ index, count, total }) => {
+    console.log(`Indexed ${index + count}/${total} items`);
+  },
+})) {
+  await db.add({
+    id: catalog[index].id,
+    vector: embedding,
+    metadata: { /* ... */ },
+  });
+}
+```
+
+Once indexed, the catalog persists in IndexedDB. Users revisiting your site skip the embedding step entirely - the vectors are already there.
+
+---
+
+## Step 3: "More Like This" - Item-to-Item Similarity
+
+The simplest and most universally useful recommendation pattern. A user is looking at a specific item. Show them similar ones.
+
+The approach: embed the current item (or look up its stored vector), then search the database for nearest neighbors.
+
+```ts
+import { embed } from '@localmode/core';
+
+async function moreLikeThis(itemId: string, k = 6) {
+  // Get the item's stored vector directly from the database
+  const results = await db.search(
+    (await db.get(itemId))!.vector,
+    {
+      k: k + 1,           // +1 because the item itself will be the top match
+      threshold: 0.5,      // Minimum cosine similarity
+    }
+  );
+
+  // Filter out the source item
+  return results.filter((r) => r.id !== itemId);
+}
+
+const similar = await moreLikeThis('jacket-001');
+// Returns: boots, gloves, backpacks - items semantically close to a hiking jacket
+```
+
+You can also combine similarity with metadata filters. Want "more like this" but only in a specific price range?
+
+```ts
+async function moreLikeThisFiltered(
+  itemId: string,
+  maxPrice: number,
+  k = 6
+) {
+  const item = await db.get(itemId);
+  if (!item) return [];
+
+  return db.search(item.vector, {
+    k,
+    threshold: 0.5,
+    filter: {
+      price: { $lte: maxPrice },
+    },
+  });
+}
+
+// "Show me items similar to this jacket, under $100"
+const affordable = await moreLikeThisFiltered('jacket-001', 100);
+```
+
+The filter runs after the HNSW nearest-neighbor search, so it is metadata-level filtering on the top candidates - fast even with thousands of items.
+
+---
+
+## Step 4: "For You" - User Preference Vectors
+
+"More like this" works for a single item. But what about a user who has liked, viewed, or purchased multiple items over time? You need a preference vector - a single embedding that represents their aggregate taste.
+
+The technique is vector averaging: take all the vectors of items the user has interacted with, sum them component-by-component, and normalize. The result is a centroid in embedding space that points toward the user's overall interest cluster.
+
+```ts
+import { cosineSimilarity, normalize } from '@localmode/core';
+
+function computePreferenceVector(vectors: Float32Array[]) {
+  if (vectors.length === 0) return null;
+  if (vectors.length === 1) return vectors[0];
+
+  const dims = vectors[0].length;
+  const sum = new Float32Array(dims);
+
+  for (const vec of vectors) {
+    for (let i = 0; i < dims; i++) {
+      sum[i] += vec[i];
+    }
+  }
+
+  // Normalize to unit length so cosine similarity works correctly
+  return normalize(sum);
+}
+
+async function forYou(likedItemIds: string[], k = 10) {
+  // Retrieve stored vectors for liked items
+  const items = await Promise.all(
+    likedItemIds.map((id) => db.get(id))
+  );
+  const vectors = items
+    .filter((item) => item !== null)
+    .map((item) => item!.vector);
+
+  const preference = computePreferenceVector(vectors);
+  if (!preference) return [];
+
+  // Search the catalog using the preference centroid
+  const results = await db.search(preference, {
+    k: k + likedItemIds.length,
+    threshold: 0.4,
+  });
+
+  // Exclude items the user already liked
+  const likedSet = new Set(likedItemIds);
+  return results.filter((r) => !likedSet.has(r.id));
+}
+```
+
+This works surprisingly well. If a user liked three hiking jackets and two pairs of trail boots, the preference vector will point squarely at the "outdoor winter gear" region of embedding space - and the search will surface backpacks, gloves, and thermal layers without anyone manually tagging those items as related.
+
+<Callout type="warn" title="Recency weighting">
+  Simple averaging treats a like from six months ago the same as one from today. For time-sensitive catalogs (news, fashion), apply exponential decay weights: multiply each vector by `Math.exp(-lambda * ageInDays)` before summing. A lambda of 0.01 gives a half-life of about 70 days.
+</Callout>
+
+---
+
+## Step 5: "Trending in Your Taste" - Combining Filters and Similarity
+
+The third pattern merges personalization with business logic. "Show me items from a specific category that match my taste" - or in e-commerce terms, "trending in outerwear for you."
+
+```ts
+async function trendingInYourTaste(
+  likedItemIds: string[],
+  category: string,
+  minRating = 4.0,
+  k = 8
+) {
+  const items = await Promise.all(
+    likedItemIds.map((id) => db.get(id))
+  );
+  const vectors = items
+    .filter((item) => item !== null)
+    .map((item) => item!.vector);
+
+  const preference = computePreferenceVector(vectors);
+  if (!preference) return [];
+
+  const likedSet = new Set(likedItemIds);
+
+  return db.search(preference, {
+    k: k + likedItemIds.length,
+    threshold: 0.3,
+    filter: {
+      category,
+      rating: { $gte: minRating },
+    },
+  }).then((results) => results.filter((r) => !likedSet.has(r.id)));
+}
+
+// "Trending in footwear, based on your taste, rated 4+  stars"
+const trending = await trendingInYourTaste(
+  ['jacket-001', 'boots-002', 'gloves-005'],
+  'footwear',
+  4.0
+);
+```
+
+The VectorDB's typed filter system supports `$gte`, `$lte`, `$in`, `$ne`, and `$exists` operators. You can combine similarity search with arbitrary metadata constraints - price ranges, rating thresholds, category membership, availability flags - all in a single call.
+
+---
+
+## Handling the Cold Start Problem
+
+Every recommendation system hits the cold start problem: what do you recommend when you know nothing about the user? They just arrived. No likes. No history. No preference vector to compute.
+
+There are three practical strategies, and all of them work in the browser:
+
+**1. Search-query seeding.** The moment a user types anything into a search box, you have a signal. Embed the query and use it as a temporary preference vector.
+
+```ts
+async function coldStartFromSearch(query: string, k = 10) {
+  const { embedding } = await embed({ model, value: query });
+  return db.search(embedding, { k, threshold: 0.3 });
+}
+```
+
+**2. Category-based defaults.** If you know the user arrived from a category page or a marketing campaign with a known topic, use a hand-written seed description.
+
+```ts
+const { embedding } = await embed({
+  model,
+  value: 'affordable running shoes for beginners',
+});
+const defaults = await db.search(embedding, { k: 8 });
+```
+
+**3. Popularity fallback.** Store a `viewCount` or `salesRank` in your metadata and sort by it when there is no personalization signal at all.
+
+```ts
+// When we have zero signals, show highest-rated items
+const popular = await db.search(
+  // Use a zero vector - every item is equidistant
+  new Float32Array(384),
+  {
+    k: 10,
+    filter: { rating: { $gte: 4.5 } },
+  }
+);
+```
+
+The cold start phase is temporary. After one or two interactions, you have enough signal to switch to the preference-vector approach from Step 4. The transition is seamless because both paths produce the same output type: a ranked list of `SearchResult` items.
+
+---
+
+## Injecting Diversity to Avoid Filter Bubbles
+
+Pure cosine similarity has a known failure mode: it creates filter bubbles. If a user likes three sci-fi books, the engine recommends nothing but sci-fi - and the user never discovers the historical fiction they would have loved.
+
+The fix is diversity injection. After retrieving the top-k candidates by similarity, re-rank them to balance relevance with novelty. A simple approach is Maximal Marginal Relevance (MMR):
+
+```ts
+import { cosineSimilarity } from '@localmode/core';
+
+function mmrRerank(
+  queryVector: Float32Array,
+  candidates: Array<{ id: string; vector: Float32Array; score: number }>,
+  lambda = 0.7,  // 1.0 = pure relevance, 0.0 = pure diversity
+  k = 6
+) {
+  const selected: typeof candidates = [];
+  const remaining = [...candidates];
+
+  while (selected.length < k && remaining.length > 0) {
+    let bestIdx = 0;
+    let bestScore = -Infinity;
+
+    for (let i = 0; i < remaining.length; i++) {
+      const relevance = remaining[i].score;
+
+      // Maximum similarity to any already-selected item
+      let maxSim = 0;
+      for (const sel of selected) {
+        const sim = cosineSimilarity(remaining[i].vector, sel.vector);
+        if (sim > maxSim) maxSim = sim;
+      }
+
+      const mmrScore = lambda * relevance - (1 - lambda) * maxSim;
+      if (mmrScore > bestScore) {
+        bestScore = mmrScore;
+        bestIdx = i;
+      }
+    }
+
+    selected.push(remaining[bestIdx]);
+    remaining.splice(bestIdx, 1);
+  }
+
+  return selected;
+}
+```
+
+Set `lambda` to 0.7 for a good default balance. Lower it toward 0.5 for discovery-oriented contexts (browse pages, "explore" tabs) and raise it toward 0.9 for intent-driven contexts (search results, "more like this").
+
+The key insight is that `cosineSimilarity` is exported directly from `@localmode/core` - you can use it for both the core recommendation search and for post-processing re-ranking like MMR, without pulling in any additional dependencies.
+
+---
+
+## Putting It All Together: A Complete Recommendation Service
+
+Here is a complete service module that ties all the patterns together - catalog indexing, three recommendation modes, cold start handling, and diversity re-ranking:
+
+```ts
+import {
+  createVectorDB,
+  embed,
+  embedMany,
+  cosineSimilarity,
+  normalize,
+} from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// --- Setup ---
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+const db = await createVectorDB<{
+  title: string;
+  category: string;
+  price: number;
+  rating: number;
+}>({
+  name: 'recommendations',
+  dimensions: 384,
+  storage: 'indexeddb',
+});
+
+// --- Indexing ---
+export async function indexCatalog(
+  items: Array<{
+    id: string;
+    description: string;
+    category: string;
+    price: number;
+    rating: number;
+  }>
+) {
+  const { embeddings } = await embedMany({
+    model,
+    values: items.map((i) => i.description),
+  });
+
+  await db.addMany(
+    items.map((item, idx) => ({
+      id: item.id,
+      vector: embeddings[idx],
+      metadata: {
+        title: item.description,
+        category: item.category,
+        price: item.price,
+        rating: item.rating,
+      },
+    }))
+  );
+}
+
+// --- Preference vector ---
+function buildPreference(vectors: Float32Array[]) {
+  if (vectors.length === 0) return null;
+  const sum = new Float32Array(vectors[0].length);
+  for (const v of vectors) {
+    for (let i = 0; i < sum.length; i++) sum[i] += v[i];
+  }
+  return normalize(sum);
+}
+
+// --- Recommendations ---
+export async function recommend(
+  likedIds: string[],
+  options?: {
+    category?: string;
+    maxPrice?: number;
+    minRating?: number;
+    k?: number;
+    diversityLambda?: number;
+  }
+) {
+  const k = options?.k ?? 8;
+  const likedItems = await Promise.all(likedIds.map((id) => db.get(id)));
+  const vectors = likedItems.filter(Boolean).map((i) => i!.vector);
+  const preference = buildPreference(vectors);
+  if (!preference) return [];
+
+  const filter: Record<string, unknown> = {};
+  if (options?.category) filter.category = options.category;
+  if (options?.maxPrice) filter.price = { $lte: options.maxPrice };
+  if (options?.minRating) filter.rating = { $gte: options.minRating };
+
+  const likedSet = new Set(likedIds);
+  const raw = await db.search(preference, {
+    k: k * 3,  // Fetch extra for diversity re-ranking
+    threshold: 0.3,
+    filter: Object.keys(filter).length > 0 ? filter : undefined,
+    includeVectors: true,
+  });
+
+  const candidates = raw
+    .filter((r) => !likedSet.has(r.id))
+    .map((r) => ({ id: r.id, vector: r.vector!, score: r.score }));
+
+  // Apply MMR diversity re-ranking if requested
+  if (options?.diversityLambda !== undefined) {
+    return mmrRerank(preference, candidates, options.diversityLambda, k);
+  }
+
+  return candidates.slice(0, k);
+}
+```
+
+That is a fully functional recommendation engine in about 80 lines of TypeScript. No server. No API key. No per-request billing. The embedding model is 33MB. The entire thing runs offline after the first visit.
+
+---
+
+## What This Approach Gets You
+
+| Dimension | Cloud recommendation service | Browser-based with LocalMode |
+|---|---|---|
+| **Cost** | $0.50–$2.00 per 1,000 requests | $0/month |
+| **Latency** | 50–200ms (network round trip) | 1–5ms (local vector search) |
+| **Privacy** | User behavior sent to servers | Data never leaves the device |
+| **Offline** | Requires connection | Works after first model download |
+| **GDPR/CCPA** | Requires consent flows + DPAs | No personal data collection at all |
+| **Cold start** | Needs global behavioral data | Handled with search-query seeding |
+
+The tradeoff is clear. You lose collaborative filtering (the "users who bought X also bought Y" signal that requires cross-user data). You gain complete privacy, zero operational cost, offline capability, and millisecond latency. For content platforms, media libraries, documentation sites, and e-commerce catalogs where the items themselves carry enough semantic signal, that tradeoff is overwhelmingly favorable.
+
+<Callout type="info" title="Scaling">
+  LocalMode's VectorDB uses an HNSW index with sub-millisecond search up to hundreds of thousands of items. For most browser-based catalogs (100 to 50,000 items), performance will not be the bottleneck - the initial embedding pass is the only expensive operation, and it only runs once.
+</Callout>
+
+---
+
+## Three Real-World Use Cases
+
+**Documentation sites.** Embed every page's title and summary. When a reader finishes an article, show "Related articles" by running `moreLikeThis()` on the current page vector. No analytics tracking required.
+
+**Music or podcast apps.** Embed track descriptions, genre tags, and artist bios into a combined text field. Average the vectors of tracks the user has played to completion. Search for the nearest neighbors - the result is a personalized playlist that updates in real time as the user listens, without a single byte leaving their device.
+
+**E-commerce product pages.** This is the example we built above. Embed product descriptions, store price and category as metadata, and serve "more like this," "for you," and "trending in your taste" panels. The user gets personalized recommendations from their first search query onward, and your compliance team never has to worry about behavioral data processing agreements.
+
+---
+
+## Next Steps
+
+The recommendation engine we built here is content-based and single-user. If you want to go further:
+
+- **Multimodal recommendations** - Use `@localmode/transformers` multimodal embeddings with CLIP/SigLIP to embed product images alongside text. The [E-Commerce Product Search](/blog/ecommerce-product-search) post covers this in detail.
+- **Hybrid search** - Combine vector similarity with BM25 keyword scoring using the `ingest()` function's built-in BM25 index for cases where exact keyword matches matter alongside semantic similarity.
+- **Persistence** - Store the user's `likedItemIds` in `localStorage` or IndexedDB so their preference vector survives across sessions without any server-side storage.
+- **React integration** - Wrap the recommendation service in a custom hook using `useEmbedMany` and `useSemanticSearch` from `@localmode/react` for reactive UI updates with built-in loading and error states.
+
+Every piece of this runs in a single browser tab. The models are open source. The code is MIT licensed. The user's data stays on their device. That is what local-first AI is for.

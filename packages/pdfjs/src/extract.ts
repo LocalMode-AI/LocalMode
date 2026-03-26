@@ -66,10 +66,9 @@ export async function extractPDFText(
   // Dynamically import pdfjs-dist
   const pdfjs = await import('pdfjs-dist');
 
-  // Set up worker
-  if (typeof window !== 'undefined') {
-    // In browser, use the bundled worker
-    pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
+  // Set up worker using jsDelivr CDN (has all pdfjs-dist versions, unlike cdnjs)
+  if (typeof window !== 'undefined' && !pdfjs.GlobalWorkerOptions.workerSrc) {
+    pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
   }
 
   abortSignal?.throwIfAborted();

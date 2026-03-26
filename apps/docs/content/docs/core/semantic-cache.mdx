@@ -1,0 +1,279 @@
+---
+title: Semantic Cache
+description: Cache LLM responses using embedding similarity for instant repeat queries.
+icon: Database
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+Cache LLM responses based on prompt embedding similarity. When a user asks a question that is semantically similar to a previously answered question, the cached response is returned in under 50ms instead of waiting 5-30 seconds for model inference.
+
+<Callout type="info" title="See it in action">
+  Try [PDF Search](https://localmode.ai/pdf-search) and [LLM Chat](https://localmode.ai/llm-chat) for working demos of these APIs.
+</Callout>
+
+## createSemanticCache()
+
+Create a semantic cache instance:
+
+```typescript
+import { createSemanticCache } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const cache = await createSemanticCache({
+  embeddingModel: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  threshold: 0.92,   // Cosine similarity threshold for cache hits
+  maxEntries: 100,    // Maximum cached entries (LRU eviction)
+  ttlMs: 3600000,     // 1 hour TTL
+});
+```
+
+### SemanticCacheConfig
+
+<TypeTable
+  type={{
+    embeddingModel: { type: 'EmbeddingModel', description: 'Embedding model for prompt similarity comparison. Required.', required: true },
+    threshold: { type: 'number', description: 'Cosine similarity threshold for cache hits. Higher = stricter matching.', default: '0.92' },
+    maxEntries: { type: 'number', description: 'Maximum cached entries before LRU eviction.', default: '100' },
+    ttlMs: { type: 'number', description: 'Time-to-live in milliseconds. Entries older than this are expired on lookup.', default: '3600000' },
+    storage: { type: "'memory' | 'indexeddb' | Storage", description: 'Storage backend for the internal VectorDB.', default: "'memory'" },
+    normalize: { type: 'boolean', description: 'Normalize prompts (trim, collapse whitespace, lowercase) before comparison.', default: 'true' },
+  }}
+/>
+
+## lookup()
+
+Look up a cached response for a prompt:
+
+```typescript
+const result = await cache.lookup({
+  prompt: 'Explain machine learning',
+  modelId: 'llama-3.2',
+});
+
+if (result.hit) {
+  console.log(result.response);  // Cached response text
+  console.log(result.score);     // Similarity score (e.g., 0.95)
+  console.log(result.durationMs); // Lookup time in ms
+}
+```
+
+### CacheLookupResult
+
+<TypeTable
+  type={{
+    hit: { type: 'boolean', description: 'Whether a cache hit occurred.' },
+    response: { type: 'string | undefined', description: 'Cached response text (only on hit).' },
+    score: { type: 'number | undefined', description: 'Cosine similarity score (only on hit).' },
+    entryId: { type: 'string | undefined', description: 'ID of the matched cache entry (only on hit).' },
+    durationMs: { type: 'number', description: 'Time spent on the lookup in milliseconds.' },
+  }}
+/>
+
+### Lookup behavior
+
+1. **Exact match fast path** -- If the normalized prompt exactly matches a cached entry, the response is returned without embedding.
+2. **Embedding similarity** -- The prompt is embedded and compared against all cached entries via HNSW index.
+3. **Model filtering** -- Only entries from the same `modelId` are considered.
+4. **TTL check** -- Expired entries are removed lazily and treated as misses.
+
+## store()
+
+Store a prompt-response pair:
+
+```typescript
+const { entryId } = await cache.store({
+  prompt: 'What is machine learning?',
+  response: 'Machine learning is a subset of AI that...',
+  modelId: 'llama-3.2',
+});
+```
+
+When the cache reaches `maxEntries`, the least-recently-accessed entry is evicted before the new entry is stored.
+
+## clear()
+
+Clear cached entries:
+
+```typescript
+// Clear all entries
+await cache.clear();
+
+// Clear entries for a specific model only
+await cache.clear({ modelId: 'llama-3.2' });
+```
+
+## stats()
+
+Get cache statistics:
+
+```typescript
+const stats = cache.stats();
+console.log(stats.entries);   // Number of cached entries
+console.log(stats.hits);      // Total cache hits
+console.log(stats.misses);    // Total cache misses
+console.log(stats.hitRate);   // Hit rate (0-1)
+```
+
+### CacheStats
+
+<TypeTable
+  type={{
+    entries: { type: 'number', description: 'Number of cached entries.' },
+    hits: { type: 'number', description: 'Total cache hits since creation.' },
+    misses: { type: 'number', description: 'Total cache misses since creation.' },
+    hitRate: { type: 'number', description: 'Hit rate (hits / total lookups). 0 if no lookups.' },
+    oldestEntryMs: { type: 'number | null', description: 'Timestamp of the oldest entry.' },
+    newestEntryMs: { type: 'number | null', description: 'Timestamp of the newest entry.' },
+  }}
+/>
+
+## destroy()
+
+Release all resources:
+
+```typescript
+await cache.destroy();
+// All subsequent operations will throw SemanticCacheError
+```
+
+## semanticCacheMiddleware()
+
+Transparently cache `generateText()` and `streamText()` calls using [Language Model Middleware](/docs/core/language-model-middleware):
+
+```typescript
+import {
+  createSemanticCache,
+  semanticCacheMiddleware,
+  wrapLanguageModel,
+  generateText,
+} from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+import { webllm } from '@localmode/webllm';
+
+// Create cache
+const cache = await createSemanticCache({
+  embeddingModel: transformers.embedding('Xenova/bge-small-en-v1.5'),
+});
+
+// Wrap model with cache middleware
+const cachedModel = wrapLanguageModel({
+  model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16'),
+  middleware: semanticCacheMiddleware(cache),
+});
+
+// First call: model generates, result is cached (~5-30s)
+const result1 = await generateText({ model: cachedModel, prompt: 'What is AI?' });
+
+// Second call with similar prompt: cached response (~50ms)
+const result2 = await generateText({ model: cachedModel, prompt: 'Explain AI' });
+```
+
+### How middleware works
+
+| Operation | Cache Hit | Cache Miss |
+|-----------|-----------|------------|
+| `doGenerate` | Returns cached text with `finishReason: 'stop'` and zero-token usage | Calls model, stores result, returns normally |
+| `doStream` | Yields single chunk with full cached text and `done: true` | Streams from model, buffers text, stores after completion |
+
+## TTL and LRU Behavior
+
+- **TTL expiration** is checked lazily during `lookup()`. Expired entries are removed when accessed.
+- **LRU eviction** occurs during `store()` when `maxEntries` is reached. The least-recently-accessed entry is evicted.
+- Expired entries still occupy memory until accessed. This is bounded by `maxEntries` regardless.
+
+## Prompt Normalization
+
+When `normalize: true` (default), prompts are normalized before embedding:
+
+| Input | Normalized |
+|-------|-----------|
+| `"  What   is   AI?  "` | `"what is ai?"` |
+| `"EXPLAIN\nMACHINE\tLEARNING"` | `"explain machine learning"` |
+
+This prevents trivial mismatches from whitespace, casing, or formatting differences.
+
+## Events
+
+The cache emits events via `globalEventBus`:
+
+```typescript
+import { globalEventBus } from '@localmode/core';
+
+globalEventBus.on('cacheHit', ({ prompt, score, modelId, entryId }) => {
+  console.log(`Cache hit: ${prompt} (score: ${score})`);
+});
+
+globalEventBus.on('cacheMiss', ({ prompt, modelId }) => {
+  console.log(`Cache miss: ${prompt}`);
+});
+
+globalEventBus.on('cacheStore', ({ prompt, modelId, entryId }) => {
+  console.log(`Cached: ${prompt}`);
+});
+
+globalEventBus.on('cacheEvict', ({ entryId, reason }) => {
+  console.log(`Evicted: ${entryId} (${reason})`);
+});
+
+globalEventBus.on('cacheClear', ({ entriesRemoved }) => {
+  console.log(`Cleared ${entriesRemoved} entries`);
+});
+```
+
+## Error Handling
+
+```typescript
+import { SemanticCacheError } from '@localmode/core';
+
+try {
+  await cache.lookup({ prompt: 'test', modelId: 'model' });
+} catch (error) {
+  if (error instanceof SemanticCacheError) {
+    console.log(error.code);
+    // 'CACHE_DESTROYED' | 'CACHE_LOOKUP_FAILED' | 'CACHE_STORE_FAILED'
+    console.log(error.hint);
+  }
+}
+```
+
+## React Hook
+
+Use `useSemanticCache()` from `@localmode/react` for automatic lifecycle management:
+
+```tsx
+import { useSemanticCache } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+function CachedApp() {
+  const { cache, stats, isLoading } = useSemanticCache({
+    embeddingModel: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  });
+
+  if (isLoading || !cache) return <p>Initializing cache...</p>;
+
+  return (
+    <div>
+      <p>Entries: {stats.entries} | Hit rate: {(stats.hitRate * 100).toFixed(1)}%</p>
+    </div>
+  );
+}
+```
+
+The hook creates the cache on mount and calls `destroy()` on unmount.
+
+<Callout title="Recommended Configuration">
+  - Use the **same embedding model** you already have loaded for search/RAG to avoid loading a second model
+  - Start with the **default threshold (0.92)** and adjust based on your use case
+  - Set `maxEntries` based on expected unique queries per session (100 is suitable for most apps)
+  - Use `storage: 'indexeddb'` only if you need cache persistence across page reloads
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| PDF Search | Cache repeated PDF queries for faster responses | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |
+| LLM Chat | Semantic caching for LLM conversation responses | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |

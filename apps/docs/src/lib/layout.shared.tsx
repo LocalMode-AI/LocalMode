@@ -1,4 +1,6 @@
 import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
+import { createElement } from 'react';
+import { BookOpen, Newspaper } from 'lucide-react';
 
 export function baseOptions(): BaseLayoutProps {
   return {
@@ -11,6 +13,16 @@ export function baseOptions(): BaseLayoutProps {
       ),
     },
     links: [
+      {
+        text: 'Docs',
+        url: '/docs',
+        icon: createElement(BookOpen),
+      },
+      {
+        text: 'Blog',
+        url: '/blog',
+        icon: createElement(Newspaper),
+      },
       {
         text: 'GitHub',
         url: 'https://github.com/LocalMode-AI/LocalMode',

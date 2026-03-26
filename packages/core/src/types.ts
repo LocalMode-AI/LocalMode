@@ -1,3 +1,7 @@
+import type { QuantizationConfig, ScalarCalibrationData, PQCodebook } from './quantization/types.js';
+import type { ModelFingerprint } from './embeddings/types.js';
+import type { HNSWGPUOptions } from './hnsw/gpu/types.js';
+
 /**
  * Encryption configuration options.
  */
@@ -24,16 +28,23 @@ export interface SyncOptions {
 
 /**
  * Configuration options for creating a VectorDB instance.
+ *
+ * @typeParam TMetadata - Shape of the metadata object for type-safe operations.
  */
-export interface VectorDBConfig {
+export interface VectorDBConfig<TMetadata extends Record<string, unknown> = Record<string, unknown>> {
   /** Database name (used for IndexedDB store name) */
   name: string;
 
   /** Number of dimensions for vectors */
   dimensions: number;
 
-  /** Storage backend: 'indexeddb' for persistence, 'memory' for testing */
-  storage?: 'indexeddb' | 'memory';
+  /**
+   * Storage backend.
+   * - `'indexeddb'` — persistent IndexedDB storage (default)
+   * - `'memory'` — in-memory storage for testing
+   * - `StorageAdapter` instance — custom storage backend (e.g., DexieStorage, IDBStorage)
+   */
+  storage?: 'indexeddb' | 'memory' | import('./storage/types.js').StorageAdapter;
 
   /** HNSW index configuration options */
   indexOptions?: HNSWOptions;
@@ -43,6 +54,75 @@ export interface VectorDBConfig {
 
   /** Sync and recovery options */
   sync?: SyncOptions;
+
+  /** Vector quantization configuration. Reduces storage by 4x with minimal recall loss. */
+  quantization?: QuantizationConfig;
+
+  /**
+   * Storage compression for IndexedDB. Reduces disk usage without affecting
+   * search recall. Independent of the `quantization` option.
+   *
+   * When enabled, vectors are compressed using SQ8 before writing to IndexedDB
+   * and decompressed on read. The HNSW index always uses original Float32Array
+   * vectors, so search quality is completely unaffected.
+   *
+   * @example
+   * ```ts
+   * const db = await createVectorDB({
+   *   name: 'docs',
+   *   dimensions: 384,
+   *   compression: { type: 'sq8' },
+   * });
+   * ```
+   */
+  compression?: import('./storage/compression.js').CompressionConfig;
+
+  /**
+   * Optional metadata schema for runtime validation.
+   * When provided, `add()` and `addMany()` validate metadata against this schema.
+   * Reuses the same `ObjectSchema` interface used by `generateObject()`.
+   *
+   * @example
+   * ```ts
+   * import { createVectorDB, jsonSchema } from '@localmode/core';
+   * import { z } from 'zod';
+   *
+   * const db = await createVectorDB({
+   *   name: 'articles',
+   *   dimensions: 384,
+   *   schema: jsonSchema(z.object({ title: z.string(), category: z.string() })),
+   * });
+   * ```
+   */
+  schema?: import('./generation/types.js').ObjectSchema<TMetadata>;
+
+  /**
+   * Optional embedding model reference for drift detection.
+   * When provided, the model's fingerprint is stored with the collection
+   * and compared on subsequent initializations to detect model changes.
+   */
+  model?: import('./embeddings/types.js').EmbeddingModel;
+
+  /**
+   * Enable WebGPU-accelerated vector distance computation.
+   * When true, the underlying HNSW index uses GPU compute shaders for
+   * batch distance computation during search. Falls back to CPU silently
+   * when WebGPU is unavailable.
+   *
+   * This is a convenience flag equivalent to setting `indexOptions.gpu.enabled: true`.
+   * If both `enableGPU` and `indexOptions.gpu` are set, the explicit
+   * `indexOptions.gpu` settings take precedence.
+   *
+   * @example
+   * ```ts
+   * const db = await createVectorDB({
+   *   name: 'docs',
+   *   dimensions: 384,
+   *   enableGPU: true,
+   * });
+   * ```
+   */
+  enableGPU?: boolean;
 }
 
 /**
@@ -60,12 +140,22 @@ export interface HNSWOptions {
 
   /** Distance metric to use (default: 'cosine') */
   distanceFunction?: 'cosine' | 'euclidean' | 'dot';
+
+  /**
+   * GPU acceleration options for search operations.
+   * When `enabled` is true, distance computations are offloaded to WebGPU
+   * compute shaders for batch sizes above `batchThreshold`.
+   * Falls back to CPU silently when WebGPU is unavailable.
+   */
+  gpu?: HNSWGPUOptions;
 }
 
 /**
  * A document to be stored in the vector database.
+ *
+ * @typeParam TMetadata - Shape of the metadata object. Defaults to `Record<string, unknown>` for untyped usage.
  */
-export interface Document {
+export interface Document<TMetadata extends Record<string, unknown> = Record<string, unknown>> {
   /** Unique identifier for the document */
   id: string;
 
@@ -73,18 +163,20 @@ export interface Document {
   vector: Float32Array;
 
   /** Optional metadata associated with the document */
-  metadata?: Record<string, unknown>;
+  metadata?: TMetadata;
 }
 
 /**
  * Options for search operations.
+ *
+ * @typeParam TMetadata - Shape of the metadata object for type-safe filters.
  */
-export interface SearchOptions {
+export interface SearchOptions<TMetadata extends Record<string, unknown> = Record<string, unknown>> {
   /** Number of results to return (default: 10) */
   k?: number;
 
   /** Metadata filter to apply before/after search */
-  filter?: FilterQuery;
+  filter?: TypedFilterQuery<TMetadata>;
 
   /** Minimum similarity threshold (0-1 for cosine, depends on metric) */
   threshold?: number;
@@ -95,8 +187,10 @@ export interface SearchOptions {
 
 /**
  * A single search result.
+ *
+ * @typeParam TMetadata - Shape of the metadata object.
  */
-export interface SearchResult {
+export interface SearchResult<TMetadata extends Record<string, unknown> = Record<string, unknown>> {
   /** Document ID */
   id: string;
 
@@ -104,31 +198,40 @@ export interface SearchResult {
   score: number;
 
   /** Document metadata (if stored) */
-  metadata?: Record<string, unknown>;
+  metadata?: TMetadata;
 
   /** Vector embedding (only if includeVectors was true) */
   vector?: Float32Array;
 }
 
 /**
- * Filter query for metadata filtering.
- * Supports exact match, $in (any of), $gt, $gte, $lt, $lte operators.
+ * Filter value operators for a given value type.
  */
-export interface FilterQuery {
-  [key: string]:
-    | string
-    | number
-    | boolean
-    | null
-    | { $in: unknown[] }
-    | { $nin: unknown[] }
-    | { $gt: number }
-    | { $gte: number }
-    | { $lt: number }
-    | { $lte: number }
-    | { $ne: unknown }
-    | { $exists: boolean };
-}
+export type FilterValueOperators<T> =
+  | T
+  | { $in: T[] }
+  | { $nin: T[] }
+  | { $ne: T }
+  | { $exists: boolean }
+  | (T extends number ? { $gt: number } | { $gte: number } | { $lt: number } | { $lte: number } : never);
+
+/**
+ * Type-safe filter query for typed VectorDB metadata.
+ * When TMetadata is a specific type, filter keys are constrained to `keyof TMetadata`
+ * and operators are typed according to the value type at each key.
+ *
+ * @typeParam TMetadata - Shape of the metadata object.
+ */
+export type TypedFilterQuery<TMetadata extends Record<string, unknown> = Record<string, unknown>> =
+  { [K in keyof TMetadata]?: FilterValueOperators<TMetadata[K]> };
+
+/**
+ * Filter query for metadata filtering (untyped).
+ * Supports exact match, $in (any of), $gt, $gte, $lt, $lte operators.
+ *
+ * @deprecated Prefer `TypedFilterQuery<TMetadata>` for type-safe filters. This alias is kept for backward compatibility.
+ */
+export type FilterQuery = TypedFilterQuery<Record<string, unknown>>;
 
 /**
  * Options for batch add operations.
@@ -139,6 +242,17 @@ export interface AddManyOptions {
 
   /** Batch size for processing (default: 100) */
   batchSize?: number;
+}
+
+/**
+ * Options for recalibrating quantization.
+ */
+export interface RecalibrateOptions {
+  /** AbortSignal to cancel the operation */
+  abortSignal?: AbortSignal;
+
+  /** Progress callback called during recalibration */
+  onProgress?: (completed: number, total: number) => void;
 }
 
 /**
@@ -196,11 +310,12 @@ export interface StoredDocument {
 
 /**
  * Internal vector storage representation.
+ * The vector field accepts Float32Array (unquantized) or Uint8Array (quantized).
  */
 export interface StoredVector {
   id: string;
   collectionId: string;
-  vector: Float32Array;
+  vector: Float32Array | Uint8Array;
 }
 
 /**
@@ -211,26 +326,40 @@ export interface Collection {
   name: string;
   dimensions: number;
   createdAt: number;
+  /** Scalar quantization calibration data (set when quantization is enabled) */
+  calibration?: ScalarCalibrationData;
+  /** Fingerprint of the embedding model that produced this collection's vectors */
+  modelFingerprint?: ModelFingerprint;
+  /** Product quantization codebook (set when PQ is enabled) */
+  pqCodebook?: PQCodebook;
+  /** Storage compression mode (set when compression is enabled) */
+  compression?: { type: 'sq8' | 'delta-sq8' | 'none' };
+  /** Calibration data for storage compression (separate from quantization calibration) */
+  compressionCalibration?: ScalarCalibrationData;
+  /** Delta calibration for delta-sq8 compression mode */
+  deltaCalibration?: ScalarCalibrationData;
 }
 
 /**
  * The main VectorDB interface.
+ *
+ * @typeParam TMetadata - Shape of the metadata object for type-safe operations.
  */
-export interface VectorDB {
+export interface VectorDB<TMetadata extends Record<string, unknown> = Record<string, unknown>> {
   /** Add a single document */
-  add(doc: Document): Promise<void>;
+  add(doc: Document<TMetadata>): Promise<void>;
 
   /** Add multiple documents with optional progress tracking */
-  addMany(docs: Document[], options?: AddManyOptions): Promise<void>;
+  addMany(docs: Document<TMetadata>[], options?: AddManyOptions): Promise<void>;
 
   /** Search for similar vectors */
-  search(vector: Float32Array, options?: SearchOptions): Promise<SearchResult[]>;
+  search(vector: Float32Array, options?: SearchOptions<TMetadata>): Promise<SearchResult<TMetadata>[]>;
 
   /** Get a document by ID */
-  get(id: string): Promise<(Document & { metadata?: Record<string, unknown> }) | null>;
+  get(id: string): Promise<(Document<TMetadata> & { metadata?: TMetadata }) | null>;
 
   /** Update a document's vector or metadata */
-  update(id: string, updates: Partial<Omit<Document, 'id'>>): Promise<void>;
+  update(id: string, updates: Partial<Omit<Document<TMetadata>, 'id'>>): Promise<void>;
 
   /** Delete a document by ID */
   delete(id: string): Promise<void>;
@@ -239,10 +368,10 @@ export interface VectorDB {
   deleteMany(ids: string[]): Promise<void>;
 
   /** Delete documents matching a filter */
-  deleteWhere(filter: FilterQuery): Promise<number>;
+  deleteWhere(filter: TypedFilterQuery<TMetadata>): Promise<number>;
 
   /** Get a namespaced collection */
-  collection(name: string): VectorDB;
+  collection(name: string): VectorDB<TMetadata>;
 
   /** Get database statistics */
   stats(): Promise<DBStats>;
@@ -258,6 +387,9 @@ export interface VectorDB {
 
   /** Import database data */
   import(data: Blob, options?: ImportOptions): Promise<void>;
+
+  /** Recalibrate quantization from current vectors and re-quantize all stored vectors */
+  recalibrate(options?: RecalibrateOptions): Promise<void>;
 
   /** Get the lock manager (for advanced usage) */
   getLockManager(): unknown;

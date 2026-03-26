@@ -1,0 +1,136 @@
+---
+title: 'Import / Export'
+description: React hook for importing and exporting vector data with progress tracking, preview, and cancellation.
+icon: ArrowLeftRight
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+# Import / Export Hook
+
+<Callout type="info" title="See it in action">
+  Try [Semantic Search](https://localmode.ai/semantic-search) and [Data Migrator](https://localmode.ai/data-migrator) for working demos of these hooks.
+</Callout>
+
+## useImportExport
+
+Import vectors from Pinecone, ChromaDB, CSV, or JSONL, and export to CSV or JSONL — with progress tracking, preview, and cancellation.
+
+```tsx
+import { useImportExport } from '@localmode/react';
+import { createVectorDB } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const db = await createVectorDB({ name: 'docs', dimensions: 384 });
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+function DataMigrator() {
+  const {
+    importData, parsePreview, exportCSV, exportJSONL,
+    isImporting, isParsing, isExporting,
+    progress, stats, parseResult, error,
+    cancel, reset,
+  } = useImportExport({ db, model });
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const content = await file.text();
+
+    // Preview first
+    await parsePreview({ content });
+  };
+
+  const handleImport = async (content: string) => {
+    await importData({ content, format: 'pinecone' });
+  };
+
+  return (
+    <div>
+      <input type="file" onChange={handleFile} accept=".json,.csv,.jsonl" />
+
+      {isParsing && <p>Parsing...</p>}
+      {parseResult && <p>Found {parseResult.records.length} records ({parseResult.format})</p>}
+
+      {isImporting && progress && (
+        <p>Importing: {progress.completed}/{progress.total}</p>
+      )}
+      {stats && <p>Imported {stats.imported}, skipped {stats.skipped}, failed {stats.failed}</p>}
+
+      <button onClick={exportCSV} disabled={isExporting}>Export CSV</button>
+      <button onClick={exportJSONL} disabled={isExporting}>Export JSONL</button>
+
+      {isImporting && <button onClick={cancel}>Cancel</button>}
+      {error && <p className="text-error">{error.message}</p>}
+    </div>
+  );
+}
+```
+
+### Options
+
+<TypeTable
+  type={{
+    db: { description: 'Target VectorDB instance (needs dimensions and addMany)', type: 'VectorDB', required: true },
+    model: { description: 'Embedding model for re-embedding text-only records (records without vectors)', type: 'EmbeddingModel' },
+    batchSize: { description: 'Records per import batch', type: 'number', default: '100' },
+    exportFilename: { description: 'Base filename for export downloads', type: 'string', default: "'vectordb-export'" },
+  }}
+/>
+
+### Return Value
+
+<TypeTable
+  type={{
+    importData: { description: 'Import vectors from a content string', type: '(opts: { content: string, format?: ExternalFormat }) => Promise<ImportStats | null>' },
+    parsePreview: { description: 'Parse content without importing (for preview)', type: '(opts: { content: string, format?: ExternalFormat }) => Promise<ParseResult | null>' },
+    exportCSV: { description: 'Export current VectorDB to CSV and trigger download', type: '() => Promise<void>' },
+    exportJSONL: { description: 'Export current VectorDB to JSONL and trigger download', type: '() => Promise<void>' },
+    isImporting: { description: 'Whether an import is in progress', type: 'boolean' },
+    isParsing: { description: 'Whether a preview parse is in progress', type: 'boolean' },
+    isExporting: { description: 'Whether an export is in progress', type: 'boolean' },
+    progress: { description: 'Current import progress (completed/total)', type: 'ImportProgress | null' },
+    stats: { description: 'Final import statistics after completion', type: 'ImportStats | null' },
+    parseResult: { description: 'Result of preview parsing', type: 'ParseResult | null' },
+    error: { description: 'Error from the last operation', type: 'Error | null' },
+    cancel: { description: 'Abort the current import operation', type: '() => void' },
+    reset: { description: 'Clear all state (stats, parseResult, error)', type: '() => void' },
+  }}
+/>
+
+### Supported Formats
+
+| Format | Detection | Description |
+|--------|-----------|-------------|
+| `'pinecone'` | `vectors` key in JSON | Pinecone export format (`{ id, values, metadata }`) |
+| `'chroma'` | `ids` + `embeddings` arrays | ChromaDB export format (parallel arrays) |
+| `'csv'` | Comma-separated with headers | CSV with `id`, `vector`, `text`, `metadata` columns |
+| `'jsonl'` | One JSON object per line | JSON Lines with `id`, `vector`/`embedding`, `text`, `metadata` |
+
+Format is auto-detected if omitted. Pass `format` explicitly if auto-detection produces wrong results.
+
+### Re-embedding Text-Only Records
+
+When importing records that have text but no vectors (e.g., a CSV with only `id` and `text` columns), pass an `embeddingModel` to compute vectors automatically:
+
+```tsx
+const { importData } = useImportExport({
+  db,
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+});
+
+// Records without vectors will be embedded using the model
+await importData({ content: csvWithTextOnly });
+```
+
+<Callout type="info">
+For full import/export API reference including `importFrom()`, `parseExternalFormat()`, `exportToCSV()`, format specifications, and error handling, see the [Core Import/Export](/docs/core/import-export) guide.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Semantic Search | Export and import vector indexes with useImportExport | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
+| Data Migrator | Migrate vectors between formats with useImportExport | [Demo](https://localmode.ai/data-migrator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/data-migrator) |

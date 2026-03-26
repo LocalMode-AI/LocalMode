@@ -43,7 +43,7 @@ interface GlobalClassificationRegistry {
  *
  * // Now string model IDs work
  * const { label } = await classify({
- *   model: 'transformers:Xenova/distilbert-sst-2',
+ *   model: 'transformers:Xenova/distilbert-base-uncased-finetuned-sst-2-english',
  *   text: 'I love this!',
  * });
  * ```
@@ -166,7 +166,7 @@ function resolveZeroShotModel(
  * @example With string model ID (requires global provider setup)
  * ```ts
  * const { label } = await classify({
- *   model: 'transformers:Xenova/distilbert-sst-2',
+ *   model: 'transformers:Xenova/distilbert-base-uncased-finetuned-sst-2-english',
  *   text: 'This is terrible!',
  * });
  * ```
@@ -177,7 +177,7 @@ function resolveZeroShotModel(
  * setTimeout(() => controller.abort(), 5000);
  *
  * const { label } = await classify({
- *   model: transformers.classifier('Xenova/distilbert-sst-2'),
+ *   model: transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english'),
  *   text: 'Hello world',
  *   abortSignal: controller.signal,
  * });
@@ -256,7 +256,7 @@ export async function classify(options: ClassifyOptions): Promise<ClassifyResult
  * import { transformers } from '@localmode/transformers';
  *
  * const { results, usage } = await classifyMany({
- *   model: transformers.classifier('Xenova/distilbert-sst-2'),
+ *   model: transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english'),
  *   texts: ['I love this!', 'This is terrible!', 'It is okay.'],
  * });
  *
@@ -315,7 +315,7 @@ export async function classifyMany(options: ClassifyManyOptions): Promise<Classi
  * import { transformers } from '@localmode/transformers';
  *
  * const { labels, scores } = await classifyZeroShot({
- *   model: transformers.zeroShot('Xenova/bart-large-mnli'),
+ *   model: transformers.zeroShot('Xenova/mobilebert-uncased-mnli'),
  *   text: 'I just bought a new Tesla Model 3',
  *   candidateLabels: ['automotive', 'technology', 'finance', 'sports'],
  * });
@@ -327,7 +327,7 @@ export async function classifyMany(options: ClassifyManyOptions): Promise<Classi
  * @example With multi-label classification
  * ```ts
  * const { labels, scores } = await classifyZeroShot({
- *   model: transformers.zeroShot('Xenova/bart-large-mnli'),
+ *   model: transformers.zeroShot('Xenova/mobilebert-uncased-mnli'),
  *   text: 'The new iPhone uses advanced AI for photography',
  *   candidateLabels: ['technology', 'photography', 'smartphones'],
  *   multiLabel: true,

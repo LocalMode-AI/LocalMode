@@ -1,0 +1,382 @@
+---
+title: Threshold Calibration
+description: Automatically determine optimal similarity thresholds for search and use per-model presets.
+icon: SlidersHorizontal
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+## Overview
+
+Different embedding models produce different similarity score distributions. A cosine similarity of 0.7 might represent a strong match for one model but a weak match for another. Choosing the right `threshold` for `db.search()` or `semanticSearch()` is critical for relevance filtering.
+
+<Callout type="info" title="See it in action">
+  Try [Model Evaluator](https://localmode.ai/model-evaluator) and [Product Search](https://localmode.ai/product-search) for working demos of these APIs.
+</Callout>
+
+LocalMode provides two complementary features:
+
+1. **`calibrateThreshold()`** -- Empirically calibrates a threshold from your actual corpus data
+2. **`MODEL_THRESHOLD_PRESETS`** -- Known-good defaults for popular models when you need an instant answer
+
+Both are entirely optional. Existing search behavior is unchanged when no threshold is provided.
+
+## Quick Start
+
+<Tabs items={['Calibrate from Data', 'Use Preset']}>
+<Tab value="Calibrate from Data">
+
+```ts
+import { calibrateThreshold, semanticSearch } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+const corpus = ['document 1 text...', 'document 2 text...', /* ... */];
+
+const { threshold } = await calibrateThreshold({
+  model,
+  corpus,
+  percentile: 90, // Filter below 90th percentile of similarity
+});
+
+// Use the calibrated threshold for search
+const results = await semanticSearch({
+  db,
+  model,
+  query: 'How to configure auth?',
+  threshold,
+});
+```
+
+</Tab>
+<Tab value="Use Preset">
+
+```ts
+import { getDefaultThreshold, semanticSearch } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+const threshold = getDefaultThreshold('Xenova/bge-small-en-v1.5');
+// 0.5
+
+const results = await semanticSearch({
+  db,
+  model,
+  query: 'How to configure auth?',
+  threshold, // undefined-safe: omitted if model not in presets
+});
+```
+
+</Tab>
+</Tabs>
+
+## calibrateThreshold()
+
+Embeds a corpus sample, computes all pairwise similarity scores, and returns the score at a configurable percentile.
+
+```ts
+import { calibrateThreshold } from '@localmode/core';
+
+const calibration = await calibrateThreshold({
+  model,
+  corpus: sampleTexts,
+  percentile: 90,
+  maxSamples: 200,
+});
+
+console.log(calibration.threshold);              // 0.52
+console.log(calibration.distribution.mean);       // 0.38
+console.log(calibration.distribution.stdDev);     // 0.12
+console.log(calibration.sampleSize);              // 200
+```
+
+### CalibrateThresholdOptions
+
+<TypeTable
+  type={{
+    model: {
+      type: 'EmbeddingModel | string',
+      description: 'The embedding model to use (model object or string ID)',
+    },
+    corpus: {
+      type: 'string[]',
+      description: 'Array of text samples to embed and compute pairwise similarities from. Must contain at least 2 samples.',
+    },
+    percentile: {
+      type: 'number',
+      description: 'Percentile of the pairwise similarity distribution to use as threshold. 0 = min, 100 = max.',
+      default: '90',
+    },
+    distanceFunction: {
+      type: "'cosine' | 'euclidean' | 'dot'",
+      description: 'Distance metric for similarity computation.',
+      default: "'cosine'",
+    },
+    maxSamples: {
+      type: 'number',
+      description: 'Maximum corpus samples for calibration. Uniformly-spaced sampling when exceeded.',
+      default: '200',
+    },
+    abortSignal: {
+      type: 'AbortSignal',
+      description: 'Signal for cancelling the calibration.',
+    },
+  }}
+/>
+
+### ThresholdCalibration (Result)
+
+<TypeTable
+  type={{
+    threshold: {
+      type: 'number',
+      description: 'The computed similarity threshold at the requested percentile.',
+    },
+    percentile: {
+      type: 'number',
+      description: 'The percentile used (echoes input or default).',
+    },
+    sampleSize: {
+      type: 'number',
+      description: 'Number of corpus samples actually used.',
+    },
+    modelId: {
+      type: 'string',
+      description: 'The model ID used for embedding.',
+    },
+    distanceFunction: {
+      type: "'cosine' | 'euclidean' | 'dot'",
+      description: 'The distance function used.',
+    },
+    distribution: {
+      type: 'ThresholdDistributionStats',
+      description: 'Full statistics of the pairwise similarity distribution.',
+    },
+  }}
+/>
+
+### ThresholdDistributionStats
+
+<TypeTable
+  type={{
+    mean: { type: 'number', description: 'Arithmetic mean of pairwise similarity scores.' },
+    median: { type: 'number', description: 'Median of pairwise similarity scores.' },
+    stdDev: { type: 'number', description: 'Population standard deviation.' },
+    min: { type: 'number', description: 'Minimum pairwise similarity score.' },
+    max: { type: 'number', description: 'Maximum pairwise similarity score.' },
+    count: { type: 'number', description: 'Total number of pairwise comparisons (n choose 2).' },
+  }}
+/>
+
+## Percentile Selection
+
+The `percentile` parameter controls threshold strictness:
+
+| Percentile | Behavior | Use Case |
+|-----------|----------|----------|
+| 70-80 | Permissive, more results | Exploratory search, broad recall |
+| 90 (default) | Balanced | General semantic search |
+| 95-99 | Strict, fewer but more precise results | High-precision applications |
+
+The threshold is computed using the **nearest-rank method**: `index = ceil(percentile / 100 * count) - 1`, clamped to `[0, count - 1]`.
+
+## MODEL_THRESHOLD_PRESETS
+
+A static map of known-good cosine similarity thresholds for popular models:
+
+```ts
+import { MODEL_THRESHOLD_PRESETS } from '@localmode/core';
+
+console.log(MODEL_THRESHOLD_PRESETS);
+// {
+//   'Xenova/bge-small-en-v1.5': 0.5,
+//   'Xenova/bge-base-en-v1.5': 0.5,
+//   'Xenova/all-MiniLM-L6-v2': 0.68,
+//   'Xenova/all-MiniLM-L12-v2': 0.7,
+//   'nomic-ai/nomic-embed-text-v1.5': 0.55,
+//   'Xenova/gte-small': 0.6,
+//   'Xenova/gte-base': 0.6,
+//   'Xenova/e5-small-v2': 0.6,
+//   'Xenova/paraphrase-MiniLM-L6-v2': 0.72,
+// }
+```
+
+<Callout type="info">
+Presets are approximate defaults for cosine similarity. For production use with domain-specific data, use `calibrateThreshold()` for a data-driven threshold.
+</Callout>
+
+## getDefaultThreshold()
+
+Safe lookup that returns `undefined` for unknown models:
+
+```ts
+import { getDefaultThreshold } from '@localmode/core';
+
+const threshold = getDefaultThreshold('Xenova/bge-small-en-v1.5');
+// 0.5
+
+const unknown = getDefaultThreshold('unknown/model');
+// undefined
+```
+
+This is useful for conditional threshold application:
+
+```ts
+const threshold = getDefaultThreshold(model.modelId);
+
+const results = await db.search(queryVector, {
+  k: 10,
+  ...(threshold !== undefined && { threshold }),
+});
+```
+
+## Distance Functions
+
+By default, `calibrateThreshold()` uses cosine similarity. You can use other metrics:
+
+<Tabs items={['Cosine', 'Euclidean', 'Dot Product']}>
+<Tab value="Cosine">
+
+```ts
+// Default -- cosine similarity scores in [-1, 1]
+const { threshold } = await calibrateThreshold({
+  model,
+  corpus,
+  distanceFunction: 'cosine',
+});
+```
+
+</Tab>
+<Tab value="Euclidean">
+
+```ts
+// Euclidean -- scores computed as 1 / (1 + distance), in (0, 1]
+const { threshold } = await calibrateThreshold({
+  model,
+  corpus,
+  distanceFunction: 'euclidean',
+});
+```
+
+</Tab>
+<Tab value="Dot Product">
+
+```ts
+// Dot product -- raw dot product scores (any real number)
+const { threshold } = await calibrateThreshold({
+  model,
+  corpus,
+  distanceFunction: 'dot',
+});
+```
+
+</Tab>
+</Tabs>
+
+## AbortSignal Support
+
+Calibration supports cancellation via AbortSignal:
+
+```ts
+const controller = new AbortController();
+setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+try {
+  const { threshold } = await calibrateThreshold({
+    model,
+    corpus,
+    abortSignal: controller.signal,
+  });
+} catch (error) {
+  if (error.name === 'AbortError') {
+    console.log('Calibration cancelled');
+  }
+}
+```
+
+## React Hook
+
+The `useCalibrateThreshold()` hook from `@localmode/react` wraps `calibrateThreshold()` with React state management:
+
+```tsx
+import { useCalibrateThreshold } from '@localmode/react';
+
+function ThresholdCalibrator({ model, corpus }) {
+  const {
+    calibration,
+    isCalibrating,
+    error,
+    calibrate,
+    cancel,
+    clearError,
+  } = useCalibrateThreshold({ model, percentile: 90 });
+
+  return (
+    <div>
+      <button onClick={() => calibrate(corpus)} disabled={isCalibrating}>
+        {isCalibrating ? 'Calibrating...' : 'Calibrate Threshold'}
+      </button>
+      {isCalibrating && <button onClick={cancel}>Cancel</button>}
+      {calibration && (
+        <div>
+          <p>Threshold: {calibration.threshold.toFixed(4)}</p>
+          <p>Mean: {calibration.distribution.mean.toFixed(4)}</p>
+          <p>Samples: {calibration.sampleSize}</p>
+        </div>
+      )}
+      {error && <p>Error: {error.message}</p>}
+    </div>
+  );
+}
+```
+
+## Performance
+
+`calibrateThreshold()` computes O(n^2) pairwise similarities, capped by `maxSamples`:
+
+| Samples | Pairs | Pairwise Time | Total (with embedding) |
+|---------|-------|--------------|----------------------|
+| 50 | 1,225 | ~1ms | ~1-3s |
+| 100 | 4,950 | ~2ms | ~2-5s |
+| 200 (default) | 19,900 | ~5ms | ~3-10s |
+| 500 | 124,750 | ~30ms | ~5-20s |
+
+The embedding step dominates runtime. The pairwise computation is negligible for the default `maxSamples` of 200.
+
+## Integration with db.search()
+
+The calibrated threshold integrates directly with the existing search API:
+
+```ts
+import { calibrateThreshold, createVectorDB, semanticSearch } from '@localmode/core';
+
+// 1. Calibrate once at initialization
+const { threshold } = await calibrateThreshold({ model, corpus });
+
+// 2. Use with db.search()
+const results = await db.search(queryVector, {
+  k: 10,
+  threshold, // Only results above this score are returned
+});
+
+// 3. Or with semanticSearch()
+const { results: semanticResults } = await semanticSearch({
+  db,
+  model,
+  query: 'my search query',
+  threshold,
+});
+```
+
+<Callout type="info">
+`calibrateThreshold()` is purely additive. When no threshold is passed to `db.search()`, all top-k results are returned as before.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Model Evaluator | Calibrate similarity thresholds from labeled data | [Demo](https://localmode.ai/model-evaluator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/model-evaluator) |
+| Product Search | Threshold tuning for product similarity matching | [Demo](https://localmode.ai/product-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/product-search) |

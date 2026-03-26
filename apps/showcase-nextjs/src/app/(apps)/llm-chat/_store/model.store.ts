@@ -3,7 +3,7 @@
  * @description Zustand store for model state management (pure state, no async)
  */
 import { create } from 'zustand';
-import type { ModelInfo, ModelCategory, AppError } from '../_lib/types';
+import type { ModelInfo, ModelCategory, ModelBackend, AppError } from '../_lib/types';
 import { groupModelsByCategory } from '../_lib/utils';
 
 /** Model store state and actions */
@@ -21,6 +21,10 @@ interface ModelState {
   deletingModelId: string | null;
   /** Current error state */
   error: AppError | null;
+  /** Whether the browser supports WebGPU (null = not yet detected) */
+  webGPUSupported: boolean | null;
+  /** Whether the page has cross-origin isolation (multi-thread WASM) */
+  crossOriginIsolated: boolean;
 
   // Actions (pure state setters)
   /** Set the models list */
@@ -39,6 +43,10 @@ interface ModelState {
   setError: (error: AppError | null) => void;
   /** Clear error */
   clearError: () => void;
+  /** Set WebGPU support status */
+  setWebGPUSupported: (supported: boolean) => void;
+  /** Set cross-origin isolation status */
+  setCrossOriginIsolated: (isolated: boolean) => void;
 
   // Derived state getters (computed on access)
   /** Get models grouped by category */
@@ -49,6 +57,8 @@ interface ModelState {
   getAvailableCount: () => number;
   /** Get the model currently being loaded */
   getLoadingModel: () => ModelInfo | null;
+  /** Get the backend for a given model ID */
+  getModelBackend: (modelId: string) => ModelBackend | undefined;
 }
 
 /** Model store - pure state container */
@@ -60,6 +70,8 @@ export const useModelStore = create<ModelState>()((set, get) => ({
   loadProgress: 0,
   deletingModelId: null,
   error: null,
+  webGPUSupported: null,
+  crossOriginIsolated: false,
 
   // Pure state setters
   setModels: (models) => set({ models, isLoading: false }),
@@ -82,6 +94,10 @@ export const useModelStore = create<ModelState>()((set, get) => ({
 
   clearError: () => set({ error: null }),
 
+  setWebGPUSupported: (webGPUSupported) => set({ webGPUSupported }),
+
+  setCrossOriginIsolated: (crossOriginIsolated) => set({ crossOriginIsolated }),
+
   // Derived state getters (computed on each access)
   getGroupedModels: () => {
     const { models } = get();
@@ -101,5 +117,10 @@ export const useModelStore = create<ModelState>()((set, get) => ({
   getLoadingModel: () => {
     const { loadingModelId, models } = get();
     return loadingModelId ? (models.find((m) => m.id === loadingModelId) ?? null) : null;
+  },
+
+  getModelBackend: (modelId) => {
+    const { models } = get();
+    return models.find((m) => m.id === modelId)?.backend;
   },
 }));

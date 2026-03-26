@@ -68,6 +68,7 @@ describe('@localmode/webllm', () => {
         'Llama-3.2-3B-Instruct-q4f16_1-MLC',
         'Phi-3.5-mini-instruct-q4f16_1-MLC',
         'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',
+        'Qwen3-1.7B-q4f16_1-MLC',
         'SmolLM2-1.7B-Instruct-q4f16_1-MLC',
       ];
 

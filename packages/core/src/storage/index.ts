@@ -4,6 +4,7 @@
 
 export { IndexedDBStorage } from './indexeddb.js';
 export { MemoryStorage } from './memory.js';
+export { type StorageAdapter } from './types.js';
 export * from './schema.js';
 export {
   WAL,
@@ -24,6 +25,14 @@ export {
   type Migration,
   type MigrationFn,
 } from './migrations.js';
+export {
+  compressVectors,
+  decompressVectors,
+  getCompressionStats,
+  type CompressedVectorBlock,
+  type CompressionConfig,
+  type CompressionStats,
+} from './compression.js';
 
 import { IndexedDBStorage } from './indexeddb.js';
 import { MemoryStorage } from './memory.js';

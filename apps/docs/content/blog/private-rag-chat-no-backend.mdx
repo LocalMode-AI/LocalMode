@@ -1,0 +1,376 @@
+---
+title: "Build a Private RAG Chat Over Your Documents - No Backend Required"
+description: "A complete tutorial for building a retrieval-augmented generation pipeline that runs entirely in the browser. Load PDFs, chunk text, generate embeddings with BGE-small, store vectors in IndexedDB, and answer questions with a local LLM - all without a server, API key, or any data leaving the device."
+author: LocalMode
+date: 2026-03-13
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+RAG - retrieval-augmented generation - is one of the most useful patterns in applied AI. Feed a language model the right context from your documents, and it can answer domain-specific questions without hallucinating. The catch is that traditional RAG requires a backend: a vector database service, an embedding API, an LLM endpoint, and network calls that send your private documents to third-party servers.
+
+What if the entire pipeline ran in the browser tab?
+
+This post walks through building a complete, private RAG chat - from PDF ingestion to streaming LLM answers - using only client-side JavaScript. No server, no API keys, no data ever leaving the device. Every code example uses real LocalMode APIs pulled directly from the codebase.
+
+<Callout type="info" title="Working demo">
+  The [PDF Search](https://localmode.ai/pdf-search) showcase app implements everything in this tutorial. Open it, drop a PDF, and start asking questions - entirely offline after the initial model download.
+</Callout>
+
+---
+
+## What You'll Build
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Browser Tab                              │
+│                                                                 │
+│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌────────────┐  │
+│  │  PDF.js   │──▶│  Chunker  │──▶│ Embedding │──▶│  VectorDB   │  │
+│  │ (extract) │   │(recursive)│   │(BGE-small)│   │ (IndexedDB) │  │
+│  └──────────┘   └──────────┘   └──────────┘   └─────┬──────┘  │
+│                                                      │         │
+│                                     ┌────────────────┘         │
+│                                     ▼                          │
+│  ┌──────────┐   ┌──────────┐   ┌──────────┐                   │
+│  │ Streaming │◀──│  Prompt   │◀──│ Semantic  │                   │
+│  │   LLM    │   │ Assembly  │   │  Search   │                   │
+│  └──────────┘   └──────────┘   └──────────┘                   │
+│                                                                 │
+│  Models: BGE-small-en-v1.5 (33M params, ~33MB quantized)       │
+│          Llama 3.2 1B or Qwen 3 1.7B (712MB-1.1GB)             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+The pipeline has six stages:
+
+1. **Extract** - Pull text from a PDF using PDF.js
+2. **Chunk** - Split text into overlapping segments with `chunk()`
+3. **Embed** - Generate 384-dimensional vectors with `embedMany()`
+4. **Store** - Index vectors in an HNSW graph backed by IndexedDB
+5. **Search** - Find relevant chunks with `semanticSearch()`
+6. **Generate** - Stream an answer from a local LLM with `streamText()`
+
+Every stage runs in the same browser process. Let's build each one.
+
+---
+
+## Step 1: Extract Text from a PDF
+
+LocalMode's `@localmode/pdfjs` package wraps Mozilla's PDF.js to extract text from any PDF file - password-protected documents included.
+
+```typescript
+import { extractPDFText } from '@localmode/pdfjs';
+
+// Accept a File from an <input type="file">
+async function loadPDF(file: File) {
+  const arrayBuffer = await file.arrayBuffer();
+
+  const result = await extractPDFText(arrayBuffer, {
+    includePageNumbers: true,
+  });
+
+  console.log(`Extracted ${result.pageCount} pages, ${result.text.length} characters`);
+  return result;
+}
+```
+
+`extractPDFText` returns the full text, an array of per-page content, and PDF metadata (title, author, creation date). For large documents you can limit extraction with `maxPages` and cancel with an `AbortSignal`.
+
+---
+
+## Step 2: Chunk the Text
+
+Raw PDF text is too long to embed in one pass. Chunking splits it into overlapping segments that each fit within the embedding model's 512-token context window.
+
+```typescript
+import { chunk } from '@localmode/core';
+
+const chunks = chunk(result.text, {
+  strategy: 'recursive',
+  size: 512,
+  overlap: 50,
+});
+
+console.log(`Created ${chunks.length} chunks`);
+// Each chunk: { text, start, end, index }
+```
+
+The `recursive` strategy splits on paragraph breaks first, then sentences, then words - preserving natural boundaries. LocalMode also provides `markdown`, `code`, `sentence`, and `semantic` strategies. The semantic chunker uses embedding similarity to detect topic boundaries, producing higher-quality chunks at the cost of an extra embedding pass.
+
+<Callout type="info" title="Choosing a chunk size">
+  For BGE-small-en-v1.5 (512-token context), a chunk size of 400-512 characters works well. Overlap of 50 characters ensures context is not lost at boundaries. The [PDF Search](https://localmode.ai/pdf-search) demo defaults to 512 with 50 overlap.
+</Callout>
+
+---
+
+## Step 3: Generate Embeddings
+
+Each chunk needs a vector representation. BGE-small-en-v1.5 is the recommended embedding model for browser RAG: 33.4 million parameters, 384 dimensions, and a 62.17 average score across 56 MTEB tasks - strong retrieval quality in a model that downloads in seconds.
+
+```typescript
+import { embedMany } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Create the embedding model (downloaded and cached on first use)
+const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5', {
+  quantized: true,  // ~33MB download instead of ~127MB
+});
+
+// Embed all chunks in one call (auto-batched internally)
+const { embeddings, usage } = await embedMany({
+  model: embeddingModel,
+  values: chunks.map((c) => c.text),
+});
+
+console.log(`Generated ${embeddings.length} embeddings, ${usage.tokens} tokens`);
+// embeddings[0] is a Float32Array of length 384
+```
+
+`embedMany` automatically batches values up to the model's `maxEmbeddingsPerCall` limit (128 for Transformers.js) and retries on transient failures. For very large documents, `streamEmbedMany` yields results incrementally with a progress callback:
+
+```typescript
+import { streamEmbedMany } from '@localmode/core';
+
+for await (const { embedding, index } of streamEmbedMany({
+  model: embeddingModel,
+  values: chunks.map((c) => c.text),
+  batchSize: 32,
+  onBatch: ({ index, count, total }) => {
+    console.log(`Embedded ${index + count}/${total}`);
+  },
+})) {
+  // Process each embedding as it arrives
+}
+```
+
+---
+
+## Step 4: Store Vectors in IndexedDB
+
+LocalMode's `createVectorDB` builds an HNSW (Hierarchical Navigable Small World) index on top of IndexedDB. Vectors are persisted across page reloads - no re-embedding needed when the user returns.
+
+```typescript
+import { createVectorDB } from '@localmode/core';
+
+const db = await createVectorDB({
+  name: 'rag-docs',
+  dimensions: 384,
+  compression: { type: 'sq8' }, // 4x storage reduction via scalar quantization
+});
+
+// Store all chunks with their embeddings and metadata
+const documents = chunks.map((c, i) => ({
+  id: `chunk-${i}`,
+  vector: embeddings[i],
+  metadata: {
+    text: c.text,
+    start: c.start,
+    end: c.end,
+    chunkIndex: c.index,
+  },
+}));
+
+await db.addMany(documents);
+console.log(`Indexed ${documents.length} vectors`);
+```
+
+Enabling `compression: { type: 'sq8' }` applies scalar quantization to stored vectors, reducing IndexedDB disk usage by approximately 4x with negligible impact on recall. For WebGPU-capable browsers, you can also pass `enableGPU: true` to accelerate distance computations during search.
+
+---
+
+## Step 5: Search for Relevant Chunks
+
+When the user asks a question, `semanticSearch` embeds the query and searches the vector database in a single call:
+
+```typescript
+import { semanticSearch } from '@localmode/core';
+
+const { results, usage } = await semanticSearch({
+  db,
+  model: embeddingModel,
+  query: 'What are the key findings of the report?',
+  k: 5,
+});
+
+for (const result of results) {
+  console.log(`[${result.score.toFixed(3)}] ${result.text?.substring(0, 80)}...`);
+}
+
+console.log(
+  `Query embedded in ${usage.embedDurationMs.toFixed(0)}ms, ` +
+  `searched in ${usage.searchDurationMs.toFixed(0)}ms`
+);
+```
+
+`semanticSearch` returns results sorted by cosine similarity, each with the document's `text` extracted from metadata. For production use, you can add a `threshold` to filter low-confidence matches, or a `filter` object for metadata-based filtering (e.g., only search chunks from a specific document).
+
+For even better results, add a reranking pass. A cross-encoder reranker re-scores the top candidates with full query-document attention, catching nuances that embedding similarity misses:
+
+```typescript
+import { rerank } from '@localmode/core';
+
+const rerankerModel = transformers.reranker('Xenova/bge-reranker-base');
+
+const reranked = await rerank({
+  model: rerankerModel,
+  query: 'What are the key findings?',
+  documents: results.map((r) => r.text ?? ''),
+  topK: 3,
+});
+// reranked.results: [{ index, score, document }]
+```
+
+---
+
+## Step 6: Generate an Answer with a Local LLM
+
+Now feed the retrieved context to a language model running entirely in the browser. LocalMode supports three LLM providers - all using the same `streamText` function:
+
+| Provider | Engine | Best For | Example Model |
+|----------|--------|----------|---------------|
+| `@localmode/webllm` | WebGPU | Fastest inference, modern browsers | Llama 3.2 1B (712MB) |
+| `@localmode/wllama` | WASM (llama.cpp) | Universal browser support, 135K+ GGUF models | Llama 3.2 1B Q4_K_M |
+| `@localmode/transformers` | ONNX | Lightweight tasks, 15 curated models | Qwen 2.5 0.5B |
+
+Here is the complete RAG answer generation with streaming:
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+// Create the LLM (downloaded and cached on first use)
+const llm = webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC');
+
+// Build the prompt with retrieved context
+const context = results
+  .map((r, i) => `[${i + 1}] ${r.text}`)
+  .join('\n\n');
+
+const result = await streamText({
+  model: llm,
+  systemPrompt:
+    'You are a helpful assistant. Answer the user\'s question based only on the ' +
+    'provided context. If the context does not contain the answer, say so.',
+  prompt: `Context:\n${context}\n\nQuestion: What are the key findings of the report?`,
+  maxTokens: 500,
+  temperature: 0.3,
+});
+
+// Stream the response token by token
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text); // or append to your UI
+}
+
+const fullText = await result.text;
+const usage = await result.usage;
+console.log(`\nGenerated ${usage.outputTokens} tokens in ${usage.durationMs.toFixed(0)}ms`);
+```
+
+For browsers without WebGPU (Firefox, older Safari), swap in the wllama provider for universal WASM support - no code changes beyond the import:
+
+```typescript
+import { wllama } from '@localmode/wllama';
+
+const llm = wllama.languageModel(
+  'bartowski/Llama-3.2-1B-Instruct-GGUF:Llama-3.2-1B-Instruct-Q4_K_M.gguf'
+);
+// Same streamText() call works identically
+```
+
+---
+
+## The Pipeline Builder Approach
+
+The step-by-step approach above gives you full control. For a more declarative style, LocalMode's pipeline builder chains steps into a single executable unit:
+
+```typescript
+import {
+  createPipeline,
+  pipelineEmbedStep,
+  pipelineSearchStep,
+} from '@localmode/core';
+
+const ragPipeline = createPipeline('rag-query')
+  .step('embed-query', pipelineEmbedStep(embeddingModel))
+  .step('search', pipelineSearchStep(db, { k: 5 }))
+  .build();
+
+const { result } = await ragPipeline.run(userQuery, {
+  abortSignal: controller.signal,
+  onProgress: (p) => console.log(`${p.currentStep}: ${p.completed}/${p.total}`),
+});
+```
+
+For the ingestion side, the `ingest` function handles chunking, embedding, and storage in a single call with progress tracking:
+
+```typescript
+import { ingest } from '@localmode/core';
+
+const result = await ingest(db, [{ text: pdfText, id: 'report.pdf' }], {
+  chunking: { strategy: 'recursive', size: 512, overlap: 50 },
+  generateEmbeddings: true,
+  embedder: async (texts) => {
+    const { embeddings } = await embedMany({ model: embeddingModel, values: texts });
+    return embeddings;
+  },
+  onProgress: (p) => console.log(`${p.phase}: ${p.chunksProcessed}/${p.totalChunks}`),
+});
+
+console.log(`Ingested ${result.documentsProcessed} docs, ${result.chunksCreated} chunks`);
+```
+
+---
+
+## Performance Notes
+
+All measurements from Chrome 125 on an M2 MacBook Air (8GB RAM).
+
+| Stage | Model | Download Size | Cold Start | Per-Operation |
+|-------|-------|--------------|------------|---------------|
+| Embedding | BGE-small-en-v1.5 (quantized) | ~33MB | ~2s | ~15ms per chunk |
+| Vector search | HNSW (IndexedDB) | - | - | &lt;5ms for 10K vectors |
+| LLM (WebGPU) | Qwen 3 1.7B q4f16 | ~1.1GB | ~8-12s | ~30 tokens/s |
+| LLM (WebGPU) | Llama 3.2 1B q4f16 | ~712MB | ~5-8s | ~40 tokens/s |
+| LLM (WASM) | Llama 3.2 1B Q4_K_M | ~712MB | ~6-10s | ~8-12 tokens/s |
+
+Models are cached in the browser after the first download. Subsequent visits load from cache with near-instant startup for the embedding model and a few seconds for LLMs.
+
+**Memory usage**: BGE-small-en-v1.5 uses approximately 80-120MB of RAM. A 1B-parameter LLM adds 700MB-1.2GB. Total peak memory for a full RAG pipeline is typically 1-2GB, well within the limits of modern laptops and recent mobile devices.
+
+---
+
+## Privacy Guarantees
+
+This architecture provides privacy properties that no cloud RAG solution can match:
+
+- **Zero network requests** after model download - verified by checking the Network tab
+- **No telemetry** - the `@localmode/core` package has zero dependencies and makes no outbound calls
+- **Data stays in IndexedDB** - vectors and metadata never leave the browser's origin-scoped storage
+- **Optional encryption** - `createVectorDB` supports AES-GCM encryption via the Web Crypto API
+- **PII redaction** - built-in `piiRedactionMiddleware` can scrub sensitive text before embedding
+
+For regulated industries (healthcare, legal, finance), browser-local RAG eliminates the compliance burden of sending documents to third-party APIs entirely.
+
+---
+
+## Methodology
+
+Model specifications and benchmark scores referenced in this post:
+
+- [BAAI/bge-small-en-v1.5 - HuggingFace model card](https://huggingface.co/BAAI/bge-small-en-v1.5): 33.4M parameters, 384 dimensions, 62.17 MTEB average (56 tasks), 51.68 retrieval average (15 tasks)
+- [Qwen3-1.7B - HuggingFace model card](https://huggingface.co/Qwen/Qwen3-1.7B): 1.7B parameters (1.4B non-embedding), 32K native context, dual thinking/non-thinking modes
+- [Llama 3.2 1B - Meta AI blog](https://ai.meta.com/blog/llama-3-2-connect-2024-vision-edge-mobile-devices/): 1.24B parameters, 128K context, pruned and distilled from larger Llama models
+- [MTEB benchmark](https://huggingface.co/spaces/mteb/leaderboard): Massive Text Embedding Benchmark across retrieval, classification, clustering, STS, and reranking tasks
+- [Xenova/bge-small-en-v1.5 - ONNX quantized](https://huggingface.co/Xenova/bge-small-en-v1.5): Transformers.js-compatible ONNX export used by `@localmode/transformers`
+- [Qwen3 announcement - Qwen blog](https://qwenlm.github.io/blog/qwen3/): Architecture details and benchmark results for the Qwen 3 model family
+
+Performance measurements (cold start, tokens/s, memory) are from internal testing on Chrome 125 / macOS with an Apple M2 chip. Results vary by device, browser, and concurrent workload.
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

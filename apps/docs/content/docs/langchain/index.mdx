@@ -1,0 +1,97 @@
+---
+title: 'LangChain'
+description: Drop-in local inference for existing LangChain.js applications.
+icon: Link
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# LangChain Integration
+
+`@localmode/langchain` provides adapter classes so existing LangChain.js applications can swap cloud providers for 100% local inference — by changing just 3 imports.
+
+<Callout type="info" title="See it in action">
+  Try [LangChain RAG](https://localmode.ai/langchain-rag) for a working demo.
+</Callout>
+
+## Adapters
+
+| LangChain Base Class | LocalMode Adapter | Wraps | Provider |
+|---------------------|-------------------|-------|----------|
+| `Embeddings` | `LocalModeEmbeddings` | `EmbeddingModel` | `@localmode/transformers` |
+| `BaseChatModel` | `ChatLocalMode` | `LanguageModel` | `@localmode/webllm` |
+| `VectorStore` | `LocalModeVectorStore` | `VectorDB` | `@localmode/core` |
+| `BaseDocumentCompressor` | `LocalModeReranker` | `RerankerModel` | `@localmode/transformers` |
+
+Each adapter is a thin, stateless wrapper — it converts between LangChain and LocalMode data formats and delegates all work to the underlying model or database.
+
+## Installation
+
+```bash
+pnpm install @localmode/langchain @localmode/core @localmode/transformers
+# Add webllm if using ChatLocalMode:
+pnpm install @localmode/webllm
+```
+
+## Quick Start — Full RAG Chain
+
+```typescript
+import { LocalModeEmbeddings, ChatLocalMode, LocalModeVectorStore } from '@localmode/langchain';
+import { transformers } from '@localmode/transformers';
+import { webllm } from '@localmode/webllm';
+import { createVectorDB } from '@localmode/core';
+
+// 1. Create local models
+const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
+const llmModel = webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC');
+
+// 2. Wrap in LangChain adapters
+const embeddings = new LocalModeEmbeddings({ model: embeddingModel });
+const llm = new ChatLocalMode({ model: llmModel });
+
+// 3. Create vector store backed by local IndexedDB
+const db = await createVectorDB({ name: 'docs', dimensions: 384 });
+const store = new LocalModeVectorStore(embeddings, { db });
+
+// 4. Add documents (embeds automatically)
+await store.addDocuments([
+  { pageContent: 'LocalMode runs AI in the browser.', metadata: { source: 'docs' } },
+  { pageContent: 'Data never leaves the device.', metadata: { source: 'docs' } },
+]);
+
+// 5. Search
+const results = await store.similaritySearch('privacy', 3);
+
+// 6. Generate with context
+const context = results.map((r) => r.pageContent).join('\n');
+const answer = await llm.invoke(`Based on: ${context}\n\nQuestion: How does LocalMode handle privacy?`);
+```
+
+Everything runs locally. No API keys, no servers, no data leaves the device.
+
+## Key Design Decisions
+
+- **User provides model instances** — You create the LocalMode model and pass it to the adapter. The adapter doesn't know about provider packages.
+- **Float32Array to number[]** — LangChain uses `number[][]` for embeddings. The adapter converts automatically via `Array.from()`.
+- **Streaming fallback** — `ChatLocalMode._stream()` uses the model's `doStream()` if available, otherwise falls back to generating the full response and yielding it as a single chunk.
+- **No tool calling** — Local models have limited tool-calling ability. `ChatLocalMode` returns text-only content.
+
+## Package Details
+
+| Property | Value |
+|----------|-------|
+| Package | `@localmode/langchain` |
+| Dependencies | `@langchain/core` (>=0.3.0) |
+| Peer Dependencies | `@localmode/core` (>=1.0.0) |
+| Bundle | ESM + CJS, tree-shakeable |
+| Side Effects | None |
+
+<Callout>
+For individual adapter docs, see: [Embeddings](/docs/langchain/embeddings), [Chat Model](/docs/langchain/chat), [Vector Store](/docs/langchain/vector-store), [Migration Guide](/docs/langchain/migration).
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| LangChain RAG | End-to-end RAG app using LangChain adapters | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |

@@ -1,0 +1,91 @@
+---
+title: Image-to-Image
+description: Super resolution and image enhancement with Swin2SR.
+icon: Maximize
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Enhance images using super resolution models. Upscale low-resolution images to higher quality directly in the browser.
+
+<Callout type="info">
+  For full API reference (`imageToImage()`, options, result types, and custom providers), see the [Core Vision](/docs/core/vision) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [Photo Enhancer](https://localmode.ai/photo-enhancer) for a working demo.
+</Callout>
+
+## Recommended Models
+
+| Model | Size | Scale | Use Case |
+|-------|------|-------|----------|
+| `Xenova/swin2SR-lightweight-x2-64` | ~50MB | 2x | Lightweight 2x upscaling (recommended) |
+| `Xenova/swin2SR-classical-sr-x4-64` | ~50MB | 4x | Higher quality 4x upscaling |
+
+## Photo Enhancer Example
+
+Based on the [Photo Enhancer](https://localmode.ai/photo-enhancer) showcase app:
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { imageToImage } from '@localmode/core';
+
+const model = transformers.imageToImage('Xenova/swin2SR-lightweight-x2-64');
+
+async function enhancePhoto(imageDataUrl: string) {
+  const { image } = await imageToImage({
+    model,
+    image: imageDataUrl,
+    abortSignal: controller.signal,
+  });
+
+  // Convert Blob to data URL for display
+  const reader = new FileReader();
+  return new Promise<string>((resolve) => {
+    reader.onload = () => resolve(reader.result as string);
+    reader.readAsDataURL(image);
+  });
+}
+```
+
+## Best Practices
+
+<Callout type="tip" title="Super Resolution Tips">
+  1. **2x upscaling** — The lightweight model doubles image dimensions
+  2. **Input size matters** — Very large images will be slow; resize input if needed
+  3. **Output is a Blob** — Use `URL.createObjectURL()` or `FileReader` to display
+  4. **Support cancellation** — Super resolution can take several seconds
+</Callout>
+
+<Callout type="warn" title="Performance Note">
+  Super resolution is computationally intensive. Processing time increases with input image size.
+  For best results, keep input images under 1024x1024 pixels.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Photo Enhancer | Upscale and enhance photos | [Demo](https://localmode.ai/photo-enhancer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/photo-enhancer) |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core Vision API"
+    href="/docs/core/vision"
+    description="Full API reference including imageToImage()."
+  />
+  <Card
+    title="Image Captioning"
+    href="/docs/transformers/image-captioning"
+    description="Generate text descriptions of images."
+  />
+  <Card
+    title="Image Segmentation"
+    href="/docs/transformers/image-segmentation"
+    description="Segment images into regions."
+  />
+</Cards>

@@ -5,7 +5,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import type { ChatMessage, MessageRole } from './types';
-import { CHAT_CONFIG } from './constants';
+import { CHAT_CONFIG, IMAGE_CONFIG } from './constants';
 
 /**
  * Merges Tailwind CSS classes with proper precedence
@@ -68,23 +68,6 @@ export function buildPrompt(messages: ChatMessage[], systemPrompt?: string) {
 }
 
 /**
- * Export messages as a JSON file download
- * @param messages - Messages to export
- * @param filename - Optional filename prefix
- */
-export function exportMessagesAsJson(messages: ChatMessage[], filename = 'chat') {
-  const blob = new Blob([JSON.stringify(messages, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${filename}-${new Date().toISOString()}.json`;
-  link.click();
-
-  URL.revokeObjectURL(url);
-}
-
-/**
  * Group models by category
  * @param models - Array of model info objects
  */
@@ -99,4 +82,31 @@ export function groupModelsByCategory<T extends { category: string }>(
     },
     {} as Record<string, T[]>
   );
+}
+
+/**
+ * Validate an image file for upload
+ * @param file - File to validate
+ * @returns Error message string if invalid, null if valid
+ */
+export function validateImageFile(file: File): string | null {
+  if (!IMAGE_CONFIG.acceptedTypes.includes(file.type)) {
+    return `Unsupported format. Accepted: JPEG, PNG, WebP, GIF`;
+  }
+  if (file.size > IMAGE_CONFIG.maxSizeBytes) {
+    return `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max: ${IMAGE_CONFIG.maxSizeLabel}`;
+  }
+  return null;
+}
+
+/**
+ * Extract text content from string or ContentPart[] for display
+ * @param content - Message content (string or ContentPart[])
+ */
+export function getDisplayText(content: string | Array<{ type: string; text?: string }>): string {
+  if (typeof content === 'string') return content;
+  return content
+    .filter((p) => p.type === 'text')
+    .map((p) => p.text ?? '')
+    .join(' ');
 }

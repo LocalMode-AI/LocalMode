@@ -1,0 +1,64 @@
+---
+title: 'Audio'
+description: Hooks for speech-to-text and text-to-speech.
+icon: AudioLines
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Audio Hooks
+
+<Callout type="info" title="See it in action">
+  Try [Voice Notes](https://localmode.ai/voice-notes) and [Meeting Assistant](https://localmode.ai/meeting-assistant) for working demos of these hooks.
+</Callout>
+
+## useTranscribe
+
+Transcribe audio to text (speech-to-text).
+
+```tsx
+import { useTranscribe } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.speechToText('onnx-community/whisper-tiny.en');
+
+function Demo() {
+  const { data, isLoading, execute } = useTranscribe({ model });
+
+  const handleFile = (file: File) => execute(file);
+
+  return (
+    <div>
+      <input type="file" accept="audio/*" onChange={(e) => {
+        if (e.target.files?.[0]) handleFile(e.target.files[0]);
+      }} />
+      {isLoading && <p>Transcribing...</p>}
+      {data && <p>{data.text}</p>}
+    </div>
+  );
+}
+```
+
+## useSynthesizeSpeech
+
+Generate speech audio from text (text-to-speech).
+
+```tsx
+import { useSynthesizeSpeech } from '@localmode/react';
+
+const { data, isLoading, execute } = useSynthesizeSpeech({ model });
+await execute('Hello world');
+// data.audio = Float32Array, data.sampleRate = 16000
+```
+
+<Callout type="tip">
+For model recommendations, see the [Transformers Audio](/docs/transformers) guide.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Voice Notes | Record and transcribe with useTranscribe | [Demo](https://localmode.ai/voice-notes) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/voice-notes) |
+| Meeting Assistant | Transcribe and summarize with useTranscribe + useSummarize | [Demo](https://localmode.ai/meeting-assistant) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/meeting-assistant) |
+| Audiobook Creator | Text-to-speech with useSynthesizeSpeech | [Demo](https://localmode.ai/audiobook-creator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/audiobook-creator) |

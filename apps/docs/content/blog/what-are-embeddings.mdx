@@ -1,0 +1,319 @@
+---
+title: "What Are Embeddings? A Visual, Hands-On Guide With Code You Can Run"
+description: "Embeddings turn text into numbers that capture meaning. This hands-on guide walks you through your first embedding, similarity scoring, and semantic search - with runnable code, ASCII visualizations, and zero math prerequisites."
+author: LocalMode
+date: 2026-01-25
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+You have a search box. A user types "budget concerns" and expects to find a document titled "Q3 Financial Projections." Traditional keyword search fails - there is no word overlap. The document might as well not exist.
+
+This is the problem embeddings solve. And you do not need a PhD in linear algebra to use them.
+
+This guide will take you from zero to building a working semantic search engine in the browser - no servers, no API keys, no data leaving the device. Every code example runs as-is with LocalMode.
+
+---
+
+## The Problem With Keywords
+
+Keyword search matches strings. It does not understand language.
+
+| User types | Document text | Keyword match? |
+|---|---|---|
+| "budget concerns" | "Q3 Financial Projections" | No |
+| "how to fix a slow laptop" | "Improving computer performance" | No |
+| "dog breeds for apartments" | "Best small canines for city living" | No |
+| "happy" | "I'm thrilled and overjoyed" | No |
+
+Every pair in that table is clearly about the same topic - to a human. To `string.includes()`, they are unrelated. The gap between what users mean and what keywords match is enormous. Embeddings close that gap.
+
+---
+
+## The Core Idea: Meaning as Numbers
+
+An embedding is a list of numbers that represents the *meaning* of a piece of text. The key insight is simple:
+
+**Texts with similar meaning get similar numbers.**
+
+"The cat sat on the mat" and "A kitten rested on the rug" are different strings but express nearly the same idea. Their embeddings will be close together in number-space. "Stock market analysis" will be far away from both.
+
+Think of it like GPS coordinates for meaning. Two restaurants on the same block have similar latitude and longitude. Two restaurants on different continents do not. Embeddings work the same way, except instead of two dimensions (lat, long) they use hundreds - 384 is common - to capture the many facets of what a sentence means.
+
+---
+
+## Your First Embedding
+
+Let us turn a sentence into numbers. Two packages, three lines of code:
+
+```ts
+import { embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+const { embedding, usage } = await embed({
+  model,
+  value: 'The cat sat on the mat',
+});
+
+console.log(embedding);        // Float32Array(384) [ 0.032, -0.118, 0.045, ... ]
+console.log(embedding.length); // 384
+console.log(usage.tokens);     // 8
+```
+
+What just happened?
+
+1. The model downloaded to the browser (once - it is cached after that).
+2. The sentence was tokenized into 8 tokens.
+3. The model converted those tokens into a `Float32Array` of 384 numbers.
+
+That array of 384 numbers *is* the embedding. Each number captures some aspect of the sentence's meaning. You do not need to know what each dimension represents - the model learned that during training on millions of text pairs. What matters is the relationship: similar texts produce similar arrays.
+
+<Callout type="info" title="Why Float32Array?">
+  Embeddings use `Float32Array` instead of regular JavaScript arrays for performance. Each number is a 32-bit float, and typed arrays enable fast mathematical operations - critical when you are comparing thousands of vectors.
+</Callout>
+
+---
+
+## Similarity Is Geometry
+
+If embeddings capture meaning as positions in space, then measuring meaning-similarity is just measuring *distance*. The most common measure is **cosine similarity** - it looks at the angle between two vectors and returns a score from -1 to 1, where 1 means identical direction.
+
+Let us embed five sentences and see which ones the model considers similar:
+
+```ts
+import { embed, cosineSimilarity } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+const sentences = [
+  'The cat sat on the mat',           // A
+  'A kitten rested on the rug',       // B
+  'Dogs are loyal companions',        // C
+  'Stock market analysis for Q3',     // D
+  'Financial projections and trends', // E
+];
+
+// Embed all five
+const embeddings = await Promise.all(
+  sentences.map(async (s) => {
+    const { embedding } = await embed({ model, value: s });
+    return embedding;
+  })
+);
+
+// Compare every pair
+for (let i = 0; i < sentences.length; i++) {
+  for (let j = i + 1; j < sentences.length; j++) {
+    const score = cosineSimilarity(embeddings[i], embeddings[j]);
+    console.log(
+      `${String.fromCharCode(65 + i)}-${String.fromCharCode(65 + j)}: ${score.toFixed(3)}`
+    );
+  }
+}
+```
+
+Here is what the output looks like (scores will vary slightly by model version):
+
+```
+A-B: 0.854   ← cat/mat vs kitten/rug - very similar
+A-C: 0.602   ← cat vs dogs - same domain (animals), moderate
+A-D: 0.127   ← cat vs stock market - unrelated
+A-E: 0.134   ← cat vs financial projections - unrelated
+B-C: 0.571   ← kitten vs dogs - moderate
+B-D: 0.108   ← kitten vs stock market - unrelated
+B-E: 0.119   ← kitten vs financial projections - unrelated
+C-D: 0.093   ← dogs vs stock market - unrelated
+C-E: 0.102   ← dogs vs financial projections - unrelated
+D-E: 0.831   ← stock market vs financial projections - very similar
+```
+
+The model has never seen these exact sentences before, but it knows that cats and kittens are close, that stock markets and financial projections belong together, and that animals have nothing to do with finance.
+
+If we squash those 384 dimensions down to two (a technique called dimensionality reduction), the five sentences cluster exactly as you would expect:
+
+```
+        Animals cluster              Finance cluster
+        ┌──────────┐                ┌──────────┐
+  0.8   │          │                │          │
+        │  A ● ● B │                │  D ●     │
+  0.6   │          │                │      ● E │
+        │    ● C   │                │          │
+  0.4   │          │                │          │
+        └──────────┘                └──────────┘
+  0.2
+
+  0.0 ─────────────────────────────────────────────
+       0.0       0.2       0.4       0.6       0.8
+```
+
+Sentences A, B, and C form one neighborhood. D and E form another. The distance between the clusters is large. That geometric structure is what makes semantic search work.
+
+---
+
+## Building Semantic Search
+
+Knowing which texts are similar is useful. But the real power comes when you store embeddings in a database and search them. That is exactly what a vector database does.
+
+Here is a complete, working semantic search engine in about 30 lines:
+
+```ts
+import { embed, embedMany, createVectorDB, cosineSimilarity } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+// 1. Create a vector database
+const db = await createVectorDB({ name: 'knowledge', dimensions: 384 });
+
+// 2. Your corpus - the documents you want to search
+const documents = [
+  { id: 'doc-1', text: 'Q3 Financial Projections show a 12% revenue increase' },
+  { id: 'doc-2', text: 'The new employee onboarding process starts Monday' },
+  { id: 'doc-3', text: 'Server migration to AWS is scheduled for next sprint' },
+  { id: 'doc-4', text: 'Budget allocation for the marketing department' },
+  { id: 'doc-5', text: 'Team building event at the downtown conference center' },
+];
+
+// 3. Embed and store every document
+const { embeddings } = await embedMany({
+  model,
+  values: documents.map((d) => d.text),
+});
+
+for (let i = 0; i < documents.length; i++) {
+  await db.add({
+    id: documents[i].id,
+    vector: embeddings[i],
+    metadata: { text: documents[i].text },
+  });
+}
+
+// 4. Search by meaning
+const { embedding: queryVector } = await embed({
+  model,
+  value: 'budget concerns',
+});
+
+const results = await db.search(queryVector, { k: 3 });
+
+results.forEach((r) => {
+  console.log(`${r.score.toFixed(3)} - ${r.metadata?.text}`);
+});
+// 0.847 - Budget allocation for the marketing department
+// 0.792 - Q3 Financial Projections show a 12% revenue increase
+// 0.341 - The new employee onboarding process starts Monday
+```
+
+The query "budget concerns" matched "Budget allocation for the marketing department" - despite sharing only the word "budget" - and also pulled in the financial projections document. No keyword overlap needed for the second result. The model understood the *meaning*.
+
+<Callout type="tip" title="Shortcut: semanticSearch()">
+  Steps 4 above (embed the query, then search the database) can be combined into a single call with `semanticSearch()`:
+
+  ```ts
+  import { semanticSearch } from '@localmode/core';
+
+  const { results } = await semanticSearch({
+    db,
+    model,
+    query: 'budget concerns',
+    k: 3,
+  });
+  ```
+</Callout>
+
+### Why This Works Offline
+
+Everything in the example above runs in the browser. The model downloads once from Hugging Face Hub and is cached in IndexedDB. The vector database stores data in IndexedDB. After the initial model download, the entire system works without a network connection. No API keys, no per-request costs, no data leaving the device.
+
+---
+
+## Beyond Text: Images, Audio, and Cross-Modal Search
+
+Text embeddings are the most common, but the same principle applies to other data types.
+
+**CLIP models** embed both text and images into the *same* vector space. That means you can search photos with text queries or find images similar to other images:
+
+```ts
+import { embed, embedImage } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.multimodalEmbedding('Xenova/clip-vit-base-patch32');
+
+// Embed a text query
+const { embedding: textVec } = await embed({ model, value: 'a sunset over the ocean' });
+
+// Embed an image
+const { embedding: imageVec } = await embedImage({ model, image: photoBlob });
+
+// Compare them directly - same vector space
+const similarity = cosineSimilarity(textVec, imageVec);
+```
+
+This is how cross-modal search works: embed your entire photo library, then type a text query and find matching images. No tags, no manual labels, no metadata needed.
+
+Audio works similarly. Speech-to-text models convert audio to text, which you then embed. The meaning of a spoken sentence lands in the same space as written text.
+
+---
+
+## Where Embeddings Are Used
+
+Once you can convert anything into a meaning-vector and compare it, a surprising number of problems become simple:
+
+**Retrieval-Augmented Generation (RAG)** - Embed your documents, search for relevant chunks when a user asks a question, and pass those chunks to an LLM as context. The LLM generates answers grounded in your data instead of hallucinating.
+
+**Semantic search** - Replace keyword search with meaning-based search. Users find what they mean, not just what they type. This is what we built above.
+
+**Duplicate detection** - Embed every item (documents, support tickets, product listings) and flag pairs with similarity above a threshold. Near-duplicates that differ in wording are caught instantly.
+
+**Recommendations** - Embed user preferences and items into the same space. The closest items to a user's preference vector are personalized recommendations.
+
+**Clustering** - Group embeddings with k-means or similar algorithms. Documents naturally cluster by topic without any manual labeling.
+
+**Classification** - Embed a few labeled examples per category. To classify a new document, embed it and find the nearest labeled example. This is called few-shot classification, and it works remarkably well with zero training.
+
+---
+
+## Key Concepts Recap
+
+| Concept | What it means |
+|---|---|
+| **Embedding** | A `Float32Array` of numbers representing the meaning of text (or an image, or audio) |
+| **Dimensions** | The length of the array - 384 for small models, 768 or 1024 for larger ones |
+| **Cosine similarity** | A score from -1 to 1 measuring how similar two embeddings are (1 = identical meaning) |
+| **Vector database** | A database optimized for storing embeddings and finding the nearest ones to a query |
+| **Semantic search** | Finding documents by meaning rather than exact keyword matches |
+
+---
+
+## What To Explore Next
+
+You now understand the full pipeline: embed text, measure similarity, store vectors, search by meaning. Here are natural next steps:
+
+- **[Embeddings API reference](/docs/core/embeddings)** - Full documentation for `embed()`, `embedMany()`, `streamEmbedMany()`, and middleware
+- **[Vector Database guide](/docs/core/vector-db)** - Typed metadata, filters, HNSW indexing, and WebGPU-accelerated search
+- **[RAG pipelines](/docs/core/rag)** - Chunking strategies, ingestion, and retrieval-augmented generation
+- **[Multimodal embeddings](/docs/core/multimodal-embeddings)** - CLIP models for text-image search
+- **[React hooks](/docs/react/embeddings)** - `useEmbed()`, `useSemanticSearch()`, and other hooks for React applications
+
+---
+
+## Methodology
+
+This guide uses the following models and tools, all of which run entirely in the browser:
+
+- [BGE-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5) (384 dimensions) for text embeddings - a top-ranked model on the [MTEB leaderboard](https://huggingface.co/spaces/mteb/leaderboard) for its size class
+- [CLIP ViT-B/32](https://huggingface.co/openai/clip-vit-base-patch32) for multimodal text-image embeddings - [OpenAI's original CLIP paper](https://arxiv.org/abs/2103.00020)
+- Cosine similarity as defined in the [LocalMode distance functions](/docs/core/embeddings) - standard cosine similarity returning values in [-1, 1]
+- Similarity scores in the examples are representative of model behavior; exact values depend on model version and quantization settings
+- The ASCII visualization is a conceptual illustration of dimensionality reduction (e.g., [t-SNE](https://en.wikipedia.org/wiki/T-distributed_stochastic_neighbor_embedding) or [UMAP](https://arxiv.org/abs/1802.03426)), not a literal plot
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

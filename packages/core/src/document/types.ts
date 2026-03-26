@@ -174,7 +174,7 @@ export interface DoAskTableResult {
  * @example
  * ```ts
  * const { answer } = await askDocument({
- *   model: transformers.documentQA('Xenova/donut-base-finetuned-docvqa'),
+ *   model: transformers.documentQA('onnx-community/Florence-2-base-ft'),
  *   document: invoiceImage,
  *   question: 'What is the total amount?',
  * });
@@ -227,7 +227,7 @@ export interface AskDocumentResult {
  * @example
  * ```ts
  * const { answer } = await askTable({
- *   model: transformers.tableQA('Xenova/tapas-base-finetuned-wtq'),
+ *   model: transformers.tableQA('onnx-community/Florence-2-base-ft'),
  *   table: {
  *     headers: ['Name', 'Age', 'City'],
  *     rows: [

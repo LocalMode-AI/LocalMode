@@ -1,0 +1,340 @@
+---
+title: "Using LocalMode With the Vercel AI SDK: generateText() and streamText() With Zero Cloud Calls"
+description: "Drop @localmode/ai-sdk into any Vercel AI SDK project and run generateText(), streamText(), and embed() entirely in the browser. Same API, same patterns, zero network requests. This guide shows you how to swap one line and go fully local."
+author: LocalMode
+date: 2026-02-05
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+If you have built anything with the [Vercel AI SDK](https://ai-sdk.dev), you already know the pattern: import `generateText` or `streamText` from `ai`, pass a model, get results. It is the same whether you use OpenAI, Anthropic, Google, or any other provider.
+
+What if you could keep that exact pattern -- the same imports, the same function signatures, the same result shapes -- but run everything on-device? No API keys. No per-token billing. No data leaving the browser.
+
+That is what `@localmode/ai-sdk` does. It bridges LocalMode's in-browser models to the AI SDK's `LanguageModelV3` and `EmbeddingModelV3` interfaces. You change one line, and your `generateText()` call goes from a network round-trip to a local WebGPU inference.
+
+---
+
+## What Is `@localmode/ai-sdk`?
+
+`@localmode/ai-sdk` is a thin adapter package. It does not contain any models itself. Instead, it wraps LocalMode model instances -- from `@localmode/webllm`, `@localmode/transformers`, `@localmode/wllama`, or `@localmode/chrome-ai` -- as AI SDK-compatible `LanguageModelV3` and `EmbeddingModelV3` objects.
+
+The architecture is simple:
+
+```
++------------------------------------------+
+|  AI SDK (generateText, streamText, embed) |
++--------------------+---------------------+
+                     |
+            @localmode/ai-sdk
+          (adapter / bridge layer)
+                     |
++--------------------+---------------------+
+|  LocalMode models (webllm, transformers)  |
+|  Running entirely in the browser          |
++------------------------------------------+
+```
+
+The adapter handles the translation between LocalMode's types and the AI SDK's types: converting `Float32Array` embeddings to `number[]` arrays, mapping finish reasons, translating prompt formats, and wiring up streaming via `ReadableStream`. Your application code sees a standard AI SDK provider.
+
+---
+
+## Installation
+
+You need three things: the AI SDK itself, the adapter, and at least one LocalMode provider.
+
+```bash
+# The adapter + AI SDK
+pnpm install @localmode/ai-sdk @localmode/core ai @ai-sdk/provider @ai-sdk/provider-utils
+
+# Pick your model providers
+pnpm install @localmode/webllm          # LLMs via WebGPU (Llama, Qwen, Phi, Gemma)
+pnpm install @localmode/transformers     # Embeddings, classification, and more
+```
+
+The peer dependencies are `ai` (>=6.0.0), `@ai-sdk/provider` (>=1.0.0), `@ai-sdk/provider-utils` (>=3.0.0), and `@localmode/core` (>=1.0.0). If you are already on a recent AI SDK version, you likely have the first three installed.
+
+---
+
+## Creating the Provider
+
+The entry point is `createLocalMode()`. You give it a map of friendly model IDs to pre-configured LocalMode model instances:
+
+```typescript
+import { createLocalMode } from '@localmode/ai-sdk';
+import { webllm } from '@localmode/webllm';
+import { transformers } from '@localmode/transformers';
+
+const localmode = createLocalMode({
+  models: {
+    'llama': webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
+    'embedder': transformers.embedding('Xenova/bge-small-en-v1.5'),
+  },
+});
+```
+
+The returned `localmode` object implements the AI SDK `ProviderV3` interface. It is callable as a function and also exposes named methods:
+
+```typescript
+// All three return a LanguageModelV3:
+localmode('llama');
+localmode.languageModel('llama');
+
+// Returns an EmbeddingModelV3:
+localmode.embeddingModel('embedder');
+```
+
+You can register as many models as you want. Mix providers freely -- a WebLLM language model alongside a Transformers.js embedding model alongside a wllama GGUF model. The adapter does not care; it checks the model interface at runtime and wraps accordingly.
+
+---
+
+## Side-by-Side: OpenAI vs LocalMode
+
+Here is the key insight. The application code is identical. Only the model line changes.
+
+### generateText()
+
+```typescript
+import { generateText } from 'ai';
+
+// --- Cloud: OpenAI (requires OPENAI_API_KEY, sends data to API) ---
+import { openai } from '@ai-sdk/openai';
+const { text } = await generateText({
+  model: openai('gpt-4o'),
+  prompt: 'Explain quantum computing in simple terms',
+});
+
+// --- Local: LocalMode (no API key, runs in the browser) ---
+import { createLocalMode } from '@localmode/ai-sdk';
+import { webllm } from '@localmode/webllm';
+
+const localmode = createLocalMode({
+  models: { 'llama': webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC') },
+});
+
+const { text } = await generateText({
+  model: localmode.languageModel('llama'),
+  prompt: 'Explain quantum computing in simple terms',
+});
+```
+
+Same import. Same function. Same destructured `{ text }` result. The difference is where the computation happens.
+
+### streamText()
+
+```typescript
+import { streamText } from 'ai';
+
+// --- Cloud ---
+const result = streamText({
+  model: openai('gpt-4o'),
+  prompt: 'Write a short story about a robot learning to paint',
+});
+
+// --- Local ---
+const result = streamText({
+  model: localmode.languageModel('llama'),
+  prompt: 'Write a short story about a robot learning to paint',
+});
+
+// Consuming the stream is identical in both cases
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+Under the hood, when the LocalMode model supports `doStream()` (which WebLLM, wllama, and Transformers.js language models all do), the adapter creates a `ReadableStream` of `LanguageModelV3StreamPart` chunks, emitting `text-delta` events as tokens arrive. If a model only supports non-streaming generation, the adapter falls back gracefully: it calls `doGenerate()` and emits the full text as a single chunk.
+
+### embed()
+
+```typescript
+import { embed } from 'ai';
+
+// --- Cloud ---
+import { openai } from '@ai-sdk/openai';
+const { embedding } = await embed({
+  model: openai.embedding('text-embedding-3-small'),
+  value: 'What is the meaning of life?',
+});
+
+// --- Local ---
+const { embedding } = await embed({
+  model: localmode.embeddingModel('embedder'),
+  value: 'What is the meaning of life?',
+});
+```
+
+LocalMode embedding models produce `Float32Array` vectors internally. The adapter converts them to `number[]` arrays automatically, which is what the AI SDK expects. Token usage is passed through as-is.
+
+---
+
+## Swapping Providers With One Line
+
+The real power of the AI SDK's provider abstraction shows up when you want to support both local and cloud models. You can make the swap conditional:
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { createLocalMode } from '@localmode/ai-sdk';
+import { webllm } from '@localmode/webllm';
+
+const localmode = createLocalMode({
+  models: {
+    'local-llm': webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
+  },
+});
+
+// Toggle with a single variable
+const USE_LOCAL = true;
+
+const model = USE_LOCAL
+  ? localmode.languageModel('local-llm')
+  : openai('gpt-4o');
+
+const { text } = await generateText({
+  model,
+  prompt: 'Summarize the key principles of privacy by design',
+});
+```
+
+This pattern is useful for progressive enhancement. Start with cloud models during development, then switch to local models for production deployments where privacy or cost matters. Or let users choose: offer a "Private Mode" toggle that swaps the provider at runtime.
+
+---
+
+## Chat Conversations With Messages
+
+Both `generateText()` and `streamText()` support the `system` and `messages` parameters. The adapter translates AI SDK's prompt format into LocalMode's `ChatMessage` format:
+
+```typescript
+import { streamText } from 'ai';
+
+const result = streamText({
+  model: localmode.languageModel('llama'),
+  system: 'You are a helpful coding assistant. Be concise.',
+  messages: [
+    { role: 'user', content: 'What is a closure in JavaScript?' },
+    { role: 'assistant', content: 'A closure is a function that...' },
+    { role: 'user', content: 'Can you show me an example?' },
+  ],
+  maxOutputTokens: 500,
+  temperature: 0.7,
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+The adapter extracts text parts from multimodal user messages, builds a simple prompt string from the last user message for LocalMode's `doGenerate` interface, and passes the full message history as `ChatMessage[]`.
+
+---
+
+## Configuration Options
+
+All standard AI SDK call options are forwarded to the underlying LocalMode model:
+
+| AI SDK Option | Maps To | Description |
+|---|---|---|
+| `maxOutputTokens` | `maxTokens` | Maximum tokens to generate |
+| `temperature` | `temperature` | Sampling temperature (0-2) |
+| `topP` | `topP` | Nucleus sampling threshold |
+| `stopSequences` | `stopSequences` | Sequences that stop generation |
+| `abortSignal` | `abortSignal` | Cancellation support |
+
+Cancellation works end-to-end. Pass an `AbortSignal` to `generateText()` or `streamText()`, and it propagates through the adapter to the underlying WebGPU or WASM inference.
+
+---
+
+## What Is Not Supported (Yet)
+
+<Callout type="warn" title="Adapter limitations">
+  These limitations apply to the adapter layer, not to LocalMode itself. You can always use LocalMode's native API (`generateText`, `streamText`, `generateObject` from `@localmode/core`) for full functionality.
+</Callout>
+
+- **Tool calling** -- Small local models have limited tool-calling ability. The adapter returns text-only content.
+- **Structured output / JSON mode** -- AI SDK 6's `output` setting for structured data is not wired through the adapter. Use `generateObject()` from `@localmode/core` directly for structured extraction.
+- **Image generation** -- LocalMode does not include a generative image model, so `ImageModelV3` is not implemented.
+- **WebGPU required for LLMs** -- WebLLM requires WebGPU support (Chrome 113+, Edge 113+, Safari 18+). Embedding models via Transformers.js work on WASM and are broadly compatible.
+
+---
+
+## When To Use the Adapter vs LocalMode's Native API
+
+Use `@localmode/ai-sdk` when:
+
+- You have an existing AI SDK codebase and want to go local with minimal changes
+- You want the ability to swap between cloud and local providers seamlessly
+- You are building a hybrid architecture where some requests go to the cloud and others stay local
+- You want to use AI SDK's `useChat()` React hook with local models
+
+Use LocalMode's native API directly when:
+
+- You need structured output via `generateObject()` or `streamObject()`
+- You want LocalMode-specific features like semantic caching, language model middleware, inference queues, or the agent framework
+- You are building a new project and do not need cloud provider compatibility
+- You need access to non-LLM capabilities (classification, translation, OCR, speech-to-text) that the AI SDK adapter does not cover
+
+Both approaches can coexist in the same project. The adapter is just a bridge; the underlying models are the same.
+
+---
+
+## A Complete Example: Local Chat With Streaming
+
+Here is a minimal but complete example that creates a streaming chat interface using only local models:
+
+```typescript
+import { streamText } from 'ai';
+import { createLocalMode } from '@localmode/ai-sdk';
+import { webllm } from '@localmode/webllm';
+
+// 1. Set up the provider
+const localmode = createLocalMode({
+  models: {
+    'chat': webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
+  },
+});
+
+// 2. Stream a response
+const result = streamText({
+  model: localmode.languageModel('chat'),
+  system: 'You are a helpful assistant. Keep answers under 200 words.',
+  messages: [
+    { role: 'user', content: 'What are three benefits of local AI inference?' },
+  ],
+  maxOutputTokens: 300,
+  temperature: 0.7,
+});
+
+// 3. Print tokens as they arrive
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+
+// 4. Get final usage stats
+const usage = await result.usage;
+console.log('\n\nTokens used:', usage);
+```
+
+No API key configured. No environment variable set. No network request made. The model downloads once (cached in the browser), and every subsequent call runs entirely on the user's GPU.
+
+---
+
+## Methodology
+
+This post is based on the actual implementation of `@localmode/ai-sdk` (version 1.0.0), the [Vercel AI SDK documentation](https://ai-sdk.dev/docs/introduction), and the [AI SDK provider specification](https://ai-sdk.dev/providers/community-providers/custom-providers). All code examples use real API signatures from both the AI SDK (`ai` package v6+) and LocalMode packages.
+
+Sources:
+- [AI SDK generateText reference](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text)
+- [AI SDK streamText reference](https://ai-sdk.dev/docs/reference/ai-sdk-core/stream-text)
+- [AI SDK embed reference](https://ai-sdk.dev/docs/reference/ai-sdk-core/embed)
+- [AI SDK custom provider guide](https://ai-sdk.dev/providers/community-providers/custom-providers)
+- [AI SDK provider management](https://ai-sdk.dev/docs/ai-sdk-core/provider-management)
+- [LocalMode AI SDK documentation](/docs/ai-sdk)
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

@@ -1,0 +1,436 @@
+---
+title: Agents
+description: Build tool-using AI agents that run entirely in the browser with ReAct reasoning.
+icon: Bot
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Steps, Step } from 'fumadocs-ui/components/steps';
+
+# Agents
+
+Build AI agents that use tools step-by-step to solve complex tasks — entirely in the browser. The agent framework uses the **ReAct pattern** (Reason-Act-Observe) with `generateObject()` for reliable, model-agnostic tool calling.
+
+<Callout type="info" title="See it in action">
+  Try [Research Agent](https://localmode.ai/research-agent) and [LLM Chat](https://localmode.ai/llm-chat) for working demos of these APIs.
+</Callout>
+
+<Callout title="Provider-agnostic">
+  The agent framework works with **any LanguageModel** — WebLLM, wllama, or a custom provider.
+  It uses `generateObject()` with Zod schemas for tool selection, not native function calling.
+</Callout>
+
+## Quick Start
+
+```ts
+import { createAgent, runAgent, jsonSchema } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+import { z } from 'zod';
+
+// Define tools with Zod schemas
+const searchTool = {
+  name: 'search',
+  description: 'Search a knowledge base for relevant information',
+  parameters: jsonSchema(z.object({
+    query: z.string().describe('The search query'),
+    maxResults: z.number().default(5),
+  })),
+  execute: async ({ query, maxResults }) => {
+    // Your search implementation
+    return `Found ${maxResults} results for: ${query}`;
+  },
+};
+
+// One-shot execution
+const result = await runAgent({
+  model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+  tools: [searchTool],
+  prompt: 'What are the benefits of quantum computing?',
+  maxSteps: 10,
+});
+
+console.log(result.result);       // Final answer
+console.log(result.steps.length); // Number of steps taken
+console.log(result.finishReason); // 'finish' | 'max_steps' | etc.
+```
+
+## How It Works
+
+The agent uses the ReAct (Reason-Act-Observe) loop:
+
+<Steps>
+  <Step>
+    **Build prompt** — System instructions + tool descriptions + conversation history
+  </Step>
+  <Step>
+    **Generate action** — Call `generateObject()` with a schema for `tool_call` or `finish`
+  </Step>
+  <Step>
+    **If tool_call** — Validate arguments, execute the tool, capture observation
+  </Step>
+  <Step>
+    **If finish** — Return the final answer
+  </Step>
+  <Step>
+    **Repeat** — Add the step to history and go back to step 1
+  </Step>
+</Steps>
+
+## Defining Tools
+
+Tools are defined with a name, description, parameter schema, and execute function:
+
+```ts
+import { jsonSchema } from '@localmode/core';
+import { z } from 'zod';
+
+const calculatorTool = {
+  name: 'calculate',
+  description: 'Evaluate a mathematical expression',
+  parameters: jsonSchema(z.object({
+    expression: z.string().describe('Math expression like "2 + 2"'),
+  })),
+  execute: async ({ expression }, { abortSignal, stepIndex }) => {
+    // The context provides AbortSignal and current step index
+    abortSignal.throwIfAborted();
+    return String(eval(expression));
+  },
+};
+```
+
+### ToolExecutionContext
+
+Every tool receives a context with:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `abortSignal` | `AbortSignal` | For cancellation |
+| `stepIndex` | `number` | Current step number (zero-based) |
+
+## createAgent()
+
+Create a reusable agent that can be run multiple times:
+
+```ts
+const agent = createAgent({
+  model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+  tools: [searchTool, noteTool, calculateTool],
+  systemPrompt: 'You are a research assistant. Always search before answering.',
+  maxSteps: 10,
+  temperature: 0,
+});
+
+// Run multiple times — each run is independent
+const result1 = await agent.run({ prompt: 'Research quantum computing' });
+const result2 = await agent.run({ prompt: 'Research machine learning' });
+```
+
+### AgentConfig
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `model` | `LanguageModel` | required | The language model for reasoning |
+| `tools` | `ToolDefinition[]` | required | Available tools |
+| `systemPrompt` | `string` | — | System prompt prepended to agent prompt |
+| `maxSteps` | `number` | `10` | Maximum ReAct loop iterations |
+| `maxDurationMs` | `number` | — | Maximum total duration (ms) |
+| `maxRetries` | `number` | `3` | Retries per `generateObject()` call |
+| `temperature` | `number` | `0` | Sampling temperature |
+| `memory` | `AgentMemory` | — | Optional conversation memory |
+| `onStep` | `(step) => void` | — | Callback after each step |
+
+### AgentRunOptions
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `prompt` | `string` | The user's task/question |
+| `abortSignal` | `AbortSignal` | For cancellation |
+| `onStep` | `(step) => void` | Per-run callback (overrides config) |
+| `context` | `string` | Additional context for the prompt |
+
+## runAgent()
+
+One-shot convenience function — creates and runs an agent in one call:
+
+```ts
+const result = await runAgent({
+  model,
+  tools: [searchTool],
+  prompt: 'Find info about X',
+  maxSteps: 5,
+  onStep: (step) => console.log(`Step ${step.index}: ${step.type}`),
+});
+```
+
+## Safety Guards
+
+The agent enforces multiple safety mechanisms to prevent runaway execution:
+
+### Max Steps
+
+```ts
+const result = await runAgent({ model, tools, prompt, maxSteps: 5 });
+// result.finishReason === 'max_steps' if limit reached
+```
+
+### Timeout
+
+```ts
+const result = await runAgent({ model, tools, prompt, maxDurationMs: 30000 });
+// result.finishReason === 'timeout' if duration exceeded
+```
+
+### Loop Detection
+
+If the model produces the same tool call (same name + identical args) on consecutive steps:
+1. First duplicate: A hint is injected telling the model to try a different approach
+2. Second consecutive duplicate: Agent terminates with `finishReason: 'loop_detected'`
+
+### AbortSignal
+
+```ts
+const controller = new AbortController();
+
+// Cancel after 10 seconds
+setTimeout(() => controller.abort(), 10000);
+
+try {
+  const result = await runAgent({
+    model, tools, prompt,
+    abortSignal: controller.signal,
+  });
+} catch (error) {
+  // AbortError thrown on cancellation
+}
+```
+
+## AgentResult
+
+Every agent run returns a structured result:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `result` | `string` | Final answer (empty if terminated by guard) |
+| `steps` | `AgentStep[]` | All steps executed |
+| `finishReason` | `AgentFinishReason` | Why the agent stopped |
+| `totalDurationMs` | `number` | Total wall-clock time |
+| `totalUsage` | `GenerationUsage` | Accumulated token usage |
+
+### AgentFinishReason
+
+| Value | Description |
+|-------|-------------|
+| `'finish'` | Model provided a final answer |
+| `'max_steps'` | Reached `maxSteps` limit |
+| `'timeout'` | Exceeded `maxDurationMs` |
+| `'loop_detected'` | Repeated identical tool calls |
+| `'aborted'` | Cancelled via AbortSignal |
+| `'error'` | Unrecoverable error |
+
+### AgentStep
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `index` | `number` | Zero-based step number |
+| `type` | `'tool_call' \| 'finish'` | Step type |
+| `toolName` | `string?` | Tool called (tool_call only) |
+| `toolArgs` | `Record?` | Tool arguments |
+| `observation` | `string?` | Tool result or error |
+| `result` | `string?` | Final answer (finish only) |
+| `durationMs` | `number` | Step duration (ms) |
+| `usage` | `GenerationUsage?` | Token usage |
+
+## Step Callbacks
+
+Monitor agent progress in real-time:
+
+```ts
+const result = await runAgent({
+  model, tools, prompt,
+  onStep: (step) => {
+    if (step.type === 'tool_call') {
+      console.log(`Called ${step.toolName} with`, step.toolArgs);
+      console.log(`Result: ${step.observation}`);
+    } else {
+      console.log(`Final answer: ${step.result}`);
+    }
+    console.log(`Duration: ${step.durationMs}ms`);
+  },
+});
+```
+
+## Agent Memory
+
+Optional VectorDB-backed conversation memory enables agents to recall past interactions:
+
+```ts
+import { createAgentMemory, createAgent } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const memory = await createAgentMemory({
+  embeddingModel: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  maxEntries: 500,
+});
+
+const agent = createAgent({ model, tools, memory });
+
+// First run — memory is empty
+await agent.run({ prompt: 'What is quantum computing?' });
+
+// Second run — memory contains relevant context from first run
+await agent.run({ prompt: 'How does it relate to cryptography?' });
+
+// Cleanup
+await memory.close();
+```
+
+### How Memory Works
+
+1. **Before the first step**: Relevant memories are retrieved using the prompt as query
+2. **Injected as context**: Retrieved memories appear in the agent prompt
+3. **After completion**: The user's prompt and final result are stored for future retrieval
+
+Memory is optional — agents work without it. It is useful for multi-turn conversations where context from earlier interactions improves later answers.
+
+### AgentMemoryConfig
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `embeddingModel` | `EmbeddingModel` | required | Model for embedding entries |
+| `name` | `string` | `'agent-memory'` | VectorDB collection name |
+| `dimensions` | `number` | `384` | Embedding dimensions |
+| `maxEntries` | `number` | `1000` | Max entries before eviction |
+
+## useAgent() React Hook
+
+The `useAgent()` hook from `@localmode/react` provides real-time step streaming:
+
+```tsx
+import { useAgent } from '@localmode/react';
+
+function ResearchAgent() {
+  const { steps, result, isRunning, error, run, cancel, reset } = useAgent({
+    model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+    tools: [searchTool, noteTool],
+    maxSteps: 10,
+  });
+
+  return (
+    <div>
+      <button onClick={() => run('Research quantum computing')}>
+        Start Research
+      </button>
+
+      {isRunning && <button onClick={cancel}>Stop</button>}
+
+      {/* Steps update in real-time */}
+      {steps.map(step => (
+        <div key={step.index}>
+          Step {step.index + 1}: {step.type === 'tool_call'
+            ? `Called ${step.toolName}`
+            : `Finished: ${step.result}`
+          }
+        </div>
+      ))}
+
+      {result && (
+        <div>
+          <h3>Answer</h3>
+          <p>{result.result}</p>
+          <p>Completed in {result.totalDurationMs}ms</p>
+        </div>
+      )}
+
+      {error && <p>Error: {error.message}</p>}
+
+      <button onClick={reset}>Reset</button>
+    </div>
+  );
+}
+```
+
+### UseAgentReturn
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `steps` | `AgentStep[]` | Steps updated in real-time |
+| `result` | `AgentResult \| null` | Final result |
+| `isRunning` | `boolean` | Whether agent is executing |
+| `error` | `Error \| null` | Error if failed |
+| `run` | `(prompt, context?) => Promise` | Start the agent |
+| `cancel` | `() => void` | Abort current run |
+| `reset` | `() => void` | Clear all state |
+
+## Error Handling
+
+### Tool Errors Become Observations
+
+If a tool throws, the error message becomes the observation for that step. The model can then decide to retry with different arguments or use a different tool:
+
+```ts
+const unreliableTool = {
+  name: 'fetch',
+  description: 'Fetch data from URL',
+  parameters: jsonSchema(z.object({ url: z.string() })),
+  execute: async ({ url }) => {
+    throw new Error('Network timeout');
+    // This becomes observation: "Error: Network timeout"
+    // The model can try a different URL or a different tool
+  },
+};
+```
+
+### AgentError
+
+Thrown when the agent encounters an unrecoverable error (e.g., model cannot produce valid JSON after all retries):
+
+```ts
+import { AgentError } from '@localmode/core';
+
+try {
+  await runAgent({ model, tools, prompt });
+} catch (error) {
+  if (error instanceof AgentError) {
+    console.log('Steps completed:', error.steps.length);
+    console.log('Hint:', error.hint);
+  }
+}
+```
+
+## Recommended Models
+
+| Model | Size | Tool Calling Quality | Use Case |
+|-------|------|---------------------|----------|
+| Qwen3 8B | 4.4GB | Excellent (0.933 F1) | Complex multi-tool tasks |
+| Qwen3 1.7B | 1.1GB | Good | Simple tool tasks, demos |
+| Phi 3.5 Mini | 2.1GB | Good | General purpose |
+| Llama 3.2 1B | 712MB | Basic | Single-tool tasks |
+
+<Callout type="info" title="Model recommendation">
+  For reliable tool calling, use **Qwen3 1.7B** or larger. Smaller models may struggle
+  with JSON output format and multi-step reasoning.
+</Callout>
+
+## Tool Registry
+
+For advanced use cases, create a tool registry directly:
+
+```ts
+import { createToolRegistry } from '@localmode/core';
+
+const registry = createToolRegistry([searchTool, noteTool]);
+
+registry.has('search');    // true
+registry.names();          // ['search', 'note']
+registry.descriptions();   // [{ name, description, parameters }]
+
+const validated = registry.validate('search', { query: 'test' });
+const result = await registry.execute('search', { query: 'test' }, context);
+```
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Research Agent | Multi-step ReAct agent with tool use | [Demo](https://localmode.ai/research-agent) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/research-agent) |
+| LLM Chat | Agent mode with tool calling in chat interface | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |

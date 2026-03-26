@@ -9,20 +9,19 @@
 import type { ImageCaptionModel, ImageInput, VisionUsage } from '@localmode/core';
 import type { ModelSettings, TransformersDevice, ModelLoadProgress } from '../types.js';
 
-// Dynamic import types
-type ImageToTextPipeline = Awaited<
-  ReturnType<typeof import('@huggingface/transformers').pipeline<'image-to-text'>>
->;
+// Use a generic callable type since we may use 'image-to-text' or 'image-text-to-text' pipeline
+// depending on the model architecture (BLIP vs Florence-2)
+type CaptionPipeline = (image: unknown, ...args: unknown[]) => Promise<unknown>;
 
 /**
- * Image captioning model implementation using Transformers.js (BLIP)
+ * Image captioning model implementation using Transformers.js (BLIP, Florence-2)
  */
 export class TransformersCaptionModel implements ImageCaptionModel {
   readonly modelId: string;
   readonly provider = 'transformers';
 
-  private pipeline: ImageToTextPipeline | null = null;
-  private loadPromise: Promise<ImageToTextPipeline> | null = null;
+  private pipeline: CaptionPipeline | null = null;
+  private loadPromise: Promise<CaptionPipeline> | null = null;
 
   constructor(
     private baseModelId: string,
@@ -35,7 +34,7 @@ export class TransformersCaptionModel implements ImageCaptionModel {
     this.modelId = `transformers:${baseModelId}`;
   }
 
-  private async loadPipeline(): Promise<ImageToTextPipeline> {
+  private async loadPipeline(): Promise<CaptionPipeline> {
     if (this.pipeline) {
       return this.pipeline;
     }
@@ -45,13 +44,21 @@ export class TransformersCaptionModel implements ImageCaptionModel {
     }
 
     this.loadPromise = (async () => {
-      const { pipeline } = await import('@huggingface/transformers');
+      const { pipeline, env } = await import('@huggingface/transformers');
 
-      const pipe = await pipeline('image-to-text', this.baseModelId, {
+      // Suppress ONNX runtime warnings about node execution providers
+      env.backends.onnx.logLevel = 'error';
+
+      // Florence-2 and similar models use 'image-text-to-text' pipeline
+      // while traditional models (BLIP, ViT-GPT2) use 'image-to-text'
+      const isFlorence = this.baseModelId.toLowerCase().includes('florence');
+      const task = isFlorence ? 'image-text-to-text' : 'image-to-text';
+
+      const pipe = await (pipeline as Function)(task, this.baseModelId, {
         device: this.settings.device ?? 'auto',
-        dtype: this.settings.quantized !== false ? 'q8' : 'fp32',
+        dtype: this.settings.quantized === true ? 'q8' : undefined,
         progress_callback: this.settings.onProgress,
-      });
+      }) as CaptionPipeline;
 
       this.pipeline = pipe;
       return pipe;
@@ -109,12 +116,19 @@ export class TransformersCaptionModel implements ImageCaptionModel {
         pipelineOptions.max_length = maxLength;
       }
 
-      // Use type assertion as transformers accepts various image formats
-      const output = await pipe(preparedImage as unknown as string, pipelineOptions);
+      let caption: string;
 
-      // Output is array of { generated_text: string }
-      const results = Array.isArray(output) ? output : [output];
-      const caption = (results[0] as { generated_text: string }).generated_text;
+      if (this.baseModelId.toLowerCase().includes('florence')) {
+        // Florence-2 uses a text prompt to specify the task
+        const output = await pipe(preparedImage as unknown as string, '<MORE_DETAILED_CAPTION>');
+        const results = Array.isArray(output) ? output : [output];
+        const generated = (results[0] as { generated_text: string }).generated_text;
+        caption = generated.replace(/<[^>]+>/g, '').trim();
+      } else {
+        const output = await pipe(preparedImage as unknown as string, pipelineOptions);
+        const results = Array.isArray(output) ? output : [output];
+        caption = (results[0] as { generated_text: string }).generated_text;
+      }
 
       captions.push(caption.trim());
     }

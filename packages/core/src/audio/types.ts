@@ -135,7 +135,7 @@ export interface DoTranscribeResult {
  * @example
  * ```ts
  * const { text, segments } = await transcribe({
- *   model: transformers.speechToText('Xenova/whisper-tiny'),
+ *   model: transformers.speechToText('onnx-community/moonshine-tiny-ONNX'),
  *   audio: audioBlob,
  *   returnTimestamps: true,
  * });
@@ -265,7 +265,7 @@ export interface DoSynthesizeResult {
  * @example
  * ```ts
  * const { audio } = await synthesizeSpeech({
- *   model: transformers.textToSpeech('Xenova/speecht5-tts'),
+ *   model: transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX'),
  *   text: 'Hello, world!',
  * });
  * ```

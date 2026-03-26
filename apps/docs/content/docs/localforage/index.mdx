@@ -1,0 +1,173 @@
+---
+title: 'Overview'
+description: Cross-browser storage adapter with automatic driver fallback using localForage.
+icon: Database
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+# @localmode/localforage
+
+Cross-browser storage adapter using [localForage](https://localforage.github.io/localForage/). Automatically falls back from IndexedDB to WebSQL to localStorage, ensuring storage works in every browser environment.
+
+## Features
+
+- 🌐 **Auto-Fallback** — IndexedDB -> WebSQL -> localStorage, automatically
+- 🔄 **Cross-Browser** — Works everywhere, including older browsers
+- 📦 **~10KB** — Mature, battle-tested library
+- 🔒 **Safari Private Browsing** — Falls back gracefully when IndexedDB is blocked
+
+## Installation
+
+<Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
+  <Tab value="pnpm">```bash pnpm install @localmode/localforage @localmode/core ```</Tab>
+  <Tab value="npm">```bash npm install @localmode/localforage @localmode/core ```</Tab>
+  <Tab value="yarn">```bash yarn add @localmode/localforage @localmode/core ```</Tab>
+  <Tab value="bun">```bash bun add @localmode/localforage @localmode/core ```</Tab>
+</Tabs>
+
+## Quick Start
+
+```typescript
+import { LocalForageStorage } from '@localmode/localforage';
+import { createVectorDB, embed, ingest } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Create storage — automatically picks best available driver
+const storage = new LocalForageStorage({ name: 'my-app' });
+
+// Use with VectorDB
+const db = await createVectorDB({
+  name: 'documents',
+  dimensions: 384,
+  storage,
+});
+
+// Ingest documents
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+await ingest({
+  db,
+  model,
+  documents: [
+    { text: 'Local-first AI is the future', metadata: { source: 'blog' } },
+    { text: 'Privacy-preserving machine learning', metadata: { source: 'paper' } },
+  ],
+});
+```
+
+<Callout type="info">
+  The `ingest()` function is part of the [RAG pipeline](/docs/core/rag). It chunks, embeds, and stores documents in a single call.
+</Callout>
+
+## Configuration
+
+<TypeTable
+  type={{
+    name: {
+      description: 'Database name prefix for the underlying localForage instances',
+      type: 'string',
+    },
+    driver: {
+      description: 'Preferred driver order. localForage picks the first available driver from this list.',
+      type: 'string[]',
+      default: '[INDEXEDDB, WEBSQL, LOCALSTORAGE]',
+    },
+  }}
+/>
+
+### Driver Selection
+
+By default, localForage selects the best available driver automatically. You can override the priority:
+
+```typescript
+import localforage from 'localforage';
+import { LocalForageStorage } from '@localmode/localforage';
+
+// Force localStorage only (e.g., for testing)
+const storage = new LocalForageStorage({
+  name: 'my-app',
+  driver: [localforage.LOCALSTORAGE],
+});
+
+// Prefer IndexedDB, fall back to localStorage (skip WebSQL)
+const storage2 = new LocalForageStorage({
+  name: 'my-app',
+  driver: [localforage.INDEXEDDB, localforage.LOCALSTORAGE],
+});
+```
+
+## Auto-Fallback Behavior
+
+localForage handles driver selection transparently:
+
+| Driver | Environment | Used When |
+| --- | --- | --- |
+| IndexedDB | Modern browsers | Default, best performance |
+| WebSQL | Older Safari, some mobile | IndexedDB unavailable |
+| localStorage | All browsers | Last resort fallback |
+
+<Callout type="info" title="Safari Private Browsing">
+  Safari's private browsing mode blocks IndexedDB. localForage automatically falls back to
+  localStorage, so your app keeps working. Note that localStorage has a ~5MB limit, which may
+  affect large vector databases.
+</Callout>
+
+<Callout type="warn" title="Vector Serialization">
+  LocalForageStorage stores vectors as `number[]` arrays (not `Float32Array`) internally. This is
+  required because `Float32Array` does not survive JSON round-tripping used by the localStorage and
+  WebSQL drivers. Vectors are automatically converted to `Float32Array` on read and back to
+  `number[]` on write. This means storage size is ~2-3x larger than binary storage, and the
+  localStorage driver's ~5MB quota limit may be reached with large vector databases.
+</Callout>
+
+## Storage Fallback
+
+Combine with a try/catch pattern for maximum resilience:
+
+```typescript
+import { MemoryStorage } from '@localmode/core';
+import { LocalForageStorage } from '@localmode/localforage';
+
+let storage: LocalForageStorage | MemoryStorage;
+
+try {
+  storage = new LocalForageStorage({ name: 'my-app' });
+  await storage.open();
+} catch (error) {
+  console.warn('LocalForageStorage unavailable, falling back to memory:', error);
+  storage = new MemoryStorage();
+}
+```
+
+## Comparison
+
+| Adapter | Package | Bundle Size | Transactions | Auto-Fallback | Best For |
+| --- | --- | --- | --- | --- | --- |
+| `IndexedDBStorage` | `@localmode/core` | 0KB (built-in) | No | No | Simple apps, zero extra deps |
+| `DexieStorage` | `@localmode/dexie` | ~15KB | Yes | No | Production apps needing schema versioning |
+| `IDBStorage` | `@localmode/idb` | ~3KB | No | No | Minimal bundle size |
+| **`LocalForageStorage`** | **`@localmode/localforage`** | **~10KB** | **No** | **Yes** | **Max browser compatibility** |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Storage"
+    href="/docs/core/storage"
+    description="Core storage concepts, fallbacks, and quota management."
+  />
+  <Card
+    title="Dexie Adapter"
+    href="/docs/dexie"
+    description="Enhanced IndexedDB with schema versioning and transactions."
+  />
+  <Card
+    title="idb Adapter"
+    href="/docs/idb"
+    description="Minimal ~3KB IndexedDB adapter."
+  />
+</Cards>

@@ -1,28 +1,24 @@
 /**
  * @localmode/localforage
  *
- * Cross-browser storage adapter with automatic fallback using localforage.
+ * Cross-browser storage adapter for @localmode — automatic fallback
+ * from IndexedDB to WebSQL to localStorage.
  *
  * @packageDocumentation
  *
  * @example
- * ```ts
+ * ```typescript
  * import { LocalForageStorage } from '@localmode/localforage';
+ * import { createVectorDB } from '@localmode/core';
  *
  * const storage = new LocalForageStorage({ name: 'my-app' });
- * await storage.ready();
- *
- * // Store and retrieve data
- * await storage.setDocument('doc-1', { metadata: { title: 'Hello' } });
- * const doc = await storage.getDocument('doc-1');
+ * const db = await createVectorDB({
+ *   name: 'my-app',
+ *   dimensions: 384,
+ *   storage,
+ * });
  * ```
  */
 
-export {
-  LocalForageStorage,
-  type LocalForageStorageOptions,
-  type StoredDocument,
-  type StoredVector,
-  type SerializedHNSWIndex,
-} from './storage.js';
-
+export { LocalForageStorage } from './storage.js';
+export type { LocalForageStorageOptions } from './types.js';

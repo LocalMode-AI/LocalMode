@@ -4,7 +4,8 @@
  */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { STORAGE_KEYS, SEARCH_CONFIG } from '../_lib/constants';
+import { STORAGE_KEYS, SEARCH_CONFIG, THRESHOLD_DEFAULTS } from '../_lib/constants';
+import type { ChunkingStrategy, ThresholdInfo } from '../_lib/types';
 
 /** UI store state and actions */
 interface UIState {
@@ -25,6 +26,16 @@ interface UIState {
   loadingModelName: string | null;
   /** Loading progress (0-100) */
   loadingProgress: number;
+
+  // Chunking strategy
+  /** Current chunking strategy */
+  chunkingStrategy: ChunkingStrategy;
+
+  // Threshold
+  /** Current search threshold info */
+  threshold: ThresholdInfo;
+  /** Whether threshold calibration is in progress */
+  isCalibrating: boolean;
 
   // Chat input state
   /** Current input value */
@@ -47,6 +58,12 @@ interface UIState {
   setInput: (input: string) => void;
   /** Clear the input */
   clearInput: () => void;
+  /** Set chunking strategy */
+  setChunkingStrategy: (strategy: ChunkingStrategy) => void;
+  /** Set threshold info */
+  setThreshold: (threshold: ThresholdInfo) => void;
+  /** Set calibrating state */
+  setCalibrating: (calibrating: boolean) => void;
 }
 
 /** UI store with persistence for settings */
@@ -61,6 +78,9 @@ export const useUIStore = create<UIState>()(
       loadingModelName: null,
       loadingProgress: 0,
       input: '',
+      chunkingStrategy: 'semantic' as ChunkingStrategy,
+      threshold: { value: THRESHOLD_DEFAULTS.presetValue, source: 'preset' } as ThresholdInfo,
+      isCalibrating: false,
 
       // Actions
       toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
@@ -80,6 +100,12 @@ export const useUIStore = create<UIState>()(
       setInput: (input) => set({ input }),
 
       clearInput: () => set({ input: '' }),
+
+      setChunkingStrategy: (chunkingStrategy) => set({ chunkingStrategy }),
+
+      setThreshold: (threshold) => set({ threshold }),
+
+      setCalibrating: (isCalibrating) => set({ isCalibrating }),
     }),
     {
       name: STORAGE_KEYS.ui,
@@ -88,6 +114,8 @@ export const useUIStore = create<UIState>()(
         isSidebarOpen: state.isSidebarOpen,
         topK: state.topK,
         useReranking: state.useReranking,
+        chunkingStrategy: state.chunkingStrategy,
+        threshold: state.threshold,
       }),
     }
   )

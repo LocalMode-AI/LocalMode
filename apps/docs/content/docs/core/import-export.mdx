@@ -1,0 +1,256 @@
+---
+title: Import / Export
+description: Migrate vector data between cloud vector databases and LocalMode. Parse Pinecone, ChromaDB, CSV, and JSONL formats. Export to interoperable formats.
+icon: ArrowLeftRight
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Steps } from 'fumadocs-ui/components/steps';
+
+# Import / Export
+
+Migrate vector data from cloud vector databases (Pinecone, ChromaDB) to LocalMode's in-browser VectorDB. Parse, preview, import, and export vector data in multiple formats — all offline.
+
+<Callout type="info" title="See it in action">
+  Try [Semantic Search](https://localmode.ai/semantic-search) and [Data Migrator](https://localmode.ai/data-migrator) for working demos of these APIs.
+</Callout>
+
+<Callout type="info">
+The import/export module is separate from the existing `db.import()` / `db.export()` methods, which handle LocalMode's own internal JSON format. The new functions handle **external** cloud database formats.
+</Callout>
+
+## Supported Formats
+
+| Format | Shape | Use Case |
+|--------|-------|----------|
+| **Pinecone JSON** | `{ vectors: [{ id, values, metadata }] }` | Pinecone dashboard exports |
+| **ChromaDB JSON** | `{ ids, embeddings, metadatas, documents }` | ChromaDB collection exports |
+| **CSV** | Header row with `vector` column (JSON array) | Spreadsheet-compatible transfers |
+| **JSONL** | One `{ id, vector, ... }` per line | Streaming-friendly, large datasets |
+
+## Quick Start
+
+```ts
+import { importFrom, createVectorDB } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// 1. Create a VectorDB
+const db = await createVectorDB({ name: 'migrated', dimensions: 384 });
+
+// 2. Import from Pinecone export
+const stats = await importFrom({
+  db,
+  content: pineconeExportJson,
+  format: 'pinecone',
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'), // re-embed text-only records
+  onProgress: (p) => console.log(`${p.phase}: ${p.completed}/${p.total}`),
+});
+
+console.log(`Imported ${stats.imported}, skipped ${stats.skipped}`);
+```
+
+## Preview Before Import
+
+Use `parseExternalFormat()` to inspect data before committing to an import:
+
+```ts
+import { parseExternalFormat } from '@localmode/core';
+
+const result = parseExternalFormat(fileContent);
+// result.format       → 'pinecone' (auto-detected)
+// result.totalRecords → 1000
+// result.recordsWithVectors → 800
+// result.recordsWithTextOnly → 200
+// result.dimensions   → 384
+
+// Show preview to the user before importing
+```
+
+## importFrom()
+
+The main orchestrator function. Parses external data, validates dimensions, optionally re-embeds text-only records, and batches into `db.addMany()`.
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `db` | `VectorDB` | required | Target VectorDB instance |
+| `content` | `string` | required | Raw content string to parse |
+| `format` | `ExternalFormat` | auto-detect | Source format override |
+| `model` | `EmbeddingModel` | — | Embedding model for re-embedding text-only records |
+| `batchSize` | `number` | `100` | Records per `addMany()` call |
+| `skipDimensionCheck` | `boolean` | `false` | Skip dimension validation |
+| `onProgress` | `(progress) => void` | — | Progress callback |
+| `abortSignal` | `AbortSignal` | — | Cancellation signal |
+
+### ImportStats Result
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `imported` | `number` | Records successfully imported |
+| `skipped` | `number` | Records skipped (no vector and no model) |
+| `reEmbedded` | `number` | Text-only records re-embedded |
+| `totalParsed` | `number` | Total records parsed from source |
+| `format` | `ExternalFormat` | Detected or specified format |
+| `dimensions` | `number` | Vector dimensions |
+| `durationMs` | `number` | Total operation time |
+
+## Export
+
+### exportToCSV()
+
+```ts
+import { exportToCSV } from '@localmode/core';
+
+const csv = exportToCSV(records, {
+  delimiter: ',',
+  includeVectors: true,
+  includeText: true,
+});
+```
+
+### exportToJSONL()
+
+```ts
+import { exportToJSONL } from '@localmode/core';
+
+const jsonl = exportToJSONL(records, {
+  includeVectors: true,
+  vectorFieldName: 'embedding', // custom field name
+});
+```
+
+## Format Conversion
+
+Convert between formats without a VectorDB:
+
+```ts
+import { convertFormat } from '@localmode/core';
+
+// Pinecone JSON → CSV
+const csv = convertFormat(pineconeJson, { to: 'csv' });
+
+// ChromaDB JSON → JSONL
+const jsonl = convertFormat(chromaJson, { from: 'chroma', to: 'jsonl' });
+
+// CSV → Pinecone format
+const pinecone = convertFormat(csvData, { to: 'pinecone' });
+```
+
+## Re-embedding Workflow
+
+When importing from a cloud database, some records may have text but no vectors (because the original embeddings were generated server-side). Pass an `EmbeddingModel` to `importFrom()` to re-embed these records locally:
+
+```ts
+import { importFrom } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const stats = await importFrom({
+  db,
+  content: chromaExport,
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+});
+
+// stats.reEmbedded → number of text-only records that were re-embedded
+```
+
+<Callout type="warn">
+Re-embedded vectors will differ from the original cloud-generated vectors because different models produce different embeddings. This is expected — the local model becomes the new source of truth.
+</Callout>
+
+## Error Handling
+
+```ts
+import { importFrom, ParseError, DimensionMismatchOnImportError } from '@localmode/core';
+
+try {
+  await importFrom({ db, content });
+} catch (error) {
+  if (error instanceof ParseError) {
+    console.log(error.hint);           // actionable fix suggestion
+    console.log(error.context?.format); // format being parsed
+    console.log(error.context?.line);   // line number (JSONL/CSV)
+  }
+  if (error instanceof DimensionMismatchOnImportError) {
+    console.log(error.expected); // target DB dimensions
+    console.log(error.actual);   // imported vector dimensions
+    console.log(error.recordId); // first mismatched record
+  }
+}
+```
+
+## React Hook
+
+```tsx
+import { useImportExport } from '@localmode/react';
+
+function ImportPanel() {
+  const {
+    importData, parsePreview, exportCSV, exportJSONL,
+    isImporting, isParsing, progress, stats, parseResult, error,
+    cancel, reset,
+  } = useImportExport({
+    db: myVectorDB,
+    model: embeddingModel,
+  });
+
+  return (
+    <div>
+      <button onClick={() => parsePreview({ content: fileText })}>Preview</button>
+      <button onClick={() => importData({ content: fileText })}>Import</button>
+      <button onClick={exportCSV}>Export CSV</button>
+      {isImporting && <p>Phase: {progress?.phase}</p>}
+      {stats && <p>Imported: {stats.imported}</p>}
+    </div>
+  );
+}
+```
+
+## Recipe: Moving from Pinecone to LocalMode
+
+<Steps>
+### Export from Pinecone
+
+In the Pinecone console, export your index as JSON. The file will have the format:
+```json
+{ "vectors": [{ "id": "...", "values": [...], "metadata": {...} }] }
+```
+
+### Preview the export
+
+```ts
+const result = parseExternalFormat(pineconeJson);
+console.log(`${result.totalRecords} records, ${result.dimensions}d vectors`);
+```
+
+### Create a matching VectorDB
+
+```ts
+const db = await createVectorDB({
+  name: 'my-app',
+  dimensions: result.dimensions!,
+});
+```
+
+### Import with progress
+
+```ts
+const stats = await importFrom({
+  db,
+  content: pineconeJson,
+  format: 'pinecone',
+  onProgress: (p) => updateProgressBar(p.overallCompleted / p.overallTotal),
+});
+```
+
+### Delete your Pinecone account
+
+Your data now lives entirely in the browser. No servers, no API keys, no monthly bill.
+</Steps>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Semantic Search | Export and import vector indexes | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
+| Data Migrator | Migrate vectors between Pinecone, ChromaDB, CSV, JSONL | [Demo](https://localmode.ai/data-migrator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/data-migrator) |

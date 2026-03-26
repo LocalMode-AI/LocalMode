@@ -6,6 +6,7 @@
 
 import { usePDFStore } from '../_store/pdf.store';
 import { useChatStore } from '../_store/chat.store';
+import { useUIStore } from '../_store/ui.store';
 import { processPDF } from '../_services/pdf.service';
 import { createMessage, isPDFFile, formatFileSize } from '../_lib/utils';
 import { PDF_CONFIG } from '../_lib/constants';
@@ -14,6 +15,7 @@ import { PDF_CONFIG } from '../_lib/constants';
 export function usePDFUpload() {
   const pdfStore = usePDFStore();
   const chatStore = useChatStore();
+  const { chunkingStrategy } = useUIStore();
 
   /**
    * Upload and process a PDF file
@@ -44,10 +46,15 @@ export function usePDFUpload() {
     pdfStore.clearError();
 
     try {
-      // Process PDF with progress updates
-      const document = await processPDF(file, (stage, progress) => {
-        pdfStore.setProcessingProgress(stage, progress);
-      });
+      // Process PDF with progress updates, passing current chunking strategy
+      const document = await processPDF(
+        file,
+        (stage, progress) => {
+          pdfStore.setProcessingProgress(stage, progress);
+        },
+        undefined,
+        chunkingStrategy
+      );
 
       // Add document to store
       pdfStore.addDocument(document);

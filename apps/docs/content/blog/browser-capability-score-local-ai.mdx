@@ -1,0 +1,441 @@
+---
+title: "Is Your User's Browser Ready for Local AI? Building a Capability Score at Runtime"
+description: "Not every browser has WebGPU, 16GB of RAM, and a discrete GPU. Learn how to detect device capabilities at runtime, compute an ML Readiness score from 0-100, check whether a specific model can run, get adaptive model recommendations, and build a 'Can I Run It?' UI -- all with @localmode/core's zero-dependency capability detection pipeline."
+author: LocalMode
+date: 2026-01-31
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+You have built an AI feature that runs entirely in the browser. Embeddings, classification, maybe even LLM chat. It works beautifully on your M3 MacBook Pro with 36GB of RAM and WebGPU enabled.
+
+Then a user opens it on a 2019 Android phone with 3GB of RAM and no GPU acceleration. The model download stalls at 40%. The tab crashes. The user leaves.
+
+The problem is not that local AI does not work on lower-end devices. It does -- with the right model. The problem is that you shipped a one-size-fits-all experience to a wildly heterogeneous device landscape. A 4B-parameter LLM that sings on a desktop with WebGPU will choke a budget phone running WASM on two CPU cores.
+
+The solution is runtime capability detection: probe the browser's hardware, features, and storage before loading a single model weight. Then adapt -- pick the right model, the right batch size, the right inference backend, or show a clear "your device cannot run this" message instead of a cryptic crash.
+
+LocalMode ships a complete capability detection pipeline in `@localmode/core` -- zero dependencies, works in any browser, and produces actionable scores and recommendations. This post walks through the entire pipeline, from raw feature detection to a production-ready adaptive UI.
+
+---
+
+## The Capability Detection Pipeline
+
+The pipeline has five stages, each building on the previous one:
+
+| Stage | Function | What It Answers |
+|---|---|---|
+| 1. Detect capabilities | `detectCapabilities()` | What hardware, features, and storage does this browser have? |
+| 2. Generate report | `createCapabilityReport()` | How ready is this device for ML? (0-100 scores) |
+| 3. Check model support | `checkModelSupport()` | Can this specific model run on this device? |
+| 4. Recommend models | `recommendModels()` | Which models should this device use? |
+| 5. Compute batch size | `computeOptimalBatchSize()` | How many items per batch for this hardware? |
+
+Every function is exported from `@localmode/core`. No provider packages required. No network requests. The detection runs entirely from browser APIs.
+
+---
+
+## Stage 1: detectCapabilities() -- The Hardware Fingerprint
+
+The foundation of everything is `detectCapabilities()`. It probes the browser for four categories of information: browser identity, hardware specs, feature support, and storage quota.
+
+```typescript
+import { detectCapabilities } from '@localmode/core';
+
+const caps = await detectCapabilities();
+
+console.log('Browser:', caps.browser.name, caps.browser.version);
+console.log('Device:', caps.device.type, caps.device.os);
+console.log('Cores:', caps.hardware.cores);
+console.log('Memory:', caps.hardware.memory, 'GB');
+console.log('GPU:', caps.hardware.gpu);
+console.log('WebGPU:', caps.features.webgpu);
+console.log('WASM SIMD:', caps.features.simd);
+console.log('Storage available:', caps.storage.availableBytes);
+```
+
+Under the hood, this single call coordinates over a dozen individual detection routines:
+
+**Hardware detection** reads `navigator.hardwareConcurrency` for CPU core count and `navigator.deviceMemory` for RAM. The Device Memory API returns a coarse-grained value (one of 0.25, 0.5, 1, 2, 4, or 8 GB) to limit fingerprinting -- but even this rough signal is enough to distinguish a phone from a workstation. GPU identification uses the `WEBGL_debug_renderer_info` WebGL extension to extract the unmasked renderer string (e.g., "ANGLE (Apple, Apple M3 Pro, OpenGL 4.1)"), giving you the actual GPU model without requiring WebGPU.
+
+**Feature detection** probes 16 browser APIs, each with its own detection strategy. WebGPU support is not just a `'gpu' in navigator` check -- the function calls `navigator.gpu.requestAdapter()` to verify that a usable adapter actually exists, since some browsers expose the API object but fail adapter creation. WASM SIMD detection compiles a minimal SIMD module to test for instruction support. WASM threads detection checks for `SharedArrayBuffer`, `Atomics`, and compiles a threaded WASM module. Chrome Built-in AI detection checks for the `self.ai` namespace and its sub-APIs (summarizer, translator, language model).
+
+**Storage detection** calls `navigator.storage.estimate()` for quota and usage, and `navigator.storage.persisted()` to check whether the browser has granted persistent storage (which prevents eviction under storage pressure).
+
+The result is a `DeviceCapabilities` object with four sections:
+
+```typescript
+interface DeviceCapabilities {
+  browser: { name: string; version: string; engine: string };
+  device: { type: 'desktop' | 'mobile' | 'tablet' | 'unknown'; os: string; osVersion: string };
+  hardware: { cores: number; memory?: number; gpu?: string };
+  features: {
+    webgpu: boolean; webnn: boolean; wasm: boolean; simd: boolean;
+    threads: boolean; indexeddb: boolean; opfs: boolean; webworkers: boolean;
+    sharedarraybuffer: boolean; crossOriginisolated: boolean;
+    serviceworker: boolean; broadcastchannel: boolean; weblocks: boolean;
+    chromeAI: boolean; chromeAISummarizer: boolean; chromeAITranslator: boolean;
+  };
+  storage: { quotaBytes: number; usedBytes: number; availableBytes: number; isPersisted: boolean };
+}
+```
+
+<Callout type="warn" title="Browser API limitations">
+  `navigator.deviceMemory` is Chromium-only and returns `undefined` on Firefox and Safari. `WEBGL_debug_renderer_info` is deprecated in Firefox and may return generic strings. The detection functions handle these gracefully -- missing values become `undefined` or conservative defaults, never crashes. Always design your UI to work with incomplete information.
+</Callout>
+
+---
+
+## Stage 2: createCapabilityReport() -- The ML Readiness Score
+
+Raw capabilities are useful for developers. Users and product decisions need a score. `createCapabilityReport()` takes the raw capabilities and produces three weighted scores from 0 to 100, plus actionable recommendations and issue detection.
+
+```typescript
+import { createCapabilityReport, formatCapabilityReport } from '@localmode/core';
+
+const report = await createCapabilityReport();
+
+console.log('ML Readiness:', report.scores.mlReadiness);
+console.log('Storage Capacity:', report.scores.storageCapacity);
+console.log('Performance Potential:', report.scores.performancePotential);
+console.log('Issues:', report.issues.length);
+console.log('Recommendations:', report.recommendations);
+```
+
+### How the ML Readiness Score Is Calculated
+
+The ML Readiness score (0-100) is a weighted sum of the features that matter most for browser-based inference:
+
+| Feature | Points | Why It Matters |
+|---|---|---|
+| WebAssembly | +20 | Baseline requirement for any ML inference |
+| WASM SIMD | +15 | 2-4x speedup on vector operations |
+| WASM Threads | +10 | Multi-core parallel inference |
+| WebGPU | +30 | GPU-accelerated inference, 5-19x faster than CPU |
+| WebNN | +10 | Hardware-accelerated neural network primitives |
+| 4+ CPU cores | +10 | Parallel processing headroom |
+| 4+ GB memory | +5 | Enough RAM for medium models |
+
+A modern Chrome on a desktop with WebGPU scores 90-100. A budget Android phone on Firefox without WebGPU might score 35-45. Both can run local AI -- but they should run very different models.
+
+The **Storage Capacity** score factors in total quota, used percentage, persistence status, and OPFS availability. The **Performance Potential** score weights GPU availability, SIMD support, thread count, core count, and GPU vendor (NVIDIA, AMD, and Apple Silicon get slight bonuses for known strong compute performance).
+
+### The ASCII Report
+
+For debugging and support diagnostics, `formatCapabilityReport()` renders the entire report as a formatted string:
+
+```
+═══════════════════════════════════════════════════════════════
+                    CAPABILITY REPORT
+═══════════════════════════════════════════════════════════════
+
+Generated: 2026-03-25T14:30:00.000Z
+
+┌─────────────────────────────────────────────────────────────┐
+│ BROWSER & DEVICE                                            │
+└─────────────────────────────────────────────────────────────┘
+  Browser:  Chrome 134.0.6998.89 (Blink)
+  Device:   desktop - macOS 15.3.2
+  Cores:    12
+  Memory:   8 GB
+  GPU:      ANGLE (Apple, Apple M3 Pro, OpenGL 4.1)
+
+┌─────────────────────────────────────────────────────────────┐
+│ FEATURES                                                     │
+└─────────────────────────────────────────────────────────────┘
+  ✓ WebGPU                supported
+  ✗ WebNN                 not available
+  ✓ WebAssembly           supported
+  ✓ WASM SIMD             supported
+  ✓ WASM Threads          supported
+  ✓ IndexedDB             supported
+  ✓ OPFS                  supported
+  ✓ Web Workers           supported
+  ✓ SharedArrayBuffer     supported
+  ✓ Cross-Origin Isolated supported
+  ✓ Service Worker        supported
+  ✓ BroadcastChannel      supported
+  ✓ Web Locks             supported
+
+┌─────────────────────────────────────────────────────────────┐
+│ SCORES                                                       │
+└─────────────────────────────────────────────────────────────┘
+  ML Readiness:        █████████░ 95%
+  Storage Capacity:    ████████░░ 80%
+  Performance Potential: █████████░ 93%
+```
+
+That output is what you paste into a bug report or display in a developer diagnostics panel. The score bars make it immediately obvious where a device falls short.
+
+---
+
+## Stage 3: checkModelSupport() -- Can This Device Run It?
+
+Once you know the device capabilities, the next question is whether a specific model will fit. `checkModelSupport()` checks memory, storage, and CPU requirements against the detected hardware.
+
+```typescript
+import { checkModelSupport } from '@localmode/core';
+
+const result = await checkModelSupport({
+  modelId: 'Llama-3.2-3B-Instruct-q4f16_1-MLC',
+  estimatedMemory: 4_000_000_000,  // ~4GB RAM needed
+  estimatedStorage: 1_800_000_000, // ~1.8GB download
+  prefersWebGPU: true,
+  minCores: 4,
+});
+
+if (result.supported) {
+  console.log('Model can run. Recommended device:', result.recommendedDevice);
+  // 'webgpu' | 'wasm' | 'cpu'
+} else {
+  console.log('Cannot run:', result.reason);
+  console.log('Try instead:', result.fallbackModels);
+}
+```
+
+The function checks storage availability first (hard constraint -- the model files must fit), then memory (soft constraint -- checks against 70% of reported device memory to leave headroom for the page itself), then CPU cores (optional minimum). If the model passes all checks, it recommends the best inference device: WebGPU if available and preferred, WASM as fallback, CPU as last resort.
+
+When a model does not fit, the result includes fallback recommendations from a built-in registry. For example, if `Llama-3.2-3B-Instruct` fails, the system suggests `Llama-3.2-1B-Instruct` (879MB, "Smaller but capable") and `SmolLM2-360M-Instruct` (376MB, "Very small, basic tasks"). Fallbacks exist for speech-to-text models (Whisper variants cascade to Moonshine) and embedding models (MPNet cascades to BGE Small to MiniLM).
+
+---
+
+## Stage 4: recommendModels() -- Adaptive Model Selection
+
+The most powerful stage. Instead of asking "can this model run?" you ask "which models should run on this device?" and get a ranked, scored list.
+
+```typescript
+import { detectCapabilities, recommendModels } from '@localmode/core';
+
+const caps = await detectCapabilities();
+
+// Get the best embedding models for this device
+const embeddingRecs = recommendModels(caps, {
+  task: 'embedding',
+  limit: 3,
+});
+
+for (const rec of embeddingRecs) {
+  console.log(`${rec.entry.name} (${rec.entry.sizeMB}MB) - Score: ${rec.score}/100`);
+  console.log(`  Reasons: ${rec.reasons.join(', ')}`);
+}
+
+// Get the best LLM for this device, max 1GB download
+const llmRecs = recommendModels(caps, {
+  task: 'generation',
+  maxSizeMB: 1000,
+  providers: ['webllm', 'wllama'],
+  limit: 3,
+});
+```
+
+`recommendModels()` is a synchronous pure function -- you call `detectCapabilities()` once (async) and then run as many recommendation queries as you need without further async overhead. The function filters the model registry by task, provider, size constraints, and device limits, then scores each candidate on a weighted formula:
+
+**Device Fit (50% weight)** -- How well does the model match the available hardware? Considers storage headroom (smaller fraction of available space is better), memory headroom, and whether the model's recommended device (WebGPU vs. WASM) matches what the browser actually supports. A WebGPU model scores 30 points for device match when WebGPU is available, but only 5 points when it is not.
+
+**Quality Tier (30% weight)** -- High-quality models score 100, medium 60, low 30. The tiers come from the curated model registry and reflect published benchmark rankings.
+
+**Speed Tier (20% weight)** -- Fast models score 100, medium 60, slow 30. On mobile devices, fast models get an automatic bonus because latency and battery life matter more than peak quality.
+
+The model registry ships with 35+ curated entries across all task categories -- embedding, classification, NER, reranking, speech-to-text, text-to-speech, translation, summarization, object detection, OCR, document QA, image classification, multimodal embeddings, and text generation across WebLLM, wllama, Transformers.js, and Chrome AI providers. You can extend it at runtime with `registerModel()` for custom or self-hosted models.
+
+### Adaptive Model Selection in Practice
+
+Here is the pattern for building an adaptive AI experience:
+
+```typescript
+import { detectCapabilities, recommendModels } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+import { webllm } from '@localmode/webllm';
+import { embed } from '@localmode/core';
+
+const caps = await detectCapabilities();
+
+// Pick the best embedding model for this device
+const [bestEmbedding] = recommendModels(caps, { task: 'embedding', limit: 1 });
+const embeddingModel = transformers.embedding(bestEmbedding.entry.modelId);
+
+// Pick the best LLM -- WebGPU devices get larger models
+const [bestLLM] = recommendModels(caps, {
+  task: 'generation',
+  providers: caps.features.webgpu ? ['webllm'] : ['wllama'],
+  limit: 1,
+});
+
+// Use the recommended models
+const { embedding } = await embed({
+  model: embeddingModel,
+  value: 'How do I reset my password?',
+});
+```
+
+A desktop with WebGPU and 8GB RAM might get `bge-base-en-v1.5` (110MB, 768d, high quality) for embeddings and `Qwen3-4B` (2.2GB) for chat. A mobile phone with 3GB RAM and no WebGPU might get `Snowflake/arctic-embed-xs` (23MB, 384d, fast) for embeddings and `SmolLM2-135M-Instruct-Q4_K_M` (70MB GGUF) for chat. Same API. Same code path. Dramatically different model choices -- each optimal for the device it runs on.
+
+---
+
+## Stage 5: computeOptimalBatchSize() -- Right-Sizing Throughput
+
+When you are embedding or ingesting hundreds or thousands of items, batch size determines both throughput and memory pressure. Too large and the tab crashes. Too small and you waste parallelism.
+
+`computeOptimalBatchSize()` computes the optimal batch size using a formula calibrated against a reference device (4 cores, 8GB RAM):
+
+```
+batchSize = base * (cores / 4) * (memoryGB / 8) * gpuMultiplier
+```
+
+The GPU multiplier is 1.5x when a GPU is available, 1.0x otherwise. The result is clamped to task-specific bounds (embedding: 4-256, ingestion: 8-512).
+
+```typescript
+import { computeOptimalBatchSize, streamEmbedMany } from '@localmode/core';
+
+const { batchSize, reasoning, deviceProfile } = computeOptimalBatchSize({
+  taskType: 'embedding',
+  modelDimensions: 384,
+});
+
+console.log(`Batch size: ${batchSize}`);
+console.log(`Reasoning: ${reasoning}`);
+// "Task: embedding (384d). Device: 12 cores, 8GB RAM, GPU: yes (source: detected).
+//  Formula: 32 * 3.00 (cores) * 1.00 (mem) * 1.5 (gpu) = 144.0.
+//  Floored to 144. Result: batchSize=144 (bounds: [4, 256])."
+
+// Use the computed batch size
+for await (const result of streamEmbedMany({
+  model: embeddingModel,
+  values: thousandsOfDocuments,
+  batchSize,
+})) {
+  // Process results as they stream in
+}
+```
+
+On a 16-core workstation with 32GB RAM and WebGPU, the batch size scales up to 256 (the maximum). On a dual-core phone with 2GB RAM, it scales down to 4 (the minimum). The reasoning string is fully transparent -- you can log it to understand exactly why a particular batch size was chosen, including the device profile source (`detected` from browser APIs, `override` from caller-provided values, or `fallback` for SSR/Node environments).
+
+---
+
+## Building a "Can I Run It?" UI Component
+
+Putting it all together, here is a pattern for a pre-flight check component that runs before loading any models:
+
+```typescript
+import {
+  createCapabilityReport,
+  checkModelSupport,
+  recommendModels,
+  detectCapabilities,
+} from '@localmode/core';
+
+async function runPreflightCheck(targetModelId: string, requirements: ModelRequirements) {
+  // 1. Get the full report
+  const report = await createCapabilityReport();
+
+  // 2. Check if the target model fits
+  const modelCheck = await checkModelSupport(requirements);
+
+  // 3. Get alternatives if it doesn't
+  let alternatives: ModelRecommendation[] = [];
+  if (!modelCheck.supported) {
+    const caps = report.capabilities;
+    alternatives = recommendModels(caps, {
+      task: 'generation',
+      maxSizeMB: caps.storage.availableBytes / (1024 * 1024),
+      limit: 3,
+    });
+  }
+
+  // 4. Surface critical issues
+  const blockers = report.issues.filter((i) => i.severity === 'error');
+  const warnings = report.issues.filter((i) => i.severity === 'warning');
+
+  return {
+    score: report.scores.mlReadiness,
+    canRunTarget: modelCheck.supported,
+    recommendedDevice: modelCheck.recommendedDevice,
+    alternatives,
+    blockers,
+    warnings,
+    recommendations: report.recommendations,
+  };
+}
+```
+
+Your UI reads the result and renders one of three states:
+
+**Green (score 70+, model supported)**: "Your device is ready. Loading model with WebGPU acceleration..." Proceed to load the target model.
+
+**Yellow (score 40-69, model not supported but alternatives exist)**: "This model requires more memory than your device has. We recommend [alternative model name] instead -- it is optimized for your hardware." Offer a one-click switch to the recommended alternative.
+
+**Red (score below 40 or critical blockers)**: "Your browser does not support WebAssembly. Please update to Chrome 57+, Firefox 52+, or Safari 11+." Show the specific blocker and its suggestion from the issues array.
+
+The key insight is that you never show users a generic "something went wrong" error. The capability system gives you the specific reason (insufficient memory, no WebGPU, storage full) and the specific fix (use a smaller model, enable a flag, clear storage). That specificity is the difference between a user who leaves and a user who adjusts and succeeds.
+
+---
+
+## Individual Feature Checks
+
+For simpler cases where you need to check a single feature, the granular detection functions are available:
+
+```typescript
+import {
+  isWebGPUSupported,
+  isWASMSupported,
+  isIndexedDBSupported,
+  isChromeAISupported,
+  checkFeatureSupport,
+} from '@localmode/core';
+
+// Quick boolean checks
+if (await isWebGPUSupported()) {
+  // Use WebGPU-accelerated models
+} else if (isWASMSupported()) {
+  // Fall back to WASM models
+}
+
+// Detailed check with fallback recommendations
+const webgpuCheck = await checkFeatureSupport('webgpu');
+if (!webgpuCheck.supported) {
+  console.log('Reason:', webgpuCheck.reason);
+  // "WebGPU is not available in this browser"
+
+  console.log('Fallbacks:', webgpuCheck.fallbacks);
+  // [{ feature: 'webgpu', alternative: 'wasm',
+  //    reason: 'WebAssembly is widely supported',
+  //    tradeoffs: ['2-5x slower inference', 'Higher CPU usage'] }]
+
+  console.log('Browser recommendations:', webgpuCheck.browserRecommendations);
+  // [{ browser: 'Chrome', minVersion: '113', features: ['WebGPU'] },
+  //  { browser: 'Safari', minVersion: '18', features: ['WebGPU'], note: 'macOS 15+ / iOS 18+' }]
+}
+```
+
+`checkFeatureSupport()` is particularly useful for building upgrade prompts. If a user's browser is one version away from WebGPU support, you can show a targeted "Update your browser for 5x faster AI" message instead of silently falling back to WASM.
+
+---
+
+## The Real-World Device Landscape
+
+To understand why this matters, consider the range of devices hitting a typical web application in 2026:
+
+| Device Profile | Cores | RAM | WebGPU | ML Readiness Score | Best Model Strategy |
+|---|---|---|---|---|---|
+| M3 MacBook Pro | 12 | 36GB | Yes | 95-100 | Full-size models, large batch sizes |
+| Windows laptop (RTX 3060) | 8 | 16GB | Yes | 90-95 | Full-size models, GPU inference |
+| 2024 iPad Pro | 6 | 8GB | Yes | 80-85 | Medium models, moderate batches |
+| Budget Chromebook | 4 | 4GB | Maybe | 50-65 | Small models, small batches |
+| 2022 Android phone | 4 | 3GB | No | 35-45 | Tiny models, minimal batches |
+| Older iPhone (iOS 17) | 2 | 2GB | No | 25-35 | Smallest models or cloud fallback |
+
+The top row and the bottom row are separated by an order of magnitude in capability. Shipping the same model to both is like serving a 4K video stream to a device on 2G -- technically possible, practically broken. The capability pipeline gives you the data to make the right choice automatically.
+
+---
+
+## Methodology
+
+All API references in this post correspond to functions exported from `@localmode/core` version 1.x. The `DeviceCapabilities` interface, scoring weights, and model registry entries are documented in the source at `packages/core/src/capabilities/`. The ML Readiness score formula and weights are from `packages/core/src/capabilities/report.ts`. The batch size formula and reference device constants are from `packages/core/src/capabilities/batch-size.ts`. The model recommendation scoring algorithm (device fit, quality tier, speed tier weights) is from `packages/core/src/capabilities/recommend.ts`. Browser support data for WebGPU references [Can I Use](https://caniuse.com/webgpu) and the [WebGPU Implementation Status wiki](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status). The Device Memory API (`navigator.deviceMemory`) limitations are documented on [MDN](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/deviceMemory) and [Can I Use](https://caniuse.com/mdn-api_navigator_devicememory). `WEBGL_debug_renderer_info` deprecation status is tracked on [MDN](https://developer.mozilla.org/en-US/docs/Web/API/WEBGL_debug_renderer_info).
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

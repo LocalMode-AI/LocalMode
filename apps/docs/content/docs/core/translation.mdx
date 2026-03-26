@@ -1,0 +1,186 @@
+---
+title: Translation
+description: Translate text between languages with configurable models.
+icon: Languages
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+Translate text between languages using provider-agnostic translation models. Works with any provider that implements the `TranslationModel` interface.
+
+<Callout type="info" title="See it in action">
+  Try [Translator](https://localmode.ai/translator) and [Smart Writer](https://localmode.ai/smart-writer) for working demos of these APIs.
+</Callout>
+
+## translate()
+
+Translate a single text:
+
+<Tabs items={['Basic Usage', 'With AbortSignal']}>
+<Tab value="Basic Usage">
+
+```ts {5-8}
+import { translate } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.translator('Xenova/opus-mt-en-de');
+
+const { translation, usage, response } = await translate({
+  model,
+  text: 'Hello, how are you?',
+});
+
+console.log(translation); // 'Hallo, wie geht es Ihnen?'
+console.log(usage.durationMs); // 120
+```
+
+</Tab>
+<Tab value="With AbortSignal">
+
+```ts {3,7}
+const controller = new AbortController();
+
+setTimeout(() => controller.abort(), 5000);
+
+const { translation } = await translate({
+  model,
+  text: 'Hello, how are you?',
+  abortSignal: controller.signal,
+});
+```
+
+</Tab>
+</Tabs>
+
+### TranslateOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The translation model to use',
+      type: 'TranslationModel | string',
+      required: true,
+    },
+    text: {
+      description: 'Text to translate',
+      type: 'string',
+      required: true,
+    },
+    sourceLanguage: {
+      description: 'Source language code (auto-detected if omitted)',
+      type: 'string',
+      required: false,
+    },
+    targetLanguage: {
+      description: 'Target language code',
+      type: 'string',
+      required: false,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure (default: 2)',
+      type: 'number',
+      required: false,
+    },
+  }}
+/>
+
+### TranslateResult
+
+<TypeTable
+  type={{
+    translation: {
+      description: 'The translated text',
+      type: 'string',
+    },
+    detectedLanguage: {
+      description: 'Detected source language (if auto-detected)',
+      type: 'string | undefined',
+    },
+    usage: {
+      description: 'Usage info: inputTokens, outputTokens, durationMs',
+      type: 'TranslationUsage',
+    },
+    response: {
+      description: 'Response metadata: modelId, timestamp',
+      type: 'TranslationResponse',
+    },
+  }}
+/>
+
+## translateMany()
+
+Translate multiple texts in a single call:
+
+```ts
+import { translateMany } from '@localmode/core';
+
+const { translations } = await translateMany({
+  model,
+  texts: ['Hello', 'Goodbye', 'Thank you'],
+});
+
+translations.forEach((t) => console.log(t));
+// 'Hallo', 'Auf Wiedersehen', 'Danke'
+```
+
+## Custom Provider
+
+Implement the `TranslationModel` interface to create a custom translation provider:
+
+```ts
+import type { TranslationModel, DoTranslateOptions, DoTranslateResult } from '@localmode/core';
+
+class MyTranslator implements TranslationModel {
+  readonly modelId = 'custom:my-translator';
+  readonly provider = 'custom';
+  readonly sourceLanguage = 'en';
+  readonly targetLanguage = 'de';
+
+  async doTranslate(options: DoTranslateOptions): Promise<DoTranslateResult> {
+    const { texts } = options;
+
+    // Your translation logic here
+    const translations = texts.map((text) => `[translated] ${text}`);
+
+    return {
+      translations,
+      usage: { inputTokens: texts.join('').length, outputTokens: translations.join('').length, durationMs: 0 },
+    };
+  }
+}
+```
+
+<Callout type="info">
+  For recommended models, provider-specific options, and practical recipes, see the
+  [Transformers Translation](/docs/transformers/translation) guide.
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Transformers Translation"
+    href="/docs/transformers/translation"
+    description="Recommended translation models and usage."
+  />
+  <Card
+    title="Summarization"
+    href="/docs/core/summarization"
+    description="Summarize text with configurable length."
+  />
+</Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Translator | Translate text between 200+ languages | [Demo](https://localmode.ai/translator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/translator) |
+| Smart Writer | Multi-language writing assistant with translation | [Demo](https://localmode.ai/smart-writer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-writer) |

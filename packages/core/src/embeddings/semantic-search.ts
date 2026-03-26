@@ -27,7 +27,7 @@ import type {
  * import { transformers } from '@localmode/transformers';
  *
  * const db = await createVectorDB({ name: 'docs', dimensions: 384 });
- * const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+ * const model = transformers.embedding('Xenova/bge-small-en-v1.5');
  *
  * const { results, usage } = await semanticSearch({
  *   db,

@@ -1,0 +1,62 @@
+---
+title: Classification
+description: Text classification for sentiment analysis, topic detection, and more.
+icon: Tags
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Classify text into predefined categories using fine-tuned transformer models. Useful for sentiment analysis, content moderation, and topic detection.
+
+<Callout type="info">
+  For full API reference (`classify()`, `classifyMany()`, options, result types, and custom providers), see the [Core Classification](/docs/core/classification) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [Sentiment Analyzer](https://localmode.ai/sentiment-analyzer) and [Email Classifier](https://localmode.ai/email-classifier) for working demos.
+</Callout>
+
+## Recommended Models
+
+| Model | Size | Labels | Use Case |
+|-------|------|--------|----------|
+| `Xenova/distilbert-base-uncased-finetuned-sst-2-english` | ~67MB | POSITIVE/NEGATIVE | Sentiment analysis |
+| `Xenova/twitter-roberta-base-sentiment-latest` | ~125MB | Positive/Neutral/Negative | Social media sentiment |
+| `Xenova/toxic-bert` | ~110MB | Toxic/Non-toxic | Content moderation |
+
+## Best Practices
+
+<Callout type="tip" title="Classification Tips">
+  1. **Choose task-specific models** — Sentiment models work best for sentiment, not topic detection
+  2. **Check allScores** — Low confidence scores may indicate ambiguous input
+  3. **Batch when possible** — `classifyMany()` is more efficient than multiple `classify()` calls
+  4. **Cache the model** — Create the model instance once and reuse it
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Sentiment Analyzer | Sentiment analysis with transformer classification models | [Demo](https://localmode.ai/sentiment-analyzer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/sentiment-analyzer) |
+| Email Classifier | Zero-shot email categorization | [Demo](https://localmode.ai/email-classifier) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/email-classifier) |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core Classification API"
+    href="/docs/core/classification"
+    description="Full API reference, options, result types, and custom providers."
+  />
+  <Card
+    title="Zero-Shot Classification"
+    href="/docs/transformers/zero-shot"
+    description="Classify into arbitrary labels without fine-tuning."
+  />
+  <Card
+    title="NER"
+    href="/docs/transformers/ner"
+    description="Extract named entities from text."
+  />
+</Cards>

@@ -1,0 +1,84 @@
+---
+title: Image Segmentation
+description: Segment images for background removal and scene understanding.
+icon: Scissors
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Segment images into labeled regions using semantic segmentation models. Useful for background removal, scene understanding, and image editing.
+
+<Callout type="info">
+  For full API reference (`segmentImage()`, options, result types, and custom providers), see the [Core Vision](/docs/core/vision) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [Background Remover](https://localmode.ai/background-remover) for a working demo.
+</Callout>
+
+## Recommended Models
+
+| Model | Size | Speed | Use Case |
+|-------|------|-------|----------|
+| `briaai/RMBG-1.4` | ~176MB | ⚡⚡ | High-quality background removal (non-commercial license) |
+| `Xenova/segformer-b0-finetuned-ade-512-512` | ~90MB | ⚡⚡ | Semantic segmentation (MIT license) |
+
+## Background Removal Example
+
+Based on the [Background Remover](https://localmode.ai/background-remover) showcase app:
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { segmentImage } from '@localmode/core';
+
+const model = transformers.segmenter('briaai/RMBG-1.4');
+
+async function removeBackground(imageDataUrl: string) {
+  const { masks } = await segmentImage({
+    model,
+    image: imageDataUrl,
+    abortSignal: controller.signal,
+  });
+
+  // Find the main subject mask (e.g., 'person', 'wall', etc.)
+  // Apply the mask to create a transparent background
+  return applyMaskToImage(imageDataUrl, masks);
+}
+```
+
+## Best Practices
+
+<Callout type="tip" title="Segmentation Tips">
+  1. **License** — RMBG-1.4 is non-commercial only; commercial use requires a paid license from BRIA AI. Use `segformer-b0` (MIT) for commercial projects.
+  2. **Purpose-built for background removal** — RMBG-1.4 excels at foreground/background separation
+  3. **Multiple masks** — Each segment in the image gets its own mask and label
+  4. **Combine masks** — Merge related masks for background removal (e.g., combine all non-subject masks)
+  5. **Canvas processing** — Use Canvas API to apply masks for transparency effects
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Background Remover | Segment and remove image backgrounds | [Demo](https://localmode.ai/background-remover) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/background-remover) |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core Vision API"
+    href="/docs/core/vision"
+    description="Full API reference including segmentImage()."
+  />
+  <Card
+    title="Object Detection"
+    href="/docs/transformers/object-detection"
+    description="Detect objects with bounding boxes."
+  />
+  <Card
+    title="Image Features"
+    href="/docs/transformers/image-features"
+    description="Extract feature vectors for similarity search."
+  />
+</Cards>

@@ -57,7 +57,7 @@ function resolveModel(modelOrId: FillMaskModel | string): FillMaskModel {
  * import { transformers } from '@localmode/transformers';
  *
  * const { predictions, usage } = await fillMask({
- *   model: transformers.fillMask('Xenova/bert-base-uncased'),
+ *   model: transformers.fillMask('onnx-community/ModernBERT-base-ONNX'),
  *   text: 'The capital of France is [MASK].',
  *   topK: 5,
  * });
@@ -70,7 +70,7 @@ function resolveModel(modelOrId: FillMaskModel | string): FillMaskModel {
  * @example Autocomplete
  * ```ts
  * const { predictions } = await fillMask({
- *   model: transformers.fillMask('Xenova/bert-base-uncased'),
+ *   model: transformers.fillMask('onnx-community/ModernBERT-base-ONNX'),
  *   text: 'I want to eat [MASK] for dinner.',
  *   topK: 10,
  * });
@@ -150,7 +150,7 @@ export async function fillMask(options: FillMaskOptions): Promise<FillMaskResult
  * @example
  * ```ts
  * const { results } = await fillMaskMany({
- *   model: transformers.fillMask('Xenova/bert-base-uncased'),
+ *   model: transformers.fillMask('onnx-community/ModernBERT-base-ONNX'),
  *   texts: [
  *     'The [MASK] is blue.',
  *     'I love [MASK] music.',

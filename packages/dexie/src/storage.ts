@@ -2,24 +2,27 @@
  * Dexie Storage Implementation
  *
  * Storage adapter using Dexie.js for enhanced IndexedDB experience.
+ * Implements the {@link StorageAdapter} interface from `@localmode/core`.
  *
  * @packageDocumentation
  */
 
 import Dexie, { type Table } from 'dexie';
 import type {
-  DexieStorageOptions,
+  StorageAdapter,
   StoredDocument,
   StoredVector,
-  SerializedHNSWIndex,
   Collection,
-} from './types.js';
+  SerializedHNSWIndex,
+} from '@localmode/core';
+import type { DexieStorageOptions } from './types.js';
 
 /**
- * Internal database schema types
+ * Internal Dexie record types (vector stored as ArrayBuffer for Dexie compatibility).
  */
 interface DocumentRecord {
   id: string;
+  collectionId: string;
   metadata?: Record<string, unknown>;
   createdAt: number;
   updatedAt: number;
@@ -27,19 +30,13 @@ interface DocumentRecord {
 
 interface VectorRecord {
   id: string;
+  collectionId: string;
   vector: ArrayBuffer;
-  collection?: string;
 }
 
 interface IndexRecord {
-  id: string;
-  data: ArrayBuffer;
-  metadata?: {
-    dimensions: number;
-    nodeCount: number;
-    m: number;
-    efConstruction: number;
-  };
+  collectionId: string;
+  data: string; // JSON serialized
   updatedAt: number;
 }
 
@@ -47,29 +44,26 @@ interface CollectionRecord {
   id: string;
   name: string;
   dimensions: number;
-  distanceFunction: 'cosine' | 'euclidean' | 'dot';
   createdAt: number;
-  updatedAt: number;
-  documentCount: number;
 }
 
 /**
  * Dexie database class with typed tables.
  */
-class VectorDB extends Dexie {
+class DexieDB extends Dexie {
   documents!: Table<DocumentRecord, string>;
   vectors!: Table<VectorRecord, string>;
   indexes!: Table<IndexRecord, string>;
   collections!: Table<CollectionRecord, string>;
 
-  constructor(name: string, version: number = 1) {
-    super(`vectordb_${name}`);
+  constructor(name: string) {
+    super(name);
 
-    this.version(version).stores({
-      documents: 'id, createdAt, updatedAt',
-      vectors: 'id, collection',
-      indexes: 'id, updatedAt',
-      collections: 'id, name, createdAt',
+    this.version(1).stores({
+      documents: 'id, collectionId',
+      vectors: 'id, collectionId',
+      indexes: 'collectionId',
+      collections: 'id, &name',
     });
   }
 }
@@ -77,14 +71,11 @@ class VectorDB extends Dexie {
 /**
  * Dexie.js storage adapter for VectorDB.
  *
- * Provides enhanced IndexedDB storage with:
- * - Schema versioning and migrations
- * - Transaction support
- * - Better query capabilities
- * - Developer-friendly API
+ * Provides enhanced IndexedDB storage with Dexie.js, implementing the
+ * core {@link StorageAdapter} interface for use with `createVectorDB()`.
  *
  * @example
- * ```ts
+ * ```typescript
  * import { DexieStorage } from '@localmode/dexie';
  * import { createVectorDB } from '@localmode/core';
  *
@@ -96,295 +87,212 @@ class VectorDB extends Dexie {
  * });
  * ```
  */
-export class DexieStorage {
-  private db: VectorDB;
-  private isOpen = false;
+export class DexieStorage implements StorageAdapter {
+  private db: DexieDB;
 
   constructor(options: DexieStorageOptions) {
-    this.db = new VectorDB(options.name, options.version);
-
-    if (options.autoOpen !== false) {
-      // Auto-open is handled by Dexie on first operation
-      this.isOpen = true;
-    }
+    this.db = new DexieDB(options.name);
   }
 
-  /**
-   * Open the database connection explicitly.
-   */
+  // ============================================
+  // Lifecycle
+  // ============================================
+
   async open(): Promise<void> {
-    if (!this.isOpen) {
+    if (!this.db.isOpen()) {
       await this.db.open();
-      this.isOpen = true;
     }
   }
 
-  /**
-   * Close the database connection.
-   */
   async close(): Promise<void> {
     this.db.close();
-    this.isOpen = false;
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // DOCUMENT OPERATIONS
-  // ═══════════════════════════════════════════════════════════════
+  // ============================================
+  // Document Operations
+  // ============================================
 
-  /**
-   * Get a document by ID.
-   */
-  async getDocument(id: string): Promise<StoredDocument | undefined> {
+  async addDocument(doc: StoredDocument): Promise<void> {
+    await this.db.documents.put({
+      id: doc.id,
+      collectionId: doc.collectionId,
+      metadata: doc.metadata,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    });
+  }
+
+  async getDocument(id: string): Promise<StoredDocument | null> {
     const record = await this.db.documents.get(id);
-    if (!record) return undefined;
+    if (!record) return null;
 
     return {
       id: record.id,
+      collectionId: record.collectionId,
       metadata: record.metadata,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     };
   }
 
-  /**
-   * Set (upsert) a document.
-   */
-  async setDocument(id: string, doc: Omit<StoredDocument, 'id'>): Promise<void> {
-    const now = Date.now();
-    const existing = await this.db.documents.get(id);
-
-    await this.db.documents.put({
-      id,
-      metadata: doc.metadata,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    });
-  }
-
-  /**
-   * Delete a document by ID.
-   */
   async deleteDocument(id: string): Promise<void> {
     await this.db.documents.delete(id);
   }
 
-  /**
-   * Get all document IDs.
-   */
-  async getDocumentIds(): Promise<string[]> {
-    return this.db.documents.toCollection().primaryKeys();
+  async getAllDocuments(collectionId: string): Promise<StoredDocument[]> {
+    const records = await this.db.documents
+      .where('collectionId')
+      .equals(collectionId)
+      .toArray();
+
+    return records.map((r) => ({
+      id: r.id,
+      collectionId: r.collectionId,
+      metadata: r.metadata,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    }));
   }
 
-  /**
-   * Clear all documents.
-   */
-  async clearDocuments(): Promise<void> {
-    await this.db.documents.clear();
+  async countDocuments(collectionId: string): Promise<number> {
+    return this.db.documents
+      .where('collectionId')
+      .equals(collectionId)
+      .count();
   }
 
-  /**
-   * Get document count.
-   */
-  async getDocumentCount(): Promise<number> {
-    return this.db.documents.count();
-  }
+  // ============================================
+  // Vector Operations
+  // ============================================
 
-  // ═══════════════════════════════════════════════════════════════
-  // VECTOR OPERATIONS
-  // ═══════════════════════════════════════════════════════════════
+  async addVector(vec: StoredVector): Promise<void> {
+    // Copy to standalone ArrayBuffer to avoid shared buffer issues
+    const buffer = new ArrayBuffer(vec.vector.byteLength);
+    new Float32Array(buffer).set(vec.vector);
 
-  /**
-   * Get a vector by document ID.
-   */
-  async getVector(id: string): Promise<StoredVector | undefined> {
-    const record = await this.db.vectors.get(id);
-    if (!record) return undefined;
-
-    return {
-      id: record.id,
-      vector: new Float32Array(record.vector),
-      collection: record.collection,
-    };
-  }
-
-  /**
-   * Set a vector for a document.
-   */
-  async setVector(id: string, vector: Float32Array, collection?: string): Promise<void> {
     await this.db.vectors.put({
-      id,
-      vector: vector.buffer.slice(
-        vector.byteOffset,
-        vector.byteOffset + vector.byteLength
-      ) as ArrayBuffer,
-      collection,
+      id: vec.id,
+      collectionId: vec.collectionId,
+      vector: buffer,
     });
   }
 
-  /**
-   * Delete a vector by document ID.
-   */
+  async getVector(id: string): Promise<Float32Array | null> {
+    const record = await this.db.vectors.get(id);
+    if (!record) return null;
+
+    return new Float32Array(record.vector);
+  }
+
   async deleteVector(id: string): Promise<void> {
     await this.db.vectors.delete(id);
   }
 
-  /**
-   * Get all vectors (optionally filtered by collection).
-   */
-  async getAllVectors(collection?: string): Promise<StoredVector[]> {
-    let query = this.db.vectors.toCollection();
+  async getAllVectors(collectionId: string): Promise<Map<string, Float32Array>> {
+    const records = await this.db.vectors
+      .where('collectionId')
+      .equals(collectionId)
+      .toArray();
 
-    if (collection) {
-      query = this.db.vectors.where('collection').equals(collection);
+    const map = new Map<string, Float32Array>();
+    for (const r of records) {
+      map.set(r.id, new Float32Array(r.vector));
     }
-
-    const records = await query.toArray();
-
-    return records.map((record) => ({
-      id: record.id,
-      vector: new Float32Array(record.vector),
-      collection: record.collection,
-    }));
+    return map;
   }
 
-  /**
-   * Clear all vectors.
-   */
-  async clearVectors(): Promise<void> {
-    await this.db.vectors.clear();
-  }
+  // ============================================
+  // Index Operations
+  // ============================================
 
-  // ═══════════════════════════════════════════════════════════════
-  // INDEX OPERATIONS
-  // ═══════════════════════════════════════════════════════════════
-
-  /**
-   * Get a serialized HNSW index.
-   */
-  async getIndex(id: string): Promise<SerializedHNSWIndex | undefined> {
-    const record = await this.db.indexes.get(id);
-    if (!record) return undefined;
-
-    return {
-      id: record.id,
-      data: new Uint8Array(record.data),
-      metadata: record.metadata,
-    };
-  }
-
-  /**
-   * Save a serialized HNSW index.
-   */
-  async setIndex(id: string, index: Omit<SerializedHNSWIndex, 'id'>): Promise<void> {
+  async saveIndex(collectionId: string, index: SerializedHNSWIndex): Promise<void> {
     await this.db.indexes.put({
-      id,
-      data: index.data.buffer.slice(
-        index.data.byteOffset,
-        index.data.byteOffset + index.data.byteLength
-      ) as ArrayBuffer,
-      metadata: index.metadata,
+      collectionId,
+      data: JSON.stringify(index),
       updatedAt: Date.now(),
     });
   }
 
-  /**
-   * Delete an index.
-   */
-  async deleteIndex(id: string): Promise<void> {
-    await this.db.indexes.delete(id);
+  async loadIndex(collectionId: string): Promise<SerializedHNSWIndex | null> {
+    const record = await this.db.indexes.get(collectionId);
+    if (!record) return null;
+
+    try {
+      return JSON.parse(record.data) as SerializedHNSWIndex;
+    } catch {
+      return null;
+    }
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // COLLECTION OPERATIONS
-  // ═══════════════════════════════════════════════════════════════
-
-  /**
-   * Get a collection by ID.
-   */
-  async getCollection(id: string): Promise<Collection | undefined> {
-    const record = await this.db.collections.get(id);
-    if (!record) return undefined;
-
-    return { ...record };
+  async deleteIndex(collectionId: string): Promise<void> {
+    await this.db.indexes.delete(collectionId);
   }
 
-  /**
-   * Create or update a collection.
-   */
-  async setCollection(id: string, collection: Omit<Collection, 'id'>): Promise<void> {
+  // ============================================
+  // Collection Operations
+  // ============================================
+
+  async createCollection(collection: Collection): Promise<void> {
     await this.db.collections.put({
-      id,
-      ...collection,
+      id: collection.id,
+      name: collection.name,
+      dimensions: collection.dimensions,
+      createdAt: collection.createdAt,
     });
   }
 
-  /**
-   * Delete a collection.
-   */
+  async getCollection(id: string): Promise<Collection | null> {
+    const record = await this.db.collections.get(id);
+    if (!record) return null;
+
+    return {
+      id: record.id,
+      name: record.name,
+      dimensions: record.dimensions,
+      createdAt: record.createdAt,
+    };
+  }
+
+  async getCollectionByName(name: string): Promise<Collection | null> {
+    const record = await this.db.collections.where('name').equals(name).first();
+    if (!record) return null;
+
+    return {
+      id: record.id,
+      name: record.name,
+      dimensions: record.dimensions,
+      createdAt: record.createdAt,
+    };
+  }
+
+  async getAllCollections(): Promise<Collection[]> {
+    const records = await this.db.collections.toArray();
+    return records.map((r) => ({
+      id: r.id,
+      name: r.name,
+      dimensions: r.dimensions,
+      createdAt: r.createdAt,
+    }));
+  }
+
+  async updateCollection(collection: Collection): Promise<void> {
+    await this.db.collections.put({
+      id: collection.id,
+      name: collection.name,
+      dimensions: collection.dimensions,
+      createdAt: collection.createdAt,
+    });
+  }
+
   async deleteCollection(id: string): Promise<void> {
     await this.db.collections.delete(id);
   }
 
-  /**
-   * Get all collections.
-   */
-  async getAllCollections(): Promise<Collection[]> {
-    return this.db.collections.toArray();
-  }
+  // ============================================
+  // Utility Operations
+  // ============================================
 
-  // ═══════════════════════════════════════════════════════════════
-  // BATCH OPERATIONS
-  // ═══════════════════════════════════════════════════════════════
-
-  /**
-   * Add multiple documents and vectors in a single transaction.
-   */
-  async addMany(
-    items: Array<{
-      id: string;
-      vector: Float32Array;
-      metadata?: Record<string, unknown>;
-      collection?: string;
-    }>
-  ): Promise<void> {
-    const now = Date.now();
-
-    await this.db.transaction('rw', [this.db.documents, this.db.vectors], async () => {
-      const docRecords = items.map((item) => ({
-        id: item.id,
-        metadata: item.metadata,
-        createdAt: now,
-        updatedAt: now,
-      }));
-
-      const vectorRecords: VectorRecord[] = items.map((item) => ({
-        id: item.id,
-        vector: item.vector.buffer.slice(
-          item.vector.byteOffset,
-          item.vector.byteOffset + item.vector.byteLength
-        ) as ArrayBuffer,
-        collection: item.collection,
-      }));
-
-      await this.db.documents.bulkPut(docRecords);
-      await this.db.vectors.bulkPut(vectorRecords);
-    });
-  }
-
-  /**
-   * Delete multiple documents and vectors in a single transaction.
-   */
-  async deleteMany(ids: string[]): Promise<void> {
-    await this.db.transaction('rw', [this.db.documents, this.db.vectors], async () => {
-      await this.db.documents.bulkDelete(ids);
-      await this.db.vectors.bulkDelete(ids);
-    });
-  }
-
-  /**
-   * Clear all data.
-   */
-  async clearAll(): Promise<void> {
+  async clear(): Promise<void> {
     await this.db.transaction(
       'rw',
       [this.db.documents, this.db.vectors, this.db.indexes, this.db.collections],
@@ -393,40 +301,27 @@ export class DexieStorage {
         await this.db.vectors.clear();
         await this.db.indexes.clear();
         await this.db.collections.clear();
-      }
+      },
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // UTILITY METHODS
-  // ═══════════════════════════════════════════════════════════════
+  async clearCollection(collectionId: string): Promise<void> {
+    const docs = await this.getAllDocuments(collectionId);
+    const ids = docs.map((d) => d.id);
 
-  /**
-   * Check if the database exists.
-   */
-  async exists(): Promise<boolean> {
-    return Dexie.exists(this.db.name);
+    await this.db.transaction('rw', [this.db.documents, this.db.vectors], async () => {
+      await this.db.documents.bulkDelete(ids);
+      await this.db.vectors.bulkDelete(ids);
+    });
+
+    await this.deleteIndex(collectionId);
   }
 
-  /**
-   * Delete the database entirely.
-   */
-  async delete(): Promise<void> {
-    await this.db.delete();
-    this.isOpen = false;
-  }
-
-  /**
-   * Get the database name.
-   */
-  get name(): string {
-    return this.db.name;
-  }
-
-  /**
-   * Get the current version.
-   */
-  get version(): number {
-    return this.db.verno;
+  async estimateSize(): Promise<number> {
+    if (typeof navigator !== 'undefined' && navigator.storage?.estimate) {
+      const estimate = await navigator.storage.estimate();
+      return estimate.usage ?? 0;
+    }
+    return 0;
   }
 }

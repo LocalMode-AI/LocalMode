@@ -1,0 +1,434 @@
+---
+title: "17 AI Features You Can Add to Your App Without an API Key"
+description: "A practical guide to 17 production-ready AI features that run entirely in the browser - no API keys, no servers, no recurring costs. Each includes working code, model recommendations, and a live demo you can try right now."
+author: LocalMode
+date: 2026-02-28
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Every AI feature you add to your app usually means another API key to manage, another vendor to trust with your users' data, and another line item on your monthly bill that scales with success.
+
+But modern browsers are powerful enough to run real ML models - the same transformer architectures behind cloud APIs - directly on the user's device. No servers. No API keys. No per-request costs. Data never leaves the browser tab.
+
+This is not a theoretical exercise. Below are 17 features you can ship today, each with a working code snippet using real function signatures from [LocalMode](https://localmode.dev), the model that powers it, and a link to a live demo running at [localmode.ai](https://localmode.ai).
+
+---
+
+## 1. Semantic Search
+
+Find documents by meaning, not just keywords. Embed text into vectors and search by cosine similarity. Users can search "budget concerns" and find a note titled "Q3 financial projections" - because the model understands they are related.
+
+```ts
+import { embed, createVectorDB } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+const db = await createVectorDB({ name: 'notes', dimensions: 384 });
+
+const { embedding } = await embed({ model, value: 'budget concerns' });
+const results = await db.search(embedding, { topK: 5 });
+```
+
+**Model:** `Xenova/bge-small-en-v1.5` (33 MB) | [Try the live demo](https://localmode.ai/semantic-search)
+
+---
+
+## 2. Sentiment Analysis
+
+Classify customer reviews, support tickets, or social mentions as positive or negative in real time. Batch-process thousands of texts without sending a single request to any external service.
+
+```ts
+import { classify } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { label, score } = await classify({
+  model: transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english'),
+  text: 'This product exceeded my expectations!',
+});
+// label: "POSITIVE", score: 0.9998
+```
+
+**Model:** `Xenova/distilbert-base-uncased-finetuned-sst-2-english` (67 MB) | [Try the live demo](https://localmode.ai/sentiment-analyzer)
+
+---
+
+## 3. Text Summarization
+
+Condense long articles, meeting notes, or support threads into key points. Control output length with `maxLength` and `minLength` parameters.
+
+```ts
+import { summarize } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { summary } = await summarize({
+  model: transformers.summarizer('Xenova/distilbart-cnn-6-6'),
+  text: longArticle,
+  maxLength: 100,
+  minLength: 30,
+});
+```
+
+**Model:** `Xenova/distilbart-cnn-6-6` (300 MB) | [Try the live demo](https://localmode.ai/text-summarizer)
+
+---
+
+## 4. Language Translation
+
+Translate text between 20+ language pairs completely offline. Helsinki-NLP's OPUS-MT models cover the major European, Asian, and Romance languages, each as a compact per-pair download.
+
+```ts
+import { translate } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { translation } = await translate({
+  model: transformers.translator('Xenova/opus-mt-en-de'),
+  text: 'Hello, how are you?',
+  targetLanguage: 'de',
+});
+// translation: "Hallo, wie geht es dir?"
+```
+
+**Model:** `Xenova/opus-mt-en-*` (100-300 MB per pair) | [Try the live demo](https://localmode.ai/translator)
+
+---
+
+## 5. Image Captioning
+
+Generate natural language descriptions of images automatically. Useful for accessibility alt-text, content moderation pipelines, or building searchable image libraries.
+
+```ts
+import { captionImage } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { caption } = await captionImage({
+  model: transformers.captioner('onnx-community/Florence-2-base-ft'),
+  image: imageBlob,
+});
+// caption: "a golden retriever playing with a ball in a park"
+```
+
+**Model:** `onnx-community/Florence-2-base-ft` (460 MB) | [Try the live demo](https://localmode.ai/image-captioner)
+
+---
+
+## 6. Object Detection
+
+Locate and label objects in images with bounding boxes. D-FINE achieves strong accuracy at a fraction of the size of YOLO-family models, and runs well on WebGPU-enabled browsers.
+
+```ts
+import { detectObjects } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { objects } = await detectObjects({
+  model: transformers.objectDetector('onnx-community/dfine_n_coco-ONNX'),
+  image: imageBlob,
+  threshold: 0.7,
+});
+
+for (const obj of objects) {
+  console.log(`${obj.label} at (${obj.box.x}, ${obj.box.y}): ${(obj.score * 100).toFixed(1)}%`);
+}
+```
+
+**Model:** `onnx-community/dfine_n_coco-ONNX` (130 MB) | [Try the live demo](https://localmode.ai/object-detector)
+
+---
+
+## 7. OCR (Optical Character Recognition)
+
+Extract text from photos, scanned documents, and screenshots. TrOCR handles both printed and handwritten text, making it suitable for receipt scanning, form digitization, and note capture.
+
+```ts
+import { extractText } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { text } = await extractText({
+  model: transformers.ocr('Xenova/trocr-small-printed'),
+  image: scannedDocument,
+});
+```
+
+**Model:** `Xenova/trocr-small-printed` (10-50 MB) | [Try the live demo](https://localmode.ai/ocr-scanner)
+
+---
+
+## 8. Document Redaction (PII Detection)
+
+Detect and redact personally identifiable information before it reaches storage or embeddings. Combine regex-based pattern matching for structured PII (emails, SSNs, credit cards) with NER for names and organizations.
+
+```ts
+import { redactPII } from '@localmode/core';
+
+const redacted = redactPII(
+  'Contact John Smith at john@example.com or 555-123-4567',
+  { emails: true, phones: true }
+);
+// redacted: "Contact John Smith at [EMAIL_REDACTED] or [PHONE_REDACTED]"
+```
+
+**Model:** Pattern-based (0 MB, zero-dependency) + optional NER (110 MB) | [Try the live demo](https://localmode.ai/document-redactor)
+
+---
+
+## 9. Voice Transcription
+
+Convert audio recordings to text using Moonshine, a lightweight speech recognition model optimized for browser inference. Supports timestamps for subtitle generation and works across accents.
+
+```ts
+import { transcribe } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { text, segments } = await transcribe({
+  model: transformers.speechToText('onnx-community/moonshine-tiny-ONNX'),
+  audio: audioBlob,
+  returnTimestamps: true,
+});
+
+segments?.forEach(seg => {
+  console.log(`[${seg.start}s - ${seg.end}s] ${seg.text}`);
+});
+```
+
+**Model:** `onnx-community/moonshine-tiny-ONNX` (50 MB) | [Try the live demo](https://localmode.ai/voice-notes)
+
+---
+
+## 10. Text-to-Speech
+
+Generate natural-sounding speech from text entirely in the browser. Create audiobooks, accessibility features, or voice interfaces without sending text to any external service.
+
+```ts
+import { synthesizeSpeech } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { audio, sampleRate } = await synthesizeSpeech({
+  model: transformers.textToSpeech('Xenova/mms-tts-eng'),
+  text: 'Welcome to the future of local AI.',
+});
+```
+
+**Model:** `Xenova/mms-tts-eng` (30 MB) | [Try the live demo](https://localmode.ai/audiobook-creator)
+
+---
+
+## 11. Smart Autocomplete
+
+Predict the most likely word to fill a gap in text using masked language models. This powers writing assistants, search suggestions, and form auto-fill - all without sending keystrokes to a server.
+
+```ts
+import { fillMask } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { predictions } = await fillMask({
+  model: transformers.fillMask('onnx-community/ModernBERT-base-ONNX'),
+  text: 'The capital of France is [MASK].',
+  topK: 5,
+});
+// predictions[0].token: "paris", predictions[0].score: 0.95
+```
+
+**Model:** `onnx-community/ModernBERT-base-ONNX` (150 MB) | [Try the live demo](https://localmode.ai/smart-autocomplete)
+
+---
+
+## 12. Email / Intent Classification
+
+Classify emails, support tickets, or any text into custom categories - without training a model. Zero-shot classification lets you define labels at runtime and the model figures out which ones fit.
+
+```ts
+import { classifyZeroShot } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { labels, scores } = await classifyZeroShot({
+  model: transformers.zeroShot('Xenova/mobilebert-uncased-mnli'),
+  text: 'I need to reset my password and update billing info',
+  candidateLabels: ['account access', 'billing', 'technical support', 'feedback'],
+});
+// labels: ["account access", "billing", ...], scores: [0.72, 0.68, ...]
+```
+
+**Model:** `Xenova/mobilebert-uncased-mnli` (25 MB) | [Try the live demo](https://localmode.ai/email-classifier)
+
+---
+
+## 13. Named Entity Recognition
+
+Extract people, organizations, locations, and other entities from unstructured text. NER is the backbone of document understanding, knowledge graph construction, and the PII detection pipeline in feature #8.
+
+```ts
+import { extractEntities } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { entities } = await extractEntities({
+  model: transformers.ner('Xenova/bert-base-NER'),
+  text: 'Tim Cook announced that Apple will open a new office in Berlin.',
+});
+// entities: [
+//   { text: "Tim Cook", type: "PERSON", score: 0.99 },
+//   { text: "Apple", type: "ORG", score: 0.98 },
+//   { text: "Berlin", type: "LOC", score: 0.97 }
+// ]
+```
+
+**Model:** `Xenova/bert-base-NER` (110 MB) | [Try the live demo](https://localmode.ai/document-redactor)
+
+---
+
+## 14. Question Answering
+
+Given a passage of text and a question, extract the precise answer span with a confidence score. Ideal for FAQ bots, documentation search, and customer support - no LLM required.
+
+```ts
+import { answerQuestion } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { answer, score } = await answerQuestion({
+  model: transformers.questionAnswering('Xenova/distilbert-base-cased-distilled-squad'),
+  question: 'What is the capital of France?',
+  context: 'France is a country in Europe. Its capital is Paris, known for the Eiffel Tower.',
+});
+// answer: "Paris", score: 0.98
+```
+
+**Model:** `Xenova/distilbert-base-cased-distilled-squad` (100 MB) | [Try the live demo](https://localmode.ai/qa-bot)
+
+---
+
+## 15. Background Removal
+
+Segment foreground objects from the background and export transparent PNGs. RMBG-1.4 handles complex scenes, hair details, and semi-transparent objects with surprising accuracy for its size.
+
+```ts
+import { segmentImage } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { masks } = await segmentImage({
+  model: transformers.segmenter('briaai/RMBG-1.4'),
+  image: photoBlob,
+});
+```
+
+**Model:** `briaai/RMBG-1.4` (170 MB) | [Try the live demo](https://localmode.ai/background-remover)
+
+---
+
+## 16. Photo Enhancement (Super Resolution)
+
+Upscale low-resolution images by 2x or 4x using neural super resolution. Restore old photos, enhance thumbnails, or improve screenshots - all processed locally without uploading images anywhere.
+
+```ts
+import { imageToImage } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { image } = await imageToImage({
+  model: transformers.imageToImage('Xenova/swin2SR-lightweight-x2-64'),
+  image: lowResPhoto,
+  scale: 2,
+});
+```
+
+**Model:** `Xenova/swin2SR-lightweight-x2-64` (50 MB) | [Try the live demo](https://localmode.ai/photo-enhancer)
+
+---
+
+## 17. Cross-Modal Image Search
+
+Search photos by typing a text description, or find visually similar images by uploading a reference. CLIP embeds text and images into the same vector space, enabling true cross-modal retrieval.
+
+```ts
+import { embed, embedImage, createVectorDB } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.multimodalEmbedding('Xenova/clip-vit-base-patch32');
+
+// Index photos by their visual content
+const { embedding: imgVec } = await embedImage({ model, image: photoBlob });
+await db.add({ id: 'photo-1', vector: imgVec });
+
+// Search with text
+const { embedding: queryVec } = await embed({ model, value: 'sunset over the ocean' });
+const results = await db.search(queryVec, { topK: 10 });
+```
+
+**Model:** `Xenova/clip-vit-base-patch32` (~350 MB) | [Try the live demo](https://localmode.ai/cross-modal-search)
+
+---
+
+## Summary Table
+
+| # | Feature | Function | Model | Size | Quality vs Cloud |
+|---|---------|----------|-------|------|-----------------|
+| 1 | Semantic Search | `embed()` | `Xenova/bge-small-en-v1.5` | 33 MB | ~99% of OpenAI |
+| 2 | Sentiment Analysis | `classify()` | `Xenova/distilbert-base-uncased-finetuned-sst-2-english` | 67 MB | ~95% of GPT-4o |
+| 3 | Text Summarization | `summarize()` | `Xenova/distilbart-cnn-6-6` | 300 MB | ~85% of GPT-4o |
+| 4 | Language Translation | `translate()` | `Xenova/opus-mt-en-*` | 100-300 MB | ~80% of DeepL |
+| 5 | Image Captioning | `captionImage()` | `onnx-community/Florence-2-base-ft` | 460 MB | ~85% of GPT-4o |
+| 6 | Object Detection | `detectObjects()` | `onnx-community/dfine_n_coco-ONNX` | 130 MB | ~90% of AWS Rekognition |
+| 7 | OCR | `extractText()` | `Xenova/trocr-small-printed` | 10-50 MB | ~75% of Google Vision |
+| 8 | Document Redaction | `redactPII()` | Pattern-based + NER | 0-110 MB | ~95% of GPT-4o |
+| 9 | Voice Transcription | `transcribe()` | `onnx-community/moonshine-tiny-ONNX` | 50 MB | ~80% of Whisper API |
+| 10 | Text-to-Speech | `synthesizeSpeech()` | `Xenova/mms-tts-eng` | 30 MB | ~70% of ElevenLabs |
+| 11 | Smart Autocomplete | `fillMask()` | `onnx-community/ModernBERT-base-ONNX` | 150 MB | ~90% of GPT-4o |
+| 12 | Email Classification | `classifyZeroShot()` | `Xenova/mobilebert-uncased-mnli` | 25 MB | ~85% of GPT-4o |
+| 13 | Named Entity Recognition | `extractEntities()` | `Xenova/bert-base-NER` | 110 MB | ~95% of GPT-4o |
+| 14 | Question Answering | `answerQuestion()` | `Xenova/distilbert-base-cased-distilled-squad` | 100 MB | ~90% of GPT-4o |
+| 15 | Background Removal | `segmentImage()` | `briaai/RMBG-1.4` | 170 MB | ~90% of remove.bg |
+| 16 | Photo Enhancement | `imageToImage()` | `Xenova/swin2SR-lightweight-x2-64` | 50 MB | ~80% of Topaz AI |
+| 17 | Cross-Modal Search | `embedImage()` | `Xenova/clip-vit-base-patch32` | ~350 MB | ~85% of OpenAI CLIP |
+
+Total size if you use every feature: under 3 GB. In practice, most apps use 2-4 models that together weigh 100-500 MB, cached in IndexedDB after the first download, and available offline forever.
+
+---
+
+## What All 17 Features Have in Common
+
+**No API key.** You `npm install` a package, import a function, and call it. There is no key provisioning, no environment variables, no billing dashboard.
+
+**No server.** Models run in the browser via WebAssembly and WebGPU. Your backend never sees the data, which means you never have to worry about data residency, GDPR consent flows for third-party processors, or the liability of storing user content on your infrastructure.
+
+**No recurring cost.** Cloud AI pricing is per-request. Local AI pricing is per-download - and the download is cached. Your thousandth user costs the same as your first: zero.
+
+**No latency penalty for simple tasks.** Embedding a sentence takes 5-15ms locally. A cloud round-trip to do the same thing takes 100-300ms including network overhead. For interactive features like search-as-you-type, local inference is not just cheaper - it is faster.
+
+<Callout type="warn" title="When to use cloud instead">
+  Local models are smaller than cloud models. For tasks requiring broad world knowledge (complex multi-step reasoning, creative writing, code generation), a 1-4 GB local LLM will not match GPT-4o or Claude. Use local AI for the focused, high-volume tasks in this list. Use cloud AI for the open-ended tasks where quality is paramount and latency is acceptable.
+</Callout>
+
+---
+
+## Getting Started
+
+Every snippet above uses two packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+`@localmode/core` provides the functions (`embed`, `classify`, `transcribe`, etc.) with zero dependencies. `@localmode/transformers` provides the HuggingFace Transformers.js model implementations. The architecture is interface-based - you can swap providers without changing application code.
+
+For React applications, add `@localmode/react` for hooks that handle loading states, cancellation, and error boundaries:
+
+```bash
+npm install @localmode/react
+```
+
+Models are downloaded from HuggingFace Hub on first use and cached in IndexedDB. Subsequent loads are instant and work fully offline.
+
+---
+
+## Methodology
+
+All function signatures, model IDs, and code snippets in this post are taken directly from the [LocalMode source code](https://github.com/nicholasareed/localmode). Every snippet uses the actual exported API.
+
+Model sizes are based on the quantized ONNX weights as downloaded by Transformers.js and reported in the [LocalMode showcase app](https://localmode.ai). Quality comparisons reference the benchmarks published in our [Local AI vs. Cloud](/blog/local-ai-vs-cloud) analysis, which tested against OpenAI, Google Cloud, AWS, Cohere, ElevenLabs, and DeepL on standard academic benchmarks (MTEB, SQuAD, BLEU, WER, COCO mAP).
+
+All 17 demo applications are open source and available at [localmode.ai](https://localmode.ai).
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

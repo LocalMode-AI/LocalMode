@@ -28,6 +28,8 @@ export {
   createMarkdownChunker,
   codeChunk,
   createCodeChunker,
+  semanticChunk,
+  createSemanticChunker,
 } from './chunkers/index.js';
 
 // ============================================================================

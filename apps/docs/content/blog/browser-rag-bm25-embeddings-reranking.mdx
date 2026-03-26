@@ -1,0 +1,559 @@
+---
+title: "The Complete Browser RAG Stack: BM25 + Embeddings + Reranking in One Pipeline"
+description: "Pure vector search misses exact terms. Pure keyword search misses meaning. This guide builds a production-grade hybrid retrieval pipeline - BM25 keyword search, vector semantic search, Reciprocal Rank Fusion, and cross-encoder reranking - all running in the browser with LocalMode. No servers, no API keys, dramatically better recall."
+author: LocalMode
+date: 2026-02-01
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Your RAG pipeline has a blind spot.
+
+A user asks "What does error code XJ-4021 mean?" and your vector search returns five results about error handling in general - none of which mention XJ-4021. The answer is sitting right there in your knowledge base, but cosine similarity between the query embedding and the document embedding is not high enough because the model has never seen that specific code before. The exact string match that would have found it instantly is not part of the retrieval strategy.
+
+This is not a corner case. It is the single most common failure mode in production RAG systems. Vector search excels at understanding meaning - "budget concerns" finds "Q3 Financial Projections" - but it struggles with identifiers, acronyms, product SKUs, error codes, IP addresses, and any token that carries meaning through its exact form rather than its semantic neighborhood.
+
+The fix is not to abandon vector search. It is to combine it with keyword search, fuse the results intelligently, and then let a cross-encoder reranker make the final call on what is actually relevant.
+
+This guide builds that complete pipeline - BM25 keyword index, vector embeddings, hybrid fusion, and cross-encoder reranking - entirely in the browser using `@localmode/core` and `@localmode/transformers`. No backend. No API keys. Every document stays on the user's device.
+
+---
+
+## Why Each Layer Matters
+
+A production retrieval pipeline is not one algorithm. It is three algorithms working in sequence, each compensating for the weaknesses of the others.
+
+### Layer 1: BM25 Keyword Search
+
+BM25 (Best Matching 25) is a probabilistic ranking function that scores documents based on term frequency, inverse document frequency, and document length normalization. It has been the backbone of search engines for decades, and for good reason: when the user types an exact identifier, BM25 finds it.
+
+The scoring formula weighs three factors. How often does the query term appear in the document (term frequency)? How rare is that term across the entire corpus (inverse document frequency - rare terms are more informative)? And how long is the document compared to the average (longer documents get a slight penalty to avoid rewarding verbosity)?
+
+BM25 does not understand meaning. "Dog" and "canine" are completely unrelated tokens. But when a user searches for `XJ-4021`, `CORS_POLICY_VIOLATION`, or `192.168.1.1`, BM25 returns the exact match instantly.
+
+### Layer 2: Vector Semantic Search
+
+Embedding models compress text into dense vectors where semantic similarity corresponds to geometric proximity. "How do I reset my password?" and "Account recovery steps" land near each other in embedding space even though they share no words.
+
+This is transformative for recall - users do not need to guess the exact terminology used in your documents. But embeddings are lossy compressions. Short identifiers, rare technical terms, and novel tokens often get mapped to generic regions of the embedding space, producing weak or misleading similarity scores.
+
+### Layer 3: Cross-Encoder Reranking
+
+Both BM25 and vector search are retrieval models - they are optimized for speed over thousands or millions of documents. A cross-encoder reranker is a precision model. It takes a query-document pair, concatenates them, and passes them through a transformer that attends to both simultaneously. This joint encoding captures fine-grained relevance signals that neither BM25 scores nor cosine similarity can express.
+
+The cost is latency: a cross-encoder is too slow to run against your entire corpus. But running it against the top 20-50 candidates from hybrid search is fast and dramatically improves precision.
+
+<Callout type="info" title="The Three-Stage Architecture">
+  **Retrieve broadly** (BM25 + vectors) then **rerank precisely** (cross-encoder). Research shows this three-stage pipeline improves retrieval quality by 10-48% compared to single-method approaches, depending on the candidate set size and domain.
+</Callout>
+
+---
+
+## Step 1: Ingest Documents With Dual Indexing
+
+The first step is to chunk your documents, generate embeddings, store vectors in the VectorDB, and simultaneously build a BM25 keyword index. LocalMode's `ingest()` function does all of this in one call.
+
+```typescript
+import {
+  createVectorDB,
+  ingest,
+  embedMany,
+} from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Create the vector database
+const db = await createVectorDB({
+  name: 'knowledge-base',
+  dimensions: 384,
+});
+
+// Prepare the embedding model
+const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+// Source documents - could come from PDFs, markdown files, APIs, etc.
+const documents = [
+  {
+    id: 'troubleshooting',
+    text: 'Error code XJ-4021 indicates a timeout in the authentication service. Reset the auth token and retry. If the error persists, check the CORS_POLICY_VIOLATION header in the response.',
+    metadata: { category: 'errors', source: 'troubleshooting-guide.md' },
+  },
+  {
+    id: 'architecture',
+    text: 'The authentication service handles all OAuth2 flows including token refresh, session management, and multi-factor verification. It communicates with the gateway over gRPC.',
+    metadata: { category: 'architecture', source: 'system-design.md' },
+  },
+  {
+    id: 'deployment',
+    text: 'Deploy the auth service to the 192.168.1.0/24 subnet. Ensure the firewall rules allow inbound traffic on port 8443. The health check endpoint is /healthz.',
+    metadata: { category: 'ops', source: 'runbook.md' },
+  },
+  // ... hundreds more documents
+];
+
+// Ingest: chunk → embed → store in VectorDB + build BM25 index
+const result = await ingest(db, documents, {
+  chunking: { strategy: 'recursive', size: 500, overlap: 50 },
+  generateEmbeddings: true,
+  embedder: async (texts) => {
+    const { embeddings } = await embedMany({
+      model: embeddingModel,
+      values: texts,
+    });
+    return embeddings;
+  },
+  buildBM25Index: true,
+  bm25Options: { stemming: true },
+  onProgress: (p) => {
+    console.log(`${p.phase}: ${p.chunksProcessed}/${p.totalChunks} chunks`);
+  },
+});
+
+console.log(`Ingested ${result.documentsProcessed} docs → ${result.chunksCreated} chunks in ${result.duration}ms`);
+
+// The BM25 index is returned alongside the vector database
+const bm25Index = result.bm25Index;
+```
+
+The `ingest()` function runs three phases internally - chunking, embedding, and indexing - and reports progress through each. The `buildBM25Index: true` option tells it to simultaneously build a BM25 keyword index over the same chunks that go into the VectorDB. The `stemming: true` option enables a Porter-like stemmer so that "authenticating," "authentication," and "authenticated" all map to the same root token.
+
+After ingestion, you have two parallel search structures over the same corpus: a vector index for semantic queries and a BM25 index for keyword queries.
+
+---
+
+## Step 2: Persist the BM25 Index
+
+The VectorDB persists automatically in IndexedDB, but the BM25 index lives in memory. To survive page reloads, serialize it.
+
+```typescript
+// Save BM25 index to localStorage (or IndexedDB for large indices)
+const serialized = bm25Index.toJSON();
+localStorage.setItem('bm25-index', JSON.stringify(serialized));
+
+// Restore on next page load
+const stored = localStorage.getItem('bm25-index');
+if (stored) {
+  const { createBM25 } = await import('@localmode/core');
+  const restoredIndex = createBM25({ stemming: true });
+  restoredIndex.fromJSON(JSON.parse(stored));
+
+  // Verify it loaded correctly
+  const stats = restoredIndex.stats();
+  console.log(`Restored BM25 index: ${stats.docCount} docs, ${stats.vocabularySize} terms`);
+}
+```
+
+The `toJSON()` method serializes the full index state - document frequencies, token lists, average document length - into a plain object. `fromJSON()` reconstructs the index from that state, rebuilding the internal term frequency maps. For large corpora (10,000+ chunks), store the serialized index in IndexedDB instead of localStorage to avoid the 5-10MB localStorage limit.
+
+---
+
+## Step 3: Hybrid Search With Reciprocal Rank Fusion
+
+Now for the retrieval step. You have two options: the `HybridSearch` class for managed hybrid search, or the `hybridFuse()` function for one-off fusion of results you have already retrieved. We will show both.
+
+### Option A: The HybridSearch Class
+
+`HybridSearch` wraps a VectorDB and a BM25 index together, managing both data structures in sync.
+
+```typescript
+import { createVectorDB, createHybridSearch } from '@localmode/core';
+
+const db = await createVectorDB({ name: 'docs', dimensions: 384 });
+const hybrid = createHybridSearch(db, { stemming: true });
+
+// Add documents (stores in both VectorDB and BM25 simultaneously)
+await hybrid.add('doc1', 'Error XJ-4021: auth timeout', embedding1, { category: 'errors' });
+await hybrid.add('doc2', 'OAuth2 token refresh flow', embedding2, { category: 'auth' });
+
+// Search with both signals
+const results = await hybrid.search(queryEmbedding, 'XJ-4021 timeout', {
+  k: 10,
+  vectorWeight: 0.7,
+  keywordWeight: 0.3,
+  normalizeScores: true,
+});
+
+// Each result includes both scores for transparency
+for (const r of results) {
+  console.log(`${r.id}: combined=${r.score.toFixed(3)} vector=${r.vectorScore?.toFixed(3)} keyword=${r.keywordScore?.toFixed(3)}`);
+}
+```
+
+The `HybridSearch` class runs both searches in parallel (`Promise.all`), normalizes the score distributions to a 0-1 range, and combines them using weighted linear combination. The default weights - 0.7 for vector, 0.3 for keyword - work well for most domains. Shift toward keyword weight for corpora heavy in identifiers and codes; shift toward vector weight for conversational or conceptual queries.
+
+### Option B: hybridFuse() for Standalone Fusion
+
+If you already have a VectorDB and a separate BM25 index (e.g., from `ingest()` with `buildBM25Index: true`), use `hybridFuse()` to combine their results without the `HybridSearch` wrapper.
+
+```typescript
+import {
+  semanticSearch,
+  hybridFuse,
+  createBM25,
+} from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
+const query = 'What does error code XJ-4021 mean?';
+
+// Run both searches in parallel
+const [vectorResults, bm25Results] = await Promise.all([
+  // Semantic search: embed query → search VectorDB
+  semanticSearch({ db, model: embeddingModel, query, k: 20 }),
+  // Keyword search: BM25 over the same corpus
+  Promise.resolve(bm25Index.search(query, 20)),
+]);
+
+// Fuse with weighted score combination
+const weightedResults = hybridFuse(vectorResults.results, bm25Results, {
+  vectorWeight: 0.7,
+  keywordWeight: 0.3,
+  normalizeScores: true,
+});
+
+// Or fuse with Reciprocal Rank Fusion (rank-based, no score normalization needed)
+const rrfResults = hybridFuse(vectorResults.results, bm25Results, {
+  useRRF: true,
+  rrfK: 60,
+});
+```
+
+### Weighted Combination vs. Reciprocal Rank Fusion
+
+`hybridFuse()` supports two fusion strategies. The choice matters.
+
+**Weighted score combination** normalizes both score distributions to 0-1 and combines them: `score = vectorScore * 0.7 + keywordScore * 0.3`. This works well when both retrieval methods return reasonable scores, but it is sensitive to score distribution differences. If your BM25 scores cluster tightly while your vector scores spread widely, normalization can distort the relative rankings.
+
+**Reciprocal Rank Fusion (RRF)** ignores scores entirely and works only with rankings. Each document's RRF score is `1/(k + rank)`, summed across both result lists. The constant `k` (default 60) dampens the influence of high ranks. RRF is normalization-free - it does not care whether BM25 scores range from 0.1-3.0 while vector scores range from 0.7-0.99. This makes it more robust as a default, especially when you have not tuned the weights for your specific corpus.
+
+<Callout type="info" title="When to Use Which">
+  Start with **RRF** (`useRRF: true`). It requires no tuning and produces strong results across domains. Switch to **weighted combination** when you have validated optimal weights through evaluation on your specific corpus and query distribution.
+</Callout>
+
+---
+
+## Step 4: Rerank the Top Candidates
+
+Hybrid fusion gives you a merged, roughly-ordered candidate list. The reranking step transforms "roughly ordered" into "precisely ordered."
+
+A cross-encoder reranker like `ms-marco-MiniLM-L-6-v2` takes each (query, document) pair and produces a single relevance score from a transformer that attends to both texts jointly. This is fundamentally more expressive than the independent scoring of BM25 or bi-encoder embeddings, where query and document are encoded separately and compared via a simple distance metric.
+
+```typescript
+import { rerank } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+
+// Take the top candidates from hybrid search
+const candidates = rrfResults.slice(0, 20);
+
+// Extract text content for reranking
+const candidateTexts = candidates.map(
+  (r) => r.text ?? (r.metadata?._text as string) ?? ''
+);
+
+// Rerank with the cross-encoder
+const { results: reranked } = await rerank({
+  model: rerankerModel,
+  query: 'What does error code XJ-4021 mean?',
+  documents: candidateTexts,
+  topK: 5,
+});
+
+// Final results - the best 5 documents, precisely ordered
+for (const doc of reranked) {
+  console.log(`Score: ${doc.score.toFixed(4)} - ${doc.text.slice(0, 100)}...`);
+}
+```
+
+The reranker rescores the top 20 candidates and returns the top 5. This is the retrieve-then-rerank pattern: cast a wide net with hybrid search (fast, broad recall), then use the cross-encoder to pick the best results from the candidates (slow, high precision). Reranking 20 documents takes roughly 100-300ms in the browser - fast enough for interactive search, and a negligible cost for the quality improvement it provides.
+
+### Why 20 Candidates?
+
+The candidate set size is a precision-recall tradeoff. Too few candidates (5-10) and the reranker cannot recover documents that hybrid search ranked poorly. Too many (100+) and you pay latency without meaningful quality gains. For most knowledge base applications, 20-50 candidates is the sweet spot - broad enough to capture relevant documents that were underranked, narrow enough to keep reranking fast.
+
+---
+
+## Putting It All Together: The Full Pipeline
+
+Here is the complete three-stage retrieval function - hybrid search followed by cross-encoder reranking - as a single reusable function.
+
+```typescript
+import {
+  createVectorDB,
+  createBM25,
+  semanticSearch,
+  hybridFuse,
+  rerank,
+  embed,
+} from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
+const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+
+interface RetrievalOptions {
+  query: string;
+  db: Awaited<ReturnType<typeof createVectorDB>>;
+  bm25Index: ReturnType<typeof createBM25>;
+  topK?: number;
+  candidateCount?: number;
+  abortSignal?: AbortSignal;
+}
+
+async function retrieve(options: RetrievalOptions) {
+  const {
+    query,
+    db,
+    bm25Index,
+    topK = 5,
+    candidateCount = 20,
+    abortSignal,
+  } = options;
+
+  // Stage 1: Parallel retrieval - vector + keyword
+  const [vectorResults, bm25Results] = await Promise.all([
+    semanticSearch({
+      db,
+      model: embeddingModel,
+      query,
+      k: candidateCount,
+      abortSignal,
+    }),
+    Promise.resolve(bm25Index.search(query, candidateCount)),
+  ]);
+
+  // Stage 2: Fuse results with Reciprocal Rank Fusion
+  const fused = hybridFuse(vectorResults.results, bm25Results, {
+    useRRF: true,
+    rrfK: 60,
+  });
+
+  // Stage 3: Cross-encoder reranking on top candidates
+  const candidateTexts = fused.slice(0, candidateCount).map(
+    (r) => r.text ?? (r.metadata?._text as string) ?? ''
+  );
+
+  const { results: reranked } = await rerank({
+    model: rerankerModel,
+    query,
+    documents: candidateTexts,
+    topK,
+    abortSignal,
+  });
+
+  return {
+    results: reranked,
+    stats: {
+      vectorCandidates: vectorResults.results.length,
+      keywordCandidates: bm25Results.length,
+      fusedCandidates: fused.length,
+      finalResults: reranked.length,
+    },
+  };
+}
+
+// Usage
+const { results, stats } = await retrieve({
+  query: 'What does error code XJ-4021 mean?',
+  db,
+  bm25Index,
+  topK: 5,
+});
+
+console.log(`${stats.vectorCandidates} vector + ${stats.keywordCandidates} keyword → ${stats.fusedCandidates} fused → ${stats.finalResults} final`);
+```
+
+---
+
+## Quality Comparison: Vector Only vs. Hybrid vs. Hybrid + Rerank
+
+To make the quality difference concrete, consider what happens with three different queries across the three retrieval strategies.
+
+### Query 1: "What does error code XJ-4021 mean?"
+
+| Strategy | Top Result | Correct? |
+|---|---|---|
+| **Vector only** | "The authentication service handles all OAuth2 flows..." | No - semantic match on "auth" but wrong document |
+| **Hybrid (BM25 + vector)** | "Error code XJ-4021 indicates a timeout in the authentication service..." | Yes - BM25 matched the exact code |
+| **Hybrid + rerank** | "Error code XJ-4021 indicates a timeout in the authentication service..." | Yes - reranker confirmed relevance with high confidence |
+
+BM25 saves this query. The embedding model has no special representation for "XJ-4021" - it is an out-of-vocabulary token that gets mapped to a generic region. BM25 finds the exact string match. Hybrid fusion floats that result to the top.
+
+### Query 2: "How does the login system work?"
+
+| Strategy | Top Result | Correct? |
+|---|---|---|
+| **Vector only** | "The authentication service handles all OAuth2 flows including token refresh, session management..." | Yes - strong semantic match |
+| **Hybrid (BM25 + vector)** | "The authentication service handles all OAuth2 flows including token refresh, session management..." | Yes - vector score dominates, BM25 contributes on "login" |
+| **Hybrid + rerank** | "The authentication service handles all OAuth2 flows including token refresh, session management..." | Yes - reranker confirms with highest confidence |
+
+For semantic queries with no exact identifiers, all three strategies work. The hybrid approach does not hurt - it still returns the right result because vector scores dominate when BM25 has no strong signal.
+
+### Query 3: "Auth service health check on 192.168.1.0 subnet"
+
+| Strategy | Top Result | Correct? |
+|---|---|---|
+| **Vector only** | "The authentication service handles all OAuth2 flows..." | Partial - right topic, wrong document |
+| **Hybrid (BM25 + vector)** | "Deploy the auth service to the 192.168.1.0/24 subnet. Ensure the firewall rules allow inbound traffic..." | Yes - BM25 matched the IP, vector matched "auth service" |
+| **Hybrid + rerank** | "Deploy the auth service to the 192.168.1.0/24 subnet..." | Yes - reranker confirms the operational runbook is the best match |
+
+This is the hybrid sweet spot: a query that is partly semantic ("auth service health check") and partly lexical ("192.168.1.0"). Neither retrieval method alone covers both signals. Together, they find the exact document.
+
+<Callout type="warn" title="The Pattern">
+  Vector search fails on **exact identifiers**. BM25 fails on **semantic meaning**. Hybrid search covers both - and reranking ensures the final ordering is precise. In practice, hybrid search with reranking recovers 10-48% more relevant results compared to vector-only retrieval.
+</Callout>
+
+---
+
+## Using the Pipeline Builder
+
+For teams that prefer a declarative, composable approach, LocalMode's pipeline builder lets you define the same retrieval flow as a sequence of named steps.
+
+```typescript
+import {
+  createPipeline,
+  pipelineEmbedStep,
+  pipelineSearchStep,
+  pipelineRerankStep,
+} from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
+const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+
+const ragPipeline = createPipeline('hybrid-rag')
+  .addStep(pipelineEmbedStep(embeddingModel))
+  .addStep(pipelineSearchStep(db, { k: 20 }))
+  .step('prepare-for-rerank', async (searchResults, signal) => {
+    signal.throwIfAborted();
+    return {
+      query: currentQuery,
+      documents: searchResults.map((r) => r.metadata?._text as string ?? ''),
+    };
+  })
+  .addStep(pipelineRerankStep(rerankerModel, { topK: 5 }))
+  .build();
+
+const { result, durationMs } = await ragPipeline.run('What does error XJ-4021 mean?', {
+  onProgress: (p) => console.log(`Step ${p.completed}/${p.total}: ${p.currentStep}`),
+  abortSignal: controller.signal,
+});
+
+console.log(`Pipeline completed in ${durationMs}ms`);
+```
+
+The pipeline builder handles abort signal propagation, progress tracking, and error attribution (if a step fails, the error message identifies which step and its index). The `addStep()` method accepts pre-built step factories (`pipelineEmbedStep`, `pipelineSearchStep`, `pipelineRerankStep`), while the `.step()` method accepts inline async functions for custom logic.
+
+---
+
+## Tuning for Your Domain
+
+### BM25 Parameters
+
+The BM25 constructor accepts two critical parameters.
+
+```typescript
+import { createBM25 } from '@localmode/core';
+
+const bm25 = createBM25({
+  k1: 1.2,   // Term frequency saturation (default: 1.2)
+  b: 0.75,   // Document length normalization (default: 0.75)
+  stemming: true,
+  minTokenLength: 2,
+});
+```
+
+**`k1`** controls how quickly term frequency saturates. A document mentioning "authentication" 10 times should not score 10x higher than one mentioning it once. Higher `k1` (1.5-2.0) gives more credit to repeated terms; lower `k1` (0.5-1.0) treats frequency more uniformly. The default 1.2 works well for most domains.
+
+**`b`** controls document length normalization. At `b=1.0`, long documents are heavily penalized (BM25 assumes they match queries by chance due to length). At `b=0.0`, document length is ignored. The default 0.75 is a good balance. Lower it (0.3-0.5) for corpora where document length varies intentionally (e.g., detailed guides vs. short FAQs that are both equally valid results).
+
+### Hybrid Weights
+
+The optimal vector/keyword weight split depends on your query distribution.
+
+| Query Type | Recommended Weights | Why |
+|---|---|---|
+| Mostly conceptual ("how does X work?") | vector: 0.8, keyword: 0.2 | Semantic matching dominates |
+| Mixed (concepts + identifiers) | vector: 0.7, keyword: 0.3 | Default - good for most domains |
+| Mostly identifier-heavy (error codes, SKUs) | vector: 0.5, keyword: 0.5 | Equal weight to both signals |
+| Log search / exact match heavy | vector: 0.3, keyword: 0.7 | Keyword matching dominates |
+
+Or skip weight tuning entirely and use RRF, which works purely on rank position and requires no weight configuration.
+
+---
+
+## Performance Budget
+
+Running this entire pipeline in the browser is practical. Here is a realistic latency breakdown for a 10,000-chunk knowledge base.
+
+| Stage | Latency | Notes |
+|---|---|---|
+| Embed query | 8-30ms | Single embedding, warm model |
+| VectorDB search (top 20) | 5-15ms | HNSW index, 10K vectors |
+| BM25 search (top 20) | 1-5ms | In-memory inverted index |
+| Hybrid fusion (RRF) | < 1ms | Pure arithmetic on 40 items |
+| Cross-encoder rerank (20 docs) | 100-300ms | Transformer inference on 20 pairs |
+| **Total** | **~120-350ms** | Interactive-speed retrieval |
+
+The reranker is the bottleneck, and it is still fast enough for interactive search. For real-time-as-you-type search, skip the reranker and use hybrid search alone - that path completes in under 50ms. Add the reranker when the user submits a final query or when feeding context to an LLM.
+
+---
+
+## From Retrieval to Generation
+
+Once you have the top 5 reranked documents, feeding them to a local LLM completes the RAG pipeline.
+
+```typescript
+import { generateText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+const llm = webllm.languageModel('Qwen3-4B-Instruct-q4f16_1-MLC');
+
+// Build context from reranked results
+const context = reranked
+  .map((doc, i) => `[${i + 1}] ${doc.text}`)
+  .join('\n\n');
+
+const { text: answer } = await generateText({
+  model: llm,
+  systemPrompt: 'Answer the question using only the provided context. Cite sources by number.',
+  prompt: `Context:\n${context}\n\nQuestion: What does error code XJ-4021 mean?`,
+  maxTokens: 500,
+});
+
+console.log(answer);
+// "Error code XJ-4021 indicates a timeout in the authentication service.
+//  To resolve it, reset the auth token and retry. If the error persists,
+//  check the CORS_POLICY_VIOLATION header in the response. [1]"
+```
+
+The entire pipeline - from user query to generated answer - runs in the browser. No server received the query. No API processed the documents. No data left the device.
+
+---
+
+## Key Takeaways
+
+**Vector search alone is not enough for production RAG.** Exact identifiers, rare tokens, and technical terminology fall through the cracks of embedding-based retrieval. BM25 keyword search catches what vectors miss.
+
+**Reciprocal Rank Fusion is the safest default for combining results.** It is normalization-free, requires no weight tuning, and produces strong results across domains. Use weighted combination only after you have validated optimal weights for your specific corpus.
+
+**Cross-encoder reranking is the highest-leverage quality improvement.** It costs 100-300ms of latency and delivers 10-48% better precision on the final result set. Always rerank before feeding context to an LLM.
+
+**The entire stack runs in the browser.** BM25 indexing, vector search, hybrid fusion, and cross-encoder reranking - all provided by `@localmode/core` and `@localmode/transformers`, running on WebAssembly and WebGPU, with zero network dependencies after initial model download.
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Your user's data never has to leave their device to get production-grade retrieval quality.
+
+---
+
+<Callout type="info" title="Next Steps">
+  - [Getting Started guide](/docs/getting-started) - install LocalMode in under 5 minutes
+  - [Core RAG documentation](/docs/core/rag) - chunking strategies, BM25 options, hybrid search API reference
+  - [Reranking guide](/docs/core/reranking) - cross-encoder models, topK tuning, pipeline integration
+  - [Embeddings guide](/docs/core/embeddings) - model selection, batch embedding, streaming
+  - [Private RAG Chat tutorial](/blog/private-rag-chat-no-backend) - full end-to-end RAG chat with PDF loading
+  - [Live demos](https://localmode.ai) - try hybrid search and RAG in your browser, no sign-up required
+</Callout>

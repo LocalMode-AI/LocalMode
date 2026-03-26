@@ -1,0 +1,280 @@
+---
+title: "Drop-In Local AI for Your LangChain.js App - No Cloud Provider Needed"
+description: "Migrate your LangChain.js application from OpenAI and Pinecone to 100% local inference by changing three imports. LocalModeEmbeddings, ChatLocalMode, and LocalModeVectorStore are thin adapters that wrap browser-based models behind standard LangChain interfaces - same chains, same retrievers, zero API keys."
+author: LocalMode
+date: 2026-02-03
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+LangChain.js is the most popular orchestration framework for building AI applications in JavaScript. With `@langchain/core` now past version 1.1 and hundreds of thousands of weekly npm installs, there is a massive ecosystem of chains, retrievers, agents, and output parsers that developers rely on every day.
+
+The catch: almost every LangChain.js tutorial starts with `new ChatOpenAI()` and `new OpenAIEmbeddings()`. That means API keys, per-request billing, network latency, and user data leaving the device on every call.
+
+What if you could keep all your chain logic, all your retriever configuration, all your prompt templates - and just swap the provider line to run everything locally in the browser?
+
+That is exactly what `@localmode/langchain` does. It ships four adapter classes that implement standard LangChain base classes, backed by local models running via WebAssembly and WebGPU. No servers. No API keys. Data never leaves the device.
+
+---
+
+## The Three-Import Migration
+
+The entire migration comes down to replacing provider constructors. Everything downstream - chains, retrievers, output parsers, callbacks - stays identical.
+
+| Cloud Provider | LocalMode Adapter | LangChain Base Class |
+|---|---|---|
+| `OpenAIEmbeddings` | `LocalModeEmbeddings` | `Embeddings` |
+| `ChatOpenAI` | `ChatLocalMode` | `BaseChatModel` |
+| `PineconeStore` / `Chroma` | `LocalModeVectorStore` | `VectorStore` |
+| `CohereRerank` | `LocalModeReranker` | `BaseDocumentCompressor` |
+
+Each adapter is a thin, stateless wrapper. It converts between LangChain data formats and LocalMode interfaces, then delegates all inference to the underlying local model or database. There is no abstraction overhead worth measuring.
+
+Install everything you need in one line:
+
+```bash
+pnpm install @localmode/langchain @localmode/core @localmode/transformers @localmode/webllm
+```
+
+`@localmode/langchain` depends on `@langchain/core` (>=0.3.0) as a regular dependency, and `@localmode/core` (>=1.0.0) as a peer dependency. The provider packages (`@localmode/transformers`, `@localmode/webllm`) supply the actual models.
+
+---
+
+## 1. Embeddings: LocalModeEmbeddings Replaces OpenAIEmbeddings
+
+`LocalModeEmbeddings` extends LangChain's `Embeddings` base class. It wraps any `@localmode/core` `EmbeddingModel` and exposes the standard `embedDocuments()` and `embedQuery()` methods.
+
+### Before - Cloud
+
+```typescript
+import { OpenAIEmbeddings } from '@langchain/openai';
+
+const embeddings = new OpenAIEmbeddings({
+  model: 'text-embedding-3-small',
+});
+
+const vectors = await embeddings.embedDocuments(['Hello world', 'How are you?']);
+const queryVec = await embeddings.embedQuery('search term');
+```
+
+### After - Local
+
+```typescript
+import { LocalModeEmbeddings } from '@localmode/langchain';
+import { transformers } from '@localmode/transformers';
+
+const embeddings = new LocalModeEmbeddings({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+});
+
+const vectors = await embeddings.embedDocuments(['Hello world', 'How are you?']);
+const queryVec = await embeddings.embedQuery('search term');
+```
+
+The constructor takes a single options object with one required field: `model`, which accepts any `EmbeddingModel` instance. Internally, `embedDocuments()` calls `model.doEmbed({ values: texts })` and converts each `Float32Array` result to `number[]` via `Array.from()` - since LangChain's embedding interface expects `number[][]`, not typed arrays.
+
+The `Xenova/bge-small-en-v1.5` model is 33MB, produces 384-dimensional embeddings, and scores 99% of OpenAI's `text-embedding-3-small` quality on MTEB benchmarks. For multilingual workloads, swap in `Xenova/paraphrase-multilingual-MiniLM-L12-v2` (384 dimensions, 50+ languages).
+
+---
+
+## 2. Chat Model: ChatLocalMode Replaces ChatOpenAI
+
+`ChatLocalMode` extends LangChain's `BaseChatModel`. It wraps any `@localmode/core` `LanguageModel` and implements both `_generate()` for single responses and `_streamResponseChunks()` for streaming.
+
+### Before - Cloud
+
+```typescript
+import { ChatOpenAI } from '@langchain/openai';
+
+const llm = new ChatOpenAI({
+  model: 'gpt-4o-mini',
+  temperature: 0.7,
+});
+
+const result = await llm.invoke('What is the capital of France?');
+```
+
+### After - Local
+
+```typescript
+import { ChatLocalMode } from '@localmode/langchain';
+import { webllm } from '@localmode/webllm';
+
+const llm = new ChatLocalMode({
+  model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+  temperature: 0.7,
+});
+
+const result = await llm.invoke('What is the capital of France?');
+```
+
+The constructor accepts `model` (required), plus optional `temperature`, `maxTokens`, and `systemPrompt` defaults. The adapter handles LangChain's message type mapping automatically: `HumanMessage` becomes `user`, `AIMessage` becomes `assistant`, and the first `SystemMessage` is extracted as a dedicated `systemPrompt` parameter rather than being included in the messages array.
+
+Streaming works out of the box. If the underlying `LanguageModel` exposes a `doStream()` method (WebLLM and wllama models do), the adapter yields real `ChatGenerationChunk` objects as tokens arrive. If `doStream()` is not available, it falls back gracefully by generating the full response and yielding it as a single chunk.
+
+```typescript
+const stream = await llm.stream('Tell me a story');
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk.content);
+}
+```
+
+You can use any of the 30 curated WebLLM models or 17 GGUF models via `@localmode/wllama`. The `Qwen3-1.7B-q4f16_1-MLC` model (~1.1GB) offers the best quality-to-size ratio for general tasks.
+
+---
+
+## 3. Vector Store: LocalModeVectorStore Replaces Pinecone/Chroma
+
+`LocalModeVectorStore` extends LangChain's `VectorStore`. It wraps a LocalMode `VectorDB` - an HNSW-indexed vector database that persists to IndexedDB in the browser.
+
+### Before - Cloud
+
+```typescript
+import { PineconeStore } from '@langchain/pinecone';
+import { Pinecone } from '@pinecone-database/pinecone';
+
+const pinecone = new Pinecone();
+const index = pinecone.Index('my-docs');
+const store = await PineconeStore.fromExistingIndex(embeddings, {
+  pineconeIndex: index,
+});
+
+const results = await store.similaritySearch('privacy features', 5);
+```
+
+### After - Local
+
+```typescript
+import { LocalModeVectorStore } from '@localmode/langchain';
+import { createVectorDB } from '@localmode/core';
+
+const db = await createVectorDB({ name: 'my-docs', dimensions: 384 });
+const store = new LocalModeVectorStore(embeddings, { db });
+
+const results = await store.similaritySearch('privacy features', 5);
+```
+
+The constructor takes a LangChain `EmbeddingsInterface` (use `LocalModeEmbeddings`) and an options object with a `db` field containing a `VectorDB` instance. The `addDocuments()` method embeds text automatically, generates UUIDs via `crypto.randomUUID()`, and stores each document's `pageContent` in the metadata so it can be recovered on search. The `similaritySearch()` and `similaritySearchVectorWithScore()` methods work exactly as you would expect from any LangChain vector store, including metadata filter support.
+
+The static factories `fromDocuments()` and `fromExistingIndex()` match the LangChain convention, so existing code like `PineconeStore.fromExistingIndex(embeddings, { pineconeIndex })` translates directly to `LocalModeVectorStore.fromExistingIndex(embeddings, { db })`.
+
+The VectorDB supports optional SQ8 compression (4x storage reduction with no recall impact) and persists to IndexedDB, so documents survive page refreshes without re-embedding.
+
+---
+
+## Putting It All Together: A Complete Local RAG Chain
+
+Here is a full retrieval-augmented generation pipeline using all three adapters. This is functionally identical to a cloud RAG chain - the only difference is where inference runs.
+
+```typescript
+import {
+  LocalModeEmbeddings,
+  ChatLocalMode,
+  LocalModeVectorStore,
+} from '@localmode/langchain';
+import { transformers } from '@localmode/transformers';
+import { webllm } from '@localmode/webllm';
+import { createVectorDB } from '@localmode/core';
+import { Document } from '@langchain/core/documents';
+
+// 1. Create local models - no API keys
+const embeddings = new LocalModeEmbeddings({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+});
+const llm = new ChatLocalMode({
+  model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+  temperature: 0.7,
+});
+
+// 2. Create vector store backed by IndexedDB
+const db = await createVectorDB({ name: 'knowledge-base', dimensions: 384 });
+const store = new LocalModeVectorStore(embeddings, { db });
+
+// 3. Ingest documents (embeds automatically)
+await store.addDocuments([
+  new Document({
+    pageContent: 'The Transformer architecture uses self-attention mechanisms.',
+    metadata: { source: 'ml-textbook', chapter: 1 },
+  }),
+  new Document({
+    pageContent: 'BERT uses only the encoder portion of the Transformer.',
+    metadata: { source: 'ml-textbook', chapter: 3 },
+  }),
+  new Document({
+    pageContent: 'Running AI locally eliminates API costs and ensures privacy.',
+    metadata: { source: 'localmode-docs', chapter: 1 },
+  }),
+]);
+
+// 4. Search + generate - standard LangChain pattern
+const retriever = store.asRetriever({ k: 3 });
+const docs = await retriever.invoke('How do Transformers work?');
+
+const context = docs.map((d) => d.pageContent).join('\n');
+const answer = await llm.invoke(
+  `Based on the following context, answer the question concisely.\n\nContext:\n${context}\n\nQuestion: How do Transformers work?`
+);
+
+console.log(answer.content);
+```
+
+Everything after the provider setup - `asRetriever()`, `invoke()`, prompt construction - is standard LangChain code that works with any provider. If you later decide to switch back to cloud for certain use cases, you only change the constructor lines.
+
+<Callout type="info" title="Working demo">
+  The [LangChain RAG showcase app](https://localmode.ai/langchain-rag) implements this exact pattern with a full UI: paste a document, ask questions, and see retrieved sources with relevance scores. All inference runs in your browser. [View the source code](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag).
+</Callout>
+
+---
+
+## What Works Today
+
+| Feature | Status | Notes |
+|---|---|---|
+| `embedDocuments()` / `embedQuery()` | Fully supported | Any `@localmode/transformers` embedding model |
+| `invoke()` / `_generate()` | Fully supported | Text generation with system prompts |
+| `stream()` / `_streamResponseChunks()` | Fully supported | Real token-by-token streaming via WebLLM/wllama |
+| `addDocuments()` / `similaritySearch()` | Fully supported | HNSW-indexed, persistent IndexedDB storage |
+| `fromDocuments()` / `fromExistingIndex()` | Fully supported | Standard LangChain static factories |
+| `asRetriever()` | Fully supported | Inherits from `VectorStore` base class |
+| `compressDocuments()` (reranking) | Fully supported | Cross-encoder reranking via `LocalModeReranker` |
+| Metadata filters | Fully supported | Standard LocalMode filter operators |
+| LangChain callbacks | Supported | Passed through via `BaseChatModel` / `Embeddings` base classes |
+| Tool calling / function calling | Not supported | Local models lack reliable tool-calling ability |
+| Structured output via LangChain schemas | Not supported | Use `generateObject()` from `@localmode/core` directly |
+
+---
+
+## Honest Trade-Offs
+
+Switching from cloud to local is not without compromises. Here is what to expect:
+
+**Model quality.** A 1.7B-parameter local model will not match GPT-4o on complex reasoning or long-form generation. For RAG over your own documents - where the answer is in the retrieved context - the gap is much smaller than you might expect. Embeddings and reranking are where local models truly shine: `bge-small-en-v1.5` hits 99% of OpenAI embedding quality at 33MB.
+
+**Context length.** Local models typically support 2K-8K token contexts versus 128K for frontier cloud models. For most RAG applications, where you retrieve 3-5 relevant passages, this is more than sufficient. For applications that need to process entire documents in a single prompt, cloud models remain the better choice.
+
+**First-run latency.** Models must be downloaded once (33MB for embeddings, ~1GB for the LLM). After that, they are cached in the browser and load in seconds. There is no per-request network latency.
+
+**The hybrid option.** You do not have to go all-local. Use `LocalModeEmbeddings` + `LocalModeVectorStore` for the retrieval pipeline (runs locally at zero cost, keeps documents private) and keep `ChatOpenAI` for the generation step when you need frontier model quality. This hybrid approach gives you roughly 90% cost savings while maintaining answer quality.
+
+---
+
+## Methodology
+
+The adapter implementations are open source and can be inspected directly:
+
+- [LocalModeEmbeddings source](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/langchain/src/embeddings.ts) - 61 lines, extends `@langchain/core` `Embeddings`
+- [ChatLocalMode source](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/langchain/src/chat-model.ts) - 172 lines, extends `@langchain/core` `BaseChatModel`
+- [LocalModeVectorStore source](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/langchain/src/vector-store.ts) - 148 lines, extends `@langchain/core` `VectorStore`
+- [LangChain RAG showcase app](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) - full working demo
+- [LangChain.js documentation](https://docs.langchain.com/oss/javascript/langchain/overview) - official framework docs
+- [LocalMode LangChain integration docs](/docs/langchain) - full adapter API reference and migration guide
+- Quality benchmarks referenced from our [Local AI vs Cloud](/blog/local-ai-vs-cloud) analysis
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

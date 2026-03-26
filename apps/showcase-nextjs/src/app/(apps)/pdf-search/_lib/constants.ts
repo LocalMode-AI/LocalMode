@@ -6,14 +6,14 @@
 /** Model IDs for transformers */
 export const MODELS = {
   /** Embedding model for semantic search */
-  EMBEDDING: 'Xenova/all-MiniLM-L6-v2',
+  EMBEDDING: 'Xenova/bge-small-en-v1.5',
   /** Reranker model for improving search results */
   RERANKER: 'Xenova/ms-marco-MiniLM-L-6-v2',
 } as const;
 
 /** Model sizes for display */
 export const MODEL_SIZES = {
-  [MODELS.EMBEDDING]: '22MB',
+  [MODELS.EMBEDDING]: '33MB',
   [MODELS.RERANKER]: '22MB',
 } as const;
 
@@ -37,8 +37,24 @@ export const SEARCH_CONFIG = {
   defaultTopK: 5,
   /** Maximum number of results */
   maxTopK: 20,
-  /** Minimum similarity score for results */
+  /** Minimum similarity score for results (overridden by threshold) */
   minScore: 0.1,
+} as const;
+
+/** Chunking strategy labels for display */
+export const CHUNKING_STRATEGIES = {
+  semantic: { label: 'Semantic', description: 'Topic-boundary aware splitting' },
+  recursive: { label: 'Recursive', description: 'Fixed-size character splitting' },
+} as const;
+
+/** Threshold calibration defaults */
+export const THRESHOLD_DEFAULTS = {
+  /** Default threshold from model presets (bge-small-en-v1.5) */
+  presetValue: 0.5,
+  /** Percentile for calibration (90th percentile of pairwise similarity) */
+  calibrationPercentile: 90,
+  /** Maximum samples for calibration to cap computation */
+  calibrationMaxSamples: 100,
 } as const;
 
 /** Storage keys for persistence */
@@ -53,3 +69,21 @@ export const STORAGE_KEYS = {
 
 /** Accepted file types for PDF upload */
 export const ACCEPTED_FILE_TYPES = ['.pdf', 'application/pdf'] as const;
+
+/** Pipeline step display names */
+export const PIPELINE_STAGES: Record<string, string> = {
+  extracting: 'Extracting text...',
+  chunking: 'Chunking text...',
+  'semantic-chunking': 'Semantic chunking...',
+  embedding: 'Embedding chunks...',
+  storing: 'Storing vectors...',
+  complete: 'Complete!',
+};
+
+/** Inference queue configuration */
+export const QUEUE_CONFIG = {
+  /** Single model at a time */
+  concurrency: 1,
+  /** Priority levels: interactive search > background indexing */
+  priorities: ['interactive', 'background'] as string[],
+} as const;

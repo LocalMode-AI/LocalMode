@@ -11,7 +11,7 @@ import type {
   Document,
   SearchOptions,
   SearchResult,
-  FilterQuery,
+  TypedFilterQuery,
   AddManyOptions,
   ExportOptions,
   ImportOptions,
@@ -21,10 +21,12 @@ import type { VectorDBMiddleware } from './types.js';
 
 /**
  * Options for wrapping a VectorDB with middleware.
+ *
+ * @typeParam TMetadata - Shape of the metadata object.
  */
-export interface WrapVectorDBOptions {
+export interface WrapVectorDBOptions<TMetadata extends Record<string, unknown> = Record<string, unknown>> {
   /** The VectorDB instance to wrap */
-  db: VectorDB;
+  db: VectorDB<TMetadata>;
 
   /** Middleware to apply */
   middleware: VectorDBMiddleware | VectorDBMiddleware[];
@@ -172,7 +174,9 @@ export function composeVectorDBMiddleware(
  * });
  * ```
  */
-export function wrapVectorDB(options: WrapVectorDBOptions): VectorDB {
+export function wrapVectorDB<TMetadata extends Record<string, unknown> = Record<string, unknown>>(
+  options: WrapVectorDBOptions<TMetadata>
+): VectorDB<TMetadata> {
   const { db } = options;
   const middleware = Array.isArray(options.middleware)
     ? composeVectorDBMiddleware(options.middleware)
@@ -187,17 +191,17 @@ export function wrapVectorDB(options: WrapVectorDBOptions): VectorDB {
   };
 
   // Create wrapped DB object
-  const wrapped: VectorDB = {
+  const wrapped: VectorDB<TMetadata> = {
     // Wrap add with middleware
-    async add(document: Document): Promise<void> {
+    async add(document: Document<TMetadata>): Promise<void> {
       try {
         let doc = document;
         if (middleware.beforeAdd) {
-          doc = await middleware.beforeAdd(doc);
+          doc = await middleware.beforeAdd(doc as Document) as Document<TMetadata>;
         }
         await db.add(doc);
         if (middleware.afterAdd) {
-          await middleware.afterAdd(doc);
+          await middleware.afterAdd(doc as Document);
         }
       } catch (error) {
         await handleError(error as Error, 'add');
@@ -205,19 +209,19 @@ export function wrapVectorDB(options: WrapVectorDBOptions): VectorDB {
     },
 
     // Wrap addMany with middleware
-    async addMany(documents: Document[], addOptions?: AddManyOptions): Promise<void> {
+    async addMany(documents: Document<TMetadata>[], addOptions?: AddManyOptions): Promise<void> {
       try {
         let docs = documents;
         if (middleware.beforeAdd) {
           docs = [];
           for (const d of documents) {
-            docs.push(await middleware.beforeAdd(d));
+            docs.push(await middleware.beforeAdd(d as Document) as Document<TMetadata>);
           }
         }
         await db.addMany(docs, addOptions);
         if (middleware.afterAdd) {
           for (const d of docs) {
-            await middleware.afterAdd(d);
+            await middleware.afterAdd(d as Document);
           }
         }
       } catch (error) {
@@ -226,12 +230,12 @@ export function wrapVectorDB(options: WrapVectorDBOptions): VectorDB {
     },
 
     // Wrap get with middleware
-    async get(id: string): Promise<(Document & { metadata?: Record<string, unknown> }) | null> {
+    async get(id: string): Promise<(Document<TMetadata> & { metadata?: TMetadata }) | null> {
       try {
         const result = await db.get(id);
         if (middleware.afterGet && result) {
           const processed = await middleware.afterGet(result as Document);
-          return (processed as (Document & { metadata?: Record<string, unknown> })) ?? null;
+          return (processed as (Document<TMetadata> & { metadata?: TMetadata })) ?? null;
         }
         return result;
       } catch (error) {
@@ -240,7 +244,7 @@ export function wrapVectorDB(options: WrapVectorDBOptions): VectorDB {
     },
 
     // Wrap update (pass-through)
-    async update(id: string, updates: Partial<Omit<Document, 'id'>>): Promise<void> {
+    async update(id: string, updates: Partial<Omit<Document<TMetadata>, 'id'>>): Promise<void> {
       try {
         await db.update(id, updates);
       } catch (error) {
@@ -288,15 +292,15 @@ export function wrapVectorDB(options: WrapVectorDBOptions): VectorDB {
     },
 
     // Wrap deleteWhere (pass-through)
-    async deleteWhere(filter: FilterQuery): Promise<number> {
+    async deleteWhere(filter: TypedFilterQuery<TMetadata>): Promise<number> {
       return db.deleteWhere(filter);
     },
 
     // Wrap search with middleware
-    async search(query: Float32Array, searchOptions?: SearchOptions): Promise<SearchResult[]> {
+    async search(query: Float32Array, searchOptions?: SearchOptions<TMetadata>): Promise<SearchResult<TMetadata>[]> {
       try {
         let q = query;
-        let opts = searchOptions ?? {};
+        let opts: SearchOptions = searchOptions ?? {};
 
         if (middleware.beforeSearch) {
           const result = await middleware.beforeSearch(q, opts);
@@ -304,10 +308,10 @@ export function wrapVectorDB(options: WrapVectorDBOptions): VectorDB {
           opts = result.options;
         }
 
-        let results = await db.search(q, opts);
+        let results = await db.search(q, opts as SearchOptions<TMetadata>);
 
         if (middleware.afterSearch) {
-          results = await middleware.afterSearch(results);
+          results = await middleware.afterSearch(results as SearchResult[]) as SearchResult<TMetadata>[];
         }
 
         return results;
@@ -317,7 +321,7 @@ export function wrapVectorDB(options: WrapVectorDBOptions): VectorDB {
     },
 
     // Wrap collection (pass-through)
-    collection(name: string): VectorDB {
+    collection(name: string): VectorDB<TMetadata> {
       return db.collection(name);
     },
 
@@ -355,6 +359,11 @@ export function wrapVectorDB(options: WrapVectorDBOptions): VectorDB {
     // Wrap import (pass-through)
     async import(data: Blob, importOptions?: ImportOptions): Promise<void> {
       return db.import(data, importOptions);
+    },
+
+    // Pass-through for recalibrate
+    async recalibrate(recalibrateOptions?: Parameters<VectorDB['recalibrate']>[0]): Promise<void> {
+      return db.recalibrate(recalibrateOptions);
     },
 
     // Pass-through for lock manager

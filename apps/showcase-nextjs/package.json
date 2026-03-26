@@ -10,22 +10,26 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@localmode/core": "^1.0.0",
-    "@localmode/transformers": "^1.0.0",
-    "@localmode/webllm": "^1.0.0",
-    "@localmode/pdfjs": "^1.0.0",
-    "next": "16.1.1",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "daisyui": "^5.0.0",
-    "tailwindcss": "^4.0.0",
-    "zustand": "^5.0.9",
-    "zod": "^4.2.1",
-    "lucide-react": "^0.562.0",
-    "react-hook-form": "^7.53.0",
-    "@hookform/resolvers": "^3.9.0",
+    "@localmode/core": "workspace:*",
+    "@localmode/transformers": "workspace:*",
+    "@localmode/react": "workspace:*",
+    "@localmode/webllm": "workspace:*",
+    "@localmode/wllama": "workspace:*",
+    "@localmode/pdfjs": "workspace:*",
+    "@localmode/chrome-ai": "workspace:*",
+    "@localmode/devtools": "workspace:*",
+    "next": "16.2.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "daisyui": "^5.5.19",
+    "tailwindcss": "^4.2.2",
+    "zustand": "^5.0.12",
+    "zod": "^4.3.6",
+    "lucide-react": "^0.577.0",
+    "react-hook-form": "^7.72.0",
+    "@hookform/resolvers": "^5.2.2",
     "clsx": "^2.1.1",
-    "tailwind-merge": "^2.5.5"
+    "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -34,9 +38,9 @@
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
-    "eslint-config-next": "16.1.1",
+    "eslint-config-next": "16.2.1",
     "typescript": "^5",
-    "prettier": "^3.3.0",
-    "prettier-plugin-tailwindcss": "^0.6.0"
+    "prettier": "^3.8.1",
+    "prettier-plugin-tailwindcss": "^0.7.2"
   }
 }
