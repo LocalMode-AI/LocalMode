@@ -1,6 +1,6 @@
 {
   "name": "@localmode/transformers",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "description": "Transformers.js provider for @localmode - implements all ML model interfaces",
   "license": "MIT",
   "author": "LocalMode",
@@ -66,7 +66,7 @@
     "@huggingface/transformers-v4": "npm:@huggingface/transformers@4.0.0-next.9"
   },
   "peerDependencies": {
-    "@localmode/core": ">=1.0.0"
+    "@localmode/core": ">=2.0.0"
   },
   "devDependencies": {
     "@localmode/core": "workspace:*",
