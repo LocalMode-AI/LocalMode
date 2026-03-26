@@ -28,7 +28,8 @@ export type {
   WebLLMProviderSettings,
   WebLLMModelSettings,
   WebLLMLoadProgress,
-  WebLLMModelId,
 } from './types.js';
 
-export { WEBLLM_MODELS, MODEL_SIZE_THRESHOLDS, getModelCategory } from './types.js';
+// Models
+export { WEBLLM_MODELS, MODEL_SIZE_THRESHOLDS, getModelCategory } from './models.js';
+export type { WebLLMModelId } from './models.js';

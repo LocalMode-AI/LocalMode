@@ -1,0 +1,737 @@
+---
+title: Vision
+description: Image captioning, classification, detection, segmentation, and more.
+icon: Eye
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+LocalMode provides seven vision functions that run entirely in the browser — no server required. All accept an `ImageInput` (Blob, ImageData, string URL, or ArrayBuffer) and return structured results with usage metrics.
+
+<Callout type="info" title="See it in action">
+  Try [Object Detector](https://localmode.ai/object-detector) and [Background Remover](https://localmode.ai/background-remover) for working demos of these APIs.
+</Callout>
+
+| Function | Purpose |
+| --- | --- |
+| `captionImage()` | Generate natural language descriptions |
+| `classifyImage()` | Classify into pre-trained categories |
+| `classifyImageZeroShot()` | Classify into arbitrary labels (CLIP/SigLIP) |
+| `detectObjects()` | Locate and label objects with bounding boxes |
+| `segmentImage()` | Produce pixel-level masks per region |
+| `extractImageFeatures()` | Extract feature vectors for similarity search |
+| `imageToImage()` | Super-resolution / image transformation |
+
+## captionImage()
+
+Generate a natural language caption for an image:
+
+<Tabs items={['Basic Usage', 'With AbortSignal']}>
+<Tab value="Basic Usage">
+
+```ts {5-8}
+import { captionImage } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.captioner('onnx-community/Florence-2-base-ft');
+
+const { caption, usage, response } = await captionImage({
+  model,
+  image: imageBlob,
+});
+
+console.log(caption); // "a golden retriever playing with a ball in a park"
+console.log(`Processed in ${usage.durationMs}ms`);
+```
+
+</Tab>
+<Tab value="With AbortSignal">
+
+```ts {3,7}
+const controller = new AbortController();
+
+setTimeout(() => controller.abort(), 10000); // Cancel after 10s
+
+const { caption } = await captionImage({
+  model,
+  image: imageBlob,
+  abortSignal: controller.signal,
+});
+```
+
+</Tab>
+</Tabs>
+
+### CaptionImageOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The image captioning model to use',
+      type: 'ImageCaptionModel | string',
+      required: true,
+    },
+    image: {
+      description: 'The image to caption',
+      type: 'ImageInput',
+      required: true,
+    },
+    maxLength: {
+      description: 'Maximum caption length in tokens',
+      type: 'number',
+      required: false,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure',
+      type: 'number',
+      default: '2',
+    },
+    providerOptions: {
+      description: 'Provider-specific options',
+      type: 'Record<string, Record<string, unknown>>',
+      required: false,
+    },
+  }}
+/>
+
+### CaptionImageResult
+
+<TypeTable
+  type={{
+    caption: {
+      description: 'The generated caption string',
+      type: 'string',
+    },
+    usage: {
+      description: 'Processing time in milliseconds',
+      type: '{ durationMs: number }',
+    },
+    response: {
+      description: 'Response metadata',
+      type: '{ modelId: string; timestamp: Date }',
+    },
+  }}
+/>
+
+## classifyImage()
+
+Classify an image into pre-trained categories:
+
+```ts {5-9}
+import { classifyImage } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.imageClassifier('Xenova/vit-base-patch16-224');
+
+const { predictions, usage } = await classifyImage({
+  model,
+  image: imageBlob,
+  topK: 5,
+});
+
+predictions.forEach((p) => {
+  console.log(`${p.label}: ${(p.score * 100).toFixed(1)}%`);
+});
+// golden retriever: 92.3%
+// Labrador retriever: 4.1%
+// ...
+```
+
+### ClassifyImageOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The image classification model to use',
+      type: 'ImageClassificationModel | string',
+      required: true,
+    },
+    image: {
+      description: 'The image to classify',
+      type: 'ImageInput',
+      required: true,
+    },
+    topK: {
+      description: 'Number of top predictions to return',
+      type: 'number',
+      default: '5',
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure',
+      type: 'number',
+      default: '2',
+    },
+    providerOptions: {
+      description: 'Provider-specific options',
+      type: 'Record<string, Record<string, unknown>>',
+      required: false,
+    },
+  }}
+/>
+
+### ClassifyImageResult
+
+<TypeTable
+  type={{
+    predictions: {
+      description: 'Top predictions sorted by score (highest first)',
+      type: 'ImageClassificationResultItem[]',
+    },
+    usage: {
+      description: 'Processing time in milliseconds',
+      type: '{ durationMs: number }',
+    },
+    response: {
+      description: 'Response metadata',
+      type: '{ modelId: string; timestamp: Date }',
+    },
+  }}
+/>
+
+### ImageClassificationResultItem
+
+<TypeTable
+  type={{
+    label: {
+      description: 'The predicted label',
+      type: 'string',
+    },
+    score: {
+      description: 'Confidence score (0-1)',
+      type: 'number',
+    },
+  }}
+/>
+
+## classifyImageZeroShot()
+
+Classify an image into arbitrary labels without fine-tuning, using models like CLIP or SigLIP:
+
+```ts {5-10}
+import { classifyImageZeroShot } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.zeroShotImageClassifier('Xenova/siglip-base-patch16-224');
+
+const { labels, scores } = await classifyImageZeroShot({
+  model,
+  image: imageBlob,
+  candidateLabels: ['cat', 'dog', 'bird', 'car', 'tree'],
+});
+
+console.log(`Top prediction: ${labels[0]} (${(scores[0] * 100).toFixed(1)}%)`);
+// Top prediction: dog (87.2%)
+```
+
+### ClassifyImageZeroShotOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The zero-shot image classification model to use',
+      type: 'ZeroShotImageClassificationModel | string',
+      required: true,
+    },
+    image: {
+      description: 'The image to classify',
+      type: 'ImageInput',
+      required: true,
+    },
+    candidateLabels: {
+      description: 'Labels to classify the image into',
+      type: 'string[]',
+      required: true,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure',
+      type: 'number',
+      default: '2',
+    },
+    providerOptions: {
+      description: 'Provider-specific options',
+      type: 'Record<string, Record<string, unknown>>',
+      required: false,
+    },
+  }}
+/>
+
+### ClassifyImageZeroShotResult
+
+<TypeTable
+  type={{
+    labels: {
+      description: 'Labels sorted by score (highest first)',
+      type: 'string[]',
+    },
+    scores: {
+      description: 'Corresponding scores for each label',
+      type: 'number[]',
+    },
+    usage: {
+      description: 'Processing time in milliseconds',
+      type: '{ durationMs: number }',
+    },
+    response: {
+      description: 'Response metadata',
+      type: '{ modelId: string; timestamp: Date }',
+    },
+  }}
+/>
+
+## detectObjects()
+
+Detect and locate objects in an image with bounding boxes:
+
+```ts {5-9}
+import { detectObjects } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.objectDetector('onnx-community/dfine_n_coco-ONNX');
+
+const { objects, usage } = await detectObjects({
+  model,
+  image: imageBlob,
+  threshold: 0.7,
+});
+
+for (const obj of objects) {
+  console.log(`${obj.label} (${(obj.score * 100).toFixed(1)}%)`);
+  console.log(`  Box: x=${obj.box.x}, y=${obj.box.y}, ${obj.box.width}x${obj.box.height}`);
+}
+// person (95.2%)
+//   Box: x=120, y=45, 200x380
+// dog (88.7%)
+//   Box: x=350, y=210, 150x170
+```
+
+### DetectObjectsOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The object detection model to use',
+      type: 'ObjectDetectionModel | string',
+      required: true,
+    },
+    image: {
+      description: 'The image to detect objects in',
+      type: 'ImageInput',
+      required: true,
+    },
+    threshold: {
+      description: 'Minimum confidence threshold (0-1)',
+      type: 'number',
+      default: '0.5',
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure',
+      type: 'number',
+      default: '2',
+    },
+    providerOptions: {
+      description: 'Provider-specific options',
+      type: 'Record<string, Record<string, unknown>>',
+      required: false,
+    },
+  }}
+/>
+
+### DetectObjectsResult
+
+<TypeTable
+  type={{
+    objects: {
+      description: 'Array of detected objects',
+      type: 'DetectedObject[]',
+    },
+    usage: {
+      description: 'Processing time in milliseconds',
+      type: '{ durationMs: number }',
+    },
+    response: {
+      description: 'Response metadata',
+      type: '{ modelId: string; timestamp: Date }',
+    },
+  }}
+/>
+
+### DetectedObject
+
+<TypeTable
+  type={{
+    label: {
+      description: 'Object class label',
+      type: 'string',
+    },
+    score: {
+      description: 'Confidence score (0-1)',
+      type: 'number',
+    },
+    box: {
+      description: 'Bounding box location',
+      type: '{ x: number; y: number; width: number; height: number }',
+    },
+  }}
+/>
+
+## segmentImage()
+
+Segment an image into pixel-level regions:
+
+```ts {5-8}
+import { segmentImage } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.segmenter('briaai/RMBG-1.4');
+
+const { masks, usage } = await segmentImage({
+  model,
+  image: imageBlob,
+});
+
+for (const mask of masks) {
+  console.log(`${mask.label}: ${(mask.score * 100).toFixed(1)}%`);
+}
+// foreground: 97.8%
+// background: 96.2%
+```
+
+### SegmentImageOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The segmentation model to use',
+      type: 'SegmentationModel | string',
+      required: true,
+    },
+    image: {
+      description: 'The image to segment',
+      type: 'ImageInput',
+      required: true,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure',
+      type: 'number',
+      default: '2',
+    },
+    providerOptions: {
+      description: 'Provider-specific options',
+      type: 'Record<string, Record<string, unknown>>',
+      required: false,
+    },
+  }}
+/>
+
+### SegmentImageResult
+
+<TypeTable
+  type={{
+    masks: {
+      description: 'Array of segmentation masks',
+      type: 'SegmentMask[]',
+    },
+    usage: {
+      description: 'Processing time in milliseconds',
+      type: '{ durationMs: number }',
+    },
+    response: {
+      description: 'Response metadata',
+      type: '{ modelId: string; timestamp: Date }',
+    },
+  }}
+/>
+
+### SegmentMask
+
+<TypeTable
+  type={{
+    label: {
+      description: 'Segment label',
+      type: 'string',
+    },
+    score: {
+      description: 'Confidence score (0-1)',
+      type: 'number',
+    },
+    mask: {
+      description: 'Pixel mask data',
+      type: 'ImageData | Uint8Array',
+    },
+  }}
+/>
+
+## extractImageFeatures()
+
+Extract a feature vector from an image for similarity search, clustering, or reverse image lookup:
+
+```ts {5-16}
+import { extractImageFeatures, cosineSimilarity } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.imageFeatures('Xenova/siglip-base-patch16-224');
+
+const { features: features1 } = await extractImageFeatures({
+  model,
+  image: image1,
+});
+
+const { features: features2 } = await extractImageFeatures({
+  model,
+  image: image2,
+});
+
+const similarity = cosineSimilarity(features1, features2);
+console.log(`Image similarity: ${(similarity * 100).toFixed(1)}%`);
+```
+
+### ExtractImageFeaturesOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The image feature model to use',
+      type: 'ImageFeatureModel | string',
+      required: true,
+    },
+    image: {
+      description: 'The image to extract features from',
+      type: 'ImageInput',
+      required: true,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure',
+      type: 'number',
+      default: '2',
+    },
+    providerOptions: {
+      description: 'Provider-specific options',
+      type: 'Record<string, Record<string, unknown>>',
+      required: false,
+    },
+  }}
+/>
+
+### ExtractImageFeaturesResult
+
+<TypeTable
+  type={{
+    features: {
+      description: 'Feature vector for the image',
+      type: 'Float32Array',
+    },
+    usage: {
+      description: 'Processing time in milliseconds',
+      type: '{ durationMs: number }',
+    },
+    response: {
+      description: 'Response metadata',
+      type: '{ modelId: string; timestamp: Date }',
+    },
+  }}
+/>
+
+## imageToImage()
+
+Transform an image using super-resolution or other image-to-image models. This is an alias for `upscaleImage()`.
+
+```ts {5-9}
+import { imageToImage } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.imageToImage('Xenova/swin2SR-lightweight-x2-64');
+
+const { image, usage } = await imageToImage({
+  model,
+  image: lowResImage,
+  scale: 2,
+});
+
+console.log(`Upscaled in ${usage.durationMs}ms`);
+```
+
+### UpscaleImageOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The image-to-image model to use',
+      type: 'ImageToImageModel | string',
+      required: true,
+    },
+    image: {
+      description: 'The image to transform',
+      type: 'ImageInput',
+      required: true,
+    },
+    scale: {
+      description: 'Scale factor for super-resolution',
+      type: 'number',
+      default: '2',
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure',
+      type: 'number',
+      default: '2',
+    },
+    providerOptions: {
+      description: 'Provider-specific options',
+      type: 'Record<string, Record<string, unknown>>',
+      required: false,
+    },
+  }}
+/>
+
+### UpscaleImageResult
+
+<TypeTable
+  type={{
+    image: {
+      description: 'The transformed / upscaled image',
+      type: 'ImageData | Blob',
+    },
+    usage: {
+      description: 'Processing time in milliseconds',
+      type: '{ durationMs: number }',
+    },
+    response: {
+      description: 'Response metadata',
+      type: '{ modelId: string; timestamp: Date }',
+    },
+  }}
+/>
+
+## Image Input Types
+
+<Callout type="info" title="Supported image formats">
+  All vision functions accept `ImageInput`, which is a union of four types:
+
+  - **`Blob`** — File uploads, `fetch()` responses, canvas exports
+  - **`ImageData`** — Raw pixel data from `<canvas>` via `getImageData()`
+  - **`string`** — A URL (data URI, object URL, or remote URL)
+  - **`ArrayBuffer`** — Raw binary image data
+
+  ```ts
+  // From a file input
+  const blob: Blob = fileInput.files[0];
+
+  // From a canvas
+  const imageData: ImageData = ctx.getImageData(0, 0, width, height);
+
+  // From a URL
+  const url: string = 'https://example.com/photo.jpg';
+
+  // From fetch
+  const buffer: ArrayBuffer = await fetch(url).then((r) => r.arrayBuffer());
+  ```
+</Callout>
+
+## Custom Provider
+
+Implement the `ImageCaptionModel` interface to create a custom captioning provider. The other six vision interfaces (`ImageClassificationModel`, `ZeroShotImageClassificationModel`, `ObjectDetectionModel`, `SegmentationModel`, `ImageFeatureModel`, `ImageToImageModel`) follow the same pattern.
+
+```ts
+import type { ImageCaptionModel, DoCaptionImageOptions, DoCaptionImageResult } from '@localmode/core';
+
+class MyCustomCaptioner implements ImageCaptionModel {
+  readonly modelId = 'custom:my-captioner';
+  readonly provider = 'custom';
+
+  async doCaption(options: DoCaptionImageOptions): Promise<DoCaptionImageResult> {
+    const { images, maxLength, abortSignal } = options;
+
+    // Your captioning logic here
+    const captions = images.map(() => 'A description of the image');
+
+    return {
+      captions,
+      usage: { durationMs: 0 },
+    };
+  }
+}
+
+// Use with core functions
+const model = new MyCustomCaptioner();
+const { caption } = await captionImage({ model, image: imageBlob });
+```
+
+<Callout type="info">
+  For recommended models, provider-specific options, and practical recipes, see the Transformers.js provider pages:
+  [Image Captioning](/docs/transformers/image-captioning),
+  [Image Classification](/docs/transformers/image-classification),
+  [Zero-Shot Image](/docs/transformers/zero-shot-image),
+  [Object Detection](/docs/transformers/object-detection),
+  [Image Segmentation](/docs/transformers/image-segmentation),
+  [Image Features](/docs/transformers/image-features), and
+  [Image-to-Image](/docs/transformers/image-to-image).
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Embeddings"
+    href="/docs/core/embeddings"
+    description="Generate text embeddings for semantic search."
+  />
+  <Card
+    title="Vector Database"
+    href="/docs/core/vector-db"
+    description="Store and search image feature vectors."
+  />
+  <Card
+    title="Transformers Provider"
+    href="/docs/transformers"
+    description="Browse all available vision models."
+  />
+</Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Object Detector | Detect and label objects in images | [Demo](https://localmode.ai/object-detector) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/object-detector) |
+| Image Captioner | Generate natural language image descriptions | [Demo](https://localmode.ai/image-captioner) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/image-captioner) |
+| Background Remover | Segment and remove image backgrounds | [Demo](https://localmode.ai/background-remover) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/background-remover) |
+| Photo Enhancer | Upscale and enhance photos with image-to-image models | [Demo](https://localmode.ai/photo-enhancer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/photo-enhancer) |
+| Duplicate Finder | Extract image features for duplicate detection | [Demo](https://localmode.ai/duplicate-finder) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/duplicate-finder) |
+| Smart Gallery | Classify and organize photos by content | [Demo](https://localmode.ai/smart-gallery) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-gallery) |
+| Product Search | Visual product classification and search | [Demo](https://localmode.ai/product-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/product-search) |

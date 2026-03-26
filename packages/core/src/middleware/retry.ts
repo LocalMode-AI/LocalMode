@@ -38,7 +38,7 @@ export const DEFAULT_RETRY_OPTIONS: Required<RetryMiddlewareOptions> = {
  * import { wrapEmbeddingModel, retryMiddleware } from '@localmode/core';
  *
  * const resilientModel = wrapEmbeddingModel({
- *   model: transformers.embedding('Xenova/all-MiniLM-L6-v2'),
+ *   model: transformers.embedding('Xenova/bge-small-en-v1.5'),
  *   middleware: retryMiddleware({
  *     maxRetries: 3,
  *     initialDelayMs: 100,

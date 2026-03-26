@@ -1,0 +1,296 @@
+---
+title: "Real-Time Voice Notes With Transcription - 100% Offline, Zero Cost"
+description: "Build a voice notes app with browser-based speech-to-text using Moonshine models. No servers, no API keys, no per-minute charges. The model downloads once, then transcription works forever - even on a plane."
+author: LocalMode
+date: 2026-02-04
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Every speech-to-text feature you ship today comes with the same trade-off: send your users' audio to a cloud API, pay per minute, and hope the network holds up. OpenAI's Whisper API charges $0.006 per minute. That sounds cheap until you do the math for a voice notes app with 10,000 daily active users averaging 5 minutes of audio each - $10,950 per year, and every recording hits someone else's servers.
+
+What if the transcription happened entirely inside the browser? No uploads. No API keys. No recurring bill. The model downloads once, caches itself, and works offline from that point forward - on a plane, in a tunnel, in airplane mode.
+
+This post walks through exactly how to build that. We will use Moonshine, a speech recognition model purpose-built for edge devices, running in the browser via ONNX Runtime and Transformers.js. We will cover the full pipeline from microphone capture to transcribed text, compare Moonshine against Whisper on accuracy and cost, and show both the low-level `transcribe()` API and the React hooks that make it trivial.
+
+---
+
+## Why Moonshine, Not Whisper?
+
+Moonshine is a family of encoder-decoder transformer models from Useful Sensors, designed specifically for live transcription on resource-constrained devices (arXiv:2410.15608). Two key architectural decisions make it ideal for the browser:
+
+1. **Rotary Position Embeddings (RoPE)** instead of absolute position embeddings, allowing the model to handle variable-length audio segments efficiently.
+2. **No zero-padding** - unlike Whisper, which processes all audio in fixed 30-second chunks regardless of actual duration, Moonshine scales its compute proportional to input length. A 3-second voice note uses a fraction of the compute that a 30-second chunk would.
+
+The result: Moonshine Tiny delivers a 5x reduction in compute compared to Whisper tiny.en for a 10-second segment, with *better* word error rates on standard benchmarks.
+
+### Moonshine vs. Whisper: Head-to-Head
+
+| Metric | Moonshine Tiny | Whisper tiny.en | Moonshine Base | Whisper base.en | Whisper API (large-v3) |
+|---|---|---|---|---|---|
+| **Parameters** | 27.1M | 37.8M | 61.5M | 72.6M | 1,550M |
+| **ONNX download** | ~27-50MB | ~70MB | ~237MB | ~240MB | N/A (cloud) |
+| **WER (LibriSpeech clean)** | 4.52% | 5.66% | 3.23% | 4.25% | ~2.7% |
+| **WER (LibriSpeech other)** | 11.71% | 15.45% | 8.18% | 10.35% | - |
+| **Cost per minute** | $0 | $0 (local) | $0 | $0 (local) | $0.006 |
+| **Network required** | First load only | First load only | First load only | First load only | Every request |
+| **Data leaves device** | Never | Never | Never | Never | Always |
+
+Sources: WER figures from the Moonshine paper (arXiv:2410.15608, Table 1). Whisper large-v3 WER from OpenAI benchmarks. Whisper API pricing from OpenAI's pricing page ($0.006/minute).
+
+Moonshine Tiny beats Whisper tiny.en on both test-clean (4.52% vs. 5.66%) and test-other (11.71% vs. 15.45%) - with 28% fewer parameters. Moonshine Base similarly outperforms Whisper base.en across the board.
+
+The gap to the cloud API's large-v3 model is real (3.23% vs. ~2.7% on clean speech), but for voice notes, meeting transcription, and voice commands, Moonshine Base at 3.23% WER is more than sufficient - and it costs nothing after the initial download.
+
+---
+
+## The Pipeline: Mic to Text in 4 Steps
+
+A browser-based voice notes app follows a straightforward pipeline:
+
+```
+Microphone → MediaRecorder → Audio Blob → transcribe() → Text
+```
+
+1. **Capture**: `navigator.mediaDevices.getUserMedia({ audio: true })` requests mic access.
+2. **Record**: `MediaRecorder` collects audio chunks as WebM/Opus.
+3. **Transcribe**: The audio blob is passed to `transcribe()`, which decodes it to 16kHz PCM and runs inference through Moonshine.
+4. **Display**: The returned text is rendered in the UI.
+
+The Web Audio API and MediaRecorder are supported in all modern browsers - Chrome, Edge, Firefox, and Safari 14.1+.
+
+---
+
+## Basic Usage: The `transcribe()` Function
+
+The `transcribe()` function from `@localmode/core` is the low-level entry point. It accepts any `SpeechToTextModel` implementation and returns structured results with usage metadata.
+
+```ts
+import { transcribe } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Create the model - downloads on first use, cached after that
+const model = transformers.speechToText('onnx-community/moonshine-tiny-ONNX');
+
+// Transcribe an audio blob (from MediaRecorder, file input, etc.)
+const { text, usage, response } = await transcribe({
+  model,
+  audio: audioBlob,
+});
+
+console.log(text);                  // "Pick up groceries on the way home"
+console.log(usage.durationMs);      // 1200 (transcription took 1.2s)
+console.log(usage.audioDurationSec); // 4.2 (4.2 seconds of audio)
+console.log(response.modelId);      // "transformers:onnx-community/moonshine-tiny-ONNX"
+```
+
+The `audio` parameter accepts three formats - use whichever your source provides:
+
+- **`Blob`** - from `MediaRecorder` or file inputs
+- **`ArrayBuffer`** - from `fetch()` responses
+- **`Float32Array`** - raw PCM samples from the Web Audio API
+
+### Timestamps and Language
+
+For meeting notes or subtitle-style output, request segment-level timestamps:
+
+```ts
+const { text, segments } = await transcribe({
+  model,
+  audio: audioBlob,
+  returnTimestamps: true,
+});
+
+segments?.forEach((seg) => {
+  console.log(`[${seg.start.toFixed(1)}s - ${seg.end.toFixed(1)}s] ${seg.text}`);
+});
+// [0.0s - 2.4s] Pick up groceries
+// [2.4s - 4.2s] on the way home
+```
+
+For non-English audio, pass a language hint or use `task: 'translate'` to translate to English:
+
+```ts
+const { text } = await transcribe({
+  model: transformers.speechToText('onnx-community/moonshine-base-ONNX'),
+  audio: frenchAudioBlob,
+  task: 'translate',
+});
+// Returns English translation
+```
+
+### Cancellation
+
+Long recordings can take time. Always support cancellation with `AbortSignal`:
+
+```ts
+const controller = new AbortController();
+
+const { text } = await transcribe({
+  model,
+  audio: longRecording,
+  abortSignal: controller.signal,
+});
+
+// Call controller.abort() from a cancel button
+```
+
+---
+
+## React Integration: Record and Transcribe in 30 Lines
+
+`@localmode/react` provides two hooks that handle the entire pipeline. `useVoiceRecorder` manages microphone permissions and the MediaRecorder lifecycle. `useTranscribe` wraps the core `transcribe()` function with loading state, error handling, and cancellation.
+
+```tsx
+import { useVoiceRecorder, useTranscribe } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.speechToText('onnx-community/moonshine-tiny-ONNX');
+
+function VoiceNotes() {
+  const recorder = useVoiceRecorder();
+  const transcriber = useTranscribe({ model });
+
+  const handleStop = async () => {
+    const blob = await recorder.stopRecording();
+    if (blob) await transcriber.execute(blob);
+  };
+
+  return (
+    <div>
+      <button onClick={recorder.isRecording ? handleStop : recorder.startRecording}>
+        {recorder.isRecording ? 'Stop' : 'Record'}
+      </button>
+
+      {transcriber.isLoading && <p>Transcribing...</p>}
+      {transcriber.error && <p>Error: {transcriber.error.message}</p>}
+      {transcriber.data && <p>{transcriber.data.text}</p>}
+
+      <button onClick={transcriber.cancel}>Cancel</button>
+    </div>
+  );
+}
+```
+
+`useVoiceRecorder` handles the details you would rather not think about: MIME type negotiation (WebM with Opus codec, falling back to plain WebM), stopping media tracks to release the microphone, and translating `NotAllowedError` into a human-readable "Microphone access denied" message.
+
+`useTranscribe` returns `{ data, error, isLoading, execute, cancel, reset }` - the standard operation pattern used across all `@localmode/react` hooks.
+
+---
+
+## Building a Full Voice Notes App
+
+The [Voice Notes](https://localmode.ai/voice-notes) showcase app extends this pattern with accumulated notes. It uses `useOperationList` from `@localmode/react` to maintain a growing list of transcribed notes, each with its audio URL and timestamp:
+
+```ts
+import { useOperationList, toAppError } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.speechToText('onnx-community/moonshine-tiny-ONNX');
+
+function useTranscriber() {
+  const {
+    items: notes,
+    isLoading: isTranscribing,
+    error,
+    execute,
+    cancel,
+    removeItem,
+    clearItems,
+    reset,
+  } = useOperationList({
+    fn: async ({ audio }, signal) => {
+      const { transcribe } = await import('@localmode/core');
+      return transcribe({ model, audio, abortSignal: signal });
+    },
+    transform: (result, input) => ({
+      id: crypto.randomUUID(),
+      audioUrl: input.audioUrl,
+      text: result.text.trim() || '[No speech detected]',
+      timestamp: new Date(),
+    }),
+  });
+
+  return { notes, isTranscribing, error: toAppError(error), execute, cancel, removeItem, clearItems, clearError: reset };
+}
+```
+
+Each recording produces a note object with the transcribed text, a blob URL for audio playback, and a timestamp. Notes can be individually deleted or bulk-cleared.
+
+The [Meeting Assistant](https://localmode.ai/meeting-assistant) takes this further - it transcribes uploaded audio files with Moonshine Base (`onnx-community/moonshine-base-ONNX`, ~237MB) for higher accuracy, then pipes the transcript through a summarization model to extract action items and key decisions.
+
+---
+
+## Offline and PWA: Works on a Plane
+
+Once the Moonshine model downloads, it is cached in the browser via the Transformers.js cache (backed by Cache API / IndexedDB). From that point on, transcription works with zero network access.
+
+This makes voice notes a natural fit for Progressive Web Apps. Add a service worker to cache your app shell, and users can record and transcribe notes in airplane mode, underground, or anywhere else with no connectivity. The model is the only large download (~50MB for Moonshine Tiny), and it only happens once.
+
+To verify the model is cached before going offline:
+
+```ts
+import { isModelCached, preloadModel } from '@localmode/transformers';
+
+// Check if already cached
+const cached = await isModelCached('onnx-community/moonshine-tiny-ONNX');
+
+if (!cached) {
+  // Preload with progress tracking
+  await preloadModel('onnx-community/moonshine-tiny-ONNX', {
+    onProgress: (p) => console.log(`${(p.progress ?? 0).toFixed(0)}%`),
+  });
+}
+```
+
+---
+
+## Cost at Scale
+
+The economics are straightforward. Consider a voice notes feature with 50,000 monthly active users, each recording an average of 10 minutes per month:
+
+| | Whisper API | LocalMode (Moonshine) |
+|---|---|---|
+| **Monthly audio** | 500,000 minutes | 500,000 minutes |
+| **Cost per minute** | $0.006 | $0 |
+| **Monthly cost** | $3,000 | $0 |
+| **Annual cost** | $36,000 | $0 |
+| **Data sent to cloud** | 500K min/month | None |
+| **Works offline** | No | Yes |
+
+The Whisper API cost is real and scales linearly. LocalMode's cost is zero regardless of usage, because inference happens on the user's own device. The only infrastructure cost is serving the static model file (~50MB), which any CDN handles trivially.
+
+---
+
+## When to Use Cloud Instead
+
+Local transcription is not the right choice for every scenario. Consider the Whisper API or other cloud services when:
+
+- **You need maximum accuracy on challenging audio** - Whisper large-v3 at ~2.7% WER on clean speech is still ahead of Moonshine Base's 3.23%, and the gap widens on noisy or heavily accented recordings.
+- **Audio exceeds 30 seconds and you need real-time streaming** - Browser-based models process audio after recording. Cloud APIs can stream results as audio arrives.
+- **You need speaker diarization** - Identifying who said what requires specialized models not yet available in-browser.
+- **Your users are on low-end devices** - Transcription uses CPU/GPU. Very old phones or tablets may struggle.
+
+For voice notes, meeting transcription, voice commands, and any feature where privacy matters, local transcription with Moonshine is the better default.
+
+---
+
+## Methodology
+
+All accuracy numbers (WER) in this post come from the Moonshine paper:
+
+- **Moonshine paper**: Jeffries et al., "Moonshine: Speech Recognition for Live Transcription and Voice Commands," [arXiv:2410.15608](https://arxiv.org/abs/2410.15608), Table 1 (LibriSpeech test-clean and test-other WER).
+- **Moonshine model parameters**: 27.1M (Tiny), 61.5M (Base) - from arXiv:2410.15608, Section 2.
+- **Whisper WER and parameters**: OpenAI Whisper GitHub repository, [github.com/openai/whisper](https://github.com/openai/whisper). Whisper tiny.en: 37.8M params, 5.66% WER (test-clean). Whisper base.en: 72.6M params, 4.25% WER (test-clean). Whisper large-v3: ~2.7% WER (test-clean) from OpenAI benchmarks.
+- **Whisper API pricing**: [OpenAI API Pricing](https://openai.com/api/pricing/) - $0.006/minute for the Whisper model.
+- **ONNX model sizes**: [onnx-community/moonshine-tiny-ONNX](https://huggingface.co/onnx-community/moonshine-tiny-ONNX) (~50MB default) and [onnx-community/moonshine-base-ONNX](https://huggingface.co/onnx-community/moonshine-base-ONNX) (~237MB default) on Hugging Face.
+- **Browser API support**: MediaRecorder API via [caniuse.com/mediarecorder](https://caniuse.com/mediarecorder); getUserMedia via [caniuse.com/stream](https://caniuse.com/stream).
+- **Code examples**: All API signatures verified against LocalMode source code - `packages/core/src/audio/transcribe.ts`, `packages/react/src/hooks/use-transcribe.ts`, and `packages/react/src/utilities/use-voice-recorder.ts`.
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

@@ -1,0 +1,387 @@
+---
+title: "WebGPU + WebLLM: Running a 4B Parameter LLM in Chrome at 90 Tokens/Second"
+description: "A deep dive into how MLC compilation transforms HuggingFace models into WebGPU shaders, enabling 30 curated LLMs to run entirely in the browser. We cover the full model catalog, Qwen3-4B's 97% on MATH-500, VRAM management, and real performance numbers across GPU tiers."
+author: LocalMode
+date: 2026-03-05
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Two years ago, the idea of running a multi-billion parameter language model inside a browser tab would have been dismissed as impractical. The models were too large, the browser APIs too limited, and the performance gap with native inference too wide.
+
+That gap has closed.
+
+With WebGPU now shipping by default across Chrome, Edge, Firefox, and Safari, and the MLC-AI team's WebLLM engine reaching maturity at v0.2.82, browser-based LLM inference has crossed the threshold from demo to production. A 4-bit quantized Qwen3-4B model loads in under 30 seconds, occupies roughly 2.2GB of GPU memory, and generates text at 60-90+ tokens per second on modern hardware -- all inside a Chrome tab, with zero network requests after the initial download.
+
+This post explains exactly how it works, what you can run, and what the real-world limitations are.
+
+---
+
+## How WebLLM Turns a HuggingFace Model into WebGPU Shaders
+
+The path from a HuggingFace model checkpoint to real-time browser inference involves three stages, all powered by the [MLC-AI](https://github.com/mlc-ai/mlc-llm) machine learning compilation framework built on Apache TVM.
+
+### Stage 1: Weight Conversion and Quantization
+
+The process begins with a standard HuggingFace model (SafeTensors or PyTorch format). MLC converts the weights into an optimized layout and applies 4-bit quantization (q4f16_1), reducing a 4B parameter model from roughly 8GB (FP16) down to approximately 2.2GB. This quantization scheme stores weights in 4-bit integers while keeping activations in FP16, preserving most of the model's quality while cutting memory by 75%.
+
+### Stage 2: Graph Compilation to WebGPU Shaders
+
+This is where MLC diverges from typical inference frameworks. Instead of interpreting model operations at runtime, MLC compiles the entire computation graph ahead of time into optimized WebGPU Shading Language (WGSL) compute shaders. Each transformer layer -- attention, feed-forward, layer norm -- becomes a GPU kernel tuned for the target architecture.
+
+The `shader-f16` feature is particularly important: it enables native FP16 operations in WebGPU shaders rather than emulating them in FP32. Since GPU inference is typically memory-bandwidth limited, halving the data width can nearly double throughput.
+
+The compiled output is a WebAssembly module (the runtime orchestrator) plus a set of pre-compiled GPU shader programs. No JIT compilation happens in the browser -- everything is ready to execute on load.
+
+### Stage 3: Browser Runtime
+
+When you call `CreateMLCEngine()` in the browser, WebLLM downloads the compiled WASM module and quantized weights, stores them in the Cache API for offline reuse, and initializes the WebGPU pipeline. Subsequent loads skip the download entirely, going straight from cache to GPU.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+// MLC-compiled model runs entirely on the GPU via WebGPU
+const model = webllm.languageModel('Qwen3-4B-q4f16_1-MLC');
+
+const result = await streamText({
+  model,
+  prompt: 'Explain the difference between TCP and UDP.',
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+The key insight is that MLC compilation eliminates the interpreter overhead that plagues other browser-based approaches. Every matrix multiplication, every attention head, every activation function is a pre-optimized GPU dispatch -- not a generic WASM loop.
+
+---
+
+## The Complete Model Catalog: 30 Curated Models
+
+LocalMode's `@localmode/webllm` package ships with 30 curated, pre-compiled models spanning seven model families. Every model uses 4-bit quantization (q4f16_1) for efficient VRAM usage. Here is the full catalog.
+
+### Tiny Models (under 500MB VRAM)
+
+| Model ID | Parameters | VRAM | Context | Best For |
+|----------|-----------|------|---------|----------|
+| SmolLM2-135M | 135M | ~78MB | 2K | Instant loading, prototyping |
+| SmolLM2-360M | 360M | ~210MB | 2K | Ultra-fast responses |
+| Qwen 2.5 0.5B | 0.5B | ~278MB | 4K | Small but capable |
+| Qwen 3 0.6B | 0.6B | ~350MB | 4K | Latest-gen tiny model |
+| TinyLlama 1.1B | 1.1B | ~400MB | 2K | Fast general chat |
+
+These models load in seconds and work well on integrated GPUs and lower-end hardware. They are ideal for autocomplete, simple Q&A, and testing during development.
+
+### Small Models (500MB - 1GB VRAM)
+
+| Model ID | Parameters | VRAM | Context | Best For |
+|----------|-----------|------|---------|----------|
+| Llama 3.2 1B | 1B | ~712MB | 4K | General tasks, fast inference |
+| Qwen 2.5 1.5B | 1.5B | ~868MB | 4K | Multilingual, Chinese support |
+| Qwen 2.5 Coder 1.5B | 1.5B | ~868MB | 4K | Code generation |
+
+The Llama 3.2 1B model is the recommended starting point for testing and development. It downloads quickly and provides surprisingly good quality for its size, scoring 49.3 on MMLU (5-shot) according to Meta's benchmarks. For comparison, the 3B variant scores 63.4.
+
+### Medium Models (1GB - 2GB VRAM)
+
+| Model ID | Parameters | VRAM | Context | Best For |
+|----------|-----------|------|---------|----------|
+| Qwen 3 1.7B | 1.7B | ~1.1GB | 4K | Multilingual, thinking mode |
+| SmolLM2 1.7B | 1.7B | ~1GB | 2K | Best small model (shader-f16) |
+| Gemma 2 2B | 2B | ~1.44GB | 2K | Google quality (shader-f16) |
+| Qwen 2.5 3B | 3B | ~1.7GB | 4K | High-quality multilingual |
+| Qwen 2.5 Coder 3B | 3B | ~1.7GB | 4K | Mid-range code model |
+| Llama 3.2 3B | 3B | ~1.76GB | 4K | Excellent general purpose |
+| Hermes 3 Llama 3.2 3B | 3B | ~1.76GB | 4K | Enhanced chat fine-tune |
+| Ministral 3 3B | 3B | ~1.8GB | 4K | Latest Mistral architecture |
+| Ministral 3 3B Reasoning | 3B | ~1.8GB | 4K | Reasoning-tuned |
+
+This tier offers the best balance of quality and resource usage for production browser applications. Llama 3.2 3B delivers strong instruction-following (77.4 IFEval) and general knowledge, while the Ministral 3B models bring Mistral's latest architecture to the browser.
+
+### Large Models (over 2GB VRAM)
+
+| Model ID | Parameters | VRAM | Context | Best For |
+|----------|-----------|------|---------|----------|
+| Phi 3.5 Mini | 3.8B | ~2.1GB | 4K | Reasoning, coding |
+| Phi 3 Mini 4K | 3.8B | ~2.2GB | 4K | Microsoft Phi reasoning |
+| Phi 3.5 Vision | 3.8B | ~2.4GB | 1K | Multimodal (text + images) |
+| Qwen 3 4B | 4B | ~2.2GB | 4K | Best medium-range quality |
+| Mistral 7B v0.3 | 7B | ~4GB | 4K | Strong general-purpose |
+| Qwen 2.5 7B | 7B | ~4GB | 4K | Excellent multilingual |
+| Qwen 2.5 Coder 7B | 7B | ~4GB | 4K | Best-in-class browser code model |
+| DeepSeek R1 Distill Qwen 7B | 7B | ~4.18GB | 4K | Advanced reasoning |
+| DeepSeek R1 Distill Llama 8B | 8B | ~4.41GB | 4K | Strongest reasoning |
+| Hermes 3 Llama 3.1 8B | 8B | ~4.9GB | 4K | DPO-optimized chat |
+| Llama 3.1 8B | 8B | ~4.5GB | 4K | Meta's flagship 8B |
+| Qwen 3 8B | 8B | ~4.5GB | 4K | Highest-quality multilingual |
+| Gemma 2 9B | 9B | ~5GB | 1K | Google's best quality |
+
+These models require dedicated GPU memory (4GB+ VRAM) and are best suited for desktop browsers with discrete GPUs. The 7B-9B class models deliver quality that was server-only territory just a year ago.
+
+---
+
+## Qwen3-4B: The Sweet Spot for Browser LLMs
+
+Among the 30 models in the catalog, Qwen3-4B stands out as the best balance of capability and browser viability. At just 2.2GB quantized, it fits comfortably in the GPU memory of most modern laptops and desktops.
+
+### Benchmark Highlights
+
+The numbers from the [Qwen3 Technical Report](https://arxiv.org/abs/2505.09388) and [Open Laboratory evaluation](https://openlaboratory.ai/models/qwen3-4b) tell the story:
+
+| Benchmark | Qwen3-4B | What It Measures |
+|-----------|----------|-----------------|
+| MMLU-Redux | 83.7% | Broad knowledge across 57 subjects |
+| MATH-500 | 97.0% | Competition-level mathematics |
+| C-Eval | 77.5% | Chinese language understanding |
+| MLogiQA | 65.9% | Logical reasoning |
+| RULER | 85.2 | Long-context retrieval (non-thinking) |
+
+A 97% score on MATH-500 from a 4-billion parameter model running inside a browser tab is remarkable. For context, the Qwen team notes that "even a tiny model like Qwen3-4B can rival the performance of Qwen2.5-72B-Instruct" -- a model 18 times its size.
+
+### Thinking Mode
+
+Qwen3-4B supports dual inference modes. In **non-thinking mode**, the model generates responses directly -- fast and efficient. In **thinking mode**, the model produces internal chain-of-thought reasoning before its final answer, significantly improving performance on math, logic, and multi-step problems. The MATH-500 score of 97.0% leverages this thinking capability.
+
+The trade-off is latency: thinking mode generates more tokens (the reasoning chain plus the answer), so wall-clock time increases. For interactive chat, non-thinking mode is typically preferred. For tasks where accuracy matters more than speed -- code generation, data extraction, math tutoring -- thinking mode is worth the extra tokens.
+
+<Callout type="info" title="Qwen3.5-4B via ONNX">
+  The newer Qwen3.5-4B model (scoring 88.8% on MMLU-Redux per [its model card](https://huggingface.co/Qwen/Qwen3.5-4B)) is available through the `@localmode/transformers` ONNX provider. The WebLLM catalog uses MLC-compiled Qwen3-4B. Both run in the browser; the choice depends on whether you prefer WebGPU-native (WebLLM) or the ONNX runtime with WebGPU acceleration (Transformers.js v4).
+</Callout>
+
+---
+
+## Performance: Real Numbers by GPU Tier
+
+Browser LLM performance depends on three factors: model size, GPU capability, and available VRAM. Based on WebLLM benchmarks and community reports, here are representative token generation speeds.
+
+<Callout type="warn" title="Performance varies">
+  All numbers below are approximate and vary significantly by hardware, browser version, driver, thermal throttling, and concurrent GPU workload. Treat these as directional ranges, not guarantees.
+</Callout>
+
+### Tokens per Second by Hardware Tier
+
+| Hardware | 1B Models | 3B Models | 4B Models | 7-8B Models |
+|----------|-----------|-----------|-----------|-------------|
+| Apple M3 Max (40-core GPU) | 120-180 tok/s | 60-90 tok/s | 50-80 tok/s | 35-50 tok/s |
+| Apple M1/M2 (8-core GPU) | 60-100 tok/s | 30-50 tok/s | 25-40 tok/s | 15-25 tok/s |
+| RTX 4070+ (12GB VRAM) | 130-200 tok/s | 70-100 tok/s | 60-90 tok/s | 40-60 tok/s |
+| RTX 3060 (8GB VRAM) | 80-120 tok/s | 40-60 tok/s | 35-50 tok/s | 20-35 tok/s |
+| Integrated GPU (Intel/AMD) | 30-60 tok/s | 15-30 tok/s | 10-20 tok/s | Not recommended |
+
+WebLLM on an M3 Max achieves roughly 70-80% of native llama.cpp performance for equivalent models, according to [published benchmarks](https://www.buildmvpfast.com/blog/webgpu-browser-ai-inference-cost-savings-2026). Phi 3.5 Mini has been measured at 71 tok/s and Llama 3.1 8B at 41 tok/s on M3 Max hardware -- and smaller models scale significantly faster.
+
+The "90 tokens/second" in this post's title reflects the upper range achievable with a 3B-4B model on high-end consumer hardware with discrete GPU. It is not a universal number -- but it is a real, reproducible result on hardware that millions of developers already own.
+
+---
+
+## VRAM Management: What Happens When Memory Runs Out
+
+Understanding GPU memory is critical for browser LLM deployment. Unlike server-side inference where you control the hardware, browser users bring wildly varying GPU capabilities.
+
+### Where VRAM Goes
+
+For a 4-bit quantized model, VRAM consumption breaks down roughly as:
+
+| Component | Qwen3-4B (2.2GB total) | Llama 3.1 8B (4.5GB total) |
+|-----------|------------------------|----------------------------|
+| Model weights (4-bit) | ~1.8GB | ~3.8GB |
+| KV cache (4K context) | ~200MB | ~400MB |
+| Activation buffers | ~200MB | ~300MB |
+
+The KV cache grows linearly with conversation length. At 4K tokens of context, it is manageable. At 32K tokens, a Qwen 3 4B model's KV cache alone could consume over 1.5GB, which is why the WebLLM catalog limits context to 4K tokens for browser deployment.
+
+### When VRAM Is Insufficient
+
+If the model's total memory requirement exceeds available GPU VRAM, WebLLM will fail to load the model and throw a `MODEL_LOAD_FAILED` error. Unlike native runtimes such as llama.cpp that can split layers between GPU and CPU, WebGPU requires the entire model to fit in GPU memory. There is no partial offloading.
+
+This is why model selection matters. The catalog spans 78MB to 5GB precisely so developers can target the right model for the user's hardware:
+
+```typescript
+import { isWebGPUSupported, getStorageQuota } from '@localmode/core';
+import { webllm, WEBLLM_MODELS, getModelCategory } from '@localmode/webllm';
+
+// Check capabilities before loading
+if (!await isWebGPUSupported()) {
+  // Fall back to wllama (WASM) or transformers (ONNX)
+  console.warn('WebGPU not available, using WASM fallback');
+}
+
+// Choose model based on available resources
+const quota = await getStorageQuota();
+const targetSize = quota.available > 4 * 1024 * 1024 * 1024
+  ? 'Qwen3-4B-q4f16_1-MLC'       // 2.2GB - high-end
+  : 'Llama-3.2-1B-Instruct-q4f16_1-MLC';  // 712MB - safe default
+```
+
+---
+
+## Structured Output: generateObject() with WebLLM
+
+Beyond free-form text generation, WebLLM models can produce validated JSON objects using `generateObject()`. This is powered by constrained decoding with automatic retry -- the model generates JSON, LocalMode validates it against a Zod schema, and retries with the validation error appended to the prompt if it fails.
+
+```typescript
+import { generateObject, jsonSchema } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+import { z } from 'zod';
+
+const model = webllm.languageModel('Qwen3-4B-q4f16_1-MLC');
+
+const { object } = await generateObject({
+  model,
+  schema: jsonSchema(z.object({
+    name: z.string(),
+    email: z.string().email(),
+    company: z.string().optional(),
+    sentiment: z.enum(['positive', 'neutral', 'negative']),
+  })),
+  prompt: 'Extract contact info and sentiment: "Love working with Sarah at sarah@acme.co, Acme Corp is great!"',
+});
+
+console.log(object);
+// { name: "Sarah", email: "sarah@acme.co", company: "Acme Corp", sentiment: "positive" }
+```
+
+This runs entirely in the browser. No API call, no server-side validation, no data transmitted. The Qwen3-4B and Phi 3.5 Mini models handle structured output particularly well due to their strong instruction-following capabilities.
+
+---
+
+## The LLM Chat Showcase App
+
+The [LLM Chat](https://localmode.ai/llm-chat) showcase app demonstrates everything discussed in this post. It provides a multi-model chat interface where you can:
+
+- Select from all 30 WebLLM models (plus wllama GGUF and Transformers ONNX backends)
+- Stream responses in real time with cancellation support
+- Send images to the Phi 3.5 Vision model for multimodal understanding
+- Enable semantic caching to instantly replay similar prompts
+- Toggle between agent mode (ReAct reasoning with tool use) and direct chat
+- Export conversation history as JSON
+
+The app is built with `@localmode/react`'s `useChat` hook, which wraps `streamText()` with React state management, message persistence, and AbortSignal cancellation:
+
+```typescript
+import { useChat } from '@localmode/react';
+import { webllm } from '@localmode/webllm';
+
+function ChatApp() {
+  const model = webllm.languageModel('Qwen3-4B-q4f16_1-MLC');
+  const { messages, isStreaming, send, cancel } = useChat({
+    model,
+    systemPrompt: 'You are a helpful assistant.',
+  });
+
+  return (
+    <div>
+      {messages.map((m) => (
+        <p key={m.id}>{m.role}: {m.content}</p>
+      ))}
+      <button onClick={() => send('Hello!')}>Send</button>
+      {isStreaming && <button onClick={cancel}>Stop</button>}
+    </div>
+  );
+}
+```
+
+---
+
+## Limitations and Requirements
+
+### WebGPU Browser Support
+
+WebGPU is required for WebLLM. As of early 2026, [browser support](https://caniuse.com/webgpu) has reached critical mass:
+
+| Browser | WebGPU Status |
+|---------|---------------|
+| Chrome 113+ | Stable since May 2023 |
+| Edge 113+ | Stable since May 2023 |
+| Safari 26+ (macOS Tahoe 26, iOS 26) | Stable since September 2025 |
+| Firefox 141+ (Windows) | Stable since July 2025 |
+| Firefox (macOS ARM64) | Stable since Firefox 145 |
+| Firefox (Linux) | Nightly only |
+
+For users without WebGPU, LocalMode offers two alternative providers that work everywhere: `@localmode/wllama` (llama.cpp via WebAssembly) and `@localmode/transformers` (ONNX with WASM fallback). You can detect WebGPU support and choose accordingly:
+
+```typescript
+import { isWebGPUSupported } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+import { wllama } from '@localmode/wllama';
+
+const hasGPU = await isWebGPUSupported();
+
+const model = hasGPU
+  ? webllm.languageModel('Qwen3-4B-q4f16_1-MLC')
+  : wllama.languageModel('bartowski/Qwen3-4B-GGUF:Qwen3-4B-Q4_K_M.gguf');
+```
+
+### Initial Load Time
+
+The first time a user loads a model, the full quantized weights must be downloaded. For Qwen3-4B, that is approximately 2.2GB. On a 50 Mbps connection, expect roughly 6 minutes. On gigabit, under 30 seconds. After the first download, the model is cached in the browser's Cache API and loads from disk in seconds.
+
+Use `preloadModel()` during app initialization or behind a loading screen to avoid surprising users:
+
+```typescript
+import { preloadModel, isModelCached } from '@localmode/webllm';
+
+if (!(await isModelCached('Qwen3-4B-q4f16_1-MLC'))) {
+  await preloadModel('Qwen3-4B-q4f16_1-MLC', {
+    onProgress: (p) => updateLoadingBar(p.progress),
+  });
+}
+```
+
+### Context Length
+
+The WebLLM catalog caps context at 1K-4K tokens to keep VRAM usage predictable. This is shorter than the native context lengths of these models (Qwen3-4B natively supports 32K+). For applications needing longer context, consider RAG (retrieval-augmented generation) to inject relevant snippets rather than entire documents.
+
+### Single Model at a Time
+
+WebGPU allocates GPU memory per model. Running two 4B models simultaneously would require 4.4GB+ of VRAM. In practice, load one model at a time and call `model.unload()` before switching. The `@localmode/webllm` implementation handles this automatically when you create a new engine.
+
+---
+
+## What This Means for Application Developers
+
+Browser LLMs are not a replacement for GPT-4o or Claude on complex tasks. They are a new deployment target with a fundamentally different trade-off: zero marginal cost, complete privacy, offline capability, and no infrastructure -- in exchange for smaller model sizes and GPU requirements on the client.
+
+The use cases where this trade-off makes sense are growing rapidly: local document Q&A, structured data extraction, code assistance, content summarization, form autofill, smart autocomplete, and agentic workflows that chain multiple local models together.
+
+With 30 models spanning 78MB to 5GB, WebGPU support across all major browsers, and generation speeds that reach 60-90+ tokens per second on modern hardware, the browser is no longer a toy environment for AI. It is a viable production platform.
+
+---
+
+## Methodology
+
+All benchmark scores cited in this post are sourced from official model cards, technical reports, and published evaluations:
+
+**Model Benchmarks:**
+- [Qwen3 Technical Report (arXiv:2505.09388)](https://arxiv.org/abs/2505.09388) -- Qwen3 architecture, training details, MATH-500 97.0%
+- [Qwen3-4B evaluation (Open Laboratory)](https://openlaboratory.ai/models/qwen3-4b) -- MMLU-Redux 83.7% (instruct), C-Eval 77.5%, MLogiQA 65.9%
+- [Qwen3.5-4B model card (Hugging Face)](https://huggingface.co/Qwen/Qwen3.5-4B) -- MMLU-Redux 88.8%, GPQA Diamond 76.2%, IFEval 89.8%
+- [Meta Llama 3.2 model card (Hugging Face)](https://huggingface.co/meta-llama/Llama-3.2-3B) -- MMLU 63.4% (3B), IFEval 77.4%
+- [Meta Llama 3.2 announcement](https://ai.meta.com/blog/llama-3-2-connect-2024-vision-edge-mobile-devices/) -- Architecture details, distillation from 8B/70B
+- [Phi-4-mini-instruct model card (Hugging Face)](https://huggingface.co/microsoft/Phi-4-mini-instruct) -- Phi-4 mini benchmarks
+- [DeepSeek-R1 paper (arXiv:2501.12948)](https://arxiv.org/abs/2501.12948) -- DeepSeek-R1-Distill benchmark tables, MATH-500 83.9% (1.5B distill)
+
+**WebLLM and MLC-AI:**
+- [MLC-AI WebLLM GitHub](https://github.com/mlc-ai/web-llm) -- v0.2.82, engine architecture, model compilation
+- [MLC LLM documentation](https://llm.mlc.ai/docs/compilation/compile_models.html) -- Compilation pipeline: weight conversion, config generation, WebGPU shader compilation
+- [WebLLM documentation](https://webllm.mlc.ai/docs/) -- Model catalog, Cache API storage, OpenAI-compatible API
+
+**WebGPU Browser Support:**
+- [WebGPU Implementation Status (gpuweb)](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status) -- Per-browser shipping timeline
+- [Can I Use: WebGPU](https://caniuse.com/webgpu) -- Global browser support percentage
+- [WebGPU cross-browser announcement (web.dev)](https://web.dev/blog/webgpu-supported-major-browsers) -- Chrome, Edge, Firefox, Safari status
+- [Chrome for Developers: WebGPU overview](https://developer.chrome.com/docs/web-platform/webgpu/overview) -- shader-f16 feature, FP16 performance impact
+
+**Performance References:**
+- [WebGPU Browser AI Inference (buildmvpfast.com)](https://www.buildmvpfast.com/blog/webgpu-browser-ai-inference-cost-savings-2026) -- WebLLM benchmarks on M3 Max: Llama 3.1 8B at 41 tok/s, Phi 3.5 Mini at 71 tok/s, ~80% native performance
+- [WebGPU 2026 overview (byteiota.com)](https://byteiota.com/webgpu-2026-70-browser-support-15x-performance-gains/) -- 15-30x compute performance vs WebGL, cross-browser coverage metrics
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

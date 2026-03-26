@@ -165,9 +165,9 @@ export class ModelNotFoundError extends EmbeddingError {
   constructor(modelId: string) {
     super(`Embedding model not found: ${modelId}`, {
       hint: `Check that the model ID is correct. Popular models include:
-• Xenova/all-MiniLM-L6-v2 (384 dimensions)
-• Xenova/bge-small-en-v1.5 (384 dimensions)
-• Xenova/all-mpnet-base-v2 (768 dimensions)
+• Snowflake/snowflake-arctic-embed-xs (384 dimensions, ~23MB)
+• Xenova/bge-small-en-v1.5 (384 dimensions, ~33MB)
+• Xenova/bge-base-en-v1.5 (768 dimensions, ~110MB)
 
 See https://huggingface.co/models?library=transformers.js for available models.`,
     });
@@ -187,7 +187,7 @@ export class ModelLoadError extends EmbeddingError {
       hint: `Model loading failed. Try:
 1. Check your network connection (first load downloads the model)
 2. Ensure sufficient storage space for model cache
-3. Try a smaller model: Xenova/all-MiniLM-L6-v2
+3. Try a smaller model: Xenova/bge-small-en-v1.5
 4. Check browser console for detailed error messages`,
       cause,
     });
@@ -433,7 +433,7 @@ export class VisionError extends LocalModeError {
 }
 
 // ============================================================================
-// P2 Domain Errors
+// Extended Domain Errors
 // ============================================================================
 
 /**
@@ -443,6 +443,36 @@ export class GenerationError extends LocalModeError {
   constructor(message: string, options?: { hint?: string; cause?: Error }) {
     super(message, 'GENERATION_ERROR', options);
     this.name = 'GenerationError';
+  }
+}
+
+/**
+ * Error in semantic cache operations.
+ *
+ * Extends {@link GenerationError} since the semantic cache
+ * is used to cache language model generation results.
+ *
+ * @example
+ * ```ts
+ * try {
+ *   await cache.lookup({ prompt: 'test', modelId: 'model' });
+ * } catch (error) {
+ *   if (error instanceof SemanticCacheError) {
+ *     console.log(error.code); // 'CACHE_DESTROYED' | 'CACHE_LOOKUP_FAILED' | 'CACHE_STORE_FAILED'
+ *   }
+ * }
+ * ```
+ */
+export class SemanticCacheError extends GenerationError {
+  constructor(
+    message: string,
+    code: 'CACHE_DESTROYED' | 'CACHE_LOOKUP_FAILED' | 'CACHE_STORE_FAILED',
+    options?: { hint?: string; cause?: Error }
+  ) {
+    super(message, options);
+    this.name = 'SemanticCacheError';
+    // Override the code set by GenerationError
+    (this as { code: string }).code = code;
   }
 }
 
@@ -463,6 +493,23 @@ export class ContextLengthExceededError extends GenerationError {
     this.name = 'ContextLengthExceededError';
     this.maxLength = maxLength;
     this.actualLength = actualLength;
+  }
+}
+
+/**
+ * Error in structured output generation (schema validation failures).
+ */
+export class StructuredOutputError extends GenerationError {
+  /** Number of attempts made before failure */
+  readonly attempts: number;
+
+  constructor(
+    message: string,
+    options?: { hint?: string; cause?: Error; attempts?: number }
+  ) {
+    super(message, { hint: options?.hint, cause: options?.cause });
+    this.name = 'StructuredOutputError';
+    this.attempts = options?.attempts ?? 0;
   }
 }
 
@@ -637,6 +684,42 @@ export class SpeechSynthesisError extends AudioError {
 }
 
 // ============================================================================
+// Multimodal Embedding Errors
+// ============================================================================
+
+/**
+ * Error in multimodal embedding operations (e.g., CLIP text+image embeddings).
+ */
+export class MultimodalEmbeddingError extends EmbeddingError {
+  readonly modality?: string;
+
+  constructor(message: string, options?: { modality?: string; hint?: string; cause?: Error }) {
+    super(message, {
+      hint: options?.hint ?? 'Check that the model supports the requested modality and that the input is valid.',
+      cause: options?.cause,
+    });
+    this.name = 'MultimodalEmbeddingError';
+    this.modality = options?.modality;
+  }
+}
+
+/**
+ * Error when a modality is not supported by the model.
+ */
+export class UnsupportedModalityError extends MultimodalEmbeddingError {
+  readonly supportedModalities: string[];
+
+  constructor(modality: string, supportedModalities: string[]) {
+    super(`Modality "${modality}" is not supported by this model`, {
+      modality,
+      hint: `This model supports: ${supportedModalities.join(', ')}. Use a model that supports "${modality}" embeddings.`,
+    });
+    this.name = 'UnsupportedModalityError';
+    this.supportedModalities = supportedModalities;
+  }
+}
+
+// ============================================================================
 // Network Errors
 // ============================================================================
 
@@ -693,6 +776,225 @@ export class EnvironmentError extends LocalModeError {
   constructor(message: string, hint?: string) {
     super(message, 'ENVIRONMENT_ERROR', { hint });
     this.name = 'EnvironmentError';
+  }
+}
+
+/**
+ * Error that occurs during pipeline execution.
+ * Wraps the original error with step context (name and index).
+ */
+export class PipelineError extends LocalModeError {
+  constructor(
+    message: string,
+    options: { stepName: string; stepIndex: number; cause?: Error }
+  ) {
+    super(message, 'PIPELINE_ERROR', {
+      hint: `Pipeline failed at step "${options.stepName}" (index ${options.stepIndex}). Check the cause for details.`,
+      context: { stepName: options.stepName, stepIndex: options.stepIndex },
+      cause: options.cause,
+    });
+    this.name = 'PipelineError';
+  }
+}
+
+// ============================================================================
+// Model Cache Errors
+// ============================================================================
+
+/**
+ * Error class for model cache operations.
+ *
+ * Codes:
+ * - `MODEL_CACHE_QUOTA_EXCEEDED` — Storage full, eviction failed to free enough space
+ * - `MODEL_CACHE_DOWNLOAD_FAILED` — Fetch error after all retries exhausted
+ * - `MODEL_CACHE_CHUNK_CORRUPTED` — Reassembled data size doesn't match expected total
+ * - `MODEL_CACHE_INDEXEDDB_BLOCKED` — IndexedDB unavailable (Safari Private Browsing)
+ */
+export class ModelCacheError extends LocalModeError {
+  constructor(
+    message: string,
+    code:
+      | 'MODEL_CACHE_QUOTA_EXCEEDED'
+      | 'MODEL_CACHE_DOWNLOAD_FAILED'
+      | 'MODEL_CACHE_CHUNK_CORRUPTED'
+      | 'MODEL_CACHE_INDEXEDDB_BLOCKED',
+    options?: { hint?: string; context?: Record<string, unknown>; cause?: Error }
+  ) {
+    const defaultHints: Record<string, string> = {
+      MODEL_CACHE_QUOTA_EXCEEDED:
+        'Storage is full. Try evicting unused models with loader.evict(modelId) or increase maxCacheSize.',
+      MODEL_CACHE_DOWNLOAD_FAILED:
+        'Model download failed after retries. Check your network connection and try again.',
+      MODEL_CACHE_CHUNK_CORRUPTED:
+        'Cached model data is corrupted. Evict the model with loader.evict(modelId) and re-download.',
+      MODEL_CACHE_INDEXEDDB_BLOCKED:
+        'IndexedDB is unavailable (Safari Private Browsing?). Model caching is disabled; downloads will not be persisted.',
+    };
+
+    super(message, code, {
+      hint: options?.hint ?? defaultHints[code],
+      context: options?.context,
+      cause: options?.cause,
+    });
+    this.name = 'ModelCacheError';
+  }
+}
+
+// ============================================================================
+// Privacy Errors
+// ============================================================================
+
+/**
+ * Error when the differential privacy budget is exhausted.
+ *
+ * Thrown when the cumulative epsilon consumed exceeds the configured
+ * maximum and the exhaustion policy is set to 'block'.
+ */
+export class PrivacyBudgetExhaustedError extends LocalModeError {
+  /** Maximum epsilon allowed */
+  readonly maxEpsilon: number;
+
+  /** Current cumulative epsilon consumed */
+  readonly consumedEpsilon: number;
+
+  constructor(maxEpsilon: number, consumedEpsilon: number) {
+    super(
+      `Privacy budget exhausted: consumed ${consumedEpsilon.toFixed(2)} of ${maxEpsilon.toFixed(2)} epsilon`,
+      'PRIVACY_BUDGET_EXHAUSTED',
+      {
+        hint: `Your differential privacy budget has been fully consumed. Options:
+1. Reset the budget: budget.reset()
+2. Increase maxEpsilon (reduces overall privacy guarantees)
+3. Use fewer queries or batch operations to consume less budget
+4. Switch to 'warn' exhaustion policy to continue with degraded privacy`,
+        context: { maxEpsilon, consumedEpsilon },
+      }
+    );
+    this.name = 'PrivacyBudgetExhaustedError';
+    this.maxEpsilon = maxEpsilon;
+    this.consumedEpsilon = consumedEpsilon;
+  }
+}
+
+// ============================================================================
+// Import/Export Errors
+// ============================================================================
+
+/**
+ * Base error for import/export operations.
+ */
+export class ImportExportError extends LocalModeError {
+  constructor(message: string, options?: { hint?: string; context?: Record<string, unknown>; cause?: Error }) {
+    super(message, 'IMPORT_EXPORT_ERROR', options);
+    this.name = 'ImportExportError';
+  }
+}
+
+/**
+ * Error for malformed input during parsing.
+ *
+ * Includes context about the format being parsed and optionally
+ * the line number where parsing failed (for JSONL and CSV).
+ */
+export class ParseError extends ImportExportError {
+  constructor(message: string, options?: { hint?: string; context?: Record<string, unknown>; cause?: Error }) {
+    super(message, {
+      hint: options?.hint ?? 'Check that the input matches the expected format (Pinecone JSON, ChromaDB JSON, CSV, or JSONL).',
+      context: options?.context,
+      cause: options?.cause,
+    });
+    this.name = 'ParseError';
+    (this as { code: string }).code = 'PARSE_ERROR';
+  }
+}
+
+/**
+ * Error when imported vector dimensions do not match the target VectorDB.
+ *
+ * Includes the expected and actual dimensions, and optionally the record ID
+ * of the first mismatched record.
+ */
+export class DimensionMismatchOnImportError extends ImportExportError {
+  /** Expected dimensions (target VectorDB) */
+  readonly expected: number;
+  /** Actual dimensions (imported vector) */
+  readonly actual: number;
+  /** ID of the first mismatched record */
+  readonly recordId?: string;
+
+  constructor(expected: number, actual: number, recordId?: string) {
+    super(
+      `Vector dimension mismatch on import: expected ${expected}, got ${actual}${recordId ? ` (record "${recordId}")` : ''}`,
+      {
+        hint: `The imported vectors have ${actual} dimensions but the target VectorDB expects ${expected}. Either use a VectorDB with ${actual} dimensions, re-embed with a model that produces ${expected}-dimensional vectors, or use skipDimensionCheck to bypass this validation.`,
+        context: { expected, actual, recordId },
+      }
+    );
+    this.name = 'DimensionMismatchOnImportError';
+    (this as { code: string }).code = 'DIMENSION_MISMATCH_ON_IMPORT';
+    this.expected = expected;
+    this.actual = actual;
+    this.recordId = recordId;
+  }
+}
+
+// ============================================================================
+// Agent Errors
+// ============================================================================
+
+/**
+ * Error in agent execution.
+ *
+ * Thrown when the agent encounters an unrecoverable error (not a tool
+ * execution error, which becomes an observation). Includes all steps
+ * completed before the error for debugging.
+ *
+ * @example
+ * ```ts
+ * try {
+ *   await runAgent({ model, tools, prompt: 'Research X' });
+ * } catch (error) {
+ *   if (error instanceof AgentError) {
+ *     console.log('Steps completed:', error.steps.length);
+ *     console.log(error.hint);
+ *   }
+ * }
+ * ```
+ */
+export class AgentError extends LocalModeError {
+  /** All steps completed before the error */
+  readonly steps: Array<{
+    index: number;
+    type: 'tool_call' | 'finish';
+    toolName?: string;
+    toolArgs?: Record<string, unknown>;
+    observation?: string;
+    result?: string;
+    durationMs: number;
+  }>;
+
+  constructor(
+    message: string,
+    options?: {
+      steps?: Array<{
+        index: number;
+        type: 'tool_call' | 'finish';
+        toolName?: string;
+        toolArgs?: Record<string, unknown>;
+        observation?: string;
+        result?: string;
+        durationMs: number;
+      }>;
+      hint?: string;
+      cause?: Error;
+    }
+  ) {
+    super(message, 'AGENT_ERROR', {
+      hint: options?.hint ?? 'Try a more capable model or simplify the tool definitions.',
+      cause: options?.cause,
+    });
+    this.name = 'AgentError';
+    this.steps = options?.steps ?? [];
   }
 }
 

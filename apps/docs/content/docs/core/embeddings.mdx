@@ -11,6 +11,10 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 
 Embeddings convert text into numerical vectors that capture semantic meaning. Use them for similarity search, clustering, and RAG applications.
 
+<Callout type="info" title="See it in action">
+  Try [Semantic Search](https://localmode.ai/semantic-search) and [PDF Search](https://localmode.ai/pdf-search) for working demos of these APIs.
+</Callout>
+
 ## embed()
 
 Generate an embedding for a single value:
@@ -22,7 +26,7 @@ Generate an embedding for a single value:
 import { embed } from '@localmode/core';
 import { transformers } from '@localmode/transformers';
 
-const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
 
 const { embedding, usage, response } = await embed({
   model,
@@ -31,7 +35,7 @@ const { embedding, usage, response } = await embed({
 
 console.log('Dimensions:', embedding.length); // 384
 console.log('Tokens:', usage.tokens); // 4
-console.log('Model:', response.modelId); // 'Xenova/all-MiniLM-L6-v2'
+console.log('Model:', response.modelId); // 'Xenova/bge-small-en-v1.5'
 ```
 
 </Tab>
@@ -120,15 +124,25 @@ console.log('Total tokens:', usage.tokens); // ~8
 </Tab>
 <Tab value="With Progress">
 
-```ts {4-6}
-const { embeddings } = await embedMany({
+```ts {5-7}
+import { streamEmbedMany } from '@localmode/core';
+
+const stream = streamEmbedMany({
   model,
   values: largeArrayOfTexts,
-  onProgress: (progress) => {
-    console.log(`Processed ${progress.completed}/${progress.total}`);
+  onBatch: (progress) => {
+    console.log(`Processed ${progress.index + progress.count}/${progress.total}`);
   },
 });
+
+for await (const { embedding } of stream) {
+  // Process each embedding as it arrives
+}
 ```
+
+<Callout type="info">
+  For progress tracking, use `streamEmbedMany()` with the `onBatch` callback. `embedMany()` does not support progress callbacks.
+</Callout>
 
 </Tab>
 <Tab value="With Cancellation">
@@ -174,10 +188,10 @@ try {
       type: 'AbortSignal',
       required: false,
     },
-    onProgress: {
-      description: 'Progress callback',
-      type: '(progress: { completed: number; total: number }) => void',
-      required: false,
+    maxParallelCalls: {
+      description: 'Maximum parallel embedding calls',
+      type: 'number',
+      default: '1',
     },
     maxRetries: {
       description: 'Maximum retry attempts on failure',
@@ -280,7 +294,7 @@ Wrap embedding models with middleware for caching, logging, etc.:
 ```typescript
 import { wrapEmbeddingModel, cachingMiddleware, loggingMiddleware } from '@localmode/core';
 
-const baseModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const baseModel = transformers.embedding('Xenova/bge-small-en-v1.5');
 
 const model = wrapEmbeddingModel(baseModel, [
   cachingMiddleware({ maxSize: 1000 }),
@@ -316,6 +330,7 @@ class MyCustomEmbedder implements EmbeddingModel {
     return {
       embeddings,
       usage: { tokens: values.length * 10 },
+      response: { modelId: this.modelId, timestamp: new Date() },
     };
   }
 }
@@ -334,13 +349,10 @@ const { embedding } = await embed({ model, value: 'Hello' });
   4. **Preload models** - Load models during app initialization
 </Callout>
 
-### Recommended Models
-
-| Model                                          | Dimensions | Size   | Use Case              |
-| ---------------------------------------------- | ---------- | ------ | --------------------- |
-| `Xenova/all-MiniLM-L6-v2`                      | 384        | ~22MB  | General purpose, fast |
-| `Xenova/all-MiniLM-L12-v2`                     | 384        | ~33MB  | Better accuracy       |
-| `Xenova/paraphrase-multilingual-MiniLM-L12-v2` | 384        | ~117MB | 50+ languages         |
+<Callout type="info">
+  For recommended models, provider-specific configuration, and practical recipes, see the
+  [Transformers Embeddings](/docs/transformers/embeddings) guide.
+</Callout>
 
 ## Next Steps
 
@@ -355,4 +367,32 @@ const { embedding } = await embed({ model, value: 'Hello' });
     href="/docs/core/rag"
     description="Build retrieval-augmented generation pipelines."
   />
+  <Card
+    title="React Hooks"
+    href="/docs/react/embeddings"
+    description="useEmbed, useEmbedMany, and useSemanticSearch hooks."
+  />
+  <Card
+    title="Multimodal Embeddings"
+    href="/docs/core/multimodal-embeddings"
+    description="Embed images and text in the same vector space with CLIP."
+  />
+  <Card
+    title="Drift Detection"
+    href="/docs/core/embedding-drift"
+    description="Detect model changes and re-embed documents automatically."
+  />
 </Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Semantic Search | Embed documents and search by meaning | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
+| Cross-Modal Search | Embed text and images for cross-modal retrieval | [Demo](https://localmode.ai/cross-modal-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/cross-modal-search) |
+| Product Search | Embed product catalog for semantic product discovery | [Demo](https://localmode.ai/product-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/product-search) |
+| Smart Gallery | Embed images for intelligent photo organization | [Demo](https://localmode.ai/smart-gallery) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-gallery) |
+| Document Redactor | Embed text with differential privacy noise | [Demo](https://localmode.ai/document-redactor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/document-redactor) |
+| PDF Search | Embed PDF chunks for document Q&A | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |
+| LangChain RAG | Embed documents in a LangChain RAG pipeline | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |
+| Duplicate Finder | Embed image features to detect near-duplicates | [Demo](https://localmode.ai/duplicate-finder) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/duplicate-finder) |

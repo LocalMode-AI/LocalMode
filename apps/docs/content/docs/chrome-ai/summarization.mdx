@@ -1,0 +1,108 @@
+---
+title: 'Summarization'
+description: 'Summarize text using Chrome built-in Gemini Nano'
+icon: ScrollText
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Summarization
+
+Chrome AI provides instant text summarization via the built-in Summarizer API. No model download required.
+
+<Callout type="info" title="See it in action">
+  Try [Text Summarizer](https://localmode.ai/text-summarizer) and [Smart Writer](https://localmode.ai/smart-writer) for working demos.
+</Callout>
+
+## Basic Usage
+
+```ts
+import { summarize } from '@localmode/core';
+import { chromeAI } from '@localmode/chrome-ai';
+
+const { summary, usage } = await summarize({
+  model: chromeAI.summarizer(),
+  text: 'Long article text that needs summarizing...',
+});
+
+console.log(summary);
+console.log(`Completed in ${usage.durationMs}ms`);
+```
+
+## Summary Types
+
+Chrome AI supports four summary types:
+
+```ts
+// TL;DR — concise summary (default)
+chromeAI.summarizer({ type: 'tl;dr' })
+
+// Key Points — bullet-style key points
+chromeAI.summarizer({ type: 'key-points' })
+
+// Teaser — engaging preview
+chromeAI.summarizer({ type: 'teaser' })
+
+// Headline — single-line headline
+chromeAI.summarizer({ type: 'headline' })
+```
+
+## Output Format
+
+```ts
+// Plain text (default)
+chromeAI.summarizer({ format: 'plain-text' })
+
+// Markdown
+chromeAI.summarizer({ format: 'markdown' })
+```
+
+## Summary Length
+
+```ts
+chromeAI.summarizer({ length: 'short' })   // Brief
+chromeAI.summarizer({ length: 'medium' })  // Balanced (default)
+chromeAI.summarizer({ length: 'long' })    // Detailed
+```
+
+## Shared Context
+
+Provide context that applies to all summarizations in a session:
+
+```ts
+const medicalSummarizer = chromeAI.summarizer({
+  type: 'key-points',
+  sharedContext: 'These are medical research papers. Focus on methodology and findings.',
+});
+
+const { summary } = await summarize({
+  model: medicalSummarizer,
+  text: researchPaper,
+});
+```
+
+## With AbortSignal
+
+```ts
+const controller = new AbortController();
+
+const { summary } = await summarize({
+  model: chromeAI.summarizer(),
+  text: longArticle,
+  abortSignal: controller.signal,
+});
+
+// Cancel if needed
+controller.abort();
+```
+
+<Callout type="info">
+  For full API reference, options, and result types, see the [Core Summarization](/docs/core/summarization) guide.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Text Summarizer | Summarize text using Chrome AI Summarization API | [Demo](https://localmode.ai/text-summarizer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/text-summarizer) |
+| Smart Writer | Chrome AI summarization with provider fallback | [Demo](https://localmode.ai/smart-writer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-writer) |

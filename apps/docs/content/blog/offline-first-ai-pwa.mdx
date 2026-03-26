@@ -1,0 +1,471 @@
+---
+title: "Building Offline-First AI Apps With Progressive Web Apps"
+description: "A complete architecture guide for shipping AI-powered PWAs that work on planes, in the field, and on unreliable networks. Covers model pre-caching, network monitoring, IndexedDB persistence, service worker configuration, and storage quota management -- all with LocalMode."
+author: LocalMode
+date: 2026-02-28
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Your user is on a plane at 35,000 feet. The Wi-Fi dropped twenty minutes ago. They open your app, dictate a voice note, search their document library by meaning, and get an AI-generated summary -- all without a single network request.
+
+This is not a hypothetical. It is what you can ship today with Progressive Web Apps and LocalMode. Every model runs in WebAssembly or WebGPU. Every vector and document lives in IndexedDB. The service worker serves the app shell from cache. The result is an AI application that works identically whether the user is on gigabit fiber or has no signal at all.
+
+This guide walks through the complete architecture: model pre-caching with progress UI, network status monitoring, offline detection with graceful degradation, persistent vector storage, and the PWA manifest and service worker configuration that ties it all together.
+
+---
+
+## Why Offline-First Matters for AI Apps
+
+Cloud AI APIs fail in exactly the situations where users need them most. Field researchers in remote areas. Healthcare workers in rural clinics. Sales teams on international flights. Construction managers in basements with no signal. Journalists in conflict zones.
+
+The conventional answer is "show an error message and retry later." The offline-first answer is "never depend on the network for core functionality in the first place."
+
+The PWA market has grown past [$2.47 billion in 2025](https://www.researchnester.com/reports/progressive-web-apps-market/6609), with Google reporting over 270% growth in desktop PWA installations between 2021 and 2022. The pattern is proven for content apps and e-commerce. What has changed is that browser-local AI inference has matured to the point where the same architecture works for ML-powered features.
+
+LocalMode's entire design assumes the network is optional. Models download once and cache permanently. Vectors persist in IndexedDB across sessions. Inference runs on the device's CPU or GPU. The network is used for exactly one thing: the initial model download. After that, everything is local.
+
+---
+
+## The Architecture at a Glance
+
+An offline-first AI PWA has five layers, each responsible for a different part of the offline experience:
+
+| Layer | Technology | What It Caches | Survives Offline? |
+|---|---|---|---|
+| App shell | Service worker + Cache API | HTML, CSS, JS bundles | Yes |
+| ML models | Cache API (Transformers.js) or IndexedDB (createModelLoader) | ONNX, GGUF model weights | Yes |
+| Vector data | IndexedDB (VectorDB) | Embeddings, documents, HNSW indexes | Yes |
+| Application state | IndexedDB / localStorage | User preferences, session data | Yes |
+| Network awareness | Navigator APIs | Connection status, type, speed | N/A |
+
+The key insight: the Cache API and IndexedDB share the same storage quota pool in the browser. A single origin on Chrome can use up to 60% of total disk space. On a machine with a 500 GB drive, that is up to 300 GB of combined model weights, vector data, and cached assets. Even on mobile devices, you typically get several gigabytes -- more than enough for embedding models (33 MB), speech-to-text models (28-63 MB), and thousands of vector embeddings.
+
+---
+
+## Step 1: Model Pre-Caching With Progress UI
+
+The most important offline-first decision happens before the user ever goes offline: downloading and caching the models they will need. LocalMode provides two mechanisms for this.
+
+### Using preloadModel() for Transformers.js Models
+
+Transformers.js models are cached in the browser's Cache API under a `transformers-cache` key. The `preloadModel()` function triggers a download without running inference, and `isModelCached()` checks whether a model is already available:
+
+```typescript
+import { preloadModel, isModelCached } from '@localmode/transformers';
+
+async function ensureModelsReady(onProgress: (model: string, pct: number) => void) {
+  const models = [
+    'Xenova/bge-small-en-v1.5',           // Embeddings (33 MB)
+    'onnx-community/moonshine-base-ONNX',  // Speech-to-text (63 MB)
+    'Xenova/distilbart-cnn-6-6',           // Summarization (~300 MB)
+  ];
+
+  for (const modelId of models) {
+    if (await isModelCached(modelId)) {
+      onProgress(modelId, 100);
+      continue;
+    }
+
+    await preloadModel(modelId, {
+      quantized: true,
+      onProgress: (p) => {
+        if (p.progress !== undefined) {
+          onProgress(modelId, p.progress);
+        }
+      },
+    });
+  }
+}
+```
+
+### Using createModelLoader() for Custom Models
+
+For self-hosted ONNX files, GGUF models, or any model loaded from a direct URL, `createModelLoader()` provides chunked downloads with LRU eviction and cross-tab coordination:
+
+```typescript
+import { createModelLoader } from '@localmode/core';
+
+const loader = createModelLoader({
+  maxCacheSize: '2GB',
+  onProgress: (modelId, progress) => {
+    console.log(`${modelId}: ${(progress.progress * 100).toFixed(1)}%`);
+  },
+});
+
+// Check cache, download if missing
+if (!(await loader.isModelCached('custom-embedder'))) {
+  await loader.prefetchOne('https://your-cdn.com/models/custom-embedder.onnx');
+}
+
+// Later, retrieve the cached model as a Blob
+const blob = await loader.getBlob('custom-embedder');
+```
+
+The model loader stores files in IndexedDB as 16 MB chunks. Downloads that are interrupted (by navigating away, closing the tab, or losing the network) resume from the last completed chunk. Web Locks ensure that if multiple tabs attempt the same download, only one does the actual work.
+
+### Model Size Budget
+
+Here is a realistic model budget for a full-featured offline AI app:
+
+| Model | Task | Size (quantized) |
+|---|---|---|
+| bge-small-en-v1.5 | Embeddings | 33 MB |
+| moonshine-base-ONNX | Speech-to-text | 63 MB |
+| distilbart-cnn-6-6 | Summarization | ~300 MB |
+| distilbert-sst-2 | Sentiment analysis | ~67 MB |
+| **Total** | | **~463 MB** |
+
+That is under half a gigabyte for four distinct AI capabilities, all running offline. For apps that need LLM chat, add 1-4 GB for a model like Qwen3-4B or Phi-4-mini via WebLLM or wllama.
+
+---
+
+## Step 2: Network Status Monitoring
+
+LocalMode's `@localmode/core` package includes a complete network status API that goes beyond simple online/offline detection. It reads the Network Information API to report connection type, effective speed, and whether the user has enabled data saver mode:
+
+```typescript
+import {
+  getNetworkStatus,
+  onNetworkChange,
+  isConnectionSuitable,
+  getConnectionRecommendation,
+} from '@localmode/core';
+
+// Check current status
+const status = getNetworkStatus();
+console.log(status.isOnline);        // true/false
+console.log(status.effectiveType);   // '4g', '3g', '2g', 'slow-2g'
+console.log(status.downlink);        // Mbps
+console.log(status.saveData);        // true if data saver enabled
+
+// React to changes
+const unsubscribe = onNetworkChange((status) => {
+  if (!status.isOnline) {
+    showOfflineBanner();
+  } else {
+    hideOfflineBanner();
+    // Good time to sync or prefetch
+    if (isConnectionSuitable()) {
+      prefetchPendingModels();
+    }
+  }
+});
+```
+
+The `getConnectionRecommendation()` function returns a structured recommendation for what to do based on connection quality:
+
+```typescript
+const rec = getConnectionRecommendation();
+
+if (rec.useLargeModels) {
+  // 4G or better: download full-size models
+  await preloadModel('onnx-community/moonshine-base-ONNX');
+} else {
+  // Slow connection: use smaller alternatives
+  await preloadModel('onnx-community/moonshine-tiny-ONNX');
+}
+```
+
+This is particularly valuable for field applications where connectivity is intermittent. The app can opportunistically download larger, higher-quality models when on Wi-Fi and fall back to smaller models when the connection degrades.
+
+---
+
+## Step 3: Persistent Vector Storage
+
+Every vector embedding, document, and HNSW index that LocalMode creates can persist in IndexedDB across sessions. When the user reopens the app -- even offline -- their entire search index is still there.
+
+```typescript
+import { createVectorDB, embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Create a persistent VectorDB backed by IndexedDB
+const db = await createVectorDB({
+  name: 'field-notes',
+  dimensions: 384,
+  // Default storage is IndexedDB -- data survives browser restarts
+});
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+// Add a document (persisted immediately)
+const { embedding } = await embed({ model, value: 'Soil sample pH 6.2 at grid ref 4521' });
+await db.add({
+  id: 'note-001',
+  vector: embedding,
+  metadata: { text: 'Soil sample pH 6.2 at grid ref 4521', timestamp: Date.now() },
+});
+
+// Search works identically offline
+const results = await db.search(queryVector, { topK: 5 });
+```
+
+The `IndexedDBStorage` adapter stores documents, vectors, HNSW graph indexes, and collection metadata in separate IndexedDB object stores. The Write-Ahead Log (WAL) option ensures that interrupted writes do not corrupt the database -- critical for mobile devices where the browser may be killed at any time.
+
+### Storage Quota Management
+
+Browser storage is generous but not infinite. LocalMode provides quota monitoring and cleanup utilities:
+
+```typescript
+import {
+  getStorageQuota,
+  requestPersistence,
+  checkQuotaWithWarnings,
+  startStorageMonitor,
+} from '@localmode/core';
+
+// Request persistent storage (prevents browser eviction)
+const persisted = await requestPersistence();
+
+// Check current usage
+const quota = await getStorageQuota();
+if (quota) {
+  console.log(`Using ${quota.percentUsed.toFixed(1)}% of ${(quota.quotaBytes / 1e9).toFixed(1)} GB`);
+}
+
+// Monitor continuously with callbacks
+const stopMonitoring = startStorageMonitor({
+  intervalMs: 60000,
+  warnAt: 80,
+  criticalAt: 95,
+  onStatusChange: (status, quota) => {
+    if (status === 'critical') {
+      showStorageWarning(quota);
+    }
+  },
+});
+```
+
+<Callout type="warn" title="Request persistent storage">
+  Without calling `requestPersistence()`, browsers may evict your IndexedDB data under storage pressure. Safari is particularly aggressive -- it will delete script-created data for origins that have not had user interaction in the last seven days. Always request persistence for offline-first apps that store model weights or user data.
+</Callout>
+
+### Cache API vs. IndexedDB
+
+Both share the same quota pool, but they serve different purposes in an offline AI app:
+
+| | Cache API | IndexedDB |
+|---|---|---|
+| Best for | HTTP responses, model files (via Transformers.js) | Structured data, vectors, metadata |
+| Access pattern | URL-keyed request/response pairs | Key-value with indexes and queries |
+| Used by | Service worker, Transformers.js model cache | VectorDB, createModelLoader, app state |
+| Persistence | Same eviction rules as IndexedDB | Same eviction rules as Cache API |
+
+Transformers.js caches model weights in the Cache API automatically. LocalMode's `createModelLoader()` uses IndexedDB with 16 MB chunks for more control over downloads. Your vector data always goes in IndexedDB. All three share the same origin quota.
+
+---
+
+## Step 4: PWA Manifest Configuration
+
+The web app manifest tells the browser your app can be installed and run standalone. Here is a manifest tuned for an offline AI application:
+
+```json
+{
+  "name": "FieldNotes AI",
+  "short_name": "FieldNotes",
+  "description": "Offline AI-powered field notes with voice transcription and semantic search",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#18181b",
+  "theme_color": "#3b82f6",
+  "orientation": "any",
+  "scope": "/",
+  "id": "/",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    { "src": "/screenshots/search.png", "sizes": "1280x720", "type": "image/png", "form_factor": "wide" },
+    { "src": "/screenshots/mobile.png", "sizes": "750x1334", "type": "image/png", "form_factor": "narrow" }
+  ],
+  "shortcuts": [
+    { "name": "New Voice Note", "url": "/voice-notes", "icons": [{ "src": "/icons/mic.png", "sizes": "96x96" }] },
+    { "name": "Search Notes", "url": "/search", "icons": [{ "src": "/icons/search.png", "sizes": "96x96" }] }
+  ]
+}
+```
+
+Link the manifest from your HTML head:
+
+```html
+<link rel="manifest" href="/manifest.json" />
+<meta name="theme-color" content="#3b82f6" />
+```
+
+The `display: "standalone"` setting is critical -- it makes the installed app look and feel like a native app with no browser chrome. The `id` field establishes a stable identity so the browser can track installs across URL changes.
+
+---
+
+## Step 5: Service Worker for the App Shell
+
+The service worker caches your app shell (HTML, CSS, JS) so the app loads instantly even when offline. For an AI PWA, the strategy is straightforward: cache the app shell aggressively, let the model caches (managed by Transformers.js and createModelLoader) handle themselves, and never interfere with model download requests.
+
+```typescript
+// public/sw.js
+const CACHE_NAME = 'fieldnotes-shell-v1';
+const SHELL_ASSETS = [
+  '/',
+  '/voice-notes',
+  '/search',
+  '/offline.html',
+];
+
+// Install: pre-cache the app shell
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_ASSETS))
+  );
+  self.skipWaiting();
+});
+
+// Activate: clean old caches
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys
+          .filter((key) => key !== CACHE_NAME && !key.startsWith('transformers-'))
+          .map((key) => caches.delete(key))
+      )
+    )
+  );
+  self.clients.claim();
+});
+
+// Fetch: network-first for navigation, cache-first for assets
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+
+  // Do NOT intercept model downloads (Transformers.js manages its own cache)
+  if (request.url.includes('huggingface.co') || request.url.includes('cdn-lfs')) {
+    return;
+  }
+
+  // Navigation requests: network-first with offline fallback
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request).catch(() => caches.match('/offline.html'))
+    );
+    return;
+  }
+
+  // Static assets: cache-first
+  event.respondWith(
+    caches.match(request).then((cached) => cached || fetch(request))
+  );
+});
+```
+
+Register the service worker in your app:
+
+```typescript
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js');
+}
+```
+
+<Callout type="info" title="Do not cache model files in your service worker">
+  Transformers.js manages its own model cache via the Cache API (under the key `transformers-cache`), and `createModelLoader()` uses IndexedDB with chunked storage. Your service worker should explicitly skip requests to HuggingFace CDN and model download URLs. Intercepting those requests will break download progress tracking and resume-from-interrupt behavior.
+</Callout>
+
+---
+
+## The Airplane Mode Experience
+
+With all five layers in place, here is what happens when the user enables airplane mode:
+
+1. **App loads instantly** -- The service worker serves the app shell from the Cache API. No network request needed.
+2. **Models are ready** -- Transformers.js finds the embedding model, STT model, and summarizer in its cache. No download needed.
+3. **Data is there** -- The VectorDB loads its HNSW index and all documents from IndexedDB. The user's entire search corpus is available.
+4. **Network status updates** -- `onNetworkChange()` fires, the app shows a subtle offline indicator. All AI features remain fully functional.
+5. **New data persists** -- Voice notes transcribed offline, new embeddings computed offline, and search results served offline all persist in IndexedDB. When the user comes back online, everything is still there.
+
+The user experience is identical to the online experience. There is no degradation, no "offline mode" with reduced features, no retry dialogs. The AI just works.
+
+---
+
+## Feature Detection for Graceful Degradation
+
+Not every browser supports every API. LocalMode provides comprehensive feature detection so you can build appropriate fallbacks:
+
+```typescript
+import {
+  isIndexedDBSupported,
+  isWebGPUSupported,
+  isWASMSupported,
+  detectCapabilities,
+} from '@localmode/core';
+
+// Check all capabilities at once
+const capabilities = await detectCapabilities();
+
+if (!await isIndexedDBSupported()) {
+  // Safari private browsing blocks IndexedDB - fall back to MemoryStorage
+  console.warn('IndexedDB unavailable, using in-memory storage');
+}
+
+if (!('serviceWorker' in navigator)) {
+  // No offline app shell caching
+  console.warn('Service workers unavailable, offline app loading disabled');
+}
+
+// WebGPU for fast inference, WASM as universal fallback
+const device = (await isWebGPUSupported()) ? 'webgpu' : 'wasm';
+```
+
+LocalMode's provider packages handle the WebGPU-to-WASM fallback automatically. You do not need to manage it manually -- but feature detection lets you inform users about what to expect. A device with WebGPU will run LLM inference at 40-90 tokens/second; WASM-only devices will be slower but still fully functional.
+
+---
+
+## Real-World Offline AI: Voice Notes and Semantic Search
+
+Two showcase apps on [localmode.ai](https://localmode.ai) demonstrate the complete offline-first AI pattern.
+
+**Voice Notes** uses `@localmode/transformers` to run Moonshine speech-to-text entirely in the browser. After the model downloads once (28-63 MB depending on variant), voice transcription works offline indefinitely. Transcribed notes are stored locally and can be searched, exported, or analyzed without any network dependency.
+
+**Semantic Search** builds a full vector search engine in the browser using `@localmode/core`'s VectorDB with HNSW indexing and `@localmode/transformers` for embedding generation. Users add documents, the app embeds them with bge-small-en-v1.5, and semantic search works offline across sessions. The app also demonstrates import/export for vector data portability -- you can export your entire search index as JSON and import it on another device.
+
+Both apps work as installable PWAs. Both function identically offline. Both keep all user data on the device.
+
+---
+
+## Checklist: Shipping an Offline-First AI PWA
+
+Here is the complete checklist for taking an AI feature from cloud-dependent to fully offline:
+
+- [ ] **Identify models** -- Choose quantized models that fit your storage budget (embedding: 33 MB, STT: 28-63 MB, classification: 67 MB, summarization: 300 MB, LLM: 1-4 GB)
+- [ ] **Pre-cache models** -- Use `preloadModel()` or `createModelLoader()` with progress UI during onboarding
+- [ ] **Request persistent storage** -- Call `requestPersistence()` early to prevent browser eviction
+- [ ] **Monitor network status** -- Use `onNetworkChange()` to show connection indicators and opportunistically download
+- [ ] **Use adaptive model selection** -- Use `getConnectionRecommendation()` to pick model sizes based on connection quality
+- [ ] **Persist vector data** -- Use `createVectorDB()` with default IndexedDB storage (not memory) for data that survives sessions
+- [ ] **Monitor storage quota** -- Use `startStorageMonitor()` to warn users before they hit limits
+- [ ] **Add web app manifest** -- Include `display: "standalone"`, proper icons, and shortcuts
+- [ ] **Register service worker** -- Cache the app shell, skip model download URLs
+- [ ] **Test in airplane mode** -- The entire app should work identically with network disabled
+
+---
+
+## Methodology
+
+- [PWA Market Size (Research Nester)](https://www.researchnester.com/reports/progressive-web-apps-market/6609) -- $2.47B in 2025, 30.2% CAGR
+- [HTTP Archive Web Almanac 2025: PWA](https://almanac.httparchive.org/en/2025/pwa) -- 24.5% of websites use at least one PWA feature
+- [MDN: Storage Quotas and Eviction Criteria](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria) -- Chrome 60% per-origin, Firefox 10%/10 GiB, Safari 60%
+- [WebKit: Updates to Storage Policy](https://webkit.org/blog/14403/updates-to-storage-policy/) -- Safari 17+ storage limits and eviction behavior
+- [MDN: Web Application Manifest](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Manifest) -- Manifest specification
+- [Chrome Developers: Caching Strategies (Workbox)](https://developer.chrome.com/docs/workbox/caching-strategies-overview/) -- Service worker caching strategy patterns
+- [MDN: PWA Caching Guide](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Caching) -- Cache API and service worker patterns
+- [web.dev: Storage for the Web](https://web.dev/articles/storage-for-the-web) -- Browser storage overview and best practices
+- [SitePoint: Local-First AI Guide](https://www.sitepoint.com/local-first-ai-webgpu-chrome-guide/) -- WebGPU and WASM for in-browser inference
+- [Mozilla AI: 3W for In-Browser AI](https://blog.mozilla.ai/3w-for-in-browser-ai-webllm-wasm-webworkers/) -- WebLLM + WASM + Web Workers architecture
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

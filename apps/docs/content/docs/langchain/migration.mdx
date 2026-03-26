@@ -1,0 +1,164 @@
+---
+title: 'Migration Guide'
+description: Migrate existing LangChain.js apps from cloud providers to local inference.
+icon: ArrowRightLeft
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Migration Guide
+
+Migrate existing LangChain.js applications from cloud providers to 100% local inference. Only provider instantiation changes — all chain, retriever, and agent code stays the same.
+
+<Callout type="info" title="See it in action">
+  Try [LangChain RAG](https://localmode.ai/langchain-rag) for a working demo of a fully migrated RAG pipeline.
+</Callout>
+
+## Component Mapping
+
+| Component | Cloud (Before) | Local (After) |
+|-----------|---------------|---------------|
+| Embeddings | `OpenAIEmbeddings` | `LocalModeEmbeddings` |
+| Chat Model | `ChatOpenAI` | `ChatLocalMode` |
+| Vector Store | `PineconeStore` / `ChromaStore` | `LocalModeVectorStore` |
+| Reranker | `CohereRerank` | `LocalModeReranker` |
+
+## Full RAG Chain Migration
+
+### Before — Cloud
+
+```typescript
+import { ChatOpenAI } from '@langchain/openai';
+import { OpenAIEmbeddings } from '@langchain/openai';
+import { PineconeStore } from '@langchain/pinecone';
+import { Pinecone } from '@pinecone-database/pinecone';
+
+// Requires: OPENAI_API_KEY, PINECONE_API_KEY
+const llm = new ChatOpenAI({ modelName: 'gpt-4o-mini', temperature: 0.7 });
+const embeddings = new OpenAIEmbeddings({ modelName: 'text-embedding-3-small' });
+
+const pinecone = new Pinecone();
+const index = pinecone.Index('my-docs');
+const store = await PineconeStore.fromExistingIndex(embeddings, { pineconeIndex: index });
+
+const retriever = store.asRetriever({ k: 5 });
+```
+
+### After — Local
+
+```typescript
+import { ChatLocalMode, LocalModeEmbeddings, LocalModeVectorStore } from '@localmode/langchain';
+import { transformers } from '@localmode/transformers';
+import { webllm } from '@localmode/webllm';
+import { createVectorDB } from '@localmode/core';
+
+// No API keys needed
+const llm = new ChatLocalMode({
+  model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+  temperature: 0.7,
+});
+const embeddings = new LocalModeEmbeddings({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+});
+
+const db = await createVectorDB({ name: 'my-docs', dimensions: 384 });
+const store = new LocalModeVectorStore(embeddings, { db });
+
+const retriever = store.asRetriever({ k: 5 });
+```
+
+Everything after `retriever` — chains, prompts, output parsers — stays identical.
+
+## Individual Adapter Migrations
+
+### Embeddings
+
+```diff
+- import { OpenAIEmbeddings } from '@langchain/openai';
++ import { LocalModeEmbeddings } from '@localmode/langchain';
++ import { transformers } from '@localmode/transformers';
+
+- const embeddings = new OpenAIEmbeddings({ modelName: 'text-embedding-3-small' });
++ const embeddings = new LocalModeEmbeddings({
++   model: transformers.embedding('Xenova/bge-small-en-v1.5'),
++ });
+```
+
+### Chat Model
+
+```diff
+- import { ChatOpenAI } from '@langchain/openai';
++ import { ChatLocalMode } from '@localmode/langchain';
++ import { webllm } from '@localmode/webllm';
+
+- const llm = new ChatOpenAI({ modelName: 'gpt-4o-mini', temperature: 0.7 });
++ const llm = new ChatLocalMode({
++   model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
++   temperature: 0.7,
++ });
+```
+
+### Vector Store
+
+```diff
+- import { PineconeStore } from '@langchain/pinecone';
++ import { LocalModeVectorStore } from '@localmode/langchain';
++ import { createVectorDB } from '@localmode/core';
+
+- const store = await PineconeStore.fromExistingIndex(embeddings, { pineconeIndex });
++ const db = await createVectorDB({ name: 'docs', dimensions: 384 });
++ const store = new LocalModeVectorStore(embeddings, { db });
+```
+
+### Reranker
+
+```diff
+- import { CohereRerank } from '@langchain/cohere';
++ import { LocalModeReranker } from '@localmode/langchain';
++ import { transformers } from '@localmode/transformers';
+
+- const reranker = new CohereRerank({ model: 'rerank-english-v3.0', topN: 5 });
++ const reranker = new LocalModeReranker({
++   model: transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2'),
++   topK: 5,
++ });
+```
+
+The `LocalModeReranker` implements `BaseDocumentCompressor`, so it works with LangChain's `ContextualCompressionRetriever`:
+
+```typescript
+import { ContextualCompressionRetriever } from 'langchain/retrievers/contextual_compression';
+
+const compressedRetriever = new ContextualCompressionRetriever({
+  baseCompressor: reranker,
+  baseRetriever: store.asRetriever({ k: 20 }),
+});
+
+// Returns top 5 most relevant docs from the initial 20
+const results = await compressedRetriever.invoke('search query');
+```
+
+## What Changes, What Doesn't
+
+| Aspect | Changes? | Details |
+|--------|----------|---------|
+| Chain/agent code | No | Same LangChain chains, retrievers, prompts |
+| Provider imports | Yes | 3 import line changes |
+| API keys | Removed | No `OPENAI_API_KEY`, `PINECONE_API_KEY` needed |
+| Monthly cost | $0 | All inference is local, unlimited usage |
+| Data privacy | Improved | Documents and embeddings never leave the device |
+| First-run time | Slower | One-time model download (33MB-2GB depending on models) |
+| Model quality | Different | Smaller models — excellent for embeddings/reranking, adequate for simple generation |
+| Streaming | Supported | `ChatLocalMode` streams via `doStream()` when available |
+| Tool calling | Not supported | Local models don't support LangChain's tool/function calling |
+| Structured output | Not supported | Use `generateObject()` from `@localmode/core` directly instead |
+
+<Callout>
+**Hybrid approach:** Use `LocalModeEmbeddings` + `LocalModeVectorStore` + `LocalModeReranker` for the retrieval pipeline (runs locally at $0 cost), and keep `ChatOpenAI` for the generation step when you need frontier model quality. This gives you 90% cost savings while maintaining answer quality.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| LangChain RAG | End-to-end RAG app demonstrating migration from cloud to local providers | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |

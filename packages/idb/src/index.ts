@@ -1,30 +1,24 @@
 /**
  * @localmode/idb
  *
- * Minimal IndexedDB storage adapter using the idb library.
+ * Minimal idb storage adapter for @localmode — lightweight IndexedDB
+ * wrapper with the smallest bundle footprint (~3KB).
  *
  * @packageDocumentation
  *
  * @example
- * ```ts
+ * ```typescript
  * import { IDBStorage } from '@localmode/idb';
+ * import { createVectorDB } from '@localmode/core';
  *
  * const storage = new IDBStorage({ name: 'my-app' });
- * await storage.open();
- *
- * // Store and retrieve data
- * await storage.setDocument('doc-1', { metadata: { title: 'Hello' } });
- * const doc = await storage.getDocument('doc-1');
- *
- * await storage.close();
+ * const db = await createVectorDB({
+ *   name: 'my-app',
+ *   dimensions: 384,
+ *   storage,
+ * });
  * ```
  */
 
-export {
-  IDBStorage,
-  type IDBStorageOptions,
-  type StoredDocument,
-  type StoredVector,
-  type SerializedHNSWIndex,
-} from './storage.js';
-
+export { IDBStorage } from './storage.js';
+export type { IDBStorageOptions } from './types.js';

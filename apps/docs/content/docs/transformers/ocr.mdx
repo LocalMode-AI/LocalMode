@@ -1,0 +1,98 @@
+---
+title: OCR
+description: Extract text from images using TrOCR models.
+icon: ScanText
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Extract text from images using TrOCR (Transformer-based OCR) models. Works with handwritten text, printed documents, and screenshots.
+
+<Callout type="info">
+  For full API reference (`extractText()`, `extractTextMany()`, options, result types, and custom providers), see the [Core OCR](/docs/core/ocr) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [OCR Scanner](https://localmode.ai/ocr-scanner) for a working demo.
+</Callout>
+
+## Recommended Models
+
+| Model | Size | Strength | Use Case |
+|-------|------|----------|----------|
+| `Xenova/trocr-small-printed` | ~120MB | Printed text | Documents, screenshots (recommended) |
+| `Xenova/trocr-small-handwritten` | ~120MB | Handwritten text | Notes, forms, handwriting |
+
+## Document Scanner Example
+
+Based on the [OCR Scanner](https://localmode.ai/ocr-scanner) showcase app:
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { extractText } from '@localmode/core';
+
+const model = transformers.ocr('Xenova/trocr-small-printed');
+
+async function scanDocument(file: File) {
+  const dataUrl = await new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.readAsDataURL(file);
+  });
+
+  const { text } = await extractText({
+    model,
+    image: dataUrl,
+    abortSignal: controller.signal,
+  });
+
+  return text;
+}
+```
+
+## Image Input Formats
+
+The `image` parameter accepts:
+- `string` — Data URL (`data:image/jpeg;base64,...`)
+- `Blob` — Image blob from file input
+
+## Best Practices
+
+<Callout type="tip" title="OCR Tips">
+  1. **Choose the right model** — Use handwritten model for handwriting, printed for documents
+  2. **Image quality matters** — Clear, well-lit images give much better results
+  3. **Crop to text area** — If the image has a small text region, crop it for better accuracy
+  4. **Single line focus** — TrOCR works best on single-line or small text regions
+</Callout>
+
+<Callout type="info">
+  For full PDF text extraction, use `@localmode/pdfjs` instead — it extracts text directly from PDF
+  structure without OCR. Use OCR only for scanned documents or images of text.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| OCR Scanner | Extract text from images and scanned documents | [Demo](https://localmode.ai/ocr-scanner) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/ocr-scanner) |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core OCR API"
+    href="/docs/core/ocr"
+    description="Full API reference, options, result types, and custom providers."
+  />
+  <Card
+    title="Document QA"
+    href="/docs/transformers/document-qa"
+    description="Answer questions about document images."
+  />
+  <Card
+    title="PDF Extraction"
+    href="/docs/pdfjs"
+    description="Extract text from PDF files."
+  />
+</Cards>

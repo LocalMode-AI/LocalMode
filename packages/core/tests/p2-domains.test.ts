@@ -1,7 +1,7 @@
 /**
- * P2 Domain Tests
+ * Extended Domain Tests
  *
- * Tests for all P2 domain functions and mock models.
+ * Tests for all extended domain functions and mock models.
  *
  * @packageDocumentation
  */
@@ -30,7 +30,7 @@ import {
 // MOCK MODEL TESTS
 // ═══════════════════════════════════════════════════════════════
 
-describe('P2 Mock Models', () => {
+describe('Extended Mock Models', () => {
   describe('createMockLanguageModel()', () => {
     it('should generate text', async () => {
       const model = createMockLanguageModel();

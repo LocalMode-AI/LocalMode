@@ -115,7 +115,7 @@ export interface DoFillMaskResult {
  * @example
  * ```ts
  * const { predictions } = await fillMask({
- *   model: transformers.fillMask('Xenova/bert-base-uncased'),
+ *   model: transformers.fillMask('onnx-community/ModernBERT-base-ONNX'),
  *   text: 'The capital of France is [MASK].',
  *   topK: 5,
  * });

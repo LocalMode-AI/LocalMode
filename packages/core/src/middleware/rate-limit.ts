@@ -36,7 +36,7 @@ export const DEFAULT_RATE_LIMIT_OPTIONS: Required<Omit<RateLimitMiddlewareOption
  * import { wrapEmbeddingModel, rateLimitMiddleware } from '@localmode/core';
  *
  * const rateLimitedModel = wrapEmbeddingModel({
- *   model: transformers.embedding('Xenova/all-MiniLM-L6-v2'),
+ *   model: transformers.embedding('Xenova/bge-small-en-v1.5'),
  *   middleware: rateLimitMiddleware({
  *     maxRequests: 10,
  *     windowMs: 1000, // 10 requests per second

@@ -1,0 +1,477 @@
+---
+title: "The Hybrid AI Architecture: Local Models for 95% of Requests, Cloud for the Rest"
+description: "Most AI requests in production apps are embeddings, classification, NER, reranking, and summarization - tasks where local browser models hit 90-99% of cloud quality. A hybrid architecture routes these locally at $0 cost while reserving cloud APIs for the 5% that genuinely need frontier reasoning. Here is how to build it."
+author: LocalMode
+date: 2026-03-16
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+The most common objection to local AI is also the most reasonable one: cloud models are better.
+
+That is true. GPT-4o, Claude, and Gemini are better at complex reasoning, nuanced creative writing, and multi-step problem solving than any model that fits in a browser tab. No serious person disputes this.
+
+But here is the question that matters for production architecture: what percentage of your AI requests actually require frontier-quality reasoning?
+
+We analyzed the request patterns across the 20+ showcase applications at [localmode.ai](https://localmode.ai) and found a consistent distribution. Roughly 95% of AI calls fall into categories where local models deliver 90-99% of cloud quality: embeddings, classification, NER, reranking, extractive QA, summarization, and translation. The remaining 5% - open-ended generation, complex multi-step reasoning, long-context synthesis - genuinely benefit from cloud APIs.
+
+The pragmatic architecture is not local OR cloud. It is local for the 95%, cloud for the 5%. This post shows you exactly how to build it.
+
+---
+
+## The 95/5 Split: What Goes Where
+
+Not all AI tasks are created equal. Some are well-defined, bounded operations where a small purpose-built model matches or nearly matches a general-purpose LLM. Others require the kind of broad reasoning that only frontier models deliver today.
+
+<Callout type="info" title="Reference benchmarks">
+  Quality percentages in this table are from our [benchmark analysis](/blog/local-ai-vs-cloud) of 18 model categories against OpenAI, Google, Cohere, and AWS. All local models run entirely in the browser.
+</Callout>
+
+| Task | Local Model | Quality vs Cloud | Cloud Fallback | When to Use Cloud |
+|---|---|---|---|---|
+| Embeddings | `bge-small-en-v1.5` (33MB) | **99%** of OpenAI | `text-embedding-3-small` | Never - local matches cloud |
+| Sentiment / Classification | `distilbert-sst-2` (67MB) | **95%+** of GPT-4o | GPT-4o | Multi-label with 50+ categories |
+| Zero-shot classification | `mobilebert-mnli` (100MB) | **94-97%** of GPT-4o | GPT-4o | Ambiguous or overlapping labels |
+| Named entity recognition | `bert-base-NER` (178MB) | **95-98%** of GPT-4o | GPT-4o | Rare entity types, nested entities |
+| Extractive QA | `distilbert-squad` (67MB) | **92-95%** of GPT-4o | GPT-4o | Multi-hop reasoning over long docs |
+| Reranking | `ms-marco-MiniLM-L6-v2` (23MB) | **87-93%** of Cohere | Cohere Rerank | Multilingual or domain-specific |
+| Summarization | `distilbart-cnn-6-6` (305MB) | **85-90%** of GPT-4o | GPT-4o | Abstractive over 10K+ tokens |
+| Translation | `opus-mt-*` (~100MB each) | **85%** of Google Translate | Google Translate | Rare language pairs, literary text |
+| Speech-to-text | `moonshine-base` (63MB) | **~80%** of Whisper API | Whisper API | Heavy accents, noisy environments |
+| LLM chat | Qwen3-4B (2.2GB) | **84%** MMLU-Redux | GPT-4o | Complex reasoning, 128K context |
+| LLM chat (thinking) | Qwen3.5-4B (~2.5GB) | **~100%** MMLU-Redux | GPT-4o | Creative writing, nuanced tone |
+
+The first seven rows - embeddings through translation - represent the vast majority of AI calls in typical production applications. Search boxes embed queries. Moderation pipelines classify content. Support systems extract entities and answer questions. Recommendation engines rerank results. None of these require GPT-4o.
+
+---
+
+## Architecture Overview
+
+A hybrid AI architecture uses capability detection at startup, routes the common path through local models, and escalates to cloud APIs only when the task exceeds what local inference can handle.
+
+```
+                            +------------------+
+                            |   User Request   |
+                            +--------+---------+
+                                     |
+                              +------v-------+
+                              |  Task Router  |
+                              +------+-------+
+                                     |
+                    +----------------+----------------+
+                    |                                  |
+          +---------v----------+            +----------v-----------+
+          |   LOCAL PATH (95%) |            |   CLOUD PATH (5%)    |
+          |                    |            |                      |
+          |  Embeddings        |            |  Complex reasoning   |
+          |  Classification    |            |  Long-context gen    |
+          |  NER               |            |  Creative writing    |
+          |  Reranking         |            |  Multi-hop QA        |
+          |  Extractive QA     |            |  Rare languages      |
+          |  Summarization     |            |                      |
+          |  Translation       |            |                      |
+          +---------+----------+            +----------+-----------+
+                    |                                  |
+          +---------v----------+            +----------v-----------+
+          | @localmode/core    |            |  Cloud API (fetch)   |
+          | @localmode/        |            |  OpenAI / Cohere /   |
+          |   transformers     |            |  Google / Anthropic  |
+          +---------+----------+            +----------+-----------+
+                    |                                  |
+                    +----------------+----------------+
+                                     |
+                              +------v-------+
+                              |   Response   |
+                              +--------------+
+```
+
+The key insight: the router is not a load balancer. It is a capability-aware decision function that checks what the device can handle and what the task requires.
+
+---
+
+## Step 1: Detect Device Capabilities
+
+Before routing any request, determine what the user's device can support. LocalMode provides `detectCapabilities()` for a full hardware and feature inventory, plus individual checks for specific features.
+
+```typescript
+import {
+  detectCapabilities,
+  isWebGPUSupported,
+  checkModelSupport,
+} from '@localmode/core';
+
+// Full capability report at app startup
+const capabilities = await detectCapabilities();
+
+console.log('WebGPU:', capabilities.features.webgpu);
+console.log('WASM SIMD:', capabilities.features.simd);
+console.log('Device memory:', capabilities.hardware.memory, 'GB');
+console.log('CPU cores:', capabilities.hardware.cores);
+console.log('Storage available:', capabilities.storage.availableBytes);
+
+// Check if a specific model can run on this device
+const modelCheck = await checkModelSupport({
+  modelId: 'Qwen3-4B-Instruct',
+  estimatedMemory: 2_200_000_000,  // 2.2GB
+  estimatedStorage: 2_200_000_000,
+  prefersWebGPU: true,
+});
+
+if (!modelCheck.supported) {
+  console.log('Cannot run locally:', modelCheck.reason);
+  console.log('Fallback models:', modelCheck.fallbackModels);
+  // → Route to cloud API instead
+}
+```
+
+`detectCapabilities()` returns browser info, device type, hardware specs (cores, memory, GPU), feature flags (WebGPU, WASM, SIMD, threads, IndexedDB), and storage quota - everything you need to make routing decisions.
+
+---
+
+## Step 2: Route Tasks to Local Models
+
+For the 95% path, use LocalMode's function-first API. Each function accepts a model interface - implementations come from provider packages like `@localmode/transformers`.
+
+```typescript
+import { embed, classify, rerank, extractEntities } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Embeddings - 99% of OpenAI quality, 8-30ms latency, $0
+const { embedding } = await embed({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  value: userQuery,
+});
+
+// Classification - 95%+ of GPT-4o, 10-50ms, $0
+const { label, score } = await classify({
+  model: transformers.classifier(
+    'Xenova/distilbert-base-uncased-finetuned-sst-2-english'
+  ),
+  text: userMessage,
+});
+
+// NER - 95-98% of GPT-4o, 30-100ms, $0
+const { entities } = await extractEntities({
+  model: transformers.ner('Xenova/bert-base-NER'),
+  text: documentText,
+});
+
+// Reranking - 87-93% of Cohere, 20-80ms, $0
+const { results } = await rerank({
+  model: transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2'),
+  query: searchQuery,
+  documents: candidateResults,
+});
+```
+
+Every function supports `abortSignal` for cancellation, `maxRetries` for resilience, and returns structured results with `usage` metadata. Latencies are after model warm-up - first inference includes a one-time model download (cached in IndexedDB for subsequent visits).
+
+---
+
+## Step 3: Build the Routing Middleware
+
+For text generation - the task most likely to need cloud escalation - use `wrapLanguageModel()` to create middleware that routes based on task complexity.
+
+```typescript
+import {
+  generateText,
+  streamText,
+  wrapLanguageModel,
+  detectCapabilities,
+} from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+import type { LanguageModelMiddleware } from '@localmode/core';
+
+// Create a routing middleware that checks task complexity
+const hybridRoutingMiddleware: LanguageModelMiddleware = {
+  wrapGenerate: async ({ doGenerate, prompt, model }) => {
+    // Estimate if this task needs cloud escalation
+    const needsCloud =
+      prompt.length > 8000 ||              // Long context
+      requiresMultiStepReasoning(prompt) || // Complex reasoning
+      requiresCreativeWriting(prompt);      // Nuanced generation
+
+    if (needsCloud) {
+      // Escalate to cloud API
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        body: JSON.stringify({ prompt }),
+      });
+      const data = await response.json();
+      return {
+        text: data.text,
+        finishReason: 'stop' as const,
+        usage: {
+          inputTokens: data.usage.input_tokens,
+          outputTokens: data.usage.output_tokens,
+          totalTokens: data.usage.total_tokens,
+          durationMs: data.duration_ms,
+        },
+      };
+    }
+
+    // Handle locally - the 95% path
+    return doGenerate();
+  },
+};
+
+// Wrap the local model with routing middleware
+const hybridModel = wrapLanguageModel({
+  model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
+  middleware: hybridRoutingMiddleware,
+});
+
+// Use it exactly like any other model - routing is transparent
+const { text } = await generateText({
+  model: hybridModel,
+  prompt: 'Summarize this customer feedback...',
+  maxTokens: 200,
+});
+```
+
+The middleware intercepts every generation call. Simple requests (summarization, short answers, structured extraction) run locally at zero cost. Complex requests transparently escalate to your cloud API endpoint. The calling code does not need to know which path was taken.
+
+---
+
+## Step 4: Compose Multiple Middleware
+
+Real production systems layer multiple concerns: routing, caching, logging, and guardrails. Use `composeLanguageModelMiddleware()` to stack them.
+
+```typescript
+import {
+  wrapLanguageModel,
+  composeLanguageModelMiddleware,
+} from '@localmode/core';
+import type { LanguageModelMiddleware } from '@localmode/core';
+
+// Cache responses to avoid redundant inference
+const cachingMiddleware: LanguageModelMiddleware = {
+  wrapGenerate: async ({ doGenerate, prompt }) => {
+    const cached = responseCache.get(prompt);
+    if (cached) return cached;
+    const result = await doGenerate();
+    responseCache.set(prompt, result);
+    return result;
+  },
+};
+
+// Log all generation calls for observability
+const loggingMiddleware: LanguageModelMiddleware = {
+  wrapGenerate: async ({ doGenerate, prompt, model }) => {
+    const start = Date.now();
+    const result = await doGenerate();
+    console.log(
+      `[${model.modelId}] ${prompt.slice(0, 40)}... → ${Date.now() - start}ms`
+    );
+    return result;
+  },
+};
+
+// Stack: guardrails → cache → routing → logging
+const composedMiddleware = composeLanguageModelMiddleware([
+  loggingMiddleware,
+  cachingMiddleware,
+  hybridRoutingMiddleware,
+]);
+
+const productionModel = wrapLanguageModel({
+  model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
+  middleware: composedMiddleware,
+});
+```
+
+Middleware are applied in order: `loggingMiddleware` wraps the outermost layer, `cachingMiddleware` checks the cache before `hybridRoutingMiddleware` decides local vs. cloud. This is the same composition pattern used by Vercel AI SDK middleware.
+
+---
+
+## Step 5: Handle Device Fallbacks Gracefully
+
+Not every device can run every local model. A low-end phone may struggle with a 2.2GB LLM but handle a 33MB embedding model without issue. Build your hybrid architecture to degrade gracefully.
+
+```typescript
+import {
+  embed,
+  classify,
+  detectCapabilities,
+  checkModelSupport,
+  isWebGPUSupported,
+} from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+async function createHybridEmbedder() {
+  // Embeddings are lightweight - almost always run locally
+  // Even on low-end devices, bge-small is only 33MB
+  return {
+    embed: async (text: string) => {
+      const { embedding } = await embed({
+        model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+        value: text,
+      });
+      return embedding;
+    },
+  };
+}
+
+async function createHybridClassifier() {
+  const caps = await detectCapabilities();
+  const hasEnoughMemory =
+    caps.hardware.memory === undefined || caps.hardware.memory >= 2;
+
+  if (hasEnoughMemory) {
+    // Run classification locally - 95%+ of cloud quality
+    return {
+      classify: async (text: string) => {
+        const { label, score } = await classify({
+          model: transformers.classifier(
+            'Xenova/distilbert-base-uncased-finetuned-sst-2-english'
+          ),
+          text,
+        });
+        return { label, score, source: 'local' as const };
+      },
+    };
+  }
+
+  // Fallback to cloud API for very low-memory devices
+  return {
+    classify: async (text: string) => {
+      const res = await fetch('/api/classify', {
+        method: 'POST',
+        body: JSON.stringify({ text }),
+      });
+      const data = await res.json();
+      return { ...data, source: 'cloud' as const };
+    },
+  };
+}
+```
+
+The pattern is consistent: check capabilities, prefer local, fall back to cloud. For lightweight models like embeddings (33MB) and classifiers (67MB), the local path works on virtually all modern browsers. For heavier models like LLMs (2-4GB), the capability check matters.
+
+---
+
+## The Latency Advantage
+
+The hybrid architecture is not just cheaper - it is faster for the local path. Cloud API calls include network round-trips that local inference avoids entirely.
+
+| Task | Local Latency | Cloud API Latency | Speedup |
+|---|---|---|---|
+| Embed single query | 8-30ms | 250-2,000ms | **8-66x** |
+| Classify text | 10-50ms | 300-1,500ms | **6-30x** |
+| Extract entities | 30-100ms | 500-3,000ms | **5-30x** |
+| Rerank 20 documents | 20-80ms | 170-460ms | **2-6x** |
+| Generate 100 tokens | 2-5s | 2-8s | **1-1.6x** |
+
+Local latencies are after model warm-up. Cloud latencies include network round-trip from a typical broadband connection and are based on published benchmarks and community reports. For embeddings and classification - the two highest-volume AI operations in most apps - the local path is an order of magnitude faster.
+
+The first-load penalty (model download) is a one-time cost. Models cache in IndexedDB and load from local storage on subsequent visits, typically in under a second.
+
+---
+
+## When Cloud Is the Right Choice
+
+The hybrid architecture explicitly acknowledges that cloud APIs are the better tool for certain tasks. Do not try to force local models into these roles:
+
+**Complex multi-step reasoning.** "Analyze this contract, identify the three most unusual clauses, and explain how they interact with Section 7" requires a frontier LLM's reasoning depth. Local models handle single-step extraction; cloud models handle chains of inference.
+
+**Long-context generation.** GPT-4o processes 128K tokens in a single context window. Browser LLMs typically operate with 4-32K context. If your task requires synthesizing information across a 50-page document, use a cloud API.
+
+**Frontier-quality creative writing.** Generating marketing copy that matches a brand voice, writing fiction with consistent characters, or producing nuanced professional communications - cloud models produce meaningfully better output for these tasks.
+
+**Broad multilingual support.** Google Translate covers 243 languages in one API call. Local translation requires downloading a separate ~100MB model per language pair. If you need to support more than a handful of languages, cloud is more practical.
+
+**Very low-end devices.** If your users are on budget phones with 2GB RAM and limited storage, even lightweight models may strain the device. Cloud APIs work on any device with an internet connection.
+
+---
+
+## Cost Model: Why 95/5 Matters at Scale
+
+The financial argument for hybrid architecture compounds with scale. Consider an application with 10,000 daily active users making an average of 50 AI calls per day:
+
+| Scenario | Cloud Calls/Year | Cost/Year | Local Calls/Year | Net Cost/Year |
+|---|---|---|---|---|
+| 100% Cloud | 182.5M | $50K - $300K+ | 0 | $50K - $300K+ |
+| 100% Local | 0 | $0 | 182.5M | **$0** |
+| 95/5 Hybrid | 9.1M | $2.5K - $15K | 173.4M | **$2.5K - $15K** |
+
+The hybrid approach captures 95% of the cost savings while maintaining 100% quality coverage. The 5% that goes to cloud APIs handles the genuinely complex requests where frontier models deliver meaningful value.
+
+Infrastructure costs also drop. Fewer cloud API calls mean fewer backend proxy servers, fewer API key rotation systems, fewer rate-limiting headaches, and fewer 3am billing alerts.
+
+---
+
+## Getting Started
+
+Install the packages and start routing:
+
+```bash
+npm install @localmode/core @localmode/transformers @localmode/webllm
+```
+
+```typescript
+import { embed, classify, generateText, wrapLanguageModel } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+import { webllm } from '@localmode/webllm';
+
+// Local path: embeddings and classification (the 95%)
+const { embedding } = await embed({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  value: 'How do I reset my password?',
+});
+
+const { label } = await classify({
+  model: transformers.classifier(
+    'Xenova/distilbert-base-uncased-finetuned-sst-2-english'
+  ),
+  text: 'This product is amazing!',
+});
+
+// Hybrid path: LLM with middleware routing (the 5%)
+const hybridModel = wrapLanguageModel({
+  model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
+  middleware: hybridRoutingMiddleware, // See Step 3 above
+});
+
+const { text } = await generateText({
+  model: hybridModel,
+  prompt: 'Summarize the key points from this feedback...',
+  maxTokens: 200,
+});
+```
+
+Models download once, cache in the browser, and run offline from that point forward. The hybrid routing middleware handles escalation transparently. Your application code calls the same API regardless of which path is taken.
+
+---
+
+## Methodology
+
+Quality percentages are from our [benchmark analysis](/blog/local-ai-vs-cloud) comparing 18 local model categories against cloud APIs on standard academic benchmarks (MTEB, SQuAD, CoNLL-2003, BLEU, WER, MMLU-Redux).
+
+### Sources
+
+**Local Model Benchmarks:**
+- [BAAI/bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5) -- MTEB 62.17, 384 dimensions, 33MB
+- [Qwen3 Technical Report (arXiv:2505.09388)](https://arxiv.org/abs/2505.09388) -- Qwen3-4B MMLU-Redux 83.7-84.2%
+- [Qwen3.5-4B model card](https://huggingface.co/Qwen/Qwen3.5-4B) -- MMLU-Redux 88.8% (thinking mode)
+- [OpenAI text-embedding-3-small](https://openai.com/index/new-embedding-models-and-api-updates/) -- MTEB 62.3
+- [OpenAI GPT-4o announcement](https://openai.com/index/hello-gpt-4o/) -- MMLU 88.7%
+
+**Cloud API Latency:**
+- [Embedding provider latency benchmarks (Nixie Search, 2025)](https://nixiesearch.substack.com/p/benchmarking-api-latency-of-embedding) -- OpenAI embedding P50 ~250ms-2s
+- [Cohere Rerank latency benchmarks](https://www.zeroentropy.dev/articles/lightning-fast-reranking-with-zerank-1) -- Cohere Rerank 3.5 P50 ~171ms (small), ~459ms (large)
+- [Azure OpenAI embedding latency reports](https://learn.microsoft.com/en-us/answers/questions/2153840/azure-openai-embedding-api-takes-1-2-sec-how-to-re) -- Azure OpenAI embedding ~1.2s typical
+
+**Pricing:**
+- [OpenAI API Pricing](https://openai.com/api/pricing/) -- GPT-4o $2.50/$10 per 1M tokens, embeddings $0.020/1M tokens
+- [Cohere Pricing](https://cohere.com/pricing) -- Rerank $2/1K searches
+- [Google Cloud Translation Pricing](https://cloud.google.com/translate/pricing) -- $20/1M characters
+
+All code examples use real LocalMode APIs verified against the `packages/core/src/` and `packages/transformers/src/` source code. All model names are real HuggingFace models with published ONNX weights.
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

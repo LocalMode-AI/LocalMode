@@ -1,0 +1,349 @@
+---
+title: "Cross-Modal Search: Find Photos by Describing Them in Words"
+description: "Build a photo search engine that understands natural language. Using CLIP multimodal embeddings, you can index images and find them with text queries like 'sunset over the ocean' - all running locally in the browser with zero cloud dependencies."
+author: LocalMode
+date: 2026-03-04
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+You have a folder of 500 vacation photos. You remember one - a golden retriever running on a beach at sunset. You do not remember the file name. You do not remember the date. You just remember what the photo looked like.
+
+Traditional search cannot help you. File names are useless. EXIF dates narrow things down but still leave hundreds of candidates. You need something that understands what is *in* the image and can match it to a description in plain English.
+
+This is exactly what multimodal embeddings do. A single model - CLIP - maps both text and images into the same vector space. A photo of a dog on a beach and the sentence "golden retriever running on a beach at sunset" land near each other in that space. Search becomes a nearest-neighbor lookup.
+
+In this post, we will build a complete cross-modal photo search system that runs entirely in the browser. No API keys. No server. No data leaves the device.
+
+---
+
+## How Multimodal Embeddings Work
+
+Standard text embedding models map sentences to vectors. Standard image models map images to vectors. The problem: those vectors live in completely different spaces. You cannot compare them.
+
+CLIP (Contrastive Language-Image Pre-training), released by OpenAI in 2021, solves this by training a text encoder and a vision encoder *jointly*. During training, the model sees 400 million image-text pairs. For each batch, it learns to maximize the similarity between matched pairs (an image and its caption) while minimizing similarity for all unmatched pairs. The result: both encoders produce vectors in the same 512-dimensional space.
+
+```
+                    SHARED EMBEDDING SPACE (512 dimensions)
+  ┌─────────────────────────────────────────────────────────────┐
+  │                                                             │
+  │    "sunset over the ocean"  ●─── close ───●  [photo of     │
+  │                                              ocean sunset]  │
+  │                                                             │
+  │    "a cat sleeping"  ●─── close ───●  [photo of            │
+  │                                       sleeping cat]         │
+  │                                                             │
+  │                                                             │
+  │    "sunset over the ocean"  ●─── far ────●  [photo of      │
+  │                                             sleeping cat]   │
+  │                                                             │
+  └─────────────────────────────────────────────────────────────┘
+
+         Text Encoder                    Vision Encoder
+         (Transformer)                   (ViT-B/32)
+              │                               │
+         "sunset over                    [image bytes]
+          the ocean"
+```
+
+The key insight is that cosine similarity between a text vector and an image vector is meaningful. A score of 0.35 between "sunset over the ocean" and a beach sunset photo means high relevance. A score of 0.05 between that same text and a photo of a cat means low relevance. This one property enables two powerful search modes:
+
+- **Text-to-image search**: Embed a text query, find the nearest image vectors
+- **Image-to-image search**: Embed a reference image, find the nearest image vectors
+
+Both use the exact same index. Both use the exact same distance function. The only difference is which encoder produces the query vector.
+
+---
+
+## Available Models
+
+LocalMode ships three multimodal embedding models through the Transformers provider, each with different trade-offs:
+
+| Model | Dimensions | Size (quantized) | Speed | Best For |
+|-------|-----------|-------------------|-------|----------|
+| `Xenova/clip-vit-base-patch32` | 512 | ~340 MB | Fastest | General-purpose cross-modal search |
+| `Xenova/clip-vit-base-patch16` | 512 | ~340 MB | Medium | Higher accuracy, same vector size |
+| `Xenova/siglip-base-patch16-224` | 768 | ~400 MB | Medium | Best quality, larger vectors |
+
+**CLIP ViT-Base/Patch32** is the default choice. It uses a Vision Transformer that splits images into 32x32 pixel patches, producing 512-dimensional vectors. The model expects 224x224 pixel input images (resized automatically by the processor). At around 350 MB quantized, it downloads once and is cached in the browser for subsequent visits.
+
+**SigLIP** (Sigmoid Loss for Language-Image Pre-training) is a 2023 improvement from Google that replaces CLIP's softmax-based contrastive loss with a sigmoid loss. Instead of treating alignment as a multi-class problem over the full batch, SigLIP treats each image-text pair as an independent binary classification. This eliminates the need for the full N-by-N similarity matrix during training, allowing larger batch sizes and producing better-calibrated similarity scores, especially at smaller model sizes. SigLIP's 768-dimensional vectors provide richer representations at the cost of slightly more storage per vector.
+
+---
+
+## Step 1: Create the Model and Database
+
+```ts
+import { embedImage, embed, createVectorDB } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Create the multimodal model - handles both text and image encoding
+const model = transformers.multimodalEmbedding('Xenova/clip-vit-base-patch32');
+
+// Create a vector database for image embeddings
+const db = await createVectorDB({
+  name: 'photo-search',
+  dimensions: 512,    // Must match model output
+  storage: 'memory',  // Or 'indexeddb' for persistence
+});
+```
+
+The `multimodalEmbedding()` factory returns a `MultimodalEmbeddingModel` - an interface that extends `EmbeddingModel<string>`. This means the same model instance works with both `embed()` (text) and `embedImage()` (images). Internally, the text encoder and vision encoder are loaded lazily: the text encoder downloads on the first `embed()` call, and the vision encoder on the first `embedImage()` call. If you only need text-to-image search, the vision encoder only loads during indexing.
+
+## Step 2: Index Images
+
+```ts
+// Index a batch of photos
+const photos = [
+  { id: 'photo-1', blob: photo1Blob, title: 'Beach sunset' },
+  { id: 'photo-2', blob: photo2Blob, title: 'Mountain trail' },
+  { id: 'photo-3', blob: photo3Blob, title: 'City skyline' },
+];
+
+for (const photo of photos) {
+  const { embedding } = await embedImage({
+    model,
+    image: photo.blob, // Accepts Blob, ArrayBuffer, data URI, or URL string
+  });
+
+  await db.add({
+    id: photo.id,
+    vector: embedding,
+    metadata: { title: photo.title },
+  });
+}
+```
+
+Each `embedImage()` call runs the image through CLIP's vision encoder (ViT-B/32), which tokenizes the image into a grid of patches, processes them through transformer layers, and projects the output to a 512-dimensional L2-normalized vector. The `image` parameter accepts multiple formats: a `Blob` from file uploads, an `ArrayBuffer` from fetch responses, a data URI string from `FileReader`, or a URL string pointing to an image.
+
+For larger collections, use `embedManyImages()` to batch-process images:
+
+```ts
+import { embedManyImages } from '@localmode/core';
+
+const blobs = photos.map((p) => p.blob);
+
+const { embeddings } = await embedManyImages({
+  model,
+  images: blobs,
+});
+
+// Index all at once
+for (let i = 0; i < photos.length; i++) {
+  await db.add({
+    id: photos[i].id,
+    vector: embeddings[i],
+    metadata: { title: photos[i].title },
+  });
+}
+```
+
+## Step 3: Search with Text
+
+```ts
+// User types: "sunset over the ocean"
+const query = 'sunset over the ocean';
+
+// Embed the text query - same model, same vector space
+const { embedding: queryVector } = await embed({
+  model,
+  value: query,
+});
+
+// Find the 5 most similar images
+const results = await db.search(queryVector, { k: 5 });
+
+for (const result of results) {
+  console.log(`${result.id}: ${(result.score * 100).toFixed(1)}% match`);
+}
+```
+
+This is the core of cross-modal search. The text "sunset over the ocean" is encoded by CLIP's text encoder into the same 512-dimensional space as the image embeddings. The `db.search()` call computes cosine similarity between the query vector and every indexed image vector, returning the top-k matches. Because both encoders were trained jointly on image-text pairs, the similarity score directly reflects semantic relevance.
+
+## Step 4: Search with Images
+
+```ts
+// User uploads a reference image to find similar photos
+const { embedding: imageQuery } = await embedImage({
+  model,
+  image: referenceImageBlob,
+});
+
+const similar = await db.search(imageQuery, { k: 5 });
+```
+
+Image-to-image search uses the same index and the same search call. The only difference is the query vector comes from the vision encoder instead of the text encoder. This finds visually similar images - photos with similar colors, composition, subjects, or scenes.
+
+---
+
+## Building a React Photo Search UI
+
+Here is a complete React component that combines everything into a working search interface. It uses the `useEmbedImage` and `useBatchOperation` hooks from `@localmode/react` for managed state and cancellation.
+
+The service layer creates singleton model and database instances:
+
+```ts
+// search.service.ts
+import { embed, embedImage, createVectorDB } from '@localmode/core';
+import type { VectorDB, MultimodalEmbeddingModel } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+let clipModel: MultimodalEmbeddingModel | null = null;
+let vectorDB: VectorDB | null = null;
+const photoStore = new Map<string, { id: string; dataUrl: string }>();
+
+export function getModel() {
+  if (!clipModel) {
+    clipModel = transformers.multimodalEmbedding('Xenova/clip-vit-base-patch32');
+  }
+  return clipModel;
+}
+
+async function getDB() {
+  if (!vectorDB) {
+    vectorDB = await createVectorDB({
+      name: 'photo-search',
+      dimensions: 512,
+      storage: 'memory',
+    });
+  }
+  return vectorDB;
+}
+
+export async function indexPhoto(
+  photo: { id: string; dataUrl: string },
+  signal?: AbortSignal
+) {
+  const model = getModel();
+  const db = await getDB();
+
+  const { embedding } = await embedImage({
+    model,
+    image: photo.dataUrl,
+    abortSignal: signal,
+  });
+
+  await db.add({ id: photo.id, vector: embedding });
+  photoStore.set(photo.id, photo);
+}
+
+export async function searchByText(query: string, signal?: AbortSignal) {
+  const model = getModel();
+  const db = await getDB();
+
+  const { embedding } = await embed({
+    model,
+    value: query,
+    abortSignal: signal,
+  });
+
+  const results = await db.search(embedding, { k: 20 });
+  return results
+    .map((r) => ({ photo: photoStore.get(r.id)!, score: r.score }))
+    .filter((r) => r.photo);
+}
+
+export async function searchByImage(imageDataUrl: string, signal?: AbortSignal) {
+  const model = getModel();
+  const db = await getDB();
+
+  const { embedding } = await embedImage({
+    model,
+    image: imageDataUrl,
+    abortSignal: signal,
+  });
+
+  const results = await db.search(embedding, { k: 20 });
+  return results
+    .map((r) => ({ photo: photoStore.get(r.id)!, score: r.score }))
+    .filter((r) => r.photo);
+}
+```
+
+The hook owns all async state and exposes actions to the component:
+
+```ts
+// use-photo-search.ts
+import { useState } from 'react';
+import { useBatchOperation, readFileAsDataUrl } from '@localmode/react';
+import { indexPhoto, searchByText, searchByImage } from './search.service';
+
+export function usePhotoSearch() {
+  const [photos, setPhotos] = useState([]);
+  const [results, setResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  const batch = useBatchOperation({
+    fn: async (item, signal) => {
+      const dataUrl = await readFileAsDataUrl(item.file);
+      const photo = { id: crypto.randomUUID(), dataUrl };
+      setPhotos((prev) => [...prev, photo]);
+      await indexPhoto(photo, signal);
+      return photo;
+    },
+    concurrency: 1, // CLIP is not parallelizable
+  });
+
+  const search = async (query: string) => {
+    setIsSearching(true);
+    try {
+      setResults(await searchByText(query));
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const searchImage = async (file: File) => {
+    setIsSearching(true);
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setResults(await searchByImage(dataUrl));
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  return {
+    photos, results, isSearching,
+    uploadPhotos: (files) => batch.execute(files.map((f) => ({ file: f }))),
+    search, searchImage,
+    cancel: batch.cancel,
+  };
+}
+```
+
+The component reads state from the hook and handles only UI concerns - input management and rendering. The full working implementations of this pattern are available in the [Cross-Modal Search](https://localmode.ai/cross-modal-search) and [Smart Gallery](https://localmode.ai/smart-gallery) showcase apps.
+
+---
+
+## Practical Considerations
+
+**Similarity score ranges.** Cross-modal CLIP scores are lower than same-modality scores. A text-to-image score of 0.30-0.35 indicates strong relevance. Scores above 0.25 are generally good matches. Do not expect scores above 0.5 for text-to-image queries - the gap between modalities compresses the range. For image-to-image search, scores are higher (0.7+ for visually similar images).
+
+**Image preprocessing.** CLIP's vision encoder automatically resizes inputs to 224x224 pixels. You do not need to resize images yourself, but be aware that very large images (e.g., 4000x3000 from a DSLR) will consume significant memory during processing. Consider resizing to a reasonable maximum (e.g., 1024px on the longest side) before embedding if you are processing hundreds of images.
+
+**First-load latency.** The CLIP model downloads on first use (~340 MB for ViT-Base/Patch32). After that, the browser caches the model files. The text encoder and vision encoder load independently - if a user only searches (text queries), only the text encoder loads. The vision encoder loads when the first image is embedded.
+
+**Storage strategy.** Use `storage: 'memory'` for session-only search (the cross-modal-search showcase app does this). Use `storage: 'indexeddb'` if you want vectors to persist across page reloads. For large photo libraries, consider the [storage compression](/docs/core/storage) utilities to reduce IndexedDB usage, or [SQ8 quantization](/docs/core/vector-quantization) to cut vector storage by 4x with minimal recall impact.
+
+**AbortSignal for cancellation.** Both `embed()` and `embedImage()` accept an `abortSignal` parameter. Use it to let users cancel long indexing operations. The showcase apps wire this through `useBatchOperation`, which provides a `cancel()` function that aborts all in-flight operations.
+
+---
+
+## Methodology
+
+This post describes the multimodal embedding pipeline implemented in LocalMode's `@localmode/core` and `@localmode/transformers` packages. All code examples use real API signatures from the codebase. The two showcase apps referenced - Cross-Modal Search and Smart Gallery - are open-source and runnable at [localmode.ai](https://localmode.ai).
+
+Background on the models:
+
+- CLIP (Contrastive Language-Image Pre-training) was introduced by OpenAI in January 2021. The model architecture, training methodology, and zero-shot capabilities are described in the [OpenAI CLIP announcement](https://openai.com/index/clip/) and the [CLIP GitHub repository](https://github.com/openai/CLIP). Model specifications for ViT-Base/Patch32 (512 dimensions, ~290 MB fp16) are from the [Hugging Face model card](https://huggingface.co/openai/clip-vit-base-patch32).
+- SigLIP (Sigmoid Loss for Language-Image Pre-training) was introduced by Google in 2023. The sigmoid loss formulation and its advantages over CLIP's softmax contrastive loss are described in [Zhai et al., 2023 (arXiv:2303.15343)](https://arxiv.org/abs/2303.15343). The [Hugging Face SigLIP documentation](https://huggingface.co/docs/transformers/model_doc/siglip) provides implementation details.
+- Contrastive learning fundamentals and the dual-encoder architecture are covered in the [Pinecone CLIP tutorial](https://www.pinecone.io/learn/series/image-search/clip/) and the [Towards Data Science CLIP overview](https://towardsdatascience.com/clip-model-overview-unlocking-the-power-of-multimodal-ai/).
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

@@ -1,0 +1,160 @@
+---
+title: 'Overview'
+description: React hooks for local-first AI — useChat, useEmbed, useClassify, and more.
+icon: Atom
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+# @localmode/react
+
+React hooks for local-first AI. Embed, chat, classify, transcribe, and more — with built-in loading states, error handling, and cancellation.
+
+## Features
+
+- **39 hooks** — One for each AI capability in @localmode/core plus agents, import/export, multimodal, utility, batch, and pipeline hooks
+- **Streaming** — `useChat` with real-time message updates and persistence
+- **List accumulation** — `useOperationList` for building result lists from repeated operations
+- **Batch processing** — `useBatchOperation` for concurrent, `useSequentialBatch` for sequential with progress
+- **Cancellation** — Every hook supports AbortSignal-based cancellation
+- **SSR-safe** — No-op during server rendering for Next.js compatibility
+- **Provider-agnostic** — Works with any @localmode provider (transformers, webllm, chrome-ai)
+- **Zero deps** — Only peer dependencies on `react` and `@localmode/core`
+- **Pipeline** — `usePipeline` for composing multi-step workflows
+
+## Installation
+
+<Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
+  <Tab value="pnpm">```bash pnpm install @localmode/react @localmode/core ```</Tab>
+  <Tab value="npm">```bash npm install @localmode/react @localmode/core ```</Tab>
+  <Tab value="yarn">```bash yarn add @localmode/react @localmode/core ```</Tab>
+  <Tab value="bun">```bash bun add @localmode/react @localmode/core ```</Tab>
+</Tabs>
+
+## Quick Start
+
+### Embed text
+
+```tsx
+import { useEmbed } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+
+function EmbedDemo() {
+  const { data, isLoading, execute } = useEmbed({ model });
+
+  return (
+    <div>
+      <button onClick={() => execute('Hello world')} disabled={isLoading}>
+        {isLoading ? 'Embedding...' : 'Embed'}
+      </button>
+      {data && <p>Dimensions: {data.embedding.length}</p>}
+    </div>
+  );
+}
+```
+
+### Chat with an LLM
+
+```tsx
+import { useChat } from '@localmode/react';
+import { webllm } from '@localmode/webllm';
+
+const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+
+function ChatDemo() {
+  const { messages, isStreaming, send, cancel } = useChat({ model });
+
+  return (
+    <div>
+      {messages.map((m) => (
+        <div key={m.id}><b>{m.role}:</b> {m.content}</div>
+      ))}
+      <button onClick={() => send('What is LocalMode?')}>Send</button>
+      {isStreaming && <button onClick={cancel}>Cancel</button>}
+    </div>
+  );
+}
+```
+
+### Classify text
+
+```tsx
+import { useClassify } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english');
+
+function ClassifyDemo() {
+  const { data, isLoading, execute } = useClassify({ model });
+
+  return (
+    <div>
+      <button onClick={() => execute('I love this product!')}>Classify</button>
+      {data && <p>{data.label} ({(data.score * 100).toFixed(1)}%)</p>}
+    </div>
+  );
+}
+```
+
+## All Hooks
+
+| Hook | Domain | Wraps |
+|------|--------|-------|
+| `useEmbed` | Embeddings | `embed()` |
+| `useEmbedMany` | Embeddings | `embedMany()` |
+| `useSemanticSearch` | Embeddings | `semanticSearch()` |
+| `useSemanticChunk` | RAG | `semanticChunk()` — embedding-aware chunking |
+| `useEmbedImage` | Multimodal | `embedImage()` — CLIP cross-modal |
+| `useEmbedManyImages` | Multimodal | `embedManyImages()` — batch image embedding |
+| `useChat` | Generation | `streamText()` with message state |
+| `useGenerateText` | Generation | `generateText()` |
+| `useGenerateObject` | Generation | `generateObject()` — typed JSON output |
+| `useClassify` | Classification | `classify()` |
+| `useClassifyZeroShot` | Classification | `classifyZeroShot()` |
+| `useExtractEntities` | NER | `extractEntities()` |
+| `useTranscribe` | Audio | `transcribe()` |
+| `useSynthesizeSpeech` | Audio | `synthesizeSpeech()` |
+| `useCaptionImage` | Vision | `captionImage()` |
+| `useDetectObjects` | Vision | `detectObjects()` |
+| `useClassifyImage` | Vision | `classifyImage()` |
+| `useClassifyImageZeroShot` | Vision | `classifyImageZeroShot()` |
+| `useSegmentImage` | Vision | `segmentImage()` |
+| `useExtractImageFeatures` | Vision | `extractImageFeatures()` |
+| `useImageToImage` | Vision | `imageToImage()` / `upscaleImage()` |
+| `useTranslate` | Text | `translate()` |
+| `useSummarize` | Text | `summarize()` |
+| `useExtractText` | OCR | `extractText()` |
+| `useFillMask` | NLP | `fillMask()` |
+| `useAnswerQuestion` | QA | `answerQuestion()` |
+| `useAskDocument` | Document QA | `askDocument()` |
+| `useAgent` | Agents | `createAgent()` + `runAgent()` — ReAct loop with tools |
+| `useImportExport` | Import/Export | `importFrom()`, `exportToCSV()`, `exportToJSONL()` |
+| `useModelStatus` | Utility | Model readiness |
+| `useCapabilities` | Utility | `detectCapabilities()` |
+| `useNetworkStatus` | Utility | Online/offline |
+| `useStorageQuota` | Utility | Storage quota |
+| `useSemanticCache` | Utility | Semantic cache lifecycle and stats |
+| `useReindex` | Utility | Embedding drift re-embedding with progress |
+| `useVoiceRecorder` | Utility | MediaRecorder lifecycle |
+| `useInferenceQueue` | Utility | Priority-based task scheduling |
+| `useModelLoader` | Utility | Model cache downloads, prefetch, evict |
+| `usePipeline` | Pipeline | Multi-step workflows |
+| `useBatchOperation` | Batch | Concurrent batch processing |
+| `useOperationList` | Batch | Accumulate results into a list |
+| `useSequentialBatch` | Batch | Sequential processing with progress |
+| `toAppError` | Utility | Convert Error to AppError shape |
+
+## Next Steps
+
+<Cards>
+  <Card title="useChat" href="/docs/react/chat" description="Streaming chat with message persistence" />
+  <Card title="Embeddings" href="/docs/react/embeddings" description="useEmbed, useEmbedMany, useSemanticSearch" />
+  <Card title="Classification" href="/docs/react/classification" description="useClassify, useClassifyZeroShot, useExtractEntities" />
+  <Card title="Agents" href="/docs/react/agents" description="useAgent — ReAct loop with tools and memory" />
+  <Card title="Import/Export" href="/docs/react/import-export" description="useImportExport — Pinecone, ChromaDB, CSV, JSONL" />
+  <Card title="Advanced" href="/docs/react/advanced" description="usePipeline, testing, and custom composition" />
+</Cards>

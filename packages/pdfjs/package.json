@@ -36,10 +36,10 @@
     "clean": "rm -rf dist node_modules"
   },
   "dependencies": {
-    "pdfjs-dist": "^5.4.530"
+    "pdfjs-dist": "^5.5.207"
   },
   "peerDependencies": {
-    "@localmode/core": "^1.0.2"
+    "@localmode/core": ">=1.0.0"
   },
   "devDependencies": {
     "@localmode/core": "workspace:*",

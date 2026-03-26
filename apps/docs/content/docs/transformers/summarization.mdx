@@ -1,0 +1,119 @@
+---
+title: Summarization
+description: Generate concise summaries from long text.
+icon: FileText
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Generate concise summaries from long text using abstractive summarization models.
+
+<Callout type="info">
+  For full API reference (`summarize()`, `summarizeMany()`, options, result types, and custom providers), see the [Core Summarization](/docs/core/summarization) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [Text Summarizer](https://localmode.ai/text-summarizer) and [Meeting Assistant](https://localmode.ai/meeting-assistant) for working demos.
+</Callout>
+
+## Recommended Models
+
+| Model | Size | Speed | Use Case |
+|-------|------|-------|----------|
+| `Xenova/distilbart-cnn-6-6` | ~300MB | ⚡⚡ | General-purpose summarization |
+| `Xenova/distilbart-cnn-12-6` | ~400MB | ⚡ | Higher quality summaries |
+
+## Configurable Length
+
+Based on the [Text Summarizer](https://localmode.ai/text-summarizer) showcase app:
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { summarize } from '@localmode/core';
+
+const model = transformers.summarizer('Xenova/distilbart-cnn-6-6');
+
+// Short summary
+const { summary: brief } = await summarize({
+  model,
+  text: longDocument,
+  maxLength: 60,
+  minLength: 20,
+});
+
+// Medium summary
+const { summary: medium } = await summarize({
+  model,
+  text: longDocument,
+  maxLength: 150,
+  minLength: 60,
+});
+
+// Detailed summary
+const { summary: detailed } = await summarize({
+  model,
+  text: longDocument,
+  maxLength: 300,
+  minLength: 100,
+});
+```
+
+## Meeting Notes Example
+
+Based on the [Meeting Assistant](https://localmode.ai/meeting-assistant) showcase app — combine speech-to-text with summarization:
+
+```typescript
+import { transcribe, summarize } from '@localmode/core';
+
+// First transcribe the meeting audio
+const { text: transcript } = await transcribe({
+  model: speechModel,
+  audio: meetingAudio,
+});
+
+// Then summarize the transcript
+const { summary } = await summarize({
+  model: summarizerModel,
+  text: transcript,
+  maxLength: 200,
+  minLength: 60,
+});
+```
+
+## Best Practices
+
+<Callout type="tip" title="Summarization Tips">
+  1. **Set length constraints** — Use `maxLength` and `minLength` to control summary size
+  2. **Input length matters** — Models have a max input length; very long texts may need chunking
+  3. **Abstractive output** — Summaries are generated text, not extracted sentences
+  4. **Use AbortSignal** — Summarization can take several seconds; support cancellation
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Text Summarizer | Summarize articles and long-form content | [Demo](https://localmode.ai/text-summarizer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/text-summarizer) |
+| Meeting Assistant | Transcribe and summarize meeting recordings | [Demo](https://localmode.ai/meeting-assistant) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/meeting-assistant) |
+| Smart Writer | Summarize and rewrite content for different audiences | [Demo](https://localmode.ai/smart-writer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-writer) |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core Summarization API"
+    href="/docs/core/summarization"
+    description="Full API reference, options, result types, and custom providers."
+  />
+  <Card
+    title="Translation"
+    href="/docs/transformers/translation"
+    description="Translate text between languages."
+  />
+  <Card
+    title="Question Answering"
+    href="/docs/transformers/question-answering"
+    description="Extract answers from context."
+  />
+</Cards>

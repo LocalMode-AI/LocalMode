@@ -1,0 +1,129 @@
+---
+title: Document QA
+description: Answer questions about document images using Florence-2 models.
+icon: FileQuestionMark
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Answer questions about document images — invoices, forms, receipts — using document understanding models like Florence-2. The model reads the document image and extracts answers without separate OCR.
+
+<Callout type="info">
+  For full API reference (`askDocument()`, `askTable()`, options, result types, and custom providers), see the [Core Document QA](/docs/core/document-qa) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [Invoice QA](https://localmode.ai/invoice-qa) for a working demo.
+</Callout>
+
+## Recommended Models
+
+| Model | Size | Use Case |
+|-------|------|----------|
+| `onnx-community/Florence-2-base-ft` | ~223MB | Document visual Q&A (invoices, forms, receipts) |
+| `Xenova/donut-base-finetuned-docvqa` | ~218MB | OCR-free document understanding (legacy) |
+
+## Invoice QA Example
+
+Based on the [Invoice QA](https://localmode.ai/invoice-qa) showcase app:
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { askDocument } from '@localmode/core';
+
+const model = transformers.documentQA('onnx-community/Florence-2-base-ft');
+
+async function askAboutDocument(imageDataUrl: string, question: string) {
+  const { answer, score } = await askDocument({
+    model,
+    document: imageDataUrl,
+    question,
+    abortSignal: controller.signal,
+  });
+
+  return {
+    answer,
+    confidence: score,
+    isReliable: score > 0.5,
+  };
+}
+
+// Example questions for invoices:
+// - "What is the invoice number?"
+// - "What is the total amount?"
+// - "What is the date?"
+// - "Who is the vendor?"
+```
+
+## Table QA
+
+The same `documentQA()` model also supports question answering on tabular data via `askTable()`:
+
+```typescript
+import { askTable } from '@localmode/core';
+
+const { answer, score, aggregator, cells } = await askTable({
+  model,
+  table: {
+    headers: ['Product', 'Q1 Sales', 'Q2 Sales'],
+    rows: [
+      ['Widget A', '1200', '1500'],
+      ['Widget B', '800', '950'],
+      ['Widget C', '2000', '2200'],
+    ],
+  },
+  question: 'Which product had the highest Q2 sales?',
+});
+
+console.log(answer);     // 'Widget C'
+console.log(aggregator); // e.g., 'NONE' or 'MAX'
+console.log(cells);      // ['2200']
+```
+
+## Document Input Formats
+
+The `document` parameter accepts:
+- `string` — Data URL of the document image
+- `Blob` — Image blob from file input or camera capture
+
+## Best Practices
+
+<Callout type="tip" title="Document QA Tips">
+  1. **Ask specific questions** — "What is the total?" works better than "Tell me about this document"
+  2. **Use clear images** — High-resolution scans give much better results
+  3. **Check confidence** — Low scores indicate uncertain answers
+  4. **One question at a time** — Ask focused questions for the best accuracy
+</Callout>
+
+<Callout type="info">
+  Florence-2 is an end-to-end model — it reads the document image directly without needing separate OCR.
+  For text-based Q&A (where you already have the text), use
+  [Question Answering](/docs/transformers/question-answering) instead.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Invoice QA | Ask questions about invoice and document images | [Demo](https://localmode.ai/invoice-qa) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/invoice-qa) |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core Document QA API"
+    href="/docs/core/document-qa"
+    description="Full API reference, options, result types, and custom providers."
+  />
+  <Card
+    title="OCR"
+    href="/docs/transformers/ocr"
+    description="Extract raw text from images."
+  />
+  <Card
+    title="Question Answering"
+    href="/docs/transformers/question-answering"
+    description="Extractive Q&A from text context."
+  />
+</Cards>

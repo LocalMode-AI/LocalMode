@@ -1,0 +1,139 @@
+---
+title: Image Features
+description: Extract feature vectors for image similarity search with SigLIP.
+icon: FingerprintPattern
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Extract dense feature vectors from images using SigLIP models. These vectors enable image similarity search, duplicate detection, and cross-modal (text-to-image) search.
+
+<Callout type="info">
+  For full API reference (`extractImageFeatures()`, options, result types, and custom providers), see the [Core Vision](/docs/core/vision) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [Duplicate Finder](https://localmode.ai/duplicate-finder) and [Smart Gallery](https://localmode.ai/smart-gallery) for working demos.
+</Callout>
+
+## Recommended Models
+
+| Model | Size | Dimensions | Use Case |
+|-------|------|------------|----------|
+| `Xenova/siglip-base-patch16-224` | ~400MB | 768 | Image search, text-to-image matching |
+| `onnx-community/dinov2-base-ONNX` | ~350MB | 768 | Self-supervised image features, similarity |
+
+<Callout type="info">
+  SigLIP models encode both images and text into the same vector space, enabling text-to-image search.
+  Use `transformers.imageFeatures()` for images and `transformers.embedding()` with the same model
+  for text queries.
+</Callout>
+
+## Duplicate Detection Example
+
+Based on the [Duplicate Finder](https://localmode.ai/duplicate-finder) showcase app:
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { extractImageFeatures, cosineSimilarity } from '@localmode/core';
+
+const model = transformers.imageFeatures('Xenova/siglip-base-patch16-224');
+const SIMILARITY_THRESHOLD = 0.85;
+
+async function findDuplicates(images: string[]) {
+  // Extract features for all images
+  const allFeatures: Float32Array[] = [];
+  for (const img of images) {
+    const { features } = await extractImageFeatures({
+      model,
+      image: img,
+      abortSignal: controller.signal,
+    });
+    allFeatures.push(features);
+  }
+
+  // Compare all pairs
+  const duplicates: [number, number, number][] = [];
+  for (let i = 0; i < allFeatures.length; i++) {
+    for (let j = i + 1; j < allFeatures.length; j++) {
+      const similarity = cosineSimilarity(allFeatures[i], allFeatures[j]);
+      if (similarity > SIMILARITY_THRESHOLD) {
+        duplicates.push([i, j, similarity]);
+      }
+    }
+  }
+
+  return duplicates;
+}
+```
+
+## Semantic Image Search with VectorDB
+
+Based on the [Smart Gallery](https://localmode.ai/smart-gallery) and [Product Search](https://localmode.ai/product-search) showcase apps:
+
+```typescript
+import { createVectorDB, embed, extractImageFeatures } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const imageModel = transformers.imageFeatures('Xenova/siglip-base-patch16-224');
+const textModel = transformers.embedding('Xenova/siglip-base-patch16-224');
+
+const db = await createVectorDB({
+  name: 'gallery',
+  dimensions: 768,
+  storage: 'memory',
+});
+
+// Index images by their features
+async function indexImage(id: string, imageDataUrl: string) {
+  const { features } = await extractImageFeatures({
+    model: imageModel,
+    image: imageDataUrl,
+  });
+  await db.add({ id, vector: features, metadata: { fileName: id } });
+}
+
+// Search by text query (cross-modal)
+async function searchByText(query: string, topK = 10) {
+  const { embedding } = await embed({ model: textModel, value: query });
+  return db.search(embedding, { k: topK });
+}
+```
+
+## Best Practices
+
+<Callout type="tip" title="Image Features Tips">
+  1. **Use SigLIP for search** — SigLIP vectors work across text and images in the same space
+  2. **Store in VectorDB** — Use `createVectorDB` with `storage: 'memory'` for fast search
+  3. **Cosine similarity** — Use `cosineSimilarity()` from core to compare feature vectors
+  4. **768 dimensions** — SigLIP-Base produces 768-dimensional vectors
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Duplicate Finder | Extract image features for near-duplicate detection | [Demo](https://localmode.ai/duplicate-finder) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/duplicate-finder) |
+| Smart Gallery | Image feature extraction for gallery organization | [Demo](https://localmode.ai/smart-gallery) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-gallery) |
+| Product Search | Visual feature extraction for product matching | [Demo](https://localmode.ai/product-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/product-search) |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core Vision API"
+    href="/docs/core/vision"
+    description="Full API reference including extractImageFeatures()."
+  />
+  <Card
+    title="Image Captioning"
+    href="/docs/transformers/image-captioning"
+    description="Generate text descriptions of images."
+  />
+  <Card
+    title="Embeddings"
+    href="/docs/transformers/embeddings"
+    description="Text embeddings for semantic search."
+  />
+</Cards>

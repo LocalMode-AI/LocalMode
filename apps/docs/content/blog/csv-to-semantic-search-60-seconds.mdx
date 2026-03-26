@@ -1,0 +1,357 @@
+---
+title: "From CSV to Semantic Search in 60 Seconds: Loading Any Document Into a Local RAG Pipeline"
+description: "Load CSV, JSON, HTML, or PDF files into a fully local semantic search pipeline with just a few lines of code. LocalMode's built-in document loaders, the ingest() shortcut, and semanticSearch() get you from raw data to AI-powered search in under a minute - no server, no API key, no data leaving the device."
+author: LocalMode
+date: 2026-02-16
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+You have data. Maybe it is a CSV export from your CRM, a JSON dump from an API, a folder of saved HTML pages, or a stack of PDF invoices. You want to search it by meaning, not by keywords. You want a user to type "budget concerns" and find the row about "Q3 financial projections."
+
+The gap between "I have a file" and "I have semantic search" feels large. It is not. With LocalMode, the entire path - load, chunk, embed, search - fits in a single code block and runs entirely in the browser. No server. No API key. No data leaves the device.
+
+This post shows the shortest path for four common formats, then introduces the `ingest()` shortcut that collapses the whole pipeline into one function call.
+
+---
+
+## The Pipeline at a Glance
+
+Every format follows the same four steps:
+
+```
+File  -->  Load  -->  Chunk + Embed  -->  VectorDB  -->  Search
+          (loader)     (ingest)          (IndexedDB)    (semanticSearch)
+```
+
+LocalMode provides a built-in loader for each format, an `ingest()` function that handles chunking and embedding in one call, and a `semanticSearch()` function that embeds a query and searches the database in a single step.
+
+Here is the shared setup that every example below uses:
+
+```ts
+import {
+  createVectorDB,
+  ingest,
+  semanticSearch,
+} from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// 1. Create a vector database (stored in IndexedDB)
+const db = await createVectorDB({ name: 'my-docs', dimensions: 384 });
+
+// 2. Create an embedding model (33MB, downloads once, cached forever)
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+// 3. Build an embedder function for ingest()
+const embedder = async (texts: string[]) => {
+  const { embeddings } = await embedMany({ model, values: texts });
+  return embeddings;
+};
+```
+
+That is the foundation. Now drop in any file.
+
+---
+
+## 1. CSV: Rows to Search Results
+
+A CSV with a `description` column - product catalog, support tickets, survey responses, anything tabular.
+
+```ts
+import { CSVLoader } from '@localmode/core';
+
+// Load the CSV (auto-detects 'description' column, or specify one)
+const loader = new CSVLoader();
+const docs = await loader.load(csvString, { textColumn: 'description' });
+
+// Ingest: chunk + embed + store in one call
+await ingest(db, docs, {
+  chunking: { strategy: 'recursive', size: 500 },
+  generateEmbeddings: true,
+  embedder,
+});
+
+// Search
+const { results } = await semanticSearch({
+  db, model, query: 'budget concerns', k: 5,
+});
+```
+
+The `CSVLoader` turns each row into a document. Every column value is preserved as metadata, so you can filter results later (`filter: { category: 'finance' }`). If you do not specify `textColumn`, it looks for columns named `text`, `content`, `body`, or `description` automatically. You can also combine multiple columns:
+
+```ts
+const docs = await loader.load(csvFile, {
+  textColumns: ['title', 'description'],
+  columnSeparator: ' - ',
+});
+```
+
+---
+
+## 2. JSON: Extract the Fields That Matter
+
+API responses, exported records, structured datasets - JSON comes in many shapes. The `JSONLoader` handles objects, arrays, and nested paths.
+
+```ts
+import { JSONLoader } from '@localmode/core';
+
+const loader = new JSONLoader();
+const docs = await loader.load(jsonString, {
+  recordsPath: 'data.articles',     // navigate to the array
+  textFields: ['title', 'body'],    // combine these fields
+  fieldSeparator: '\n',
+});
+
+await ingest(db, docs, {
+  chunking: { strategy: 'recursive', size: 500 },
+  generateEmbeddings: true,
+  embedder,
+});
+
+const { results } = await semanticSearch({
+  db, model, query: 'machine learning trends', k: 5,
+});
+```
+
+`recordsPath` uses dot notation to reach nested arrays - `data.items`, `response.results`, or just omit it for top-level arrays. If you skip `textFields`, the loader searches for common field names (`text`, `content`, `body`, `description`) automatically. Need everything? Set `extractAllStrings: true` and it recursively pulls every string value from each record.
+
+---
+
+## 3. HTML: Strip the Tags, Keep the Meaning
+
+Saved web pages, documentation exports, scraped content - HTML is noisy. The `HTMLLoader` strips scripts, styles, navigation, and tags, leaving clean text.
+
+```ts
+import { HTMLLoader } from '@localmode/core';
+
+const loader = new HTMLLoader();
+const docs = await loader.load(htmlString, {
+  selector: 'article.content',   // target specific content
+  preserveFormatting: true,       // keep paragraph breaks
+  extractMetadata: true,          // pull title, description, author
+});
+
+await ingest(db, docs, {
+  chunking: { strategy: 'recursive', size: 500 },
+  generateEmbeddings: true,
+  embedder,
+});
+
+const { results } = await semanticSearch({
+  db, model, query: 'authentication setup', k: 5,
+});
+```
+
+The `selector` option accepts CSS selectors - `#main`, `.post-body`, `article` - so you can skip headers, footers, and sidebars. Without a selector, it extracts text from the entire `<body>`. In browser environments it uses `DOMParser` for accurate extraction; in other environments it falls back to a regex-based parser that handles the common cases.
+
+---
+
+## 4. PDF: Pages to Searchable Chunks
+
+PDFs require the `@localmode/pdfjs` package, which wraps PDF.js for browser-native extraction.
+
+```ts
+import { extractPDFText } from '@localmode/pdfjs';
+
+// Extract text from a PDF file (File, Blob, ArrayBuffer, or URL)
+const { text, pageCount } = await extractPDFText(pdfFile);
+
+// Turn extracted text into a source document
+const docs = [{ id: 'report-q3', text, metadata: { source: pdfFile.name } }];
+
+// Ingest with markdown-aware chunking (good for structured PDFs)
+await ingest(db, docs, {
+  chunking: { strategy: 'recursive', size: 500, overlap: 50 },
+  generateEmbeddings: true,
+  embedder,
+});
+
+const { results } = await semanticSearch({
+  db, model, query: 'revenue growth Q3', k: 5,
+});
+```
+
+`extractPDFText` returns page-level content too, so you can ingest each page as a separate document if you prefer finer-grained results:
+
+```ts
+const { pages } = await extractPDFText(pdfFile, { includePageNumbers: true });
+
+const docs = pages.map((page) => ({
+  id: `page-${page.pageNumber}`,
+  text: page.text,
+  metadata: { page: page.pageNumber, source: pdfFile.name },
+}));
+```
+
+---
+
+## The Auto-Detect Shortcut
+
+Do not know the file type in advance? `loadDocument()` auto-detects the format and routes to the right loader:
+
+```ts
+import { loadDocument } from '@localmode/core';
+
+// Auto-detect: CSV, JSON, HTML, or plain text
+const docs = await loadDocument(file);
+
+// Then ingest as usual
+await ingest(db, docs, {
+  chunking: { strategy: 'recursive', size: 500 },
+  generateEmbeddings: true,
+  embedder,
+});
+```
+
+It checks the `File` object's name and MIME type, or inspects the string content for CSV commas, JSON braces, or HTML tags. For multiple files at once, use `loadDocuments()`:
+
+```ts
+import { loadDocuments } from '@localmode/core';
+
+const docs = await loadDocuments([file1, file2, file3]);
+```
+
+---
+
+## Drag-and-Drop File Handling
+
+Most real applications let users drop files into the browser. Here is the pattern that connects a drop event to the full pipeline:
+
+```tsx
+function handleDrop(event: React.DragEvent) {
+  event.preventDefault();
+  const files = Array.from(event.dataTransfer.files);
+
+  for (const file of files) {
+    let docs;
+
+    if (file.name.endsWith('.pdf')) {
+      const { text } = await extractPDFText(file);
+      docs = [{ id: file.name, text, metadata: { source: file.name } }];
+    } else {
+      docs = await loadDocument(file);
+    }
+
+    await ingest(db, docs, {
+      chunking: { strategy: 'recursive', size: 500 },
+      generateEmbeddings: true,
+      embedder,
+      onProgress: (p) => {
+        console.log(`${p.phase}: ${p.chunksProcessed}/${p.totalChunks}`);
+      },
+    });
+  }
+}
+```
+
+The `onProgress` callback reports four phases - `chunking`, `embedding`, `indexing`, `complete` - so you can drive a progress bar. Each phase reports `chunksProcessed` and `totalChunks`.
+
+---
+
+## The ingest() Function in Detail
+
+`ingest()` is the workhorse that makes everything above concise. Here is what it does under the hood:
+
+1. **Chunk** - Splits every document using your chosen strategy (`recursive`, `markdown`, `code`, `sentence`, `paragraph`). Each chunk gets metadata linking it back to its source document.
+2. **Embed** - Calls your `embedder` function in batches. You control the batch size, or set `adaptiveBatching: true` to let LocalMode pick an optimal size based on the device's capabilities.
+3. **Index** - Stores vectors and metadata in the VectorDB via `addMany()`.
+
+```ts
+const result = await ingest(db, docs, {
+  chunking: { strategy: 'markdown', size: 1000, overlap: 100 },
+  generateEmbeddings: true,
+  embedder,
+  adaptiveBatching: true,
+  onProgress: (p) => updateUI(p),
+});
+
+console.log(result.documentsProcessed); // 42
+console.log(result.chunksCreated);      // 318
+console.log(result.duration);           // 2450 (ms)
+```
+
+If you want to run the same configuration on multiple batches, `createIngestPipeline()` gives you a reusable function:
+
+```ts
+import { createIngestPipeline } from '@localmode/core';
+
+const ingestDocs = createIngestPipeline(db, {
+  chunking: { strategy: 'recursive', size: 500 },
+  generateEmbeddings: true,
+  embedder,
+});
+
+// Now ingest anything with one call
+await ingestDocs(csvDocs);
+await ingestDocs(jsonDocs);
+await ingestDocs(pdfDocs);
+```
+
+---
+
+## Searching With semanticSearch()
+
+Once data is ingested, `semanticSearch()` wraps `embed()` + `db.search()` into a single call:
+
+```ts
+const { results, usage } = await semanticSearch({
+  db,
+  model,
+  query: 'quarterly revenue growth',
+  k: 10,
+  filter: { source: 'report-q3.pdf' },
+});
+
+for (const r of results) {
+  console.log(`${r.score.toFixed(3)} - ${r.text?.substring(0, 80)}...`);
+}
+
+console.log(`Embed: ${usage.embedDurationMs}ms, Search: ${usage.searchDurationMs}ms`);
+```
+
+The `filter` option narrows results by metadata - any field your loader or ingest step attached. The `threshold` option sets a minimum similarity score to exclude weak matches.
+
+---
+
+## Putting It All Together
+
+Here is the complete, minimal path from "I have a CSV" to "I have semantic search" - twelve lines of working code:
+
+```ts
+import { CSVLoader, createVectorDB, ingest, semanticSearch, embedMany } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const db = await createVectorDB({ name: 'products', dimensions: 384 });
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+const embedder = async (texts: string[]) =>
+  (await embedMany({ model, values: texts })).embeddings;
+
+const docs = await new CSVLoader().load(csvFile, { textColumn: 'description' });
+await ingest(db, docs, {
+  chunking: { strategy: 'recursive', size: 500 },
+  generateEmbeddings: true,
+  embedder,
+});
+
+const { results } = await semanticSearch({ db, model, query: 'wireless noise canceling', k: 5 });
+```
+
+Swap `CSVLoader` for `JSONLoader`, `HTMLLoader`, or `extractPDFText`. The rest stays the same. That is the point - one pipeline shape handles any data you throw at it.
+
+<Callout type="info" title="Try it live">
+  The [Semantic Search](https://localmode.ai/semantic-search) and [PDF Search](https://localmode.ai/pdf-search) showcase apps implement everything in this post. Drop your own files in and search them - entirely in the browser, entirely offline after the first model download.
+</Callout>
+
+---
+
+## What Comes Next
+
+Once you have data in a VectorDB, the entire LocalMode toolkit opens up:
+
+- **[RAG chat](/docs/core/rag)** - Pipe search results into a local LLM with `generateText()` for grounded answers
+- **[Hybrid search](/docs/core/rag)** - Combine semantic results with BM25 keyword search via `buildBM25Index: true` in `ingest()`
+- **[Metadata filters](/docs/core/vector-db)** - Narrow results by any field: date ranges, categories, sources
+- **[Import/export](/docs/core/import-export)** - Move vectors between browsers or migrate from Pinecone/ChromaDB with `importFrom()` and `exportToCSV()`
+- **[React hooks](/docs/react/embeddings)** - `useSemanticSearch()`, `useIngest()`, and `usePipeline()` for reactive UI integration
+
+Every piece runs locally. Your users' data never touches a server. And it all starts with loading a file.

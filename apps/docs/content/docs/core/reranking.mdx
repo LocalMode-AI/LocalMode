@@ -5,7 +5,6 @@ icon: ArrowUpDown
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
-import { Steps } from 'fumadocs-ui/components/steps';
 import { TypeTable } from 'fumadocs-ui/components/type-table';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
@@ -50,64 +49,6 @@ const { results } = await rerank({
 //   { index: 2, score: 0.88, text: 'Deep learning is a subset of...' }
 // ]
 ```
-
-## RAG Pipeline Example
-
-<Steps>
-
-### Perform Initial Vector Search
-
-Retrieve more candidates than you need—reranking will filter to the best ones.
-
-```ts
-import { semanticSearch, createVectorDB, embed } from '@localmode/core';
-import { transformers } from '@localmode/transformers';
-
-const embeddingModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
-
-// Get 20 candidates from vector search
-const { embedding: queryVector } = await embed({
-  model: embeddingModel,
-  value: 'What is machine learning?',
-});
-
-const candidates = await db.search(queryVector, { k: 20 });
-```
-
-### Rerank the Candidates
-
-Score each document against the query for precise relevance ranking.
-
-```ts
-const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
-
-const { results } = await rerank({
-  model: rerankerModel,
-  query: 'What is machine learning?',
-  documents: candidates.map((c) => c.metadata.text),
-  topK: 5, // Keep only top 5 after reranking
-});
-```
-
-### Use Top Results for Generation
-
-Pass the reranked documents as context to your LLM.
-
-```ts
-const context = results.map((r) => r.text).join('\n\n');
-
-const response = await streamText({
-  model: languageModel,
-  prompt: `Based on the following context, answer the question.
-
-Context:
-${context}
-
-Question: What is machine learning?`,
-});
-```
-
-</Steps>
 
 ## API Reference
 
@@ -188,35 +129,10 @@ Reranks documents by relevance to a query.
   }}
 />
 
-## Supported Models
-
-<Tabs items={['Cross-Encoders', 'Model Recommendations']}>
-<Tab value="Cross-Encoders">
-
-Cross-encoder models score query-document pairs directly:
-
-| Model                            | Size  | Speed  | Quality | Use Case        |
-| -------------------------------- | ----- | ------ | ------- | --------------- |
-| `Xenova/ms-marco-MiniLM-L-6-v2`  | 23MB  | Fast   | Good    | General purpose |
-| `Xenova/ms-marco-MiniLM-L-12-v2` | 33MB  | Medium | Better  | Higher accuracy |
-| `Xenova/bge-reranker-base`       | 110MB | Slower | Best    | Maximum quality |
-
-</Tab>
-<Tab value="Model Recommendations">
-
-Choose based on your needs:
-
-- **Speed-critical**: Use `ms-marco-MiniLM-L-6-v2` for fast inference
-- **Balanced**: Use `ms-marco-MiniLM-L-12-v2` for good accuracy with reasonable speed
-- **Quality-critical**: Use `bge-reranker-base` when accuracy matters most
-
-<Callout type="tip">
-  Start with `ms-marco-MiniLM-L-6-v2`—it's a great balance of speed and quality for most
-  applications.
+<Callout type="info">
+  For recommended models, provider-specific options, and practical recipes, see the
+  [Transformers Reranking](/docs/transformers/reranking) guide.
 </Callout>
-
-</Tab>
-</Tabs>
 
 ## Cancellation Support
 
@@ -241,19 +157,6 @@ try {
   }
 }
 ```
-
-## Performance Tips
-
-<Callout type="tip">
-
-**Optimize your reranking pipeline:**
-
-1. **Limit candidates**: Retrieve 20-50 candidates, not hundreds
-2. **Use topK**: Only return the documents you need
-3. **Batch when possible**: Rerank multiple queries together if your use case allows
-4. **Cache results**: Consider caching reranked results for repeated queries
-
-</Callout>
 
 ## Custom Reranker Implementation
 

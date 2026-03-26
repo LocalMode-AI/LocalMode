@@ -30,7 +30,7 @@ let globalTTSProvider: TextToSpeechModelFactory | null = null;
  *
  * // Now you can use string model IDs
  * const { audio } = await synthesizeSpeech({
- *   model: 'Xenova/speecht5-tts',
+ *   model: 'onnx-community/Kokoro-82M-v1.0-ONNX',
  *   text: 'Hello, world!',
  * });
  * ```
@@ -69,7 +69,7 @@ function resolveModel(modelOrId: TextToSpeechModel | string): TextToSpeechModel 
  * import { transformers } from '@localmode/transformers';
  *
  * const { audio, sampleRate, usage } = await synthesizeSpeech({
- *   model: transformers.textToSpeech('Xenova/speecht5-tts'),
+ *   model: transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX'),
  *   text: 'Hello, how are you today?',
  * });
  *
@@ -87,7 +87,7 @@ function resolveModel(modelOrId: TextToSpeechModel | string): TextToSpeechModel 
  * @example With voice selection
  * ```ts
  * const { audio } = await synthesizeSpeech({
- *   model: transformers.textToSpeech('Xenova/speecht5-tts'),
+ *   model: transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX'),
  *   text: 'Welcome to the application.',
  *   voice: 'speaker-1',
  *   speed: 1.2, // Slightly faster
@@ -97,7 +97,7 @@ function resolveModel(modelOrId: TextToSpeechModel | string): TextToSpeechModel 
  * @example Create audio URL for playback
  * ```ts
  * const { audio } = await synthesizeSpeech({
- *   model: transformers.textToSpeech('Xenova/speecht5-tts'),
+ *   model: transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX'),
  *   text: 'This is a test.',
  * });
  *

@@ -143,7 +143,7 @@ function generateRecommendations(caps: DeviceCapabilities): string[] {
   // Memory
   if (caps.hardware.memory && caps.hardware.memory < 4) {
     recommendations.push(
-      'Low device memory detected. Use smaller models (e.g., whisper-tiny instead of whisper-large)'
+      'Low device memory detected. Use smaller models (e.g., moonshine-tiny-ONNX instead of whisper-large)'
     );
   }
 

@@ -1,20 +1,12 @@
 # @localmode/idb
 
-> 🚧 **In Development** — This package is under active development and not yet used in production applications. API may change.
+Minimal idb storage adapter for LocalMode — lightweight IndexedDB wrapper with the smallest bundle footprint (~3KB).
 
-Minimal IndexedDB storage adapter using the idb library - the lightest option at ~3KB.
-
+[![npm](https://img.shields.io/npm/v/@localmode/idb)](https://www.npmjs.com/package/@localmode/idb)
 [![license](https://img.shields.io/npm/l/@localmode/idb)](../../LICENSE)
 
-[![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev)
+[![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev/docs/idb)
 [![Demo](https://img.shields.io/badge/Demo-LocalMode.ai-purple)](https://localmode.ai)
-
-## Features
-
-- 🪶 **Minimal Overhead** - Only ~3KB added to bundle
-- 📦 **Promise-Based** - Clean async/await API
-- ⚡ **Transaction Support** - Atomic batch operations
-- 🛠️ **TypeScript** - Full type safety
 
 ## Installation
 
@@ -26,107 +18,83 @@ pnpm install @localmode/idb @localmode/core
 
 ```typescript
 import { IDBStorage } from '@localmode/idb';
+import { createVectorDB } from '@localmode/core';
 
 const storage = new IDBStorage({ name: 'my-app' });
-await storage.open();
 
-// Store documents and vectors
-await storage.setDocument('doc-1', {
-  metadata: { title: 'Hello' },
+const db = await createVectorDB({
+  name: 'my-app',
+  dimensions: 384,
+  storage,
 });
-await storage.setVector('doc-1', new Float32Array([0.1, 0.2, 0.3]));
 
-// Retrieve data
-const doc = await storage.getDocument('doc-1');
-const vector = await storage.getVector('doc-1');
-
-await storage.close();
+// Use db.add(), db.search(), etc.
 ```
 
-## Batch Operations
-
-```typescript
-// Add multiple items atomically
-await storage.addMany([
-  { id: 'doc-1', vector: embedding1, metadata: { title: 'First' } },
-  { id: 'doc-2', vector: embedding2, metadata: { title: 'Second' } },
-]);
-
-// Delete multiple items
-await storage.deleteMany(['doc-1', 'doc-2']);
-```
-
-## API Reference
+## API
 
 ### Constructor
 
 ```typescript
-new IDBStorage(options: IDBStorageOptions)
+new IDBStorage({ name: string })
 ```
 
-**Options:**
+### StorageAdapter Methods
 
-- `name` - Database name (required)
-- `version` - Schema version (default: 1)
+`IDBStorage` implements the `StorageAdapter` interface from `@localmode/core`:
 
-### Document Operations
-
-- `getDocument(id)` - Get document by ID
-- `setDocument(id, doc)` - Create or update document
-- `deleteDocument(id)` - Delete document
-- `getDocumentIds()` - Get all document IDs
-- `getDocumentCount()` - Get document count
-- `clearDocuments()` - Delete all documents
-
-### Vector Operations
-
-- `getVector(id)` - Get vector by document ID
-- `setVector(id, vector, collection?)` - Store vector
-- `deleteVector(id)` - Delete vector
-- `getAllVectors()` - Get all vectors
-- `clearVectors()` - Delete all vectors
-
-### Index Operations
-
-- `getIndex(id)` - Get serialized index
-- `setIndex(id, index)` - Store serialized index
-- `deleteIndex(id)` - Delete index
-
-### Batch Operations
-
-- `addMany(items)` - Add multiple documents and vectors atomically
-- `deleteMany(ids)` - Delete multiple items atomically
-- `clearAll()` - Clear all data
-
-### Utility Methods
-
-- `open()` - Open database connection
-- `close()` - Close database connection
-- `delete()` - Delete entire database
+| Method | Description |
+|--------|-------------|
+| `open()` / `close()` | Manage database connection |
+| `addDocument(doc)` | Add/upsert a document |
+| `getDocument(id)` | Get document by ID (returns `null` if missing) |
+| `deleteDocument(id)` | Delete a document |
+| `getAllDocuments(collectionId)` | Get all documents in a collection |
+| `countDocuments(collectionId)` | Count documents in a collection |
+| `addVector(vec)` | Add/upsert a vector |
+| `getVector(id)` | Get vector as `Float32Array \| null` |
+| `deleteVector(id)` | Delete a vector |
+| `getAllVectors(collectionId)` | Get all vectors as `Map<string, Float32Array>` |
+| `saveIndex(collectionId, index)` | Save serialized HNSW index |
+| `loadIndex(collectionId)` | Load serialized HNSW index |
+| `deleteIndex(collectionId)` | Delete an index |
+| `createCollection(collection)` | Create a collection |
+| `getCollection(id)` | Get collection by ID |
+| `getCollectionByName(name)` | Get collection by name |
+| `getAllCollections()` | List all collections |
+| `deleteCollection(id)` | Delete a collection |
+| `clear()` | Clear all data |
+| `clearCollection(collectionId)` | Clear a specific collection |
+| `estimateSize()` | Estimate storage size in bytes |
 
 ## Why idb?
 
-The idb library is a tiny (~3KB gzipped) Promise wrapper around IndexedDB:
+The idb library is a tiny (~3KB gzipped) Promise wrapper around IndexedDB by Jake Archibald (Google Chrome team):
 
-1. **Minimal size** - Smallest viable IndexedDB wrapper
-2. **Promise-based** - No callbacks needed
-3. **TypeScript** - Excellent type support
-4. **Well-maintained** - By Jake Archibald (Google Chrome team)
+1. **Minimal size** — Smallest viable IndexedDB wrapper
+2. **Promise-based** — Clean async/await API, no callbacks
+3. **TypeScript** — Excellent type support
+4. **Well-maintained** — Widely used, battle-tested
 
 ## Comparison
 
-| Feature        | Built-in IndexedDB | IDBStorage | DexieStorage |
-| -------------- | ------------------ | ---------- | ------------ |
-| Bundle size    | 0KB                | ~3KB       | ~15KB        |
-| Learning curve | High               | Low        | Low          |
-| TypeScript     | Manual             | Excellent  | Excellent    |
-| Versioning     | Manual             | Basic      | Advanced     |
+| Feature | IndexedDBStorage (built-in) | IDBStorage | DexieStorage |
+|---------|---------------------------|------------|--------------|
+| Bundle size | 0KB (built-in) | ~3KB | ~15KB |
+| Schema versioning | Manual | Basic | Advanced |
+| Transactions | Manual | Manual | Automatic |
+| Queries | Basic | Basic | Indexed |
+| TypeScript | Good | Excellent | Excellent |
 
 ## When to Use
 
 - You need the **smallest possible bundle**
 - Simple storage needs without complex queries
-- Prefer minimal abstractions
+- Prefer minimal abstractions over feature-rich wrappers
+
+## Acknowledgments
+
+This package is built on [idb](https://github.com/jakearchibald/idb) by [Jake Archibald](https://jakearchibald.com/) — a tiny, Promise-based IndexedDB wrapper.
 
 ## License
 

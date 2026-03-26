@@ -7,7 +7,7 @@
  */
 
 // ═══════════════════════════════════════════════════════════════
-// P0/P1 Implementations
+// Core Implementations
 // ═══════════════════════════════════════════════════════════════
 
 export { TransformersEmbeddingModel, createEmbeddingModel } from './embedding.js';
@@ -24,7 +24,7 @@ export { TransformersZeroShotImageModel, createZeroShotImageModel } from './zero
 export { TransformersCaptionModel, createCaptionModel } from './captioner.js';
 
 // ═══════════════════════════════════════════════════════════════
-// P2 Implementations
+// Extended Implementations
 // ═══════════════════════════════════════════════════════════════
 
 // Vision
@@ -35,6 +35,12 @@ export { TransformersImageToImageModel, createImageToImageModel } from './image-
 
 // Audio
 export { TransformersTextToSpeechModel, createTextToSpeechModel } from './text-to-speech.js';
+export {
+  TransformersAudioClassificationModel,
+  createAudioClassificationModel,
+  TransformersZeroShotAudioClassificationModel,
+  createZeroShotAudioClassificationModel,
+} from './audio-classifier.js';
 
 // Translation & Summarization
 export { TransformersTranslationModel, createTranslationModel } from './translator.js';
@@ -47,3 +53,15 @@ export { TransformersQuestionAnsweringModel, createQuestionAnsweringModel } from
 // OCR & Document QA
 export { TransformersOCRModel, createOCRModel } from './ocr.js';
 export { TransformersDocumentQAModel, createDocumentQAModel } from './document-qa.js';
+
+// Multimodal Embeddings (CLIP/SigLIP)
+export { TransformersCLIPEmbeddingModel, createCLIPEmbeddingModel } from './clip-embedding.js';
+
+// Depth Estimation
+export { TransformersDepthEstimationModel, createDepthEstimationModel } from './depth-estimator.js';
+
+// ═══════════════════════════════════════════════════════════════
+// Language Model (Experimental — TJS v4)
+// ═══════════════════════════════════════════════════════════════
+
+export { TransformersLanguageModel, createLanguageModel } from './language-model.js';

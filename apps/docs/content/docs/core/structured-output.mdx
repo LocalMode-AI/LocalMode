@@ -1,0 +1,269 @@
+---
+title: Structured Output
+description: Generate typed, validated JSON objects from language models.
+icon: Braces
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+Generate typed, validated JSON objects from local language models using Zod schemas.
+
+<Callout type="info" title="See it in action">
+  Try [Data Extractor](https://localmode.ai/data-extractor) and [Research Agent](https://localmode.ai/research-agent) for working demos of these APIs.
+</Callout>
+
+## generateObject()
+
+Generate a complete JSON object matching a schema:
+
+```typescript
+import { generateObject, jsonSchema } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+import { z } from 'zod';
+
+const { object } = await generateObject({
+  model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+  schema: jsonSchema(z.object({
+    name: z.string(),
+    email: z.string(),
+    company: z.string().optional(),
+  })),
+  prompt: 'Extract contact info: "Hi, I\'m Sarah at sarah@acme.co, Acme Corp"',
+});
+
+console.log(object);
+// { name: "Sarah", email: "sarah@acme.co", company: "Acme Corp" }
+```
+
+### Options
+
+```typescript
+interface GenerateObjectOptions<T> {
+  model: LanguageModel;        // The language model to use
+  schema: ObjectSchema<T>;     // Schema defining expected output
+  prompt: string;              // What to extract/generate
+  systemPrompt?: string;       // Additional system instructions
+  mode?: 'json' | 'array' | 'enum'; // Output mode (default: 'json')
+  maxTokens?: number;          // Max tokens (default: 1024)
+  temperature?: number;        // Sampling temp (default: 0)
+  maxRetries?: number;         // Validation retries (default: 3)
+  abortSignal?: AbortSignal;   // Cancellation support
+}
+```
+
+### Result
+
+```typescript
+interface GenerateObjectResult<T> {
+  object: T;                   // Parsed, validated object
+  rawText: string;             // Raw model output
+  finishReason: FinishReason;  // stop, length, etc.
+  usage: GenerationUsage;      // Token counts and duration
+  response: GenerationResponse; // Model ID and timestamp
+  attempts: number;            // Retry attempts (1 = first try)
+}
+```
+
+## streamObject()
+
+Stream partial objects as tokens arrive, with final validation:
+
+```typescript
+import { streamObject, jsonSchema } from '@localmode/core';
+import { z } from 'zod';
+
+const result = await streamObject({
+  model,
+  schema: jsonSchema(z.object({
+    name: z.string(),
+    items: z.array(z.string()),
+  })),
+  prompt: 'Generate a shopping list for a BBQ',
+});
+
+for await (const partial of result.partialObjectStream) {
+  console.log(partial);
+  // { name: "BBQ Shopping" }
+  // { name: "BBQ Shopping", items: ["burgers"] }
+  // { name: "BBQ Shopping", items: ["burgers", "buns", "ketchup"] }
+}
+
+const final = await result.object; // fully validated
+```
+
+### With Callback
+
+```typescript
+const result = await streamObject({
+  model,
+  schema,
+  prompt: 'Extract data...',
+  onPartialObject: (partial) => {
+    // Update UI in real-time
+    updateDisplay(partial);
+  },
+});
+```
+
+## jsonSchema()
+
+Convert Zod schemas to `ObjectSchema` for use with `generateObject` and `streamObject`:
+
+```typescript
+import { jsonSchema } from '@localmode/core';
+import { z } from 'zod';
+
+const schema = jsonSchema(z.object({
+  name: z.string().describe('Full name'),
+  age: z.number(),
+  tags: z.array(z.string()),
+  role: z.enum(['admin', 'user']),
+  bio: z.string().optional(),
+}));
+```
+
+### Supported Zod Types
+
+| Zod Type | JSON Schema Output |
+|----------|-------------------|
+| `z.string()` | `{ type: "string" }` |
+| `z.number()` | `{ type: "number" }` |
+| `z.boolean()` | `{ type: "boolean" }` |
+| `z.array(z.string())` | `{ type: "array", items: { type: "string" } }` |
+| `z.object({...})` | `{ type: "object", properties: {...} }` |
+| `z.enum([...])` | `{ type: "string", enum: [...] }` |
+| `z.optional(...)` | Omitted from `required` |
+| `z.nullable(...)` | `{ anyOf: [..., { type: "null" }] }` |
+| `z.literal(...)` | `{ const: ... }` |
+| `z.union([...])` | `{ anyOf: [...] }` |
+
+<Callout type="info">
+`jsonSchema()` uses duck-typing to read Zod's internal structure. No Zod import is needed in `@localmode/core` — bring your own Zod.
+</Callout>
+
+## Output Modes
+
+### JSON Mode (default)
+
+Generate a single JSON object:
+
+```typescript
+const { object } = await generateObject({
+  model,
+  schema: jsonSchema(z.object({ name: z.string() })),
+  prompt: 'Extract name from: "Hi, I\'m John"',
+  mode: 'json', // default
+});
+```
+
+### Array Mode
+
+Generate an array of objects:
+
+```typescript
+const { object } = await generateObject({
+  model,
+  schema: jsonSchema(z.object({ item: z.string(), qty: z.number() })),
+  prompt: 'List 5 grocery items for a BBQ',
+  mode: 'array',
+});
+// [{ item: "burgers", qty: 8 }, { item: "buns", qty: 8 }, ...]
+```
+
+### Enum Mode
+
+Generate one value from a set:
+
+```typescript
+const { object } = await generateObject({
+  model,
+  schema: jsonSchema(z.enum(['positive', 'negative', 'neutral'])),
+  prompt: 'Classify sentiment: "I love this product!"',
+  mode: 'enum',
+});
+// "positive"
+```
+
+## Validation and Retry
+
+`generateObject()` automatically retries when the model produces invalid output:
+
+1. Model generates text
+2. JSON is extracted (handles code fences, surrounding text)
+3. Parsed JSON is validated against the schema via `.parse()`
+4. On failure: the validation error is appended to the prompt and the model retries
+5. Up to `maxRetries` attempts (default: 3)
+
+```typescript
+const { object, attempts } = await generateObject({
+  model,
+  schema,
+  prompt: 'Extract data...',
+  maxRetries: 5, // up to 5 attempts
+});
+
+console.log(`Succeeded on attempt ${attempts}`);
+```
+
+If all attempts fail, a `StructuredOutputError` is thrown with the last validation error.
+
+## React Hook
+
+Use `useGenerateObject` from `@localmode/react`:
+
+```tsx
+import { useGenerateObject, jsonSchema } from '@localmode/react';
+import { z } from 'zod';
+
+const schema = jsonSchema(z.object({ name: z.string(), age: z.number() }));
+
+function MyComponent() {
+  const { data, isLoading, error, execute } = useGenerateObject({
+    model,
+    schema,
+  });
+
+  return (
+    <div>
+      <button onClick={() => execute('Extract: John is 30')}>
+        Extract
+      </button>
+      {data && <pre>{JSON.stringify(data.object, null, 2)}</pre>}
+    </div>
+  );
+}
+```
+
+<Callout type="info">
+For full React hook documentation, see the [React Hooks](/docs/react) guide.
+</Callout>
+
+## Use Cases
+
+- **Data extraction** — Pull structured fields from emails, documents, web pages
+- **Form autofill** — Extract form data from natural language descriptions
+- **Entity parsing** — Convert unstructured text to typed entities
+- **Classification** — Use enum mode as an LLM-powered classifier
+- **Config generation** — Generate configuration objects from requirements
+- **Content structuring** — Convert articles into structured metadata
+
+## Model Recommendations
+
+| Model | Size | Structured Output Quality |
+|-------|------|--------------------------|
+| Qwen 3 1.7B | 1.1GB | Good — reliable for simple schemas |
+| Qwen 2.5 3B | 1.7GB | Better — handles nested objects well |
+| Qwen 3 4B | 2.2GB | Best — complex schemas and arrays |
+| Phi 3.5 Mini | 2.1GB | Excellent — strong instruction following |
+
+<Callout type="warn">
+Temperature defaults to `0` for structured output (not `0.7` like `generateText`). This ensures deterministic, valid JSON. Override with `temperature` option if needed.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Data Extractor | Extract structured JSON from unstructured text | [Demo](https://localmode.ai/data-extractor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/data-extractor) |
+| Research Agent | Generate structured tool calls and reasoning steps | [Demo](https://localmode.ai/research-agent) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/research-agent) |

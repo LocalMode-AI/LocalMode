@@ -1,0 +1,311 @@
+---
+title: Vector Quantization
+description: Reduce vector storage with scalar (4x) or product quantization (8-32x) while maintaining high recall.
+icon: Minimize2
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+Vector quantization compresses stored vectors to reduce IndexedDB storage requirements. Two strategies are available:
+
+| Strategy | Compression | Recall@10 | Best For |
+|----------|------------|-----------|----------|
+| **Scalar (SQ8)** | 4x | >95% | General use, high-accuracy needs |
+| **Product (PQ)** | 8-32x | 85-92% | Large collections, mobile/low-storage |
+
+<Callout type="info">
+**Phase 1 (current):** Quantization applies to storage only. The in-memory HNSW index continues to use Float32Array for maximum search accuracy. This gives you storage savings without sacrificing search quality.
+</Callout>
+
+## Quick Start
+
+<Tabs items={['Scalar (SQ8)', 'Product (PQ)']}>
+<Tab value="Scalar (SQ8)">
+
+```ts {6}
+import { createVectorDB } from '@localmode/core';
+
+const db = await createVectorDB({
+  name: 'my-documents',
+  dimensions: 384,
+  quantization: { type: 'scalar' },
+});
+
+// Usage is identical to a non-quantized database
+await db.add({ id: 'doc1', vector: embedding, metadata: { text: 'Hello' } });
+const results = await db.search(queryVector, { k: 10 });
+```
+
+</Tab>
+<Tab value="Product (PQ)">
+
+```ts {6}
+import { createVectorDB } from '@localmode/core';
+
+const db = await createVectorDB({
+  name: 'my-documents',
+  dimensions: 384,
+  quantization: { type: 'pq' },
+});
+
+// Usage is identical to a non-quantized database
+await db.add({ id: 'doc1', vector: embedding, metadata: { text: 'Hello' } });
+const results = await db.search(queryVector, { k: 10 });
+```
+
+</Tab>
+</Tabs>
+
+## Scalar Quantization (SQ8)
+
+Scalar quantization performs a per-dimension linear mapping:
+
+1. **Calibration** — On the first `add()` or `addMany()`, the database computes per-dimension min/max values from the input vectors.
+2. **Quantize on write** — Each Float32 value is linearly mapped from `[min, max]` to `[0, 255]` and stored as a Uint8.
+3. **Dequantize on read** — When vectors are returned via `get()`, `search({ includeVectors: true })`, or `export()`, they are converted back to Float32Array approximations.
+4. **HNSW stays Float32** — The in-memory search index always uses full-precision vectors for maximum accuracy.
+
+```
+Float32Array [0.42, -0.18, 0.73, ...]    4 bytes per dim
+     ↓ quantize (calibrated per-dimension)
+Uint8Array   [178, 45, 220, ...]          1 byte per dim  (4x smaller)
+     ↓ dequantize
+Float32Array [0.419, -0.177, 0.731, ...]  approximate reconstruction
+```
+
+## Product Quantization (PQ)
+
+Product quantization divides each vector into subvectors and encodes each subvector as a single centroid index byte. This achieves much higher compression than scalar quantization at the cost of lower recall.
+
+### How PQ Works
+
+1. **Codebook training** — On the first `add()` or `addMany()`, the database divides training vectors into `m` subvector partitions and runs k-means clustering on each partition independently. This produces a codebook of `k` centroids per partition.
+2. **Encode on write** — For each subvector partition, the nearest centroid is found and its index (0-255) is stored as a single byte. A 384-dim vector with 48 subvectors compresses to just 48 bytes.
+3. **Decode on read** — Centroid vectors are looked up and concatenated to reconstruct an approximate Float32Array.
+4. **HNSW stays Float32** — The in-memory search index uses original full-precision vectors.
+
+```
+Float32Array [0.42, -0.18, 0.73, ...]    1,536 bytes (384 dims x 4 bytes)
+     ↓ split into 48 subvectors of 8 dims each
+     ↓ find nearest centroid per subvector
+Uint8Array   [42, 187, 5, ...]            48 bytes (48 centroid indices)
+     ↓ look up centroid vectors
+Float32Array [0.41, -0.19, 0.70, ...]     approximate reconstruction
+```
+
+### PQ Compression Comparison
+
+For 384-dimensional vectors with default PQ settings (`m=48`, `k=256`):
+
+| Metric | No Quantization | SQ8 | PQ |
+|--------|----------------|-----|-----|
+| **Bytes per vector** | 1,536 | 384 | 48 |
+| **Compression ratio** | 1x | 4x | 32x |
+| **100K vectors** | ~147 MB | ~37 MB | ~4.6 MB |
+| **Recall@10** | 100% | >95% | 85-92% |
+| **Codebook overhead** | — | — | ~393 KB (once) |
+
+### PQ Recommendations
+
+- Train the codebook from at least **500 vectors** for good quality. Fewer vectors produce suboptimal codebooks.
+- Call `recalibrate()` after adding significantly more data to retrain the codebook.
+- Choose `subvectors` so that `dimensions % subvectors === 0`. For 384-dim, good choices are 48 (default), 24, or 96.
+- Use SQ8 instead of PQ when you need >95% recall.
+
+<Callout type="warn">
+**Codebook quality depends on training data.** Training from a single vector produces a degenerate codebook. For best results, load a representative batch before querying. You can always call `recalibrate()` later to retrain from all stored vectors.
+</Callout>
+
+## QuantizationConfig
+
+The `quantization` option is a discriminated union on the `type` field:
+
+### Scalar Config
+
+<TypeTable
+  type={{
+    type: {
+      description: "Set to 'scalar' for SQ8 quantization.",
+      type: "'scalar'",
+      required: true,
+    },
+    calibrationSamples: {
+      description: 'Number of vectors to sample for min/max calibration. Set to 0 to use all vectors.',
+      type: 'number',
+      default: '1000',
+    },
+  }}
+/>
+
+### PQ Config
+
+<TypeTable
+  type={{
+    type: {
+      description: "Set to 'pq' for product quantization.",
+      type: "'pq'",
+      required: true,
+    },
+    subvectors: {
+      description: 'Number of subvector partitions. Dimensions must be evenly divisible by this value.',
+      type: 'number',
+      default: '48',
+    },
+    centroids: {
+      description: 'Number of centroids per subvector (max 256, fits in Uint8).',
+      type: 'number',
+      default: '256',
+    },
+    calibrationSamples: {
+      description: 'Number of vectors to sample for codebook training. Set to 0 to use all vectors.',
+      type: 'number',
+      default: '1000',
+    },
+    maxIterations: {
+      description: 'Maximum k-means iterations per subvector partition during codebook training.',
+      type: 'number',
+      default: '20',
+    },
+  }}
+/>
+
+## Recalibration
+
+If the distribution of your vectors changes significantly over time (e.g., after adding vectors from a different domain), you can recalibrate. This works for both scalar and PQ quantization:
+
+```ts
+await db.recalibrate({
+  onProgress: (completed, total) => {
+    console.log(`Recalibrating: ${completed}/${total}`);
+  },
+  abortSignal: controller.signal,
+});
+```
+
+**For scalar quantization**, recalibration recomputes min/max and re-quantizes all stored vectors.
+
+**For product quantization**, recalibration retrains the entire codebook via k-means and re-encodes all stored vectors. This is more expensive (2-3 seconds for 10K vectors at 384-dim) but can significantly improve codebook quality when the data distribution has changed.
+
+### RecalibrateOptions
+
+<TypeTable
+  type={{
+    abortSignal: {
+      description: 'AbortSignal to cancel the operation',
+      type: 'AbortSignal',
+    },
+    onProgress: {
+      description: 'Progress callback called during recalibration',
+      type: '(completed: number, total: number) => void',
+    },
+  }}
+/>
+
+## Export & Import
+
+Quantized databases export **dequantized** Float32 vectors for maximum portability. When importing into a quantized database, vectors are automatically re-quantized (SQ8) or a new codebook is trained (PQ):
+
+```ts
+// Export from quantized DB (vectors are dequantized for portability)
+const blob = await quantizedDb.export();
+
+// Import into another quantized DB (re-quantizes/retrains automatically)
+const newDb = await createVectorDB({
+  name: 'imported',
+  dimensions: 384,
+  quantization: { type: 'pq' },
+});
+await newDb.import(blob);
+```
+
+<Callout type="info">
+PQ codebooks are **not** included in exports. The target database trains a new codebook from the imported vectors. This ensures the codebook matches the target's configuration even if the source used different settings.
+</Callout>
+
+## Backward Compatibility
+
+- **Existing databases** without quantization continue to work unchanged
+- Quantization is **opt-in** via the `quantization` config option
+- The `VectorDB` interface is unchanged for all read/write operations
+- The `recalibrate()` method throws an error if quantization is not enabled
+- Upgrading to a version with PQ support runs a no-op migration (v6) that does not modify existing data
+
+## Low-Level API
+
+The quantization primitives are exported for advanced use cases:
+
+<Tabs items={['Scalar', 'Product Quantization']}>
+<Tab value="Scalar">
+
+```ts
+import {
+  calibrate,
+  scalarQuantize,
+  scalarDequantize,
+  mergeCalibration,
+} from '@localmode/core';
+
+// Calibrate from a set of vectors
+const calibration = calibrate(vectors);
+
+// Quantize a single vector
+const quantized: Uint8Array = scalarQuantize(vector, calibration);
+
+// Dequantize back to Float32Array
+const restored: Float32Array = scalarDequantize(quantized, calibration);
+
+// Merge calibration from two sets
+const merged = mergeCalibration(calibrationA, calibrationB);
+```
+
+</Tab>
+<Tab value="Product Quantization">
+
+```ts
+import {
+  trainPQ,
+  pqQuantize,
+  pqDequantize,
+  kMeansCluster,
+} from '@localmode/core';
+
+// Train a PQ codebook from training vectors
+const codebook = trainPQ(trainingVectors, {
+  subvectors: 48,
+  centroids: 256,
+  maxIterations: 20,
+});
+
+// Encode a vector to centroid indices
+const encoded: Uint8Array = pqQuantize(vector, codebook);
+// encoded.length === 48 for 384-dim vectors with 48 subvectors
+
+// Decode back to approximate Float32Array
+const decoded: Float32Array = pqDequantize(encoded, codebook);
+
+// K-means clustering (used internally by PQ, also exported)
+const { centroids, assignments, iterations } = kMeansCluster(data, 8, {
+  maxIterations: 20,
+  threshold: 1e-6,
+});
+```
+
+</Tab>
+</Tabs>
+
+## When to Use Quantization
+
+| Scenario | Recommendation |
+|----------|---------------|
+| Large collections (>10K vectors) | **SQ8** for balanced compression and recall |
+| Very large collections (>100K vectors) on mobile | **PQ** for maximum compression |
+| IndexedDB quota concerns | **SQ8** (4x) or **PQ** (32x) depending on severity |
+| Maximum search precision needed | Keep quantization off |
+| Mobile / low-storage devices | **PQ** for smallest footprint |
+| Testing / development | Either works, or no quantization |
+
+<Callout type="warn">
+Quantization introduces approximation error. SQ8 is nearly lossless for most embedding models (BERT, MiniLM, BGE). PQ introduces more error but dramatically reduces storage. If you need exact vector reproduction, keep quantization disabled.
+</Callout>

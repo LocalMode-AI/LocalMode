@@ -1,0 +1,275 @@
+---
+title: "Add AI Search to Any React App in 10 Minutes"
+description: "Build semantic search that understands meaning, not just keywords - running entirely in the browser with zero API keys. Step-by-step guide using LocalMode with a complete, copy-pasteable React component."
+author: LocalMode
+date: 2026-02-12
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Your users type "how to fix a broken deployment" and your search returns nothing because no document contains that exact phrase. The page titled "Troubleshooting CI/CD Pipeline Failures" sits there, invisible.
+
+Keyword search is the problem. Semantic search is the fix. And you can add it to a React app in about 10 minutes - running entirely in the browser, with no API keys and no backend.
+
+Here is the complete walkthrough.
+
+---
+
+## What You Will Build
+
+A search component that converts text into 384-dimensional vectors using a 33MB AI model, stores them in an in-browser vector database, and finds results by meaning instead of exact string matches. The model downloads once, caches in the browser, and runs offline after that.
+
+<Callout type="info" title="Live demo">
+  The full version of this - with model selection, vector quantization, chunking modes, import/export, and drift detection - is the **Semantic Search** app at [localmode.ai](https://localmode.ai).
+</Callout>
+
+---
+
+## Step 1: Install Two Packages
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+`@localmode/core` provides the embedding functions and vector database. `@localmode/transformers` provides the AI model via Transformers.js. That is everything you need.
+
+---
+
+## Step 2: Create the Model and Vector Database
+
+```ts
+import { createVectorDB } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Create an embedding model (33MB, downloads once, cached in browser)
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+// Create an in-memory vector database
+const db = await createVectorDB({
+  name: 'my-search',
+  dimensions: 384,
+  storage: 'memory',
+});
+```
+
+`transformers.embedding()` creates a model instance - it does not download anything yet. The model loads on the first `embed()` call. The vector database is configured with 384 dimensions to match `bge-small-en-v1.5`'s output.
+
+For persistent storage across page reloads, remove the `storage: 'memory'` line. It defaults to IndexedDB.
+
+---
+
+## Step 3: Index Your Content
+
+```ts
+import { embedMany } from '@localmode/core';
+
+const articles = [
+  { id: '1', text: 'Troubleshooting CI/CD pipeline failures and deployment rollbacks' },
+  { id: '2', text: 'Setting up authentication with OAuth2 and JWT tokens' },
+  { id: '3', text: 'Optimizing PostgreSQL queries with indexes and EXPLAIN ANALYZE' },
+  { id: '4', text: 'Designing REST APIs with proper error handling and pagination' },
+  { id: '5', text: 'Configuring Docker containers for production environments' },
+];
+
+// Embed all texts in one call
+const { embeddings } = await embedMany({
+  model,
+  values: articles.map((a) => a.text),
+});
+
+// Store each vector in the database
+for (let i = 0; i < articles.length; i++) {
+  await db.add({
+    id: articles[i].id,
+    vector: embeddings[i],
+    metadata: { text: articles[i].text },
+  });
+}
+```
+
+`embedMany()` batches the texts through the model efficiently. Each embedding is a `Float32Array` with 384 values. We store them in the vector database alongside the original text as metadata.
+
+---
+
+## Step 4: Search by Meaning
+
+```ts
+import { embed } from '@localmode/core';
+
+const { embedding } = await embed({
+  model,
+  value: 'how to fix a broken deployment',
+});
+
+const results = await db.search(embedding, { k: 3 });
+
+for (const result of results) {
+  console.log(`${result.score.toFixed(3)} - ${result.metadata?.text}`);
+}
+// 0.847 - Troubleshooting CI/CD pipeline failures and deployment rollbacks
+// 0.612 - Configuring Docker containers for production environments
+// 0.534 - Designing REST APIs with proper error handling and pagination
+```
+
+The query "how to fix a broken deployment" shares zero keywords with "Troubleshooting CI/CD pipeline failures" - yet it scores highest. That is the difference between keyword matching and semantic search.
+
+---
+
+## Step 5: The Complete React Component
+
+Or skip the manual steps above and use `semanticSearch()`, which combines embedding and search into a single call.
+
+```tsx
+'use client';
+
+import { useState, useRef, useEffect } from 'react';
+import { createVectorDB, embedMany, semanticSearch } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+import type { VectorDB } from '@localmode/core';
+
+const ARTICLES = [
+  'Troubleshooting CI/CD pipeline failures and deployment rollbacks',
+  'Setting up authentication with OAuth2 and JWT tokens',
+  'Optimizing PostgreSQL queries with indexes and EXPLAIN ANALYZE',
+  'Designing REST APIs with proper error handling and pagination',
+  'Configuring Docker containers for production environments',
+  'Writing unit tests with Jest and React Testing Library',
+  'Managing state in React with hooks and context',
+  'Implementing WebSocket connections for real-time updates',
+];
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+export default function SearchApp() {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<{ text: string; score: number }[]>([]);
+  const [isReady, setIsReady] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const dbRef = useRef<VectorDB | null>(null);
+
+  // Index articles on mount
+  useEffect(() => {
+    let cancelled = false;
+
+    async function init() {
+      const db = await createVectorDB({
+        name: 'search-demo',
+        dimensions: 384,
+        storage: 'memory',
+      });
+
+      const { embeddings } = await embedMany({
+        model,
+        values: ARTICLES,
+      });
+
+      for (let i = 0; i < ARTICLES.length; i++) {
+        await db.add({
+          id: String(i),
+          vector: embeddings[i],
+          metadata: { text: ARTICLES[i] },
+        });
+      }
+
+      if (!cancelled) {
+        dbRef.current = db;
+        setIsReady(true);
+      }
+    }
+
+    init();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Search on query change
+  async function handleSearch(q: string) {
+    setQuery(q);
+    if (!q.trim() || !dbRef.current) {
+      setResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    const { results: hits } = await semanticSearch({
+      db: dbRef.current,
+      model,
+      query: q,
+      k: 5,
+    });
+    setResults(hits.map((h) => ({ text: h.text ?? '', score: h.score })));
+    setIsSearching(false);
+  }
+
+  return (
+    <div style={{ maxWidth: 600, margin: '2rem auto', fontFamily: 'system-ui' }}>
+      <h1>Semantic Search Demo</h1>
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => handleSearch(e.target.value)}
+        placeholder={isReady ? 'Search articles...' : 'Loading model...'}
+        disabled={!isReady}
+        style={{ width: '100%', padding: '0.75rem', fontSize: '1rem' }}
+      />
+      <ul style={{ listStyle: 'none', padding: 0, marginTop: '1rem' }}>
+        {results.map((r, i) => (
+          <li key={i} style={{ padding: '0.75rem 0', borderBottom: '1px solid #eee' }}>
+            <strong>{(r.score * 100).toFixed(1)}%</strong> - {r.text}
+          </li>
+        ))}
+      </ul>
+      {isSearching && <p>Searching...</p>}
+    </div>
+  );
+}
+```
+
+That is 80 lines for a fully functional semantic search UI. The first search takes a few seconds while the model downloads; every search after that runs in milliseconds.
+
+---
+
+## What Just Happened?
+
+Traditional search matches keywords: the word "deployment" has to appear in the document. Semantic search matches meaning by converting text into numbers.
+
+Here is the pipeline:
+
+1. **Text goes in.** The sentence "how to fix a broken deployment" enters the model.
+2. **A vector comes out.** The model produces 384 numbers (a `Float32Array`) that represent the meaning of that sentence in a high-dimensional space.
+3. **Similar meanings cluster together.** Sentences about deployments, CI/CD, and infrastructure end up near each other in that space - even if they share no words.
+4. **Search becomes geometry.** Finding relevant documents is now a nearest-neighbor search: which stored vectors are closest to the query vector? The vector database handles this using an HNSW index, which makes it fast even with thousands of documents.
+
+The model doing this work is [BAAI/bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5) - a 33M parameter embedding model that scores 62.2 on the MTEB benchmark. For context, OpenAI's `text-embedding-3-small` scores 62.3. That is a 0.1-point difference, running entirely in the browser at zero cost.
+
+---
+
+## Going Further
+
+The example above covers the basics. The full LocalMode toolkit goes much further:
+
+| Feature | How |
+|---|---|
+| **Persistent storage** | Remove `storage: 'memory'` to use IndexedDB (default) |
+| **React hooks** | `useSemanticSearch({ model, db, topK: 10 })` from `@localmode/react` |
+| **Metadata filters** | `db.search(vector, { k: 10, filter: { category: 'docs' } })` |
+| **4x smaller storage** | `createVectorDB({ ..., quantization: { type: 'scalar' } })` |
+| **Cancellation** | Every function accepts `abortSignal` for cancellation |
+| **Import/export** | `db.export()` and `db.import()` for data portability |
+| **RAG pipelines** | Chain `chunk` + `embed` + `search` steps with `createPipeline()` |
+
+---
+
+## Methodology
+
+- **Model**: [BAAI/bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5) - 33M parameters, 384 dimensions, MIT license
+- **MTEB benchmark**: Score of 62.2 per the [MTEB Leaderboard](https://huggingface.co/spaces/mteb/leaderboard). OpenAI `text-embedding-3-small` scores 62.3.
+- **Browser runtime**: [Transformers.js](https://huggingface.co/docs/transformers.js) by Hugging Face, running ONNX models via WebAssembly
+- **ONNX model variant**: [Xenova/bge-small-en-v1.5](https://huggingface.co/Xenova/bge-small-en-v1.5) - pre-converted for browser execution (~33MB download)
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

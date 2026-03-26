@@ -1,0 +1,75 @@
+{
+  "name": "@localmode/ai-sdk",
+  "version": "1.0.0",
+  "description": "Vercel AI SDK provider for @localmode - use local models with generateText, streamText, and embed",
+  "license": "MIT",
+  "author": "LocalMode",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LocalMode-AI/LocalMode.git",
+    "directory": "packages/ai-sdk"
+  },
+  "homepage": "https://localmode.dev/docs/ai-sdk",
+  "bugs": {
+    "url": "https://github.com/LocalMode-AI/LocalMode/issues"
+  },
+  "keywords": [
+    "ai-sdk",
+    "vercel",
+    "local-first",
+    "privacy",
+    "ai",
+    "language-model",
+    "embeddings",
+    "offline",
+    "provider"
+  ],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "@ai-sdk/provider": ">=1.0.0",
+    "@ai-sdk/provider-utils": ">=3.0.0",
+    "@localmode/core": ">=1.0.0",
+    "ai": ">=6.0.0"
+  },
+  "devDependencies": {
+    "@ai-sdk/provider": "^3.0.8",
+    "@ai-sdk/provider-utils": "^4.0.21",
+    "@localmode/core": "workspace:*",
+    "ai": "^6.0.134",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  }
+}
