@@ -340,7 +340,7 @@ function maskPII(match: string, type: PIIType): string {
  * import { embed, wrapEmbeddingModel, piiRedactionMiddleware } from '@localmode/core';
  *
  * const safeModel = wrapEmbeddingModel({
- *   model: transformers.embedding('Xenova/all-MiniLM-L6-v2'),
+ *   model: transformers.embedding('Xenova/bge-small-en-v1.5'),
  *   middleware: piiRedactionMiddleware({ emails: true, phones: true }),
  * });
  *

@@ -4,10 +4,18 @@
  *
  * Based on the paper: "Efficient and robust approximate nearest neighbor search
  * using Hierarchical Navigable Small World graphs" by Malkov & Yashunin (2016).
+ *
+ * Supports optional WebGPU-accelerated distance computation for search operations.
+ * When GPU is enabled, batch distance computations in `searchLayer()` are offloaded
+ * to GPU compute shaders for candidate sets exceeding the batch threshold. Falls back
+ * to CPU distance functions for small sets or when WebGPU is unavailable.
  */
 
 import type { HNSWOptions, SerializedHNSWIndex } from '../types.js';
 import { getDistanceFunction, distanceToScore, type DistanceFunction } from './distance.js';
+import type { HNSWGPUOptions } from './gpu/types.js';
+import { DEFAULT_BATCH_THRESHOLD } from './gpu/types.js';
+import type { GPUDistanceManager } from './gpu/manager.js';
 
 interface HNSWNode {
   id: string;
@@ -170,6 +178,13 @@ export class HNSWIndex {
   private readonly distanceType: DistanceFunction;
   private readonly distanceFn: (a: Float32Array, b: Float32Array) => number;
 
+  // GPU acceleration fields
+  private readonly gpuOptions: HNSWGPUOptions | undefined;
+  private gpuManager: GPUDistanceManager | null = null;
+  private gpuInitialized = false;
+  private gpuInitFailed = false;
+  private readonly batchThreshold: number;
+
   constructor(private dimensions: number, options: HNSWOptions = {}) {
     this.m = options.m ?? 16;
     this.mMax = this.m * 2; // Layer 0 has 2x connections
@@ -177,6 +192,17 @@ export class HNSWIndex {
     this.efSearch = options.efSearch ?? 50;
     this.distanceType = options.distanceFunction ?? 'cosine';
     this.distanceFn = getDistanceFunction(this.distanceType);
+
+    // GPU options
+    this.gpuOptions = options.gpu;
+    this.batchThreshold = options.gpu?.batchThreshold ?? DEFAULT_BATCH_THRESHOLD;
+  }
+
+  /**
+   * Whether GPU acceleration is configured on this index.
+   */
+  get gpuEnabled(): boolean {
+    return this.gpuOptions?.enabled === true;
   }
 
   /**
@@ -203,6 +229,27 @@ export class HNSWIndex {
       level++;
     }
     return level;
+  }
+
+  /**
+   * Lazily initialize the GPU distance manager.
+   * Called on first GPU-enabled search. If initialization fails, falls back to CPU
+   * silently and marks GPU as failed to avoid retry overhead.
+   */
+  private async initGPU(): Promise<void> {
+    if (this.gpuInitialized || this.gpuInitFailed) return;
+
+    try {
+      // Dynamic import to avoid pulling in GPU code for non-GPU users
+      const { GPUDistanceManager } = await import('./gpu/manager.js');
+      this.gpuManager = await GPUDistanceManager.create({
+        onFallback: this.gpuOptions?.onFallback,
+      });
+      this.gpuInitialized = true;
+    } catch {
+      this.gpuInitFailed = true;
+      this.gpuOptions?.onFallback?.('WebGPU initialization failed');
+    }
   }
 
   /**
@@ -289,8 +336,13 @@ export class HNSWIndex {
 
   /**
    * Search for the k nearest neighbors.
+   *
+   * When GPU is not configured, returns results synchronously.
+   * When GPU is configured, returns a Promise (GPU dispatch is async).
    */
-  search(query: Float32Array, k: number): Array<{ id: string; score: number }> {
+  search(query: Float32Array, k: number): Array<{ id: string; score: number }>;
+  search(query: Float32Array, k: number): Array<{ id: string; score: number }> | Promise<Array<{ id: string; score: number }>>;
+  search(query: Float32Array, k: number): Array<{ id: string; score: number }> | Promise<Array<{ id: string; score: number }>> {
     if (query.length !== this.dimensions) {
       throw new Error(`Query dimension mismatch: expected ${this.dimensions}, got ${query.length}`);
     }
@@ -299,6 +351,12 @@ export class HNSWIndex {
       return [];
     }
 
+    // If GPU is enabled, delegate to async path
+    if (this.gpuEnabled) {
+      return this.searchAsync(query, k);
+    }
+
+    // Synchronous CPU path (existing behavior unchanged)
     let currNodeId = this.entryPointId;
 
     // Traverse from top layer to layer 1
@@ -317,6 +375,139 @@ export class HNSWIndex {
       id: c.id,
       score: distanceToScore(c.distance, this.distanceType),
     }));
+  }
+
+  /**
+   * Async search path used when GPU is enabled.
+   * Initializes GPU on first call, then uses GPU-accelerated distance
+   * computation for large neighbor sets.
+   */
+  private async searchAsync(query: Float32Array, k: number): Promise<Array<{ id: string; score: number }>> {
+    // Lazy GPU initialization
+    await this.initGPU();
+
+    let currNodeId = this.entryPointId!;
+
+    // Traverse from top layer to layer 1
+    for (let l = this.maxLevel; l > 0; l--) {
+      const result = this.searchLayer(query, currNodeId, 1, l);
+      if (result.length > 0) {
+        currNodeId = result[0].id;
+      }
+    }
+
+    // Search layer 0 — use GPU-accelerated path if manager available
+    const ef = Math.max(k, this.efSearch);
+    let candidates: SearchCandidate[];
+
+    if (this.gpuManager) {
+      candidates = await this.searchLayerGPU(query, currNodeId, ef, 0);
+    } else {
+      // GPU init failed — use CPU path
+      candidates = this.searchLayer(query, currNodeId, ef, 0);
+    }
+
+    // Return top k results with scores
+    return candidates.slice(0, k).map((c) => ({
+      id: c.id,
+      score: distanceToScore(c.distance, this.distanceType),
+    }));
+  }
+
+  /**
+   * GPU-accelerated layer search. Same BFS expansion as `searchLayer()` but
+   * collects unvisited neighbor vectors into batches and dispatches them to
+   * the GPU when the batch exceeds the threshold.
+   */
+  private async searchLayerGPU(
+    query: Float32Array,
+    entryId: string,
+    ef: number,
+    level: number,
+  ): Promise<SearchCandidate[]> {
+    const visited = new Set<string>([entryId]);
+    const entryVector = this.vectors.get(entryId);
+
+    if (!entryVector) {
+      return [];
+    }
+
+    const entryDist = this.distanceFn(query, entryVector);
+    const candidates = new MinHeap();
+    const results = new MaxHeap();
+
+    candidates.push({ id: entryId, distance: entryDist });
+    results.push({ id: entryId, distance: entryDist });
+
+    while (candidates.size > 0) {
+      const current = candidates.pop()!;
+
+      // If current is further than the furthest result, we're done
+      if (results.size >= ef && current.distance > results.peek()!.distance) {
+        break;
+      }
+
+      const currentNode = this.nodes.get(current.id);
+      if (!currentNode) continue;
+
+      const connections = currentNode.connections.get(level);
+      if (!connections) continue;
+
+      // Collect unvisited neighbors
+      const unvisitedIds: string[] = [];
+      const unvisitedVectors: Float32Array[] = [];
+
+      for (const neighborId of connections) {
+        if (visited.has(neighborId)) continue;
+        visited.add(neighborId);
+
+        const neighborVector = this.vectors.get(neighborId);
+        if (!neighborVector) continue;
+
+        unvisitedIds.push(neighborId);
+        unvisitedVectors.push(neighborVector);
+      }
+
+      if (unvisitedIds.length === 0) continue;
+
+      // Decide: GPU batch or CPU per-pair
+      let distances: Float32Array;
+
+      if (unvisitedVectors.length >= this.batchThreshold && this.gpuManager) {
+        try {
+          distances = await this.gpuManager.computeDistances(query, unvisitedVectors, this.distanceType);
+        } catch {
+          // GPU failed — fall back to CPU for this batch
+          this.gpuOptions?.onFallback?.('GPU compute failed, using CPU fallback');
+          distances = new Float32Array(unvisitedVectors.length);
+          for (let i = 0; i < unvisitedVectors.length; i++) {
+            distances[i] = this.distanceFn(query, unvisitedVectors[i]);
+          }
+        }
+      } else {
+        // Below threshold — use CPU
+        distances = new Float32Array(unvisitedVectors.length);
+        for (let i = 0; i < unvisitedVectors.length; i++) {
+          distances[i] = this.distanceFn(query, unvisitedVectors[i]);
+        }
+      }
+
+      // Use computed distances to update candidate/result heaps
+      for (let i = 0; i < unvisitedIds.length; i++) {
+        const neighborDist = distances[i];
+
+        if (results.size < ef || neighborDist < results.peek()!.distance) {
+          candidates.push({ id: unvisitedIds[i], distance: neighborDist });
+          results.push({ id: unvisitedIds[i], distance: neighborDist });
+
+          if (results.size > ef) {
+            results.pop();
+          }
+        }
+      }
+    }
+
+    return results.toArray();
   }
 
   /**
@@ -369,7 +560,7 @@ export class HNSWIndex {
   }
 
   /**
-   * Search a single layer of the graph.
+   * Search a single layer of the graph (CPU path).
    */
   private searchLayer(
     query: Float32Array,
@@ -478,6 +669,19 @@ export class HNSWIndex {
   }
 
   /**
+   * Destroy the GPU manager and release all GPU resources.
+   * Safe to call even if GPU was never initialized.
+   */
+  destroyGPU(): void {
+    if (this.gpuManager) {
+      this.gpuManager.destroy();
+      this.gpuManager = null;
+    }
+    this.gpuInitialized = false;
+    this.gpuInitFailed = false;
+  }
+
+  /**
    * Serialize the index to a JSON-compatible object.
    */
   serialize(): SerializedHNSWIndex {
@@ -547,4 +751,3 @@ export class HNSWIndex {
     this.maxLevel = 0;
   }
 }
-

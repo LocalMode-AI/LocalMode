@@ -1,0 +1,416 @@
+---
+title: "Add Local AI to Your Vue/Svelte/Angular App - LocalMode Works Everywhere"
+description: "LocalMode is not a React library. The core packages are plain TypeScript with zero dependencies - they work in Vue 3, Svelte 5, Angular, vanilla JS, and any framework that can import an npm package. Here is the same semantic search feature built four ways to prove it."
+author: LocalMode
+date: 2026-02-09
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Most of the LocalMode examples you see online are written in React. That is because the showcase app at [localmode.ai](https://localmode.ai) is a Next.js application, and because `@localmode/react` ships 46 purpose-built hooks that make React integration especially smooth.
+
+But here is the thing most people miss: **React is optional.** The two packages that do all the actual work - `@localmode/core` and provider packages like `@localmode/transformers` - are plain TypeScript with zero framework dependencies. They export async functions. They return promises. They work anywhere JavaScript runs in a browser.
+
+If your stack is Vue, Svelte, Angular, Solid, Qwik, Lit, or a plain `<script>` tag, you can use every feature in LocalMode today. This post shows you how.
+
+---
+
+## Why It Works Everywhere
+
+Look at the dependency list of `@localmode/core`:
+
+```json
+// packages/core/package.json
+"dependencies": {}
+```
+
+That is not a typo. The core package has **zero runtime dependencies**. No React. No RxJS. No framework adapters. It is a collection of pure async functions - `embed()`, `embedMany()`, `classify()`, `streamText()`, `generateText()`, `transcribe()`, `captionImage()`, `createVectorDB()`, and dozens more - that accept an options object and return a structured result.
+
+The provider packages (`@localmode/transformers`, `@localmode/webllm`, `@localmode/wllama`) follow the same pattern. They export factory functions that create model instances. Those model instances implement core interfaces. You pass them into core functions. That is the entire integration surface.
+
+```ts
+import { embed, createVectorDB, semanticSearch } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// This is vanilla TypeScript. No framework. No hooks. No decorators.
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+const db = await createVectorDB({ name: 'docs', dimensions: 384 });
+const results = await semanticSearch({ db, model, query: 'budget concerns', k: 5 });
+```
+
+That snippet runs the same way whether you paste it into a Vue composable, a Svelte `$effect`, an Angular service, or a plain `.ts` file.
+
+---
+
+## The Same Feature, Four Frameworks
+
+To make this concrete, here is the same semantic search feature - embed documents on mount, search by meaning on user input - implemented in Vue 3, Svelte 5, Angular, and vanilla JavaScript. Every example uses the exact same `@localmode/core` and `@localmode/transformers` API calls.
+
+### Vue 3 (Composition API)
+
+```vue
+<script setup lang="ts">
+import { ref, onMounted } from 'vue';
+import { embed, embedMany, createVectorDB, semanticSearch } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+const query = ref('');
+const results = ref<{ score: number; metadata: Record<string, unknown> }[]>([]);
+const ready = ref(false);
+let db: Awaited<ReturnType<typeof createVectorDB>>;
+
+const docs = [
+  'Machine learning is a subset of artificial intelligence.',
+  'Neural networks are inspired by biological neurons.',
+  'Natural language processing handles human language.',
+  'Computer vision enables machines to interpret images.',
+];
+
+onMounted(async () => {
+  db = await createVectorDB({ name: 'vue-demo', dimensions: 384 });
+  const { embeddings } = await embedMany({ model, values: docs });
+  await db.addMany(docs.map((text, i) => ({
+    id: `doc-${i}`, vector: embeddings[i], metadata: { text },
+  })));
+  ready.value = true;
+});
+
+async function search() {
+  if (!query.value.trim() || !ready.value) return;
+  const { results: hits } = await semanticSearch({ db, model, query: query.value, k: 3 });
+  results.value = hits;
+}
+</script>
+```
+
+Standard Vue 3 Composition API. `ref` for reactive state, `onMounted` for initialization, a plain async function for search. The LocalMode calls are identical to any other example in the docs.
+
+### Svelte 5 (Runes)
+
+```svelte
+<script lang="ts">
+import { embed, embedMany, createVectorDB, semanticSearch } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+let query = $state('');
+let results = $state<{ score: number; metadata: Record<string, unknown> }[]>([]);
+let ready = $state(false);
+let db: Awaited<ReturnType<typeof createVectorDB>>;
+
+const docs = [
+  'Machine learning is a subset of artificial intelligence.',
+  'Neural networks are inspired by biological neurons.',
+  'Natural language processing handles human language.',
+  'Computer vision enables machines to interpret images.',
+];
+
+$effect(() => {
+  (async () => {
+    db = await createVectorDB({ name: 'svelte-demo', dimensions: 384 });
+    const { embeddings } = await embedMany({ model, values: docs });
+    await db.addMany(docs.map((text, i) => ({
+      id: `doc-${i}`, vector: embeddings[i], metadata: { text },
+    })));
+    ready = true;
+  })();
+});
+
+async function search() {
+  if (!query.trim() || !ready) return;
+  const { results: hits } = await semanticSearch({ db, model, query, k: 3 });
+    results = hits;
+}
+</script>
+```
+
+Svelte 5 runes (`$state`, `$effect`) replace the old reactive declarations. The LocalMode code inside them is unchanged. No adapters needed.
+
+### Angular (Signals)
+
+```typescript
+import { Component, signal, effect } from '@angular/core';
+import { embed, embedMany, createVectorDB, semanticSearch } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+import type { VectorDB } from '@localmode/core';
+
+@Component({ selector: 'app-search', templateUrl: './search.component.html' })
+export class SearchComponent {
+  private model = transformers.embedding('Xenova/bge-small-en-v1.5');
+  private db: VectorDB | null = null;
+
+  query = signal('');
+  results = signal<{ score: number; metadata: Record<string, unknown> }[]>([]);
+  ready = signal(false);
+
+  private docs = [
+    'Machine learning is a subset of artificial intelligence.',
+    'Neural networks are inspired by biological neurons.',
+    'Natural language processing handles human language.',
+    'Computer vision enables machines to interpret images.',
+  ];
+
+  constructor() {
+    this.init();
+  }
+
+  private async init() {
+    this.db = await createVectorDB({ name: 'angular-demo', dimensions: 384 });
+    const { embeddings } = await embedMany({ model: this.model, values: this.docs });
+    await this.db.addMany(this.docs.map((text, i) => ({
+      id: `doc-${i}`, vector: embeddings[i], metadata: { text },
+    })));
+    this.ready.set(true);
+  }
+
+  async search() {
+    if (!this.query().trim() || !this.db) return;
+    const { results } = await semanticSearch({
+      db: this.db, model: this.model, query: this.query(), k: 3,
+    });
+    this.results.set(results);
+  }
+}
+```
+
+Angular signals (`signal`, `computed`) handle reactivity. The AI logic is plain async/await calls to `@localmode/core`. No RxJS wrapping required for these operations.
+
+### Vanilla JavaScript (No Framework)
+
+```html
+<input id="search" type="text" placeholder="Search by meaning..." />
+<ul id="results"></ul>
+
+<script type="module">
+import { embedMany, createVectorDB, semanticSearch } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+const db = await createVectorDB({ name: 'vanilla-demo', dimensions: 384 });
+
+const docs = [
+  'Machine learning is a subset of artificial intelligence.',
+  'Neural networks are inspired by biological neurons.',
+  'Natural language processing handles human language.',
+  'Computer vision enables machines to interpret images.',
+];
+
+const { embeddings } = await embedMany({ model, values: docs });
+await db.addMany(docs.map((text, i) => ({
+  id: `doc-${i}`, vector: embeddings[i], metadata: { text },
+})));
+
+document.getElementById('search').addEventListener('input', async (e) => {
+  const query = e.target.value.trim();
+  if (!query) return;
+  const { results: hits } = await semanticSearch({ db, model, query, k: 3 });
+  document.getElementById('results').innerHTML = hits
+    .map(r => `<li>${r.metadata.text} (${r.score.toFixed(3)})</li>`)
+    .join('');
+});
+</script>
+```
+
+No build step required beyond a bundler that handles `node_modules` imports (Vite works out of the box). The same four lines of LocalMode code - `createVectorDB`, `embedMany`, `addMany`, `semanticSearch` - appear in every example above.
+
+---
+
+## Streaming LLM Chat in Vanilla JS
+
+Semantic search is one use case. Here is another common one - streaming LLM chat - in plain JavaScript to show that even the most complex LocalMode feature works without a framework:
+
+```html
+<textarea id="prompt" rows="3" placeholder="Ask anything..."></textarea>
+<button id="send">Send</button>
+<div id="output"></div>
+
+<script type="module">
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+const output = document.getElementById('output');
+
+document.getElementById('send').addEventListener('click', async () => {
+  const prompt = document.getElementById('prompt').value;
+  if (!prompt.trim()) return;
+
+  output.textContent = '';
+  const result = await streamText({ model, prompt, maxTokens: 500 });
+
+  for await (const chunk of result.stream) {
+    output.textContent += chunk.text;
+  }
+
+  const usage = await result.usage;
+  console.log(`Generated ${usage.outputTokens} tokens in ${usage.durationMs}ms`);
+});
+</script>
+```
+
+The `streamText()` function returns an async iterable. You consume it with `for await...of`. That is standard JavaScript - no React state, no observables, no framework magic. The LLM runs entirely in the browser via WebGPU, and each token appears in the DOM as it is generated.
+
+---
+
+## What About React?
+
+<Callout type="info" title="React developers">
+  If you are using React, you do not have to use the vanilla API. The `@localmode/react` package provides 46 hooks - `useEmbed`, `useChat`, `useClassify`, `useTranscribe`, `useCaptionImage`, `useSemanticSearch`, and many more - with built-in loading states, error handling, and AbortSignal cancellation. See the [React hooks documentation](/docs/react) for the full API.
+</Callout>
+
+The `@localmode/react` package is a convenience layer. It wraps the same `@localmode/core` functions in React hooks that manage `useState`, `useRef`, and cleanup logic for you. Under the hood, `useEmbed` calls `embed()`. `useChat` calls `streamText()`. There is no separate React-only runtime.
+
+If you are building with React, use the hooks - they save real boilerplate. If you are building with anything else, use the core functions directly. You get the same models, the same quality, the same offline behavior.
+
+---
+
+## Package Compatibility Table
+
+Every package in LocalMode except `@localmode/react` is framework-agnostic:
+
+| Package | What It Does | React | Vue | Svelte | Angular | Vanilla JS |
+|---|---|---|---|---|---|---|
+| `@localmode/core` | Functions, VectorDB, types, middleware | Yes | Yes | Yes | Yes | Yes |
+| `@localmode/transformers` | 25+ model types via Transformers.js | Yes | Yes | Yes | Yes | Yes |
+| `@localmode/webllm` | LLM chat via WebGPU (30 models) | Yes | Yes | Yes | Yes | Yes |
+| `@localmode/wllama` | GGUF models via llama.cpp WASM (160K+ models) | Yes | Yes | Yes | Yes | Yes |
+| `@localmode/chrome-ai` | Chrome Built-in AI (zero download) | Yes | Yes | Yes | Yes | Yes |
+| `@localmode/pdfjs` | PDF text extraction | Yes | Yes | Yes | Yes | Yes |
+| `@localmode/langchain` | LangChain.js adapters | Yes | Yes | Yes | Yes | Yes |
+| `@localmode/dexie` | Dexie.js storage adapter | Yes | Yes | Yes | Yes | Yes |
+| `@localmode/idb` | idb storage adapter | Yes | Yes | Yes | Yes | Yes |
+| `@localmode/localforage` | localForage storage adapter | Yes | Yes | Yes | Yes | Yes |
+| `@localmode/devtools` | In-app DevTools widget | Yes | Yes | Yes | Yes | Yes |
+| `@localmode/ai-sdk` | Vercel AI SDK provider | Yes | Yes | Yes | Yes | Yes |
+| `@localmode/react` | React hooks (46 hooks) | **Yes** | No | No | No | No |
+
+The pattern is clear: 12 out of 13 packages work with any framework. The one exception exists specifically to provide idiomatic React integration.
+
+---
+
+## Tips for Non-React Integration
+
+### Create a Service Module
+
+In every framework, the cleanest pattern is to isolate your LocalMode calls in a dedicated module - a Vue composable file, a Svelte `.ts` module, an Angular service, or a plain utility file:
+
+```ts
+// src/lib/ai.ts - shared across your app, framework-agnostic
+import { transformers } from '@localmode/transformers';
+import { webllm } from '@localmode/webllm';
+
+export const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
+export const classifierModel = transformers.classifier(
+  'Xenova/distilbert-base-uncased-finetuned-sst-2-english'
+);
+export const llm = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+```
+
+Then import from `src/lib/ai.ts` in your framework-specific code. Model instances are reused across calls, so the heavy model download happens only once.
+
+### Always Support Cancellation
+
+Every LocalMode function accepts an `abortSignal` option. Wire it up to your framework's lifecycle:
+
+```ts
+// Vue 3 - cancel on unmount
+import { onUnmounted } from 'vue';
+const controller = new AbortController();
+onUnmounted(() => controller.abort());
+await embed({ model, value: text, abortSignal: controller.signal });
+
+// Svelte 5 - cancel via onDestroy
+import { onDestroy } from 'svelte';
+const controller = new AbortController();
+onDestroy(() => controller.abort());
+
+// Angular - cancel via OnDestroy
+ngOnDestroy() { this.controller.abort(); }
+```
+
+### Handle the First Load
+
+Models download from HuggingFace Hub on first use and cache in IndexedDB. Show a loading indicator during this one-time download:
+
+```ts
+import { transformers, preloadModel, isModelCached } from '@localmode/transformers';
+
+const modelId = 'Xenova/bge-small-en-v1.5';
+const cached = await isModelCached(modelId);
+if (!cached) {
+  await preloadModel(modelId, {
+    onProgress: (p) => updateLoadingBar(p.progress),
+  });
+}
+```
+
+This works identically regardless of your UI framework.
+
+### Bundler Configuration
+
+For Vite-based frameworks (Vue, Svelte, SvelteKit), you may need to exclude the transformers dependency from pre-bundling:
+
+```ts
+// vite.config.ts
+export default defineConfig({
+  optimizeDeps: {
+    exclude: ['@huggingface/transformers'],
+  },
+});
+```
+
+For Angular CLI (which uses webpack under the hood), add to your `angular.json` or custom webpack config:
+
+```json
+{
+  "build": {
+    "options": {
+      "allowedCommonJsDependencies": ["onnxruntime-web"]
+    }
+  }
+}
+```
+
+---
+
+## What You Can Build
+
+Everything listed in the [Getting Started guide](/docs/getting-started) and every function in the [Core API reference](/docs/core) is available to non-React frameworks. That includes:
+
+- **Embeddings and vector search** - `embed()`, `embedMany()`, `createVectorDB()`, `semanticSearch()`
+- **LLM chat with streaming** - `streamText()`, `generateText()`, `generateObject()`
+- **Classification and NER** - `classify()`, `classifyZeroShot()`, `extractEntities()`
+- **Vision** - `captionImage()`, `detectObjects()`, `segmentImage()`, `classifyImage()`
+- **Audio** - `transcribe()`, `synthesizeSpeech()`
+- **Translation and summarization** - `translate()`, `summarize()`
+- **Document understanding** - `askDocument()`, `extractText()`
+- **RAG pipelines** - `chunk()`, `ingest()`, `rerank()`, `createPipeline()`
+- **Security** - `encrypt()`, `decryptString()`, `redactPII()`
+- **Agents** - `createAgent()`, `runAgent()` with tool calling
+
+All of it is async functions and options objects. All of it is framework-agnostic.
+
+---
+
+## The Real Takeaway
+
+LocalMode is not a React library that happens to have some core utilities. It is a set of framework-agnostic AI primitives that happens to ship a React convenience layer.
+
+The architecture is intentional. `@localmode/core` has zero dependencies so that it can be a universal foundation. Provider packages depend only on their ML runtime and core. The React package is a leaf node - it depends on core, but nothing depends on it.
+
+If you are building with Vue, Svelte, Angular, or any other framework: install `@localmode/core` and a provider, call the functions, and ship local AI features that work offline with zero API costs. The same models, the same quality, the same privacy guarantees. The only thing you miss is some React-specific ergonomics - and your framework's own reactivity primitives are more than capable of filling that gap.
+
+---
+
+## Methodology
+
+Framework usage statistics are from the [Stack Overflow Developer Survey 2025](https://survey.stackoverflow.co/2025/) (49,000+ respondents), the [State of JavaScript 2024](https://2024.stateofjs.com/en-US/libraries/front-end-frameworks/) survey, and aggregated trend data from [GitHub front-end framework popularity tracking](https://gist.github.com/tkrotoff/b1caa4c3a185629299ec234d2314e190). Vue 3 Composition API patterns reference the [official Vue.js documentation](https://vuejs.org/api/composition-api-lifecycle.html). Svelte 5 runes syntax follows the [official Svelte runes documentation](https://svelte.dev/docs/svelte/$state) and [2026 best practices](https://onehorizon.ai/blog/svelte-best-practices-in-2026-scaling-with-runes-snippets-and-pure-reactivity). Angular signals patterns reference the [official Angular signals guide](https://angular.dev/guide/signals). All code examples use real function signatures from `@localmode/core` and `@localmode/transformers`. Package compatibility claims are based on the published `package.json` dependency lists - `@localmode/core` has zero runtime dependencies, and `@localmode/react` is the only package with a `react` peer dependency.
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

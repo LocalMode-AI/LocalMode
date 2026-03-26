@@ -56,7 +56,7 @@ function resolveModel(modelOrId: ImageFeatureModel | string): ImageFeatureModel 
  * import { extractImageFeatures, cosineSimilarity } from '@localmode/core';
  * import { transformers } from '@localmode/transformers';
  *
- * const model = transformers.imageFeatures('Xenova/clip-vit-base-patch32');
+ * const model = transformers.imageFeatures('Xenova/siglip-base-patch16-224');
  *
  * const { features: features1 } = await extractImageFeatures({
  *   model,
@@ -75,7 +75,7 @@ function resolveModel(modelOrId: ImageFeatureModel | string): ImageFeatureModel 
  * @example Store in vector database
  * ```ts
  * const { features } = await extractImageFeatures({
- *   model: transformers.imageFeatures('Xenova/clip-vit-base-patch32'),
+ *   model: transformers.imageFeatures('Xenova/siglip-base-patch16-224'),
  *   image: productImage,
  * });
  *

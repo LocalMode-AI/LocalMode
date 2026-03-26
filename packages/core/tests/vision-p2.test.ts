@@ -1,5 +1,5 @@
 /**
- * Vision P2 Feature Tests
+ * Vision Extended Feature Tests
  *
  * Tests for segmentImage(), detectObjects(), extractImageFeatures(), imageToImage().
  *

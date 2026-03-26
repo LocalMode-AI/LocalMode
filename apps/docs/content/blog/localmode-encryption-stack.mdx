@@ -1,0 +1,466 @@
+---
+title: "The LocalMode Encryption Stack: PBKDF2 Key Derivation, AES-256-GCM, and Encrypted Embeddings"
+description: "A deep technical walkthrough of LocalMode's zero-knowledge encryption pipeline. From PBKDF2 key derivation with configurable iterations to AES-256-GCM authenticated encryption of vectors, metadata, and text -- all running entirely in the browser via the Web Crypto API. No server ever sees a plaintext byte."
+author: LocalMode
+date: 2026-02-03
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Most "privacy-first" AI libraries mean one thing: they do not phone home. Your data stays on the device during inference. That is necessary, but it is not sufficient. If your embedding vectors sit in IndexedDB as raw Float32Arrays, anyone with access to the device -- a shared laptop, a stolen phone, a compromised browser extension -- can read them. Worse, research has shown that [embedding vectors can be inverted](https://medium.com/@himansusaha/embedding-inversion-encrypted-vector-db-the-future-of-privacy-aware-rag-e0caf0985ee1) to reconstruct the original text with surprising accuracy.
+
+LocalMode ships a complete encryption stack that closes this gap. Every layer -- key derivation, authenticated encryption, persistent key management, vector encryption middleware -- runs in the browser through the [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API). No external cryptography libraries. No server round-trips. Zero knowledge by construction.
+
+This post walks through every layer of that stack, from the raw cryptographic primitives to the high-level middleware that encrypts your VectorDB transparently.
+
+<Callout type="info" title="Working demo">
+  The [Encrypted Vault](https://localmode.ai/encrypted-vault) showcase app implements the complete encryption pipeline described here. Create a vault, add encrypted entries, lock and unlock with a master password -- all running locally in your browser with AES-256-GCM encryption.
+</Callout>
+
+---
+
+## Layer 1: Key Derivation with PBKDF2
+
+The entire encryption pipeline starts with a password. Users do not think in terms of 256-bit keys; they think in terms of passwords. The bridge between a human-memorizable string and a cryptographically strong key is [PBKDF2](https://en.wikipedia.org/wiki/PBKDF2) (Password-Based Key Derivation Function 2).
+
+LocalMode's `deriveEncryptionKey()` function wraps the Web Crypto API's `SubtleCrypto.deriveKey()` to produce an AES-256-GCM `CryptoKey` from a password, a salt, and an iteration count:
+
+```typescript
+import { deriveEncryptionKey } from '@localmode/core';
+
+// Derive an encryption key from a user password
+const { key, salt } = await deriveEncryptionKey('user-password');
+
+// Store the salt for future key derivation (it is not secret)
+localStorage.setItem('encryption-salt', salt);
+
+// Later, re-derive the same key with the stored salt
+const { key: sameKey } = await deriveEncryptionKey('user-password', storedSalt);
+```
+
+Under the hood, this executes two Web Crypto operations in sequence:
+
+1. **Import the password as raw key material** -- `crypto.subtle.importKey('raw', encodedPassword, { name: 'PBKDF2' }, false, ['deriveKey'])` converts the UTF-8 encoded password into a non-extractable `CryptoKey` that can only be used for derivation.
+2. **Derive the AES-256 key** -- `crypto.subtle.deriveKey()` runs PBKDF2 with HMAC-SHA-256 as the pseudorandom function, the provided salt, and the configured iteration count, producing a 256-bit AES-GCM key.
+
+The returned `CryptoKey` is non-extractable (`extractable: false`). The raw key bytes never enter JavaScript memory. They exist only inside the browser's cryptographic subsystem, inaccessible to application code, browser extensions, or in-memory inspection tools.
+
+### Salt Generation
+
+When no salt is provided, `deriveEncryptionKey()` generates 16 random bytes (128 bits) via `crypto.getRandomValues()`. The salt is returned as a base64 string for easy storage. It is not secret -- its purpose is to ensure that the same password produces different keys for different databases, defeating precomputed rainbow table attacks.
+
+### Iteration Count: The Security-Performance Tradeoff
+
+LocalMode defaults to **100,000 PBKDF2 iterations**. Each iteration runs one HMAC-SHA-256 computation, so the total derivation cost scales linearly.
+
+The [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) currently recommends a minimum of **600,000 iterations** for PBKDF2-SHA-256 in server-side password hashing. Some security researchers [advocate for 310,000+ iterations](https://dev.to/securebitchat/why-you-should-use-310000-iterations-with-pbkdf2-in-2025-3o1e) as a practical floor in 2025-2026.
+
+LocalMode's default of 100,000 is a deliberate tradeoff for client-side key derivation in the browser. Key derivation happens on the user's device -- which might be a mid-range phone, not a server with dedicated hardware. At 100,000 iterations, derivation takes approximately 50-150ms on modern hardware. At 600,000, it would take 300-900ms, creating a noticeable delay on every vault unlock.
+
+The iteration count is fully configurable:
+
+```typescript
+// High-security: match OWASP server-side recommendations
+const { key, salt } = await deriveEncryptionKey('password', undefined, 600_000);
+
+// Default: 100,000 iterations (good browser-side tradeoff)
+const { key: defaultKey } = await deriveEncryptionKey('password');
+```
+
+For applications handling highly sensitive data (medical records, legal documents, financial information), raising iterations to 300,000-600,000 is straightforward. The Keystore class (Layer 4) persists the iteration count alongside the key metadata, so the correct value is always used for re-derivation.
+
+---
+
+## Layer 2: AES-256-GCM Authenticated Encryption
+
+With a derived `CryptoKey` in hand, the next layer handles the actual encryption. LocalMode uses [AES-256-GCM](https://en.wikipedia.org/wiki/Galois/Counter_Mode) (Galois/Counter Mode) -- a NIST-standardized authenticated encryption with associated data (AEAD) cipher.
+
+### Why AES-256-GCM?
+
+GCM provides three properties in a single pass:
+
+| Property | What It Means |
+|----------|---------------|
+| **Confidentiality** | Ciphertext reveals nothing about the plaintext without the key |
+| **Integrity** | Any modification to the ciphertext is detected on decryption |
+| **Authenticity** | The 128-bit authentication tag proves the ciphertext was produced by someone who holds the key |
+
+This matters because IndexedDB is not a tamper-proof store. A malicious extension or XSS attack could modify stored ciphertext to inject crafted data. With GCM's authentication tag, any such modification causes decryption to fail with an explicit error rather than silently returning corrupted plaintext.
+
+### The Encrypt Function
+
+The `encrypt()` function accepts strings or raw `ArrayBuffer` data:
+
+```typescript
+// Note: encrypt/decryptString are internal utilities used by encryptionMiddleware.
+// For most use cases, use encryptionMiddleware() or deriveEncryptionKey() directly.
+import { deriveEncryptionKey, encryptionMiddleware } from '@localmode/core';
+
+// Encrypt a string
+const encrypted = await encrypt('Sensitive medical record', 'user-password');
+// Returns: { ciphertext, iv, salt, algorithm: 'AES-GCM', version: 1 }
+
+// Decrypt it back
+const plaintext = await decryptString(encrypted, 'user-password');
+// 'Sensitive medical record'
+```
+
+Each call to `encrypt()` generates:
+
+1. **A fresh 16-byte salt** for key derivation (via `crypto.getRandomValues`)
+2. **A fresh 12-byte IV** (initialization vector / nonce) for AES-GCM
+3. **A derived AES-256 key** from the password + salt via PBKDF2
+4. **The ciphertext + authentication tag** via `crypto.subtle.encrypt()`
+
+The `EncryptedData` structure stores everything needed for decryption:
+
+```typescript
+interface EncryptedData {
+  ciphertext: string;      // Base64-encoded ciphertext + auth tag
+  iv: string;              // Base64-encoded 12-byte IV
+  salt: string;            // Base64-encoded 16-byte PBKDF2 salt
+  algorithm: 'AES-GCM';   // Algorithm identifier
+  version: 1;              // Schema version for future compatibility
+}
+```
+
+### Nonce Uniqueness: The Critical Invariant
+
+AES-GCM has one absolute requirement: **the (key, IV) pair must never repeat**. Reusing an IV with the same key [completely breaks both confidentiality and authenticity](https://nvlpubs.nist.gov/nistpubs/legacy/sp/nistspecialpublication800-38d.pdf). Since LocalMode generates a fresh random salt for every `encrypt()` call, a different key is derived each time -- making IV collisions irrelevant even if the same 12-byte IV were drawn twice. In the encryption middleware (Layer 5), where a single derived key is reused across multiple operations, a fresh 12-byte IV is generated per operation via `crypto.getRandomValues()`, keeping the collision probability at approximately 2^-48 per operation -- safely below the practical threshold for any client-side workload.
+
+### Specialized Encryption Functions
+
+Beyond string encryption, the crypto module provides type-specific wrappers:
+
+```typescript
+// Vector and metadata encryption is handled automatically by encryptionMiddleware.
+// The low-level encryptVector/decryptVector functions are internal to the middleware.
+
+// Encrypt a Float32Array (embedding vector)
+const vector = new Float32Array([0.1, 0.2, 0.3, /* ... 384 dimensions */]);
+const encryptedVector = await encryptVector(vector, 'password');
+const decryptedVector = await decryptVector(encryptedVector, 'password');
+// decryptedVector is identical to the original Float32Array
+
+// Encrypt arbitrary JSON
+const metadata = { patientId: 'P-12345', diagnosis: 'confidential' };
+const encryptedMeta = await encryptJSON(metadata, 'password');
+const decryptedMeta = await decryptJSON(encryptedMeta, 'password');
+```
+
+The `encryptVector()` function passes the `Float32Array`'s underlying `ArrayBuffer` directly to AES-GCM, avoiding any intermediate serialization. For a 384-dimensional embedding (1,536 bytes), the encrypted output is 1,536 bytes of ciphertext + 16 bytes of auth tag + 12 bytes of IV + 16 bytes of salt -- roughly 1,580 bytes total, an overhead of under 3%.
+
+---
+
+## Layer 3: Passphrase Verification
+
+Encryption protects data at rest, but users need a way to know whether they entered the correct password before attempting to decrypt an entire database. The crypto module includes constant-time passphrase verification:
+
+```typescript
+import { hashPassphrase, verifyPassphrase } from '@localmode/core';
+
+// On vault creation: hash and store
+const hash = await hashPassphrase('user-password');
+// SHA-256 hash, base64-encoded
+
+// On unlock: verify before attempting decryption
+const isValid = await verifyPassphrase('user-password', storedHash);
+```
+
+The `verifyPassphrase()` function uses a constant-time comparison loop to prevent timing attacks -- each character is compared via XOR accumulation regardless of whether an earlier character mismatched:
+
+```typescript
+// Constant-time comparison (from crypto.ts)
+let result = 0;
+for (let i = 0; i < newHash.length; i++) {
+  result |= newHash.charCodeAt(i) ^ hash.charCodeAt(i);
+}
+return result === 0;
+```
+
+This is not a full timing-attack-proof implementation (JavaScript's runtime characteristics make true constant-time guarantees difficult), but it eliminates the most obvious timing leaks from early-exit string comparison.
+
+---
+
+## Layer 4: The Keystore -- Persistent Key Management
+
+Raw encryption functions are low-level primitives. The `Keystore` class provides the session management layer that applications actually interact with:
+
+```typescript
+// Keystore is used internally by the encrypted-vault showcase app.
+// For production use, the encryptionMiddleware + deriveEncryptionKey pattern is recommended.
+import { deriveEncryptionKey, hashPassphrase, verifyPassphrase } from '@localmode/core';
+
+const keystore = createKeystore();
+
+// First time: initialize encryption for a database
+await keystore.initialize('my-vector-db', 'master-password', 100_000);
+
+// Later sessions: unlock with the password
+const isValid = await keystore.unlock('my-vector-db', 'master-password');
+
+// Check status
+keystore.isUnlocked(); // true
+
+// When done: clear the password from memory
+keystore.lock();
+```
+
+The Keystore persists key metadata in a dedicated IndexedDB database (`vectordb_keystore`), separate from application data. Each entry stores:
+
+| Field | Purpose |
+|-------|---------|
+| `dbName` | Which database this key belongs to |
+| `passphraseHash` | SHA-256 hash for password verification |
+| `iterations` | PBKDF2 iteration count used during initialization |
+| `createdAt` | Timestamp for audit trails |
+| `lastUsedAt` | Timestamp updated on every unlock |
+| `enabled` | Whether encryption is currently active |
+
+The Keystore never stores the password or the derived key in IndexedDB. The password lives only in JavaScript memory while the vault is unlocked, and is cleared to `null` on `lock()`. The derived `CryptoKey` is non-extractable by the Web Crypto API's design.
+
+### Key Lifecycle Operations
+
+The Keystore supports the full lifecycle of an encryption key:
+
+```typescript
+// Change password (verifies old password first)
+await keystore.changePassphrase('my-db', 'old-password', 'new-password');
+
+// Disable encryption (requires password verification)
+await keystore.disable('my-db', 'master-password');
+
+// Delete all key metadata
+await keystore.delete('my-db');
+
+// Check if a database has encryption configured
+const hasEncryption = await keystore.hasEncryption('my-db');
+```
+
+---
+
+## Layer 5: The Encryption Middleware -- Transparent VectorDB Encryption
+
+The layers above are building blocks. The `encryptionMiddleware` ties everything together into a single VectorDB middleware that encrypts documents on write and decrypts them on read -- completely transparently to application code.
+
+```typescript
+import {
+  createVectorDB,
+  wrapVectorDB,
+  encryptionMiddleware,
+  deriveEncryptionKey,
+  embed,
+} from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// 1. Derive encryption key from user password
+const { key } = await deriveEncryptionKey('master-password', storedSalt);
+
+// 2. Create a standard VectorDB
+const db = await createVectorDB({ name: 'encrypted-notes', dimensions: 384 });
+
+// 3. Wrap it with encryption middleware
+const encryptedDb = wrapVectorDB({
+  db,
+  middleware: encryptionMiddleware({ key }),
+});
+
+// 4. Use normally -- encryption is transparent
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+const { embedding } = await embed({ model, value: 'Patient diagnosed with...' });
+
+await encryptedDb.add({
+  id: 'note-1',
+  vector: embedding,
+  metadata: { title: 'Medical Note', content: 'Patient diagnosed with...' },
+});
+
+// 5. Search works normally -- results are decrypted automatically
+const results = await encryptedDb.search(queryVector, { topK: 5 });
+// results[0].metadata.content === 'Patient diagnosed with...' (decrypted)
+```
+
+### What Gets Encrypted
+
+The middleware encrypts three categories of data independently, each controlled by a configuration flag:
+
+| Data | Flag | Default | Method |
+|------|------|---------|--------|
+| **Vectors** | `encryptVectors` | `true` | AES-GCM on raw Float32Array bytes; IV prepended to ciphertext; result stored as padded Float32Array |
+| **Metadata strings** | `encryptText` | `true` | AES-GCM per field; result stored as `{ __encrypted: true, ciphertext, iv }` |
+| **Metadata objects** | `encryptMetadata` | `true` | JSON-serialized then encrypted as string |
+
+You can exclude specific metadata fields from encryption -- useful for fields that need to remain filterable:
+
+```typescript
+const encryptedDb = wrapVectorDB({
+  db,
+  middleware: encryptionMiddleware({
+    key,
+    excludeFields: ['category', 'timestamp'],
+    // 'category' stays as plaintext for filtered search
+    // 'timestamp' stays readable for sorting
+  }),
+});
+```
+
+### How Vector Encryption Works
+
+Vector encryption deserves special attention because embedding vectors are `Float32Array` values that need to remain storable in IndexedDB. The middleware handles this by:
+
+1. Generating a fresh 12-byte IV via `crypto.getRandomValues()`
+2. Encrypting the raw `Float32Array` buffer with AES-GCM
+3. Prepending the IV to the ciphertext
+4. Padding the combined bytes to a multiple of 4 bytes
+5. Wrapping the result as a new `Float32Array` for storage compatibility
+
+On retrieval, the process reverses: the first 12 bytes are extracted as the IV, the remainder is decrypted, and the original `Float32Array` is reconstructed.
+
+<Callout type="warn" title="Encrypted vectors and similarity search">
+  When `encryptVectors` is enabled, the encrypted vectors are ciphertext -- they bear no mathematical relationship to the original embeddings. This means HNSW index-based similarity search over encrypted vectors will not return meaningful results. The vectors are protected at rest, but search queries must operate on plaintext vectors in memory. For full encrypted search, you need a separate architecture: embed the query, search against plaintext vectors held in memory for the duration of the session, and encrypt only at rest. The middleware's `afterSearch` hook automatically decrypts metadata in search results.
+</Callout>
+
+### The Practical Pattern: Encrypt at Rest, Search in Memory
+
+The most common architecture for encrypted semantic search in LocalMode is:
+
+1. **On unlock**: derive the key, load encrypted documents, decrypt vectors into memory
+2. **During session**: search against in-memory plaintext vectors; all results pass through `afterSearch` for metadata decryption
+3. **On lock**: clear in-memory vectors and the derived key
+
+This gives you zero-knowledge storage (nothing readable on disk without the password) while maintaining full-speed HNSW search during active sessions. The encrypted-vault showcase app demonstrates this pattern.
+
+---
+
+## Layer 6: Combining Encryption with Other Middleware
+
+The encryption middleware composes with LocalMode's other middleware through `wrapVectorDB`:
+
+```typescript
+import {
+  wrapVectorDB,
+  encryptionMiddleware,
+  loggingMiddleware,
+  validationMiddleware,
+} from '@localmode/core';
+
+const secureDb = wrapVectorDB({
+  db,
+  middleware: [
+    validationMiddleware({ dimensions: 384 }),   // Validate first
+    loggingMiddleware({ level: 'info' }),         // Log operations
+    encryptionMiddleware({ key }),                // Encrypt last (before storage)
+  ],
+});
+```
+
+You can also combine it with PII redaction on the embedding model side for defense in depth:
+
+```typescript
+import { wrapEmbeddingModel, piiRedactionMiddleware } from '@localmode/core';
+
+// Redact PII before embedding, encrypt vectors after embedding
+const safeModel = wrapEmbeddingModel({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  middleware: piiRedactionMiddleware({ emails: true, phones: true, ssn: true }),
+});
+
+// PII is stripped before it reaches the model
+// Vectors are encrypted before they reach storage
+```
+
+This two-layer approach means that even if the encryption is somehow bypassed, the stored embeddings do not encode any PII -- because it was redacted before the embedding model ever saw it.
+
+---
+
+## Browser Compatibility
+
+The entire encryption stack depends on the [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API), specifically `crypto.subtle`. Browser support is [effectively universal](https://caniuse.com/cryptography) across modern browsers:
+
+| Browser | `crypto.subtle` | PBKDF2 | AES-GCM |
+|---------|-----------------|--------|---------|
+| Chrome 37+ | Yes | Yes | Yes |
+| Firefox 34+ | Yes | Yes | Yes |
+| Safari 11+ | Yes | Yes | Yes |
+| Edge 12+ | Yes | Yes | Yes |
+
+One important constraint: `crypto.subtle` is only available in [secure contexts](https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto) (HTTPS or `localhost`). LocalMode's `isCryptoSupported()` function checks for availability before any encryption operation:
+
+```typescript
+// Check for Web Crypto API availability (HTTPS or localhost required)
+const isCryptoAvailable = typeof globalThis.crypto?.subtle !== 'undefined';
+
+if (!isCryptoSupported()) {
+  // Fallback: warn the user or disable encryption features
+  console.warn('Web Crypto API not available -- encryption disabled');
+}
+```
+
+---
+
+## Security Properties Summary
+
+| Property | Guarantee |
+|----------|-----------|
+| **Key derivation** | PBKDF2 with HMAC-SHA-256, configurable iterations (default 100K), 128-bit random salt |
+| **Encryption** | AES-256-GCM with 12-byte random IV per operation |
+| **Authentication** | 128-bit GCM auth tag detects any ciphertext tampering |
+| **Key exposure** | `CryptoKey` is non-extractable; raw key bytes never enter JS memory |
+| **Password exposure** | Cleared from memory on `lock()`; never persisted to storage |
+| **Nonce reuse** | Fresh random IV per operation; fresh salt per `encrypt()` call |
+| **Timing attacks** | Constant-time passphrase comparison in `verifyPassphrase()` |
+| **Zero knowledge** | No server component; all cryptography runs in the browser |
+
+### What This Does Not Protect Against
+
+Transparency requires acknowledging limitations:
+
+- **Weak passwords**: PBKDF2 slows brute-force attacks but cannot compensate for a four-character password. Enforce minimum length and complexity at the application layer.
+- **Memory inspection**: While the `CryptoKey` is non-extractable, decrypted plaintext exists in JavaScript memory during processing. A compromised browser process could read it.
+- **Side-channel attacks**: JavaScript's runtime does not guarantee constant-time execution. The comparison loop in `verifyPassphrase()` mitigates but does not eliminate timing leaks.
+- **Key management**: If the user loses their password, the data is unrecoverable by design. This is a feature, not a bug -- but users must understand it.
+
+---
+
+## Getting Started
+
+Install the core package and a provider:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Set up encrypted storage in under 20 lines:
+
+```typescript
+import { createVectorDB, wrapVectorDB, encryptionMiddleware, deriveEncryptionKey, embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Derive key from password
+const { key, salt } = await deriveEncryptionKey('master-password');
+
+// Create encrypted VectorDB
+const db = await createVectorDB({ name: 'private-notes', dimensions: 384 });
+const encryptedDb = wrapVectorDB({
+  db,
+  middleware: encryptionMiddleware({ key }),
+});
+
+// Embed and store -- encryption is automatic
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+const { embedding } = await embed({ model, value: 'Confidential document text' });
+await encryptedDb.add({ id: '1', vector: embedding, metadata: { text: 'Confidential document text' } });
+
+// Search results are decrypted transparently
+const results = await encryptedDb.search(embedding, { topK: 5 });
+```
+
+For a complete working application, explore the [Encrypted Vault](https://localmode.ai/encrypted-vault) showcase app, which demonstrates vault creation, password-based unlock, entry encryption/decryption, and locking -- all built on the stack described in this post.
+
+---
+
+<Callout type="info" title="Further reading">
+  - [Security documentation](/docs/core/security) -- full API reference for encryption, PII redaction, and security middleware
+  - [Storage documentation](/docs/core/storage) -- VectorDB configuration and middleware composition
+  - [Middleware documentation](/docs/core/middleware) -- how to compose encryption with logging, caching, and validation middleware
+</Callout>

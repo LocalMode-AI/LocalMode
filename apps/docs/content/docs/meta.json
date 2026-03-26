@@ -1,4 +1,4 @@
 {
   "title": "Documentation",
-  "pages": ["index", "getting-started", "---Packages---", "core", "transformers", "webllm", "pdfjs"]
+  "pages": ["index", "getting-started", "---Core & React---", "core", "react", "---AI Providers---", "transformers", "webllm", "wllama", "chrome-ai", "---Ecosystem---", "ai-sdk", "langchain", "devtools", "---Storage & Utilities---", "pdfjs", "dexie", "idb", "localforage"]
 }

@@ -23,7 +23,7 @@ import { createLanguageModel } from './model.js';
  *   onProgress: (p) => console.log(`Loading: ${p.progress}%`),
  * });
  *
- * const model = myWebLLM.languageModel('Llama-3.2-1B-Instruct-q4f16');
+ * const model = myWebLLM.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
  * ```
  */
 export function createWebLLM(settings?: WebLLMProviderSettings): WebLLMProvider {
@@ -48,7 +48,7 @@ export function createWebLLM(settings?: WebLLMProviderSettings): WebLLMProvider 
  * import { generateText } from '@localmode/core';
  *
  * const { text } = await generateText({
- *   model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16'),
+ *   model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
  *   prompt: 'Hello, how are you?',
  * });
  * ```

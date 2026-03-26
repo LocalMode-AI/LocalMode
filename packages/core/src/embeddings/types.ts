@@ -34,7 +34,7 @@
  * @see {@link embedMany} - Use with embedMany() function
  */
 export interface EmbeddingModel<VALUE = string> {
-  /** Unique identifier for this model (e.g., 'transformers:Xenova/all-MiniLM-L6-v2') */
+  /** Unique identifier for this model (e.g., 'transformers:Xenova/bge-small-en-v1.5') */
   readonly modelId: string;
 
   /** Provider name (e.g., 'transformers', 'openai', 'custom') */
@@ -121,7 +121,7 @@ export interface EmbeddingResponse {
  * @example
  * ```ts
  * const { embedding, usage } = await embed({
- *   model: transformers.embedding('Xenova/all-MiniLM-L6-v2'),
+ *   model: transformers.embedding('Xenova/bge-small-en-v1.5'),
  *   value: 'Hello world',
  *   maxRetries: 3,
  * });
@@ -171,7 +171,7 @@ export interface EmbedResult {
  * @example
  * ```ts
  * const { embeddings, usage } = await embedMany({
- *   model: transformers.embedding('Xenova/all-MiniLM-L6-v2'),
+ *   model: transformers.embedding('Xenova/bge-small-en-v1.5'),
  *   values: ['Hello', 'World'],
  *   maxParallelCalls: 2,
  * });
@@ -243,6 +243,22 @@ export interface StreamEmbedManyOptions {
   /** Batch size for processing (default: 32) */
   batchSize?: number;
 
+  /**
+   * Opt-in to adaptive batch size computation based on device capabilities.
+   *
+   * When `true` and no explicit `batchSize` is provided, the batch size is
+   * computed from the device's CPU cores, memory, and GPU availability using
+   * `computeOptimalBatchSize()`.
+   *
+   * When both `batchSize` and `adaptiveBatching` are set, the explicit
+   * `batchSize` always takes precedence.
+   *
+   * @defaultValue `false`
+   *
+   * @see {@link computeOptimalBatchSize} for the underlying computation
+   */
+  adaptiveBatching?: boolean;
+
   /** AbortSignal for cancellation */
   abortSignal?: AbortSignal;
 
@@ -298,7 +314,7 @@ export interface StreamEmbedResult {
  * ```ts
  * const { results, usage } = await semanticSearch({
  *   db,
- *   model: transformers.embedding('Xenova/all-MiniLM-L6-v2'),
+ *   model: transformers.embedding('Xenova/bge-small-en-v1.5'),
  *   query: 'How to configure authentication?',
  *   k: 5,
  * });
@@ -473,7 +489,7 @@ export interface EmbeddingProvider {
  * @example
  * ```ts
  * const registry = createModelRegistry({ transformers });
- * const model = registry.embeddingModel('transformers:Xenova/all-MiniLM-L6-v2');
+ * const model = registry.embeddingModel('transformers:Xenova/bge-small-en-v1.5');
  * ```
  */
 export interface EmbeddingModelRegistry {
@@ -490,4 +506,226 @@ export interface EmbeddingModelRegistry {
 export interface ModelRegistryOptions {
   /** Separator between provider and model ID (default: ':') */
   separator?: string;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MODEL FINGERPRINT & DRIFT DETECTION
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Identifies the embedding model that produced a collection's vectors.
+ *
+ * Derived from `EmbeddingModel.modelId`, `EmbeddingModel.provider`,
+ * and `EmbeddingModel.dimensions`. Two fingerprints with the same
+ * `modelId` and `provider` occupy the same embedding space.
+ *
+ * @example
+ * ```ts
+ * const fingerprint: ModelFingerprint = {
+ *   modelId: 'Xenova/bge-small-en-v1.5',
+ *   provider: 'transformers',
+ *   dimensions: 384,
+ * };
+ * ```
+ */
+export interface ModelFingerprint {
+  /** Model identifier (e.g., 'Xenova/bge-small-en-v1.5') */
+  modelId: string;
+  /** Provider name (e.g., 'transformers') */
+  provider: string;
+  /** Output embedding dimensions */
+  dimensions: number;
+}
+
+/**
+ * Compatibility status between stored and current embedding models.
+ */
+export type ModelCompatibilityStatus = 'compatible' | 'incompatible' | 'dimension-mismatch';
+
+/**
+ * Result of checking model compatibility for a VectorDB collection.
+ *
+ * @see {@link checkModelCompatibility}
+ */
+export interface ModelCompatibilityResult {
+  /** Compatibility status */
+  status: ModelCompatibilityStatus;
+  /** Stored model fingerprint (null if no fingerprint stored) */
+  storedModel: ModelFingerprint | null;
+  /** Current model fingerprint */
+  currentModel: ModelFingerprint;
+  /** Number of documents in the collection */
+  documentCount: number;
+}
+
+/**
+ * Progress information for reindex operations.
+ */
+export interface ReindexProgress {
+  /** Number of documents processed so far */
+  completed: number;
+  /** Total number of documents to process */
+  total: number;
+  /** Number of documents skipped (no text in metadata) */
+  skipped: number;
+  /** Current phase of reindexing */
+  phase: 'embedding' | 'indexing';
+}
+
+/**
+ * Options for the `reindexCollection()` function.
+ *
+ * @see {@link reindexCollection}
+ */
+export interface ReindexOptions {
+  /** AbortSignal for cancellation */
+  abortSignal?: AbortSignal;
+  /** Progress callback called after each batch */
+  onProgress?: (progress: ReindexProgress) => void;
+  /** Inference queue for background scheduling */
+  queue?: import('../queue/types.js').InferenceQueue;
+  /** Number of documents to process per batch (default: 50) */
+  batchSize?: number;
+  /**
+   * Custom text extractor for documents without standard `_text` metadata.
+   * Return `null` to skip a document.
+   */
+  textExtractor?: (metadata: Record<string, unknown>) => string | null;
+  /**
+   * Default text metadata field to look up (default: '_text').
+   * Falls back to: 'text', 'content', 'body', '__text', 'pageContent'.
+   */
+  textField?: string;
+}
+
+/**
+ * Result of a `reindexCollection()` operation.
+ *
+ * @see {@link reindexCollection}
+ */
+export interface ReindexResult {
+  /** Number of documents successfully re-embedded */
+  reindexed: number;
+  /** Number of documents skipped (no text in metadata) */
+  skipped: number;
+  /** Total duration in milliseconds */
+  durationMs: number;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// THRESHOLD CALIBRATION
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Options for the `calibrateThreshold()` function.
+ *
+ * @example
+ * ```ts
+ * const calibration = await calibrateThreshold({
+ *   model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+ *   corpus: ['cat facts', 'dog breeds', 'car specs', 'truck models'],
+ *   percentile: 90,
+ * });
+ *
+ * const results = await db.search(queryVector, {
+ *   threshold: calibration.threshold,
+ * });
+ * ```
+ *
+ * @see {@link calibrateThreshold}
+ */
+export interface CalibrateThresholdOptions {
+  /** The embedding model to use (model object or string 'provider:modelId') */
+  model: EmbeddingModel | string;
+
+  /** Array of text samples to embed and compute pairwise similarities from */
+  corpus: string[];
+
+  /**
+   * Percentile of the pairwise similarity distribution to use as threshold.
+   * Must be between 0 and 100 inclusive.
+   * @defaultValue 90
+   */
+  percentile?: number;
+
+  /**
+   * Distance metric for similarity computation.
+   * @defaultValue 'cosine'
+   */
+  distanceFunction?: 'cosine' | 'euclidean' | 'dot';
+
+  /**
+   * Maximum number of corpus samples to use for calibration.
+   * When the corpus exceeds this, a uniformly-spaced subset is selected.
+   * @defaultValue 200
+   */
+  maxSamples?: number;
+
+  /** AbortSignal for cancellation of the embedding and computation */
+  abortSignal?: AbortSignal;
+}
+
+/**
+ * Distribution statistics for pairwise similarity scores.
+ *
+ * Returned as part of `ThresholdCalibration` for observability
+ * and post-hoc analysis of the similarity distribution.
+ *
+ * @see {@link ThresholdCalibration}
+ * @see {@link calibrateThreshold}
+ */
+export interface ThresholdDistributionStats {
+  /** Arithmetic mean of all pairwise similarity scores */
+  mean: number;
+
+  /** Median of all pairwise similarity scores */
+  median: number;
+
+  /** Population standard deviation of all pairwise similarity scores */
+  stdDev: number;
+
+  /** Minimum pairwise similarity score observed */
+  min: number;
+
+  /** Maximum pairwise similarity score observed */
+  max: number;
+
+  /** Total number of pairwise comparisons computed */
+  count: number;
+}
+
+/**
+ * Result of similarity threshold calibration.
+ *
+ * Contains the computed threshold, the percentile used, sample metadata,
+ * and full distribution statistics for observability.
+ *
+ * @example
+ * ```ts
+ * const calibration = await calibrateThreshold({ model, corpus });
+ * console.log(`Threshold: ${calibration.threshold}`);
+ * console.log(`Based on ${calibration.sampleSize} samples`);
+ * console.log(`Mean similarity: ${calibration.distribution.mean}`);
+ * ```
+ *
+ * @see {@link calibrateThreshold}
+ */
+export interface ThresholdCalibration {
+  /** The computed similarity threshold at the requested percentile */
+  threshold: number;
+
+  /** The percentile used (echoes the input or the default) */
+  percentile: number;
+
+  /** Number of corpus samples actually used (may be less than corpus length if maxSamples applied) */
+  sampleSize: number;
+
+  /** The model ID used for embedding */
+  modelId: string;
+
+  /** The distance function used */
+  distanceFunction: 'cosine' | 'euclidean' | 'dot';
+
+  /** Statistics of the pairwise similarity distribution */
+  distribution: ThresholdDistributionStats;
 }

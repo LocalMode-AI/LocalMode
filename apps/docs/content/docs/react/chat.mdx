@@ -1,0 +1,142 @@
+---
+title: 'Chat'
+description: Streaming LLM chat with message persistence and cancellation.
+icon: MessageSquare
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+# useChat
+
+Streaming LLM chat with message history, IndexedDB persistence, system prompts, and cancellation.
+
+<Callout type="info" title="See it in action">
+  Try [LLM Chat](https://localmode.ai/llm-chat) and [PDF Search](https://localmode.ai/pdf-search) for working demos of these hooks.
+</Callout>
+
+## Basic Usage
+
+```tsx
+import { useChat } from '@localmode/react';
+import { webllm } from '@localmode/webllm';
+
+const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+
+function Chat() {
+  const { messages, isStreaming, send, cancel, clearMessages } = useChat({
+    model,
+    systemPrompt: 'You are a helpful assistant.',
+  });
+
+  return (
+    <div>
+      {messages.map((m) => (
+        <div key={m.id}><b>{m.role}:</b> {m.content}</div>
+      ))}
+      <input onKeyDown={(e) => {
+        if (e.key === 'Enter') send(e.currentTarget.value);
+      }} />
+      {isStreaming && <button onClick={cancel}>Stop</button>}
+      <button onClick={clearMessages}>Clear</button>
+    </div>
+  );
+}
+```
+
+## Options
+
+<TypeTable type={{
+  model: { type: 'LanguageModel', description: 'The language model to use for generation.' },
+  systemPrompt: { type: 'string', description: 'System prompt included in all requests.' },
+  maxTokens: { type: 'number', description: 'Maximum tokens to generate per response.' },
+  temperature: { type: 'number', description: 'Sampling temperature (0-2).' },
+  persist: { type: 'boolean', description: 'Persist messages to IndexedDB. Default: true.' },
+  persistKey: { type: 'string', description: 'IndexedDB key for persistence. Default: "localmode-chat-messages".' },
+  initialMessages: { type: 'ReactChatMessage[]', description: 'Initial messages when no persisted data exists.' },
+}} />
+
+## Return Value
+
+<TypeTable type={{
+  messages: { type: 'ReactChatMessage[]', description: 'All messages in the conversation.' },
+  isStreaming: { type: 'boolean', description: 'Whether the assistant is currently streaming.' },
+  error: { type: 'Error | null', description: 'Error from the last failed operation.' },
+  send: { type: '(text: string, options?: { images?: ImageAttachment[] }) => Promise<void>', description: 'Send a user message and stream the response. Pass images for vision-capable models.' },
+  cancel: { type: '() => void', description: 'Cancel the current stream. Partial content is preserved.' },
+  clearMessages: { type: '() => void', description: 'Clear all messages and persisted storage.' },
+  setSystemPrompt: { type: '(prompt: string) => void', description: 'Update the system prompt.' },
+}} />
+
+## Persistence
+
+Messages are persisted to IndexedDB by default. This means chat history survives page refreshes.
+
+```tsx
+// Disable persistence
+const chat = useChat({ model, persist: false });
+
+// Custom storage key (useful for multiple chat instances)
+const chat = useChat({ model, persistKey: 'my-project-chat' });
+```
+
+<Callout type="info">
+Persisted messages take precedence over `initialMessages`. If IndexedDB has saved messages, `initialMessages` is ignored.
+</Callout>
+
+## Cancellation
+
+Calling `cancel()` during streaming preserves the partial assistant message — it won't be cleared.
+
+```tsx
+const { isStreaming, cancel } = useChat({ model });
+
+// The partial response stays in messages after cancel
+```
+
+## Vision (Image Input)
+
+For vision-capable models, pass images alongside text using the `send()` options:
+
+```tsx
+import { useChat } from '@localmode/react';
+import { webllm } from '@localmode/webllm';
+
+const model = webllm.languageModel('Phi-3.5-vision-instruct-q4f16_1-MLC');
+
+function VisionChat() {
+  const { messages, send } = useChat({ model });
+
+  const handleImageUpload = async (file: File) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      const base64 = dataUrl.split(',')[1];
+      await send('Describe this image', {
+        images: [{ data: base64, mimeType: file.type, name: file.name }],
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // ... render messages and file input
+}
+```
+
+Check `model.supportsVision` to conditionally show image upload UI. Messages with images have `content` as `ContentPart[]` instead of `string`.
+
+<Callout type="info">
+  For the full multimodal API reference, see the [Core Generation — Vision](/docs/core/generation#vision-multimodal-input) guide.
+</Callout>
+
+<Callout type="tip">
+For full API reference on `streamText()`, see the [Core Generation](/docs/core/generation) guide. For model setup, see [WebLLM](/docs/webllm) or [Transformers](/docs/transformers).
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| LLM Chat | Full chat interface with streaming, model selection, and vision image input | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |
+| PDF Search | Document Q&A chat powered by RAG | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |
+| GGUF Explorer | Chat with locally-loaded GGUF models | [Demo](https://localmode.ai/gguf-explorer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/gguf-explorer) |

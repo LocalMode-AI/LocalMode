@@ -1,0 +1,184 @@
+---
+title: 'Vector Store'
+description: LocalModeVectorStore — use LocalMode VectorDB as a LangChain vector store.
+icon: Database
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# LocalModeVectorStore
+
+LangChain `VectorStore` backed by LocalMode's VectorDB — HNSW-indexed vector search with persistent IndexedDB storage.
+
+<Callout type="info" title="See it in action">
+  Try [LangChain RAG](https://localmode.ai/langchain-rag) for a working demo.
+</Callout>
+
+## Constructor
+
+```typescript
+import { LocalModeVectorStore, LocalModeEmbeddings } from '@localmode/langchain';
+import { transformers } from '@localmode/transformers';
+import { createVectorDB } from '@localmode/core';
+
+const embeddings = new LocalModeEmbeddings({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+});
+const db = await createVectorDB({ name: 'docs', dimensions: 384 });
+
+const store = new LocalModeVectorStore(embeddings, { db });
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `embeddings` | `EmbeddingsInterface` | Yes | LangChain embeddings (use `LocalModeEmbeddings`) |
+| `options.db` | `VectorDB` | Yes | LocalMode VectorDB instance from `createVectorDB()` |
+
+## Methods
+
+### addDocuments
+
+Add documents with automatic embedding. Returns generated UUIDs.
+
+```typescript
+import { Document } from '@langchain/core/documents';
+
+const ids = await store.addDocuments([
+  new Document({ pageContent: 'LocalMode runs AI in the browser.', metadata: { source: 'docs', page: 1 } }),
+  new Document({ pageContent: 'Data never leaves the device.', metadata: { source: 'docs', page: 2 } }),
+]);
+// ids: ['uuid-1', 'uuid-2']
+```
+
+Internally: calls `embeddings.embedDocuments()` on all `pageContent` values, generates a UUID per document via `crypto.randomUUID()`, stores each as `{ id, vector: Float32Array, metadata: { ...doc.metadata, text: doc.pageContent } }` in the VectorDB.
+
+### addVectors
+
+Add pre-computed vectors without re-embedding.
+
+```typescript
+const vectors = [[0.1, 0.2, ...], [0.3, 0.4, ...]];
+const docs = [
+  new Document({ pageContent: 'hello' }),
+  new Document({ pageContent: 'world' }),
+];
+
+const ids = await store.addVectors(vectors, docs);
+```
+
+Each `number[]` is converted to `Float32Array` before storing.
+
+### similaritySearch
+
+Search for similar documents by text (embeds the query automatically).
+
+```typescript
+const results = await store.similaritySearch('privacy features', 5);
+
+for (const doc of results) {
+  console.log(doc.pageContent, doc.metadata);
+}
+```
+
+### similaritySearchVectorWithScore
+
+Search with a pre-computed vector and get scores.
+
+```typescript
+const queryVec = await embeddings.embedQuery('privacy');
+const results = await store.similaritySearchVectorWithScore(queryVec, 5);
+
+for (const [doc, score] of results) {
+  console.log(`${score.toFixed(3)}: ${doc.pageContent}`);
+}
+```
+
+Returns `[Document, number][]` sorted by relevance. The `pageContent` is recovered from the stored `metadata.text` field.
+
+### Filter Support
+
+Pass metadata filters to narrow search results:
+
+```typescript
+const results = await store.similaritySearchVectorWithScore(
+  queryVec,
+  5,
+  { source: { $eq: 'docs' } }
+);
+```
+
+Filter syntax follows `@localmode/core` filter operators.
+
+## Static Factories
+
+### fromDocuments
+
+Create a store and populate it in one step:
+
+```typescript
+const store = await LocalModeVectorStore.fromDocuments(
+  [
+    new Document({ pageContent: 'Hello', metadata: { source: 'test' } }),
+    new Document({ pageContent: 'World', metadata: { source: 'test' } }),
+  ],
+  embeddings,
+  { db }
+);
+```
+
+### fromExistingIndex
+
+Wrap an existing VectorDB without adding documents:
+
+```typescript
+const store = await LocalModeVectorStore.fromExistingIndex(embeddings, { db });
+// Search existing data immediately
+const results = await store.similaritySearch('query', 5);
+```
+
+## How Data is Stored
+
+When you call `addDocuments`, each document is stored in the VectorDB as:
+
+```typescript
+{
+  id: crypto.randomUUID(),          // generated UUID
+  vector: Float32Array,              // embedded pageContent
+  metadata: {
+    ...document.metadata,            // original metadata preserved
+    text: document.pageContent,      // pageContent stored for retrieval
+  }
+}
+```
+
+On search, `metadata.text` is extracted back into `pageContent` and removed from the returned metadata.
+
+## Migration from Pinecone
+
+```diff
+- import { PineconeStore } from '@langchain/pinecone';
+- import { Pinecone } from '@pinecone-database/pinecone';
++ import { LocalModeVectorStore, LocalModeEmbeddings } from '@localmode/langchain';
++ import { transformers } from '@localmode/transformers';
++ import { createVectorDB } from '@localmode/core';
+
+- const pinecone = new Pinecone();
+- const index = pinecone.Index('my-index');
+- const store = await PineconeStore.fromExistingIndex(embeddings, { pineconeIndex: index });
++ const embeddings = new LocalModeEmbeddings({
++   model: transformers.embedding('Xenova/bge-small-en-v1.5'),
++ });
++ const db = await createVectorDB({ name: 'docs', dimensions: 384 });
++ const store = new LocalModeVectorStore(embeddings, { db });
+
+// Search API is identical:
+const results = await store.similaritySearch('query', 5);
+```
+
+The `_vectorstoreType()` method returns `'localmode'` for identification in LangChain logging.
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| LangChain RAG | Vector storage using LocalModeVectorStore adapter | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |

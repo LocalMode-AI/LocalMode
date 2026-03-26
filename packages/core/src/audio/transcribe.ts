@@ -31,7 +31,7 @@ interface GlobalSTTRegistry {
  *
  * // Now string model IDs work
  * const { text } = await transcribe({
- *   model: 'transformers:Xenova/whisper-tiny',
+ *   model: 'transformers:onnx-community/moonshine-tiny-ONNX',
  *   audio: audioBlob,
  * });
  * ```
@@ -100,7 +100,7 @@ function resolveSTTModel(modelOrId: SpeechToTextModel | string): SpeechToTextMod
  * import { transformers } from '@localmode/transformers';
  *
  * const { text, usage } = await transcribe({
- *   model: transformers.speechToText('Xenova/whisper-tiny'),
+ *   model: transformers.speechToText('onnx-community/moonshine-tiny-ONNX'),
  *   audio: audioBlob,
  * });
  *
@@ -111,7 +111,7 @@ function resolveSTTModel(modelOrId: SpeechToTextModel | string): SpeechToTextMod
  * @example With timestamps
  * ```ts
  * const { text, segments } = await transcribe({
- *   model: transformers.speechToText('Xenova/whisper-small'),
+ *   model: transformers.speechToText('onnx-community/moonshine-base-ONNX'),
  *   audio: audioBlob,
  *   returnTimestamps: true,
  * });
@@ -124,7 +124,7 @@ function resolveSTTModel(modelOrId: SpeechToTextModel | string): SpeechToTextMod
  * @example With language specification
  * ```ts
  * const { text, language } = await transcribe({
- *   model: transformers.speechToText('Xenova/whisper-small'),
+ *   model: transformers.speechToText('onnx-community/moonshine-base-ONNX'),
  *   audio: germanAudioBlob,
  *   language: 'de', // German
  * });
@@ -136,7 +136,7 @@ function resolveSTTModel(modelOrId: SpeechToTextModel | string): SpeechToTextMod
  * @example Translation mode (translate to English)
  * ```ts
  * const { text } = await transcribe({
- *   model: transformers.speechToText('Xenova/whisper-small'),
+ *   model: transformers.speechToText('onnx-community/moonshine-base-ONNX'),
  *   audio: frenchAudioBlob,
  *   task: 'translate', // Translates to English
  * });
@@ -147,7 +147,7 @@ function resolveSTTModel(modelOrId: SpeechToTextModel | string): SpeechToTextMod
  * @example With string model ID (requires global provider setup)
  * ```ts
  * const { text } = await transcribe({
- *   model: 'transformers:Xenova/whisper-tiny',
+ *   model: 'transformers:onnx-community/moonshine-tiny-ONNX',
  *   audio: audioBlob,
  * });
  * ```
@@ -158,7 +158,7 @@ function resolveSTTModel(modelOrId: SpeechToTextModel | string): SpeechToTextMod
  * setTimeout(() => controller.abort(), 30000); // 30s timeout
  *
  * const { text } = await transcribe({
- *   model: transformers.speechToText('Xenova/whisper-small'),
+ *   model: transformers.speechToText('onnx-community/moonshine-base-ONNX'),
  *   audio: longAudioBlob,
  *   abortSignal: controller.signal,
  * });

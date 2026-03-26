@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu, Github, CloudOff } from 'lucide-react';
+import { Menu, Github, CloudOff, BookOpen } from 'lucide-react';
 import { useUIStore } from '../_store';
 import { Button } from './ui';
 import { NetworkStatus } from './network-status';
@@ -42,7 +42,16 @@ export function Navbar() {
         <NetworkStatus />
       </div>
 
-      <div className="navbar-end w-auto lg:w-1/2 ml-auto">
+      <div className="navbar-end w-auto lg:w-1/2 ml-auto flex items-center gap-2">
+        <Link
+          href="https://localmode.dev"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 px-4 py-2 rounded-full bg-poster-surface/50 border border-poster-border/30 hover:border-poster-primary/50 hover:bg-poster-primary/10 transition-all duration-300 group"
+        >
+          <BookOpen className="w-4 h-4 text-poster-text-sub/70 group-hover:text-poster-primary transition-colors" />
+          <span className="text-sm font-semibold text-poster-text-sub/80">Docs</span>
+        </Link>
         <Link
           href="https://github.com/LocalMode-AI/LocalMode"
           target="_blank"

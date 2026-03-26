@@ -859,8 +859,7 @@ function matchesFilter(doc: Document, filter: Record<string, unknown>): boolean 
 }
 
 // ============================================================================
-// Mock Image Caption Model (P2)
-// ============================================================================
+// Mock Image Caption Model// ============================================================================
 
 /**
  * Options for creating a mock image caption model.
@@ -919,8 +918,7 @@ export function createMockImageCaptionModel(
 }
 
 // ============================================================================
-// Mock Segmentation Model (P2)
-// ============================================================================
+// Mock Segmentation Model// ============================================================================
 
 /**
  * Options for creating a mock segmentation model.
@@ -989,8 +987,7 @@ export function createMockSegmentationModel(
 }
 
 // ============================================================================
-// Mock Object Detection Model (P2)
-// ============================================================================
+// Mock Object Detection Model// ============================================================================
 
 /**
  * Options for creating a mock object detection model.
@@ -1057,8 +1054,7 @@ export function createMockObjectDetectionModel(
 }
 
 // ============================================================================
-// Mock Image Feature Model (P2)
-// ============================================================================
+// Mock Image Feature Model// ============================================================================
 
 /**
  * Options for creating a mock image feature model.
@@ -1121,8 +1117,7 @@ export function createMockImageFeatureModel(
 }
 
 // ============================================================================
-// Mock Image-to-Image Model (P2)
-// ============================================================================
+// Mock Image-to-Image Model// ============================================================================
 
 /**
  * Options for creating a mock image-to-image model.
@@ -1184,8 +1179,7 @@ export function createMockImageToImageModel(
 }
 
 // ============================================================================
-// Mock Text-to-Speech Model (P2)
-// ============================================================================
+// Mock Text-to-Speech Model// ============================================================================
 
 /**
  * Options for creating a mock text-to-speech model.
@@ -1259,8 +1253,7 @@ export function createMockTextToSpeechModel(
 }
 
 // ============================================================================
-// Mock Language Model (P2)
-// ============================================================================
+// Mock Language Model// ============================================================================
 
 /**
  * Options for creating a mock language model.
@@ -1271,6 +1264,13 @@ export interface MockLanguageModelOptions {
 
   /** Text to generate */
   mockResponse?: string;
+
+  /**
+   * Queue of responses to return in order.
+   * Each call to doGenerate/doStream returns the next response.
+   * After exhausting the queue, falls back to mockResponse.
+   */
+  responses?: string[];
 
   /** Context length (default: 4096) */
   contextLength?: number;
@@ -1287,6 +1287,7 @@ export interface MockLanguageModel {
   doGenerate(options: {
     prompt: string;
     systemPrompt?: string;
+    messages?: Array<{ role: string; content: unknown }>;
     maxTokens?: number;
     temperature?: number;
     topP?: number;
@@ -1302,6 +1303,7 @@ export interface MockLanguageModel {
   doStream?(options: {
     prompt: string;
     systemPrompt?: string;
+    messages?: Array<{ role: string; content: unknown }>;
     maxTokens?: number;
     temperature?: number;
     topP?: number;
@@ -1320,7 +1322,15 @@ export interface MockLanguageModel {
  * Create a mock language model for testing.
  */
 export function createMockLanguageModel(options: MockLanguageModelOptions = {}): MockLanguageModel {
-  const { delay = 0, mockResponse = 'This is a mock response.', contextLength = 4096 } = options;
+  const { delay = 0, mockResponse = 'This is a mock response.', responses, contextLength = 4096 } = options;
+  const responseQueue = responses ? [...responses] : [];
+
+  function getNextResponse(): string {
+    if (responseQueue.length > 0) {
+      return responseQueue.shift()!;
+    }
+    return mockResponse;
+  }
 
   return {
     modelId: 'mock:llm',
@@ -1334,12 +1344,13 @@ export function createMockLanguageModel(options: MockLanguageModelOptions = {}):
         abortSignal?.throwIfAborted?.();
       }
 
+      const response = getNextResponse();
       const startTime = performance.now();
       const inputTokens = prompt.split(/\s+/).length;
-      const outputTokens = mockResponse.split(/\s+/).length;
+      const outputTokens = response.split(/\s+/).length;
 
       return {
-        text: mockResponse,
+        text: response,
         finishReason: 'stop' as const,
         usage: {
           inputTokens,
@@ -1356,9 +1367,10 @@ export function createMockLanguageModel(options: MockLanguageModelOptions = {}):
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
 
+      const response = getNextResponse();
       const startTime = performance.now();
       const inputTokens = prompt.split(/\s+/).length;
-      const tokens = mockResponse.split(' ');
+      const tokens = response.split(' ');
 
       for (let i = 0; i < tokens.length; i++) {
         abortSignal?.throwIfAborted?.();
@@ -1384,7 +1396,131 @@ export function createMockLanguageModel(options: MockLanguageModelOptions = {}):
 }
 
 // ============================================================================
-// Mock Translation Model (P2)
+// Mock Vision Language Model
+// ============================================================================
+
+/**
+ * Options for creating a mock vision language model.
+ */
+export interface MockVisionLanguageModelOptions {
+  /** Simulated delay in milliseconds (default: 0) */
+  delay?: number;
+  /** Context length (default: 4096) */
+  contextLength?: number;
+}
+
+/**
+ * Create a mock vision language model for testing.
+ *
+ * Returns a `LanguageModel` with `supportsVision: true` that echoes
+ * a description of received content parts. Useful for testing multimodal
+ * message handling without a real model.
+ *
+ * @param options - Configuration options
+ * @returns Mock vision language model
+ *
+ * @example
+ * ```ts
+ * const model = createMockVisionLanguageModel();
+ * const { text } = await generateText({
+ *   model,
+ *   messages: [{
+ *     role: 'user',
+ *     content: [
+ *       { type: 'text', text: 'Describe this' },
+ *       { type: 'image', data: '...', mimeType: 'image/png' },
+ *     ],
+ *   }],
+ *   prompt: '',
+ * });
+ * // text: "Received 1 text part and 1 image part"
+ * ```
+ */
+export function createMockVisionLanguageModel(
+  options: MockVisionLanguageModelOptions = {}
+): MockLanguageModel & { supportsVision: true } {
+  const { delay = 0, contextLength = 4096 } = options;
+
+  function describeContent(messages?: Array<{ role: string; content: string | Array<{ type: string }> }>): string {
+    if (!messages || messages.length === 0) {
+      return 'No messages received';
+    }
+    const lastMsg = messages[messages.length - 1];
+    if (typeof lastMsg.content === 'string') {
+      return `Received text: ${lastMsg.content}`;
+    }
+    const parts = lastMsg.content;
+    const textCount = parts.filter((p) => p.type === 'text').length;
+    const imageCount = parts.filter((p) => p.type === 'image').length;
+    const segments: string[] = [];
+    if (textCount > 0) segments.push(`${textCount} text part${textCount > 1 ? 's' : ''}`);
+    if (imageCount > 0) segments.push(`${imageCount} image part${imageCount > 1 ? 's' : ''}`);
+    return `Received ${segments.join(' and ')}`;
+  }
+
+  return {
+    modelId: 'mock:vision-llm',
+    provider: 'mock',
+    contextLength,
+    supportsVision: true as const,
+
+    async doGenerate({ prompt, messages, abortSignal }) {
+      abortSignal?.throwIfAborted?.();
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        abortSignal?.throwIfAborted?.();
+      }
+
+      const response = describeContent(messages as Array<{ role: string; content: string | Array<{ type: string }> }>);
+      const inputTokens = prompt.split(/\s+/).length;
+      const outputTokens = response.split(/\s+/).length;
+
+      return {
+        text: response,
+        finishReason: 'stop' as const,
+        usage: {
+          inputTokens,
+          outputTokens,
+          totalTokens: inputTokens + outputTokens,
+          durationMs: 0,
+        },
+      };
+    },
+
+    async *doStream({ prompt, messages, abortSignal }) {
+      abortSignal?.throwIfAborted?.();
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+
+      const response = describeContent(messages as Array<{ role: string; content: string | Array<{ type: string }> }>);
+      const tokens = response.split(' ');
+
+      for (let i = 0; i < tokens.length; i++) {
+        abortSignal?.throwIfAborted?.();
+        const tokenText = (i > 0 ? ' ' : '') + tokens[i];
+        const isLast = i === tokens.length - 1;
+
+        yield {
+          text: tokenText,
+          done: isLast,
+          finishReason: isLast ? ('stop' as const) : undefined,
+          usage: isLast
+            ? {
+                inputTokens: prompt.split(/\s+/).length,
+                outputTokens: tokens.length,
+                totalTokens: prompt.split(/\s+/).length + tokens.length,
+                durationMs: 0,
+              }
+            : undefined,
+        };
+      }
+    },
+  };
+}
+
+// ============================================================================
+// Mock Translation Model
 // ============================================================================
 
 /**
@@ -1455,8 +1591,7 @@ export function createMockTranslationModel(
 }
 
 // ============================================================================
-// Mock Summarization Model (P2)
-// ============================================================================
+// Mock Summarization Model// ============================================================================
 
 /**
  * Options for creating a mock summarization model.
@@ -1542,8 +1677,7 @@ export function createMockSummarizationModel(
 }
 
 // ============================================================================
-// Mock Fill-Mask Model (P2)
-// ============================================================================
+// Mock Fill-Mask Model// ============================================================================
 
 /**
  * Options for creating a mock fill-mask model.
@@ -1617,8 +1751,7 @@ export function createMockFillMaskModel(options: MockFillMaskModelOptions = {}):
 }
 
 // ============================================================================
-// Mock Question Answering Model (P2)
-// ============================================================================
+// Mock Question Answering Model// ============================================================================
 
 /**
  * Options for creating a mock question answering model.
@@ -1696,8 +1829,7 @@ export function createMockQuestionAnsweringModel(
 }
 
 // ============================================================================
-// Mock OCR Model (P2)
-// ============================================================================
+// Mock OCR Model// ============================================================================
 
 /**
  * Options for creating a mock OCR model.
@@ -1773,8 +1905,7 @@ export function createMockOCRModel(options: MockOCRModelOptions = {}): MockOCRMo
 }
 
 // ============================================================================
-// Mock Document QA Model (P2)
-// ============================================================================
+// Mock Document QA Model// ============================================================================
 
 /**
  * Options for creating a mock document QA model.
@@ -1865,6 +1996,144 @@ export function createMockDocumentQAModel(
 }
 
 // ============================================================================
+// Mock Audio Classification Model
+// ============================================================================
+
+/**
+ * Options for creating a mock audio classification model.
+ */
+export interface MockAudioClassificationModelOptions {
+  /** Delay in milliseconds (default: 0) */
+  delay?: number;
+
+  /** Mock labels (default: ['speech', 'music', 'noise']) */
+  labels?: string[];
+}
+
+/**
+ * Mock audio classification model interface.
+ */
+export interface MockAudioClassificationModel {
+  modelId: string;
+  provider: string;
+
+  doClassify(options: {
+    audio: Array<Blob | ArrayBuffer | Float32Array>;
+    topK?: number;
+    abortSignal?: AbortSignal;
+    providerOptions?: Record<string, Record<string, unknown>>;
+  }): Promise<{
+    results: Array<Array<{ label: string; score: number }>>;
+    usage: { durationMs: number };
+  }>;
+}
+
+/**
+ * Create a mock audio classification model for testing.
+ */
+export function createMockAudioClassificationModel(
+  options: MockAudioClassificationModelOptions = {}
+): MockAudioClassificationModel {
+  const { delay = 0, labels = ['speech', 'music', 'noise'] } = options;
+
+  return {
+    modelId: 'mock:audio-classifier',
+    provider: 'mock',
+
+    async doClassify({ audio, topK = 5, abortSignal }) {
+      abortSignal?.throwIfAborted?.();
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        abortSignal?.throwIfAborted?.();
+      }
+
+      const startTime = performance.now();
+
+      const predictions = labels.slice(0, topK).map((label, i) => ({
+        label,
+        score: Math.max(0.95 - i * 0.2, 0.05),
+      }));
+
+      return {
+        results: audio.map(() => predictions),
+        usage: { durationMs: performance.now() - startTime },
+      };
+    },
+  };
+}
+
+// ============================================================================
+// Mock Depth Estimation Model
+// ============================================================================
+
+/**
+ * Options for creating a mock depth estimation model.
+ */
+export interface MockDepthEstimationModelOptions {
+  /** Delay in milliseconds (default: 0) */
+  delay?: number;
+
+  /** Width of the mock depth map (default: 224) */
+  width?: number;
+
+  /** Height of the mock depth map (default: 224) */
+  height?: number;
+}
+
+/**
+ * Mock depth estimation model interface.
+ */
+export interface MockDepthEstimationModel {
+  modelId: string;
+  provider: string;
+
+  doEstimate(options: {
+    images: Array<Blob | ImageData | string | ArrayBuffer>;
+    abortSignal?: AbortSignal;
+    providerOptions?: Record<string, Record<string, unknown>>;
+  }): Promise<{
+    depthMaps: Array<Float32Array | ImageData>;
+    usage: { durationMs: number };
+  }>;
+}
+
+/**
+ * Create a mock depth estimation model for testing.
+ */
+export function createMockDepthEstimationModel(
+  options: MockDepthEstimationModelOptions = {}
+): MockDepthEstimationModel {
+  const { delay = 0, width = 224, height = 224 } = options;
+
+  return {
+    modelId: 'mock:depth-estimation',
+    provider: 'mock',
+
+    async doEstimate({ images, abortSignal }) {
+      abortSignal?.throwIfAborted?.();
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        abortSignal?.throwIfAborted?.();
+      }
+
+      const startTime = performance.now();
+      const size = width * height;
+
+      return {
+        depthMaps: images.map(() => {
+          const depthMap = new Float32Array(size);
+          for (let i = 0; i < size; i++) {
+            depthMap[i] = (i / size); // Gradient from 0 to 1
+          }
+          return depthMap;
+        }),
+        usage: { durationMs: performance.now() - startTime },
+      };
+    },
+  };
+}
+
+// ============================================================================
 // Test Helpers
 // ============================================================================
 
@@ -1941,4 +2210,441 @@ export function createSpy<T extends (...args: unknown[]) => unknown>(): T & {
   };
 
   return spy;
+}
+
+// ============================================================================
+// Mock Multimodal Embedding Model
+// ============================================================================
+
+/**
+ * Options for creating a mock multimodal embedding model.
+ */
+export interface MockMultimodalEmbeddingModelOptions {
+  /** Number of dimensions (default: 512) */
+  dimensions?: number;
+
+  /** Delay in milliseconds before returning (default: 0) */
+  delay?: number;
+
+  /** Number of times to fail before succeeding (default: 0) */
+  failCount?: number;
+
+  /** Error to throw when failing */
+  failError?: Error;
+
+  /** Model ID (default: 'mock:multimodal-embedding') */
+  modelId?: string;
+
+  /** Seed for deterministic embeddings */
+  seed?: number;
+
+  /** Supported modalities (default: ['text', 'image']) */
+  supportedModalities?: Array<'text' | 'image' | 'audio'>;
+}
+
+/**
+ * Create a mock multimodal embedding model for testing.
+ *
+ * Produces deterministic embeddings for both text and images in the same
+ * vector space, making it easy to test cross-modal search scenarios.
+ *
+ * @param options - Configuration options
+ * @returns Mock MultimodalEmbeddingModel instance
+ *
+ * @example
+ * ```typescript
+ * import { createMockMultimodalEmbeddingModel, embedImage, embed } from '@localmode/core';
+ *
+ * const model = createMockMultimodalEmbeddingModel({ dimensions: 512 });
+ *
+ * const { embedding: textVec } = await embed({ model, value: 'cat' });
+ * const { embedding: imgVec } = await embedImage({ model, image: catBlob });
+ *
+ * // Both vectors have same dimensions
+ * expect(textVec.length).toBe(512);
+ * expect(imgVec.length).toBe(512);
+ * ```
+ */
+export function createMockMultimodalEmbeddingModel(
+  options: MockMultimodalEmbeddingModelOptions = {}
+) {
+  const {
+    dimensions = 512,
+    delay = 0,
+    failCount = 0,
+    failError = new Error('Mock multimodal embedding failed'),
+    modelId = 'mock:multimodal-embedding',
+    seed = 42,
+    supportedModalities = ['text', 'image'],
+  } = options;
+
+  let textFailures = 0;
+  let imageFailures = 0;
+  let textCallCount = 0;
+  let imageCallCount = 0;
+
+  return {
+    modelId,
+    provider: 'mock',
+    dimensions,
+    maxEmbeddingsPerCall: 100 as number | undefined,
+    supportsParallelCalls: true,
+    supportedModalities,
+
+    async doEmbed(embedOptions: {
+      values: string[];
+      abortSignal?: AbortSignal;
+      headers?: Record<string, string>;
+      providerOptions?: Record<string, Record<string, unknown>>;
+    }) {
+      textCallCount++;
+
+      embedOptions.abortSignal?.throwIfAborted?.();
+
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        embedOptions.abortSignal?.throwIfAborted?.();
+      }
+
+      if (textFailures < failCount) {
+        textFailures++;
+        throw failError;
+      }
+
+      const embeddings = embedOptions.values.map((value, index) => {
+        const valueSeed = seed + hashString(value) + index;
+        return createTestVector(dimensions, valueSeed);
+      });
+
+      return {
+        embeddings,
+        usage: {
+          tokens: embedOptions.values.reduce((sum, v) => sum + v.split(/\s+/).length, 0),
+        },
+        response: {
+          id: `mock-text-${textCallCount}`,
+          modelId,
+          timestamp: new Date(),
+        },
+      };
+    },
+
+    async doEmbedImage(embedOptions: {
+      images: Array<Blob | ImageData | string | ArrayBuffer>;
+      abortSignal?: AbortSignal;
+      headers?: Record<string, string>;
+      providerOptions?: Record<string, Record<string, unknown>>;
+    }) {
+      imageCallCount++;
+
+      embedOptions.abortSignal?.throwIfAborted?.();
+
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        embedOptions.abortSignal?.throwIfAborted?.();
+      }
+
+      if (imageFailures < failCount) {
+        imageFailures++;
+        throw failError;
+      }
+
+      // Use a different seed offset for images to distinguish from text
+      const embeddings = embedOptions.images.map((_, index) => {
+        const imageSeed = seed + 10000 + index;
+        return createTestVector(dimensions, imageSeed);
+      });
+
+      return {
+        embeddings,
+        usage: {
+          tokens: embedOptions.images.length, // 1 "token" per image
+        },
+        response: {
+          id: `mock-image-${imageCallCount}`,
+          modelId,
+          timestamp: new Date(),
+        },
+      };
+    },
+
+    get textCallCount() {
+      return textCallCount;
+    },
+    get imageCallCount() {
+      return imageCallCount;
+    },
+    resetCallCounts() {
+      textCallCount = 0;
+      imageCallCount = 0;
+      textFailures = 0;
+      imageFailures = 0;
+    },
+  };
+}
+
+// ============================================================================
+// Mock Import/Export Data Helpers
+// ============================================================================
+
+/**
+ * Create mock Pinecone JSON export data.
+ *
+ * @param count - Number of records to generate
+ * @param dimensions - Vector dimensions per record
+ * @returns JSON string in Pinecone format
+ *
+ * @example
+ * ```ts
+ * const data = createMockPineconeData(10, 384);
+ * const records = parsePinecone(data);
+ * // 10 records with 384-dimensional vectors
+ * ```
+ */
+export function createMockPineconeData(count: number, dimensions: number): string {
+  const rng = createSeededRandom(42);
+  const vectors = [];
+
+  for (let i = 0; i < count; i++) {
+    const values = [];
+    for (let d = 0; d < dimensions; d++) {
+      values.push(Math.round((rng() * 2 - 1) * 1000) / 1000);
+    }
+    vectors.push({
+      id: `pinecone-${i}`,
+      values,
+      metadata: { source: 'mock', index: i },
+    });
+  }
+
+  return JSON.stringify({ vectors });
+}
+
+/**
+ * Create mock ChromaDB JSON export data.
+ *
+ * @param count - Number of records to generate
+ * @param dimensions - Vector dimensions per record
+ * @returns JSON string in ChromaDB columnar format
+ *
+ * @example
+ * ```ts
+ * const data = createMockChromaData(10, 384);
+ * const records = parseChroma(data);
+ * // 10 records with 384-dimensional vectors
+ * ```
+ */
+export function createMockChromaData(count: number, dimensions: number): string {
+  const rng = createSeededRandom(43);
+  const ids: string[] = [];
+  const embeddings: number[][] = [];
+  const metadatas: Record<string, unknown>[] = [];
+  const documents: string[] = [];
+
+  for (let i = 0; i < count; i++) {
+    ids.push(`chroma-${i}`);
+    const emb = [];
+    for (let d = 0; d < dimensions; d++) {
+      emb.push(Math.round((rng() * 2 - 1) * 1000) / 1000);
+    }
+    embeddings.push(emb);
+    metadatas.push({ source: 'mock', index: i });
+    documents.push(`Document ${i} content`);
+  }
+
+  return JSON.stringify({ ids, embeddings, metadatas, documents });
+}
+
+/**
+ * Create mock CSV export data with vector column.
+ *
+ * @param count - Number of records to generate
+ * @param dimensions - Vector dimensions per record
+ * @returns CSV string with id, text, vector, and metadata columns
+ *
+ * @example
+ * ```ts
+ * const data = createMockCSVVectorData(10, 384);
+ * const records = parseCSVVectors(data);
+ * // 10 records with 384-dimensional vectors
+ * ```
+ */
+export function createMockCSVVectorData(count: number, dimensions: number): string {
+  const rng = createSeededRandom(44);
+  const lines = ['id,text,vector,source'];
+
+  for (let i = 0; i < count; i++) {
+    const values = [];
+    for (let d = 0; d < dimensions; d++) {
+      values.push(Math.round((rng() * 2 - 1) * 1000) / 1000);
+    }
+    const vectorStr = `"[${values.join(',')}]"`;
+    lines.push(`csv-${i},Document ${i},${vectorStr},mock`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Create mock JSONL export data.
+ *
+ * @param count - Number of records to generate
+ * @param dimensions - Vector dimensions per record
+ * @returns JSONL string with one JSON object per line
+ *
+ * @example
+ * ```ts
+ * const data = createMockJSONLData(10, 384);
+ * const records = parseJSONL(data);
+ * // 10 records with 384-dimensional vectors
+ * ```
+ */
+export function createMockJSONLData(count: number, dimensions: number): string {
+  const rng = createSeededRandom(45);
+  const lines: string[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const vector = [];
+    for (let d = 0; d < dimensions; d++) {
+      vector.push(Math.round((rng() * 2 - 1) * 1000) / 1000);
+    }
+    lines.push(JSON.stringify({
+      id: `jsonl-${i}`,
+      text: `Document ${i}`,
+      vector,
+      source: 'mock',
+    }));
+  }
+
+  return lines.join('\n');
+}
+
+// ============================================================================
+// Mock Agent Utilities
+// ============================================================================
+
+/**
+ * Options for creating a mock language model for agent testing.
+ */
+export interface MockAgentLanguageModelOptions {
+  /** Sequence of JSON responses the model should return (as raw text) */
+  actionSequence: Array<
+    | { type: 'tool_call'; tool: string; args: Record<string, unknown> }
+    | { type: 'finish'; result: string }
+  >;
+  /** Context length in tokens (default: 4096) */
+  contextLength?: number;
+  /** Delay per step in milliseconds (default: 0) */
+  delay?: number;
+}
+
+/**
+ * Create a mock language model that returns a predetermined sequence
+ * of agent actions (tool calls and finish). Useful for testing the
+ * agent ReAct loop without a real LLM.
+ *
+ * @param options - Configuration with action sequence
+ * @returns A LanguageModel that returns JSON action strings
+ *
+ * @example
+ * ```ts
+ * const model = createMockLanguageModelForAgent({
+ *   actionSequence: [
+ *     { type: 'tool_call', tool: 'search', args: { query: 'test' } },
+ *     { type: 'finish', result: 'The answer is 42.' },
+ *   ],
+ * });
+ *
+ * const result = await runAgent({ model, tools, prompt: 'What is 42?' });
+ * ```
+ */
+export function createMockLanguageModelForAgent(
+  options: MockAgentLanguageModelOptions
+) {
+  const { actionSequence, contextLength = 4096, delay = 0 } = options;
+  const queue = [...actionSequence];
+  let callCount = 0;
+
+  return {
+    modelId: 'mock:agent-llm',
+    provider: 'mock',
+    contextLength,
+
+    async doGenerate({ abortSignal }: { prompt: string; abortSignal?: AbortSignal }) {
+      abortSignal?.throwIfAborted?.();
+
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        abortSignal?.throwIfAborted?.();
+      }
+
+      callCount++;
+      const action = queue.shift();
+      if (!action) {
+        // Default to finish if sequence exhausted
+        const text = JSON.stringify({ type: 'finish', result: 'No more actions in sequence.' });
+        return {
+          text,
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20, durationMs: 1 },
+        };
+      }
+
+      const text = JSON.stringify(action);
+      return {
+        text,
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20, durationMs: 1 },
+      };
+    },
+
+    get callCount() {
+      return callCount;
+    },
+  };
+}
+
+/**
+ * Create a mock tool for testing agents.
+ *
+ * @param name - Tool name
+ * @param result - Value the tool returns when executed
+ * @returns A ToolDefinition mock
+ *
+ * @example
+ * ```ts
+ * const searchTool = createMockTool('search', 'Found: quantum computing article');
+ * const agent = createAgent({ model, tools: [searchTool] });
+ * ```
+ */
+export function createMockTool(
+  name: string,
+  result: string | Record<string, unknown> = 'Mock result',
+  description: string = `Mock ${name} tool`,
+) {
+  let callCount = 0;
+  const calls: Array<{ args: unknown }> = [];
+
+  return {
+    name,
+    description,
+    parameters: {
+      parse: (value: unknown) => {
+        if (typeof value !== 'object' || value === null) return {};
+        return value;
+      },
+      jsonSchema: { type: 'object', properties: {} },
+    },
+    execute: async (params: unknown) => {
+      callCount++;
+      calls.push({ args: params });
+      return typeof result === 'string' ? result : JSON.stringify(result);
+    },
+    get callCount() {
+      return callCount;
+    },
+    get calls() {
+      return calls;
+    },
+  };
 }

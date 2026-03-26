@@ -8,11 +8,17 @@ import { useRef, useEffect } from 'react';
 import { useUIStore } from '../_store/ui.store';
 import { useChatStore } from '../_store/chat.store';
 import { useModelStore } from '../_store/model.store';
+import { useImageUpload } from './use-image-upload';
+import type { ChatImageAttachment } from '../_lib/types';
 
 /** Options for the useChatInput hook */
 interface UseChatInputOptions {
   /** Callback when a message is sent */
-  onSendMessage: (message: string) => void | Promise<void>;
+  onSendMessage: (message: string, images?: ChatImageAttachment[]) => void | Promise<void>;
+  /** Whether the model is currently streaming */
+  isStreaming: boolean;
+  /** Whether the selected model supports vision */
+  supportsVision?: boolean;
 }
 
 /**
@@ -20,11 +26,14 @@ interface UseChatInputOptions {
  * @param options - Hook options
  */
 export function useChatInput(options: UseChatInputOptions) {
-  const { onSendMessage } = options;
+  const { onSendMessage, isStreaming, supportsVision } = options;
+
+  // Image upload state
+  const imageUpload = useImageUpload();
 
   // Get state from stores
   const { input, isSending, setInput, setSending, clearInput } = useUIStore();
-  const { isStreaming, selectedModel } = useChatStore();
+  const selectedModel = useChatStore((s) => s.selectedModel);
   const { loadingModelId } = useModelStore();
   // Model is ready when a model is selected and not loading
   const isModelReady = Boolean(selectedModel) && !loadingModelId;
@@ -44,14 +53,17 @@ export function useChatInput(options: UseChatInputOptions) {
    * Submit the current message
    */
   const submitMessage = async () => {
-    if (!input.trim() || isSending || !isModelReady) return;
+    const hasImages = supportsVision && imageUpload.images.length > 0;
+    if ((!input.trim() && !hasImages) || isSending || !isModelReady) return;
 
     const message = input.trim();
+    const imagesToSend = hasImages ? [...imageUpload.images] : undefined;
     clearInput();
+    imageUpload.clearImages();
     setSending(true);
 
     try {
-      await onSendMessage(message);
+      await onSendMessage(message, imagesToSend);
     } finally {
       setSending(false);
     }
@@ -84,7 +96,8 @@ export function useChatInput(options: UseChatInputOptions) {
 
   // Derive state
   const isDisabled = !isModelReady || isSending || isStreaming;
-  const canSubmit = input.trim().length > 0 && !isDisabled;
+  const hasImages = supportsVision && imageUpload.images.length > 0;
+  const canSubmit = (input.trim().length > 0 || hasImages) && !isDisabled;
 
   return {
     textareaRef,
@@ -93,5 +106,8 @@ export function useChatInput(options: UseChatInputOptions) {
     handleInputChange,
     isDisabled,
     canSubmit,
+    // Image upload
+    imageUpload,
+    supportsVision: supportsVision ?? false,
   };
 }

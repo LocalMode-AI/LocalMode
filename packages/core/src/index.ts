@@ -21,19 +21,47 @@ export type {
   SearchOptions,
   SearchResult,
   FilterQuery,
+  TypedFilterQuery,
+  FilterValueOperators,
   AddManyOptions,
   ExportOptions,
   ImportOptions,
+  RecalibrateOptions,
   DBStats,
   HNSWOptions,
   Collection,
   StoredDocument,
   StoredVector,
+  SerializedHNSWIndex,
   EncryptionOptions,
   SyncOptions,
 } from './types.js';
 
 export { DEFAULT_CONFIG, DEFAULT_COLLECTION } from './types.js';
+
+// ═══════════════════════════════════════════════════════════════
+// VECTOR QUANTIZATION
+// ═══════════════════════════════════════════════════════════════
+
+export type {
+  QuantizationConfig,
+  ScalarQuantizationConfig,
+  PQQuantizationConfig,
+  ScalarCalibrationData,
+  PQCodebook,
+} from './quantization/index.js';
+export type { KMeansOptions, KMeansResult } from './quantization/index.js';
+export type { PQTrainOptions } from './quantization/index.js';
+export {
+  calibrate,
+  scalarQuantize,
+  scalarDequantize,
+  mergeCalibration,
+  kMeansCluster,
+  trainPQ,
+  pqQuantize,
+  pqDequantize,
+} from './quantization/index.js';
 
 // ═══════════════════════════════════════════════════════════════
 // EMBEDDINGS DOMAIN
@@ -50,6 +78,15 @@ export {
   // Middleware
   wrapEmbeddingModel,
   composeEmbeddingMiddleware,
+  // Drift detection & reindex
+  extractFingerprint,
+  fingerprintsMatch,
+  checkModelCompatibility,
+  reindexCollection,
+  // Threshold calibration
+  calibrateThreshold,
+  getDefaultThreshold,
+  MODEL_THRESHOLD_PRESETS,
 } from './embeddings/index.js';
 
 export type {
@@ -84,7 +121,44 @@ export type {
   // Registry types
   EmbeddingModelRegistry,
   ModelRegistryOptions,
+  // Model fingerprint & drift detection types
+  ModelFingerprint,
+  ModelCompatibilityStatus,
+  ModelCompatibilityResult,
+  ReindexProgress,
+  ReindexOptions,
+  ReindexResult,
+  // Threshold calibration types
+  CalibrateThresholdOptions,
+  ThresholdCalibration,
+  ThresholdDistributionStats,
 } from './embeddings/index.js';
+
+// ═══════════════════════════════════════════════════════════════
+// MULTIMODAL EMBEDDINGS DOMAIN (Text + Image in shared space)
+// ═══════════════════════════════════════════════════════════════
+
+export {
+  embedImage,
+  embedManyImages,
+  setGlobalMultimodalEmbeddingProvider,
+} from './multimodal/index.js';
+
+export type {
+  // Multimodal model interface
+  MultimodalEmbeddingModel,
+  EmbeddingModality,
+  DoEmbedImageOptions,
+  DoEmbedAudioOptions,
+  // embedImage() function types
+  EmbedImageOptions,
+  EmbedImageResult,
+  // embedManyImages() function types
+  EmbedManyImagesOptions,
+  EmbedManyImagesResult,
+  // Factory types
+  MultimodalEmbeddingModelFactory,
+} from './multimodal/index.js';
 
 // ═══════════════════════════════════════════════════════════════
 // CLASSIFICATION DOMAIN (Sentiment, Emotion, Intent, Topic)
@@ -187,6 +261,8 @@ export {
   setGlobalImageFeatureProvider,
   imageToImage,
   setGlobalImageToImageProvider,
+  estimateDepth,
+  setGlobalDepthEstimationProvider,
 } from './vision/index.js';
 
 export type {
@@ -246,7 +322,7 @@ export type {
   DoExtractImageFeaturesResult,
   ExtractImageFeaturesOptions,
   ExtractImageFeaturesResult,
-  // Image-to-image model interface (P2)
+  // Image-to-image model interface
   ImageToImageModel,
   DoTransformImageOptions,
   DoTransformImageResult,
@@ -272,6 +348,9 @@ export {
   setGlobalSTTProvider,
   synthesizeSpeech,
   setGlobalTTSProvider,
+  classifyAudio,
+  classifyAudioZeroShot,
+  setGlobalAudioClassificationProvider,
 } from './audio/index.js';
 
 export type {
@@ -315,13 +394,22 @@ export type {
 } from './audio/index.js';
 
 // ═══════════════════════════════════════════════════════════════
-// GENERATION DOMAIN (P2 - LLM Text Generation)
+// GENERATION DOMAIN (LLM Text Generation)
 // ═══════════════════════════════════════════════════════════════
 
 export {
   generateText,
   streamText,
+  generateObject,
+  streamObject,
+  jsonSchema,
   setGlobalLanguageModelProvider,
+  // Middleware
+  wrapLanguageModel,
+  composeLanguageModelMiddleware,
+  // Content utilities
+  normalizeContent,
+  getTextContent,
 } from './generation/index.js';
 
 export type {
@@ -335,18 +423,53 @@ export type {
   GenerationResponse,
   FinishReason,
   ChatMessage,
+  // Multimodal content types
+  ContentPart,
+  TextPart,
+  ImagePart,
   // generateText() function types
   GenerateTextOptions,
   GenerateTextResult,
   // streamText() function types
   StreamTextOptions,
   StreamTextResult,
+  // Structured output types
+  ObjectSchema,
+  ObjectOutputMode,
+  GenerateObjectOptions,
+  GenerateObjectResult,
+  StreamObjectOptions,
+  StreamObjectResult,
+  DeepPartial,
   // Factory types
   LanguageModelFactory,
+  // Middleware types
+  LanguageModelMiddleware,
 } from './generation/index.js';
 
 // ═══════════════════════════════════════════════════════════════
-// TRANSLATION DOMAIN (P2)
+// SEMANTIC CACHE
+// ═══════════════════════════════════════════════════════════════
+
+export {
+  createSemanticCache,
+  semanticCacheMiddleware,
+} from './cache/index.js';
+
+export type {
+  SemanticCacheConfig,
+  SemanticCache,
+  CacheLookupResult,
+  CacheStats,
+  CacheHitEvent,
+  CacheMissEvent,
+  CacheStoreEvent,
+  CacheEvictEvent,
+  CacheClearEvent,
+} from './cache/index.js';
+
+// ═══════════════════════════════════════════════════════════════
+// TRANSLATION DOMAIN
 // ═══════════════════════════════════════════════════════════════
 
 export {
@@ -371,7 +494,7 @@ export type {
 } from './translation/index.js';
 
 // ═══════════════════════════════════════════════════════════════
-// SUMMARIZATION DOMAIN (P2)
+// SUMMARIZATION DOMAIN
 // ═══════════════════════════════════════════════════════════════
 
 export {
@@ -396,7 +519,7 @@ export type {
 } from './summarization/index.js';
 
 // ═══════════════════════════════════════════════════════════════
-// FILL-MASK DOMAIN (P2)
+// FILL-MASK DOMAIN
 // ═══════════════════════════════════════════════════════════════
 
 export {
@@ -422,7 +545,7 @@ export type {
 } from './fill-mask/index.js';
 
 // ═══════════════════════════════════════════════════════════════
-// QUESTION ANSWERING DOMAIN (P2 - Extractive QA)
+// QUESTION ANSWERING DOMAIN (Extractive QA)
 // ═══════════════════════════════════════════════════════════════
 
 export {
@@ -448,7 +571,7 @@ export type {
 } from './question-answering/index.js';
 
 // ═══════════════════════════════════════════════════════════════
-// OCR DOMAIN (P2 - Optical Character Recognition)
+// OCR DOMAIN (Optical Character Recognition)
 // ═══════════════════════════════════════════════════════════════
 
 export {
@@ -474,7 +597,7 @@ export type {
 } from './ocr/index.js';
 
 // ═══════════════════════════════════════════════════════════════
-// DOCUMENT QA DOMAIN (P2 - Document/Table Question Answering)
+// DOCUMENT QA DOMAIN (Document/Table Question Answering)
 // ═══════════════════════════════════════════════════════════════
 
 export {
@@ -522,6 +645,9 @@ export type {
   Chunk,
   ChunkMetadata,
   Chunker,
+  // Semantic chunking types
+  SemanticChunkOptions,
+  SemanticChunkMetadata,
   // BM25 types
   BM25Options,
   BM25Document,
@@ -565,6 +691,9 @@ export {
   createMarkdownChunker,
   codeChunk,
   createCodeChunker,
+  // Semantic chunking
+  semanticChunk,
+  createSemanticChunker,
   // BM25 keyword search
   BM25,
   createBM25,
@@ -583,6 +712,65 @@ export {
 } from './rag/index.js';
 
 // ═══════════════════════════════════════════════════════════════
+// PIPELINE (Composable Multi-Step Workflows)
+// ═══════════════════════════════════════════════════════════════
+
+export { createPipeline } from './pipeline/index.js';
+
+export {
+  embedStep as pipelineEmbedStep,
+  embedManyStep as pipelineEmbedManyStep,
+  chunkStep as pipelineChunkStep,
+  searchStep as pipelineSearchStep,
+  rerankStep as pipelineRerankStep,
+  storeStep as pipelineStoreStep,
+  classifyStep as pipelineClassifyStep,
+  summarizeStep as pipelineSummarizeStep,
+  generateStep as pipelineGenerateStep,
+  semanticChunkStep as pipelineSemanticChunkStep,
+} from './pipeline/index.js';
+
+export type {
+  PipelineStep,
+  Pipeline,
+  PipelineConfig,
+  PipelineProgress,
+  PipelineResult,
+  PipelineRunOptions,
+} from './pipeline/index.js';
+
+// ═══════════════════════════════════════════════════════════════
+// INFERENCE QUEUE (Priority-Based Task Scheduling)
+// ═══════════════════════════════════════════════════════════════
+
+export { createInferenceQueue } from './queue/index.js';
+
+export type {
+  InferenceQueue,
+  InferenceQueueConfig,
+  QueueAddOptions,
+  QueueStats,
+  QueuePriority,
+  QueueEventType,
+  QueueEventCallback,
+} from './queue/index.js';
+
+// ═══════════════════════════════════════════════════════════════
+// MODEL CACHE (Chunked Downloads, LRU Eviction, Cross-Tab)
+// ═══════════════════════════════════════════════════════════════
+
+export { createModelLoader } from './model-cache/index.js';
+
+export type {
+  ModelLoader,
+  ModelLoaderConfig,
+  CacheEntry,
+  ModelDownloadProgress,
+  ModelDownloadRequest,
+  PrefetchOptions,
+} from './model-cache/types.js';
+
+// ═══════════════════════════════════════════════════════════════
 // HNSW INDEX & SIMILARITY FUNCTIONS
 // ═══════════════════════════════════════════════════════════════
 
@@ -596,6 +784,19 @@ export {
 } from './hnsw/distance.js';
 
 // ═══════════════════════════════════════════════════════════════
+// GPU-ACCELERATED VECTOR DISTANCE
+// ═══════════════════════════════════════════════════════════════
+
+export { createGPUDistanceComputer } from './hnsw/gpu/index.js';
+export { GPUDistanceManager } from './hnsw/gpu/index.js';
+
+export type {
+  HNSWGPUOptions,
+  GPUDistanceComputer,
+  GPUDistanceOptions,
+} from './hnsw/gpu/index.js';
+
+// ═══════════════════════════════════════════════════════════════
 // QUERY & FILTERING
 // ═══════════════════════════════════════════════════════════════
 
@@ -606,6 +807,19 @@ export { IndexedDBStorage } from './storage/indexeddb.js';
 export { MemoryStorage } from './storage/memory.js';
 export { createStorage } from './storage/index.js';
 export type { Storage } from './storage/index.js';
+export type { StorageAdapter } from './storage/types.js';
+
+// Storage Compression
+export {
+  compressVectors,
+  decompressVectors,
+  getCompressionStats,
+} from './storage/compression.js';
+export type {
+  CompressedVectorBlock,
+  CompressionConfig,
+  CompressionStats,
+} from './storage/compression.js';
 
 // WAL and Migrations
 export {
@@ -732,9 +946,46 @@ export {
   encryptionMiddleware,
   deriveEncryptionKey,
   deriveKey, // Alias for backward compatibility
+  hashPassphrase,
+  verifyPassphrase,
 } from './security/index.js';
 
 export type { PIIRedactionOptions } from './security/pii.js';
+
+// ═══════════════════════════════════════════════════════════════
+// DIFFERENTIAL PRIVACY
+// ═══════════════════════════════════════════════════════════════
+
+export {
+  // Noise mechanisms
+  gaussianNoise,
+  laplacianNoise,
+  addNoise,
+  // Sensitivity calibration
+  lookupSensitivity,
+  getSensitivity,
+  calibrateSensitivity,
+  resolveSensitivity,
+  // Budget tracking
+  createPrivacyBudget,
+  // Embedding middleware
+  dpEmbeddingMiddleware,
+  computeGaussianSigma,
+  computeLaplacianScale,
+} from './security/index.js';
+
+// DP Classification (Randomized Response)
+export {
+  randomizedResponse,
+  dpClassificationMiddleware,
+} from './classification/index.js';
+
+export type {
+  DPEmbeddingConfig,
+  DPClassificationConfig,
+  PrivacyBudgetConfig,
+  PrivacyBudget,
+} from './security/index.js';
 
 // ═══════════════════════════════════════════════════════════════
 // STORAGE QUOTA & LIFECYCLE (Production-Essential)
@@ -826,6 +1077,10 @@ export {
   isOPFSSupported,
   isBroadcastChannelSupported,
   isWebLocksSupported,
+  isChromeAISupported,
+  isSummarizerAPISupported,
+  isTranslatorAPISupported,
+  isLanguageModelAPISupported,
 } from './capabilities/features.js';
 
 export {
@@ -841,6 +1096,16 @@ export {
 
 export { createCapabilityReport, formatCapabilityReport } from './capabilities/report.js';
 
+export { computeOptimalBatchSize } from './capabilities/batch-size.js';
+
+export {
+  DEFAULT_MODEL_REGISTRY,
+  registerModel,
+  getModelRegistry,
+} from './capabilities/model-registry.js';
+
+export { recommendModels } from './capabilities/recommend.js';
+
 export type {
   DeviceCapabilities,
   DeviceInfo,
@@ -852,6 +1117,14 @@ export type {
   ModelFallback,
   ModelRequirements,
   CapabilityReport,
+  BatchSizeOptions,
+  BatchSizeResult,
+  DeviceProfile,
+  BatchTaskType,
+  TaskCategory,
+  ModelRegistryEntry,
+  ModelRecommendation,
+  RecommendationOptions,
 } from './capabilities/types.js';
 
 // ═══════════════════════════════════════════════════════════════
@@ -885,6 +1158,32 @@ export type {
   NetworkRequestCallback,
   ProgressCallback,
 } from './network/types.js';
+
+// ═══════════════════════════════════════════════════════════════
+// VECTOR IMPORT/EXPORT (External Format Migration)
+// ═══════════════════════════════════════════════════════════════
+
+export {
+  importFrom,
+  parseExternalFormat,
+  detectFormat,
+  exportToCSV,
+  exportToJSONL,
+  convertFormat,
+} from './import-export/index.js';
+
+export type {
+  ImportRecord,
+  ParseResult,
+  ExternalFormat,
+  ImportFromOptions,
+  ImportProgress,
+  ImportStats,
+  ExportToCSVOptions,
+  ExportToJSONLOptions,
+  ConvertOptions,
+  CSVParseOptions,
+} from './import-export/index.js';
 
 // ═══════════════════════════════════════════════════════════════
 // ERROR HANDLING (Production-Essential)
@@ -931,9 +1230,13 @@ export {
   // Capabilities
   FeatureNotSupportedError,
   EnvironmentError,
-  // P2 Domain Errors
+  // Pipeline
+  PipelineError,
+  // Extended Domain Errors
   GenerationError,
+  SemanticCacheError,
   ContextLengthExceededError,
+  StructuredOutputError,
   TranslationError,
   UnsupportedLanguageError,
   SummarizationError,
@@ -949,6 +1252,19 @@ export {
   ObjectDetectionError,
   ImageUpscaleError,
   SpeechSynthesisError,
+  // Model Cache
+  ModelCacheError,
+  // Privacy
+  PrivacyBudgetExhaustedError,
+  // Multimodal
+  MultimodalEmbeddingError,
+  UnsupportedModalityError,
+  // Import/Export
+  ImportExportError,
+  ParseError,
+  DimensionMismatchOnImportError,
+  // Agents
+  AgentError,
   // Error formatting
   formatErrorForUser,
   formatErrorForConsole,
@@ -959,6 +1275,37 @@ export {
 export type { FormattedError } from './errors/format.js';
 
 // ═══════════════════════════════════════════════════════════════
+// AGENT FRAMEWORK (ReAct Loop, Tool Registry, Memory)
+// ═══════════════════════════════════════════════════════════════
+
+export {
+  createAgent,
+  runAgent,
+  createToolRegistry,
+  createAgentMemory,
+} from './agents/index.js';
+
+export type {
+  // Tool types
+  ToolDefinition,
+  ToolRegistry,
+  ToolExecutionContext,
+  // Agent types
+  Agent,
+  AgentConfig,
+  AgentRunOptions,
+  RunAgentOptions,
+  AgentStep,
+  AgentResult,
+  AgentFinishReason,
+  // Memory types
+  AgentMemory,
+  AgentMemoryConfig,
+  MemoryEntry,
+  MemoryRetrieveOptions,
+} from './agents/index.js';
+
+// ═══════════════════════════════════════════════════════════════
 // TESTING UTILITIES
 // ═══════════════════════════════════════════════════════════════
 
@@ -967,12 +1314,12 @@ export {
   createSeededRandom,
   createTestVector,
   createTestVectors,
-  // Mock models (P0/P1)
+  // Mock models (core)
   createMockEmbeddingModel,
   createMockClassificationModel,
   createMockNERModel,
   createMockSpeechToTextModel,
-  // Mock models (P2)
+  // Mock models (extended)
   createMockImageCaptionModel,
   createMockSegmentationModel,
   createMockObjectDetectionModel,
@@ -986,9 +1333,22 @@ export {
   createMockQuestionAnsweringModel,
   createMockOCRModel,
   createMockDocumentQAModel,
+  // Mock multimodal model
+  createMockMultimodalEmbeddingModel,
+  // Mock models (Audio Classification & Depth Estimation)
+  createMockAudioClassificationModel,
+  createMockDepthEstimationModel,
   // Mock storage
   createMockStorage,
   createMockVectorDB,
+  // Mock import/export data
+  createMockPineconeData,
+  createMockChromaData,
+  createMockCSVVectorData,
+  createMockJSONLData,
+  // Mock agent utilities
+  createMockLanguageModelForAgent,
+  createMockTool,
   // Test helpers
   waitFor,
   createDeferred,
@@ -996,7 +1356,7 @@ export {
 } from './testing/index.js';
 
 export type {
-  // P0/P1 mock model types
+  // Core mock model types
   MockEmbeddingModelOptions,
   MockClassificationModelOptions,
   MockClassificationModel,
@@ -1004,7 +1364,7 @@ export type {
   MockNERModel,
   MockSpeechToTextModelOptions,
   MockSpeechToTextModel,
-  // P2 mock model types
+  // Extended mock model types
   MockImageCaptionModelOptions,
   MockImageCaptionModel,
   MockSegmentationModelOptions,
@@ -1031,8 +1391,42 @@ export type {
   MockOCRModel,
   MockDocumentQAModelOptions,
   MockDocumentQAModel,
+  // Mock multimodal types
+  MockMultimodalEmbeddingModelOptions,
+  // Audio Classification & Depth Estimation mock types
+  MockAudioClassificationModelOptions,
+  MockAudioClassificationModel,
+  MockDepthEstimationModelOptions,
+  MockDepthEstimationModel,
   // Mock storage types
   MockVectorDBOptions,
   SimpleMockStorage,
   SimpleMockVectorDB,
+  // Mock agent types
+  MockAgentLanguageModelOptions,
 } from './testing/index.js';
+
+// ═══════════════════════════════════════════════════════════════
+// EVALUATION SDK
+// ═══════════════════════════════════════════════════════════════
+
+export {
+  accuracy,
+  precision,
+  recall,
+  f1Score,
+  bleuScore,
+  rougeScore,
+  cosineDistance as evalCosineDistance,
+  mrr,
+  ndcg,
+  confusionMatrix,
+  evaluateModel,
+} from './evaluation/index.js';
+
+export type {
+  MetricFunction,
+  EvaluateModelOptions,
+  EvaluateModelResult,
+  ConfusionMatrix,
+} from './evaluation/index.js';

@@ -1,20 +1,12 @@
 # @localmode/localforage
 
-> 🚧 **In Development** — This package is under active development and not yet used in production applications. API may change.
+Cross-browser storage adapter for LocalMode — automatic fallback from IndexedDB to WebSQL to localStorage.
 
-Cross-browser storage adapter with automatic fallback from IndexedDB to WebSQL to localStorage.
-
+[![npm](https://img.shields.io/npm/v/@localmode/localforage)](https://www.npmjs.com/package/@localmode/localforage)
 [![license](https://img.shields.io/npm/l/@localmode/localforage)](../../LICENSE)
 
-[![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev)
+[![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev/docs/localforage)
 [![Demo](https://img.shields.io/badge/Demo-LocalMode.ai-purple)](https://localmode.ai)
-
-## Features
-
-- 🔄 **Auto-Fallback** - IndexedDB → WebSQL → localStorage
-- 🔒 **Safari Private Browsing** - Works when IndexedDB is blocked
-- 📱 **Maximum Compatibility** - Works on older browsers
-- ⚡ **Simple API** - Consistent interface regardless of driver
 
 ## Installation
 
@@ -26,124 +18,93 @@ pnpm install @localmode/localforage @localmode/core
 
 ```typescript
 import { LocalForageStorage } from '@localmode/localforage';
+import { createVectorDB } from '@localmode/core';
 
 const storage = new LocalForageStorage({ name: 'my-app' });
-await storage.ready();
 
-// Store documents and vectors
-await storage.setDocument('doc-1', {
-  metadata: { title: 'Hello' },
+const db = await createVectorDB({
+  name: 'my-app',
+  dimensions: 384,
+  storage,
 });
-await storage.setVector('doc-1', new Float32Array([0.1, 0.2, 0.3]));
 
-// Retrieve data
-const doc = await storage.getDocument('doc-1');
-const vector = await storage.getVector('doc-1');
-
-// Check which driver is being used
-const driver = await storage.getDriver();
-console.log(`Using: ${driver}`);
-
-// Check if falling back from IndexedDB
-const isFallback = await storage.isUsingFallback();
+// Use db.add(), db.search(), etc.
 ```
 
-## Batch Operations
-
-```typescript
-// Add multiple items
-await storage.addMany([
-  { id: 'doc-1', vector: embedding1, metadata: { title: 'First' } },
-  { id: 'doc-2', vector: embedding2, metadata: { title: 'Second' } },
-]);
-
-// Delete multiple items
-await storage.deleteMany(['doc-1', 'doc-2']);
-```
-
-## API Reference
+## API
 
 ### Constructor
 
 ```typescript
-new LocalForageStorage(options: LocalForageStorageOptions)
+new LocalForageStorage({ name: string, driver?: string[] })
 ```
 
 **Options:**
 
-- `name` - Database name (required)
-- `storeName` - Store name prefix (default: 'vectordb')
-- `description` - Database description
-- `drivers` - Preferred driver order (default: [INDEXEDDB, WEBSQL, LOCALSTORAGE])
+- `name` — Database name (required)
+- `driver` — Preferred driver order (optional, defaults to `[localforage.INDEXEDDB, localforage.WEBSQL, localforage.LOCALSTORAGE]`). Accepts localforage driver constants or string values.
 
-### Document Operations
+### StorageAdapter Methods
 
-- `getDocument(id)` - Get document by ID
-- `setDocument(id, doc)` - Create or update document
-- `deleteDocument(id)` - Delete document
-- `getDocumentIds()` - Get all document IDs
-- `getDocumentCount()` - Get document count
-- `clearDocuments()` - Delete all documents
+`LocalForageStorage` implements the `StorageAdapter` interface from `@localmode/core`:
 
-### Vector Operations
+| Method | Description |
+|--------|-------------|
+| `open()` / `close()` | Manage storage connection (`close()` is a no-op — localforage does not manage explicit connections) |
+| `addDocument(doc)` | Add/upsert a document |
+| `getDocument(id)` | Get document by ID (returns `null` if missing) |
+| `deleteDocument(id)` | Delete a document |
+| `getAllDocuments(collectionId)` | Get all documents in a collection |
+| `countDocuments(collectionId)` | Count documents in a collection |
+| `addVector(vec)` | Add/upsert a vector |
+| `getVector(id)` | Get vector as `Float32Array \| null` |
+| `deleteVector(id)` | Delete a vector |
+| `getAllVectors(collectionId)` | Get all vectors as `Map<string, Float32Array>` |
+| `saveIndex(collectionId, index)` | Save serialized HNSW index |
+| `loadIndex(collectionId)` | Load serialized HNSW index |
+| `deleteIndex(collectionId)` | Delete an index |
+| `createCollection(collection)` | Create a collection |
+| `getCollection(id)` | Get collection by ID |
+| `getCollectionByName(name)` | Get collection by name |
+| `getAllCollections()` | List all collections |
+| `deleteCollection(id)` | Delete a collection |
+| `clear()` | Clear all data |
+| `clearCollection(collectionId)` | Clear a specific collection |
+| `estimateSize()` | Estimate storage size in bytes |
 
-- `getVector(id)` - Get vector by document ID
-- `setVector(id, vector, collection?)` - Store vector
-- `deleteVector(id)` - Delete vector
-- `getAllVectors()` - Get all vectors
-- `clearVectors()` - Delete all vectors
+## Auto-Fallback Behavior
 
-### Index Operations
+localforage automatically selects the best available storage driver:
 
-- `getIndex(id)` - Get serialized index
-- `setIndex(id, index)` - Store serialized index
-- `deleteIndex(id)` - Delete index
+| Driver | Priority | Notes |
+|--------|----------|-------|
+| IndexedDB | 1 | Best performance, largest storage |
+| WebSQL | 2 | Deprecated but still works in some browsers |
+| localStorage | 3 | Limited to 5-10MB, synchronous under the hood |
 
-### Batch Operations
-
-- `addMany(items)` - Add multiple documents and vectors
-- `deleteMany(ids)` - Delete multiple items
-- `clearAll()` - Clear all data
-
-### Utility Methods
-
-- `ready()` - Wait for storage to be ready
-- `getDriver()` - Get current storage driver
-- `isUsingFallback()` - Check if using fallback driver
-- `drop()` - Delete entire database
-
-## Why localforage?
-
-localforage provides automatic driver selection and fallback:
-
-1. **Maximum compatibility** - Works on all browsers
-2. **Safari Private Browsing** - Falls back to localStorage when IndexedDB is blocked
-3. **Simple API** - Same interface regardless of underlying storage
-4. **Well-maintained** - Widely used and tested
-
-## Storage Drivers
-
-| Driver       | Priority | Notes                             |
-| ------------ | -------- | --------------------------------- |
-| IndexedDB    | 1        | Best performance, largest storage |
-| WebSQL       | 2        | Deprecated but still works        |
-| localStorage | 3        | Limited to 5-10MB                 |
+This means `LocalForageStorage` works in environments where IndexedDB is unavailable, such as **Safari Private Browsing** mode, by falling back to localStorage.
 
 ## Comparison
 
-| Feature        | Built-in IndexedDB | IDBStorage | LocalForageStorage | DexieStorage |
-| -------------- | ------------------ | ---------- | ------------------ | ------------ |
-| Bundle size    | 0KB                | ~3KB       | ~10KB              | ~15KB        |
-| Safari Private | ❌                 | ❌         | ✅                 | ❌           |
-| Fallback       | ❌                 | ❌         | ✅                 | ❌           |
-| Storage limit  | Large              | Large      | Varies             | Large        |
+| Feature | Built-in IndexedDB | IDBStorage | LocalForageStorage | DexieStorage |
+|---------|-------------------|------------|-------------------|--------------|
+| Bundle size | 0KB | ~3KB | ~10KB | ~15KB |
+| Safari Private | No | No | Yes | No |
+| Auto-fallback | No | No | Yes | No |
+| Schema versioning | Manual | No | No | Built-in |
+| Transactions | Manual | No | No | Automatic |
+| Storage limit | Large | Large | Varies by driver | Large |
 
 ## When to Use
 
 - You need **maximum browser compatibility**
-- Safari Private Browsing support is required
-- You prefer a **simple, consistent API**
-- You don't need advanced features like versioning
+- **Safari Private Browsing** support is required
+- You prefer a **simple, consistent API** regardless of underlying driver
+- You don't need advanced features like schema versioning or indexed queries
+
+## Acknowledgments
+
+This package is built on [localForage](https://localforage.github.io/localForage/) by [Mozilla](https://mozilla.org/) — a cross-browser storage library with automatic fallback from IndexedDB to WebSQL to localStorage.
 
 ## License
 

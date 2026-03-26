@@ -1,0 +1,326 @@
+---
+title: "Local AI for Legal Tech: Contract Analysis Without Data Leaving Your Firm"
+description: "Build contract analysis, clause classification, entity extraction, semantic search, PII redaction, and encrypted storage that runs entirely in the browser. No cloud APIs, no data processor agreements, no privilege risk."
+author: LocalMode
+date: 2026-02-22
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+When a lawyer uploads a contract to a cloud-based AI service, that document leaves the firm's control. The text travels over a network, lands on a third-party server, and may be retained, logged, or used for model training. For privileged communications and confidential client data, that transmission creates real risk -- not theoretical risk, but the kind that bar associations are now writing formal opinions about.
+
+In July 2024, the ABA Standing Committee on Ethics and Professional Responsibility issued Formal Opinion 512, its first comprehensive guidance on lawyers' use of generative AI tools. The opinion is direct: a lawyer must obtain informed consent before inputting confidential client information into any AI tool that could retain or expose that data. The consent must be truly informed -- not boilerplate in an engagement letter, but a genuine explanation of the risks involved.
+
+The simplest way to eliminate the risk is to ensure the data never leaves the device.
+
+This post walks through five contract analysis workflows built entirely with LocalMode, where every model runs in the browser via WebAssembly. No data is transmitted. No API keys are needed. No cloud vendor ever touches client documents.
+
+<Callout type="warn" title="Not legal advice">
+  This post discusses technical architecture for building legal technology tools. It does not constitute legal advice. Consult qualified counsel for guidance on attorney-client privilege, data handling obligations, and regulatory compliance in your jurisdiction.
+</Callout>
+
+---
+
+## Why Local Execution Matters for Legal Work
+
+The legal technology market is projected to reach approximately $32.5 billion in 2026 and $67.5 billion by 2034, with contract automation among the fastest-growing segments. Yet adoption of AI tools in legal practice consistently runs into the same barrier: confidentiality obligations.
+
+Three forces converge to make local AI particularly relevant for legal tech:
+
+**Attorney-client privilege.** Courts have found that disclosing privileged material to a third party, even inadvertently, can waive privilege. Sending contract text to a cloud API creates a transmission to a third-party service provider. While careful vendor agreements can mitigate this, eliminating the transmission entirely removes the question.
+
+**ABA ethics requirements.** Formal Opinion 512 requires lawyers to investigate the reliability, security measures, and policies of any AI tool, ensure the tool is configured to protect confidentiality, and confirm that confidentiality obligations are enforceable. With local-only processing, there is no third-party vendor to investigate -- the model runs in the same browser tab as the user.
+
+**GDPR Article 28 and data processor obligations.** Under GDPR, using a cloud AI API for processing personal data typically makes that API provider a data processor, triggering requirements for a Data Processing Agreement, documented instructions, sub-processor controls, breach notification, and data deletion at contract end. When processing happens entirely on the client device, no personal data is transmitted to a processor, and these obligations do not arise.
+
+---
+
+## The Five Workflows
+
+Each workflow below uses actual LocalMode APIs. The models download once on first use and then run offline indefinitely.
+
+### 1. Contract Upload and Clause Classification
+
+The first step in contract analysis is understanding what each section of a contract is about. Zero-shot classification lets you classify clauses against arbitrary legal labels without any fine-tuning -- the model was trained on natural language inference (NLI), not legal documents specifically, yet it performs well on domain-specific labels.
+
+```typescript
+import { extractPDFText } from '@localmode/pdfjs';
+import { classifyZeroShot, chunk } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Extract text from uploaded contract PDF
+const file = document.querySelector('input[type="file"]').files[0];
+const { text, pageCount } = await extractPDFText(file);
+
+// Split into clause-sized chunks
+const clauses = chunk(text, {
+  strategy: 'recursive',
+  size: 800,
+  overlap: 50,
+  separators: ['\n\n', '\n', '. ', ' '],
+});
+
+// Classify each clause against legal categories
+const model = transformers.zeroShot('Xenova/mobilebert-uncased-mnli');
+
+const legalLabels = [
+  'indemnification',
+  'limitation of liability',
+  'termination',
+  'confidentiality',
+  'intellectual property',
+  'governing law',
+  'force majeure',
+  'payment terms',
+  'representations and warranties',
+  'dispute resolution',
+];
+
+for (const clause of clauses) {
+  const { labels, scores } = await classifyZeroShot({
+    model,
+    text: clause.text,
+    candidateLabels: legalLabels,
+    multiLabel: true, // A clause can match multiple categories
+  });
+
+  console.log(`Clause: "${clause.text.substring(0, 60)}..."`);
+  console.log(`  Top label: ${labels[0]} (${(scores[0] * 100).toFixed(1)}%)`);
+}
+```
+
+The `Xenova/mobilebert-uncased-mnli` model is approximately 25MB and runs comfortably on any modern laptop. Because zero-shot classification uses NLI under the hood, you can change the label set at any time -- adding "non-compete", "data protection", or "audit rights" requires no retraining.
+
+### 2. Party, Date, and Entity Extraction
+
+Named Entity Recognition (NER) identifies the key actors, locations, and organizations mentioned in a contract. The `Xenova/bert-base-NER` model detects four entity types using the CoNLL-2003 BIO tagging scheme:
+
+| Entity Type | Tag | Examples |
+|---|---|---|
+| Person | PER | "John Smith", "Sarah Chen" |
+| Organization | ORG | "Acme Corp", "Delaware LLC" |
+| Location | LOC | "New York", "State of California" |
+| Miscellaneous | MISC | "GDPR", "Section 4.2" |
+
+```typescript
+import { extractEntities } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const nerModel = transformers.ner('Xenova/bert-base-NER');
+
+const contractClause = `This Agreement is entered into by Acme Corporation,
+a Delaware limited liability company ("Buyer"), and Smith & Associates LLP,
+a New York partnership ("Seller"), effective as of January 15, 2026.`;
+
+const { entities, usage } = await extractEntities({
+  model: nerModel,
+  text: contractClause,
+});
+
+// Group entities by type for structured output
+const grouped = Object.groupBy(entities, (e) => e.type);
+
+console.log('Organizations:', grouped.ORG?.map((e) => e.text));
+// → ["Acme Corporation", "Smith & Associates LLP"]
+
+console.log('Locations:', grouped.LOC?.map((e) => e.text));
+// → ["Delaware", "New York"]
+
+console.log(`Extracted ${entities.length} entities in ${usage.durationMs}ms`);
+```
+
+The NER model is approximately 110MB. Each entity includes character-level `start` and `end` offsets, which enables highlighting entities directly in a document viewer. The showcase [Document Redactor](/docs/core/classification) app demonstrates this pattern with interactive entity highlighting.
+
+### 3. Semantic Search Across a Contract Corpus
+
+Once contracts are chunked and embedded, you can search across hundreds of documents using natural language queries. This is where local AI becomes transformative for legal research -- an associate can search "what are the termination provisions across all vendor agreements" and get ranked results in milliseconds, all without any document leaving the browser.
+
+```typescript
+import { createVectorDB, embed, embedMany, semanticSearch, chunk } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+// Create a local vector database with SQ8 compression
+const db = await createVectorDB({
+  name: 'contracts',
+  dimensions: 384,
+  compression: { type: 'sq8' }, // 4x storage reduction
+});
+
+// Ingest a contract: chunk → embed → store
+async function ingestContract(text: string, filename: string) {
+  const chunks = chunk(text, { strategy: 'recursive', size: 512, overlap: 50 });
+
+  const { embeddings } = await embedMany({
+    model: embeddingModel,
+    values: chunks.map((c) => c.text),
+  });
+
+  const documents = chunks.map((c, i) => ({
+    id: `${filename}-${i}`,
+    vector: embeddings[i],
+    metadata: { text: c.text, filename, chunkIndex: i },
+  }));
+
+  await db.addMany(documents);
+}
+
+// Search across all ingested contracts
+const { results } = await semanticSearch({
+  model: embeddingModel,
+  db,
+  query: 'indemnification obligations and liability caps',
+  k: 10,
+});
+
+for (const result of results) {
+  console.log(`[${result.metadata?.filename}] Score: ${result.score.toFixed(3)}`);
+  console.log(`  ${result.metadata?.text?.substring(0, 120)}...`);
+}
+```
+
+The `Xenova/bge-small-en-v1.5` embedding model is approximately 23MB and produces 384-dimensional vectors. With SQ8 compression enabled, a corpus of 10,000 contract chunks occupies roughly 3.7MB in IndexedDB -- well within browser storage limits. The [PDF Search](/docs/core/rag) showcase app demonstrates this full pipeline with drag-and-drop PDF upload, semantic chunking, and reranking.
+
+### 4. PII Redaction Before Sharing
+
+Before sharing contract analysis results with opposing counsel, co-counsel outside the privilege circle, or internal teams without need-to-know, you may need to strip personally identifiable information. LocalMode's `redactPII` function handles common PII patterns, and you can extend it with custom patterns for legal-specific data like case numbers or client IDs.
+
+```typescript
+import { redactPII, detectPII, wrapEmbeddingModel, piiRedactionMiddleware } from '@localmode/core';
+
+const contractText = `Agreement between John Smith (SSN: 123-45-6789)
+and Acme Corp. Contact: john.smith@acmecorp.com, +1-555-867-5309.
+Payment of $2,500,000 due by March 30, 2026.`;
+
+// Detect what PII exists
+const detection = detectPII(contractText);
+console.log(`Found ${detection.detections.length} PII instances:`);
+for (const d of detection.detections) {
+  console.log(`  ${d.type}: ${d.maskedMatch}`);
+}
+// → email: j***@acmecorp.com
+// → phone: *********5309
+// → ssn: ***-**-6789
+
+// Redact PII with category-specific replacements
+const redacted = redactPII(contractText, {
+  emails: true,
+  phones: true,
+  ssn: true,
+  creditCards: true,
+  customPatterns: [
+    { pattern: /\$[\d,]+(?:\.\d{2})?/g, replacement: '[AMOUNT_REDACTED]' },
+    { pattern: /Case No\.\s*\d{2}-\w+-\d+/gi, replacement: '[CASE_NO_REDACTED]' },
+  ],
+});
+
+console.log(redacted);
+// → "Agreement between John Smith (SSN: [SSN_REDACTED])
+//    and Acme Corp. Contact: [EMAIL_REDACTED], [PHONE_REDACTED].
+//    Payment of [AMOUNT_REDACTED] due by March 30, 2026."
+
+// Or apply PII redaction as embedding middleware --
+// ensures no PII is ever stored in vector representations
+const safeModel = wrapEmbeddingModel({
+  model: embeddingModel,
+  middleware: piiRedactionMiddleware({
+    emails: true,
+    phones: true,
+    ssn: true,
+  }),
+});
+```
+
+The PII redaction runs entirely via regex pattern matching in the core package -- zero dependencies, zero network calls. The `piiRedactionMiddleware` can be applied to any embedding model so that PII is stripped before text is converted to vectors, ensuring that even the mathematical representations of your documents contain no personal data. The showcase [Document Redactor](https://localmode.ai/document-redactor) app combines NER-based entity detection with PII redaction in a single interface.
+
+### 5. Encrypted Document Storage
+
+For the most sensitive documents, LocalMode provides AES-256-GCM encryption using the Web Crypto API. Documents are encrypted before they are written to IndexedDB, and decrypted only when the user provides the correct passphrase. The encryption key is derived from the passphrase via PBKDF2 with 100,000 iterations, and is never persisted to disk.
+
+```typescript
+import { encrypt, decryptString } from '@localmode/core';
+import type { EncryptedData } from '@localmode/core';
+
+// Encrypt a contract's full text with a firm-level passphrase
+const contractText = '...full contract text...';
+const passphrase = 'firm-secure-passphrase-2026';
+
+const encrypted: EncryptedData = await encrypt(contractText, passphrase);
+// encrypted contains: { ciphertext, iv, salt, algorithm: 'AES-GCM', version: 1 }
+
+// Store the encrypted payload in IndexedDB or localStorage
+localStorage.setItem('contract-001', JSON.stringify(encrypted));
+
+// Later, decrypt when needed
+const stored = JSON.parse(localStorage.getItem('contract-001')!) as EncryptedData;
+const decrypted = await decryptString(stored, passphrase);
+console.log(decrypted === contractText); // true
+```
+
+For a full vault pattern with passphrase-based unlock, entry management, and automatic locking, see the [Encrypted Vault](https://localmode.ai/encrypted-vault) showcase app. It derives a `CryptoKey` via `deriveEncryptionKey()`, stores only the salt in localStorage, and clears the in-memory key on lock -- so even if someone inspects browser storage, they see only ciphertext.
+
+---
+
+## Compliance Advantages of Local-Only Architecture
+
+When AI processing happens entirely on the user's device, several compliance obligations simplify dramatically or disappear:
+
+| Compliance Area | Cloud AI API | Local AI (LocalMode) |
+|---|---|---|
+| **Data Processing Agreement** | Required under GDPR Art. 28 | Not applicable -- no data processor |
+| **Data processor registration** | Required in many EU jurisdictions | Not applicable |
+| **Sub-processor chain** | Must audit all sub-processors | No sub-processors exist |
+| **Cross-border transfer** | Requires adequacy decision or SCCs | Data never leaves device |
+| **Breach notification** | Processor must notify controller | No third-party breach vector |
+| **Data retention / deletion** | Must contractually enforce | User controls their own storage |
+| **Vendor security audit** | Required for due diligence | No vendor to audit |
+| **ABA Formal Opinion 512** | Must investigate vendor, configure protections, ensure enforceability | No third-party vendor involved |
+
+This does not mean local processing eliminates all compliance work -- you still need device-level security, access controls, and data governance policies. But it removes an entire category of obligations related to third-party data processing.
+
+---
+
+## Model Summary
+
+All models referenced in this post run in the browser via Transformers.js (WebAssembly/WebGPU). They download once and are cached in the browser for offline use.
+
+| Task | Model | Size | What It Does |
+|---|---|---|---|
+| Clause classification | `Xenova/mobilebert-uncased-mnli` | ~25MB | Zero-shot classification into arbitrary legal labels |
+| Entity extraction | `Xenova/bert-base-NER` | ~110MB | Detects PER, ORG, LOC, MISC entities |
+| Semantic search | `Xenova/bge-small-en-v1.5` | ~23MB | 384-dim embeddings for vector similarity |
+| PII redaction | Built-in (no model) | 0MB | Regex-based pattern matching in `@localmode/core` |
+| Encryption | Built-in (Web Crypto) | 0MB | AES-256-GCM via browser-native APIs |
+
+Total model footprint for a full contract analysis suite: approximately 158MB, downloaded once and cached indefinitely.
+
+---
+
+## Putting It Together
+
+A production contract analysis tool would combine these five workflows into a pipeline: upload a PDF, extract text, classify clauses, extract entities, embed and index for search, redact PII for external sharing, and encrypt for at-rest storage. Every step runs in the browser. Every step supports `AbortSignal` for cancellation. And at no point does any contract text leave the user's device.
+
+For law firms evaluating AI tools, the architecture question is straightforward: if the AI can run locally with acceptable quality, why introduce the risk, cost, and compliance burden of sending privileged documents to a cloud API?
+
+---
+
+## Methodology
+
+Research and technical claims in this post are based on the following sources:
+
+- **ABA Formal Opinion 512** (July 2024): [ABA ethics guidance on generative AI](https://www.americanbar.org/news/abanews/aba-news-archives/2024/07/aba-issues-first-ethics-guidance-ai-tools/)
+- **GDPR Article 28** (Data processor obligations): [Art. 28 GDPR full text](https://gdpr-info.eu/art-28-gdpr/)
+- **Legal technology market data**: [Precedence Research legal tech market report](https://www.precedenceresearch.com/legal-technology-market) -- $29.81B (2025) to $67.53B (2034), 9.51% CAGR
+- **bert-base-NER model card**: [dslim/bert-base-NER on Hugging Face](https://huggingface.co/dslim/bert-base-NER) -- CoNLL-2003 fine-tuned, PER/ORG/LOC/MISC entities
+- **MobileBERT MNLI model card**: [typeform/mobilebert-uncased-mnli on Hugging Face](https://huggingface.co/typeform/mobilebert-uncased-mnli) -- NLI-based zero-shot classification
+- **Model quality benchmarks**: See [Near Cloud-Quality AI at $0 Cost](/blog/local-ai-vs-cloud) for detailed accuracy comparisons against cloud APIs
+- All code examples use `@localmode/core`, `@localmode/transformers`, and `@localmode/pdfjs` APIs verified against the current codebase
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

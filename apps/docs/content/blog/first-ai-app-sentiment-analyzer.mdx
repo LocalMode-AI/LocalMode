@@ -1,0 +1,309 @@
+---
+title: "Your First AI App: Build a Sentiment Analyzer in 15 Minutes (No Python, No Servers)"
+description: "A step-by-step tutorial for JavaScript developers who have never built an AI feature. Install two packages, write five lines of classification code, and ship a working sentiment analyzer that runs entirely in the browser."
+author: LocalMode
+date: 2026-03-12
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+You have never trained a model. You have never called an AI API. You write JavaScript, and the phrase "machine learning pipeline" makes you want to close the tab.
+
+Good news: you are about to build a fully working sentiment analyzer in about 15 minutes. It will run entirely in the browser -- no Python, no backend server, no API key. The AI model downloads once and then works offline forever.
+
+---
+
+## What We're Building
+
+A single-page React app with a text input and an "Analyze" button. Type a sentence like "I love this product!" and the app instantly returns:
+
+```json
+{ "label": "POSITIVE", "score": 0.9998 }
+```
+
+Type "Terrible experience, total waste of money" and you get:
+
+```json
+{ "label": "NEGATIVE", "score": 0.9994 }
+```
+
+That is it. One input, one button, one result. Let's build it.
+
+---
+
+## A 30-Second Primer: What Is a "Model"?
+
+A **model** is a file (roughly 67 MB in our case) that contains patterns learned from millions of example sentences. Our model, DistilBERT, was trained on the Stanford Sentiment Treebank -- thousands of movie reviews already labeled as positive or negative. When you pass it new text, it compares the patterns and returns a label with a confidence score between 0 and 1.
+
+**Classification** is the task of sorting text into categories. Sentiment analysis is one type of classification: the categories are POSITIVE and NEGATIVE. The model handles the hard part. You just call a function.
+
+---
+
+## Prerequisites
+
+- **Node.js 18+** installed
+- A React framework (this tutorial uses Next.js, but any React setup works)
+- A code editor
+- About 15 minutes
+
+---
+
+## Step 1: Create a Project and Install Two Packages
+
+Scaffold a new Next.js app (or use an existing one):
+
+```bash
+npx create-next-app@latest sentiment-app --typescript --app
+cd sentiment-app
+```
+
+Install the two LocalMode packages you need:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+`@localmode/core` provides the `classify()` function. `@localmode/transformers` provides the model that does the actual work. That is the entire dependency list.
+
+---
+
+## Step 2: Write the classify() Call
+
+Create a new file at `src/app/page.tsx` and start with the imports and the model setup:
+
+```tsx
+import { classify } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.classifier(
+  'Xenova/distilbert-base-uncased-finetuned-sst-2-english'
+);
+```
+
+That string is the model ID on HuggingFace. The first time a user opens the page, the model downloads (~67 MB) and gets cached in the browser. Every visit after that is instant.
+
+Now classify a piece of text:
+
+```tsx
+const { label, score } = await classify({ model, text: 'I love this product!' });
+// label: 'POSITIVE'
+// score: 0.9998
+```
+
+Five lines of code: import, create model, call `classify()`. That is the entire AI part.
+
+---
+
+## Step 3: Build the UI
+
+Here is a complete, copy-pasteable component. Replace the contents of `src/app/page.tsx` with this:
+
+```tsx
+'use client';
+
+import { useState } from 'react';
+import { classify } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Create the model once, outside the component
+const model = transformers.classifier(
+  'Xenova/distilbert-base-uncased-finetuned-sst-2-english'
+);
+
+export default function SentimentApp() {
+  const [input, setInput] = useState('');
+  const [result, setResult] = useState<{
+    label: string;
+    score: number;
+  } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const analyze = async () => {
+    if (!input.trim()) return;
+    setLoading(true);
+    try {
+      const { label, score } = await classify({ model, text: input });
+      setResult({ label, score });
+    } catch (err) {
+      console.error('Classification failed:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <main style={{ maxWidth: 480, margin: '80px auto', fontFamily: 'system-ui' }}>
+      <h1>Sentiment Analyzer</h1>
+      <p style={{ color: '#666' }}>
+        Type a sentence and click Analyze. The AI model runs in your browser.
+      </p>
+
+      <textarea
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder="e.g. I love this product!"
+        rows={3}
+        style={{ width: '100%', padding: 12, fontSize: 16, borderRadius: 8,
+                 border: '1px solid #ccc', marginTop: 16 }}
+      />
+
+      <button
+        onClick={analyze}
+        disabled={loading || !input.trim()}
+        style={{ marginTop: 12, padding: '10px 24px', fontSize: 16,
+                 borderRadius: 8, border: 'none', cursor: 'pointer',
+                 background: loading ? '#ccc' : '#2563eb', color: '#fff' }}
+      >
+        {loading ? 'Analyzing...' : 'Analyze'}
+      </button>
+
+      {result && (
+        <div style={{ marginTop: 24, padding: 20, borderRadius: 12,
+                      background: result.label === 'POSITIVE' ? '#f0fdf4' : '#fef2f2',
+                      border: `1px solid ${result.label === 'POSITIVE' ? '#bbf7d0' : '#fecaca'}` }}>
+          <p style={{ fontSize: 28, margin: 0 }}>
+            {result.label === 'POSITIVE' ? '👍' : '👎'} {result.label}
+          </p>
+          <p style={{ color: '#666', margin: '8px 0 0' }}>
+            Confidence: {(result.score * 100).toFixed(1)}%
+          </p>
+        </div>
+      )}
+    </main>
+  );
+}
+```
+
+That is about 60 lines -- most of it is plain HTML and state management you already know.
+
+---
+
+## Step 4: Run It
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:3000`. The first time you click "Analyze," you will see a brief pause while the model downloads. After that, classification takes around 50-150 ms per sentence.
+
+Try these:
+
+| Input | Expected Output |
+|---|---|
+| "This is the best purchase I've ever made!" | POSITIVE, ~99.9% |
+| "Terrible quality, broke after one day." | NEGATIVE, ~99.9% |
+| "It's okay, nothing special." | POSITIVE or NEGATIVE, ~55-70% (ambiguous) |
+
+Notice the third example: the model is less confident because the text is genuinely ambiguous. A lower score is the model telling you "I'm not sure." That is useful information, not a bug.
+
+---
+
+## What Just Happened?
+
+Here is what happened behind the scenes when you clicked "Analyze":
+
+1. **Model download** -- The `transformers.classifier()` call triggered a one-time download of the DistilBERT ONNX model (~67 MB) from HuggingFace Hub. The browser cached it in IndexedDB so future visits skip this step entirely.
+
+2. **Tokenization** -- Your sentence was split into tokens (subword pieces) that the model understands. "I love this product!" becomes something like `["i", "love", "this", "product", "!"]` with numeric IDs.
+
+3. **Inference** -- The tokenized input was fed through the model's neural network, running via WebAssembly in the browser. The model compared patterns from its training data (the Stanford Sentiment Treebank, ~67K labeled movie reviews) and produced a probability distribution over POSITIVE and NEGATIVE.
+
+4. **Result** -- `classify()` returned the top label and its confidence score in a structured object, along with usage metadata like processing time.
+
+No data left your device at any point. There was no network request after the initial model download. The entire inference pipeline ran in the browser tab.
+
+---
+
+## Going Further
+
+You just built a working AI feature. Here are three ways to extend it.
+
+### Batch Analysis
+
+Classify many texts at once with `classifyMany()`:
+
+```tsx
+import { classifyMany } from '@localmode/core';
+
+const { results } = await classifyMany({
+  model,
+  texts: [
+    'Amazing product!',
+    'Worst purchase ever.',
+    'Decent value for the price.',
+  ],
+});
+
+results.forEach((r) => console.log(r.label, r.score));
+// POSITIVE 0.9998
+// NEGATIVE 0.9995
+// POSITIVE 0.9346
+```
+
+### Other Classification Models
+
+Swap the model ID to get different capabilities:
+
+| Model | Size | What It Detects |
+|---|---|---|
+| `Xenova/distilbert-base-uncased-finetuned-sst-2-english` | ~67 MB | Positive / Negative sentiment |
+| `Xenova/twitter-roberta-base-sentiment-latest` | ~125 MB | Positive / Neutral / Negative (social media) |
+| `Xenova/toxic-bert` | ~110 MB | Toxic / Non-toxic content |
+
+Changing models is a one-line change -- just pass a different string to `transformers.classifier()`.
+
+### Zero-Shot Classification
+
+What if you want custom categories the model was never trained on? Use `classifyZeroShot()` to define your own labels at runtime:
+
+```tsx
+import { classifyZeroShot } from '@localmode/core';
+
+const { labels, scores } = await classifyZeroShot({
+  model: transformers.zeroShot('Xenova/mobilebert-uncased-mnli'),
+  text: 'The quarterly earnings exceeded expectations',
+  candidateLabels: ['finance', 'sports', 'technology', 'politics'],
+});
+
+console.log(labels[0]); // 'finance'
+console.log(scores[0]); // 0.87
+```
+
+No retraining needed. You define the categories; the model figures out the rest.
+
+### React Hooks
+
+If you prefer a hook-based approach, `@localmode/react` provides `useClassify()` with built-in loading state, error handling, and automatic cancellation:
+
+```bash
+npm install @localmode/react
+```
+
+```tsx
+import { useClassify } from '@localmode/react';
+
+const { data, isLoading, error, execute, cancel } = useClassify({ model });
+
+// In your click handler:
+await execute('I love this product!');
+// data.label === 'POSITIVE'
+// data.score === 0.9998
+```
+
+<Callout type="info" title="See the full showcase">
+  The [Sentiment Analyzer demo](https://localmode.ai/sentiment-analyzer) on localmode.ai uses batch analysis, progress tracking, and a polished dashboard UI -- all built with the same `classify()` function you just learned.
+</Callout>
+
+---
+
+## Methodology
+
+This tutorial uses the [distilbert-base-uncased-finetuned-sst-2-english](https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english) model, a distilled version of BERT fine-tuned on the Stanford Sentiment Treebank (SST-2). It achieves 91.3% accuracy on the SST-2 dev set while being 60% faster than BERT-base. The [Xenova/distilbert-base-uncased-finetuned-sst-2-english](https://huggingface.co/Xenova/distilbert-base-uncased-finetuned-sst-2-english) variant provides ONNX weights optimized for browser inference via Transformers.js. All code examples use real API signatures from `@localmode/core` and `@localmode/transformers`. Model size (~67 MB) is sourced from the LocalMode showcase app constants and HuggingFace model card.
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

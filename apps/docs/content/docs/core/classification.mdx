@@ -1,0 +1,593 @@
+---
+title: Classification & NER
+description: Text classification, zero-shot classification, and named entity recognition.
+icon: Tags
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+LocalMode provides provider-agnostic functions for text classification, zero-shot classification, and named entity recognition (NER). Pass any model that implements the corresponding interface — the core functions handle retries, cancellation, and structured results.
+
+<Callout type="info" title="See it in action">
+  Try [Sentiment Analyzer](https://localmode.ai/sentiment-analyzer) and [Email Classifier](https://localmode.ai/email-classifier) for working demos of these APIs.
+</Callout>
+
+## classify()
+
+Classify a single text using a trained classification model:
+
+<Tabs items={['Basic Usage', 'With AbortSignal']}>
+<Tab value="Basic Usage">
+
+```ts {5-8}
+import { classify } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english');
+
+const { label, score, usage, response } = await classify({
+  model,
+  text: 'I love this product!',
+});
+
+console.log('Label:', label); // 'POSITIVE'
+console.log('Score:', score); // 0.9998
+console.log('Duration:', usage.durationMs); // ~120
+console.log('Model:', response.modelId);
+```
+
+</Tab>
+<Tab value="With AbortSignal">
+
+```ts {3,7}
+const controller = new AbortController();
+
+setTimeout(() => controller.abort(), 5000); // Cancel after 5s
+
+const { label, score } = await classify({
+  model,
+  text: 'I love this product!',
+  abortSignal: controller.signal,
+});
+```
+
+</Tab>
+</Tabs>
+
+### ClassifyOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The classification model to use',
+      type: 'ClassificationModel | string',
+      required: true,
+    },
+    text: {
+      description: 'The text to classify',
+      type: 'string',
+      required: true,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure',
+      type: 'number',
+      default: '2',
+    },
+    headers: {
+      description: 'Custom headers to include in requests',
+      type: 'Record<string, string>',
+      required: false,
+    },
+    providerOptions: {
+      description: 'Provider-specific options',
+      type: 'Record<string, Record<string, unknown>>',
+      required: false,
+    },
+  }}
+/>
+
+### ClassifyResult
+
+<TypeTable
+  type={{
+    label: {
+      description: 'The predicted label',
+      type: 'string',
+    },
+    score: {
+      description: 'Confidence score (0-1)',
+      type: 'number',
+    },
+    allScores: {
+      description: 'All label scores (optional)',
+      type: 'Record<string, number>',
+    },
+    usage: {
+      description: 'Usage information including inputTokens and durationMs',
+      type: 'ClassificationUsage',
+    },
+    response: {
+      description: 'Response metadata including modelId and timestamp',
+      type: 'ClassificationResponse',
+    },
+  }}
+/>
+
+## classifyMany()
+
+Classify multiple texts in a single call:
+
+```ts {3-7}
+import { classifyMany } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english');
+
+const { results, usage } = await classifyMany({
+  model,
+  texts: ['I love this!', 'This is terrible!', 'It is okay.'],
+});
+
+results.forEach((r, i) => {
+  console.log(`Text ${i}: ${r.label} (${r.score.toFixed(2)})`);
+});
+// Text 0: POSITIVE (1.00)
+// Text 1: NEGATIVE (1.00)
+// Text 2: POSITIVE (0.56)
+```
+
+### ClassifyManyResult
+
+<TypeTable
+  type={{
+    results: {
+      description: 'Classification results (one per input text)',
+      type: 'ClassificationResultItem[]',
+    },
+    usage: {
+      description: 'Usage information including inputTokens and durationMs',
+      type: 'ClassificationUsage',
+    },
+    response: {
+      description: 'Response metadata including modelId and timestamp',
+      type: 'ClassificationResponse',
+    },
+  }}
+/>
+
+### ClassificationResultItem
+
+<TypeTable
+  type={{
+    label: {
+      description: 'The predicted label',
+      type: 'string',
+    },
+    score: {
+      description: 'Confidence score (0-1)',
+      type: 'number',
+    },
+    allScores: {
+      description: 'All label scores (optional)',
+      type: 'Record<string, number>',
+    },
+  }}
+/>
+
+## classifyZeroShot()
+
+Classify text into arbitrary labels without fine-tuning:
+
+<Tabs items={['Basic Usage', 'Multi-Label']}>
+<Tab value="Basic Usage">
+
+```ts {5-10}
+import { classifyZeroShot } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.zeroShot('Xenova/mobilebert-uncased-mnli');
+
+const { labels, scores } = await classifyZeroShot({
+  model,
+  text: 'I just bought a new Tesla Model 3',
+  candidateLabels: ['automotive', 'technology', 'finance', 'sports'],
+});
+
+console.log(labels[0]); // 'automotive'
+console.log(scores[0]); // 0.87
+```
+
+</Tab>
+<Tab value="Multi-Label">
+
+```ts {6}
+const { labels, scores } = await classifyZeroShot({
+  model,
+  text: 'The new iPhone uses advanced AI for photography',
+  candidateLabels: ['technology', 'photography', 'smartphones'],
+  multiLabel: true,
+});
+
+// Multiple labels can have high scores simultaneously
+labels.forEach((label, i) => {
+  console.log(`${label}: ${scores[i].toFixed(2)}`);
+});
+// technology: 0.92
+// smartphones: 0.85
+// photography: 0.78
+```
+
+</Tab>
+</Tabs>
+
+### ClassifyZeroShotOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The zero-shot classification model to use',
+      type: 'ZeroShotClassificationModel | string',
+      required: true,
+    },
+    text: {
+      description: 'The text to classify',
+      type: 'string',
+      required: true,
+    },
+    candidateLabels: {
+      description: 'Candidate labels to classify into',
+      type: 'string[]',
+      required: true,
+    },
+    multiLabel: {
+      description: 'Allow multiple labels per text (scores are independent)',
+      type: 'boolean',
+      required: false,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure',
+      type: 'number',
+      default: '2',
+    },
+    providerOptions: {
+      description: 'Provider-specific options',
+      type: 'Record<string, Record<string, unknown>>',
+      required: false,
+    },
+  }}
+/>
+
+### ClassifyZeroShotResult
+
+<TypeTable
+  type={{
+    labels: {
+      description: 'Labels sorted by score (highest first)',
+      type: 'string[]',
+    },
+    scores: {
+      description: 'Corresponding scores for each label',
+      type: 'number[]',
+    },
+    usage: {
+      description: 'Usage information including inputTokens and durationMs',
+      type: 'ClassificationUsage',
+    },
+    response: {
+      description: 'Response metadata including modelId and timestamp',
+      type: 'ClassificationResponse',
+    },
+  }}
+/>
+
+## extractEntities()
+
+Extract named entities (people, organizations, locations, etc.) from text:
+
+```ts {5-8}
+import { extractEntities } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.ner('Xenova/bert-base-NER');
+
+const { entities, usage } = await extractEntities({
+  model,
+  text: 'John works at Microsoft in Seattle',
+});
+
+// entities: [
+//   { text: 'John', type: 'PERSON', start: 0, end: 4, score: 0.99 },
+//   { text: 'Microsoft', type: 'ORG', start: 14, end: 23, score: 0.98 },
+//   { text: 'Seattle', type: 'LOC', start: 27, end: 34, score: 0.97 }
+// ]
+```
+
+### ExtractEntitiesOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The NER model to use',
+      type: 'NERModel | string',
+      required: true,
+    },
+    text: {
+      description: 'The text to extract entities from',
+      type: 'string',
+      required: true,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure',
+      type: 'number',
+      default: '2',
+    },
+    providerOptions: {
+      description: 'Provider-specific options',
+      type: 'Record<string, Record<string, unknown>>',
+      required: false,
+    },
+  }}
+/>
+
+### ExtractEntitiesResult
+
+<TypeTable
+  type={{
+    entities: {
+      description: 'Extracted entities from the text',
+      type: 'Entity[]',
+    },
+    usage: {
+      description: 'Usage information including inputTokens and durationMs',
+      type: 'NERUsage',
+    },
+    response: {
+      description: 'Response metadata including modelId and timestamp',
+      type: 'NERResponse',
+    },
+  }}
+/>
+
+### Entity
+
+<TypeTable
+  type={{
+    text: {
+      description: 'The entity text as it appears in the input',
+      type: 'string',
+    },
+    type: {
+      description: "Entity type (e.g., 'PERSON', 'ORG', 'LOC')",
+      type: 'string',
+    },
+    start: {
+      description: 'Start character position in the input text',
+      type: 'number',
+    },
+    end: {
+      description: 'End character position in the input text',
+      type: 'number',
+    },
+    score: {
+      description: 'Confidence score (0-1)',
+      type: 'number',
+    },
+  }}
+/>
+
+## extractEntitiesMany()
+
+Extract entities from multiple texts in a single call:
+
+```ts {3-9}
+import { extractEntitiesMany } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.ner('Xenova/bert-base-NER');
+
+const { results, usage } = await extractEntitiesMany({
+  model,
+  texts: [
+    'John works at Microsoft',
+    'Apple is based in Cupertino',
+    'The Eiffel Tower is in Paris',
+  ],
+});
+
+results.forEach((r, i) => {
+  console.log(`Text ${i}:`, r.entities.map((e) => `${e.text} (${e.type})`));
+});
+// Text 0: ['John (PERSON)', 'Microsoft (ORG)']
+// Text 1: ['Apple (ORG)', 'Cupertino (LOC)']
+// Text 2: ['Eiffel Tower (LOC)', 'Paris (LOC)']
+```
+
+## Cancellation Support
+
+All classification and NER operations support `AbortSignal` for cancellation:
+
+```ts
+const controller = new AbortController();
+
+// Cancel after 5 seconds
+setTimeout(() => controller.abort(), 5000);
+
+try {
+  const { label } = await classify({
+    model,
+    text: 'I love this product!',
+    abortSignal: controller.signal,
+  });
+} catch (error) {
+  if (error.name === 'AbortError') {
+    console.log('Classification was cancelled');
+  }
+}
+```
+
+## Custom Provider Implementations
+
+Implement the core interfaces to create custom classification, zero-shot, and NER providers.
+
+<Tabs items={['ClassificationModel', 'ZeroShotClassificationModel', 'NERModel']}>
+<Tab value="ClassificationModel">
+
+```ts
+import type {
+  ClassificationModel,
+  DoClassifyOptions,
+  DoClassifyResult,
+} from '@localmode/core';
+
+class MyClassifier implements ClassificationModel {
+  readonly modelId = 'custom:my-classifier';
+  readonly provider = 'custom';
+  readonly labels = ['positive', 'negative', 'neutral'];
+
+  async doClassify(options: DoClassifyOptions): Promise<DoClassifyResult> {
+    const { texts } = options;
+
+    // Your classification logic here
+    const results = texts.map((text) => ({
+      label: 'positive',
+      score: 0.95,
+      allScores: { positive: 0.95, negative: 0.03, neutral: 0.02 },
+    }));
+
+    return {
+      results,
+      usage: {
+        inputTokens: texts.join('').length,
+        durationMs: 0,
+      },
+    };
+  }
+}
+```
+
+</Tab>
+<Tab value="ZeroShotClassificationModel">
+
+```ts
+import type {
+  ZeroShotClassificationModel,
+  DoClassifyZeroShotOptions,
+  DoClassifyZeroShotResult,
+} from '@localmode/core';
+
+class MyZeroShotClassifier implements ZeroShotClassificationModel {
+  readonly modelId = 'custom:zero-shot';
+  readonly provider = 'custom';
+
+  async doClassifyZeroShot(
+    options: DoClassifyZeroShotOptions
+  ): Promise<DoClassifyZeroShotResult> {
+    const { texts, candidateLabels } = options;
+
+    // Your zero-shot logic here
+    const results = texts.map(() => ({
+      labels: candidateLabels,
+      scores: candidateLabels.map(() => 1 / candidateLabels.length),
+    }));
+
+    return {
+      results,
+      usage: {
+        inputTokens: texts.join('').length,
+        durationMs: 0,
+      },
+    };
+  }
+}
+```
+
+</Tab>
+<Tab value="NERModel">
+
+```ts
+import type {
+  NERModel,
+  DoExtractEntitiesOptions,
+  DoExtractEntitiesResult,
+} from '@localmode/core';
+
+class MyNERModel implements NERModel {
+  readonly modelId = 'custom:ner';
+  readonly provider = 'custom';
+  readonly entityTypes = ['PERSON', 'ORG', 'LOC'];
+
+  async doExtract(
+    options: DoExtractEntitiesOptions
+  ): Promise<DoExtractEntitiesResult> {
+    const { texts } = options;
+
+    // Your NER logic here
+    const results = texts.map(() => ({
+      entities: [],
+    }));
+
+    return {
+      results,
+      usage: {
+        inputTokens: texts.join('').length,
+        durationMs: 0,
+      },
+    };
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="info">
+  For recommended models, provider-specific options, and practical recipes, see the Transformers.js provider pages:
+  [Classification](/docs/transformers/classification),
+  [Zero-Shot Classification](/docs/transformers/zero-shot), and
+  [NER](/docs/transformers/ner).
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Reranking"
+    href="/docs/core/reranking"
+    description="Rerank retrieved documents for more accurate RAG pipelines."
+  />
+  <Card
+    title="Embeddings"
+    href="/docs/core/embeddings"
+    description="Generate embeddings for semantic search and similarity."
+  />
+  <Card
+    title="RAG"
+    href="/docs/core/rag"
+    description="Build retrieval-augmented generation pipelines."
+  />
+</Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Sentiment Analyzer | Classify text sentiment with sequential batch processing | [Demo](https://localmode.ai/sentiment-analyzer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/sentiment-analyzer) |
+| Email Classifier | Zero-shot email categorization into custom labels | [Demo](https://localmode.ai/email-classifier) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/email-classifier) |

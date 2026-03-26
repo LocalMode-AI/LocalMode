@@ -57,7 +57,7 @@ function resolveModel(modelOrId: OCRModel | string): OCRModel {
  * import { transformers } from '@localmode/transformers';
  *
  * const { text, usage } = await extractText({
- *   model: transformers.ocr('Xenova/trocr-base-handwritten'),
+ *   model: transformers.ocr('Xenova/trocr-small-printed'),
  *   image: imageBlob,
  * });
  *
@@ -68,7 +68,7 @@ function resolveModel(modelOrId: OCRModel | string): OCRModel {
  * @example With region detection
  * ```ts
  * const { text, regions } = await extractText({
- *   model: transformers.ocr('Xenova/trocr-base-printed'),
+ *   model: transformers.ocr('Xenova/trocr-small-printed'),
  *   image: documentImage,
  *   detectRegions: true,
  * });
@@ -153,7 +153,7 @@ export async function extractText(options: ExtractTextOptions): Promise<ExtractT
  * @example
  * ```ts
  * const { texts } = await extractTextMany({
- *   model: transformers.ocr('Xenova/trocr-base-handwritten'),
+ *   model: transformers.ocr('Xenova/trocr-small-printed'),
  *   images: [page1, page2, page3],
  * });
  *

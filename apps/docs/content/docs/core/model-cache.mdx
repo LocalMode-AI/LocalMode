@@ -1,0 +1,156 @@
+---
+title: 'Model Cache'
+description: Chunked model storage with background downloads, resumption, and LRU eviction for direct model file loading.
+icon: HardDriveDownload
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Model Cache
+
+`createModelLoader()` provides a chunked model cache for downloading large model files directly from any URL — with resumable downloads, LRU eviction, and cross-tab coordination.
+
+<Callout type="info" title="See it in action">
+  Try [PDF Search](https://localmode.ai/pdf-search) for a working demo of model caching with progress tracking.
+</Callout>
+
+<Callout type="info">
+**When to use this vs provider caching:** `@localmode/transformers` and `@localmode/webllm` manage their own model downloads and caching internally. You do NOT need `createModelLoader` for models loaded through those providers. Use it when you are loading model files directly from URLs — such as custom ONNX models, self-hosted models, GGUF files, or models for future providers like WebNN.
+</Callout>
+
+## When to Use
+
+| Scenario | Use `createModelLoader`? |
+|----------|------------------------|
+| Loading models via `@localmode/transformers` | No — Transformers.js has its own Cache API caching |
+| Loading models via `@localmode/webllm` | No — WebLLM has its own download and cache system |
+| Loading raw ONNX files from a custom URL | **Yes** |
+| Self-hosted models on your own CDN (enterprise) | **Yes** |
+| Loading GGUF files for a wllama/llama.cpp provider | **Yes** |
+| Future `@localmode/webnn` provider (direct ONNX loading) | **Yes** |
+| Any large binary file (>50MB) you need to cache in the browser | **Yes** |
+
+## Overview
+
+Large model files (50MB-4GB) downloaded directly via `fetch()` have several problems in browsers:
+
+- **No resume** — Network interruption means restarting from scratch
+- **IndexedDB size limits** — Some browsers limit per-value size (~50MB Firefox, ~500MB Safari)
+- **No eviction** — Storage fills up silently until quota errors
+- **Tab conflicts** — Multiple tabs can download the same file simultaneously
+
+The model cache solves all of these:
+
+- **Chunked storage** — 16MB chunks in IndexedDB (works within all browser limits)
+- **Resumable downloads** — HTTP Range headers resume from the last complete chunk
+- **LRU eviction** — Automatically evicts least-recently-used models when storage is low
+- **Cross-tab coordination** — Web Locks ensure only one tab downloads a model; BroadcastChannel notifies others
+- **Offline-aware** — Pauses when offline, resumes when back online
+
+## Usage
+
+```typescript
+import { createModelLoader } from '@localmode/core';
+
+const loader = await createModelLoader({
+  maxCacheSize: '2GB',
+  onProgress: (modelId, progress) => {
+    console.log(`${modelId}: ${Math.round(progress.progress * 100)}%`);
+  },
+});
+
+// Download a model file from any URL
+await loader.prefetchOne('https://your-cdn.com/models/custom-model.onnx');
+
+// Check if cached
+const cached = await loader.isModelCached('custom-model');
+
+// Reassemble cached model as a Blob
+const blob = await loader.getBlob('custom-model');
+if (blob) {
+  // Use the blob: load into ONNX Runtime, pass to WebNN, etc.
+  const arrayBuffer = await blob.arrayBuffer();
+}
+
+// Evict when no longer needed
+await loader.evict('custom-model');
+
+// Clean up
+await loader.destroy();
+```
+
+## Configuration
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `cacheName` | `string` | `'localmode-model-cache'` | IndexedDB database name |
+| `maxCacheSize` | `string \| number` | `'2GB'` | Maximum total cache size (supports `'500MB'`, `'2GB'`, etc.) |
+| `chunkSize` | `number` | `16777216` (16MB) | Size per IndexedDB chunk |
+| `evictionStrategy` | `'lru'` | `'lru'` | Eviction strategy |
+| `maxRetries` | `number` | `3` | Retry attempts per failed chunk |
+| `retryDelayMs` | `number` | `1000` | Base retry delay (exponential backoff) |
+| `onProgress` | `function` | — | Progress callback |
+
+## React Hook
+
+```tsx
+import { useModelLoader } from '@localmode/react';
+
+function ModelManager() {
+  const { downloads, isDownloading, prefetch, cancel, evict, cacheStatus } = useModelLoader({
+    maxCacheSize: '2GB',
+  });
+
+  return (
+    <div>
+      <button onClick={() => prefetch([{
+        url: 'https://your-cdn.com/models/model.onnx',
+        modelId: 'my-model'
+      }])}>
+        Download Model
+      </button>
+      {isDownloading && <p>Downloading...</p>}
+    </div>
+  );
+}
+```
+
+<Callout>
+For the full React hook API, see the [useModelLoader](/docs/react/utilities#usemodelloader) section in the React utilities docs.
+</Callout>
+
+## Events
+
+The model loader emits events on `globalEventBus`:
+
+| Event | Data | When |
+|-------|------|------|
+| `modelDownloadStart` | `{ modelId, totalBytes }` | Download begins |
+| `modelDownloadProgress` | `{ modelId, downloadedBytes, totalBytes, progress }` | After each chunk |
+| `modelDownloadComplete` | `{ modelId, totalBytes, durationMs }` | Download finished |
+| `modelDownloadError` | `{ modelId, error }` | Download failed |
+
+These events are automatically picked up by the [DevTools widget](/docs/devtools) if enabled.
+
+## Browser Compatibility
+
+| Browser | Chunked Cache | Resumable | Cross-Tab |
+|---------|--------------|-----------|-----------|
+| Chrome 80+ | Yes | Yes | Yes |
+| Edge 80+ | Yes | Yes | Yes |
+| Firefox 75+ | Yes | Yes | Yes |
+| Safari 14+ | Yes (except Private Browsing) | Yes | Partial |
+
+Safari Private Browsing blocks IndexedDB — the model loader degrades gracefully, skipping caching without errors.
+
+## Related
+
+- [Storage](/docs/core/storage) — IndexedDB and memory storage for VectorDB
+- [Sync](/docs/core/sync) — Cross-tab coordination primitives used by the model cache
+- [Network](/docs/core/network) — Network status detection used for offline pause/resume
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| PDF Search | Model preloading with progress UI and cache management | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |

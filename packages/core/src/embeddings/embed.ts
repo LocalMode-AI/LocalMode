@@ -16,6 +16,7 @@ import type {
   StreamEmbedManyOptions,
   StreamEmbedResult,
 } from './types.js';
+import { computeOptimalBatchSize } from '../capabilities/batch-size.js';
 
 // Re-export for completeness (EmbedProgress is used in StreamEmbedManyOptions.onBatch)
 export type { EmbedProgress } from './types.js';
@@ -42,7 +43,7 @@ interface GlobalProviderRegistry {
  *
  * // Now string model IDs work
  * const { embedding } = await embed({
- *   model: 'transformers:Xenova/all-MiniLM-L6-v2',
+ *   model: 'transformers:Xenova/bge-small-en-v1.5',
  *   value: 'Hello',
  * });
  * ```
@@ -108,7 +109,7 @@ function resolveModel(modelOrId: EmbeddingModel | string): EmbeddingModel {
  * import { transformers } from '@localmode/transformers';
  *
  * const { embedding, usage, response } = await embed({
- *   model: transformers.embedding('Xenova/all-MiniLM-L6-v2'),
+ *   model: transformers.embedding('Xenova/bge-small-en-v1.5'),
  *   value: 'Hello world',
  * });
  *
@@ -119,7 +120,7 @@ function resolveModel(modelOrId: EmbeddingModel | string): EmbeddingModel {
  * @example With string model ID (requires global provider setup)
  * ```ts
  * const { embedding } = await embed({
- *   model: 'transformers:Xenova/all-MiniLM-L6-v2',
+ *   model: 'transformers:Xenova/bge-small-en-v1.5',
  *   value: 'Hello world',
  * });
  * ```
@@ -130,7 +131,7 @@ function resolveModel(modelOrId: EmbeddingModel | string): EmbeddingModel {
  * setTimeout(() => controller.abort(), 5000);
  *
  * const { embedding } = await embed({
- *   model: transformers.embedding('Xenova/all-MiniLM-L6-v2'),
+ *   model: transformers.embedding('Xenova/bge-small-en-v1.5'),
  *   value: 'Hello world',
  *   abortSignal: controller.signal,
  * });
@@ -213,7 +214,7 @@ export async function embed(options: EmbedOptions): Promise<EmbedResult> {
  * import { transformers } from '@localmode/transformers';
  *
  * const { embeddings, usage } = await embedMany({
- *   model: transformers.embedding('Xenova/all-MiniLM-L6-v2'),
+ *   model: transformers.embedding('Xenova/bge-small-en-v1.5'),
  *   values: ['Hello', 'World', 'Test'],
  * });
  *
@@ -301,7 +302,7 @@ export async function embedMany(options: EmbedManyOptions): Promise<EmbedManyRes
  * import { streamEmbedMany } from '@localmode/core';
  *
  * for await (const { embedding, index } of streamEmbedMany({
- *   model: transformers.embedding('Xenova/all-MiniLM-L6-v2'),
+ *   model: transformers.embedding('Xenova/bge-small-en-v1.5'),
  *   values: largeTextArray,
  *   batchSize: 32,
  *   onBatch: ({ index, count, total }) => {
@@ -320,7 +321,8 @@ export async function* streamEmbedMany(
   const {
     model: modelOrId,
     values,
-    batchSize = 32,
+    batchSize: explicitBatchSize,
+    adaptiveBatching,
     abortSignal,
     maxRetries = 2,
     headers,
@@ -330,6 +332,19 @@ export async function* streamEmbedMany(
 
   // Resolve string model ID to model object
   const model = resolveModel(modelOrId);
+
+  // Determine batch size: explicit > adaptive > default (32)
+  let batchSize: number;
+  if (explicitBatchSize !== undefined) {
+    batchSize = explicitBatchSize;
+  } else if (adaptiveBatching) {
+    batchSize = computeOptimalBatchSize({
+      taskType: 'embedding',
+      modelDimensions: model.dimensions,
+    }).batchSize;
+  } else {
+    batchSize = 32;
+  }
 
   // Check for cancellation before starting
   abortSignal?.throwIfAborted();

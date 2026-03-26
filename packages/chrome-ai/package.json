@@ -1,0 +1,69 @@
+{
+  "name": "@localmode/chrome-ai",
+  "version": "1.0.2",
+  "description": "Chrome AI provider for @localmode - zero-download inference via Chrome's built-in Gemini Nano",
+  "license": "MIT",
+  "author": "LocalMode",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist node_modules",
+    "test": "vitest run"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "@localmode/core": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@localmode/core": "workspace:*",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.1"
+  },
+  "keywords": [
+    "chrome-ai",
+    "gemini-nano",
+    "local-first",
+    "privacy",
+    "ai",
+    "summarization",
+    "translation",
+    "offline",
+    "browser-native"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LocalMode-AI/LocalMode.git",
+    "directory": "packages/chrome-ai"
+  },
+  "homepage": "https://localmode.dev/docs/chrome-ai",
+  "bugs": {
+    "url": "https://github.com/LocalMode-AI/LocalMode/issues"
+  }
+}

@@ -1,0 +1,209 @@
+---
+title: Question Answering
+description: Extract answers from text context using extractive QA models.
+icon: MessageCircleQuestionMark
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+Extract precise answers from a given context using extractive question answering models. The model identifies the span of text in the context that best answers the question.
+
+<Callout type="info" title="See it in action">
+  Try [QA Bot](https://localmode.ai/qa-bot) for a working demo of these APIs.
+</Callout>
+
+## answerQuestion()
+
+Answer a question given a context:
+
+<Tabs items={['Basic Usage', 'With AbortSignal']}>
+<Tab value="Basic Usage">
+
+```ts {5-10}
+import { answerQuestion } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.questionAnswering('Xenova/distilbert-base-cased-distilled-squad');
+
+const { answer, score, start, end } = await answerQuestion({
+  model,
+  question: 'What is the capital of France?',
+  context: 'France is a country in Europe. The capital of France is Paris. It is known for the Eiffel Tower.',
+});
+
+console.log(answer); // 'Paris'
+console.log(score);  // 0.98
+console.log(start);  // 51
+console.log(end);    // 56
+```
+
+</Tab>
+<Tab value="With AbortSignal">
+
+```ts {3,7}
+const controller = new AbortController();
+
+setTimeout(() => controller.abort(), 5000);
+
+const { answer } = await answerQuestion({
+  model,
+  question: 'What is the capital of France?',
+  context: 'The capital of France is Paris.',
+  abortSignal: controller.signal,
+});
+```
+
+</Tab>
+</Tabs>
+
+### AnswerQuestionOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The question answering model to use',
+      type: 'QuestionAnsweringModel | string',
+      required: true,
+    },
+    question: {
+      description: 'The question to answer',
+      type: 'string',
+      required: true,
+    },
+    context: {
+      description: 'The text context to extract answers from',
+      type: 'string',
+      required: true,
+    },
+    topK: {
+      description: 'Number of candidate answers to return (default: 1)',
+      type: 'number',
+      required: false,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure (default: 2)',
+      type: 'number',
+      required: false,
+    },
+  }}
+/>
+
+### AnswerQuestionResult
+
+<TypeTable
+  type={{
+    answer: {
+      description: 'The extracted answer text',
+      type: 'string',
+    },
+    score: {
+      description: 'Confidence score (0-1)',
+      type: 'number',
+    },
+    start: {
+      description: 'Start character index in the context',
+      type: 'number',
+    },
+    end: {
+      description: 'End character index in the context',
+      type: 'number',
+    },
+    allAnswers: {
+      description: 'All candidate answers when topK > 1',
+      type: 'ExtractedAnswer[] | undefined',
+    },
+    usage: {
+      description: 'Usage info: inputTokens, durationMs',
+      type: 'QuestionAnsweringUsage',
+    },
+    response: {
+      description: 'Response metadata: modelId, timestamp',
+      type: 'QuestionAnsweringResponse',
+    },
+  }}
+/>
+
+## answerQuestionMany()
+
+Answer multiple questions:
+
+```ts
+import { answerQuestionMany } from '@localmode/core';
+
+const { answers } = await answerQuestionMany({
+  model,
+  questions: [
+    { question: 'What is the capital?', context: 'The capital of France is Paris.' },
+    { question: 'What is it known for?', context: 'Paris is known for the Eiffel Tower.' },
+  ],
+});
+
+answers.forEach((answerSet) => {
+  answerSet.forEach((a) => console.log(`${a.answer} (${a.score.toFixed(2)})`));
+});
+```
+
+## Custom Provider
+
+Implement the `QuestionAnsweringModel` interface:
+
+```ts
+import type {
+  QuestionAnsweringModel,
+  DoAnswerQuestionOptions,
+  DoAnswerQuestionResult,
+} from '@localmode/core';
+
+class MyQAModel implements QuestionAnsweringModel {
+  readonly modelId = 'custom:my-qa';
+  readonly provider = 'custom';
+
+  async doAnswer(options: DoAnswerQuestionOptions): Promise<DoAnswerQuestionResult> {
+    const { questions } = options;
+
+    // Your QA logic here
+    const answers = questions.map(({ question, context }) => [
+      { answer: 'example', score: 0.9, start: 0, end: 7 },
+    ]);
+
+    return {
+      answers,
+      usage: { inputTokens: 0, durationMs: 0 },
+    };
+  }
+}
+```
+
+<Callout type="info">
+  For recommended models, provider-specific options, and practical recipes, see the
+  [Transformers Question Answering](/docs/transformers/question-answering) guide.
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Transformers QA"
+    href="/docs/transformers/question-answering"
+    description="Recommended QA models and usage."
+  />
+  <Card
+    title="Document QA"
+    href="/docs/core/document-qa"
+    description="Answer questions about document images."
+  />
+</Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| QA Bot | Answer questions from provided context | [Demo](https://localmode.ai/qa-bot) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/qa-bot) |

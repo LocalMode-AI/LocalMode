@@ -1,0 +1,416 @@
+---
+title: 'Overview'
+description: wllama provider for browser LLM inference via llama.cpp WASM. Run any GGUF model without WebGPU.
+icon: Cpu
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { Accordions, Accordion } from 'fumadocs-ui/components/accordion';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+# @localmode/wllama
+
+Run any GGUF model in the browser using llama.cpp compiled to WebAssembly. Access 135,000+ models from HuggingFace without WebGPU.
+
+<Callout type="info" title="See it in action">
+  Try [GGUF Explorer](https://localmode.ai/gguf-explorer) and [LLM Chat](https://localmode.ai/llm-chat) for working demos.
+</Callout>
+
+## Features
+
+- **Universal Browser Support** -- Works in Chrome, Firefox, Safari, and Edge (WASM only, no WebGPU needed)
+- **135K+ Models** -- Run any GGUF model from HuggingFace
+- **GGUF Inspection** -- Read model metadata before downloading via ~4KB Range requests
+- **Compatibility Check** -- Estimate if a model will run on the current device
+- **Multi-Threading** -- Auto-detects CORS isolation for 2-4x faster inference
+- **Streaming** -- Real-time token generation
+
+## Installation
+
+<Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
+  <Tab value="pnpm">```bash pnpm install @localmode/wllama @localmode/core ```</Tab>
+  <Tab value="npm">```bash npm install @localmode/wllama @localmode/core ```</Tab>
+  <Tab value="yarn">```bash yarn add @localmode/wllama @localmode/core ```</Tab>
+  <Tab value="bun">```bash bun add @localmode/wllama @localmode/core ```</Tab>
+</Tabs>
+
+## Quick Start
+
+```typescript
+import { streamText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+const model = wllama.languageModel(
+  'bartowski/Llama-3.2-1B-Instruct-GGUF:Llama-3.2-1B-Instruct-Q4_K_M.gguf'
+);
+
+const result = await streamText({
+  model,
+  prompt: 'Explain quantum computing in simple terms.',
+});
+
+let fullText = '';
+for await (const chunk of result.stream) {
+  fullText += chunk.text;
+  // Update your UI with each chunk
+}
+```
+
+## Model Selection
+
+Use `WLLAMA_MODELS` for curated models or pass any HuggingFace GGUF URL:
+
+```typescript
+import { WLLAMA_MODELS } from '@localmode/wllama';
+
+// Curated catalog entry
+const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+
+// HuggingFace shorthand (repo:filename)
+const model2 = wllama.languageModel(
+  'bartowski/Llama-3.2-1B-Instruct-GGUF:Llama-3.2-1B-Instruct-Q4_K_M.gguf'
+);
+
+// Full URL
+const model3 = wllama.languageModel(
+  'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf'
+);
+```
+
+<Callout type="info" title="Recommended Picks">
+  - **Testing / Prototyping**: SmolLM2-135M Q4_K_M -- 70MB, instant loading
+  - **General Purpose**: Llama 3.2 1B Q4_K_M -- 750MB, good balance with 128K context
+  - **Multilingual**: Qwen 2.5 1.5B Q4_K_M -- 986MB, strong multilingual support
+  - **Reasoning / Coding**: Phi 3.5 Mini Q4_K_M -- 1.24GB, excellent reasoning
+  - **Higher Quality**: Llama 3.2 3B Q4_K_M -- 1.93GB, excellent quality with 128K context
+  - **Best Quality**: Llama 3.1 8B Q4_K_M -- 4.92GB, requires 8GB+ RAM
+</Callout>
+
+### `WLLAMA_MODELS` Catalog (16 Models)
+
+The curated catalog ships 16 Q4_K_M quantized models across four size tiers:
+
+#### Tiny (&lt; 500MB)
+
+| Catalog Key | Name | Size | Context | Params | Best For |
+| --- | --- | --- | --- | --- | --- |
+| `SmolLM2-135M-Instruct-Q4_K_M` | SmolLM2 135M | 70MB | 8K | 135M | Instant loading, testing |
+| `SmolLM2-360M-Instruct-Q4_K_M` | SmolLM2 360M | 234MB | 8K | 360M | Very small, fast responses |
+| `Qwen2.5-0.5B-Instruct-Q4_K_M` | Qwen 2.5 0.5B | 386MB | 4K | 500M | Tiny with great quality |
+
+#### Small (500MB -- 1GB)
+
+| Catalog Key | Name | Size | Context | Params | Best For |
+| --- | --- | --- | --- | --- | --- |
+| `TinyLlama-1.1B-Chat-Q4_K_M` | TinyLlama 1.1B Chat | 670MB | 2K | 1.1B | Classic, fast and reliable |
+| `Llama-3.2-1B-Instruct-Q4_K_M` | Llama 3.2 1B | 750MB | 128K | 1.2B | General purpose, huge context |
+| `Qwen2.5-1.5B-Instruct-Q4_K_M` | Qwen 2.5 1.5B | 986MB | 32K | 1.5B | Multilingual |
+
+#### Medium (1 -- 2GB)
+
+| Catalog Key | Name | Size | Context | Params | Best For |
+| --- | --- | --- | --- | --- | --- |
+| `Qwen2.5-Coder-1.5B-Instruct-Q4_K_M` | Qwen 2.5 Coder 1.5B | 1.0GB | 32K | 1.5B | Code-specialized, programming |
+| `SmolLM2-1.7B-Instruct-Q4_K_M` | SmolLM2 1.7B | 1.06GB | 8K | 1.7B | Efficient per-param quality |
+| `Phi-3.5-mini-instruct-Q4_K_M` | Phi 3.5 Mini | 1.24GB | 4K | 3.8B | Reasoning, coding |
+| `Gemma-2-2B-IT-Q4_K_M` | Gemma 2 2B IT | 1.3GB | 8K | 2B | Instruction following |
+| `Llama-3.2-3B-Instruct-Q4_K_M` | Llama 3.2 3B | 1.93GB | 128K | 3.2B | High quality, huge context |
+| `Qwen2.5-3B-Instruct-Q4_K_M` | Qwen 2.5 3B | 1.94GB | 32K | 3B | High quality multilingual |
+
+#### Large (2GB+)
+
+| Catalog Key | Name | Size | Context | Params | Best For |
+| --- | --- | --- | --- | --- | --- |
+| `Phi-4-mini-instruct-Q4_K_M` | Phi-4 Mini | 2.3GB | 4K | 3.8B | Strong reasoning and coding |
+| `Qwen2.5-Coder-7B-Instruct-Q4_K_M` | Qwen 2.5 Coder 7B | 4.5GB | 32K | 7B | Best code generation quality |
+| `Mistral-7B-Instruct-v0.3-Q4_K_M` | Mistral 7B v0.3 | 4.37GB | 32K | 7.2B | Strong general performance |
+| `Llama-3.1-8B-Instruct-Q4_K_M` | Llama 3.1 8B | 4.92GB | 128K | 8B | Best quality (8GB+ RAM) |
+
+Access the catalog programmatically:
+
+```typescript
+import { WLLAMA_MODELS, getModelCategory } from '@localmode/wllama';
+import type { WllamaModelId } from '@localmode/wllama';
+
+// Iterate all 16 curated models
+for (const [id, info] of Object.entries(WLLAMA_MODELS)) {
+  const category = getModelCategory(info.sizeBytes);
+  console.log(`[${category}] ${info.name}: ${info.size}, ${info.description}`);
+}
+
+// Type-safe catalog key
+const modelId: WllamaModelId = 'Llama-3.2-1B-Instruct-Q4_K_M';
+const entry = WLLAMA_MODELS[modelId];
+console.log(entry.url); // HuggingFace download URL
+```
+
+## Text Generation
+
+### Streaming
+
+```typescript
+import { streamText } from '@localmode/core';
+
+const result = await streamText({
+  model: wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M'),
+  prompt: 'Write a haiku about programming.',
+});
+
+let fullText = '';
+for await (const chunk of result.stream) {
+  fullText += chunk.text;
+}
+```
+
+### Non-Streaming
+
+```typescript
+import { generateText } from '@localmode/core';
+
+const { text, usage } = await generateText({
+  model: wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M'),
+  prompt: 'What is the capital of France?',
+});
+
+console.log(text);
+console.log('Tokens used:', usage.totalTokens);
+```
+
+## Configuration
+
+### Model Options
+
+```ts
+const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M', {
+  systemPrompt: 'You are a helpful coding assistant.',
+  temperature: 0.7,
+  maxTokens: 1024,
+  topP: 0.9,
+  contextLength: 4096,
+});
+```
+
+<TypeTable
+  type={{
+    systemPrompt: {
+      description: 'System message prepended to all conversations',
+      type: 'string',
+    },
+    temperature: {
+      description: 'Randomness in generation (0.0 = deterministic, 2.0 = very random)',
+      type: 'number',
+      default: '0.7',
+    },
+    maxTokens: {
+      description: 'Maximum tokens to generate',
+      type: 'number',
+      default: '512',
+    },
+    topP: {
+      description: 'Nucleus sampling (0.0-1.0)',
+      type: 'number',
+      default: '0.95',
+    },
+    contextLength: {
+      description: 'Context window size. Auto-detected from GGUF metadata if not set.',
+      type: 'number',
+      default: '4096',
+    },
+    numThreads: {
+      description: 'Thread count override. Default: auto-detect from CORS isolation.',
+      type: 'number',
+    },
+    modelUrl: {
+      description: 'Full URL to the GGUF file (overrides ID-based URL construction).',
+      type: 'string',
+    },
+  }}
+/>
+
+### Custom Provider
+
+```typescript
+import { createWllama } from '@localmode/wllama';
+
+const myWllama = createWllama({
+  numThreads: 4,
+  onProgress: (progress) => {
+    console.log(`Loading: ${progress.progress?.toFixed(1)}%`);
+    console.log(`Status: ${progress.text}`);
+  },
+});
+
+const model = myWllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+```
+
+### Provider-Specific Sampling
+
+wllama supports additional sampling parameters via `providerOptions`:
+
+```typescript
+const { text } = await generateText({
+  model,
+  prompt: 'Hello!',
+  providerOptions: {
+    wllama: {
+      top_k: 40,
+      repeat_penalty: 1.1,
+      mirostat: 2,
+      mirostat_tau: 5.0,
+      mirostat_eta: 0.1,
+    },
+  },
+});
+```
+
+## Model Preloading
+
+Preload models during app initialization:
+
+```typescript
+import { preloadModel, isModelCached } from '@localmode/wllama';
+
+const modelId = 'bartowski/Llama-3.2-1B-Instruct-GGUF:Llama-3.2-1B-Instruct-Q4_K_M.gguf';
+
+if (!(await isModelCached(modelId))) {
+  await preloadModel(modelId, {
+    onProgress: (progress) => {
+      updateLoadingBar(progress.progress ?? 0);
+    },
+  });
+}
+```
+
+## Model Management
+
+### Delete Cached Models
+
+```typescript
+import { deleteModelCache } from '@localmode/wllama';
+
+await deleteModelCache('bartowski/Llama-3.2-1B-Instruct-GGUF:Llama-3.2-1B-Instruct-Q4_K_M.gguf');
+```
+
+## CORS Multi-Threading
+
+wllama uses `SharedArrayBuffer` for multi-threaded WASM execution, which requires CORS isolation headers:
+
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+Without these headers, wllama automatically falls back to single-threaded mode (~2-4x slower).
+
+```typescript
+import { isCrossOriginIsolated } from '@localmode/wllama';
+
+if (isCrossOriginIsolated()) {
+  console.log('Multi-threading enabled');
+} else {
+  console.log('Single-thread fallback (add CORS headers for 2-4x speed)');
+}
+```
+
+<Callout type="tip" title="Next.js CORS Headers">
+  Add to your `next.config.js`:
+  ```js
+  async headers() {
+    return [{
+      source: '/(.*)',
+      headers: [
+        { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+        { key: 'Cross-Origin-Embedder-Policy', value: 'require-corp' },
+      ],
+    }];
+  }
+  ```
+</Callout>
+
+## WebLLM Fallback Pattern
+
+Use wllama as a fallback when WebGPU is not available:
+
+```typescript
+import { createProviderWithFallback } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+import { wllama } from '@localmode/wllama';
+
+const model = await createProviderWithFallback({
+  providers: [
+    () => webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
+    () => wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M'),
+  ],
+  onFallback: (error, idx) => console.warn(`Provider ${idx} failed:`, error),
+});
+```
+
+## Browser Support
+
+| Browser     | Support |
+| ----------- | ------- |
+| Chrome 57+  | Yes     |
+| Edge 16+    | Yes     |
+| Firefox 52+ | Yes     |
+| Safari 11+  | Yes     |
+| iOS Safari  | Yes     |
+
+<Callout type="info">
+  wllama works in ALL modern browsers since it only requires WebAssembly support, unlike WebLLM which requires WebGPU.
+</Callout>
+
+## wllama vs WebLLM
+
+| Feature        | @localmode/wllama        | @localmode/webllm        |
+| -------------- | ------------------------ | ------------------------ |
+| Runtime        | llama.cpp WASM           | MLC WebGPU               |
+| Browser Support| All modern browsers      | WebGPU-capable only      |
+| Models         | 135K+ GGUF models        | ~20 curated MLC models   |
+| Performance    | ~40-50% of WebGPU speed  | Native GPU speed         |
+| GPU Required   | No                       | Yes                      |
+| Model Format   | GGUF (standard)          | MLC (pre-compiled)       |
+
+## Error Handling
+
+```typescript
+import { generateText, ModelLoadError, GenerationError } from '@localmode/core';
+
+try {
+  const { text } = await generateText({ model, prompt: 'Hello' });
+} catch (error) {
+  if (error instanceof ModelLoadError) {
+    console.error('Failed to load model:', error.hint);
+  } else if (error instanceof GenerationError) {
+    console.error('Generation failed:', error.hint);
+  }
+}
+```
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="GGUF Models"
+    href="/docs/wllama/gguf-models"
+    description="Browse, inspect, and check compatibility of GGUF models."
+  />
+  <Card
+    title="Text Generation"
+    href="/docs/core/generation"
+    description="Learn about streaming and generation options."
+  />
+  <Card
+    title="WebLLM Provider"
+    href="/docs/webllm"
+    description="WebGPU-accelerated alternative for compatible browsers."
+  />
+</Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| GGUF Explorer | Browse, load, and chat with GGUF models via wllama | [Demo](https://localmode.ai/gguf-explorer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/gguf-explorer) |
+| LLM Chat | Chat with wllama GGUF models alongside WebLLM and ONNX | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |

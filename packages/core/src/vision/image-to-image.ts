@@ -55,7 +55,7 @@ function resolveModel(modelOrId: ImageToImageModel | string): ImageToImageModel 
  * import { transformers } from '@localmode/transformers';
  *
  * const { image, usage } = await upscaleImage({
- *   model: transformers.imageToImage('Xenova/swin2SR-classical-sr-x2-64'),
+ *   model: transformers.imageToImage('Xenova/swin2SR-lightweight-x2-64'),
  *   image: lowResImage,
  *   scale: 2,
  * });
@@ -66,7 +66,7 @@ function resolveModel(modelOrId: ImageToImageModel | string): ImageToImageModel 
  * @example 4x upscaling
  * ```ts
  * const { image } = await upscaleImage({
- *   model: transformers.imageToImage('Xenova/swin2SR-realworld-sr-x4-64'),
+ *   model: transformers.imageToImage('Xenova/swin2SR-classical-sr-x4-64'),
  *   image: thumbnailImage,
  *   scale: 4,
  * });

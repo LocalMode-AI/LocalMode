@@ -9,6 +9,14 @@ import { Card, Cards } from 'fumadocs-ui/components/card';
 
 Reranking uses cross-encoder models to improve the relevance of search results. It's particularly useful for RAG pipelines.
 
+<Callout type="info">
+  For full API reference (`rerank()`, options, result types, and custom providers), see the [Core Reranking](/docs/core/reranking) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [Semantic Search](https://localmode.ai/semantic-search) for a working demo.
+</Callout>
+
 ## Why Reranking?
 
 Bi-encoder (embedding) models are fast but may miss subtle relevance signals. Cross-encoder rerankers consider query-document pairs together for better accuracy.
@@ -27,37 +35,13 @@ After Reranking:
 3. "The synthesis of proteins requires energy" ✗
 ```
 
-## Basic Usage
+## Recommended Models
 
-```typescript
-import { transformers } from '@localmode/transformers';
-import { rerank } from '@localmode/core';
-
-const model = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
-
-const results = await rerank({
-  model,
-  query: 'What is machine learning?',
-  documents: [
-    'Machine learning is a subset of artificial intelligence.',
-    'The weather forecast predicts rain tomorrow.',
-    'Deep learning uses neural networks to learn patterns.',
-    'I went to the grocery store yesterday.',
-  ],
-  topK: 2,
-});
-
-results.forEach((r, i) => {
-  console.log(`${i + 1}. Score: ${r.score.toFixed(3)}`);
-  console.log(`   ${r.document}`);
-});
-
-// Output:
-// 1. Score: 0.892
-//    Machine learning is a subset of artificial intelligence.
-// 2. Score: 0.756
-//    Deep learning uses neural networks to learn patterns.
-```
+| Model | Size | Speed | Quality |
+|-------|------|-------|---------|
+| `Xenova/ms-marco-MiniLM-L-6-v2` | ~23MB | ⚡⚡⚡ | Good (recommended for browser) |
+| `Xenova/ms-marco-MiniLM-L-12-v2` | ~33MB | ⚡⚡ | Better |
+| `Xenova/bge-reranker-base` | ~279MB | ⚡ | Best quality (large download) |
 
 ## With Semantic Search
 
@@ -76,7 +60,7 @@ async function searchWithReranking(query: string) {
   });
 
   // Step 2: Rerank for accuracy (keep top results)
-  const reranked = await rerank({
+  const { results } = await rerank({
     model: rerankerModel,
     query,
     documents: candidates.map((c) => c.metadata.text as string),
@@ -84,37 +68,18 @@ async function searchWithReranking(query: string) {
   });
 
   // Step 3: Map back to original results with metadata
-  return reranked.map((r) => ({
-    ...candidates[r.originalIndex],
+  return results.map((r) => ({
+    ...candidates[r.index],
     rerankerScore: r.score,
   }));
 }
 ```
-
-## Rerank Result Structure
-
-```typescript
-interface RerankResult {
-  document: string;       // The document text
-  score: number;          // Relevance score (higher = more relevant)
-  originalIndex: number;  // Index in the original documents array
-}
-```
-
-## Recommended Models
-
-| Model | Size | Speed | Quality |
-|-------|------|-------|---------|
-| `Xenova/ms-marco-MiniLM-L-6-v2` | ~22MB | ⚡⚡⚡ | Good |
-| `Xenova/ms-marco-MiniLM-L-12-v2` | ~33MB | ⚡⚡ | Better |
 
 ## Complete RAG Example
 
 ```typescript
 import {
   createVectorDB,
-  chunk,
-  ingest,
   semanticSearch,
   rerank,
   streamText,
@@ -123,7 +88,7 @@ import { transformers } from '@localmode/transformers';
 import { webllm } from '@localmode/webllm';
 
 // Setup models
-const embeddingModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
 const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
 const llm = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
 
@@ -141,7 +106,7 @@ async function ragQuery(question: string) {
   });
 
   // 2. Rerank (slower, accurate)
-  const reranked = await rerank({
+  const { results: reranked } = await rerank({
     model: rerankerModel,
     query: question,
     documents: candidates.map((c) => c.metadata.text as string),
@@ -149,7 +114,7 @@ async function ragQuery(question: string) {
   });
 
   // 3. Generate answer
-  const context = reranked.map((r) => r.document).join('\n\n');
+  const context = reranked.map((r) => r.text).join('\n\n');
 
   const stream = await streamText({
     model: llm,
@@ -198,18 +163,18 @@ const reranked = await rerank({
 async function rerankLargeResultSet(query: string, documents: string[], topK: number) {
   const batchSize = 50;
   const batches = [];
-  
+
   for (let i = 0; i < documents.length; i += batchSize) {
     const batch = documents.slice(i, i + batchSize);
-    const result = await rerank({
+    const { results: batchResults } = await rerank({
       model: rerankerModel,
       query,
       documents: batch,
       topK: Math.min(topK, batch.length),
     });
-    batches.push(result.map((r) => ({
+    batches.push(batchResults.map((r) => ({
       ...r,
-      originalIndex: r.originalIndex + i,
+      index: r.index + i,
     })));
   }
 
@@ -231,9 +196,20 @@ async function rerankLargeResultSet(query: string, documents: string[], topK: nu
   5. **Test with/without** — Measure accuracy improvement for your use case
 </Callout>
 
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Semantic Search | Rerank search results for improved relevance | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
+
 ## Next Steps
 
 <Cards>
+  <Card
+    title="Core Reranking API"
+    href="/docs/core/reranking"
+    description="Full API reference, options, result types, and custom providers."
+  />
   <Card
     title="RAG"
     href="/docs/core/rag"

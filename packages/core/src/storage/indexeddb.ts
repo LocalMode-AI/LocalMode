@@ -227,7 +227,7 @@ export class IndexedDBStorage {
     });
   }
 
-  async getVector(id: string): Promise<Float32Array | null> {
+  async getVector(id: string): Promise<Float32Array | Uint8Array | null> {
     const db = this.ensureOpen();
 
     return new Promise((resolve, reject) => {
@@ -256,7 +256,7 @@ export class IndexedDBStorage {
     });
   }
 
-  async getAllVectors(collectionId: string): Promise<Map<string, Float32Array>> {
+  async getAllVectors(collectionId: string): Promise<Map<string, Float32Array | Uint8Array>> {
     const db = this.ensureOpen();
 
     return new Promise((resolve, reject) => {
@@ -268,7 +268,7 @@ export class IndexedDBStorage {
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
         const records = request.result as VectorRecord[];
-        const map = new Map<string, Float32Array>();
+        const map = new Map<string, Float32Array | Uint8Array>();
         for (const r of records) {
           map.set(r.id, r.vector);
         }
@@ -340,6 +340,65 @@ export class IndexedDBStorage {
   // Collection Operations
   // ============================================
 
+  /**
+   * Convert a CollectionRecord to a Collection, deserializing calibration data.
+   */
+  private collectionFromRecord(record: CollectionRecord): Collection {
+    const collection: Collection = {
+      id: record.id,
+      name: record.name,
+      dimensions: record.dimensions,
+      createdAt: record.createdAt,
+    };
+
+    if (record.calibration) {
+      collection.calibration = {
+        min: new Float32Array(record.calibration.min),
+        max: new Float32Array(record.calibration.max),
+      };
+    }
+
+    if (record.modelFingerprint) {
+      collection.modelFingerprint = { ...record.modelFingerprint };
+    }
+
+    // Deserialize compression calibration
+    if (record.compressionCalibration) {
+      collection.compressionCalibration = {
+        min: new Float32Array(record.compressionCalibration.min),
+        max: new Float32Array(record.compressionCalibration.max),
+      };
+    }
+
+    // Deserialize delta calibration
+    if (record.deltaCalibration) {
+      collection.deltaCalibration = {
+        min: new Float32Array(record.deltaCalibration.min),
+        max: new Float32Array(record.deltaCalibration.max),
+      };
+    }
+
+    // Deserialize compression config
+    if (record.compression) {
+      collection.compression = { ...record.compression };
+    }
+
+    // Deserialize PQ codebook: number[][][] -> Float32Array[][]
+    if (record.pqCodebook) {
+      const { subvectors, centroids, subvectorDim, data } = record.pqCodebook;
+      const codebook: Float32Array[][] = new Array(subvectors);
+      for (let p = 0; p < subvectors; p++) {
+        codebook[p] = new Array(centroids);
+        for (let c = 0; c < centroids; c++) {
+          codebook[p][c] = new Float32Array(data[p][c]);
+        }
+      }
+      collection.pqCodebook = { subvectors, centroids, subvectorDim, codebook };
+    }
+
+    return collection;
+  }
+
   async createCollection(collection: Collection): Promise<void> {
     const db = this.ensureOpen();
     const record: CollectionRecord = {
@@ -348,6 +407,53 @@ export class IndexedDBStorage {
       dimensions: collection.dimensions,
       createdAt: collection.createdAt,
     };
+
+    // Serialize calibration data if present
+    if (collection.calibration) {
+      record.calibration = {
+        min: Array.from(collection.calibration.min),
+        max: Array.from(collection.calibration.max),
+      };
+    }
+
+    // Serialize model fingerprint if present
+    if (collection.modelFingerprint) {
+      record.modelFingerprint = { ...collection.modelFingerprint };
+    }
+
+    // Serialize PQ codebook: Float32Array[][] -> number[][][]
+    if (collection.pqCodebook) {
+      const { subvectors, centroids, subvectorDim, codebook } = collection.pqCodebook;
+      const data: number[][][] = new Array(subvectors);
+      for (let p = 0; p < subvectors; p++) {
+        data[p] = new Array(centroids);
+        for (let c = 0; c < centroids; c++) {
+          data[p][c] = Array.from(codebook[p][c]);
+        }
+      }
+      record.pqCodebook = { subvectors, centroids, subvectorDim, data };
+    }
+
+    // Serialize compression calibration if present
+    if (collection.compressionCalibration) {
+      record.compressionCalibration = {
+        min: Array.from(collection.compressionCalibration.min),
+        max: Array.from(collection.compressionCalibration.max),
+      };
+    }
+
+    // Serialize delta calibration if present
+    if (collection.deltaCalibration) {
+      record.deltaCalibration = {
+        min: Array.from(collection.deltaCalibration.min),
+        max: Array.from(collection.deltaCalibration.max),
+      };
+    }
+
+    // Serialize compression config if present
+    if (collection.compression) {
+      record.compression = { ...collection.compression };
+    }
 
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAMES.COLLECTIONS, 'readwrite');
@@ -374,12 +480,7 @@ export class IndexedDBStorage {
           resolve(null);
           return;
         }
-        resolve({
-          id: record.id,
-          name: record.name,
-          dimensions: record.dimensions,
-          createdAt: record.createdAt,
-        });
+        resolve(this.collectionFromRecord(record));
       };
     });
   }
@@ -400,12 +501,7 @@ export class IndexedDBStorage {
           resolve(null);
           return;
         }
-        resolve({
-          id: record.id,
-          name: record.name,
-          dimensions: record.dimensions,
-          createdAt: record.createdAt,
-        });
+        resolve(this.collectionFromRecord(record));
       };
     });
   }
@@ -421,15 +517,74 @@ export class IndexedDBStorage {
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
         const records = request.result as CollectionRecord[];
-        resolve(
-          records.map((r) => ({
-            id: r.id,
-            name: r.name,
-            dimensions: r.dimensions,
-            createdAt: r.createdAt,
-          }))
-        );
+        resolve(records.map((r) => this.collectionFromRecord(r)));
       };
+    });
+  }
+
+  async updateCollection(collection: Collection): Promise<void> {
+    const db = this.ensureOpen();
+    const record: CollectionRecord = {
+      id: collection.id,
+      name: collection.name,
+      dimensions: collection.dimensions,
+      createdAt: collection.createdAt,
+    };
+
+    // Serialize calibration data (Float32Array -> number[]) for IndexedDB storage
+    if (collection.calibration) {
+      record.calibration = {
+        min: Array.from(collection.calibration.min),
+        max: Array.from(collection.calibration.max),
+      };
+    }
+
+    // Serialize model fingerprint if present
+    if (collection.modelFingerprint) {
+      record.modelFingerprint = { ...collection.modelFingerprint };
+    }
+
+    // Serialize PQ codebook: Float32Array[][] -> number[][][]
+    if (collection.pqCodebook) {
+      const { subvectors, centroids, subvectorDim, codebook } = collection.pqCodebook;
+      const data: number[][][] = new Array(subvectors);
+      for (let p = 0; p < subvectors; p++) {
+        data[p] = new Array(centroids);
+        for (let c = 0; c < centroids; c++) {
+          data[p][c] = Array.from(codebook[p][c]);
+        }
+      }
+      record.pqCodebook = { subvectors, centroids, subvectorDim, data };
+    }
+
+    // Serialize compression calibration if present
+    if (collection.compressionCalibration) {
+      record.compressionCalibration = {
+        min: Array.from(collection.compressionCalibration.min),
+        max: Array.from(collection.compressionCalibration.max),
+      };
+    }
+
+    // Serialize delta calibration if present
+    if (collection.deltaCalibration) {
+      record.deltaCalibration = {
+        min: Array.from(collection.deltaCalibration.min),
+        max: Array.from(collection.deltaCalibration.max),
+      };
+    }
+
+    // Serialize compression config if present
+    if (collection.compression) {
+      record.compression = { ...collection.compression };
+    }
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAMES.COLLECTIONS, 'readwrite');
+      const store = tx.objectStore(STORE_NAMES.COLLECTIONS);
+      const request = store.put(record);
+
+      request.onerror = () => reject(request.error);
+      tx.oncomplete = () => resolve();
     });
   }
 
@@ -507,5 +662,60 @@ export class IndexedDBStorage {
       return estimate.usage ?? 0;
     }
     return 0;
+  }
+
+  // ============================================
+  // Meta Operations (Key-Value Store)
+  // ============================================
+
+  /**
+   * Get a value from the meta store.
+   */
+  async getMeta(key: string): Promise<unknown> {
+    const db = this.ensureOpen();
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAMES.META, 'readonly');
+      const store = tx.objectStore(STORE_NAMES.META);
+      const request = store.get(key);
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const record = request.result as { key: string; value: unknown } | undefined;
+        resolve(record?.value ?? null);
+      };
+    });
+  }
+
+  /**
+   * Set a value in the meta store.
+   */
+  async setMeta(key: string, value: unknown): Promise<void> {
+    const db = this.ensureOpen();
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAMES.META, 'readwrite');
+      const store = tx.objectStore(STORE_NAMES.META);
+      const request = store.put({ key, value });
+
+      request.onerror = () => reject(request.error);
+      tx.oncomplete = () => resolve();
+    });
+  }
+
+  /**
+   * Delete a value from the meta store.
+   */
+  async deleteMeta(key: string): Promise<void> {
+    const db = this.ensureOpen();
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAMES.META, 'readwrite');
+      const store = tx.objectStore(STORE_NAMES.META);
+      const request = store.delete(key);
+
+      request.onerror = () => reject(request.error);
+      tx.oncomplete = () => resolve();
+    });
   }
 }

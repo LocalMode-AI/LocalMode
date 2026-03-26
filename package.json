@@ -24,15 +24,20 @@
     "clean": "pnpm -r clean && rm -rf node_modules"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.27.1",
-    "@types/node": "^20.10.0",
-    "eslint": "^8.55.0",
-    "jsdom": "^27.3.0",
-    "prettier": "^3.1.0",
-    "typescript": "^5.3.0",
-    "vitest": "^1.1.0"
+    "@changesets/cli": "^2.30.0",
+    "@types/node": "^24",
+    "eslint": "^9",
+    "jsdom": "^29.0.1",
+    "prettier": "^3.8.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vitest": "^4.1.0"
   },
   "engines": {
     "node": ">=18"
-  }
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ]
 }

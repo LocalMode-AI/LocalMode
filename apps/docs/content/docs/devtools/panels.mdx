@@ -1,0 +1,91 @@
+---
+title: 'Panels'
+description: Reference for each DevTools widget panel tab.
+icon: LayoutPanelLeft
+---
+
+# Panels Reference
+
+The DevTools widget displays six tabbed panels. Data updates are instant — the widget subscribes to the bridge directly, with no polling delay.
+
+## Models
+
+Shows all loaded models with their status, load times, and last used timestamps. Data comes from embedding and model load events captured by `globalEventBus`.
+
+| Column | Description |
+|--------|-------------|
+| Model ID | The model identifier (e.g., `Xenova/bge-small-en-v1.5`) |
+| Status | `loaded` (green) or `error` (red) |
+| Load Time | How long the model took to load (ms) |
+| Last Used | When the model was last invoked |
+
+## VectorDB
+
+Displays aggregated statistics per collection. Data comes from `globalEventBus` events: `add`, `addMany`, `search`, `delete`, `clear`.
+
+| Column | Description |
+|--------|-------------|
+| Collection | VectorDB collection name |
+| Adds | Total add operations |
+| Searches | Total search operations |
+| Deletes | Total delete operations |
+| Avg Search | Average search duration (ms) |
+| Last Activity | Timestamp of last operation |
+
+## Queue
+
+Live inference queue metrics. Register queues with `registerQueue()` to see them here. Data comes from `queue.on('stats')` in `createInferenceQueue()`.
+
+```typescript
+import { createInferenceQueue } from '@localmode/core';
+import { registerQueue } from '@localmode/devtools';
+
+const queue = createInferenceQueue({ concurrency: 1 });
+const unsubscribe = registerQueue('embedding', queue);
+```
+
+| Column | Description |
+|--------|-------------|
+| Queue | Queue name |
+| Pending | Tasks waiting (highlighted when > 0) |
+| Active | Tasks currently running (highlighted when > 0) |
+| Completed | Total completed tasks |
+| Failed | Total failed tasks |
+| Avg Latency | Average task duration (ms) |
+
+## Pipeline
+
+Step execution status with progress tracking. Use `createDevToolsProgressCallback()` to connect a pipeline:
+
+```typescript
+import { createPipeline } from '@localmode/core';
+import { createDevToolsProgressCallback } from '@localmode/devtools';
+
+const pipeline = createPipeline('rag-ingest')
+  .step('chunk', chunkFn)
+  .step('embed', embedFn)
+  .build();
+
+await pipeline.run(input, {
+  onProgress: createDevToolsProgressCallback('rag-ingest'),
+});
+```
+
+Each pipeline shows: name, status (running/completed/idle), current step, progress bar, and total duration.
+
+## Events
+
+Live scrolling stream of all events captured by `globalEventBus`. Events are displayed newest-first with:
+
+- **Timestamp** — When the event occurred
+- **Type** — Event type (e.g., `vectordb:search`, `embedding:complete`)
+- **Data** — JSON summary of the event payload
+
+Use the **filter input** to narrow events by type substring (e.g., type "search" to see only search events).
+
+## Device
+
+One-time snapshot of browser capabilities from `detectCapabilities()`. Displays:
+
+- **Browser & Device** — Browser name/version, OS, device type, hardware (cores, memory, GPU)
+- **Features** — Checklist with green checkmark or red X for each feature: WebGPU, WASM, SIMD, Threads, IndexedDB, OPFS, Web Workers, SharedArrayBuffer, Cross-Origin Isolation, Service Worker, BroadcastChannel, Web Locks, Chrome AI, Summarizer API, Translator API

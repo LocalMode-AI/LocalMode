@@ -2,14 +2,16 @@
  * Metadata filtering logic.
  */
 
-import type { FilterQuery } from '../types.js';
+import type { TypedFilterQuery } from '../types.js';
 
 /**
  * Check if a document's metadata matches a filter query.
+ *
+ * @typeParam TMetadata - Shape of the metadata object.
  */
-export function matchesFilter(
+export function matchesFilter<TMetadata extends Record<string, unknown> = Record<string, unknown>>(
   metadata: Record<string, unknown> | undefined,
-  filter: FilterQuery
+  filter: TypedFilterQuery<TMetadata>
 ): boolean {
   if (!filter || Object.keys(filter).length === 0) {
     return true;
@@ -100,7 +102,7 @@ function matchesCondition(value: unknown, condition: unknown): boolean {
  */
 export function applyFilter<T extends { metadata?: Record<string, unknown> }>(
   items: T[],
-  filter: FilterQuery | undefined
+  filter: TypedFilterQuery | undefined
 ): T[] {
   if (!filter || Object.keys(filter).length === 0) {
     return items;

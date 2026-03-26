@@ -1,0 +1,320 @@
+---
+title: 'Utilities'
+description: Hooks for model status, capabilities, network, storage, voice recording, and helper utilities for files and downloads.
+icon: Wrench
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Utility Hooks
+
+<Callout type="info" title="See it in action">
+  Try [LLM Chat](https://localmode.ai/llm-chat), [Semantic Search](https://localmode.ai/semantic-search), and [Voice Notes](https://localmode.ai/voice-notes) for working demos of these hooks.
+</Callout>
+
+## useVoiceRecorder
+
+Manage browser MediaRecorder lifecycle for audio recording. Pairs naturally with `useTranscribe`.
+
+```tsx
+import { useVoiceRecorder, useTranscribe } from '@localmode/react';
+
+function VoiceInput() {
+  const recorder = useVoiceRecorder();
+  const transcriber = useTranscribe({ model });
+
+  const handleStop = async () => {
+    const blob = await recorder.stopRecording();
+    if (blob) await transcriber.execute(blob);
+  };
+
+  return (
+    <div>
+      <button onClick={recorder.isRecording ? handleStop : recorder.startRecording}>
+        {recorder.isRecording ? 'Stop' : 'Record'}
+      </button>
+      {recorder.error && <p>{recorder.error.message}</p>}
+    </div>
+  );
+}
+```
+
+### Return Value
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `isRecording` | `boolean` | Whether audio is being recorded |
+| `error` | `AppError \| null` | Recording error (e.g., mic denied) |
+| `startRecording` | `() => Promise<void>` | Request mic access and start recording |
+| `stopRecording` | `() => Promise<Blob \| null>` | Stop recording, return audio blob |
+| `clearError` | `() => void` | Clear the error state |
+
+### Options
+
+```tsx
+const recorder = useVoiceRecorder({
+  mimeType: 'audio/mp4', // Custom MIME type (default: 'audio/webm;codecs=opus')
+});
+```
+
+## toAppError
+
+Convert `Error | null` from hook returns to the `AppError` shape expected by UI components.
+
+```tsx
+import { toAppError } from '@localmode/react';
+import type { AppError } from '@localmode/react';
+
+// In a hook's return statement:
+return {
+  error: toAppError(error),          // { message: '...', recoverable: true } or null
+  error: toAppError(error, false),   // { message: '...', recoverable: false }
+};
+```
+
+All `@localmode/react` hooks return `Error | null`. Components typically render `error.message` and check `error.recoverable`. `toAppError` bridges the gap:
+
+```tsx
+// Without toAppError (verbose):
+error: error ? { message: error.message, recoverable: true } : null
+
+// With toAppError (clean):
+error: toAppError(error)
+```
+
+### AppError Type
+
+```tsx
+interface AppError {
+  message: string;
+  code?: string;
+  recoverable?: boolean;
+}
+```
+
+## useModelStatus
+
+Track whether a model is ready for inference.
+
+```tsx
+import { useModelStatus } from '@localmode/react';
+
+const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+
+function Demo() {
+  const { isReady, isLoading, error } = useModelStatus(model);
+
+  if (isLoading) return <p>Loading model...</p>;
+  if (error) return <p>Failed to load: {error.message}</p>;
+  if (isReady) return <p>Model ready</p>;
+}
+```
+
+## useCapabilities
+
+Detect browser AI capabilities on mount.
+
+```tsx
+import { useCapabilities } from '@localmode/react';
+
+function Demo() {
+  const { capabilities, isDetecting } = useCapabilities();
+
+  if (isDetecting) return <p>Detecting...</p>;
+
+  return (
+    <ul>
+      <li>WebGPU: {capabilities?.features?.webgpu ? 'Yes' : 'No'}</li>
+      <li>WASM: {capabilities?.features?.wasm ? 'Yes' : 'No'}</li>
+      <li>IndexedDB: {capabilities?.features?.indexedDB ? 'Yes' : 'No'}</li>
+    </ul>
+  );
+}
+```
+
+## useNetworkStatus
+
+Reactively track online/offline status.
+
+```tsx
+import { useNetworkStatus } from '@localmode/react';
+
+function Demo() {
+  const { isOnline, isOffline } = useNetworkStatus();
+
+  return <p>{isOnline ? 'Online' : 'Offline'}</p>;
+}
+```
+
+## useStorageQuota
+
+Monitor browser storage usage.
+
+```tsx
+import { useStorageQuota } from '@localmode/react';
+
+function Demo() {
+  const { quota, isLoading, refresh } = useStorageQuota();
+
+  return (
+    <div>
+      {quota && <p>Used: {(quota.usedBytes / 1024 / 1024).toFixed(1)} MB</p>}
+      <button onClick={refresh}>Refresh</button>
+    </div>
+  );
+}
+```
+
+---
+
+# Helper Utilities
+
+Browser utility functions commonly needed when building AI-powered React apps.
+
+## readFileAsDataUrl
+
+Read a browser `File` as a data URL string for passing to image/audio models.
+
+```tsx
+import { readFileAsDataUrl } from '@localmode/react';
+
+const handleFile = async (file: File) => {
+  const dataUrl = await readFileAsDataUrl(file);
+  await captioner.execute(dataUrl);
+};
+```
+
+## validateFile
+
+Validate file type and size before processing. Returns `AppError | null`.
+
+```tsx
+import { validateFile } from '@localmode/react';
+
+const error = validateFile({
+  file,
+  accept: ['image/png', 'image/jpeg', 'image/webp'],
+  maxSize: 10_000_000, // 10MB
+});
+
+if (error) {
+  setError(error); // { message: '...', recoverable: true }
+  return;
+}
+```
+
+### Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `file` | `File` | The file to validate (required) |
+| `accept` | `string[]` | Accepted MIME types |
+| `maxSize` | `number` | Maximum size in bytes |
+
+## downloadBlob
+
+Trigger a file download from in-memory content.
+
+```tsx
+import { downloadBlob } from '@localmode/react';
+
+// Download text content
+downloadBlob('transcript text...', 'transcript.txt');
+
+// Download binary content
+downloadBlob(audioBlob, 'recording.webm', 'audio/webm');
+```
+
+## useModelLoader
+
+Wraps `createModelLoader()` from `@localmode/core` with React state for downloading model files directly from URLs. Use this for custom ONNX models, self-hosted models, or other direct file downloads — not for models loaded through `@localmode/transformers` or `@localmode/webllm` (those providers manage their own caching).
+
+```tsx
+import { useModelLoader } from '@localmode/react';
+
+function ModelManager() {
+  const { downloads, isDownloading, prefetch, cancel, evict } = useModelLoader({
+    maxCacheSize: '2GB',
+  });
+
+  return (
+    <button onClick={() => prefetch([{
+      url: 'https://your-cdn.com/models/custom-model.onnx',
+      modelId: 'custom-model'
+    }])}>
+      Download Model
+    </button>
+  );
+}
+```
+
+For full API reference and when-to-use guidance, see the [Model Cache](/docs/core/model-cache) documentation.
+
+## useInferenceQueue
+
+Wraps `createInferenceQueue()` for priority-based task scheduling with live stats.
+
+```tsx
+import { useInferenceQueue } from '@localmode/react';
+
+function QueueDemo() {
+  const { queue, stats, isProcessing } = useInferenceQueue({
+    concurrency: 1,
+    priorities: ['interactive', 'background'],
+  });
+
+  const handleSearch = async (query: string) => {
+    const result = await queue.add(
+      () => embed({ model, value: query }),
+      { priority: 'interactive' }
+    );
+  };
+
+  return (
+    <div>
+      {stats && <p>Pending: {stats.pending}, Active: {stats.active}</p>}
+    </div>
+  );
+}
+```
+
+For full API reference, see the [Inference Queue](/docs/core/inference-queue) documentation.
+
+## useSemanticCache
+
+Manages a `SemanticCache` lifecycle in React components. Creates the cache on mount and destroys it on unmount.
+
+```tsx
+import { useSemanticCache } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+function CachedApp() {
+  const { cache, stats, isLoading } = useSemanticCache({
+    embeddingModel: transformers.embedding('Xenova/bge-small-en-v1.5'),
+    threshold: 0.92,
+    maxEntries: 100,
+  });
+
+  if (isLoading || !cache) return <p>Initializing cache...</p>;
+
+  return (
+    <div>
+      <p>Entries: {stats.entries}</p>
+      <p>Hit rate: {(stats.hitRate * 100).toFixed(1)}%</p>
+    </div>
+  );
+}
+```
+
+For full API reference, see the [Semantic Cache](/docs/core/semantic-cache) documentation.
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| LLM Chat | Uses toAppError for error handling, downloadBlob for exports | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |
+| Semantic Search | Uses toAppError, downloadBlob, validateFile | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
+| Voice Notes | Uses toAppError for transcription error handling | [Demo](https://localmode.ai/voice-notes) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/voice-notes) |
+| Object Detector | Uses readFileAsDataUrl for image loading | [Demo](https://localmode.ai/object-detector) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/object-detector) |
+| Document Redactor | Uses toAppError and downloadBlob | [Demo](https://localmode.ai/document-redactor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/document-redactor) |
+| Model Evaluator | Uses toAppError for evaluation error handling | [Demo](https://localmode.ai/model-evaluator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/model-evaluator) |

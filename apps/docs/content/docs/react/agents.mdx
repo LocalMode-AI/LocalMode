@@ -1,0 +1,132 @@
+---
+title: 'Agents'
+description: React hook for running AI agents with real-time step updates, tool execution, and cancellation.
+icon: Bot
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+# Agent Hook
+
+<Callout type="info" title="See it in action">
+  Try [Research Agent](https://localmode.ai/research-agent) and [LLM Chat](https://localmode.ai/llm-chat) for working demos of these hooks.
+</Callout>
+
+## useAgent
+
+Run AI agents with a ReAct loop, tool execution, real-time step streaming, and cancellation.
+
+```tsx
+import { useAgent } from '@localmode/react';
+import { webllm } from '@localmode/webllm';
+import { z } from 'zod';
+
+const model = webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC');
+
+const tools = [
+  {
+    name: 'search',
+    description: 'Search for information',
+    parameters: z.object({ query: z.string() }),
+    execute: async ({ query }) => `Results for: ${query}`,
+  },
+];
+
+function AgentDemo() {
+  const { steps, result, isRunning, error, run, cancel, reset } = useAgent({
+    model,
+    tools,
+    maxSteps: 10,
+  });
+
+  return (
+    <div>
+      <button onClick={() => run('Find info about LocalMode')} disabled={isRunning}>
+        {isRunning ? 'Thinking...' : 'Run Agent'}
+      </button>
+      {isRunning && <button onClick={cancel}>Cancel</button>}
+
+      {steps.map((step, i) => (
+        <div key={i}>
+          <b>Step {i + 1}:</b> {step.thinking}
+          {step.action.type === 'tool_call' && (
+            <p>Tool: {step.action.toolName}({JSON.stringify(step.action.toolArgs)})</p>
+          )}
+        </div>
+      ))}
+
+      {result && <p><b>Answer:</b> {result.finalAnswer}</p>}
+      {error && <p className="text-error">{error.message}</p>}
+    </div>
+  );
+}
+```
+
+### Options
+
+<TypeTable
+  type={{
+    model: { description: 'The LanguageModel to use for the agent', type: 'LanguageModel', required: true },
+    tools: { description: 'Array of tool definitions with Zod parameter schemas', type: 'ToolDefinition[]', required: true },
+    maxSteps: { description: 'Maximum ReAct loop iterations', type: 'number', default: '10' },
+    maxDurationMs: { description: 'Maximum total duration in milliseconds', type: 'number' },
+    temperature: { description: 'Sampling temperature for tool selection', type: 'number', default: '0' },
+    systemPrompt: { description: 'Optional system prompt for the agent', type: 'string' },
+    memory: { description: 'Optional VectorDB-backed conversation memory', type: 'AgentMemory' },
+  }}
+/>
+
+### Return Value
+
+<TypeTable
+  type={{
+    steps: { description: 'Array of completed agent steps, updated in real-time', type: 'AgentStep[]' },
+    result: { description: 'Final result when agent completes', type: 'AgentResult | null' },
+    isRunning: { description: 'Whether the agent is currently executing', type: 'boolean' },
+    error: { description: 'Error if the agent failed', type: 'Error | null' },
+    run: { description: 'Start the agent with a prompt and optional context', type: '(prompt: string, context?: string) => Promise<AgentResult | null>' },
+    cancel: { description: 'Abort the current agent run', type: '() => void' },
+    reset: { description: 'Clear steps, result, and error state', type: '() => void' },
+  }}
+/>
+
+### Step Structure
+
+Each `AgentStep` contains:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `thinking` | `string` | The agent's reasoning for this step |
+| `action` | `{ type: 'tool_call', toolName, toolArgs, result }` or `{ type: 'finish', answer }` | The action taken |
+| `durationMs` | `number` | Time taken for this step |
+
+### Agent with Memory
+
+Use `createAgentMemory()` for conversation context that persists across runs:
+
+```tsx
+import { useAgent } from '@localmode/react';
+import { createAgentMemory } from '@localmode/core';
+
+const memory = await createAgentMemory({
+  model: embeddingModel,
+  maxEntries: 100,
+});
+
+function AgentWithMemory() {
+  const agent = useAgent({ model, tools, memory });
+  // Memory is automatically updated after each run
+}
+```
+
+<Callout type="info">
+For full agent API reference including `createAgent()`, `runAgent()`, tool definitions, and memory, see the [Core Agents](/docs/core/agents) guide.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Research Agent | Multi-step ReAct agent with useAgent | [Demo](https://localmode.ai/research-agent) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/research-agent) |
+| LLM Chat | Agent mode with tool calling via useAgent | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |

@@ -1,0 +1,69 @@
+---
+title: 'Classification'
+description: Hooks for text classification, zero-shot classification, and NER.
+icon: Tags
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Classification Hooks
+
+<Callout type="info" title="See it in action">
+  Try [Sentiment Analyzer](https://localmode.ai/sentiment-analyzer) and [Email Classifier](https://localmode.ai/email-classifier) for working demos of these hooks.
+</Callout>
+
+## useClassify
+
+Classify text into predefined categories.
+
+```tsx
+import { useClassify } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english');
+
+function Demo() {
+  const { data, isLoading, execute } = useClassify({ model });
+  return (
+    <div>
+      <button onClick={() => execute('I love this!')}>Classify</button>
+      {data && <p>{data.label}: {(data.score * 100).toFixed(1)}%</p>}
+    </div>
+  );
+}
+```
+
+## useClassifyZeroShot
+
+Classify text with custom labels — no model fine-tuning required.
+
+```tsx
+import { useClassifyZeroShot } from '@localmode/react';
+
+const { data, execute } = useClassifyZeroShot({ model });
+await execute({ text: 'The server is down', candidateLabels: ['bug', 'feature', 'question'] });
+// data.labels = [{ label: 'bug', score: 0.89 }, ...]
+```
+
+## useExtractEntities
+
+Extract named entities (NER) from text.
+
+```tsx
+import { useExtractEntities } from '@localmode/react';
+
+const { data, execute } = useExtractEntities({ model });
+await execute('John works at Google in Seattle');
+// data.entities = [{ entity: 'PER', word: 'John' }, { entity: 'ORG', word: 'Google' }, ...]
+```
+
+<Callout type="tip">
+For full API reference, see the [Core Classification](/docs/core) guide.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Sentiment Analyzer | Batch sentiment analysis with useSequentialBatch | [Demo](https://localmode.ai/sentiment-analyzer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/sentiment-analyzer) |
+| Email Classifier | Zero-shot classification with useOperationList | [Demo](https://localmode.ai/email-classifier) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/email-classifier) |

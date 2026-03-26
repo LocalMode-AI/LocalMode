@@ -53,13 +53,32 @@ export class TransformersTextToSpeechModel implements TextToSpeechModel {
     }
 
     this.loadPromise = (async () => {
-      const { pipeline } = await import('@huggingface/transformers');
+      const { pipeline, AutoModel, env } = await import('@huggingface/transformers');
+
+      // Suppress ONNX runtime warnings about node execution providers
+      env.backends.onnx.logLevel = 'error';
+
+      // TTS models use ops (GatherND int64, MatMul) that fail on WebGPU JSEP —
+      // force WASM for TTS to avoid runtime kernel failures
+      const device = this.settings.device ?? 'wasm';
+      const dtype = this.settings.quantized === true ? 'q8' : undefined;
 
       const pipe = await pipeline('text-to-speech', this.baseModelId, {
-        device: this.settings.device ?? 'auto',
-        dtype: this.settings.quantized !== false ? 'q8' : 'fp32',
+        device,
+        dtype,
         progress_callback: this.settings.onProgress,
       });
+
+      // SpeechT5 models need a HiFi-GAN vocoder; VITS models generate waveforms directly.
+      // Only load vocoder for SpeechT5-type models (which have a processor but no built-in vocoder).
+      const isSpeechT5 = this.baseModelId.toLowerCase().includes('speecht5');
+      if (isSpeechT5 && !pipe.vocoder) {
+        const vocoderModel = await AutoModel.from_pretrained(
+          'Xenova/speecht5_hifigan',
+          { dtype: 'fp32', device }
+        );
+        (pipe as unknown as { vocoder: unknown }).vocoder = vocoderModel;
+      }
 
       this.pipeline = pipe;
       return pipe;
@@ -92,8 +111,16 @@ export class TransformersTextToSpeechModel implements TextToSpeechModel {
 
     abortSignal?.throwIfAborted();
 
-    // Text-to-speech pipeline returns { audio: Float32Array, sampling_rate: number }
-    const output = await pipe(text, {} as Record<string, unknown>);
+    // SpeechT5 requires speaker embeddings; VITS models (mms-tts) don't need them
+    const isSpeechT5 = this.baseModelId.toLowerCase().includes('speecht5');
+    const pipelineOptions: Record<string, unknown> = {};
+
+    if (isSpeechT5) {
+      pipelineOptions.speaker_embeddings =
+        'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/speaker_embeddings.bin';
+    }
+
+    const output = await pipe(text, pipelineOptions);
 
     const audioData = (output as { audio: Float32Array }).audio;
     const samplingRate = (output as { sampling_rate: number }).sampling_rate || this.sampleRate;

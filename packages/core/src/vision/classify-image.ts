@@ -270,7 +270,7 @@ export async function classifyImage(
  * import { transformers } from '@localmode/transformers';
  *
  * const { labels, scores } = await classifyImageZeroShot({
- *   model: transformers.zeroShotImageClassifier('Xenova/clip-vit-base-patch32'),
+ *   model: transformers.zeroShotImageClassifier('Xenova/siglip-base-patch16-224'),
  *   image: imageBlob,
  *   candidateLabels: ['cat', 'dog', 'bird', 'car', 'tree'],
  * });
@@ -282,7 +282,7 @@ export async function classifyImage(
  * @example Photo organization
  * ```ts
  * const { labels, scores } = await classifyImageZeroShot({
- *   model: transformers.zeroShotImageClassifier('Xenova/clip-vit-base-patch32'),
+ *   model: transformers.zeroShotImageClassifier('Xenova/siglip-base-patch16-224'),
  *   image: vacationPhoto,
  *   candidateLabels: ['beach', 'mountain', 'city', 'forest', 'desert'],
  * });

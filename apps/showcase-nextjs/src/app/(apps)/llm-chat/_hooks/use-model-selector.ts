@@ -13,10 +13,17 @@ import {
   checkModelCached,
   loadModel as loadModelService,
   deleteCache as deleteCacheService,
+  detectCapabilities,
 } from '../_services/model.service';
 
+/** Options for the useModelSelector hook */
+interface UseModelSelectorOptions {
+  /** Callback to clear chat messages (owned by useChat hook) */
+  clearMessages: () => void;
+}
+
 /** Hook for managing model selection and loading */
-export function useModelSelector() {
+export function useModelSelector({ clearMessages }: UseModelSelectorOptions) {
   const modelStore = useModelStore();
   const uiStore = useUIStore();
   const chatStore = useChatStore();
@@ -33,7 +40,7 @@ export function useModelSelector() {
       const modelsWithCache = await Promise.all(
         availableModels.map(async (model) => ({
           ...model,
-          isCached: await checkModelCached(model.id),
+          isCached: await checkModelCached(model.id, model.backend),
         }))
       );
       modelStore.setModels(modelsWithCache);
@@ -48,11 +55,17 @@ export function useModelSelector() {
     }
   };
 
-  // Check cache status on mount
+  // Check cache status and detect capabilities on mount
   useEffect(() => {
     if (modelStore.models.length === 0) {
       checkCacheStatus();
     }
+
+    // Detect WebGPU and CORS isolation once on mount
+    detectCapabilities().then(({ webGPUSupported, crossOriginIsolated }) => {
+      modelStore.setWebGPUSupported(webGPUSupported);
+      modelStore.setCrossOriginIsolated(crossOriginIsolated);
+    });
   }, []);
 
   // Auto-load model if specified
@@ -73,12 +86,13 @@ export function useModelSelector() {
    * @param modelId - Model ID to load
    */
   const handleLoadModel = async (modelId: string) => {
+    const backend = modelStore.getModelBackend(modelId) ?? 'webgpu';
     chatStore.setSelectedModel(modelId);
     modelStore.setLoadingModel(modelId, 0);
     modelStore.clearError();
 
     try {
-      await loadModelService(modelId, (progress) => {
+      await loadModelService(modelId, backend, (progress) => {
         modelStore.setLoadProgress(progress);
       });
 
@@ -88,7 +102,7 @@ export function useModelSelector() {
 
       // Transition to chat
       if (uiStore.appState === 'chat') {
-        chatStore.clearMessages();
+        clearMessages();
       }
       uiStore.setAppState('chat');
       uiStore.setAutoLoadModelId(null);
@@ -100,6 +114,8 @@ export function useModelSelector() {
         recoverable: true,
       });
       modelStore.setLoadingModel(null);
+      // Clear auto-load to prevent infinite retry loop
+      uiStore.setAutoLoadModelId(null);
     }
   };
 
@@ -110,7 +126,7 @@ export function useModelSelector() {
   const handleSidebarModelSelect = (modelId: string) => {
     chatStore.setSelectedModel(modelId);
     uiStore.setAutoLoadModelId(modelId);
-    chatStore.clearMessages();
+    clearMessages();
     uiStore.setAppState('model-selection');
   };
 
@@ -119,17 +135,18 @@ export function useModelSelector() {
    * @param modelId - Model ID to delete
    */
   const handleDeleteCache = async (modelId: string) => {
+    const backend = modelStore.getModelBackend(modelId) ?? 'webgpu';
     modelStore.setDeletingModelId(modelId);
     modelStore.clearError();
 
     try {
-      await deleteCacheService(modelId);
+      await deleteCacheService(modelId, backend);
       modelStore.setModelCached(modelId, false);
 
       // Clear selection if the deleted model was selected
-      if (chatStore.selectedModel === modelId) {
+      if (useChatStore.getState().selectedModel === modelId) {
         chatStore.setSelectedModel('');
-        chatStore.clearMessages();
+        clearMessages();
       }
     } catch (error) {
       console.error('Failed to delete cache:', error);

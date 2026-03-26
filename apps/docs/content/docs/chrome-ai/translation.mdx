@@ -1,0 +1,99 @@
+---
+title: 'Translation'
+description: 'Translate text using Chrome built-in Gemini Nano'
+icon: Languages
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Translation
+
+Chrome AI provides instant text translation via the built-in Translator API. No model download required.
+
+<Callout type="info" title="See it in action">
+  Try [Translator](https://localmode.ai/translator) and [Smart Writer](https://localmode.ai/smart-writer) for working demos.
+</Callout>
+
+## Basic Usage
+
+```ts
+import { translate } from '@localmode/core';
+import { chromeAI } from '@localmode/chrome-ai';
+
+const { translation } = await translate({
+  model: chromeAI.translator({ targetLanguage: 'es' }),
+  text: 'Hello, how are you?',
+});
+
+console.log(translation); // "Hola, ¿cómo estás?"
+```
+
+## Language Configuration
+
+```ts
+// English to German
+const deTranslator = chromeAI.translator({
+  sourceLanguage: 'en',
+  targetLanguage: 'de',
+});
+
+// English to French
+const frTranslator = chromeAI.translator({
+  sourceLanguage: 'en',
+  targetLanguage: 'fr',
+});
+```
+
+## Override Language at Call Time
+
+```ts
+const translator = chromeAI.translator();
+
+const { translation } = await translate({
+  model: translator,
+  text: 'Good morning',
+  sourceLanguage: 'en',
+  targetLanguage: 'ja',
+});
+```
+
+## Batch Translation
+
+```ts
+import { translateMany } from '@localmode/core';
+
+const { translations } = await translateMany({
+  model: chromeAI.translator({ targetLanguage: 'de' }),
+  texts: ['Hello', 'Goodbye', 'Thank you'],
+});
+
+console.log(translations); // ["Hallo", "Auf Wiedersehen", "Danke"]
+```
+
+## Session Caching
+
+The Chrome AI translator caches sessions per language pair. Multiple translations with the same pair reuse the same session for efficiency.
+
+```ts
+const translator = chromeAI.translator();
+
+// First call creates the en→es session
+await translate({ model: translator, text: 'Hello', targetLanguage: 'es' });
+
+// Second call reuses the cached session (instant)
+await translate({ model: translator, text: 'Goodbye', targetLanguage: 'es' });
+
+// Different pair creates a new session
+await translate({ model: translator, text: 'Hello', targetLanguage: 'fr' });
+```
+
+<Callout type="info">
+  For full API reference, options, and result types, see the [Core Translation](/docs/core/translation) guide.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Translator | Translate text using Chrome AI Translation API | [Demo](https://localmode.ai/translator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/translator) |
+| Smart Writer | Chrome AI translation with provider fallback | [Demo](https://localmode.ai/smart-writer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-writer) |

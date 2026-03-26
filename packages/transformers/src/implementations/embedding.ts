@@ -46,7 +46,7 @@ export class TransformersEmbeddingModel implements EmbeddingModel {
   private getDimensionsFromModelId(modelId: string): number {
     const lowerModelId = modelId.toLowerCase();
 
-    if (lowerModelId.includes('minilm-l6') || lowerModelId.includes('bge-small')) {
+    if (lowerModelId.includes('minilm-l6') || lowerModelId.includes('bge-small') || lowerModelId.includes('arctic-embed-xs') || lowerModelId.includes('arctic-embed-s')) {
       return 384;
     }
     if (lowerModelId.includes('mpnet') || lowerModelId.includes('bge-base')) {
@@ -77,11 +77,11 @@ export class TransformersEmbeddingModel implements EmbeddingModel {
 
       // Suppress ONNX runtime warnings about node execution providers
       // These are informational and don't affect functionality
-      env.backends.onnx.logSeverityLevel = 3; // Only show errors, suppress warnings
+      env.backends.onnx.logLevel = 'error';
 
       const pipe = await pipeline('feature-extraction', this.baseModelId, {
         device: this.settings.device ?? 'auto',
-        dtype: this.settings.quantized !== false ? 'q8' : 'fp32',
+        dtype: this.settings.quantized === true ? 'q8' : undefined,
         progress_callback: this.settings.onProgress,
       });
 

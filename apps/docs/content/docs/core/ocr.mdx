@@ -1,0 +1,222 @@
+---
+title: OCR
+description: Extract text from images using optical character recognition.
+icon: ScanText
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+Extract text from images using optical character recognition (OCR) models. Works with any provider that implements the `OCRModel` interface.
+
+<Callout type="info" title="See it in action">
+  Try [OCR Scanner](https://localmode.ai/ocr-scanner) for a working demo of these APIs.
+</Callout>
+
+## extractText()
+
+Extract text from a single image:
+
+<Tabs items={['Basic Usage', 'With Region Detection', 'With AbortSignal']}>
+<Tab value="Basic Usage">
+
+```ts {5-8}
+import { extractText } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.ocr('Xenova/trocr-small-printed');
+
+const { text, usage } = await extractText({
+  model,
+  image: imageBlob,
+});
+
+console.log(text); // 'Invoice #12345\nDate: 2024-01-15'
+console.log(usage.durationMs); // 150
+```
+
+</Tab>
+<Tab value="With Region Detection">
+
+```ts {4}
+const { text, regions } = await extractText({
+  model,
+  image: imageBlob,
+  detectRegions: true,
+});
+
+regions?.forEach((region) => {
+  console.log(`"${region.text}" (confidence: ${region.confidence.toFixed(2)})`);
+  if (region.bbox) {
+    console.log(`  at (${region.bbox.x}, ${region.bbox.y})`);
+  }
+});
+```
+
+</Tab>
+<Tab value="With AbortSignal">
+
+```ts {3,7}
+const controller = new AbortController();
+
+setTimeout(() => controller.abort(), 5000);
+
+const { text } = await extractText({
+  model,
+  image: imageBlob,
+  abortSignal: controller.signal,
+});
+```
+
+</Tab>
+</Tabs>
+
+### ExtractTextOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The OCR model to use',
+      type: 'OCRModel | string',
+      required: true,
+    },
+    image: {
+      description: 'Image to extract text from',
+      type: 'Blob | ImageData | string | ArrayBuffer',
+      required: true,
+    },
+    languages: {
+      description: 'Language hints for better accuracy',
+      type: 'string[]',
+      required: false,
+    },
+    detectRegions: {
+      description: 'Detect text regions with bounding boxes (default: false)',
+      type: 'boolean',
+      required: false,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure (default: 2)',
+      type: 'number',
+      required: false,
+    },
+  }}
+/>
+
+### ExtractTextResult
+
+<TypeTable
+  type={{
+    text: {
+      description: 'Extracted text content',
+      type: 'string',
+    },
+    regions: {
+      description: 'Detected text regions with positions (when detectRegions is true)',
+      type: 'TextRegion[] | undefined',
+    },
+    usage: {
+      description: 'Usage info: durationMs',
+      type: 'OCRUsage',
+    },
+    response: {
+      description: 'Response metadata: modelId, timestamp',
+      type: 'OCRResponse',
+    },
+  }}
+/>
+
+### TextRegion
+
+<TypeTable
+  type={{
+    text: {
+      description: 'Text content of the region',
+      type: 'string',
+    },
+    confidence: {
+      description: 'Confidence score (0-1)',
+      type: 'number',
+    },
+    bbox: {
+      description: 'Bounding box: { x, y, width, height }',
+      type: '{ x: number; y: number; width: number; height: number } | undefined',
+    },
+  }}
+/>
+
+## extractTextMany()
+
+Extract text from multiple images:
+
+```ts
+import { extractTextMany } from '@localmode/core';
+
+const { texts } = await extractTextMany({
+  model,
+  images: [image1, image2, image3],
+});
+
+texts.forEach((t) => console.log(t));
+```
+
+## Custom Provider
+
+Implement the `OCRModel` interface:
+
+```ts
+import type { OCRModel, DoOCROptions, DoOCRResult } from '@localmode/core';
+
+class MyOCR implements OCRModel {
+  readonly modelId = 'custom:my-ocr';
+  readonly provider = 'custom';
+
+  async doOCR(options: DoOCROptions): Promise<DoOCRResult> {
+    const { images } = options;
+
+    // Your OCR logic here
+    const results = images.map(() => ({
+      text: 'extracted text',
+      regions: [],
+    }));
+
+    return {
+      results,
+      usage: { durationMs: 0 },
+    };
+  }
+}
+```
+
+<Callout type="info">
+  For recommended models, provider-specific options, and practical recipes, see the
+  [Transformers OCR](/docs/transformers/ocr) guide.
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Transformers OCR"
+    href="/docs/transformers/ocr"
+    description="Recommended OCR models and usage."
+  />
+  <Card
+    title="Document QA"
+    href="/docs/core/document-qa"
+    description="Answer questions about document images."
+  />
+</Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| OCR Scanner | Extract text from images and documents | [Demo](https://localmode.ai/ocr-scanner) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/ocr-scanner) |

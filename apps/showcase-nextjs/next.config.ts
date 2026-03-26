@@ -3,6 +3,7 @@ import path from 'path';
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  transpilePackages: ['@wllama/wllama'],
   experimental: {
     optimizePackageImports: ['lucide-react', 'zustand'],
   },

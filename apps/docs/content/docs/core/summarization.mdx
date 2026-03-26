@@ -1,0 +1,199 @@
+---
+title: Summarization
+description: Summarize text with configurable length controls.
+icon: ScrollText
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+Generate concise summaries of text using provider-agnostic summarization models. Works with any provider that implements the `SummarizationModel` interface.
+
+<Callout type="info" title="See it in action">
+  Try [Text Summarizer](https://localmode.ai/text-summarizer) and [Meeting Assistant](https://localmode.ai/meeting-assistant) for working demos of these APIs.
+</Callout>
+
+## summarize()
+
+Summarize a single text:
+
+<Tabs items={['Basic Usage', 'With Length Control', 'With AbortSignal']}>
+<Tab value="Basic Usage">
+
+```ts {5-8}
+import { summarize } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.summarizer('Xenova/distilbart-cnn-6-6');
+
+const { summary, usage, response } = await summarize({
+  model,
+  text: 'A long article about machine learning and its impact on modern technology...',
+});
+
+console.log(summary);
+console.log(usage.durationMs); // 250
+```
+
+</Tab>
+<Tab value="With Length Control">
+
+```ts {4-5}
+const { summary } = await summarize({
+  model,
+  text: longArticle,
+  maxLength: 100,
+  minLength: 30,
+});
+```
+
+</Tab>
+<Tab value="With AbortSignal">
+
+```ts {3,7}
+const controller = new AbortController();
+
+setTimeout(() => controller.abort(), 10000);
+
+const { summary } = await summarize({
+  model,
+  text: longArticle,
+  abortSignal: controller.signal,
+});
+```
+
+</Tab>
+</Tabs>
+
+### SummarizeOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The summarization model to use',
+      type: 'SummarizationModel | string',
+      required: true,
+    },
+    text: {
+      description: 'Text to summarize',
+      type: 'string',
+      required: true,
+    },
+    maxLength: {
+      description: 'Maximum summary length in tokens (default: 150)',
+      type: 'number',
+      required: false,
+    },
+    minLength: {
+      description: 'Minimum summary length in tokens (default: 30)',
+      type: 'number',
+      required: false,
+    },
+    mode: {
+      description: 'Summarization mode (default: abstractive)',
+      type: "'extractive' | 'abstractive'",
+      required: false,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure (default: 2)',
+      type: 'number',
+      required: false,
+    },
+  }}
+/>
+
+### SummarizeResult
+
+<TypeTable
+  type={{
+    summary: {
+      description: 'The generated summary',
+      type: 'string',
+    },
+    usage: {
+      description: 'Usage info: inputTokens, outputTokens, durationMs',
+      type: 'SummarizationUsage',
+    },
+    response: {
+      description: 'Response metadata: modelId, timestamp',
+      type: 'SummarizationResponse',
+    },
+  }}
+/>
+
+## summarizeMany()
+
+Summarize multiple texts:
+
+```ts
+import { summarizeMany } from '@localmode/core';
+
+const { summaries } = await summarizeMany({
+  model,
+  texts: [article1, article2, article3],
+  maxLength: 100,
+  minLength: 30,
+});
+
+summaries.forEach((s) => console.log(s));
+```
+
+## Custom Provider
+
+Implement the `SummarizationModel` interface:
+
+```ts
+import type { SummarizationModel, DoSummarizeOptions, DoSummarizeResult } from '@localmode/core';
+
+class MySummarizer implements SummarizationModel {
+  readonly modelId = 'custom:my-summarizer';
+  readonly provider = 'custom';
+
+  async doSummarize(options: DoSummarizeOptions): Promise<DoSummarizeResult> {
+    const { texts, maxLength, minLength } = options;
+
+    // Your summarization logic here
+    const summaries = texts.map((text) => text.slice(0, maxLength ?? 150));
+
+    return {
+      summaries,
+      usage: { inputTokens: texts.join('').length, outputTokens: summaries.join('').length, durationMs: 0 },
+    };
+  }
+}
+```
+
+<Callout type="info">
+  For recommended models, provider-specific options, and practical recipes, see the
+  [Transformers Summarization](/docs/transformers/summarization) guide.
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Transformers Summarization"
+    href="/docs/transformers/summarization"
+    description="Recommended summarization models and usage."
+  />
+  <Card
+    title="Translation"
+    href="/docs/core/translation"
+    description="Translate text between languages."
+  />
+</Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Text Summarizer | Summarize articles and documents | [Demo](https://localmode.ai/text-summarizer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/text-summarizer) |
+| Meeting Assistant | Summarize transcribed meeting recordings | [Demo](https://localmode.ai/meeting-assistant) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/meeting-assistant) |
+| Smart Writer | Summarize and rewrite content | [Demo](https://localmode.ai/smart-writer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-writer) |

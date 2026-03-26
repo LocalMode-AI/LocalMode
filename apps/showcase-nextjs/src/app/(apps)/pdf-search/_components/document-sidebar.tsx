@@ -4,15 +4,17 @@
  */
 'use client';
 
-import { useState } from 'react';
-import { FileText, HardDrive, Loader2, Trash2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { FileText, HardDrive, Loader2, Trash2, Archive } from 'lucide-react';
 import { FileUpload, Badge, Spinner, Progress } from './ui';
 import { ErrorAlert } from './error-boundary';
+import { PIPELINE_STAGES } from '../_lib/constants';
+import type { PipelineStage, CompressionDisplayStats } from '../_lib/types';
 import { usePDFStore } from '../_store/pdf.store';
 import { useUIStore } from '../_store/ui.store';
 import { usePDFUpload } from '../_hooks';
-import { formatFileSize } from '../_lib/utils';
-import { deleteDocumentVectors } from '../_services/pdf.service';
+import { formatFileSize, formatCompressionRatio } from '../_lib/utils';
+import { deleteDocumentVectors, getCompressionStatsForDB } from '../_services/pdf.service';
 import { DemoButton } from '../_demo';
 
 /** Sidebar component for document management */
@@ -29,6 +31,24 @@ export function DocumentSidebar() {
   } = usePDFStore();
   const { modelsReady, loadingModelName, loadingProgress } = useUIStore();
   const { uploadMultiplePDFs } = usePDFUpload();
+
+  // Compression stats state
+  const [compressionStats, setCompressionStats] = useState<CompressionDisplayStats | null>(null);
+
+  // Refresh compression stats when documents change or processing completes
+  useEffect(() => {
+    if (documents.length === 0) {
+      setCompressionStats(null);
+      return;
+    }
+
+    // Only fetch stats when not currently processing (avoids mid-upload fetches)
+    if (!isProcessing) {
+      getCompressionStatsForDB()
+        .then(setCompressionStats)
+        .catch((err) => console.error('[Sidebar] Failed to get compression stats:', err));
+    }
+  }, [documents.length, isProcessing]);
 
   // Handle document deletion
   const handleDeleteDocument = async (documentId: string) => {
@@ -94,7 +114,9 @@ export function DocumentSidebar() {
         <div className="p-4 border-b border-poster-border/30 bg-poster-primary/5">
           <div className="flex items-center gap-3 mb-2">
             <Spinner size="sm" className="text-poster-primary" />
-            <span className="text-sm text-poster-text-main font-medium">{processingStage}</span>
+            <span className="text-sm text-poster-text-main font-medium">
+              {PIPELINE_STAGES[processingStage as PipelineStage] ?? processingStage}
+            </span>
           </div>
           <Progress value={processingProgress} max={100} className="h-1" />
         </div>
@@ -141,13 +163,33 @@ export function DocumentSidebar() {
         )}
       </div>
 
-      {/* Storage info footer */}
+      {/* Storage info footer with compression stats */}
       {documents.length > 0 && (
         <div className="p-4 border-t border-poster-border/30 bg-poster-surface/30">
-          <div className="flex items-center gap-2 text-xs text-poster-text-sub/60">
-            <HardDrive className="w-3 h-3" />
-            <span>Embeddings stored locally in IndexedDB</span>
-          </div>
+          {compressionStats && compressionStats.vectorCount > 0 ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-xs text-poster-text-sub/80">
+                <Archive className="w-3 h-3 text-poster-accent-teal" />
+                <span className="font-medium">SQ8 Compression</span>
+                <Badge variant="neutral" size="sm" className="bg-poster-accent-teal/10 text-poster-accent-teal text-[9px] ml-auto">
+                  {formatCompressionRatio(compressionStats.ratio)} savings
+                </Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-poster-text-sub/60">
+                <span>Vectors</span>
+                <span className="text-right">{compressionStats.vectorCount}</span>
+                <span>Original</span>
+                <span className="text-right">{formatFileSize(compressionStats.originalSize)}</span>
+                <span>Compressed</span>
+                <span className="text-right">{formatFileSize(compressionStats.compressedSize)}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-xs text-poster-text-sub/60">
+              <HardDrive className="w-3 h-3" />
+              <span>Embeddings stored locally in IndexedDB</span>
+            </div>
+          )}
         </div>
       )}
     </div>

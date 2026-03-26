@@ -1,0 +1,90 @@
+---
+title: Fill-Mask
+description: BERT-style masked token prediction for autocomplete and text suggestions.
+icon: Puzzle
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Predict masked tokens in text using BERT-style models. Useful for smart autocomplete, word suggestions, and understanding language patterns.
+
+<Callout type="info">
+  For full API reference (`fillMask()`, `fillMaskMany()`, options, result types, and custom providers), see the [Core Fill-Mask](/docs/core/fill-mask) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [Smart Autocomplete](https://localmode.ai/smart-autocomplete) for a working demo.
+</Callout>
+
+## Recommended Models
+
+| Model | Size | Mask Token | Use Case |
+|-------|------|------------|----------|
+| `onnx-community/ModernBERT-base-ONNX` | ~150MB | `[MASK]` | General-purpose, English, modern architecture |
+| `Xenova/bert-base-cased` | ~67MB | `[MASK]` | Case-sensitive predictions |
+| `Xenova/bert-base-multilingual-cased` | ~180MB | `[MASK]` | Multilingual |
+| `Xenova/roberta-base` | ~125MB | `<mask>` | RoBERTa-based (note: uses `<mask>`, not `[MASK]`) |
+
+## Smart Autocomplete Example
+
+Based on the [Smart Autocomplete](https://localmode.ai/smart-autocomplete) showcase app:
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { fillMask } from '@localmode/core';
+
+const model = transformers.fillMask('onnx-community/ModernBERT-base-ONNX');
+
+async function getSuggestions(partialSentence: string) {
+  const textWithMask = `${partialSentence} [MASK]`;
+
+  const { predictions } = await fillMask({
+    model,
+    text: textWithMask,
+    topK: 5,
+    abortSignal: controller.signal,
+  });
+
+  return predictions.map((p) => ({
+    word: p.token,
+    confidence: p.score,
+    fullText: p.sequence,
+  }));
+}
+```
+
+## Best Practices
+
+<Callout type="tip" title="Fill-Mask Tips">
+  1. **Check mask token** — BERT models expect `[MASK]`, but RoBERTa uses `<mask>`. Always match the token to the model.
+  2. **One mask at a time** — Most models predict one mask per call
+  3. **Adjust topK** — Use 3-10 for autocomplete, 1 for best prediction
+  4. **ModernBERT for suggestions** — `ModernBERT-base-ONNX` provides strong general-purpose predictions
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Smart Autocomplete | Predict masked words for intelligent text completion | [Demo](https://localmode.ai/smart-autocomplete) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-autocomplete) |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core Fill-Mask API"
+    href="/docs/core/fill-mask"
+    description="Full API reference, options, result types, and custom providers."
+  />
+  <Card
+    title="Classification"
+    href="/docs/transformers/classification"
+    description="Classify text into categories."
+  />
+  <Card
+    title="Question Answering"
+    href="/docs/transformers/question-answering"
+    description="Extract answers from context."
+  />
+</Cards>

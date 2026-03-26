@@ -1,0 +1,467 @@
+---
+title: Audio
+description: Speech-to-text transcription and text-to-speech synthesis.
+icon: AudioLines
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+Transcribe speech to text and synthesize speech from text, entirely in the browser. No servers, no API keys — audio never leaves the device.
+
+<Callout type="info" title="See it in action">
+  Try [Voice Notes](https://localmode.ai/voice-notes) and [Meeting Assistant](https://localmode.ai/meeting-assistant) for working demos of these APIs.
+</Callout>
+
+## transcribe()
+
+Transcribe audio to text using a speech-to-text model:
+
+<Tabs items={['Basic Usage', 'With Timestamps', 'With AbortSignal']}>
+<Tab value="Basic Usage">
+
+```ts {5-8}
+import { transcribe } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.speechToText('onnx-community/moonshine-tiny-ONNX');
+
+const { text, usage, response } = await transcribe({
+  model,
+  audio: audioBlob,
+});
+
+console.log(text); // "Hello, world!"
+console.log(usage.audioDurationSec); // 3.5
+console.log(response.modelId); // 'onnx-community/moonshine-tiny-ONNX'
+```
+
+</Tab>
+<Tab value="With Timestamps">
+
+```ts {7,11-13}
+import { transcribe } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.speechToText('onnx-community/moonshine-tiny-ONNX');
+
+const { text, segments } = await transcribe({
+  model,
+  audio: audioBlob,
+  returnTimestamps: true,
+});
+
+segments?.forEach((seg) => {
+  console.log(`[${seg.start}s - ${seg.end}s] ${seg.text}`);
+});
+```
+
+</Tab>
+<Tab value="With AbortSignal">
+
+```ts {3,7}
+const controller = new AbortController();
+
+setTimeout(() => controller.abort(), 30000); // Cancel after 30s
+
+try {
+  const { text } = await transcribe({
+    model,
+    audio: longAudioBlob,
+    abortSignal: controller.signal,
+  });
+} catch (error) {
+  if (error.name === 'AbortError') {
+    console.log('Transcription was cancelled');
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+### TranscribeOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The speech-to-text model to use',
+      type: 'SpeechToTextModel | string',
+      required: true,
+    },
+    audio: {
+      description: 'Audio to transcribe',
+      type: 'AudioInput',
+      required: true,
+    },
+    language: {
+      description: 'Language code (ISO 639-1), e.g. "en", "de", "fr"',
+      type: 'string',
+      required: false,
+    },
+    task: {
+      description: 'Task type — "transcribe" keeps original language, "translate" converts to English',
+      type: '"transcribe" | "translate"',
+      required: false,
+    },
+    returnTimestamps: {
+      description: 'Return segment or word-level timestamps',
+      type: 'boolean | "word"',
+      required: false,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure',
+      type: 'number',
+      default: '2',
+    },
+    providerOptions: {
+      description: 'Provider-specific options',
+      type: 'Record<string, Record<string, unknown>>',
+      required: false,
+    },
+  }}
+/>
+
+### TranscribeResult
+
+<TypeTable
+  type={{
+    text: {
+      description: 'Full transcribed text',
+      type: 'string',
+    },
+    segments: {
+      description: 'Segments with timestamps (if returnTimestamps was set)',
+      type: 'TranscriptionSegment[]',
+    },
+    language: {
+      description: 'Detected language (ISO 639-1 code)',
+      type: 'string',
+    },
+    usage: {
+      description: 'Usage information including audioDurationSec and durationMs',
+      type: '{ audioDurationSec?: number; durationMs: number }',
+    },
+    response: {
+      description: 'Response metadata',
+      type: '{ modelId: string; timestamp: Date }',
+    },
+  }}
+/>
+
+### TranscriptionSegment
+
+<TypeTable
+  type={{
+    text: {
+      description: 'Segment text',
+      type: 'string',
+    },
+    start: {
+      description: 'Start time in seconds',
+      type: 'number',
+    },
+    end: {
+      description: 'End time in seconds',
+      type: 'number',
+    },
+    confidence: {
+      description: 'Optional confidence score (0-1)',
+      type: 'number',
+    },
+  }}
+/>
+
+### Language & Translation
+
+Specify a language hint or translate non-English audio to English:
+
+```ts
+// Transcribe German audio with language hint
+const { text, language } = await transcribe({
+  model,
+  audio: germanAudioBlob,
+  language: 'de',
+});
+
+// Translate French audio to English
+const { text: englishText } = await transcribe({
+  model,
+  audio: frenchAudioBlob,
+  task: 'translate',
+});
+```
+
+## synthesizeSpeech()
+
+Synthesize speech from text using a text-to-speech model:
+
+<Tabs items={['Basic Usage', 'With Options', 'With AbortSignal']}>
+<Tab value="Basic Usage">
+
+```ts {5-8}
+import { synthesizeSpeech } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX');
+
+const { audio, sampleRate, usage } = await synthesizeSpeech({
+  model,
+  text: 'Hello, how are you today?',
+});
+
+// Play the audio
+const audioUrl = URL.createObjectURL(audio);
+const audioElement = new Audio(audioUrl);
+audioElement.play();
+
+console.log(`Sample rate: ${sampleRate}Hz`);
+console.log(`Generated ${usage.characterCount} characters in ${usage.durationMs}ms`);
+```
+
+</Tab>
+<Tab value="With Options">
+
+```ts {7-8}
+import { synthesizeSpeech } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX');
+
+const { audio } = await synthesizeSpeech({
+  model,
+  text: 'Welcome to the application.',
+  voice: 'af_heart',
+  speed: 1.2,
+  pitch: 1.0,
+});
+
+const audioUrl = URL.createObjectURL(audio);
+const audioElement = new Audio(audioUrl);
+audioElement.play();
+```
+
+</Tab>
+<Tab value="With AbortSignal">
+
+```ts {3,7}
+const controller = new AbortController();
+
+setTimeout(() => controller.abort(), 10000); // Cancel after 10s
+
+try {
+  const { audio } = await synthesizeSpeech({
+    model,
+    text: longArticleText,
+    abortSignal: controller.signal,
+  });
+} catch (error) {
+  if (error.name === 'AbortError') {
+    console.log('Speech synthesis was cancelled');
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+### SynthesizeSpeechOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The text-to-speech model to use',
+      type: 'TextToSpeechModel | string',
+      required: true,
+    },
+    text: {
+      description: 'Text to synthesize into speech',
+      type: 'string',
+      required: true,
+    },
+    voice: {
+      description: 'Voice ID to use for synthesis',
+      type: 'string',
+      required: false,
+    },
+    speed: {
+      description: 'Speech rate multiplier',
+      type: 'number (0.5-2.0)',
+      default: '1.0',
+    },
+    pitch: {
+      description: 'Pitch adjustment',
+      type: 'number',
+      required: false,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure',
+      type: 'number',
+      default: '2',
+    },
+    providerOptions: {
+      description: 'Provider-specific options',
+      type: 'Record<string, Record<string, unknown>>',
+      required: false,
+    },
+  }}
+/>
+
+### SynthesizeSpeechResult
+
+<TypeTable
+  type={{
+    audio: {
+      description: 'Generated audio as a Blob',
+      type: 'Blob',
+    },
+    sampleRate: {
+      description: 'Sample rate of the generated audio in Hz',
+      type: 'number',
+    },
+    usage: {
+      description: 'Usage information including characterCount and durationMs',
+      type: '{ characterCount: number; durationMs: number }',
+    },
+    response: {
+      description: 'Response metadata',
+      type: '{ modelId: string; timestamp: Date }',
+    },
+  }}
+/>
+
+## Audio Input Types
+
+<Callout type="info">
+  The `AudioInput` type accepts three formats: `Blob | ArrayBuffer | Float32Array`. Use whichever is most convenient for your source — file inputs produce `Blob`, fetch responses give `ArrayBuffer`, and the Web Audio API provides `Float32Array`.
+</Callout>
+
+```ts
+// From a file input
+const blob = fileInput.files[0]; // Blob
+await transcribe({ model, audio: blob });
+
+// From a fetch response
+const buffer = await fetch('/audio.wav').then((r) => r.arrayBuffer()); // ArrayBuffer
+await transcribe({ model, audio: buffer });
+
+// From Web Audio API
+const audioContext = new AudioContext();
+const samples = audioBuffer.getChannelData(0); // Float32Array
+await transcribe({ model, audio: samples });
+```
+
+## Custom Provider
+
+Implement the `SpeechToTextModel` and `TextToSpeechModel` interfaces to create custom audio providers:
+
+### SpeechToTextModel
+
+```ts
+import type { SpeechToTextModel, DoTranscribeOptions, DoTranscribeResult } from '@localmode/core';
+
+class MySpeechToText implements SpeechToTextModel {
+  readonly modelId = 'custom:my-stt';
+  readonly provider = 'custom';
+  readonly languages = ['en', 'de', 'fr'];
+
+  async doTranscribe(options: DoTranscribeOptions): Promise<DoTranscribeResult> {
+    const { audio, language, returnTimestamps, abortSignal } = options;
+
+    // Your transcription logic here
+    const startTime = performance.now();
+
+    return {
+      text: 'Transcribed text...',
+      segments: returnTimestamps
+        ? [{ text: 'Transcribed text...', start: 0, end: 2.5, confidence: 0.95 }]
+        : undefined,
+      language: language ?? 'en',
+      usage: {
+        audioDurationSec: 2.5,
+        durationMs: performance.now() - startTime,
+      },
+    };
+  }
+}
+```
+
+### TextToSpeechModel
+
+```ts
+import type { TextToSpeechModel, DoSynthesizeOptions, DoSynthesizeResult } from '@localmode/core';
+
+class MyTextToSpeech implements TextToSpeechModel {
+  readonly modelId = 'custom:my-tts';
+  readonly provider = 'custom';
+  readonly voices = ['default', 'narrator'];
+
+  async doSynthesize(options: DoSynthesizeOptions): Promise<DoSynthesizeResult> {
+    const { text, voice, speed, abortSignal } = options;
+
+    // Your synthesis logic here
+    const startTime = performance.now();
+    const audioBlob = new Blob([], { type: 'audio/wav' });
+
+    return {
+      audio: audioBlob,
+      sampleRate: 24000,
+      usage: {
+        characterCount: text.length,
+        durationMs: performance.now() - startTime,
+      },
+    };
+  }
+}
+```
+
+<Callout type="info">
+  For recommended models, provider-specific options, and practical recipes, see the
+  [Speech-to-Text](/docs/transformers/speech-to-text) and
+  [Text-to-Speech](/docs/transformers/text-to-speech) Transformers provider guides.
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Speech-to-Text (Transformers)"
+    href="/docs/transformers/speech-to-text"
+    description="Transcribe audio with Whisper and Moonshine models."
+  />
+  <Card
+    title="Text-to-Speech (Transformers)"
+    href="/docs/transformers/text-to-speech"
+    description="Synthesize speech with Kokoro and other TTS models."
+  />
+  <Card
+    title="Text Generation"
+    href="/docs/core/generation"
+    description="Generate and stream text with language models."
+  />
+  <Card
+    title="Middleware"
+    href="/docs/core/middleware"
+    description="Add retry, caching, and logging to any function."
+  />
+</Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Voice Notes | Record and transcribe audio with Moonshine models | [Demo](https://localmode.ai/voice-notes) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/voice-notes) |
+| Meeting Assistant | Transcribe and summarize meeting recordings | [Demo](https://localmode.ai/meeting-assistant) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/meeting-assistant) |
+| Audiobook Creator | Generate speech audio from text | [Demo](https://localmode.ai/audiobook-creator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/audiobook-creator) |

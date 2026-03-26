@@ -35,7 +35,7 @@ interface GlobalImageCaptionRegistry {
  *
  * // Now string model IDs work
  * const { caption } = await captionImage({
- *   model: 'transformers:Xenova/blip-image-captioning-base',
+ *   model: 'transformers:onnx-community/Florence-2-base-ft',
  *   image: imageBlob,
  * });
  * ```
@@ -105,7 +105,7 @@ function resolveImageCaptionModel(modelOrId: ImageCaptionModel | string): ImageC
  * import { transformers } from '@localmode/transformers';
  *
  * const { caption, usage } = await captionImage({
- *   model: transformers.captioner('Xenova/blip-image-captioning-base'),
+ *   model: transformers.captioner('onnx-community/Florence-2-base-ft'),
  *   image: imageBlob,
  * });
  *
@@ -117,7 +117,7 @@ function resolveImageCaptionModel(modelOrId: ImageCaptionModel | string): ImageC
  * ```ts
  * // Generate alt text for images
  * const { caption } = await captionImage({
- *   model: transformers.captioner('Xenova/blip-image-captioning-base'),
+ *   model: transformers.captioner('onnx-community/Florence-2-base-ft'),
  *   image: uploadedImage,
  * });
  *
@@ -149,7 +149,7 @@ function resolveImageCaptionModel(modelOrId: ImageCaptionModel | string): ImageC
  * @example With string model ID (requires global provider setup)
  * ```ts
  * const { caption } = await captionImage({
- *   model: 'transformers:Xenova/blip-image-captioning-base',
+ *   model: 'transformers:onnx-community/Florence-2-base-ft',
  *   image: imageBlob,
  * });
  * ```
@@ -160,7 +160,7 @@ function resolveImageCaptionModel(modelOrId: ImageCaptionModel | string): ImageC
  * setTimeout(() => controller.abort(), 10000);
  *
  * const { caption } = await captionImage({
- *   model: transformers.captioner('Xenova/blip-image-captioning-base'),
+ *   model: transformers.captioner('onnx-community/Florence-2-base-ft'),
  *   image: imageBlob,
  *   abortSignal: controller.signal,
  * });

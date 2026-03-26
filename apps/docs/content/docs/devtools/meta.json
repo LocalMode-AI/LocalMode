@@ -1,0 +1,5 @@
+{
+  "title": "DevTools",
+  "icon": "MonitorDot",
+  "pages": ["index", "panels"]
+}

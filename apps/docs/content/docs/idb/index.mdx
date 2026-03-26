@@ -1,0 +1,161 @@
+---
+title: 'Overview'
+description: Minimal IndexedDB storage adapter using the idb library — only ~3KB.
+icon: Database
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+# @localmode/idb
+
+Minimal IndexedDB storage adapter using the [idb](https://github.com/nickvdp/idb) library. A thin, promise-based wrapper around IndexedDB with typed schemas at only ~3KB.
+
+## Features
+
+- 🪶 **~3KB** — Smallest external storage adapter
+- 🔒 **Type-Safe** — Full TypeScript schema definitions via `DBSchema`
+- 🧩 **Promise-Based** — Clean async/await API over raw IndexedDB
+- 🏗️ **Typed Indexes** — Collection-scoped lookups with typed index definitions
+
+## Installation
+
+<Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
+  <Tab value="pnpm">```bash pnpm install @localmode/idb @localmode/core ```</Tab>
+  <Tab value="npm">```bash npm install @localmode/idb @localmode/core ```</Tab>
+  <Tab value="yarn">```bash yarn add @localmode/idb @localmode/core ```</Tab>
+  <Tab value="bun">```bash bun add @localmode/idb @localmode/core ```</Tab>
+</Tabs>
+
+## Quick Start
+
+```typescript
+import { IDBStorage } from '@localmode/idb';
+import { createVectorDB, embed, ingest } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Create storage
+const storage = new IDBStorage({ name: 'my-app' });
+
+// Use with VectorDB
+const db = await createVectorDB({
+  name: 'documents',
+  dimensions: 384,
+  storage,
+});
+
+// Ingest documents
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+await ingest({
+  db,
+  model,
+  documents: [
+    { text: 'Local-first AI is the future', metadata: { source: 'blog' } },
+    { text: 'Privacy-preserving machine learning', metadata: { source: 'paper' } },
+  ],
+});
+```
+
+<Callout type="info">
+  The `ingest()` function is part of the [RAG pipeline](/docs/core/rag). It chunks, embeds, and stores documents in a single call.
+</Callout>
+
+## Configuration
+
+<TypeTable
+  type={{
+    name: {
+      description: 'Database name used for the underlying IndexedDB database',
+      type: 'string',
+    },
+  }}
+/>
+
+## Why idb?
+
+The idb library is the thinnest possible wrapper around IndexedDB:
+
+- **~3KB gzipped** — Adds almost nothing to your bundle
+- **Promise-based** — Replaces IndexedDB's awkward event-based API with async/await
+- **Typed schemas** — Full `DBSchema` interface for compile-time safety
+- **No magic** — What you write is what runs; no ORM overhead
+
+<Callout type="tip" title="When to choose idb">
+  Choose `@localmode/idb` when bundle size is your top priority and you don't need Dexie's schema
+  versioning or localForage's automatic driver fallback.
+</Callout>
+
+## Typed Schema
+
+IDBStorage uses idb's `DBSchema` interface for compile-time type safety on all IndexedDB operations. The schema defines four object stores with typed indexes for efficient collection-scoped lookups:
+
+```typescript
+// Internal schema (handled automatically)
+interface VectorDBSchema extends DBSchema {
+  documents: {
+    key: string;
+    value: DocumentRecord;
+    indexes: { collectionId: string };  // Fast per-collection queries
+  };
+  vectors: {
+    key: string;
+    value: VectorRecord;
+    indexes: { collectionId: string };
+  };
+  indexes: { key: string; value: IndexRecord };
+  collections: { key: string; value: CollectionRecord; indexes: { name: string } };
+}
+```
+
+This means all `get()`, `put()`, and `delete()` calls are type-checked — you get compile-time errors for invalid keys or values, unlike raw IndexedDB.
+
+## Storage Fallback
+
+Gracefully fallback when IndexedDB is unavailable (e.g., Safari private browsing):
+
+```typescript
+import { MemoryStorage } from '@localmode/core';
+import { IDBStorage } from '@localmode/idb';
+
+let storage: IDBStorage | MemoryStorage;
+
+try {
+  storage = new IDBStorage({ name: 'my-app' });
+  await storage.open();
+} catch (error) {
+  console.warn('IDBStorage unavailable, falling back to memory:', error);
+  storage = new MemoryStorage();
+}
+```
+
+## Comparison
+
+| Adapter | Package | Bundle Size | Transactions | Auto-Fallback | Best For |
+| --- | --- | --- | --- | --- | --- |
+| `IndexedDBStorage` | `@localmode/core` | 0KB (built-in) | No | No | Simple apps, zero extra deps |
+| `DexieStorage` | `@localmode/dexie` | ~15KB | Yes | No | Production apps needing schema versioning |
+| **`IDBStorage`** | **`@localmode/idb`** | **~3KB** | **No** | **No** | **Minimal bundle size** |
+| `LocalForageStorage` | `@localmode/localforage` | ~10KB | No | Yes | Max browser compatibility |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Storage"
+    href="/docs/core/storage"
+    description="Core storage concepts, fallbacks, and quota management."
+  />
+  <Card
+    title="Dexie Adapter"
+    href="/docs/dexie"
+    description="Enhanced IndexedDB with schema versioning and transactions."
+  />
+  <Card
+    title="LocalForage Adapter"
+    href="/docs/localforage"
+    description="Cross-browser storage with automatic fallback."
+  />
+</Cards>

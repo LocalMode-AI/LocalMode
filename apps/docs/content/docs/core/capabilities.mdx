@@ -11,6 +11,10 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 
 LocalMode provides utilities to detect device capabilities and choose appropriate fallbacks.
 
+<Callout type="info" title="See it in action">
+  Try [LLM Chat](https://localmode.ai/llm-chat) and [PDF Search](https://localmode.ai/pdf-search) for working demos of these APIs.
+</Callout>
+
 ## Full Capability Report
 
 Get a comprehensive report of available features:
@@ -80,84 +84,136 @@ const capabilities = await detectCapabilities();
   }}
 />
 
-## Individual Feature Checks
+## Feature Detection Functions
 
-### WebGPU
+All functions are available from `@localmode/core`:
 
 ```typescript
-import { isWebGPUSupported } from '@localmode/core';
+import {
+  isWebGPUSupported,
+  isWebNNSupported,
+  isWASMSupported,
+  isWASMSIMDSupported,
+  isWASMThreadsSupported,
+  isIndexedDBSupported,
+  isWebWorkersSupported,
+  isSharedArrayBufferSupported,
+  isCrossOriginIsolated,
+  isOPFSSupported,
+  isBroadcastChannelSupported,
+  isWebLocksSupported,
+  isServiceWorkerSupported,
+  isWebCryptoSupported,
+} from '@localmode/core';
+```
 
-if (isWebGPUSupported()) {
-  // Use WebGPU-accelerated models
-  console.log('WebGPU available!');
-} else {
-  // Fall back to WASM
-  console.log('Using WASM fallback');
+### Complete Reference
+
+| Function | Return Type | Description |
+| --- | --- | --- |
+| `isWebGPUSupported()` | `Promise<boolean>` | WebGPU for GPU-accelerated inference (async — requests adapter) |
+| `isWebNNSupported()` | `boolean` | WebNN for hardware-accelerated ML |
+| `isWASMSupported()` | `boolean` | WebAssembly support |
+| `isWASMSIMDSupported()` | `boolean` | WASM SIMD instructions (2-4x faster vector ops) |
+| `isWASMThreadsSupported()` | `boolean` | WASM multi-threading (requires SharedArrayBuffer) |
+| `isIndexedDBSupported()` | `boolean` | IndexedDB for persistent storage |
+| `isWebWorkersSupported()` | `boolean` | Web Workers for background processing |
+| `isSharedArrayBufferSupported()` | `boolean` | SharedArrayBuffer for shared memory |
+| `isCrossOriginIsolated()` | `boolean` | Cross-origin isolation (required for SharedArrayBuffer) |
+| `isOPFSSupported()` | `boolean` | Origin Private File System |
+| `isBroadcastChannelSupported()` | `boolean` | BroadcastChannel for cross-tab messaging |
+| `isWebLocksSupported()` | `boolean` | Web Locks API for cross-tab coordination |
+| `isServiceWorkerSupported()` | `boolean` | Service Workers for offline support |
+| `isWebCryptoSupported()` | `boolean` | Web Crypto API for encryption |
+
+<Callout type="info" title="isWebGPUSupported() vs isWebGPUAvailable()">
+  `isWebGPUSupported()` from `@localmode/core` is an **async** capability check that requests a GPU adapter.
+
+  `isWebGPUAvailable()` from `@localmode/transformers` (or `@localmode/webllm`) is a **provider-specific** async check.
+
+  Use `isWebGPUSupported()` for general capability detection. Use `isWebGPUAvailable()` when working with a specific provider package.
+</Callout>
+
+### Quick Access Object
+
+The `features` object provides synchronous access to all checks (except WebGPU which is async):
+
+```typescript
+import { features } from '@localmode/core';
+
+if (features.wasm && features.simd) {
+  console.log('Fast WASM execution available');
 }
 ```
 
-### IndexedDB
+### Runtime Detection
 
 ```typescript
-import { isIndexedDBSupported } from '@localmode/core';
+import { runtime } from '@localmode/core';
 
-if (isIndexedDBSupported()) {
-  // Use IndexedDB storage
-} else {
-  // Use memory storage (Safari private browsing)
-}
+if (runtime.isBrowser) { /* browser environment */ }
+if (runtime.isNode) { /* Node.js environment */ }
+if (runtime.isWebWorker) { /* Web Worker context */ }
+if (runtime.isElectron) { /* Electron app */ }
 ```
 
-### Web Workers
+## Device Detection
+
+Detect hardware and environment information:
 
 ```typescript
-import { isWebWorkersSupported } from '@localmode/core';
-
-if (isWebWorkersSupported()) {
-  // Offload to worker
-  const db = await createVectorDBWithWorker({ name: 'db', dimensions: 384 });
-} else {
-  // Use main thread
-  const db = await createVectorDB({ name: 'db', dimensions: 384 });
-}
+import {
+  detectBrowser,
+  detectOS,
+  detectDeviceType,
+  detectGPU,
+  getDeviceInfo,
+  getMemoryInfo,
+  getHardwareConcurrency,
+  getStorageEstimate,
+} from '@localmode/core';
 ```
 
-### Web Locks
+| Function | Return Type | Description |
+| --- | --- | --- |
+| `detectBrowser()` | `{ name: string; version: string; engine: string }` | Browser name, version, and engine |
+| `detectOS()` | `{ name: string; version: string }` | Operating system name and version |
+| `detectDeviceType()` | `'desktop' \| 'mobile' \| 'tablet' \| 'unknown'` | Device form factor |
+| `detectGPU()` | `{ vendor: string; renderer: string } \| null` | GPU vendor and renderer via WebGL |
+| `getDeviceInfo()` | `DeviceInfo` | Combined device information |
+| `getMemoryInfo()` | `MemoryInfo` | Device memory information |
+| `getHardwareConcurrency()` | `number` | Number of logical CPU cores |
+| `getStorageEstimate()` | `Promise<{ quota; usage; persisted }>` | Storage quota and usage |
 
 ```typescript
-import { isWebLocksSupported } from '@localmode/core';
+const browser = detectBrowser();
+console.log(`${browser.name} ${browser.version} (${browser.engine})`);
 
-if (isWebLocksSupported()) {
-  // Use Web Locks for cross-tab coordination
-} else {
-  // Use fallback lock manager
+const gpu = detectGPU();
+if (gpu) {
+  console.log(`GPU: ${gpu.vendor} — ${gpu.renderer}`);
 }
+
+const cores = getHardwareConcurrency();
+console.log(`CPU cores: ${cores}`);
+
+const storage = await getStorageEstimate();
+console.log(`Storage: ${storage?.usage}/${storage?.quota} bytes used`);
 ```
 
-### Crypto
+## Capability Reports
+
+Generate a comprehensive browser capability summary:
 
 ```typescript
-import { isCryptoSupported } from '@localmode/core';
+import { createCapabilityReport, formatCapabilityReport } from '@localmode/core';
 
-if (isCryptoSupported()) {
-  // Use Web Crypto API for encryption
-} else {
-  // Encryption not available
-}
+const report = await createCapabilityReport();
+const formatted = formatCapabilityReport(report);
+console.log(formatted);
 ```
 
-### Cross-Origin Isolation
-
-```typescript
-import { isCrossOriginIsolated } from '@localmode/core';
-
-if (isCrossOriginIsolated()) {
-  // SharedArrayBuffer available
-  // Better worker performance
-} else {
-  // Some features limited
-}
-```
+The report includes browser info, feature support, hardware details, and storage status — useful for diagnostics and support.
 
 ## Model Support Check
 
@@ -187,7 +243,7 @@ const fallbacks = await getRecommendedFallbacks();
 
 console.log(fallbacks);
 // {
-//   embedding: 'Xenova/all-MiniLM-L6-v2',      // Smaller model for limited devices
+//   embedding: 'Xenova/bge-small-en-v1.5',      // Smaller model for limited devices
 //   llm: 'SmolLM2-1.7B-Instruct-q4f16_1-MLC', // Compact LLM
 //   storage: 'memory',                         // If IndexedDB unavailable
 //   compute: 'wasm',                           // If WebGPU unavailable
@@ -208,7 +264,7 @@ const capabilities = await detectCapabilities();
 // Choose embedding model
 const embeddingModel = capabilities.webgpu
   ? transformers.embedding('Xenova/all-MiniLM-L12-v2') // Larger, better
-  : transformers.embedding('Xenova/all-MiniLM-L6-v2'); // Smaller, faster
+  : transformers.embedding('Xenova/bge-small-en-v1.5'); // Smaller, faster
 
 // Choose LLM
 let llm;
@@ -302,14 +358,311 @@ if (memory) {
 }
 ```
 
+## Adaptive Batch Size
+
+Compute an optimal batch size for `streamEmbedMany()` or `ingest()` based on device hardware:
+
+```typescript
+import { computeOptimalBatchSize } from '@localmode/core';
+
+const { batchSize, reasoning, deviceProfile } = computeOptimalBatchSize({
+  taskType: 'embedding',
+  modelDimensions: 384,
+});
+
+console.log(batchSize);     // e.g., 32 on a 4-core/8GB device
+console.log(reasoning);     // Human-readable explanation
+console.log(deviceProfile); // { cores, memoryGB, hasGPU, source }
+```
+
+### Formula
+
+The batch size is computed as:
+
+```
+Math.max(min, Math.min(max, Math.floor(base * (cores / 4) * (memGB / 8) * gpuMult)))
+```
+
+The formula normalizes against a **reference device** (4 cores, 8 GB RAM). Devices with more resources scale up linearly; devices with fewer scale down. A 1.5x GPU bonus is applied when a GPU is detected.
+
+### Task-Type Defaults
+
+| Task Type | Base | Min | Max |
+| --- | --- | --- | --- |
+| `embedding` | 32 | 4 | 256 |
+| `ingestion` | 64 | 8 | 512 |
+
+### Options
+
+<TypeTable
+  type={{
+    taskType: {
+      description: "Batch operation type: 'embedding' or 'ingestion'",
+      type: "'embedding' | 'ingestion'",
+      required: true,
+    },
+    modelDimensions: {
+      description: 'Embedding model output dimensions (used in reasoning)',
+      type: 'number',
+      required: true,
+    },
+    deviceCapabilities: {
+      description: 'Optional device overrides for testing/SSR: { cores?, memoryGB?, hasGPU? }',
+      type: '{ cores?: number; memoryGB?: number; hasGPU?: boolean }',
+    },
+    minBatchSize: {
+      description: 'Override minimum batch size floor',
+      type: 'number',
+    },
+    maxBatchSize: {
+      description: 'Override maximum batch size ceiling',
+      type: 'number',
+    },
+    baseBatchSize: {
+      description: 'Override base batch size (replaces task-type default)',
+      type: 'number',
+    },
+  }}
+/>
+
+### Device Override for Testing
+
+Pass `deviceCapabilities` for deterministic results in tests or SSR:
+
+```typescript
+const result = computeOptimalBatchSize({
+  taskType: 'embedding',
+  modelDimensions: 384,
+  deviceCapabilities: { cores: 16, memoryGB: 32, hasGPU: true },
+});
+// batchSize: 256 (clamped to max)
+```
+
+### Integration with streamEmbedMany
+
+Use the `adaptiveBatching` flag to opt in:
+
+```typescript
+import { streamEmbedMany } from '@localmode/core';
+
+for await (const { embedding, index } of streamEmbedMany({
+  model,
+  values: largeArray,
+  adaptiveBatching: true, // Computes batch size from device capabilities
+})) {
+  await db.add({ id: `doc-${index}`, vector: embedding });
+}
+```
+
+An explicit `batchSize` always takes precedence over adaptive computation.
+
+### Integration with ingest
+
+```typescript
+import { ingest } from '@localmode/core';
+
+await ingest(db, documents, {
+  adaptiveBatching: true,
+  chunking: { strategy: 'recursive', size: 500 },
+});
+```
+
+### React Hook
+
+```tsx
+import { useAdaptiveBatchSize } from '@localmode/react';
+
+function BatchConfig() {
+  const { batchSize, reasoning, deviceProfile } = useAdaptiveBatchSize({
+    taskType: 'embedding',
+    modelDimensions: 384,
+  });
+
+  return <p>Optimal batch size: {batchSize} ({deviceProfile.cores} cores)</p>;
+}
+```
+
+<Callout type="info" title="Browser Compatibility">
+  `navigator.deviceMemory` is only available in Chrome. On Firefox and Safari, the memory factor defaults to 1.0 (assumes 8 GB), producing the base batch size. `navigator.hardwareConcurrency` may be capped by browser privacy features, which produces conservative (but valid) batch sizes.
+</Callout>
+
+## Model Registry
+
+The model registry is a curated catalog of popular models across all providers (transformers, webllm, wllama, chrome-ai). Use `recommendModels()` to get ranked model suggestions for any task based on what the device can actually run.
+
+### Get Recommendations
+
+```typescript
+import { detectCapabilities, recommendModels } from '@localmode/core';
+
+const caps = await detectCapabilities();
+const recs = recommendModels(caps, { task: 'embedding' });
+
+for (const rec of recs) {
+  console.log(`${rec.entry.name} — score: ${rec.score}`);
+  console.log(`  Provider: ${rec.entry.provider}`);
+  console.log(`  Size: ${rec.entry.sizeMB} MB`);
+  console.log(`  Reasons: ${rec.reasons.join(', ')}`);
+}
+```
+
+`recommendModels()` is a **synchronous** pure function. Call `detectCapabilities()` first (async) and pass the result.
+
+### RecommendationOptions
+
+<TypeTable
+  type={{
+    task: {
+      description: 'Task category to filter by (e.g., embedding, generation, classification)',
+      type: 'TaskCategory',
+      required: true,
+    },
+    maxSizeMB: {
+      description: 'Maximum model download size in MB',
+      type: 'number',
+    },
+    maxMemoryMB: {
+      description: 'Maximum memory requirement in MB',
+      type: 'number',
+    },
+    providers: {
+      description: "Provider names to include (e.g., ['transformers', 'webllm'])",
+      type: 'string[]',
+    },
+    requireWebGPU: {
+      description: 'Only include models that recommend WebGPU',
+      type: 'boolean',
+    },
+    limit: {
+      description: 'Maximum number of recommendations (default: 5)',
+      type: 'number',
+    },
+  }}
+/>
+
+### ModelRecommendation Result
+
+<TypeTable
+  type={{
+    entry: {
+      description: 'The model registry entry (modelId, provider, task, sizeMB, etc.)',
+      type: 'ModelRegistryEntry',
+    },
+    score: {
+      description: 'Suitability score from 0 to 100',
+      type: 'number',
+    },
+    reasons: {
+      description: 'Human-readable explanations for the ranking',
+      type: 'string[]',
+    },
+  }}
+/>
+
+### Filter by Provider and Size
+
+```typescript
+const recs = recommendModels(caps, {
+  task: 'generation',
+  providers: ['webllm'],
+  maxSizeMB: 1000,
+  limit: 3,
+});
+```
+
+### Register Custom Models
+
+Extend the registry at runtime with `registerModel()`:
+
+```typescript
+import { registerModel, recommendModels } from '@localmode/core';
+
+registerModel({
+  modelId: 'custom/my-embedder',
+  provider: 'custom',
+  task: 'embedding',
+  name: 'My Custom Embedder',
+  sizeMB: 50,
+  dimensions: 384,
+  recommendedDevice: 'wasm',
+  speedTier: 'fast',
+  qualityTier: 'medium',
+});
+
+// Custom model now appears in recommendations
+const recs = recommendModels(caps, { task: 'embedding' });
+```
+
+### Browse the Registry
+
+```typescript
+import { getModelRegistry, DEFAULT_MODEL_REGISTRY } from '@localmode/core';
+
+// Default curated catalog (read-only)
+console.log(`${DEFAULT_MODEL_REGISTRY.length} curated models`);
+
+// Full registry (defaults + custom)
+const all = getModelRegistry();
+const embeddingModels = all.filter(e => e.task === 'embedding');
+```
+
+<Callout type="info" title="Registry is a Starting Point">
+  The curated catalog covers popular models from all providers. Use `registerModel()` to add custom or newly released models without waiting for a core update. Provider packages can also self-register their full catalogs at app startup.
+</Callout>
+
+### Scoring Algorithm
+
+Recommendations are scored using a weighted composite:
+
+| Factor | Weight | Description |
+| --- | --- | --- |
+| Device Fit | 50% | Storage headroom, memory headroom, device match (WebGPU/WASM/CPU) |
+| Quality Tier | 30% | `high` > `medium` > `low` based on published benchmarks |
+| Speed Tier | 20% | `fast` > `medium` > `slow`, with mobile bonus for fast models |
+
+Models that exceed available storage or device memory are excluded entirely.
+
+### React Hook
+
+```tsx
+import { useModelRecommendations } from '@localmode/react';
+
+function ModelPicker() {
+  const { recommendations, isLoading, error, refresh } = useModelRecommendations({
+    task: 'embedding',
+    limit: 3,
+  });
+
+  if (isLoading) return <p>Detecting device...</p>;
+  if (error) return <p>Error: {error.message}</p>;
+
+  return (
+    <ul>
+      {recommendations.map((rec) => (
+        <li key={rec.entry.modelId}>
+          {rec.entry.name} — score: {rec.score}
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+### TaskCategory
+
+All supported task categories:
+
+`embedding` | `classification` | `zero-shot` | `ner` | `reranking` | `generation` | `translation` | `summarization` | `fill-mask` | `question-answering` | `speech-to-text` | `text-to-speech` | `image-classification` | `image-captioning` | `object-detection` | `segmentation` | `ocr` | `document-qa` | `image-features` | `image-to-image` | `multimodal-embedding`
+
 ## Best Practices
 
 <Callout type="tip" title="Capability Tips">
-  1. **Check early** - Detect capabilities at app startup 
-  2. **Provide fallbacks** - Always have a fallback for each feature 
-  3. **Inform users** - Show warnings for limited functionality 
-  4. **Test everywhere** - Test on various devices and browsers 
+  1. **Check early** - Detect capabilities at app startup
+  2. **Provide fallbacks** - Always have a fallback for each feature
+  3. **Inform users** - Show warnings for limited functionality
+  4. **Test everywhere** - Test on various devices and browsers
   5. **Graceful degradation** - Core features should work everywhere
+  6. **Use `recommendModels()`** - Let the registry pick the best model for the device instead of hard-coding model IDs
 </Callout>
 
 ## Next Steps
@@ -326,3 +679,10 @@ if (memory) {
     description="Learn about available ML models."
   />
 </Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| LLM Chat | WebGPU detection for optimal model backend selection | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |
+| PDF Search | Feature detection for WebGPU-accelerated search | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |

@@ -12,6 +12,10 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 
 LocalMode includes a high-performance vector database with HNSW (Hierarchical Navigable Small World) indexing for fast approximate nearest neighbor search.
 
+<Callout type="info" title="See it in action">
+  Try [Semantic Search](https://localmode.ai/semantic-search) and [PDF Search](https://localmode.ai/pdf-search) for working demos of these APIs.
+</Callout>
+
 ## Creating a Database
 
 ```ts {3-6}
@@ -50,6 +54,10 @@ const db = await createVectorDB({
     hnswConfig: {
       description: 'HNSW index configuration',
       type: '{ m?: number; efConstruction?: number; efSearch?: number }',
+    },
+    quantization: {
+      description: 'Vector quantization for 4x storage reduction. See [Vector Quantization](/docs/core/vector-quantization).',
+      type: "{ type: 'scalar'; calibrationSamples?: number }",
     },
   }}
 />
@@ -100,6 +108,23 @@ await db.addMany([
   { id: 'doc-2', vector: embeddings[1], metadata: { text: 'Second' } },
   { id: 'doc-3', vector: embeddings[2], metadata: { text: 'Third' } },
 ]);
+```
+
+#### AddMany Options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `onProgress` | `(completed: number, total: number) => void` | - | Callback invoked after each batch is inserted |
+| `batchSize` | `number` | `100` | Number of documents per batch |
+
+```typescript
+// Track insertion progress
+await db.addMany(documents, {
+  batchSize: 50,
+  onProgress: (completed, total) => {
+    console.log(`Inserted ${completed}/${total} documents`);
+  },
+});
 ```
 
 <Callout type="warn" title="Dimension Mismatch">
@@ -438,3 +463,15 @@ results.forEach((r) => {
     description="Learn about storage options and persistence."
   />
 </Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Semantic Search | Full-text semantic search with VectorDB | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
+| Cross-Modal Search | Multi-modal vector storage and retrieval | [Demo](https://localmode.ai/cross-modal-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/cross-modal-search) |
+| Product Search | Product catalog indexing and similarity search | [Demo](https://localmode.ai/product-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/product-search) |
+| Smart Gallery | Image vector storage for gallery organization | [Demo](https://localmode.ai/smart-gallery) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-gallery) |
+| PDF Search | PDF chunk storage and retrieval | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |
+| LangChain RAG | VectorDB-backed retrieval for RAG | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |
+| Data Migrator | Import/export vectors between storage formats | [Demo](https://localmode.ai/data-migrator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/data-migrator) |

@@ -46,11 +46,14 @@ export class TransformersNERModel implements NERModel {
     }
 
     this.loadPromise = (async () => {
-      const { pipeline } = await import('@huggingface/transformers');
+      const { pipeline, env } = await import('@huggingface/transformers');
+
+      // Suppress ONNX runtime warnings about node execution providers
+      env.backends.onnx.logLevel = 'error';
 
       const pipe = await pipeline('token-classification', this.baseModelId, {
         device: this.settings.device ?? 'auto',
-        dtype: this.settings.quantized !== false ? 'q8' : 'fp32',
+        dtype: this.settings.quantized === true ? 'q8' : undefined,
         progress_callback: this.settings.onProgress,
       });
 
@@ -95,13 +98,16 @@ export class TransformersNERModel implements NERModel {
 
       const predictions = Array.isArray(output) ? output : [output];
 
+      // Track search position for fallback offset computation
+      let searchFrom = 0;
+
       for (const pred of predictions as Array<{
         word: string;
         entity: string;
         entity_group?: string;
         score: number;
-        start: number;
-        end: number;
+        start?: number;
+        end?: number;
       }>) {
         // Handle both 'entity' and 'entity_group' (aggregation mode)
         const entityType = pred.entity_group ?? pred.entity;
@@ -109,11 +115,38 @@ export class TransformersNERModel implements NERModel {
         // Remove B- or I- prefix if present
         const cleanType = entityType.replace(/^[BI]-/, '');
 
+        // Compute start/end offsets — fallback to text search if pipeline doesn't provide them
+        let start = pred.start;
+        let end = pred.end;
+
+        if (start == null || end == null) {
+          const cleanWord = pred.word.replace(/^#+\s*/, '').trim();
+          const idx = text.indexOf(cleanWord, searchFrom);
+          if (idx !== -1) {
+            start = idx;
+            end = idx + cleanWord.length;
+            searchFrom = end;
+          } else {
+            // Last resort: try case-insensitive search
+            const lowerIdx = text.toLowerCase().indexOf(cleanWord.toLowerCase(), searchFrom);
+            if (lowerIdx !== -1) {
+              start = lowerIdx;
+              end = lowerIdx + cleanWord.length;
+              searchFrom = end;
+            } else {
+              start = 0;
+              end = 0;
+            }
+          }
+        } else {
+          searchFrom = end;
+        }
+
         entities.push({
           text: pred.word,
           type: cleanType,
-          start: pred.start,
-          end: pred.end,
+          start,
+          end,
           score: pred.score,
         });
       }

@@ -1,0 +1,108 @@
+---
+title: Object Detection
+description: Detect objects in images with bounding boxes using D-FINE.
+icon: ScanLine
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Detect objects in images with labeled bounding boxes using D-FINE (state-of-the-art DETR refinement) models.
+
+<Callout type="info">
+  For full API reference (`detectObjects()`, options, result types, and custom providers), see the [Core Vision](/docs/core/vision) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [Object Detector](https://localmode.ai/object-detector) for a working demo.
+</Callout>
+
+## Recommended Models
+
+| Model | Size | Objects | Use Case |
+|-------|------|---------|----------|
+| `onnx-community/dfine_n_coco-ONNX` | ~4.5MB | 80 COCO classes | State-of-the-art, ultra-small (recommended) |
+| `Xenova/detr-resnet-50` | ~160MB | 80 COCO classes | Classic transformer detection |
+| `onnx-community/rtdetr_v2_r18vd-ONNX` | ~40MB | 80 COCO classes | Real-time object detection |
+
+## Drawing Bounding Boxes
+
+Based on the [Object Detector](https://localmode.ai/object-detector) showcase app:
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { detectObjects } from '@localmode/core';
+
+const model = transformers.objectDetector('onnx-community/dfine_n_coco-ONNX');
+
+const { objects } = await detectObjects({
+  model,
+  image: imageDataUrl,
+  threshold: 0.5,
+});
+
+function drawDetections(
+  ctx: CanvasRenderingContext2D,
+  objects: DetectedObject[],
+  imgWidth: number,
+  imgHeight: number
+) {
+  objects.forEach((obj) => {
+    const { x, y, width, height } = obj.box;
+
+    // Draw bounding box
+    ctx.strokeStyle = '#00ff00';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(
+      x * imgWidth,
+      y * imgHeight,
+      width * imgWidth,
+      height * imgHeight
+    );
+
+    // Draw label
+    ctx.fillStyle = '#00ff00';
+    ctx.font = '14px sans-serif';
+    ctx.fillText(
+      `${obj.label} ${(obj.score * 100).toFixed(0)}%`,
+      x * imgWidth,
+      y * imgHeight - 5
+    );
+  });
+}
+```
+
+## Best Practices
+
+<Callout type="tip" title="Detection Tips">
+  1. **Adjust threshold** — Lower threshold (0.3) catches more objects; higher (0.7) reduces false positives
+  2. **Normalize coordinates** — Box coordinates are normalized (0-1); multiply by image dimensions for pixels
+  3. **COCO classes** — D-FINE detects 80 COCO object categories (person, car, dog, etc.)
+  4. **Image quality matters** — Higher resolution images give more accurate detections
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Object Detector | Detect and label objects in uploaded images | [Demo](https://localmode.ai/object-detector) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/object-detector) |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core Vision API"
+    href="/docs/core/vision"
+    description="Full API reference including detectObjects()."
+  />
+  <Card
+    title="Image Segmentation"
+    href="/docs/transformers/image-segmentation"
+    description="Segment images into regions."
+  />
+  <Card
+    title="Image Captioning"
+    href="/docs/transformers/image-captioning"
+    description="Generate text descriptions of images."
+  />
+</Cards>

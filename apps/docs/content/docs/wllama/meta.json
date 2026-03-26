@@ -1,0 +1,5 @@
+{
+  "title": "wllama",
+  "icon": "Cpu",
+  "pages": ["index", "gguf-models"]
+}

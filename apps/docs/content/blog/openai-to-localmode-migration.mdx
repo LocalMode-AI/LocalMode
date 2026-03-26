@@ -1,0 +1,460 @@
+---
+title: "From OpenAI SDK to LocalMode: A Migration Guide"
+description: "A practical, side-by-side migration guide for developers moving from the OpenAI Node.js SDK to LocalMode. Covers embeddings, chat completions, streaming, structured output, and batch operations -- with code comparisons, quality benchmarks, and a step-by-step checklist."
+author: LocalMode
+date: 2026-02-21
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+If your application calls `openai.chat.completions.create()` or `openai.embeddings.create()`, you already know the pattern: construct an options object, await the result, destructure the fields you need. LocalMode follows the same shape. The functions are named differently, the models run in the browser instead of on a remote server, and your data never leaves the device -- but the mental model is remarkably similar.
+
+This guide walks through every common OpenAI SDK operation, shows the LocalMode equivalent side-by-side, and covers the tradeoffs you should evaluate before migrating.
+
+---
+
+## Why Migrate?
+
+Three reasons keep coming up in conversations with teams that have moved:
+
+1. **Cost.** OpenAI charges per token. At scale, embeddings alone can cost thousands per year. LocalMode is $0 after the initial model download.
+2. **Privacy.** Regulated industries (healthcare, finance, legal) often cannot send user data to third-party APIs. Local inference means data never leaves the browser.
+3. **Latency.** No network round-trip. Once the model is loaded, inference is instant -- typically 5-50ms for embeddings, with no cold starts.
+
+The tradeoff is model size: cloud models like GPT-4o are far larger than anything a browser can run. For many tasks -- embeddings, classification, summarization, translation, small-model chat -- local models deliver 85-99% of cloud quality at zero marginal cost.
+
+---
+
+## Installation
+
+OpenAI requires one package and an API key. LocalMode requires a core package and at least one provider -- but no key.
+
+```bash
+# OpenAI
+npm install openai
+# Requires: OPENAI_API_KEY environment variable
+
+# LocalMode
+npm install @localmode/core @localmode/transformers  # embeddings, classification, vision, audio
+npm install @localmode/webllm                         # LLM chat (optional)
+# Requires: nothing
+```
+
+---
+
+## Operation 1: Embeddings
+
+Embeddings are the most common migration starting point. The API shape is nearly identical.
+
+### OpenAI
+
+```typescript
+import OpenAI from 'openai';
+
+const openai = new OpenAI(); // reads OPENAI_API_KEY from env
+
+const response = await openai.embeddings.create({
+  model: 'text-embedding-3-small',
+  input: 'How do neural networks work?',
+});
+
+const vector = response.data[0].embedding;  // number[] (1536 dims)
+const tokens = response.usage.total_tokens; // token count
+```
+
+### LocalMode
+
+```typescript
+import { embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { embedding, usage } = await embed({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  value: 'How do neural networks work?',
+});
+
+const vector = embedding;     // Float32Array (384 dims)
+const tokens = usage.tokens;  // token count
+```
+
+### What changed
+
+| Aspect | OpenAI | LocalMode |
+|--------|--------|-----------|
+| Function | `openai.embeddings.create()` | `embed()` |
+| Model param | `model: 'text-embedding-3-small'` | `model: transformers.embedding('Xenova/bge-small-en-v1.5')` |
+| Input param | `input: string` | `value: string` |
+| Result vector | `response.data[0].embedding` (number[]) | `embedding` (Float32Array) |
+| Dimensions | 1536 | 384 |
+| Auth | API key required | None |
+| Network | HTTPS request to OpenAI servers | Local inference, no network |
+
+### Quality comparison
+
+| Metric | text-embedding-3-small | bge-small-en-v1.5 | Ratio |
+|--------|------------------------|-------------------|-------|
+| MTEB Average | 62.3 | 62.2 | 99.8% |
+| Dimensions | 1536 | 384 | -- |
+| Model size | Cloud-hosted | 33 MB (browser) | -- |
+| Cost per 1M tokens | $0.02 | $0 | -- |
+
+At 62.2 vs 62.3 on the MTEB benchmark, bge-small-en-v1.5 matches OpenAI's small embedding model almost exactly -- with 4x fewer dimensions (meaning 4x less storage) and zero ongoing cost.
+
+---
+
+## Operation 2: Chat Completion
+
+### OpenAI
+
+```typescript
+const response = await openai.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [
+    { role: 'system', content: 'You are a helpful assistant.' },
+    { role: 'user', content: 'Explain quantum computing in simple terms' },
+  ],
+  max_tokens: 200,
+  temperature: 0.7,
+});
+
+const text = response.choices[0].message.content;
+const usage = response.usage; // { prompt_tokens, completion_tokens, total_tokens }
+```
+
+### LocalMode
+
+```typescript
+import { generateText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+const { text, usage } = await generateText({
+  model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
+  systemPrompt: 'You are a helpful assistant.',
+  prompt: 'Explain quantum computing in simple terms',
+  maxTokens: 200,
+  temperature: 0.7,
+});
+
+// text: string (the generated response)
+// usage: { inputTokens, outputTokens, totalTokens, durationMs }
+```
+
+### What changed
+
+| Aspect | OpenAI | LocalMode |
+|--------|--------|-----------|
+| Function | `openai.chat.completions.create()` | `generateText()` |
+| System prompt | Inside `messages` array | Dedicated `systemPrompt` param |
+| Result text | `response.choices[0].message.content` | `text` (top-level) |
+| Token counts | `prompt_tokens` / `completion_tokens` | `inputTokens` / `outputTokens` |
+| Timing | Not included | `usage.durationMs` built-in |
+| Cost per 1M tokens (input/output) | $0.15 / $0.60 | $0 / $0 |
+
+<Callout type="info" title="Model size tradeoff">
+  GPT-4o-mini is estimated at hundreds of billions of parameters running on dedicated GPU clusters. Llama-3.2-1B runs at 712 MB in the browser via WebGPU. For simple Q&A, summarization, and extraction tasks, the local model handles most requests well. For complex reasoning or multi-step logic, cloud models still have a significant edge.
+</Callout>
+
+---
+
+## Operation 3: Streaming
+
+Streaming is where the API divergence is smallest. Both return an async iterable you consume with `for await`.
+
+### OpenAI
+
+```typescript
+const stream = await openai.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [{ role: 'user', content: 'Write a short story about a robot' }],
+  max_tokens: 500,
+  stream: true,
+});
+
+for await (const chunk of stream) {
+  const text = chunk.choices[0]?.delta?.content ?? '';
+  process.stdout.write(text);
+}
+```
+
+### LocalMode
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+const result = await streamText({
+  model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
+  prompt: 'Write a short story about a robot',
+  maxTokens: 500,
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+
+// Bonus: await the full text and usage after the stream completes
+const fullText = await result.text;
+const usage = await result.usage;
+```
+
+### What stayed the same
+
+Both APIs use `for await` over an async iterable. Both yield incremental text deltas. The overall pattern -- start a stream, consume chunks, render in real time -- is identical.
+
+### What changed
+
+OpenAI puts the text delta at `chunk.choices[0].delta.content`. LocalMode puts it at `chunk.text`. LocalMode also provides `result.text` and `result.usage` as promises that resolve when the stream finishes -- a convenience OpenAI does not offer natively.
+
+---
+
+## Operation 4: Structured Output (JSON Mode)
+
+OpenAI offers `response_format: { type: 'json_object' }` and the newer Structured Outputs with `response_format: { type: 'json_schema', json_schema: ... }`. LocalMode uses `generateObject()` with a Zod schema.
+
+### OpenAI
+
+```typescript
+const response = await openai.chat.completions.create({
+  model: 'gpt-4o-mini',
+  messages: [
+    { role: 'system', content: 'Extract contact info. Respond in JSON with name and email fields.' },
+    { role: 'user', content: 'Hi, I\'m Sarah at sarah@acme.co' },
+  ],
+  response_format: { type: 'json_object' },
+});
+
+const data = JSON.parse(response.choices[0].message.content);
+// data: { name: "Sarah", email: "sarah@acme.co" } - hopefully
+```
+
+### LocalMode
+
+```typescript
+import { generateObject, jsonSchema } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+import { z } from 'zod';
+
+const { object } = await generateObject({
+  model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+  schema: jsonSchema(z.object({
+    name: z.string(),
+    email: z.string().email(),
+  })),
+  prompt: 'Extract contact info: "Hi, I\'m Sarah at sarah@acme.co"',
+});
+
+// object: { name: "Sarah", email: "sarah@acme.co" } - validated by Zod
+```
+
+### What changed
+
+| Aspect | OpenAI | LocalMode |
+|--------|--------|-----------|
+| Schema definition | Prompt engineering or `json_schema` param | Zod schema via `jsonSchema()` |
+| Validation | Manual `JSON.parse()` + your own checks | Automatic Zod validation with retry |
+| Retry on failure | Manual | Built-in (up to `maxRetries` attempts with self-correction) |
+| Type safety | None (returns `string`) | Full TypeScript inference from Zod schema |
+
+LocalMode's `generateObject()` is arguably stricter: it parses the model's output, validates against your Zod schema, and retries with error feedback if validation fails. OpenAI's JSON mode guarantees valid JSON but not schema conformance.
+
+---
+
+## Operation 5: Batch Embeddings
+
+Embedding many documents at once is critical for RAG ingestion. Both APIs support batching, but the mechanics differ.
+
+### OpenAI
+
+```typescript
+const response = await openai.embeddings.create({
+  model: 'text-embedding-3-small',
+  input: [
+    'Machine learning is a subset of AI.',
+    'Neural networks are inspired by biology.',
+    'Deep learning uses multiple layers.',
+  ],
+});
+
+const vectors = response.data.map((d) => d.embedding);
+// vectors: number[][] (3 x 1536)
+```
+
+### LocalMode
+
+```typescript
+import { embedMany } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { embeddings, usage } = await embedMany({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  values: [
+    'Machine learning is a subset of AI.',
+    'Neural networks are inspired by biology.',
+    'Deep learning uses multiple layers.',
+  ],
+});
+
+// embeddings: Float32Array[] (3 x 384)
+```
+
+For large-scale ingestion with progress tracking, LocalMode also offers `streamEmbedMany()`:
+
+```typescript
+import { streamEmbedMany } from '@localmode/core';
+
+for await (const { embedding, index } of streamEmbedMany({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  values: thousandsOfDocuments,
+  batchSize: 32,
+  onBatch: ({ index, count, total }) => {
+    console.log(`Progress: ${index + count}/${total}`);
+  },
+})) {
+  await db.add({ id: `doc-${index}`, vector: embedding });
+}
+```
+
+OpenAI has no equivalent streaming embeddings API. For large batches, you must paginate manually or use the Batch API (which has a 24-hour completion window).
+
+---
+
+## The Minimum-Change Migration: AI SDK Adapter
+
+If you are already using the [Vercel AI SDK](https://ai-sdk.dev) with `@ai-sdk/openai`, LocalMode offers a drop-in adapter that lets you swap providers by changing one import. Your `generateText()`, `streamText()`, and `embed()` calls stay the same.
+
+### Before (OpenAI via AI SDK)
+
+```typescript
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+
+const { text } = await generateText({
+  model: openai('gpt-4o-mini'),
+  prompt: 'Explain quantum computing',
+});
+```
+
+### After (LocalMode via AI SDK)
+
+```typescript
+import { generateText } from 'ai';
+import { createLocalMode } from '@localmode/ai-sdk';
+import { webllm } from '@localmode/webllm';
+
+const localmode = createLocalMode({
+  models: {
+    'llama': webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
+  },
+});
+
+const { text } = await generateText({
+  model: localmode.languageModel('llama'),
+  prompt: 'Explain quantum computing',
+});
+```
+
+The `generateText` call is identical. Only the model reference changed. This makes it straightforward to run local models in development or privacy-sensitive contexts and cloud models in production -- or vice versa.
+
+---
+
+## What Stays the Same
+
+If you are comfortable with the OpenAI SDK, most of your intuition carries over:
+
+- **Options-object pattern.** Both APIs use a single options object: `{ model, prompt, maxTokens, temperature }`.
+- **Async/await.** Every operation returns a promise. Streaming returns an async iterable.
+- **Structured results.** Both return objects with text/embedding data plus usage metadata.
+- **Cancellation.** OpenAI supports `signal` via the second argument. LocalMode supports `abortSignal` in the options object.
+- **Retry logic.** Both handle transient failures with retries (OpenAI in the SDK client, LocalMode via `maxRetries`).
+
+## What Changes
+
+| Concern | OpenAI SDK | LocalMode |
+|---------|-----------|-----------|
+| Authentication | API key in env or constructor | None required |
+| Network dependency | Every call hits OpenAI servers | No network after model download |
+| First-load cost | None (cloud-hosted) | Model download (33 MB for embeddings, 712 MB+ for LLMs) |
+| Model range | GPT-4o, o1, DALL-E, Whisper, etc. | 60+ browser models across 18 categories |
+| Max model quality | State-of-the-art (GPT-4o, o1) | Good for tasks, limited for complex reasoning |
+| Pricing model | Pay per token | Free after download |
+| Data residency | OpenAI servers (US) | User's browser (device-local) |
+| Offline support | No | Yes, after initial model cache |
+| Vector format | `number[]` | `Float32Array` (more memory-efficient) |
+
+---
+
+## Addressing Common Concerns
+
+### "Are local models good enough?"
+
+For embeddings, yes -- bge-small-en-v1.5 scores 99.8% of OpenAI's text-embedding-3-small on MTEB. For classification, NER, summarization, and translation, local models deliver 85-98% of cloud quality. For LLM chat, it depends on the task: simple Q&A and extraction work well; multi-step reasoning still favors larger cloud models. See our [full benchmark post](/blog/local-ai-vs-cloud) for detailed comparisons across 18 model categories.
+
+### "What about the first-load download?"
+
+Embedding models are 33 MB. The smallest LLMs start at 78 MB (SmolLM2-135M). After the first download, models are cached in IndexedDB and load instantly on subsequent visits. Use `preloadModel()` to download during onboarding or show a progress indicator.
+
+### "Which browsers are supported?"
+
+Embedding, classification, and most non-LLM models work in all modern browsers via WebAssembly (Chrome 80+, Firefox 75+, Safari 14+, Edge 80+). LLM inference via WebLLM requires WebGPU (Chrome 113+, Edge 113+, Safari 18+). For broader LLM compatibility, `@localmode/wllama` runs GGUF models via llama.cpp compiled to WASM -- no WebGPU needed.
+
+### "Can I use both local and cloud models?"
+
+Absolutely. Many teams use local models for privacy-sensitive operations (PII processing, on-device search) and cloud models for tasks that need maximum quality. The AI SDK adapter makes switching between providers a one-line change.
+
+---
+
+## Migration Checklist
+
+Use this checklist to plan your migration:
+
+- [ ] **Identify operations.** List every `openai.embeddings.create()`, `openai.chat.completions.create()`, and structured output call in your codebase.
+- [ ] **Map models.** For each OpenAI model, choose a LocalMode equivalent:
+  - `text-embedding-3-small` -> `transformers.embedding('Xenova/bge-small-en-v1.5')`
+  - `gpt-4o-mini` (simple tasks) -> `webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC')`
+  - `gpt-4o-mini` (structured output) -> `webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC')`
+- [ ] **Install packages.** `npm install @localmode/core @localmode/transformers @localmode/webllm`
+- [ ] **Configure bundler.** Add webpack aliases for Next.js; exclude `@huggingface/transformers` from Vite's optimizeDeps.
+- [ ] **Replace embedding calls.** `openai.embeddings.create({ model, input })` becomes `embed({ model, value })` or `embedMany({ model, values })`.
+- [ ] **Replace chat calls.** `openai.chat.completions.create({ model, messages })` becomes `generateText({ model, prompt, systemPrompt })` or `streamText()`.
+- [ ] **Replace structured output.** `response_format: { type: 'json_object' }` becomes `generateObject({ model, schema: jsonSchema(zodSchema), prompt })`.
+- [ ] **Update vector handling.** If your code assumes `number[]` vectors, convert with `Array.from(embedding)` or update downstream code to accept `Float32Array`.
+- [ ] **Add model preloading.** Call model factories during app initialization so models are warm when the user first interacts.
+- [ ] **Test offline.** Disconnect from the network after initial load and verify all operations still work.
+- [ ] **Evaluate quality.** Run your existing test suite or evaluation set against both providers and compare results on your actual data.
+
+---
+
+## Cost Projection
+
+For a concrete example, consider an application that processes 10 million embedding tokens and 2 million LLM tokens per month:
+
+| | OpenAI (monthly) | LocalMode (monthly) |
+|---|---|---|
+| Embeddings (10M tokens) | $0.20 | $0 |
+| LLM input (1M tokens) | $0.15 | $0 |
+| LLM output (1M tokens) | $0.60 | $0 |
+| **Total** | **$0.95** | **$0** |
+
+At small scale, the savings are modest. At 1 billion embedding tokens per month (common for search products), the gap widens to $200/month for embeddings alone -- with zero privacy risk and zero vendor dependency.
+
+---
+
+## Methodology
+
+This guide references the following sources for API signatures, pricing, and benchmarks:
+
+- [OpenAI API Reference](https://platform.openai.com/docs/api-reference) -- official SDK documentation for `chat.completions.create()` and `embeddings.create()`
+- [OpenAI API Pricing](https://openai.com/api/pricing/) -- token pricing for gpt-4o-mini ($0.15/$0.60 per 1M tokens) and text-embedding-3-small ($0.02 per 1M tokens)
+- [OpenAI Node.js SDK](https://github.com/openai/openai-node) -- official JavaScript/TypeScript library
+- [MTEB Leaderboard](https://huggingface.co/spaces/mteb/leaderboard) -- Massive Text Embedding Benchmark for quality comparisons
+- [BAAI/bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5) -- model card with benchmark scores
+- [Vercel AI SDK Documentation](https://ai-sdk.dev) -- `generateText()`, `streamText()`, and `embed()` reference
+- LocalMode API signatures verified against `packages/core/src/` source code (commit 66a6bf4)
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

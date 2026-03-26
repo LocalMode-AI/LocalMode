@@ -332,7 +332,7 @@ export interface DoCaptionImageResult {
  * @example
  * ```ts
  * const { caption } = await captionImage({
- *   model: transformers.captioner('Xenova/blip-image-captioning-base'),
+ *   model: transformers.captioner('onnx-community/Florence-2-base-ft'),
  *   image: imageBlob,
  * });
  * ```
@@ -914,7 +914,7 @@ export interface DoTransformImageResult {
  * @example
  * ```ts
  * const { image } = await upscaleImage({
- *   model: transformers.imageToImage('Xenova/swin2SR-classical-sr-x2-64'),
+ *   model: transformers.imageToImage('Xenova/swin2SR-lightweight-x2-64'),
  *   image: lowResImage,
  *   scale: 2,
  * });

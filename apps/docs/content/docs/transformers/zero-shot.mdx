@@ -1,0 +1,91 @@
+---
+title: Zero-Shot Classification
+description: Classify text into arbitrary labels without fine-tuning.
+icon: Target
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Classify text into any set of labels without needing a fine-tuned model. Provide candidate labels at inference time — the model determines which labels best match the input.
+
+<Callout type="info">
+  For full API reference (`classifyZeroShot()`, options, result types, and custom providers), see the [Core Classification](/docs/core/classification) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [Email Classifier](https://localmode.ai/email-classifier) for a working demo.
+</Callout>
+
+## Recommended Models
+
+| Model | Size | Speed | Use Case |
+|-------|------|-------|----------|
+| `Xenova/mobilebert-uncased-mnli` | ~21MB | ⚡⚡⚡ | Fast, browser-friendly (recommended) |
+| `Xenova/nli-deberta-v3-xsmall` | ~90MB | ⚡⚡ | Better accuracy, still browser-friendly |
+| `onnx-community/ModernBERT-large-zeroshot-v2.0-ONNX` | ~297MB | ⚡⚡ | Highest accuracy (large download) |
+
+## Email Classification Example
+
+Based on the [Email Classifier](https://localmode.ai/email-classifier) showcase app:
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { classifyZeroShot } from '@localmode/core';
+
+const model = transformers.zeroShot('Xenova/mobilebert-uncased-mnli');
+
+const categories = [
+  'Work',
+  'Personal',
+  'Shopping',
+  'Travel',
+  'Finance',
+  'Social',
+  'Spam',
+];
+
+const { labels, scores } = await classifyZeroShot({
+  model,
+  text: 'Your flight to Paris has been confirmed for March 25th.',
+  candidateLabels: categories,
+});
+
+console.log(`Category: ${labels[0]}`); // 'Travel'
+console.log(`Confidence: ${(scores[0] * 100).toFixed(1)}%`); // '95.2%'
+```
+
+## Best Practices
+
+<Callout type="tip" title="Zero-Shot Tips">
+  1. **Use descriptive labels** — "Customer complaint" works better than "type_3"
+  2. **Limit label count** — 3-10 labels works best; too many dilutes scores
+  3. **Check confidence** — Low top scores may mean none of the labels fit well
+  4. **Consider fine-tuned models** — If you always use the same labels, a fine-tuned classifier is faster
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Email Classifier | Classify emails into custom labels without fine-tuning | [Demo](https://localmode.ai/email-classifier) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/email-classifier) |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core Classification API"
+    href="/docs/core/classification"
+    description="Full API reference including classifyZeroShot()."
+  />
+  <Card
+    title="Classification"
+    href="/docs/transformers/classification"
+    description="Fine-tuned text classification."
+  />
+  <Card
+    title="NER"
+    href="/docs/transformers/ner"
+    description="Extract named entities from text."
+  />
+</Cards>

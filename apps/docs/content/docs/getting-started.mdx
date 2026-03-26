@@ -1,6 +1,6 @@
 ---
 title: Getting Started
-description: Install LocalMode and build your first local AI application.
+description: Install LocalMode and build your first local AI application in minutes.
 icon: Rocket
 ---
 
@@ -10,7 +10,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 import { Steps } from 'fumadocs-ui/components/steps';
 import { Files, File, Folder } from 'fumadocs-ui/components/files';
 
-This guide will walk you through installing LocalMode and building your first local-first AI application.
+This guide walks you through installing LocalMode and building your first local-first AI application — from embeddings and semantic search to LLM chat and React hooks.
 
 ## Installation
 
@@ -20,13 +20,37 @@ This guide will walk you through installing LocalMode and building your first lo
 
 The minimum setup requires `@localmode/core` and at least one provider:
 
-<Tabs items={['pnpm', 'npm', 'yarn']}>
+<Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
   <Tab value="pnpm">```bash pnpm install @localmode/core @localmode/transformers ```</Tab>
   <Tab value="npm">```bash npm install @localmode/core @localmode/transformers ```</Tab>
   <Tab value="yarn">```bash yarn add @localmode/core @localmode/transformers ```</Tab>
+  <Tab value="bun">```bash bun add @localmode/core @localmode/transformers ```</Tab>
 </Tabs>
 
 All underlying ML dependencies (like `@huggingface/transformers`) are automatically installed with the provider packages.
+
+### Optional packages
+
+Add more capabilities as needed:
+
+```bash
+# LLM chat (pick one or more)
+pnpm install @localmode/webllm          # WebGPU — fastest, 30 curated models
+pnpm install @localmode/wllama          # WASM — 135K+ GGUF models, all browsers
+
+# React hooks
+pnpm install @localmode/react
+
+# Ecosystem
+pnpm install @localmode/ai-sdk          # Vercel AI SDK compatibility
+pnpm install @localmode/langchain       # LangChain.js adapters
+pnpm install @localmode/chrome-ai       # Chrome Built-in AI (Gemini Nano)
+pnpm install @localmode/devtools        # In-app DevTools widget
+
+# Storage adapters
+pnpm install @localmode/dexie           # Dexie.js storage
+pnpm install @localmode/pdfjs           # PDF text extraction
+```
 
 ### Configure bundler (if needed)
 
@@ -72,7 +96,7 @@ import { embed } from '@localmode/core';
 import { transformers } from '@localmode/transformers';
 
 // Create embedding model
-const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
 
 // Generate embedding
 const { embedding, usage } = await embed({
@@ -98,8 +122,8 @@ import { createVectorDB, embed, embedMany, semanticSearch } from '@localmode/cor
 import { transformers } from '@localmode/transformers';
 
 // 1. Setup
-const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
-const db = await createVectorDB({
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+const db = await createVectorDB<{ text: string }>({
   name: 'my-documents',
   dimensions: 384,
 });
@@ -153,14 +177,14 @@ Results:
 
 ## Add RAG with Chunking
 
-For longer documents, use chunking:
+For longer documents, use chunking and reranking:
 
 ```typescript title="rag-example.ts"
 import { createVectorDB, chunk, ingest, semanticSearch, rerank } from '@localmode/core';
 import { transformers } from '@localmode/transformers';
 
 // Setup
-const embeddingModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
 const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
 
 const db = await createVectorDB({
@@ -200,7 +224,7 @@ const searchResults = await semanticSearch({
   k: 10, // Get more candidates for reranking
 });
 
-const reranked = await rerank({
+const { results: reranked } = await rerank({
   model: rerankerModel,
   query,
   documents: searchResults.map((r) => r.metadata.text as string),
@@ -210,25 +234,42 @@ const reranked = await rerank({
 console.log('Top results after reranking:');
 reranked.forEach((r, i) => {
   console.log(`${i + 1}. Score: ${r.score.toFixed(3)}`);
-  console.log(`   ${r.document.substring(0, 100)}...`);
+  console.log(`   ${r.text.substring(0, 100)}...`);
 });
 ```
 
-## Add LLM Generation
+## Add LLM Chat
 
-Combine with WebLLM for complete RAG:
+Three providers implement the same `LanguageModel` interface — choose based on your needs:
 
-```typescript title="rag-with-llm.ts"
+```typescript title="llm-chat.ts"
 import { streamText } from '@localmode/core';
 import { webllm } from '@localmode/webllm';
 
-// After getting search results...
-const context = reranked.map((r) => r.document).join('\n\n');
+// Pick any provider — all share the same LanguageModel interface
+const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+// const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+// const model = transformers.languageModel('onnx-community/Qwen3-0.6B-ONNX');
 
-const llm = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+const result = await streamText({
+  model,
+  prompt: 'Explain quantum computing in simple terms',
+  maxTokens: 500,
+});
 
-const stream = await streamText({
-  model: llm,
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+Combine with RAG results for grounded answers:
+
+```typescript title="rag-with-llm.ts"
+// After getting search results from above...
+const context = reranked.map((r) => r.text).join('\n\n');
+
+const result = await streamText({
+  model,
   prompt: `Based on the following context, answer the question.
 
 Context:
@@ -239,8 +280,80 @@ Question: ${query}
 Answer:`,
 });
 
-for await (const chunk of stream) {
+for await (const chunk of result.stream) {
   process.stdout.write(chunk.text);
+}
+```
+
+## Structured Output
+
+Generate typed JSON objects with schema validation:
+
+```typescript title="structured-output.ts"
+import { generateObject, jsonSchema } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+import { z } from 'zod';
+
+const { object } = await generateObject({
+  model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+  schema: jsonSchema(
+    z.object({
+      title: z.string(),
+      summary: z.string(),
+      tags: z.array(z.string()),
+      sentiment: z.enum(['positive', 'negative', 'neutral']),
+    })
+  ),
+  prompt: 'Analyze: "LocalMode makes AI accessible to everyone by running it in the browser"',
+});
+
+console.log(object.title);     // string
+console.log(object.tags);      // string[]
+console.log(object.sentiment); // 'positive' | 'negative' | 'neutral'
+```
+
+## React Hooks
+
+For React apps, `@localmode/react` provides hooks for every core function with built-in loading states, error handling, and cancellation:
+
+```tsx title="ChatApp.tsx"
+import { useChat } from '@localmode/react';
+import { webllm } from '@localmode/webllm';
+
+function ChatApp() {
+  const { messages, sendMessage, isStreaming, cancel } = useChat({
+    model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+  });
+
+  return (
+    <div>
+      {messages.map((msg) => (
+        <div key={msg.id}>
+          <strong>{msg.role}:</strong> {msg.content}
+        </div>
+      ))}
+      <button onClick={() => sendMessage('Hello!')}>Send</button>
+      {isStreaming && <button onClick={cancel}>Stop</button>}
+    </div>
+  );
+}
+```
+
+```tsx title="SemanticSearch.tsx"
+import { useEmbed, useSemanticSearch } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+function SearchApp() {
+  const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+  const { data, isLoading, execute } = useSemanticSearch({ model, db });
+
+  return (
+    <div>
+      <input onChange={(e) => execute({ query: e.target.value, k: 5 })} />
+      {isLoading && <p>Searching...</p>}
+      {data?.map((r) => <p key={r.id}>{r.metadata.text}</p>)}
+    </div>
+  );
 }
 ```
 
@@ -251,25 +364,26 @@ A typical LocalMode project might look like:
 <Files>
   <Folder name="src" defaultOpen>
     <Folder name="lib" defaultOpen>
-      <File name="ai.ts" />
+      <File name="models.ts" />
       <File name="db.ts" />
     </Folder>
     <Folder name="components">
+      <File name="ChatInterface.tsx" />
       <File name="SearchBox.tsx" />
-      <File name="ResultsList.tsx" />
     </Folder>
     <File name="App.tsx" />
   </Folder>
   <File name="package.json" />
 </Files>
 
-```typescript title="src/lib/ai.ts"
+```typescript title="src/lib/models.ts"
 import { transformers } from '@localmode/transformers';
 import { webllm } from '@localmode/webllm';
 
-// Singleton instances for reuse
-export const embeddingModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+// Model instances (created once, reused everywhere)
+export const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
 export const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+export const classifierModel = transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english');
 export const llm = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
 ```
 
@@ -289,22 +403,64 @@ export async function getDB() {
 }
 ```
 
+## What You Can Build
+
+Beyond embeddings, RAG, and LLM chat, LocalMode provides a full suite of local AI capabilities:
+
+| Category | Functions | Use Cases |
+| --- | --- | --- |
+| **Classification** | `classify()`, `classifyZeroShot()`, `classifyMany()` | Sentiment analysis, email routing, content moderation |
+| **NER** | `extractEntities()` | Document redaction, data extraction |
+| **Reranking** | `rerank()` | Improved RAG accuracy with cross-encoder scoring |
+| **Vision** | `captionImage()`, `detectObjects()`, `segmentImage()` | Image captioning, object detection, background removal |
+| **Multimodal Search** | `embedImage()`, `embedManyImages()` | Cross-modal text-to-image search with CLIP |
+| **Audio** | `transcribe()`, `synthesizeSpeech()` | Voice notes, meeting transcription, audiobook creation |
+| **Translation** | `translate()` | Multi-language translation (20+ languages) |
+| **Summarization** | `summarize()` | Text and document summarization |
+| **Structured Output** | `generateObject()`, `streamObject()` | Typed JSON generation with Zod schema validation |
+| **Agents** | `createAgent()`, `runAgent()` | ReAct loop with tool registry and VectorDB-backed memory |
+| **Document QA** | `askDocument()`, `askTable()` | Invoice Q&A, form and table understanding |
+| **OCR** | `extractText()` | Document scanning, text extraction from images |
+| **Fill-Mask** | `fillMask()` | Autocomplete, masked token prediction |
+| **Question Answering** | `answerQuestion()` | Extractive QA with confidence scores |
+| **Security** | `encrypt()`, `decrypt()`, `redactPII()` | Encrypted vaults, PII redaction, differential privacy |
+| **Evaluation** | `evaluateModel()`, `accuracy()`, `bleuScore()` | Model quality metrics for classification, generation, retrieval |
+| **Pipelines** | `createPipeline()` | Composable multi-step workflows with 10 step types |
+| **Import/Export** | `importFrom()`, `exportToCSV()` | Migrate vectors from Pinecone, ChromaDB, CSV, JSONL |
+
+All of these work offline after the initial model download, with no server or API key required.
+
 ## Next Steps
 
 <Cards>
   <Card
     title="Core Package"
     href="/docs/core"
-    description="Deep dive into embeddings, vector DB, RAG, and more."
+    description="VectorDB, embeddings, RAG, agents, evaluation, middleware, and security."
+  />
+  <Card
+    title="React Hooks"
+    href="/docs/react"
+    description="46 hooks for chat, embeddings, classification, vision, audio, and more."
   />
   <Card
     title="Transformers Provider"
     href="/docs/transformers"
-    description="All available ML models for classification, vision, audio."
+    description="25 model factories for text, vision, audio, and multimodal tasks."
   />
   <Card
     title="WebLLM Provider"
     href="/docs/webllm"
-    description="Run LLMs locally with streaming generation."
+    description="30 curated WebGPU models for fastest LLM inference."
+  />
+  <Card
+    title="Wllama Provider"
+    href="/docs/wllama"
+    description="135K+ GGUF models via llama.cpp WASM — universal browser support."
+  />
+  <Card
+    title="Chrome AI Provider"
+    href="/docs/chrome-ai"
+    description="Zero-download inference via Chrome's built-in Gemini Nano."
   />
 </Cards>

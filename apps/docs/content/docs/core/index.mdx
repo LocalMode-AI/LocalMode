@@ -20,10 +20,11 @@ The core package contains **all functions, interfaces, types, and utilities** fo
 
 ## Installation
 
-<Tabs items={['pnpm', 'npm', 'yarn']}>
+<Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
   <Tab value="pnpm">```bash pnpm install @localmode/core ```</Tab>
   <Tab value="npm">```bash npm install @localmode/core ```</Tab>
   <Tab value="yarn">```bash yarn add @localmode/core ```</Tab>
+  <Tab value="bun">```bash bun add @localmode/core ```</Tab>
 </Tabs>
 
 ## Quick Start
@@ -45,7 +46,7 @@ pnpm install @localmode/core @localmode/transformers
 ```ts {3}
 import { transformers } from '@localmode/transformers';
 
-const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
 ```
 
 </Step>
@@ -87,30 +88,27 @@ const results = await db.search(queryVector, { k: 5 });
 
 These features are stable and ready for production use:
 
-| Feature             | Description                                             |
-| ------------------- | ------------------------------------------------------- |
-| **Vector Database** | HNSW index for fast approximate nearest neighbor search |
-| **Embeddings**      | `embed()`, `embedMany()`, `semanticSearch()` functions  |
-| **Reranking**       | `rerank()` for improved RAG accuracy                    |
-| **RAG Utilities**   | Text chunking (recursive, markdown, code-aware)         |
-| **Text Generation** | `streamText()` with async iteration                     |
-| **Storage**         | IndexedDB persistence with memory fallback              |
-| **Capabilities**    | WebGPU, IndexedDB, Workers detection                    |
-| **Security**        | Encryption, PII redaction                               |
-| **Middleware**      | Caching, logging, retry, validation                     |
-
-### 🚧 Coming Soon
-
-| Feature            | Description                                    |
-| ------------------ | ---------------------------------------------- |
-| **Classification** | `classify()`, `classifyZeroShot()`             |
-| **NER**            | `extractEntities()`                            |
-| **Audio**          | `transcribe()`, `synthesizeSpeech()`           |
-| **Vision**         | Image classification, captioning, segmentation |
-| **Translation**    | `translate()`                                  |
-| **Summarization**  | `summarize()`                                  |
-| **OCR**            | `extractText()`                                |
-| **Document QA**    | `askDocument()`, `askTable()`                  |
+| Feature             | Description                                                                    |
+| ------------------- | ------------------------------------------------------------------------------ |
+| **Vector Database** | HNSW index for fast approximate nearest neighbor search                        |
+| **Embeddings**      | `embed()`, `embedMany()`, `semanticSearch()` functions                         |
+| **Reranking**       | `rerank()` for improved RAG accuracy                                           |
+| **RAG Utilities**   | Text chunking (recursive, markdown, code-aware)                                |
+| **Text Generation** | `streamText()` with async iteration                                            |
+| **Classification**  | `classify()`, `classifyZeroShot()`, `extractEntities()`                        |
+| **Audio**           | `transcribe()`, `synthesizeSpeech()`                                           |
+| **Vision**          | `captionImage()`, `detectObjects()`, `segmentImage()`, image classification    |
+| **Translation**     | `translate()` with multi-language support                                       |
+| **Summarization**   | `summarize()` with configurable length                                         |
+| **OCR**             | `extractText()` from images                                                    |
+| **Document QA**     | `askDocument()` for document image Q&A                                         |
+| **Fill-Mask**       | `fillMask()` for masked token prediction                                       |
+| **Q&A**             | `answerQuestion()` for extractive question answering                           |
+| **Image Features**  | `extractImageFeatures()`, `classifyImageZeroShot()`, `imageToImage()`          |
+| **Storage**         | IndexedDB persistence with memory fallback                                     |
+| **Capabilities**    | WebGPU, IndexedDB, Workers detection                                           |
+| **Security**        | Encryption, PII redaction                                                      |
+| **Middleware**      | Caching, logging, retry, validation                                            |
 
 ## Architecture
 
@@ -234,7 +232,7 @@ import {
 import { streamText, generateText } from '@localmode/core';
 ```
 
-### Classification
+### Classification & NER
 
 ```typescript
 import {
@@ -245,6 +243,62 @@ import {
   extractEntitiesMany,
   rerank,
 } from '@localmode/core';
+```
+
+### Vision
+
+```typescript
+import {
+  captionImage,
+  classifyImage,
+  classifyImageZeroShot,
+  detectObjects,
+  segmentImage,
+  extractImageFeatures,
+  imageToImage,
+} from '@localmode/core';
+```
+
+### Audio
+
+```typescript
+import { transcribe, synthesizeSpeech } from '@localmode/core';
+```
+
+### Translation
+
+```typescript
+import { translate } from '@localmode/core';
+```
+
+### Summarization
+
+```typescript
+import { summarize } from '@localmode/core';
+```
+
+### Fill-Mask
+
+```typescript
+import { fillMask } from '@localmode/core';
+```
+
+### Question Answering
+
+```typescript
+import { answerQuestion } from '@localmode/core';
+```
+
+### OCR
+
+```typescript
+import { extractText } from '@localmode/core';
+```
+
+### Document QA
+
+```typescript
+import { askDocument, askTable } from '@localmode/core';
 ```
 
 ### Storage
@@ -291,7 +345,18 @@ import {
 ### Security
 
 ```typescript
-import { encrypt, decrypt, deriveKey, isCryptoSupported, redactPII } from '@localmode/core';
+import {
+  encrypt,
+  decrypt,
+  decryptString,
+  deriveEncryptionKey, // primary — deriveKey is also available as an alias
+  encryptVector,
+  decryptVector,
+  encryptJSON,
+  decryptJSON,
+  isCryptoSupported,
+  redactPII,
+} from '@localmode/core';
 ```
 
 ### Cross-Tab Sync
@@ -360,9 +425,12 @@ import type {
   SpeechToTextModel,
   TextToSpeechModel,
   ImageClassificationModel,
+  ZeroShotImageClassificationModel,
   ImageCaptionModel,
   SegmentationModel,
   ObjectDetectionModel,
+  ImageFeatureModel,
+  ImageToImageModel,
   TranslationModel,
   SummarizationModel,
   FillMaskModel,
@@ -371,8 +439,10 @@ import type {
   DocumentQAModel,
 
   // Storage
-  Storage,
+  StorageAdapter,
   StoredDocument,
+  StoredVector,
+  Collection,
 
   // Vector DB
   VectorDB,

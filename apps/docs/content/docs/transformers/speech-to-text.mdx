@@ -1,0 +1,116 @@
+---
+title: Speech-to-Text
+description: Transcribe audio to text with Moonshine models.
+icon: Mic
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Transcribe audio to text using Moonshine models running locally in the browser. Optimized for fast, efficient speech recognition with optional timestamps.
+
+<Callout type="info">
+  For full API reference (`transcribe()`, options, result types, and custom providers), see the [Core Audio](/docs/core/audio) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [Voice Notes](https://localmode.ai/voice-notes) and [Meeting Assistant](https://localmode.ai/meeting-assistant) for working demos.
+</Callout>
+
+## Recommended Models
+
+| Model | Size | Speed | Quality | Use Case |
+|-------|------|-------|---------|----------|
+| `onnx-community/moonshine-tiny-ONNX` | ~35MB | ⚡⚡⚡ | Good | Quick transcription, voice notes |
+| `onnx-community/moonshine-base-ONNX` | ~65MB | ⚡⚡ | Better | Higher accuracy |
+
+## Voice Notes Example
+
+Based on the [Voice Notes](https://localmode.ai/voice-notes) showcase app:
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { transcribe } from '@localmode/core';
+
+const model = transformers.speechToText('onnx-community/moonshine-tiny-ONNX');
+
+// Record audio from microphone
+const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+const chunks: Blob[] = [];
+
+recorder.ondataavailable = (e) => chunks.push(e.data);
+recorder.start();
+
+// Stop recording after some time...
+recorder.stop();
+
+recorder.onstop = async () => {
+  const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+
+  const { text } = await transcribe({
+    model,
+    audio: audioBlob,
+    abortSignal: controller.signal,
+  });
+
+  console.log('Transcription:', text);
+};
+```
+
+## With Timestamps
+
+```typescript
+const { text, segments } = await transcribe({
+  model,
+  audio: audioBlob,
+  returnTimestamps: true,
+});
+
+segments?.forEach((s) => {
+  console.log(`[${s.start.toFixed(1)}s - ${s.end.toFixed(1)}s] ${s.text}`);
+});
+```
+
+## Audio Input Formats
+
+The `audio` parameter accepts:
+- `Blob` — From `MediaRecorder`, file input, or fetch
+- `ArrayBuffer` — Raw audio data
+- `Float32Array` — PCM audio samples
+
+## Best Practices
+
+<Callout type="tip" title="STT Tips">
+  1. **Start with moonshine-tiny** — Fast to download (~35MB) and good enough for most use cases
+  2. **Use WebM or OGG** — These formats work well with MediaRecorder
+  3. **Support cancellation** — Transcription can take time; always pass `abortSignal`
+  4. **Handle permissions** — Request microphone access gracefully with fallback UI
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Voice Notes | Record and transcribe audio with Moonshine models | [Demo](https://localmode.ai/voice-notes) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/voice-notes) |
+| Meeting Assistant | Transcribe meeting recordings for summarization | [Demo](https://localmode.ai/meeting-assistant) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/meeting-assistant) |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core Audio API"
+    href="/docs/core/audio"
+    description="Full API reference, options, result types, and custom providers."
+  />
+  <Card
+    title="Text-to-Speech"
+    href="/docs/transformers/text-to-speech"
+    description="Generate speech audio from text."
+  />
+  <Card
+    title="Summarization"
+    href="/docs/transformers/summarization"
+    description="Summarize transcribed text."
+  />
+</Cards>

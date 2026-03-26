@@ -30,7 +30,7 @@ let globalLanguageModelProvider: LanguageModelFactory | null = null;
  *
  * // Now you can use string model IDs
  * const { text } = await generateText({
- *   model: 'Llama-3.2-1B-Instruct-q4f16',
+ *   model: 'Llama-3.2-1B-Instruct-q4f16_1-MLC',
  *   prompt: 'Hello',
  * });
  * ```
@@ -69,7 +69,7 @@ function resolveModel(modelOrId: LanguageModel | string): LanguageModel {
  * import { webllm } from '@localmode/webllm';
  *
  * const { text, usage } = await generateText({
- *   model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16'),
+ *   model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
  *   prompt: 'Explain quantum computing',
  *   maxTokens: 200,
  * });
@@ -81,7 +81,7 @@ function resolveModel(modelOrId: LanguageModel | string): LanguageModel {
  * @example With system prompt
  * ```ts
  * const { text } = await generateText({
- *   model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16'),
+ *   model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
  *   systemPrompt: 'You are a helpful assistant.',
  *   prompt: 'What is the capital of France?',
  * });
@@ -92,7 +92,7 @@ function resolveModel(modelOrId: LanguageModel | string): LanguageModel {
  * const controller = new AbortController();
  *
  * const promise = generateText({
- *   model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16'),
+ *   model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
  *   prompt: 'Write a long story',
  *   maxTokens: 1000,
  *   abortSignal: controller.signal,

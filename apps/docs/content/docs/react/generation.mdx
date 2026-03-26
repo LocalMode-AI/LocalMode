@@ -1,0 +1,138 @@
+---
+title: 'Generation & Text'
+description: Hooks for text generation, summarization, translation, and OCR.
+icon: MessageSquare
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Generation & Text Processing Hooks
+
+<Callout type="info" title="See it in action">
+  Try [LLM Chat](https://localmode.ai/llm-chat) and [Data Extractor](https://localmode.ai/data-extractor) for working demos of these hooks.
+</Callout>
+
+## useGenerateText
+
+Non-streaming text generation.
+
+```tsx
+import { useGenerateText } from '@localmode/react';
+import { webllm } from '@localmode/webllm';
+
+const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+
+function Demo() {
+  const { data, isLoading, execute } = useGenerateText({ model, maxTokens: 200 });
+
+  return (
+    <div>
+      <button onClick={() => execute('Write a haiku about AI')}>Generate</button>
+      {data && <p>{data.text}</p>}
+    </div>
+  );
+}
+```
+
+<Callout type="info">
+For streaming generation, use [useChat](/docs/react/chat) instead.
+</Callout>
+
+## useGenerateObject
+
+Generate typed, validated JSON objects from a language model using a Zod schema.
+
+```tsx
+import { useGenerateObject } from '@localmode/react';
+import { z } from 'zod';
+
+const schema = z.object({ name: z.string(), age: z.number() });
+
+const { data, isLoading, execute } = useGenerateObject({ model, schema });
+await execute('Extract: John is 30 years old');
+// data.object = { name: 'John', age: 30 }
+```
+
+## useAnswerQuestion
+
+Extractive question answering from a context passage.
+
+```tsx
+import { useAnswerQuestion } from '@localmode/react';
+
+const { data, execute } = useAnswerQuestion({ model });
+await execute({ question: 'Who founded Apple?', context: 'Apple was founded by Steve Jobs...' });
+// data.answer = 'Steve Jobs', data.score = 0.95
+```
+
+## useAskDocument
+
+Question answering on document images (receipts, forms, invoices).
+
+```tsx
+import { useAskDocument } from '@localmode/react';
+
+const { data, execute } = useAskDocument({ model });
+await execute({ image: imageDataUrl, question: 'What is the total amount?' });
+// data.answer = '$42.50'
+```
+
+## useFillMask
+
+Masked token prediction (BERT-style).
+
+```tsx
+import { useFillMask } from '@localmode/react';
+
+const { data, execute } = useFillMask({ model });
+await execute('The capital of France is [MASK].');
+// data.predictions = [{ token: 'Paris', score: 0.98 }, ...]
+```
+
+## useSummarize
+
+Summarize long text.
+
+```tsx
+import { useSummarize } from '@localmode/react';
+
+const { data, execute } = useSummarize({ model });
+await execute('Long article text...');
+// data.summary = "A concise summary..."
+```
+
+## useTranslate
+
+Translate text between languages.
+
+```tsx
+import { useTranslate } from '@localmode/react';
+
+const { data, execute } = useTranslate({ model });
+await execute({ text: 'Hello world', targetLanguage: 'fr' });
+// data.translation = "Bonjour le monde"
+```
+
+## useExtractText
+
+Extract text from images (OCR).
+
+```tsx
+import { useExtractText } from '@localmode/react';
+
+const { data, execute } = useExtractText({ model });
+await execute(imageDataUrl);
+// data.text = "Text extracted from the image"
+```
+
+<Callout type="tip">
+For full API reference on these functions, see the [Core](/docs/core) docs.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| LLM Chat | Stream text generation with useChat (supports vision image input) | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |
+| Data Extractor | Structured output extraction with useGenerateObject | [Demo](https://localmode.ai/data-extractor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/data-extractor) |
+| LangChain RAG | Generate RAG answers with useGenerateText | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |

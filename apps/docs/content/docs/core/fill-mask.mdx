@@ -1,0 +1,206 @@
+---
+title: Fill-Mask
+description: Predict masked tokens in text for autocomplete and text analysis.
+icon: TextCursorInput
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+Predict masked tokens in text using fill-mask models. Useful for autocomplete, text analysis, and understanding language patterns.
+
+<Callout type="info" title="See it in action">
+  Try [Smart Autocomplete](https://localmode.ai/smart-autocomplete) for a working demo of these APIs.
+</Callout>
+
+## fillMask()
+
+Predict masked tokens in a single text:
+
+<Tabs items={['Basic Usage', 'With AbortSignal']}>
+<Tab value="Basic Usage">
+
+```ts {5-9}
+import { fillMask } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.fillMask('onnx-community/ModernBERT-base-ONNX');
+
+const { predictions, usage } = await fillMask({
+  model,
+  text: 'The capital of France is [MASK].',
+  topK: 5,
+});
+
+predictions.forEach((p) => {
+  console.log(`${p.token}: ${p.score.toFixed(3)} — "${p.sequence}"`);
+});
+// Paris: 0.952 — "The capital of France is Paris."
+// Lyon: 0.012 — "The capital of France is Lyon."
+```
+
+</Tab>
+<Tab value="With AbortSignal">
+
+```ts {3,7}
+const controller = new AbortController();
+
+setTimeout(() => controller.abort(), 5000);
+
+const { predictions } = await fillMask({
+  model,
+  text: 'The capital of France is [MASK].',
+  abortSignal: controller.signal,
+});
+```
+
+</Tab>
+</Tabs>
+
+### FillMaskOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The fill-mask model to use',
+      type: 'FillMaskModel | string',
+      required: true,
+    },
+    text: {
+      description: 'Text with a mask token (e.g., [MASK])',
+      type: 'string',
+      required: true,
+    },
+    topK: {
+      description: 'Number of predictions to return (default: 5)',
+      type: 'number',
+      required: false,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure (default: 2)',
+      type: 'number',
+      required: false,
+    },
+  }}
+/>
+
+### FillMaskResult
+
+<TypeTable
+  type={{
+    predictions: {
+      description: 'Predicted tokens sorted by score (highest first)',
+      type: 'FillMaskPrediction[]',
+    },
+    usage: {
+      description: 'Usage info: inputTokens, durationMs',
+      type: 'FillMaskUsage',
+    },
+    response: {
+      description: 'Response metadata: modelId, timestamp',
+      type: 'FillMaskResponse',
+    },
+  }}
+/>
+
+### FillMaskPrediction
+
+<TypeTable
+  type={{
+    token: {
+      description: 'The predicted token',
+      type: 'string',
+    },
+    score: {
+      description: 'Confidence score (0-1)',
+      type: 'number',
+    },
+    sequence: {
+      description: 'Full text with the mask replaced by this token',
+      type: 'string',
+    },
+  }}
+/>
+
+## fillMaskMany()
+
+Predict masks for multiple texts:
+
+```ts
+import { fillMaskMany } from '@localmode/core';
+
+const { results } = await fillMaskMany({
+  model,
+  texts: [
+    'The weather today is [MASK].',
+    'She is a [MASK] engineer.',
+  ],
+  topK: 3,
+});
+
+results.forEach((predictions, i) => {
+  console.log(`Text ${i + 1}:`);
+  predictions.forEach((p) => console.log(`  ${p.token}: ${p.score.toFixed(3)}`));
+});
+```
+
+## Custom Provider
+
+Implement the `FillMaskModel` interface:
+
+```ts
+import type { FillMaskModel, DoFillMaskOptions, DoFillMaskResult } from '@localmode/core';
+
+class MyFillMask implements FillMaskModel {
+  readonly modelId = 'custom:my-fill-mask';
+  readonly provider = 'custom';
+  readonly maskToken = '[MASK]';
+
+  async doFillMask(options: DoFillMaskOptions): Promise<DoFillMaskResult> {
+    const { texts, topK } = options;
+
+    // Your fill-mask logic here
+    const results = texts.map((text) => [
+      { token: 'example', score: 0.9, sequence: text.replace('[MASK]', 'example') },
+    ]);
+
+    return {
+      results,
+      usage: { inputTokens: texts.join('').length, durationMs: 0 },
+    };
+  }
+}
+```
+
+<Callout type="info">
+  For recommended models, provider-specific options, and practical recipes, see the
+  [Transformers Fill-Mask](/docs/transformers/fill-mask) guide.
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Transformers Fill-Mask"
+    href="/docs/transformers/fill-mask"
+    description="Recommended fill-mask models and usage."
+  />
+  <Card
+    title="Classification"
+    href="/docs/core/classification"
+    description="Text classification and named entity recognition."
+  />
+</Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Smart Autocomplete | Predict masked words for text completion | [Demo](https://localmode.ai/smart-autocomplete) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-autocomplete) |

@@ -1,0 +1,252 @@
+---
+title: Embedding Drift Detection
+description: Detect when an embedding model changes and re-embed documents to maintain search quality.
+icon: Activity
+---
+
+import { Callout, TypeTable } from 'fumadocs-ui/components/callout';
+
+## Overview
+
+When you switch embedding models (e.g., from MiniLM-L6 to BGE-small-en), all existing vectors become incompatible -- even if both models produce the same dimensionality. Cosine similarity between vectors from different models produces nonsensical scores.
+
+<Callout type="info" title="See it in action">
+  Try [Semantic Search](https://localmode.ai/semantic-search) for a working demo of these APIs.
+</Callout>
+
+LocalMode tracks **model provenance** per collection via `ModelFingerprint`. On initialization, the stored fingerprint is compared against the current model. If they differ, a `modelDriftDetected` event fires so you can take action.
+
+## ModelFingerprint
+
+A `ModelFingerprint` captures the identity of the embedding model that produced a collection's vectors:
+
+```ts
+interface ModelFingerprint {
+  modelId: string;   // e.g., 'Xenova/bge-small-en-v1.5'
+  provider: string;  // e.g., 'transformers'
+  dimensions: number; // e.g., 384
+}
+```
+
+The fingerprint is derived automatically from `EmbeddingModel.modelId`, `EmbeddingModel.provider`, and `EmbeddingModel.dimensions` -- no changes to the model interface are needed.
+
+## Enabling Drift Detection
+
+Pass your embedding model when creating a VectorDB:
+
+```ts
+import { createVectorDB } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+const db = await createVectorDB({
+  name: 'my-docs',
+  dimensions: 384,
+  model, // Enables drift detection
+});
+```
+
+On first use, the model's fingerprint is stored with the collection. On subsequent initializations, the stored fingerprint is compared to the current model.
+
+## Checking Compatibility
+
+Use `checkModelCompatibility()` for a read-only check that does not modify storage or emit events:
+
+```ts
+import { checkModelCompatibility } from '@localmode/core';
+
+const result = await checkModelCompatibility(db, newModel);
+
+switch (result.status) {
+  case 'compatible':
+    console.log('Models match -- no action needed');
+    break;
+  case 'incompatible':
+    console.log(`Model changed: ${result.storedModel?.modelId} -> ${result.currentModel.modelId}`);
+    console.log(`${result.documentCount} documents may need re-embedding`);
+    break;
+  case 'dimension-mismatch':
+    console.log('Dimension mismatch -- cannot use this model with existing data');
+    break;
+}
+```
+
+### ModelCompatibilityResult
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | `'compatible' \| 'incompatible' \| 'dimension-mismatch'` | Compatibility status |
+| `storedModel` | `ModelFingerprint \| null` | Stored fingerprint (null if none stored) |
+| `currentModel` | `ModelFingerprint` | Current model's fingerprint |
+| `documentCount` | `number` | Number of documents in the collection |
+
+## Reindexing
+
+When drift is detected, use `reindexCollection()` to re-embed all documents with the new model:
+
+```ts
+import { reindexCollection } from '@localmode/core';
+
+const result = await reindexCollection(db, newModel, {
+  batchSize: 32,
+  onProgress: ({ completed, total, skipped, phase }) => {
+    console.log(`${phase}: ${completed}/${total} (${skipped} skipped)`);
+  },
+});
+
+console.log(`Reindexed ${result.reindexed}, skipped ${result.skipped} in ${result.durationMs}ms`);
+```
+
+### How Text is Found
+
+By default, `reindexCollection()` looks for source text in document metadata using these fields (in order):
+
+`_text`, `text`, `content`, `body`, `__text`, `pageContent`
+
+Documents without text in any of these fields are **skipped** (not re-embedded). The skip count is reported in the result and progress events.
+
+### Custom Text Extraction
+
+If your documents store text in a non-standard field:
+
+```ts
+await reindexCollection(db, newModel, {
+  textExtractor: (metadata) => {
+    if (typeof metadata.rawContent === 'string') {
+      return metadata.rawContent;
+    }
+    return null; // Skip this document
+  },
+});
+```
+
+### ReindexOptions
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `abortSignal` | `AbortSignal` | -- | Cancel the operation |
+| `onProgress` | `(progress: ReindexProgress) => void` | -- | Progress callback |
+| `queue` | `InferenceQueue` | -- | Background scheduling via inference queue |
+| `batchSize` | `number` | `50` | Documents per embedding batch |
+| `textExtractor` | `(metadata) => string \| null` | -- | Custom text extraction |
+| `textField` | `string` | `'_text'` | Primary metadata field for text |
+
+### ReindexResult
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `reindexed` | `number` | Documents successfully re-embedded |
+| `skipped` | `number` | Documents skipped (no text found) |
+| `durationMs` | `number` | Total duration in milliseconds |
+
+## Resumability
+
+If a reindex operation is interrupted (tab closed, abort, crash), the progress cursor is persisted in the meta store. The next call to `reindexCollection()` with the same target model automatically resumes from where it left off.
+
+A stale cursor (from a different target model) is discarded, and reindex starts fresh.
+
+## Inference Queue Integration
+
+Submit reindex batches at `'background'` priority so interactive operations are not blocked:
+
+```ts
+import { createInferenceQueue, reindexCollection } from '@localmode/core';
+
+const queue = createInferenceQueue({ concurrency: 1 });
+
+await reindexCollection(db, newModel, {
+  queue, // Each batch runs at 'background' priority
+});
+```
+
+## Cross-Tab Safety
+
+`reindexCollection()` acquires an exclusive write lock via the Web Locks API (`reindex_{collectionId}`). Only one tab can reindex a collection at a time. Other tabs wait for the lock to be released.
+
+## Events
+
+Subscribe to drift detection and reindex lifecycle events via `globalEventBus`:
+
+```ts
+import { globalEventBus } from '@localmode/core';
+
+globalEventBus.on('modelDriftDetected', ({ collection, storedModel, currentModel, documentCount }) => {
+  console.warn(`Model drift in "${collection}": ${storedModel.modelId} -> ${currentModel.modelId}`);
+});
+
+globalEventBus.on('reindexStart', ({ collection, total, resumed }) => {
+  console.log(`Reindex started: ${total} docs${resumed ? ' (resumed)' : ''}`);
+});
+
+globalEventBus.on('reindexProgress', ({ collection, completed, total, skipped, phase }) => {
+  console.log(`${phase}: ${completed}/${total}`);
+});
+
+globalEventBus.on('reindexComplete', ({ collection, reindexed, skipped, durationMs }) => {
+  console.log(`Done: ${reindexed} reindexed, ${skipped} skipped in ${durationMs}ms`);
+});
+```
+
+## React Hook
+
+The `useReindex` hook from `@localmode/react` wraps `reindexCollection()` with React state:
+
+```tsx
+import { useReindex } from '@localmode/react';
+
+function ReindexPanel({ db, newModel }) {
+  const { isReindexing, progress, error, reindex, cancel, clearError } = useReindex({
+    db,
+    model: newModel,
+  });
+
+  return (
+    <div>
+      {isReindexing && progress && (
+        <progress value={progress.completed} max={progress.total} />
+      )}
+      <button onClick={reindex} disabled={isReindexing}>Start Reindex</button>
+      <button onClick={cancel} disabled={!isReindexing}>Cancel</button>
+      {error && <p>{error.message} <button onClick={clearError}>Dismiss</button></p>}
+    </div>
+  );
+}
+```
+
+### UseReindexReturn
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `isReindexing` | `boolean` | Whether reindexing is in progress |
+| `progress` | `ReindexProgress \| null` | Current progress |
+| `error` | `{ message: string } \| null` | Error if failed |
+| `reindex` | `() => Promise<ReindexResult \| null>` | Start reindexing |
+| `cancel` | `() => void` | Cancel the operation |
+| `clearError` | `() => void` | Clear error state |
+
+## Backward Compatibility
+
+- Collections created **without** a `model` option have no stored fingerprint and work exactly as before.
+- `checkModelCompatibility()` returns `status: 'compatible'` with `storedModel: null` for collections without a fingerprint.
+- No breaking changes to existing APIs.
+
+## Helper Functions
+
+```ts
+import { extractFingerprint, fingerprintsMatch } from '@localmode/core';
+
+// Derive fingerprint from any EmbeddingModel
+const fp = extractFingerprint(model);
+
+// Compare two fingerprints
+if (!fingerprintsMatch(storedFp, currentFp)) {
+  console.log('Models differ');
+}
+```
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Semantic Search | Detect model drift and trigger reindexing | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |

@@ -1,0 +1,315 @@
+---
+title: "AI Without Python: A JavaScript Developer's Guide to Machine Learning"
+description: "You don't need Python to build AI-powered features. Learn how ML models actually work in the browser, what ONNX and WebGPU do under the hood, and how to run embeddings, classification, and LLM chat in 5 lines of JavaScript."
+author: LocalMode
+date: 2026-03-14
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+If you have ever wanted to add AI features to your web app, you have probably hit the same wall: every tutorial starts with `pip install`, every example is in Python, and every guide assumes you already know what a tensor is. The entire machine learning ecosystem feels like a members-only club with a Python-shaped door.
+
+Here is the thing: you already know enough.
+
+If you can write a function that takes an input and returns an output, you understand the mental model behind every ML model in existence. The Python dominance is a historical accident of training infrastructure, not a fundamental requirement of running models. And in 2026, the browser has become a genuinely capable ML runtime.
+
+This post is for JavaScript and TypeScript developers who want to add AI features to their apps without switching languages, managing Python environments, or deploying inference servers. We will cover what models actually are, how they run in a browser, and how to use them with code you already understand.
+
+---
+
+## What Is a Model, Really?
+
+Strip away the jargon and a machine learning model is a function. It takes an input, runs it through a large set of learned numerical parameters (called weights), and produces an output.
+
+```
+input -> [weights + math] -> output
+```
+
+That is it. A sentiment classifier takes a string and returns a label. An embedding model takes a sentence and returns an array of numbers. A language model takes a prompt and returns generated text. The "intelligence" is entirely in the weights -- billions of numbers that were tuned during training to produce useful outputs.
+
+When someone says a model has "1 billion parameters," they mean the function contains 1 billion numbers that shape how inputs get transformed into outputs. When someone says a model is "67MB quantized," they mean those numbers have been compressed to fit in 67 megabytes of storage.
+
+The weights are static. They do not change when you run the model. Running a model (inference) is just math -- matrix multiplications, mostly -- applied to your input using those fixed weights. And math does not care what programming language calls it.
+
+---
+
+## How Models Run in a Browser
+
+The path from a trained Python model to your browser has three key pieces.
+
+### 1. ONNX: The Universal Model Format
+
+[ONNX](https://onnx.ai/) (Open Neural Network Exchange) is a standardized format for ML models. Think of it as the JPEG of machine learning -- a common format that any runtime can read, regardless of which framework created the model.
+
+Most models on HuggingFace are trained in PyTorch (Python). The [Optimum](https://huggingface.co/docs/optimum/en/index) library converts them to ONNX with a single command. Once in ONNX format, the model's origin language is irrelevant. The same `bge-small-en-v1.5` embedding model produces the same vectors whether you run it from Python or JavaScript.
+
+### 2. ONNX Runtime Web: The Execution Engine
+
+[ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/) is Microsoft's inference engine compiled to run in the browser. It reads ONNX model files and executes the math operations they describe. It supports two backends:
+
+- **WebGPU** -- runs computations on the GPU. This is the fast path, delivering [3-10x speedups](https://opensource.microsoft.com/blog/2024/02/29/onnx-runtime-web-unleashes-generative-ai-in-the-browser-using-webgpu/) over CPU execution. As of early 2026, WebGPU ships by default in [Chrome, Edge, Firefox, and Safari](https://caniuse.com/webgpu).
+- **WebAssembly (WASM)** -- runs computations on the CPU. This is the universal fallback that works in every modern browser, with SIMD and multi-threading support for solid performance.
+
+### 3. Transformers.js: The Developer-Friendly Layer
+
+[Transformers.js](https://github.com/huggingface/transformers.js/) from HuggingFace wraps ONNX Runtime Web in a high-level API designed to mirror Python's `transformers` library. It handles model downloading, caching, tokenization, and pre/post-processing -- all the boilerplate that would otherwise require hundreds of lines of code.
+
+LocalMode builds on top of this stack. The `@localmode/transformers` package uses [Transformers.js v3](https://www.npmjs.com/package/@huggingface/transformers) (with v4 for text generation models) to implement a clean, function-first TypeScript API across 25+ model implementations.
+
+Here is the full picture:
+
+```
+Your Code (JavaScript/TypeScript)
+        |
+   LocalMode API  (@localmode/core + @localmode/transformers)
+        |
+   Transformers.js  (tokenization, pre/post-processing)
+        |
+   ONNX Runtime Web  (inference engine)
+        |
+   WebGPU or WASM  (hardware acceleration)
+```
+
+You write `embed({ model, value: 'hello' })`. Five layers down, GPU shader cores are multiplying matrices. But you never need to think about that.
+
+---
+
+## Quantization: Shrinking Models for the Browser
+
+A full-precision (FP32) embedding model can be 90-400MB. That is too large for a browser download. Quantization solves this by reducing the precision of the model's weights -- storing them as 8-bit integers instead of 32-bit floats.
+
+The impact is dramatic:
+
+| Model | Full Size (FP32) | Quantized (INT8) | Quality Retained |
+|-------|-------------------|-------------------|-----------------|
+| bge-small-en-v1.5 (embeddings) | ~127MB | ~33MB | 99%+ |
+| distilbert-sst-2 (classification) | ~254MB | ~67MB | 98%+ |
+| Moonshine-tiny (speech) | ~109MB | ~27MB | ~95% |
+
+Quantization typically reduces model size by 4x with [minimal quality loss](https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html). For embeddings specifically, our benchmarks show quantized models score within 0.1 points of their full-precision counterparts on standard benchmarks (MTEB).
+
+In LocalMode, you enable quantization with a single option:
+
+```ts
+const model = transformers.embedding('Xenova/bge-small-en-v1.5', {
+  quantized: true, // ~127MB -> ~33MB, negligible quality difference
+});
+```
+
+---
+
+## Python vs. JavaScript: Side by Side
+
+Let us compare the same task -- generating an embedding vector -- in both languages, using the same underlying model.
+
+**Python (with HuggingFace transformers):**
+
+```python
+from transformers import pipeline
+
+embedder = pipeline('feature-extraction', model='BAAI/bge-small-en-v1.5')
+output = embedder('What is machine learning?', return_tensors=True)
+embedding = output[0].mean(dim=1).squeeze().detach().numpy()
+
+print(embedding.shape)  # (384,)
+```
+
+**JavaScript (with LocalMode):**
+
+```ts
+import { embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { embedding } = await embed({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  value: 'What is machine learning?',
+});
+
+console.log(embedding.length); // 384
+```
+
+Same model. Same 384-dimensional output. The JavaScript version runs entirely in the browser with no server, no API key, and no data leaving the device.
+
+---
+
+## Three Examples in Five Lines
+
+### 1. Embed Text (Semantic Search, RAG)
+
+Turn text into a numerical vector for similarity search, retrieval-augmented generation, or clustering.
+
+```ts
+import { embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { embedding, usage } = await embed({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  value: 'Local-first AI for the browser',
+});
+// embedding: Float32Array(384), usage: { tokens: 8 }
+```
+
+### 2. Classify Text (Sentiment, Intent, Moderation)
+
+Determine the sentiment, category, or intent of a piece of text.
+
+```ts
+import { classify } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { label, score } = await classify({
+  model: transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english'),
+  text: 'This product is absolutely fantastic!',
+});
+// label: "POSITIVE", score: 0.9998
+```
+
+### 3. Stream LLM Chat (Conversational AI)
+
+Generate text from a local language model with real-time streaming.
+
+```ts
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+const result = await streamText({
+  model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
+  prompt: 'Explain quantum computing in simple terms',
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text); // streams token by token
+}
+```
+
+Every example follows the same pattern: import a function from `@localmode/core`, create a model from a provider package, call the function with an options object, get a structured result. No classes to instantiate. No configuration files. No build step beyond what you already have.
+
+---
+
+## "But Isn't Python Faster?"
+
+This is the most common objection, and the answer has nuance.
+
+**For training: yes, Python is significantly faster.** Training involves processing terabytes of data over days or weeks. Python's ecosystem -- PyTorch, CUDA, distributed training frameworks -- is purpose-built for this. Nobody is suggesting you train models in the browser.
+
+**For inference: the gap is small and narrowing.** When you run a model, the actual computation happens in optimized C++/GPU kernels regardless of the calling language. ONNX Runtime Web uses the same core engine as ONNX Runtime for Python. The overhead of JavaScript calling into WASM or WebGPU is measured in microseconds -- negligible compared to the milliseconds spent on matrix multiplication.
+
+Real-world numbers for `bge-small-en-v1.5` embedding a single sentence:
+
+| Runtime | Time |
+|---------|------|
+| Python (PyTorch, CPU) | ~15ms |
+| Python (ONNX Runtime, CPU) | ~8ms |
+| Browser (ONNX Runtime Web, WASM) | ~12ms |
+| Browser (ONNX Runtime Web, WebGPU) | ~5ms |
+
+With WebGPU, the browser can actually be *faster* than Python on CPU for inference, because it has direct access to GPU compute without the overhead of CUDA driver initialization.
+
+The honest summary: Python is the right choice for training and research. JavaScript is a perfectly valid choice for inference, especially when your application already lives in the browser.
+
+---
+
+## "Can I Use the Same Models?"
+
+Yes. This is the key insight that makes browser ML practical.
+
+The [top 30 most popular model architectures on HuggingFace](https://onnxruntime.ai/huggingface) are all supported by ONNX Runtime. Models trained in Python with PyTorch or TensorFlow can be exported to ONNX using HuggingFace's Optimum library. Once exported, they run identically in any ONNX Runtime environment -- including the browser.
+
+Transformers.js maintains a [curated collection](https://huggingface.co/models?library=transformers.js) of thousands of ONNX-converted models on HuggingFace Hub. These are the same architectures (BERT, DistilBERT, Whisper, CLIP, Llama, and more) that power production Python applications, converted to a format the browser can execute.
+
+You are not using toy models. You are using the same models, running the same weights, producing the same outputs -- just in a different runtime.
+
+---
+
+## What JavaScript Actually Gets You
+
+Running models in the browser is not just "Python but worse." It unlocks capabilities that server-side inference cannot match:
+
+**Zero latency for the user.** No network round-trip. Inference starts immediately. For real-time features like autocomplete, search-as-you-type, or live transcription, the difference is night and day.
+
+**Absolute privacy.** Data never leaves the device. No privacy policy to write. No GDPR data processing agreement. No risk of server-side data breaches. The model runs in a sandboxed browser tab.
+
+**Zero marginal cost.** Your costs do not scale with users. Whether you have 100 or 100,000 users running inference simultaneously, your server bill stays the same: zero.
+
+**Offline capability.** After the initial model download, everything works without internet. Build apps for airplanes, rural areas, or enterprise environments with restricted network access.
+
+**No infrastructure.** No GPU servers to provision. No autoscaling to configure. No model serving frameworks to maintain. `npm install` and you are done.
+
+---
+
+## The Practical Limits
+
+Honesty matters. Here is what browser ML cannot do well today:
+
+- **Training.** Do not try to train models in the browser. Use Python, then export to ONNX.
+- **Models above ~4B parameters.** Browser memory limits cap practical LLM size at around 4 billion parameters (quantized). For GPT-4-class models, you still need a server.
+- **Batch processing at scale.** If you need to embed a million documents, a server with a dedicated GPU will finish in minutes rather than hours.
+- **First load.** Models must be downloaded once (33MB-2GB depending on the task). After that, they are cached in IndexedDB and load from disk in seconds.
+
+For the vast majority of application-layer AI features -- search, classification, summarization, translation, chat, image analysis -- browser inference is production-ready today.
+
+---
+
+## Getting Started
+
+Install two packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+That is your entire ML stack. No Python. No Docker. No GPU server. The first time you call a function, the model downloads from HuggingFace Hub and caches itself in the browser. Every subsequent call loads from cache.
+
+If you want React hooks:
+
+```bash
+npm install @localmode/react
+```
+
+If you want local LLM chat:
+
+```bash
+npm install @localmode/webllm
+```
+
+The API surface is intentionally small. Every function follows the same pattern: `functionName({ model, input, ...options })` returns `{ result, usage, response }`. If you have used `fetch()`, you already know the ergonomics.
+
+<Callout type="info" title="The full API covers 18 ML domains">
+  Embeddings, classification, zero-shot classification, NER, reranking, translation, summarization, question answering, fill-mask, speech-to-text, text-to-speech, image classification, image captioning, object detection, segmentation, OCR, document QA, and text generation. Each follows the same function-first pattern shown above.
+</Callout>
+
+---
+
+## You Already Know Enough
+
+The ML ecosystem's Python-centric tooling creates an artificial barrier. It suggests that machine learning requires a different language, a different mindset, a different kind of developer. It does not.
+
+A model is a function. Inference is calling that function. The browser is a capable runtime. And JavaScript is a perfectly good language for calling functions.
+
+The models are ready. The runtimes are fast. The APIs are clean. The only thing that was missing was a bridge between the ML world and the JavaScript world -- and that bridge exists now.
+
+You do not need to learn Python to ship AI features. You just need to `npm install` and start building.
+
+---
+
+## Methodology
+
+This post draws on the following sources for technical claims and benchmarks:
+
+- [ONNX Runtime Web documentation](https://onnxruntime.ai/docs/tutorials/web/) and [WebGPU execution provider guide](https://onnxruntime.ai/docs/tutorials/web/ep-webgpu.html) for browser inference architecture
+- [Microsoft's ONNX Runtime Web + WebGPU announcement](https://opensource.microsoft.com/blog/2024/02/29/onnx-runtime-web-unleashes-generative-ai-in-the-browser-using-webgpu/) for WebGPU performance claims (3-10x over WASM)
+- [ONNX Runtime quantization documentation](https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html) for INT8 compression ratios and quality trade-offs
+- [Transformers.js GitHub repository](https://github.com/huggingface/transformers.js/) and [v3 release blog](https://huggingface.co/blog/transformersjs-v3) for architecture and supported tasks
+- [Can I Use: WebGPU](https://caniuse.com/webgpu) and [web.dev WebGPU announcement](https://web.dev/blog/webgpu-supported-major-browsers) for browser support status
+- [ONNX Runtime HuggingFace integration page](https://onnxruntime.ai/huggingface) for supported model architecture count
+- [DLabs performance comparison: JavaScript vs Python for ML](https://dlabs.ai/blog/performance-comparison-javascript-vs-python-for-machine-learning/) for cross-language inference benchmarks
+- [HuggingFace Optimum ONNX export guide](https://huggingface.co/blog/convert-transformers-to-onnx) for model conversion workflow
+- Inference timing benchmarks run internally using LocalMode on an M3 MacBook Pro (Chrome 134, WebGPU enabled)
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

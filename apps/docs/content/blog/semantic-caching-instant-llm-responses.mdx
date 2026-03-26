@@ -1,0 +1,356 @@
+---
+title: "Semantic Caching: Instant LLM Responses for Similar Questions at Zero Cost"
+description: "Stop waiting seconds for answers your app has already generated. Semantic caching uses embedding similarity to return cached LLM responses for rephrased questions in under 50ms - entirely in the browser, with no server and no API costs."
+author: LocalMode
+date: 2026-03-04
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+A user asks your chatbot "What is machine learning?" and waits four seconds for the LLM to generate a response. Ten minutes later, a different user - or the same user in a different tab - asks "Explain machine learning to me." The model spends another four seconds generating an almost identical answer. Multiply this by hundreds of users and thousands of repeated questions, and you have a system that wastes the majority of its compute on work it has already done.
+
+The fix is caching. But traditional caching matches exact strings, and "What is machine learning?" is not the same string as "Explain machine learning to me." The cache misses, the model runs again, and the user waits.
+
+Semantic caching solves this. Instead of comparing strings character by character, it compares the *meaning* of prompts using embeddings. If two prompts are close enough in meaning, the cached response is returned instantly. No model inference, no GPU cycles, no waiting. Research shows this approach can reduce response latency by over 96% on cache hits - from seconds down to tens of milliseconds - while maintaining high accuracy.
+
+This post walks through building a semantic cache with LocalMode that runs entirely in the browser. No server, no API keys, no data leaving the device.
+
+<Callout type="info" title="Working demos">
+  The [LLM Chat](https://localmode.ai/llm-chat) and [PDF Search](https://localmode.ai/pdf-search) showcase apps both use semantic caching. Ask a question, then rephrase it - the second answer arrives instantly.
+</Callout>
+
+---
+
+## Why Exact-Match Caching Falls Short
+
+The simplest cache is a `Map<string, string>` keyed by the raw prompt. It works when users type the exact same thing:
+
+```
+"What is machine learning?" --> cache HIT
+"What is machine learning?" --> cache HIT
+"Explain machine learning"  --> cache MISS  (different string)
+"what is machine learning?" --> cache MISS  (different casing)
+"What is  machine learning?" --> cache MISS (extra space)
+```
+
+In practice, users almost never type the exact same prompt twice. They rephrase, capitalize differently, add filler words, or ask the same question from a different angle. An exact-match cache helps with programmatic retries but does almost nothing for real user traffic.
+
+The numbers bear this out. Production FAQ chatbots with exact-match caching typically see hit rates of 5-15%. The same workloads with semantic caching reach 40-85%, depending on how repetitive the domain is. Customer support, documentation assistants, and educational tools sit at the high end - precisely the use cases where caching matters most.
+
+---
+
+## How Semantic Caching Works
+
+The idea is straightforward:
+
+1. When an LLM generates a response, **embed the prompt** into a vector and store it alongside the response in a vector database.
+2. When a new prompt arrives, **embed it** and search the vector database for the nearest cached prompt.
+3. If the similarity score exceeds a threshold, **return the cached response** without calling the LLM.
+4. If it falls below the threshold, **call the LLM normally** and cache the new result.
+
+```
+User prompt: "Explain machine learning to me"
+                │
+                ▼
+     ┌─────────────────────┐
+     │  Embed prompt        │  (~15ms)
+     │  (BGE-small-en-v1.5) │
+     └──────────┬──────────┘
+                │
+                ▼
+     ┌─────────────────────┐
+     │  Search VectorDB     │  (~5ms)
+     │  (HNSW index)        │
+     └──────────┬──────────┘
+                │
+        ┌───────┴───────┐
+        │               │
+   score >= 0.92    score < 0.92
+        │               │
+        ▼               ▼
+  Return cached     Call LLM
+  response (~20ms)  (~3-8 seconds)
+                        │
+                        ▼
+                  Cache the new
+                  response for
+                  future lookups
+```
+
+The embedding step is fast - around 15ms for a single sentence with a quantized BGE-small model. The HNSW search is even faster at under 5ms. Total overhead for a cache hit is typically 20-50ms. Compare that to the 3-30 seconds a local LLM takes to generate a response, and the value is clear.
+
+---
+
+## Setting Up the Cache
+
+LocalMode's `createSemanticCache()` creates a cache backed by an internal VectorDB with an HNSW index. You provide an embedding model and optional configuration:
+
+```typescript
+import { createSemanticCache } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const cache = await createSemanticCache({
+  embeddingModel: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  threshold: 0.92,       // Cosine similarity required for a hit
+  maxEntries: 100,       // LRU eviction after 100 entries
+  ttlMs: 3600000,        // Entries expire after 1 hour
+  storage: 'memory',     // Or 'indexeddb' for persistence
+  normalize: true,       // Collapse whitespace, lowercase prompts
+});
+```
+
+The `threshold`, `maxEntries`, and `ttlMs` parameters control the three axes of cache behavior: accuracy, memory, and freshness. We will tune each one later in this post.
+
+---
+
+## Storing and Looking Up Responses
+
+The cache has two core operations: `store()` and `lookup()`.
+
+```typescript
+// After the LLM generates a response, store it
+await cache.store({
+  prompt: 'What is machine learning?',
+  response: 'Machine learning is a subset of artificial intelligence that enables systems to learn and improve from experience without being explicitly programmed...',
+  modelId: 'Llama-3.2-1B-Instruct-q4f16',
+});
+
+// Later, look up a semantically similar prompt
+const result = await cache.lookup({
+  prompt: 'Explain machine learning to me',
+  modelId: 'Llama-3.2-1B-Instruct-q4f16',
+});
+
+if (result.hit) {
+  console.log(result.response);   // The cached answer
+  console.log(result.score);      // 0.95 - high similarity
+  console.log(result.durationMs); // 18ms - near instant
+}
+```
+
+A few things happen behind the scenes:
+
+- **Prompt normalization**: "Explain machine learning to me" becomes "explain machine learning to me" (trimmed, lowercased, whitespace collapsed). This eliminates trivial mismatches before the embedding step.
+- **Exact-match fast path**: If the normalized prompt is an exact string match for a cached entry, the response is returned without computing an embedding at all. This makes repeated identical queries sub-millisecond.
+- **Model filtering**: Lookups only match entries from the same `modelId`. A response generated by Llama 3.2 will not be returned for a prompt aimed at Qwen 3 - different models produce different answers.
+- **TTL enforcement**: Expired entries are removed lazily during lookup and treated as misses.
+
+---
+
+## The Middleware Approach: Zero Code Changes
+
+Manually calling `store()` and `lookup()` works, but it means threading cache logic through every place your app calls the LLM. The cleaner approach is `semanticCacheMiddleware`, which wraps a language model so caching happens transparently:
+
+```typescript
+import {
+  createSemanticCache,
+  semanticCacheMiddleware,
+  wrapLanguageModel,
+  generateText,
+  streamText,
+} from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+import { webllm } from '@localmode/webllm';
+
+// 1. Create the cache
+const cache = await createSemanticCache({
+  embeddingModel: transformers.embedding('Xenova/bge-small-en-v1.5'),
+});
+
+// 2. Wrap the model with cache middleware
+const cachedModel = wrapLanguageModel({
+  model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16'),
+  middleware: semanticCacheMiddleware(cache),
+});
+
+// 3. Use the model normally - caching is automatic
+const result1 = await generateText({
+  model: cachedModel,
+  prompt: 'What are the benefits of exercise?',
+});
+// First call: LLM generates (~4 seconds), response is cached
+
+const result2 = await generateText({
+  model: cachedModel,
+  prompt: 'Why is exercise good for you?',
+});
+// Second call: cache hit (~20ms), no LLM inference
+```
+
+The middleware intercepts both `generateText()` and `streamText()` calls. On a cache hit during streaming, the full cached response is yielded as a single chunk with `done: true` - the consumer sees an instant "stream" that completes immediately. On a miss, the model streams normally and the middleware buffers the text to cache it after completion. Storage errors are swallowed silently because caching is best-effort - a failed `store()` should never break the user's request.
+
+---
+
+## Timing: Cached vs. Uncached
+
+Here is what the difference looks like in practice on a typical laptop with WebGPU:
+
+| Scenario | Prompt | Latency | Tokens generated |
+|----------|--------|---------|-----------------|
+| Cold (no cache) | "What is machine learning?" | ~4,200ms | ~150 tokens |
+| Cache miss (similar, below threshold) | "How does supervised learning differ from unsupervised?" | ~3,800ms | ~130 tokens |
+| Cache hit (semantic match) | "Explain machine learning to me" | ~22ms | 0 (cached) |
+| Cache hit (exact match) | "What is machine learning?" | ~0.3ms | 0 (cached) |
+
+The exact-match fast path is particularly striking - under a millisecond because it skips the embedding step entirely. Semantic hits add the embedding overhead (~15ms) and the HNSW search (~5ms), but the total is still two orders of magnitude faster than LLM inference.
+
+On cache hits the middleware returns zero-token usage (`inputTokens: 0, outputTokens: 0`), making it trivial to track how much compute the cache saved.
+
+---
+
+## Tuning the Similarity Threshold
+
+The `threshold` parameter is the most important configuration decision. It controls the tradeoff between hit rate and accuracy:
+
+| Threshold | Behavior | Good for |
+|-----------|----------|----------|
+| 0.85 | Aggressive matching. Higher hit rate but risk of returning answers for questions that are only loosely related. | High-volume FAQ bots where approximate answers are acceptable |
+| 0.92 (default) | Balanced. Catches rephrased questions while rejecting topically different ones. | General-purpose chatbots, documentation assistants |
+| 0.97 | Conservative. Only nearly identical prompts match. Lower hit rate but very high precision. | Medical, legal, or financial tools where accuracy is critical |
+
+A concrete example:
+
+```
+Original:    "What is machine learning?"
+Rephrase:    "Explain machine learning"        → similarity: 0.95 ✓ (hit at 0.92)
+Related:     "What is deep learning?"           → similarity: 0.88 ✗ (miss at 0.92)
+Unrelated:   "How do I bake a cake?"            → similarity: 0.31 ✗ (miss at any threshold)
+```
+
+The default of 0.92 is a good starting point. If you find the cache returning incorrect answers for your domain, raise it. If the hit rate is too low and most questions are genuinely repetitive, lower it. Monitor the `score` field in lookup results to understand where your queries fall on the similarity spectrum.
+
+---
+
+## Cache Invalidation: TTL, LRU, and Manual Clearing
+
+Stale cache entries are a classic problem. LocalMode handles invalidation through three mechanisms:
+
+**TTL (Time-to-Live)** - Every entry has a creation timestamp. On lookup, if an entry is older than `ttlMs`, it is removed and treated as a miss. This ensures answers do not persist forever when the underlying knowledge changes.
+
+```typescript
+const cache = await createSemanticCache({
+  embeddingModel: model,
+  ttlMs: 1800000,   // 30 minutes - good for fast-changing content
+});
+```
+
+**LRU (Least Recently Used)** - When the cache reaches `maxEntries`, the least-recently-accessed entry is evicted before a new one is stored. The `accessedAt` timestamp is updated on every cache hit, so frequently requested answers stay in the cache.
+
+```typescript
+const cache = await createSemanticCache({
+  embeddingModel: model,
+  maxEntries: 50,    // Tight budget - keeps only the 50 most-used answers
+});
+```
+
+**Manual clearing** - For explicit invalidation when you know the cached data is stale:
+
+```typescript
+// Clear everything
+await cache.clear();
+
+// Clear entries for a specific model only (useful after model updates)
+await cache.clear({ modelId: 'Llama-3.2-1B-Instruct-q4f16' });
+```
+
+For most applications, the default settings (1 hour TTL, 100 max entries) are a reasonable starting point. Shorten the TTL for content that changes frequently. Increase `maxEntries` if your users ask a wide variety of questions and you have memory to spare.
+
+---
+
+## Monitoring Cache Performance
+
+The `stats()` method provides a real-time view of how the cache is performing:
+
+```typescript
+const stats = cache.stats();
+
+console.log(`Entries: ${stats.entries}`);
+console.log(`Hits: ${stats.hits}`);
+console.log(`Misses: ${stats.misses}`);
+console.log(`Hit rate: ${(stats.hitRate * 100).toFixed(1)}%`);
+```
+
+For deeper observability, the cache emits events through the global event bus:
+
+```typescript
+import { globalEventBus } from '@localmode/core';
+
+globalEventBus.on('cacheHit', ({ prompt, score, modelId }) => {
+  console.log(`HIT  [${score.toFixed(3)}] "${prompt.slice(0, 60)}"`);
+});
+
+globalEventBus.on('cacheMiss', ({ prompt, modelId }) => {
+  console.log(`MISS "${prompt.slice(0, 60)}"`);
+});
+
+globalEventBus.on('cacheEvict', ({ entryId, reason }) => {
+  console.log(`EVICT ${entryId} (${reason})`);
+});
+```
+
+These events are useful for debugging threshold settings. If you see many misses with scores in the 0.88-0.91 range, lowering the threshold slightly could improve hit rates without sacrificing accuracy.
+
+---
+
+## Persistent Caching With IndexedDB
+
+By default, the cache uses in-memory storage, which means it is lost on page reload. For applications where users return frequently and ask similar questions across sessions, switch to IndexedDB:
+
+```typescript
+const cache = await createSemanticCache({
+  embeddingModel: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  storage: 'indexeddb',
+  ttlMs: 86400000,     // 24-hour TTL for persistent cache
+  maxEntries: 500,     // Larger budget for cross-session use
+});
+```
+
+With IndexedDB storage, cached responses survive page reloads, tab closes, and even browser restarts. The HNSW index is rebuilt from persisted vectors on cache creation, which adds a small initialization cost proportional to the number of stored entries.
+
+---
+
+## Practical Tips
+
+**Reuse your embedding model.** If your app already loads BGE-small for RAG or semantic search, pass the same model instance to `createSemanticCache()`. Loading a second embedding model wastes memory and download time.
+
+**Cache at the right granularity.** Semantic caching works best for self-contained questions with self-contained answers. It works poorly for conversational prompts that depend on message history, because the same question means different things in different contexts.
+
+**Combine with prompt normalization.** The built-in normalizer handles whitespace and casing, but you can add your own preprocessing before prompts reach the cache - stripping filler words, expanding abbreviations, or removing pleasantries like "Hey, can you tell me..."
+
+**Watch memory.** Each cached entry stores a prompt embedding (384 floats = ~1.5KB for BGE-small) plus the response text. For 100 entries with average 500-character responses, total memory is approximately 200KB - negligible. But if you cache very long responses (multi-paragraph answers), budget accordingly.
+
+**Destroy the cache when done.** Call `cache.destroy()` when the component unmounts or the user navigates away. This releases the internal VectorDB and frees memory. The `useSemanticCache()` React hook handles this automatically.
+
+---
+
+## What To Explore Next
+
+- **[Semantic Cache API reference](/docs/core/semantic-cache)** - Full documentation for `createSemanticCache()`, `lookup()`, `store()`, `stats()`, and the middleware
+- **[Language Model Middleware](/docs/core/language-model-middleware)** - Compose semantic caching with logging, retry, and guardrails middleware
+- **[Embeddings guide](/docs/core/embeddings)** - Deep dive into `embed()`, `embedMany()`, and embedding model middleware
+- **[Vector Database](/docs/core/vector-db)** - The HNSW index and storage layer that powers semantic search under the hood
+- **[React hooks](/docs/react/chat)** - `useSemanticCache()` and `useGenerateText()` for React applications
+
+---
+
+## Methodology
+
+This post references the following models, tools, and research:
+
+- [BAAI/bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5): 33.4M parameters, 384 dimensions, used for prompt embeddings via `@localmode/transformers`
+- [Xenova/bge-small-en-v1.5](https://huggingface.co/Xenova/bge-small-en-v1.5): Transformers.js-compatible ONNX quantized export (~33MB)
+- [Llama 3.2 1B](https://ai.meta.com/blog/llama-3-2-connect-2024-vision-edge-mobile-devices/): 1.24B parameters, used as the example LLM via `@localmode/webllm`
+- [Advancing Semantic Caching for LLMs with Domain-Specific Embeddings](https://arxiv.org/html/2504.02268v1): Research on embedding-based cache accuracy and hit rates
+- [From Exact Hits to Close Enough: Semantic Caching for LLM Embeddings](https://arxiv.org/html/2603.03301v1): Benchmarks showing 96.9% latency reduction on cache hits (1.67s to 0.052s)
+- [An Ensemble Embedding Approach for Semantic Caching](https://arxiv.org/html/2507.07061v1): 92% cache hit ratio for semantically equivalent queries with 85% rejection accuracy
+- Cache hit rate ranges (40-85%) and cost reduction figures are from [AWS semantic caching benchmarks](https://aws.amazon.com/blogs/database/optimize-llm-response-costs-and-latency-with-effective-caching/) and [production LLMOps data](https://redis.io/blog/large-language-model-operations-guide/)
+- Latency measurements in the timing table are from internal testing on Chrome 125 / macOS with an Apple M2 chip and WebGPU enabled. Results vary by device, browser, and model quantization
+- Similarity scores in the threshold examples are representative of BGE-small-en-v1.5 behavior; exact values depend on model version and quantization
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

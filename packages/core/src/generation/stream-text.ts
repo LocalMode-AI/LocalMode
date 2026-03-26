@@ -61,7 +61,7 @@ function resolveModel(modelOrId: LanguageModel | string): LanguageModel {
  * import { webllm } from '@localmode/webllm';
  *
  * const result = await streamText({
- *   model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16'),
+ *   model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
  *   prompt: 'Write a story about a robot',
  *   maxTokens: 500,
  * });
@@ -78,7 +78,7 @@ function resolveModel(modelOrId: LanguageModel | string): LanguageModel {
  * @example With onChunk callback
  * ```ts
  * const result = await streamText({
- *   model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16'),
+ *   model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
  *   prompt: 'Explain AI',
  *   onChunk: (chunk) => {
  *     // Update UI in real-time
