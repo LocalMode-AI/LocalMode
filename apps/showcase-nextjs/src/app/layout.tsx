@@ -50,7 +50,7 @@ export default function RootLayout({
         <NetworkMonitorScript />
         <Navbar />
         <main className="flex-1">{children}</main>
-        {process.env.NODE_ENV === 'development' && <DevTools />}
+        <DevTools />
       </body>
     </html>
   );
