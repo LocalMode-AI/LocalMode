@@ -15,6 +15,7 @@ export async function HighlightedCode({ code, lang, title, icon }: HighlightedCo
       light: 'github-light',
       dark: 'github-dark',
     },
+    defaultColor: false,
   });
 
   return (
