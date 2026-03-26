@@ -18,10 +18,8 @@ import type {
 type DocumentInput = DocInput;
 import type { ModelSettings, TransformersDevice, ModelLoadProgress } from '../types.js';
 
-// Dynamic import types
-type DocumentQAPipeline = Awaited<
-  ReturnType<typeof import('@huggingface/transformers').pipeline<'document-question-answering'>>
->;
+// Use generic callable type since we may use different pipeline tasks (Florence-2 vs Donut)
+type DocQAPipeline = (doc: unknown, question: unknown, ...args: unknown[]) => Promise<unknown>;
 
 /**
  * Document QA model implementation using Transformers.js
@@ -32,8 +30,8 @@ export class TransformersDocumentQAModel implements DocumentQAModel, TableQAMode
   readonly modelId: string;
   readonly provider = 'transformers';
 
-  private pipeline: DocumentQAPipeline | null = null;
-  private loadPromise: Promise<DocumentQAPipeline> | null = null;
+  private pipeline: DocQAPipeline | null = null;
+  private loadPromise: Promise<DocQAPipeline> | null = null;
 
   constructor(
     private baseModelId: string,
@@ -46,7 +44,7 @@ export class TransformersDocumentQAModel implements DocumentQAModel, TableQAMode
     this.modelId = `transformers:${baseModelId}`;
   }
 
-  private async loadPipeline(): Promise<DocumentQAPipeline> {
+  private async loadPipeline(): Promise<DocQAPipeline> {
     if (this.pipeline) {
       return this.pipeline;
     }
@@ -56,13 +54,20 @@ export class TransformersDocumentQAModel implements DocumentQAModel, TableQAMode
     }
 
     this.loadPromise = (async () => {
-      const { pipeline } = await import('@huggingface/transformers');
+      const { pipeline, env } = await import('@huggingface/transformers');
 
-      const pipe = await pipeline('document-question-answering', this.baseModelId, {
+      // Suppress ONNX runtime warnings about node execution providers
+      env.backends.onnx.logLevel = 'error';
+
+      // Florence-2 uses 'image-text-to-text' pipeline; traditional models use 'document-question-answering'
+      const isFlorence = this.baseModelId.toLowerCase().includes('florence');
+      const task = isFlorence ? 'image-text-to-text' : 'document-question-answering';
+
+      const pipe = await (pipeline as Function)(task, this.baseModelId, {
         device: this.settings.device ?? 'auto',
-        dtype: this.settings.quantized !== false ? 'q8' : 'fp32',
+        dtype: this.settings.quantized === true ? 'q8' : undefined,
         progress_callback: this.settings.onProgress,
-      });
+      }) as DocQAPipeline;
 
       this.pipeline = pipe;
       return pipe;
@@ -108,18 +113,32 @@ export class TransformersDocumentQAModel implements DocumentQAModel, TableQAMode
 
     const answers: Array<{ answer: string; score: number }> = [];
 
+    const isFlorence = this.baseModelId.toLowerCase().includes('florence');
+
     for (const question of questions) {
       abortSignal?.throwIfAborted();
 
-      // Document-question-answering pipeline returns { answer, score, ... }
-      const output = await pipe(preparedDoc as unknown as string, question);
+      let answer: { answer: string; score: number };
 
-      const result = Array.isArray(output) ? output[0] : output;
-
-      const answer = {
-        answer: String((result as Record<string, unknown>).answer ?? ''),
-        score: Number((result as Record<string, unknown>).score ?? 0),
-      };
+      if (isFlorence) {
+        // Florence-2 uses text prompt with the question embedded
+        const prompt = `<DocVQA> ${question}`;
+        const output = await pipe(preparedDoc as unknown as string, prompt);
+        const results = Array.isArray(output) ? output : [output];
+        const generated = String((results[0] as Record<string, unknown>).generated_text ?? '');
+        answer = {
+          answer: generated.replace(/<[^>]+>/g, '').trim() || 'No answer found',
+          score: generated ? 0.5 : 0,
+        };
+      } else {
+        // Standard document-question-answering pipeline returns { answer, score }
+        const output = await pipe(preparedDoc as unknown as string, question);
+        const result = Array.isArray(output) ? output[0] : output;
+        answer = {
+          answer: String((result as Record<string, unknown>).answer ?? ''),
+          score: Number((result as Record<string, unknown>).score ?? 0),
+        };
+      }
 
       answers.push(answer);
     }

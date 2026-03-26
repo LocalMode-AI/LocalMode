@@ -1,0 +1,272 @@
+---
+title: Multimodal Embeddings
+description: Embed text and images into the same vector space for cross-modal similarity search.
+icon: Layers
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+Multimodal embeddings map both text and images into the same vector space. This enables cross-modal search: find images using text queries, or find text descriptions that match an image.
+
+<Callout type="info" title="See it in action">
+  Try [Cross-Modal Search](https://localmode.ai/cross-modal-search) for a working demo of these APIs.
+</Callout>
+
+<Callout type="info" title="Provider Required">
+  Multimodal embedding requires a provider that implements `MultimodalEmbeddingModel`. Currently supported: `@localmode/transformers` with CLIP/SigLIP models.
+</Callout>
+
+## embedImage()
+
+Embed a single image:
+
+<Tabs items={['Basic Usage', 'Cross-Modal Search', 'With AbortSignal']}>
+<Tab value="Basic Usage">
+
+```ts {5-8}
+import { embedImage } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.multimodalEmbedding('Xenova/clip-vit-base-patch32');
+
+const { embedding, usage, response } = await embedImage({
+  model,
+  image: imageBlob, // Blob, ArrayBuffer, URL string, or data URI
+});
+
+console.log('Dimensions:', embedding.length); // 512
+```
+
+</Tab>
+<Tab value="Cross-Modal Search">
+
+```ts {8-9,12-13,16}
+import { embed, embedImage, cosineSimilarity } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.multimodalEmbedding('Xenova/clip-vit-base-patch32');
+
+// Embed text and image with the SAME model
+const { embedding: textVec } = await embed({
+  model,
+  value: 'a sunset over the ocean',
+});
+const { embedding: imgVec } = await embedImage({
+  model,
+  image: sunsetPhoto,
+});
+
+const similarity = cosineSimilarity(textVec, imgVec);
+console.log(`Text-image similarity: ${(similarity * 100).toFixed(1)}%`);
+```
+
+</Tab>
+<Tab value="With AbortSignal">
+
+```ts {3,7}
+const controller = new AbortController();
+
+setTimeout(() => controller.abort(), 10000);
+
+const { embedding } = await embedImage({
+  model,
+  image: largeImage,
+  abortSignal: controller.signal,
+});
+```
+
+</Tab>
+</Tabs>
+
+### EmbedImageOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The multimodal embedding model to use',
+      type: 'MultimodalEmbeddingModel | string',
+      required: true,
+    },
+    image: {
+      description: 'The image to embed (Blob, ArrayBuffer, URL string, or data URI)',
+      type: 'ImageInput',
+      required: true,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts',
+      type: 'number',
+      default: '2',
+    },
+    headers: {
+      description: 'Custom headers to include in requests',
+      type: 'Record<string, string>',
+    },
+    providerOptions: {
+      description: 'Provider-specific options',
+      type: 'Record<string, Record<string, unknown>>',
+    },
+  }}
+/>
+
+### EmbedImageResult
+
+<TypeTable
+  type={{
+    embedding: {
+      description: 'The generated embedding vector',
+      type: 'Float32Array',
+    },
+    usage: {
+      description: 'Usage information',
+      type: '{ tokens: number }',
+    },
+    response: {
+      description: 'Response metadata',
+      type: '{ modelId: string; timestamp: Date }',
+    },
+  }}
+/>
+
+## embedManyImages()
+
+Embed multiple images in a batch:
+
+```ts
+import { embedManyImages } from '@localmode/core';
+
+const { embeddings, usage } = await embedManyImages({
+  model,
+  images: [image1, image2, image3],
+});
+
+console.log(embeddings.length); // 3
+console.log(embeddings[0].length); // 512
+```
+
+### EmbedManyImagesOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The multimodal embedding model to use',
+      type: 'MultimodalEmbeddingModel | string',
+      required: true,
+    },
+    images: {
+      description: 'The images to embed',
+      type: 'ImageInput[]',
+      required: true,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts per batch',
+      type: 'number',
+      default: '2',
+    },
+  }}
+/>
+
+## MultimodalEmbeddingModel Interface
+
+The `MultimodalEmbeddingModel` interface extends `EmbeddingModel<string>`, meaning it works as a standard text embedding model everywhere `embed()` is used. It adds image (and optionally audio) embedding capabilities.
+
+```ts
+interface MultimodalEmbeddingModel extends EmbeddingModel<string> {
+  readonly supportedModalities: ('text' | 'image' | 'audio')[];
+  doEmbedImage(options: DoEmbedImageOptions): Promise<DoEmbedResult>;
+  doEmbedAudio?(options: DoEmbedAudioOptions): Promise<DoEmbedResult>;
+}
+```
+
+### Custom Implementation
+
+You can implement `MultimodalEmbeddingModel` to create your own providers:
+
+```ts
+import type { MultimodalEmbeddingModel } from '@localmode/core';
+
+class MyMultimodalEmbedder implements MultimodalEmbeddingModel {
+  readonly modelId = 'custom:my-clip';
+  readonly provider = 'custom';
+  readonly dimensions = 512;
+  readonly maxEmbeddingsPerCall = 32;
+  readonly supportsParallelCalls = false;
+  readonly supportedModalities = ['text', 'image'] as const;
+
+  async doEmbed(options) {
+    // Text embedding implementation
+  }
+
+  async doEmbedImage(options) {
+    // Image embedding implementation
+    // Must produce vectors in the same space as doEmbed()
+  }
+}
+```
+
+## Use Cases
+
+<Cards>
+  <Card title="Image Search" href="/docs/core/vector-db">
+    Store image embeddings in VectorDB and search with text queries.
+  </Card>
+  <Card title="Reverse Image Search" href="/docs/core/embeddings">
+    Find similar images by embedding a query image and searching the vector database.
+  </Card>
+</Cards>
+
+### Image Search with VectorDB
+
+```ts
+import { embed, embedImage, createVectorDB } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.multimodalEmbedding('Xenova/clip-vit-base-patch32');
+
+// Create a database for image embeddings
+const db = await createVectorDB({ name: 'images', dimensions: 512 });
+
+// Index images
+for (const { id, blob, title } of photos) {
+  const { embedding } = await embedImage({ model, image: blob });
+  await db.add({ id, vector: embedding, metadata: { title } });
+}
+
+// Search with text
+const { embedding: queryVec } = await embed({ model, value: 'sunset at the beach' });
+const results = await db.search(queryVec, { k: 5 });
+```
+
+## Testing
+
+Use `createMockMultimodalEmbeddingModel()` for testing:
+
+```ts
+import { createMockMultimodalEmbeddingModel, embedImage } from '@localmode/core';
+
+const model = createMockMultimodalEmbeddingModel({ dimensions: 512 });
+
+const { embedding } = await embedImage({ model, image: testBlob });
+expect(embedding).toBeInstanceOf(Float32Array);
+expect(embedding.length).toBe(512);
+```
+
+<Callout type="info" title="Provider Guide">
+  For recommended models, provider-specific options, and practical recipes, see the [Transformers Multimodal Embeddings](/docs/transformers/multimodal-embeddings) guide.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Cross-Modal Search | Text-to-image and image-to-image search with CLIP | [Demo](https://localmode.ai/cross-modal-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/cross-modal-search) |

@@ -1,0 +1,125 @@
+---
+title: 'DevTools'
+description: In-app DevTools widget for debugging and monitoring local AI applications.
+icon: MonitorDot
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# DevTools
+
+In-app DevTools widget for inspecting model cache, vector database stats, inference queue metrics, pipeline execution traces, and live event streams in LocalMode applications.
+
+## Overview
+
+`@localmode/devtools` provides an in-app overlay widget (like React Query Devtools or TanStack Router Devtools) that gives you full visibility into your local AI application at runtime — all without any telemetry or data leaving your device. Works in any browser that supports your application.
+
+<Callout type="info" title="See it in action">
+  The DevTools widget is enabled across the entire [LocalMode showcase](https://localmode.ai) — open any app and click the DevTools button to inspect live model, VectorDB, and queue state.
+</Callout>
+
+### Features
+
+- **Models panel** — Cached models, load times, status
+- **VectorDB panel** — Collections, document counts, search stats
+- **Queue panel** — Live inference queue: pending, active, completed, latency
+- **Pipeline panel** — Step execution traces with timings
+- **Events panel** — Live scrolling event stream with filtering
+- **Device panel** — WebGPU, WASM, Chrome AI, WebNN capabilities
+
+## Installation
+
+```bash
+pnpm add -D @localmode/devtools
+```
+
+## Quick Start
+
+### Option 1: Widget (recommended)
+
+Import the React widget component and render it in your app layout:
+
+```tsx
+import { DevToolsWidget } from '@localmode/devtools/widget';
+
+// In your layout or root component
+export default function Layout({ children }) {
+  return (
+    <>
+      {children}
+      {process.env.NODE_ENV === 'development' && <DevToolsWidget />}
+    </>
+  );
+}
+```
+
+The widget auto-enables instrumentation. A floating "LM" button appears — click it to expand the DevTools panel.
+
+### Option 2: Headless (no UI)
+
+If you only want instrumentation without the widget UI:
+
+```typescript
+import { enableDevTools } from '@localmode/devtools';
+
+if (process.env.NODE_ENV === 'development') {
+  enableDevTools();
+}
+```
+
+## Widget Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `position` | `'bottom-right' \| 'bottom-left' \| 'top-right' \| 'top-left'` | `'bottom-right'` | Where the floating button appears |
+| `defaultOpen` | `boolean` | `false` | Whether the panel starts open |
+| `autoEnable` | `boolean` | `true` | Auto-call `enableDevTools()` if bridge not found |
+| `panelHeight` | `number` | `400` | Panel height in pixels |
+| `zIndex` | `number` | `99999` | z-index for the widget overlay |
+
+## How It Works
+
+`enableDevTools()` subscribes to existing observability hooks in `@localmode/core`:
+
+- `globalEventBus` for VectorDB and embedding events
+- `queue.on('stats')` for inference queue metrics
+- `onProgress` callbacks for pipeline step traces
+- `getStorageQuota()` for storage usage
+- `detectCapabilities()` for device features
+
+Data is written to `window.__LOCALMODE_DEVTOOLS__`. The widget reads this bridge directly via `subscribe()` for instant, non-polling updates. Zero core changes needed — DevTools is a pure read-only visualization layer.
+
+## Next.js Integration
+
+For Next.js apps, use `dynamic()` to avoid SSR issues:
+
+```tsx
+import dynamic from 'next/dynamic';
+
+const DevToolsWidget = dynamic(
+  () => import('@localmode/devtools/widget').then((m) => m.DevToolsWidget),
+  { ssr: false }
+);
+
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <body>
+        {children}
+        {process.env.NODE_ENV === 'development' && <DevToolsWidget />}
+      </body>
+    </html>
+  );
+}
+```
+
+## Requirements
+
+- `@localmode/core` ^1.0.0 (peer dependency)
+- `react` >=18.0.0 (peer dependency, only for widget import)
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| LocalMode Showcase | DevTools widget enabled globally across all 32 showcase apps | [Demo](https://localmode.ai) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/_components/devtools.tsx) |

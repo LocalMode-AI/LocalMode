@@ -251,7 +251,7 @@ describe('checkFeatureSupport()', () => {
 describe('checkModelSupport()', () => {
   it('returns support result for model', async () => {
     const result = await checkModelSupport({
-      modelId: 'Xenova/all-MiniLM-L6-v2',
+      modelId: 'Xenova/bge-small-en-v1.5',
       estimatedMemory: 100_000_000, // 100MB
       estimatedStorage: 50_000_000, // 50MB
     });
@@ -263,7 +263,7 @@ describe('checkModelSupport()', () => {
 
   it('recommends device based on capabilities', async () => {
     const result = await checkModelSupport({
-      modelId: 'Xenova/all-MiniLM-L6-v2',
+      modelId: 'Xenova/bge-small-en-v1.5',
       estimatedMemory: 100_000_000,
       estimatedStorage: 50_000_000,
     });
@@ -275,7 +275,7 @@ describe('checkModelSupport()', () => {
   it('includes fallback models when not supported', async () => {
     const result = await checkModelSupport({
       modelId: 'Xenova/whisper-large-v3',
-      estimatedMemory: 4_000_000_000, // 4GB - likely too large
+      estimatedMemory: 4_000_000_000, // 4GB - likely too large, should suggest moonshine fallbacks
       estimatedStorage: 2_000_000_000, // 2GB
     });
 

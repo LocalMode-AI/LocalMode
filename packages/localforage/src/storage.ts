@@ -1,452 +1,339 @@
 /**
  * LocalForage Storage Implementation
  *
- * Auto-fallback storage adapter using localforage.
- * Automatically uses the best available storage driver (IndexedDB, WebSQL, localStorage).
+ * Storage adapter using localforage for cross-browser compatibility.
+ * Implements the {@link StorageAdapter} interface from `@localmode/core`.
+ * Automatically falls back from IndexedDB to WebSQL to localStorage.
  *
  * @packageDocumentation
  */
 
 import localforage from 'localforage';
+import type {
+  StorageAdapter,
+  StoredDocument,
+  StoredVector,
+  Collection,
+  SerializedHNSWIndex,
+} from '@localmode/core';
+import type { LocalForageStorageOptions } from './types.js';
 
 /**
- * Configuration options for LocalForageStorage.
- */
-export interface LocalForageStorageOptions {
-  /**
-   * Database name.
-   */
-  name: string;
-
-  /**
-   * Store name (optional).
-   * @default 'keyvaluepairs'
-   */
-  storeName?: string;
-
-  /**
-   * Description for the database.
-   */
-  description?: string;
-
-  /**
-   * Preferred driver order.
-   * @default [localforage.INDEXEDDB, localforage.WEBSQL, localforage.LOCALSTORAGE]
-   */
-  drivers?: string[];
-}
-
-/**
- * Stored document interface.
- */
-export interface StoredDocument {
-  id: string;
-  metadata?: Record<string, unknown>;
-  createdAt?: number;
-  updatedAt?: number;
-}
-
-/**
- * Stored vector interface.
- */
-export interface StoredVector {
-  id: string;
-  vector: Float32Array;
-  collection?: string;
-}
-
-/**
- * Serialized HNSW index.
- */
-export interface SerializedHNSWIndex {
-  id: string;
-  data: Uint8Array;
-  metadata?: {
-    dimensions: number;
-    nodeCount: number;
-    m: number;
-    efConstruction: number;
-  };
-}
-
-/**
- * Internal record format for documents.
- */
-interface DocumentRecord {
-  id: string;
-  metadata?: Record<string, unknown>;
-  createdAt: number;
-  updatedAt: number;
-}
-
-/**
- * Internal record format for vectors.
+ * Internal vector record stored in localforage.
+ * Uses a plain number array because localforage serializes values to JSON
+ * when using the localStorage driver, and Float32Array does not survive
+ * JSON round-tripping.
  */
 interface VectorRecord {
   id: string;
-  vector: ArrayBuffer;
-  collection?: string;
+  collectionId: string;
+  vector: number[];
 }
 
 /**
- * Internal record format for indexes.
- */
-interface IndexRecord {
-  id: string;
-  data: ArrayBuffer;
-  metadata?: {
-    dimensions: number;
-    nodeCount: number;
-    m: number;
-    efConstruction: number;
-  };
-  updatedAt: number;
-}
-
-/**
- * Cross-browser storage adapter using localforage.
+ * LocalForage storage adapter for VectorDB.
  *
- * localforage provides automatic fallback from IndexedDB to WebSQL
- * to localStorage, ensuring maximum browser compatibility including
- * Safari Private Browsing mode.
+ * Provides cross-browser storage with automatic driver fallback
+ * (IndexedDB -> WebSQL -> localStorage), implementing the core
+ * {@link StorageAdapter} interface for use with `createVectorDB()`.
+ *
+ * Uses four separate localforage instances to avoid key collisions
+ * between documents, vectors, indexes, and collections.
  *
  * @example
- * ```ts
+ * ```typescript
  * import { LocalForageStorage } from '@localmode/localforage';
+ * import { createVectorDB } from '@localmode/core';
  *
  * const storage = new LocalForageStorage({ name: 'my-app' });
- * await storage.ready();
- *
- * // Store data
- * await storage.setDocument('doc-1', { metadata: { title: 'Hello' } });
- * await storage.setVector('doc-1', new Float32Array([0.1, 0.2, 0.3]));
- *
- * // Retrieve data
- * const doc = await storage.getDocument('doc-1');
- * const vector = await storage.getVector('doc-1');
+ * const db = await createVectorDB({
+ *   name: 'my-app',
+ *   dimensions: 384,
+ *   storage,
+ * });
  * ```
  */
-export class LocalForageStorage {
-  private documents: LocalForage;
-  private vectors: LocalForage;
-  private indexes: LocalForage;
-  private initialized = false;
+export class LocalForageStorage implements StorageAdapter {
+  private docs: LocalForage;
+  private vecs: LocalForage;
+  private idxs: LocalForage;
+  private cols: LocalForage;
 
   constructor(options: LocalForageStorageOptions) {
-    const drivers = options.drivers ?? [
-      localforage.INDEXEDDB,
-      localforage.WEBSQL,
-      localforage.LOCALSTORAGE,
-    ];
+    const driverConfig = options.driver ? { driver: options.driver } : {};
 
-    // Create separate instances for each store
-    this.documents = localforage.createInstance({
-      name: options.name,
-      storeName: `${options.storeName ?? 'vectordb'}_documents`,
-      description: options.description ?? 'LocalMode vector database documents',
-      driver: drivers,
+    this.docs = localforage.createInstance({
+      name: `${options.name}_documents`,
+      ...driverConfig,
     });
 
-    this.vectors = localforage.createInstance({
-      name: options.name,
-      storeName: `${options.storeName ?? 'vectordb'}_vectors`,
-      description: options.description ?? 'LocalMode vector database vectors',
-      driver: drivers,
+    this.vecs = localforage.createInstance({
+      name: `${options.name}_vectors`,
+      ...driverConfig,
     });
 
-    this.indexes = localforage.createInstance({
-      name: options.name,
-      storeName: `${options.storeName ?? 'vectordb'}_indexes`,
-      description: options.description ?? 'LocalMode vector database indexes',
-      driver: drivers,
+    this.idxs = localforage.createInstance({
+      name: `${options.name}_indexes`,
+      ...driverConfig,
+    });
+
+    this.cols = localforage.createInstance({
+      name: `${options.name}_collections`,
+      ...driverConfig,
     });
   }
 
-  /**
-   * Wait for storage to be ready.
-   */
-  async ready(): Promise<void> {
-    if (this.initialized) return;
+  // ============================================
+  // Lifecycle
+  // ============================================
 
-    await Promise.all([this.documents.ready(), this.vectors.ready(), this.indexes.ready()]);
-    this.initialized = true;
+  async open(): Promise<void> {
+    await Promise.all([
+      this.docs.ready(),
+      this.vecs.ready(),
+      this.idxs.ready(),
+      this.cols.ready(),
+    ]);
   }
 
-  /**
-   * Get the current driver name.
-   */
-  async getDriver(): Promise<string | null> {
-    await this.ready();
-    return this.documents.driver();
+  async close(): Promise<void> {
+    // localforage has no explicit close — this is a no-op
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // DOCUMENT OPERATIONS
-  // ═══════════════════════════════════════════════════════════════
+  // ============================================
+  // Document Operations
+  // ============================================
 
-  /**
-   * Get a document by ID.
-   */
-  async getDocument(id: string): Promise<StoredDocument | undefined> {
-    await this.ready();
-    const record = await this.documents.getItem<DocumentRecord>(`doc:${id}`);
-    if (!record) return undefined;
+  async addDocument(doc: StoredDocument): Promise<void> {
+    await this.docs.setItem<StoredDocument>(doc.id, {
+      id: doc.id,
+      collectionId: doc.collectionId,
+      metadata: doc.metadata,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    });
+  }
+
+  async getDocument(id: string): Promise<StoredDocument | null> {
+    const record = await this.docs.getItem<StoredDocument>(id);
+    if (!record) return null;
 
     return {
       id: record.id,
+      collectionId: record.collectionId,
       metadata: record.metadata,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     };
   }
 
-  /**
-   * Set (upsert) a document.
-   */
-  async setDocument(id: string, doc: Omit<StoredDocument, 'id'>): Promise<void> {
-    await this.ready();
-    const now = Date.now();
-    const existing = await this.documents.getItem<DocumentRecord>(`doc:${id}`);
-
-    await this.documents.setItem<DocumentRecord>(`doc:${id}`, {
-      id,
-      metadata: doc.metadata,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    });
-  }
-
-  /**
-   * Delete a document by ID.
-   */
   async deleteDocument(id: string): Promise<void> {
-    await this.ready();
-    await this.documents.removeItem(`doc:${id}`);
+    await this.docs.removeItem(id);
   }
 
-  /**
-   * Get all document IDs.
-   */
-  async getDocumentIds(): Promise<string[]> {
-    await this.ready();
-    const keys = await this.documents.keys();
-    return keys.filter((k) => k.startsWith('doc:')).map((k) => k.slice(4));
-  }
+  async getAllDocuments(collectionId: string): Promise<StoredDocument[]> {
+    const docs: StoredDocument[] = [];
 
-  /**
-   * Clear all documents.
-   */
-  async clearDocuments(): Promise<void> {
-    await this.ready();
-    await this.documents.clear();
-  }
-
-  /**
-   * Get document count.
-   */
-  async getDocumentCount(): Promise<number> {
-    const ids = await this.getDocumentIds();
-    return ids.length;
-  }
-
-  // ═══════════════════════════════════════════════════════════════
-  // VECTOR OPERATIONS
-  // ═══════════════════════════════════════════════════════════════
-
-  /**
-   * Get a vector by document ID.
-   */
-  async getVector(id: string): Promise<StoredVector | undefined> {
-    await this.ready();
-    const record = await this.vectors.getItem<VectorRecord>(`vec:${id}`);
-    if (!record) return undefined;
-
-    return {
-      id: record.id,
-      vector: new Float32Array(record.vector),
-      collection: record.collection,
-    };
-  }
-
-  /**
-   * Set a vector for a document.
-   */
-  async setVector(id: string, vector: Float32Array, collection?: string): Promise<void> {
-    await this.ready();
-
-    await this.vectors.setItem<VectorRecord>(`vec:${id}`, {
-      id,
-      vector: vector.buffer.slice(
-        vector.byteOffset,
-        vector.byteOffset + vector.byteLength
-      ) as ArrayBuffer,
-      collection,
-    });
-  }
-
-  /**
-   * Delete a vector by document ID.
-   */
-  async deleteVector(id: string): Promise<void> {
-    await this.ready();
-    await this.vectors.removeItem(`vec:${id}`);
-  }
-
-  /**
-   * Get all vectors.
-   */
-  async getAllVectors(): Promise<StoredVector[]> {
-    await this.ready();
-    const vectors: StoredVector[] = [];
-
-    await this.vectors.iterate<VectorRecord, void>((value, key) => {
-      if (key.startsWith('vec:')) {
-        vectors.push({
+    await this.docs.iterate<StoredDocument, void>((value) => {
+      if (value.collectionId === collectionId) {
+        docs.push({
           id: value.id,
-          vector: new Float32Array(value.vector),
-          collection: value.collection,
+          collectionId: value.collectionId,
+          metadata: value.metadata,
+          createdAt: value.createdAt,
+          updatedAt: value.updatedAt,
         });
       }
     });
 
-    return vectors;
+    return docs;
   }
 
-  /**
-   * Clear all vectors.
-   */
-  async clearVectors(): Promise<void> {
-    await this.ready();
-    await this.vectors.clear();
+  async countDocuments(collectionId: string): Promise<number> {
+    let count = 0;
+
+    await this.docs.iterate<StoredDocument, void>((value) => {
+      if (value.collectionId === collectionId) {
+        count++;
+      }
+    });
+
+    return count;
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // INDEX OPERATIONS
-  // ═══════════════════════════════════════════════════════════════
+  // ============================================
+  // Vector Operations
+  // ============================================
 
-  /**
-   * Get a serialized HNSW index.
-   */
-  async getIndex(id: string): Promise<SerializedHNSWIndex | undefined> {
-    await this.ready();
-    const record = await this.indexes.getItem<IndexRecord>(`idx:${id}`);
-    if (!record) return undefined;
-
-    return {
-      id: record.id,
-      data: new Uint8Array(record.data),
-      metadata: record.metadata,
-    };
-  }
-
-  /**
-   * Save a serialized HNSW index.
-   */
-  async setIndex(id: string, index: Omit<SerializedHNSWIndex, 'id'>): Promise<void> {
-    await this.ready();
-
-    await this.indexes.setItem<IndexRecord>(`idx:${id}`, {
-      id,
-      data: index.data.buffer.slice(
-        index.data.byteOffset,
-        index.data.byteOffset + index.data.byteLength
-      ) as ArrayBuffer,
-      metadata: index.metadata,
-      updatedAt: Date.now(),
+  async addVector(vec: StoredVector): Promise<void> {
+    await this.vecs.setItem<VectorRecord>(vec.id, {
+      id: vec.id,
+      collectionId: vec.collectionId,
+      vector: Array.from(vec.vector),
     });
   }
 
-  /**
-   * Delete an index.
-   */
-  async deleteIndex(id: string): Promise<void> {
-    await this.ready();
-    await this.indexes.removeItem(`idx:${id}`);
+  async getVector(id: string): Promise<Float32Array | null> {
+    const record = await this.vecs.getItem<VectorRecord>(id);
+    if (!record) return null;
+
+    return new Float32Array(record.vector);
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // BATCH OPERATIONS
-  // ═══════════════════════════════════════════════════════════════
-
-  /**
-   * Add multiple documents and vectors.
-   */
-  async addMany(
-    items: Array<{
-      id: string;
-      vector: Float32Array;
-      metadata?: Record<string, unknown>;
-      collection?: string;
-    }>
-  ): Promise<void> {
-    await this.ready();
-    const now = Date.now();
-
-    // localforage doesn't support true transactions, but we can parallelize
-    await Promise.all(
-      items.flatMap((item) => [
-        this.documents.setItem<DocumentRecord>(`doc:${item.id}`, {
-          id: item.id,
-          metadata: item.metadata,
-          createdAt: now,
-          updatedAt: now,
-        }),
-        this.vectors.setItem<VectorRecord>(`vec:${item.id}`, {
-          id: item.id,
-          vector: item.vector.buffer.slice(
-            item.vector.byteOffset,
-            item.vector.byteOffset + item.vector.byteLength
-          ) as ArrayBuffer,
-          collection: item.collection,
-        }),
-      ])
-    );
+  async deleteVector(id: string): Promise<void> {
+    await this.vecs.removeItem(id);
   }
 
-  /**
-   * Delete multiple documents and vectors.
-   */
-  async deleteMany(ids: string[]): Promise<void> {
-    await this.ready();
+  async getAllVectors(collectionId: string): Promise<Map<string, Float32Array>> {
+    const map = new Map<string, Float32Array>();
 
-    await Promise.all(
-      ids.flatMap((id) => [
-        this.documents.removeItem(`doc:${id}`),
-        this.vectors.removeItem(`vec:${id}`),
-      ])
-    );
+    await this.vecs.iterate<VectorRecord, void>((value) => {
+      if (value.collectionId === collectionId) {
+        map.set(value.id, new Float32Array(value.vector));
+      }
+    });
+
+    return map;
   }
 
-  /**
-   * Clear all data.
-   */
-  async clearAll(): Promise<void> {
-    await this.ready();
-    await Promise.all([this.documents.clear(), this.vectors.clear(), this.indexes.clear()]);
+  // ============================================
+  // Index Operations
+  // ============================================
+
+  async saveIndex(collectionId: string, index: SerializedHNSWIndex): Promise<void> {
+    await this.idxs.setItem(collectionId, JSON.stringify(index));
   }
 
-  // ═══════════════════════════════════════════════════════════════
-  // UTILITY METHODS
-  // ═══════════════════════════════════════════════════════════════
+  async loadIndex(collectionId: string): Promise<SerializedHNSWIndex | null> {
+    const data = await this.idxs.getItem<string>(collectionId);
+    if (!data) return null;
 
-  /**
-   * Drop the database entirely.
-   * Note: localforage.dropInstance deletes all data in the database.
-   */
-  async drop(): Promise<void> {
+    try {
+      return JSON.parse(data) as SerializedHNSWIndex;
+    } catch {
+      return null;
+    }
+  }
+
+  async deleteIndex(collectionId: string): Promise<void> {
+    await this.idxs.removeItem(collectionId);
+  }
+
+  // ============================================
+  // Collection Operations
+  // ============================================
+
+  async createCollection(collection: Collection): Promise<void> {
+    await this.cols.setItem<Collection>(collection.id, {
+      id: collection.id,
+      name: collection.name,
+      dimensions: collection.dimensions,
+      createdAt: collection.createdAt,
+    });
+  }
+
+  async getCollection(id: string): Promise<Collection | null> {
+    const record = await this.cols.getItem<Collection>(id);
+    if (!record) return null;
+
+    return {
+      id: record.id,
+      name: record.name,
+      dimensions: record.dimensions,
+      createdAt: record.createdAt,
+    };
+  }
+
+  async getCollectionByName(name: string): Promise<Collection | null> {
+    let found: Collection | null = null;
+
+    await this.cols.iterate<Collection, void>((value) => {
+      if (value.name === name) {
+        found = {
+          id: value.id,
+          name: value.name,
+          dimensions: value.dimensions,
+          createdAt: value.createdAt,
+        };
+      }
+    });
+
+    return found;
+  }
+
+  async getAllCollections(): Promise<Collection[]> {
+    const collections: Collection[] = [];
+
+    await this.cols.iterate<Collection, void>((value) => {
+      collections.push({
+        id: value.id,
+        name: value.name,
+        dimensions: value.dimensions,
+        createdAt: value.createdAt,
+      });
+    });
+
+    return collections;
+  }
+
+  async updateCollection(collection: Collection): Promise<void> {
+    await this.cols.setItem<Collection>(collection.id, {
+      id: collection.id,
+      name: collection.name,
+      dimensions: collection.dimensions,
+      createdAt: collection.createdAt,
+    });
+  }
+
+  async deleteCollection(id: string): Promise<void> {
+    await this.cols.removeItem(id);
+  }
+
+  // ============================================
+  // Utility Operations
+  // ============================================
+
+  async clear(): Promise<void> {
     await Promise.all([
-      this.documents.dropInstance(),
-      this.vectors.dropInstance(),
-      this.indexes.dropInstance(),
+      this.docs.clear(),
+      this.vecs.clear(),
+      this.idxs.clear(),
+      this.cols.clear(),
     ]);
-    this.initialized = false;
   }
 
-  /**
-   * Check if using a fallback driver (not IndexedDB).
-   */
-  async isUsingFallback(): Promise<boolean> {
-    const driver = await this.getDriver();
-    return driver !== localforage.INDEXEDDB;
+  async clearCollection(collectionId: string): Promise<void> {
+    // Collect document and vector IDs belonging to this collection
+    const docIdsToDelete: string[] = [];
+    const vecIdsToDelete: string[] = [];
+
+    await this.docs.iterate<StoredDocument, void>((value, key) => {
+      if (value.collectionId === collectionId) {
+        docIdsToDelete.push(key);
+      }
+    });
+
+    await this.vecs.iterate<VectorRecord, void>((value, key) => {
+      if (value.collectionId === collectionId) {
+        vecIdsToDelete.push(key);
+      }
+    });
+
+    // Delete documents
+    await Promise.all(docIdsToDelete.map((id) => this.docs.removeItem(id)));
+
+    // Delete vectors
+    await Promise.all(vecIdsToDelete.map((id) => this.vecs.removeItem(id)));
+
+    // Delete index
+    await this.idxs.removeItem(collectionId);
+  }
+
+  async estimateSize(): Promise<number> {
+    if (typeof navigator !== 'undefined' && navigator.storage?.estimate) {
+      const estimate = await navigator.storage.estimate();
+      return estimate.usage ?? 0;
+    }
+    return 0;
   }
 }

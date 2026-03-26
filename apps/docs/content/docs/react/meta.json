@@ -1,0 +1,20 @@
+{
+  "title": "React",
+  "icon": "Atom",
+  "pages": [
+    "index",
+    "---Hooks---",
+    "chat",
+    "embeddings",
+    "classification",
+    "audio",
+    "vision",
+    "generation",
+    "agents",
+    "import-export",
+    "---Utilities---",
+    "utilities",
+    "pipelines",
+    "advanced"
+  ]
+}

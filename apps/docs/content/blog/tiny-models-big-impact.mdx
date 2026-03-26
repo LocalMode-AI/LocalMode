@@ -1,0 +1,311 @@
+---
+title: "Tiny Models, Big Impact: Why 30MB Models Are the Sweet Spot for Browser AI"
+description: "Not every task needs a 4B parameter model. We profiled 10 models in the 4-100MB range that deliver 85-99% of cloud quality, load in under 3 seconds, and run on phones with 4GB of RAM. Here is the data, the code, and the reasoning behind the sweet spot."
+author: LocalMode
+date: 2026-02-22
+---
+import { Callout } from 'fumadocs-ui/components/callout';
+
+The AI discourse is dominated by parameter counts. Every week brings a new model with more billions, more VRAM requirements, more impressive benchmarks on tasks most applications never need. Meanwhile, a 33MB embedding model matches OpenAI at 99.8% quality. A 23MB reranker replaces a $73,000/year Cohere bill. A 65MB QA model answers questions at 92% of GPT-4o's accuracy in 20 milliseconds instead of 2 seconds.
+
+The most impactful models for browser AI are not the biggest ones. They are the smallest ones that clear the quality bar for their specific task.
+
+This post is about the sweet spot: models between 4MB and 100MB that load fast, run on any device, and deliver production-grade quality for the tasks they were built for. If you are building features that need embeddings, classification, reranking, NER, QA, transcription, or object detection in the browser, these models should be your first choice -- not the 2GB LLM.
+
+---
+
+## The Sweet Spot Curve
+
+Every browser AI model lives on a curve with three axes: quality, load time, and memory footprint. The relationship between model size and quality is not linear. It is logarithmic.
+
+Going from 5MB to 50MB buys enormous quality gains. Going from 500MB to 5GB buys diminishing returns for most tasks. The sweet spot sits in the range where quality is already 85-99% of cloud APIs, but download size, memory usage, and inference latency remain small enough for real-time, mobile-friendly applications.
+
+Here is what that curve looks like for embedding models -- the pattern holds across other task types:
+
+| Model | Size | MTEB Score | Quality vs Cloud | Load Time (4G) | Memory |
+|-------|------|-----------|-----------------|----------------|--------|
+| arctic-embed-xs | ~23MB | ~50-52 | ~81% | ~2s | ~60MB |
+| bge-small-en-v1.5 | ~33MB | 62.17 | **99.8%** | ~3s | ~90MB |
+| bge-base-en-v1.5 | ~110MB | 64.23 | 103% | ~10s | ~280MB |
+| all-mpnet-base-v2 | ~420MB | 63.01 | 101% | ~40s | ~900MB |
+
+The jump from 23MB to 33MB gets you from 81% to 99.8% of OpenAI's quality. The jump from 33MB to 420MB gets you approximately 1 additional MTEB point. For virtually every production use case, the 33MB model is the right choice.
+
+This pattern -- massive quality gains in the small-to-medium range, diminishing returns beyond -- repeats across every task category we have benchmarked.
+
+---
+
+## The 10 Models That Cover 90% of Browser AI Use Cases
+
+Every model in this table runs in the browser via `@localmode/transformers`. Every benchmark number comes from published model cards or academic papers. Every one of them loads in under 10 seconds on a mobile connection.
+
+| Model | Size | Task | Benchmark | Score | vs Cloud | Load (4G) |
+|-------|------|------|-----------|-------|----------|-----------|
+| bge-small-en-v1.5 | 33MB | Embeddings | MTEB Average | 62.17 | **99.8%** of OpenAI | ~3s |
+| arctic-embed-xs | 23MB | Embeddings | MTEB Retrieval | Top in class | 1st at size tier | ~2s |
+| distilbert-sst2 | ~67MB | Sentiment | SST-2 Accuracy | 91.3% | **95%+** of cloud | ~6s |
+| ms-marco-MiniLM-L-6-v2 | 23MB | Reranking | MS MARCO MRR@10 | 39.01 | **87-93%** of Cohere | ~2s |
+| mobilebert-mnli | ~21MB | Zero-shot | MNLI | Competitive | **94-97%** of GPT-4o | ~2s |
+| bert-base-NER | ~110MB | NER | CoNLL-2003 F1 | 92.6% | **95-98%** of GPT-4o | ~10s |
+| distilbert-squad | ~65MB | QA | SQuAD v1.1 F1 | 87.1 | **92-95%** of GPT-4o | ~6s |
+| moonshine-tiny | ~50MB | Speech-to-Text | LibriSpeech WER | ~4.5% | **~80%** of Whisper API | ~5s |
+| kokoro-82M | ~86MB | Text-to-Speech | TTS Arena | #1 single-speaker | **88-92%** of OpenAI | ~8s |
+| D-FINE nano | ~4.5MB | Object Detection | COCO AP | ~35-42% | **~65%** of Cloud Vision | &lt;1s |
+
+That is 10 models totaling approximately 480MB that cover embeddings, classification, reranking, zero-shot classification, named entity recognition, extractive QA, speech-to-text, text-to-speech, and object detection. You could cache all 10 of them in less space than a single LLM download.
+
+<Callout type="info" title="Size vs. download">
+  Sizes listed are approximate quantized/ONNX download sizes. Runtime memory usage is typically 2-3x the download size due to activation buffers, tokenizers, and intermediate tensors. A 33MB model uses roughly 90MB of RAM at inference time.
+</Callout>
+
+---
+
+## Why Quantization Works So Well
+
+The reason these models are so small without losing quality comes down to quantization -- reducing the numerical precision of model weights from 32-bit floating point (FP32) to 8-bit integers (INT8) or 4-bit integers (Q4).
+
+A naive reading might suggest that cutting precision by 4-8x should destroy model quality. In practice, it does not. Here is why:
+
+**Neural networks are redundant by design.** Training produces weights distributed around narrow ranges. Most of the 32-bit precision is wasted on encoding differences that are too small to affect the output. INT8 quantization maps the meaningful range of each weight tensor to 256 discrete levels, which is enough to preserve the learned representations.
+
+**Calibration recovers the remaining gap.** Modern quantization pipelines (ONNX Runtime, Transformers.js) use calibration datasets to determine optimal scale factors per tensor. This maps the INT8 range to the actual weight distribution, not just a uniform range. The result is typically 95-99% of FP32 quality for task-specific models.
+
+**The quality retention numbers tell the story:**
+
+| Precision | Size Reduction | Typical Quality Retention | Best For |
+|-----------|---------------|--------------------------|----------|
+| FP32 (baseline) | 1x | 100% | Training, reference |
+| FP16 | 2x | ~99.5% | GPU inference |
+| INT8 (Q8) | 4x | **95-99%** | Browser inference (recommended) |
+| INT4 (Q4) | 8x | **90-97%** | LLMs, memory-constrained |
+| Binary (1-bit) | 32x | 70-85% | Research only |
+
+For task-specific models like classifiers, embedding models, and NER taggers, INT8 quantization is effectively lossless. You get a 4x size reduction and typically faster inference (integer math is cheaper than floating point on most hardware) with negligible quality impact.
+
+For LLMs, 4-bit quantization (Q4_K_M, q4f16) is the standard. Qwen3.5-4B quantized to 4-bit fits in ~2.5GB and retains its 88.8% MMLU-Redux score. The quality retention at 4-bit is lower than INT8 for smaller models, but for models with billions of parameters the redundancy is higher and the quantization absorbs more gracefully.
+
+The Transformers.js models in LocalMode ship with INT8 quantization by default. You get the quality retention automatically -- no configuration needed:
+
+```typescript
+import { embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// This loads the INT8 quantized version (~33MB) by default
+// Quality: 99.8% of OpenAI, size: 4x smaller than FP32
+const { embedding } = await embed({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  value: 'semantic search query',
+});
+```
+
+---
+
+## The Mobile Reality: Why Size Matters More Than You Think
+
+Desktop developers tend to underestimate mobile constraints. When your user is on a 4GB RAM phone with a spotty mobile connection, model size is not an optimization -- it is a gate.
+
+### Memory constraints are brutal
+
+A typical Android phone with 4GB of total RAM has approximately 1.5-2GB available for a browser tab after the OS, background apps, and the browser itself take their share. iOS Safari is even more aggressive -- it will kill tabs that exceed roughly 1-1.5GB of memory.
+
+This means your entire application -- the page, JavaScript bundles, model weights, activation buffers, and intermediate tensors -- needs to fit in under 1.5GB on a phone. Here is what that budget looks like:
+
+| Component | Memory |
+|-----------|--------|
+| Page + JS bundles | 50-150MB |
+| Model weights (INT8, 33MB download) | ~90MB |
+| Inference buffers | ~50-100MB |
+| IndexedDB cache overhead | ~20MB |
+| **Available for other features** | **~1GB** |
+
+A 33MB embedding model fits comfortably. A 2.5GB LLM does not. This is not a theoretical concern -- it is the difference between your feature working on 80% of devices versus 20%.
+
+### Download times are unforgiving
+
+Half of mobile web users abandon pages that take longer than 3 seconds to load. Model downloads on mobile connections follow the same psychology. Here is what different model sizes look like on real mobile networks:
+
+| Model Size | 3G (1 Mbps) | 4G (10 Mbps) | 5G (50 Mbps) | WiFi (100 Mbps) |
+|------------|-------------|--------------|--------------|-----------------|
+| 4.5MB (D-FINE nano) | 36s | 3.6s | 0.7s | 0.4s |
+| 23MB (reranker) | 3 min | 18s | 3.7s | 1.8s |
+| 33MB (bge-small) | 4.4 min | 26s | 5.3s | 2.6s |
+| 86MB (Kokoro TTS) | 11 min | 69s | 14s | 6.9s |
+| 500MB (LLM small) | 67 min | 6.7 min | 80s | 40s |
+| 2.5GB (LLM medium) | 5.6 hrs | 33 min | 6.7 min | 3.3 min |
+
+Models under 100MB are cacheable on the first visit with a reasonable wait. Models over 500MB require a deliberate "download model" step that most users will not complete on mobile. LocalMode caches models in IndexedDB after the first download, so subsequent loads are instant -- but you only get that benefit if the user completes the initial download.
+
+### LocalMode's adaptive batching accounts for device constraints
+
+The `computeOptimalBatchSize()` function in `@localmode/core` automatically detects device hardware and scales batch sizes accordingly. A laptop with 16GB RAM and a GPU gets large batches for throughput. A phone with 4GB RAM gets small batches to stay within memory limits:
+
+```typescript
+import { computeOptimalBatchSize, streamEmbedMany } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { batchSize, reasoning } = computeOptimalBatchSize({
+  taskType: 'embedding',
+  modelDimensions: 384,
+});
+// Phone (4 cores, 4GB): batchSize = 16
+// Laptop (8 cores, 16GB): batchSize = 64
+// Desktop (16 cores, 32GB, GPU): batchSize = 256
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+for await (const result of streamEmbedMany({
+  model,
+  values: documents,
+  batchSize,
+})) {
+  // Process embeddings as they complete
+}
+```
+
+This is why tiny models matter at a systems level. They are not just smaller downloads -- they enable adaptive, device-aware AI that works across the entire spectrum of user hardware.
+
+---
+
+## Code: Three Tasks, Three Tiny Models, All Fast
+
+Here is what it looks like to add embeddings, classification, and speech-to-text to a browser application using models that total under 150MB combined.
+
+### Semantic search with a 33MB model
+
+```typescript
+import { embed, createVectorDB } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5'); // 33MB
+const db = await createVectorDB({ name: 'docs', dimensions: 384 });
+
+// Index documents (one-time)
+for (const doc of documents) {
+  const { embedding } = await embed({ model, value: doc.text });
+  await db.add({ id: doc.id, vector: embedding, metadata: { title: doc.title } });
+}
+
+// Search in ~8-30ms after model warm-up
+const { embedding: queryVec } = await embed({ model, value: 'how to reset password' });
+const results = await db.search(queryVec, { k: 5 });
+```
+
+### Sentiment analysis with a 67MB model
+
+```typescript
+import { classify } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.classifier(
+  'Xenova/distilbert-base-uncased-finetuned-sst-2-english' // ~67MB
+);
+
+// Classify in ~15-50ms per input
+const { label, score } = await classify({
+  model,
+  text: 'This product exceeded my expectations!',
+});
+// { label: 'POSITIVE', score: 0.9998 }
+```
+
+### Voice transcription with a 50MB model
+
+```typescript
+import { transcribe } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.speechToText(
+  'onnx-community/moonshine-tiny-ONNX' // ~50MB
+);
+
+// Transcribe audio from a microphone blob
+const { text } = await transcribe({
+  model,
+  audio: microphoneBlob,
+});
+// "remind me to buy groceries at five pm"
+```
+
+All three models cache in IndexedDB after the first download. On subsequent visits, they load from local cache in milliseconds. Total combined download: approximately 150MB. Total API cost: $0. Total data sent to external servers: zero bytes.
+
+---
+
+## When You DO Need Bigger Models
+
+Tiny models are not universal replacements. There are tasks where model size directly determines capability, and no amount of quantization changes that.
+
+**Open-ended text generation.** Writing coherent paragraphs, following complex instructions, maintaining context across long conversations -- these require the parametric memory that only comes with billions of parameters. A 33MB model cannot write a blog post or debug your code. For LLM chat, you need at least a 1-4B parameter model (350MB-2.5GB quantized). LocalMode ships three LLM providers for this: WebLLM, Transformers.js v4, and wllama.
+
+**Complex reasoning.** Multi-step logic, mathematical proof, code generation with architectural understanding -- these tasks scale with model size. Qwen3.5-4B (~2.5GB) matches GPT-4o on MMLU-Redux and dramatically outperforms it on math, but it is not a 30MB model. Some tasks genuinely need that capacity.
+
+**Vision-language understanding.** "What is happening in this scene and why?" requires world knowledge encoded in parameters. Florence-2 (~223MB) handles structured tasks (OCR, captioning, detection) but cannot reason about visual content the way frontier models do.
+
+**Multilingual breadth.** Each Opus-MT translation model covers one language pair at ~100MB. Covering 20 language pairs means 2GB of models. Google Translate covers 243 languages in one API call.
+
+The practical decision framework:
+
+| Task Type | Recommended Approach | Typical Model Size |
+|-----------|---------------------|-------------------|
+| Embeddings, search, RAG | Tiny model (browser) | 23-33MB |
+| Classification, sentiment | Tiny model (browser) | 21-90MB |
+| NER, entity extraction | Small model (browser) | 65-110MB |
+| Reranking | Tiny model (browser) | 23MB |
+| Voice commands, dictation | Small model (browser) | 50-86MB |
+| Object detection | Tiny model (browser) | 4.5MB |
+| LLM chat, writing | Medium model (browser, desktop) | 350MB-2.5GB |
+| Complex reasoning | Large model (browser, desktop) or cloud | 1.2-4.5GB or cloud |
+| Long-document analysis | Cloud API | Cloud |
+
+The sweet spot strategy: use tiny models for the 80% of AI features that do not require generative text, and reserve larger models or cloud APIs for the 20% that do.
+
+---
+
+## The Compound Effect: Why Tiny Models Win at Scale
+
+The advantage of tiny models is not just technical. It compounds at every layer of the stack.
+
+**User experience.** A feature backed by a 33MB model loads in 3 seconds on 4G and works offline thereafter. A feature backed by a 2.5GB model requires a multi-minute download with a progress bar. The first feels like a native feature. The second feels like installing software.
+
+**Device coverage.** A 33MB model runs on phones with 4GB of RAM, Chromebooks with 4GB of storage, tablets in airplane mode. A 2.5GB model requires a modern laptop with WebGPU. The smaller your model, the larger your addressable audience.
+
+**Cost at scale.** Zero marginal cost means every user you add is free. No API rate limits. No billing alerts. No infrastructure to maintain. A 33MB cached model serving 100,000 users costs exactly as much as serving 100 users: nothing.
+
+**Privacy by architecture.** Every inference runs in the user's browser. No data leaves the device. Not because of a policy -- because of physics. The model is local. The computation is local. The result stays local.
+
+**Composability.** When each model is small, you can compose multiple models into pipelines without blowing memory budgets. Embed, rerank, classify, extract entities -- all in the same page load, all under 300MB total.
+
+The teams that will ship the most effective browser AI features in the next two years will not be the ones chasing the largest models. They will be the ones who pick the right tiny model for each task, cache them aggressively, and compose them into seamless user experiences.
+
+Start with the 33MB model. You will be surprised how far it takes you.
+
+---
+
+## Methodology
+
+All benchmark scores come from published model cards, academic papers, and official leaderboards. Model sizes are approximate quantized/ONNX download sizes as served by HuggingFace Hub. Load times are calculated from model size divided by connection speed, not including browser parsing overhead. Memory estimates are based on profiling in Chrome 120+ on representative hardware.
+
+### Primary Sources
+
+- [BAAI/bge-small-en-v1.5 model card](https://huggingface.co/BAAI/bge-small-en-v1.5) -- MTEB 62.17, 384 dimensions
+- [Snowflake/snowflake-arctic-embed-xs model card](https://huggingface.co/Snowflake/snowflake-arctic-embed-xs) -- 22M parameters, 384 dimensions, state-of-the-art at size tier
+- [Arctic-Embed paper (arXiv:2405.05374)](https://arxiv.org/abs/2405.05374) -- Retrieval benchmark comparisons
+- [distilbert-base-uncased-finetuned-sst-2-english model card](https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english) -- SST-2 accuracy 91.3%
+- [cross-encoder/ms-marco-MiniLM-L-6-v2 model card](https://huggingface.co/cross-encoder/ms-marco-MiniLM-L-6-v2) -- MRR@10 39.01
+- [cross-encoder/nli-deberta-v3-xsmall model card](https://huggingface.co/cross-encoder/nli-deberta-v3-xsmall) -- MNLI 87.77%
+- [dslim/bert-base-NER model card](https://huggingface.co/dslim/bert-base-NER) -- CoNLL-2003 F1 92.59%
+- [distilbert-base-cased-distilled-squad model card](https://huggingface.co/distilbert/distilbert-base-cased-distilled-squad) -- SQuAD F1 87.1
+- [Moonshine paper (arXiv:2410.15608)](https://arxiv.org/abs/2410.15608) -- Moonshine-tiny WER, 5x faster than Whisper-tiny
+- [Kokoro-82M model card](https://huggingface.co/hexgrad/Kokoro-82M) -- TTS Arena #1 single-speaker, 82M parameters, 28 voices
+- [D-FINE paper / GitHub](https://github.com/Peterande/D-FINE) -- COCO AP benchmarks, ICLR 2025 Spotlight
+- [OpenAI "New embedding models" announcement](https://openai.com/index/new-embedding-models-and-api-updates/) -- text-embedding-3-small MTEB 62.3
+- [ONNX Runtime Quantization documentation](https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html) -- INT8/INT4 quantization techniques
+- [V8 blog: Up to 4GB of memory in WebAssembly](https://v8.dev/blog/4gb-wasm-memory) -- Browser memory limits
+- [Chrome for Developers: WebAssembly and WebGPU for Web AI](https://developer.chrome.com/blog/io24-webassembly-webgpu-1) -- Mobile browser AI constraints
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

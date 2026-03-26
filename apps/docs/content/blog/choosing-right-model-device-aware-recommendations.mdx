@@ -1,0 +1,541 @@
+---
+title: "Choosing the Right Model: Device-Aware Recommendations With recommendModels()"
+description: "Stop guessing which model to use. LocalMode's recommendation engine detects your user's device capabilities - GPU, memory, storage, browser features - and ranks every model in its curated registry by suitability score. Three function calls replace hours of benchmarking across devices."
+author: LocalMode
+date: 2026-01-28
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+You have 35+ curated models across four providers, 21 task categories, and a user base that spans everything from a 2019 Android phone with 3 GB of RAM to a MacBook Pro with 96 GB and an M3 Max. The embedding model that flies on the MacBook will crash the phone's browser tab. The tiny model that loads instantly on mobile wastes the desktop's GPU.
+
+Picking the right model is not a one-time decision. It is a per-device, per-task decision that changes with every user who opens your app.
+
+LocalMode solves this with a three-step pipeline: detect what the device can do, score every model against those capabilities, and compute the optimal batch size for throughput. The entire flow is three function calls.
+
+```typescript
+import {
+  detectCapabilities,
+  recommendModels,
+  computeOptimalBatchSize,
+} from '@localmode/core';
+
+// Step 1: Detect device capabilities (async - probes browser APIs)
+const capabilities = await detectCapabilities();
+
+// Step 2: Get ranked model recommendations (sync - pure scoring)
+const recommendations = recommendModels(capabilities, {
+  task: 'embedding',
+});
+
+// Step 3: Compute optimal batch size for the top recommendation
+const { batchSize } = computeOptimalBatchSize({
+  taskType: 'embedding',
+  modelDimensions: recommendations[0].entry.dimensions ?? 384,
+});
+
+console.log(`Best model: ${recommendations[0].entry.name}`);
+console.log(`Score: ${recommendations[0].score}/100`);
+console.log(`Batch size: ${batchSize}`);
+```
+
+This post walks through each piece: what `detectCapabilities()` actually measures, how the model registry is structured, how scoring works, how to filter and constrain recommendations, how to register your own models, and how to wire it all together in a React app.
+
+---
+
+## What detectCapabilities() Measures
+
+`detectCapabilities()` is an async function that probes every browser API relevant to ML inference. It returns a `DeviceCapabilities` object with four sections:
+
+**Browser and device identification.** Browser name, version, engine, device type (desktop, mobile, tablet), OS, and OS version. The device type matters because mobile devices get a scoring bonus for fast, compact models.
+
+**Hardware.** Logical CPU core count via `navigator.hardwareConcurrency`, device memory in GB via `navigator.deviceMemory` (Chrome and Edge only - returns `undefined` on Firefox and Safari), and GPU renderer string when available.
+
+**Feature availability.** Boolean flags for 16 features: WebGPU, WebNN, WASM, WASM SIMD, WASM threads, IndexedDB, OPFS, Web Workers, SharedArrayBuffer, cross-origin isolation, Service Workers, BroadcastChannel, Web Locks, Chrome AI, Chrome AI Summarizer, and Chrome AI Translator.
+
+**Storage.** Total quota, used bytes, available bytes, and whether persistent storage has been granted. These come from `navigator.storage.estimate()`.
+
+The detection is fast - typically under 50ms. The only async work is the WebGPU adapter probe and the storage estimate.
+
+```typescript
+const caps = await detectCapabilities();
+
+console.log(caps.device.type);         // 'desktop' | 'mobile' | 'tablet'
+console.log(caps.hardware.cores);      // 8
+console.log(caps.hardware.memory);     // 16 (GB, Chrome only)
+console.log(caps.features.webgpu);     // true
+console.log(caps.features.wasm);       // true
+console.log(caps.storage.availableBytes); // 4_294_967_296
+```
+
+<Callout type="info" title="Firefox and Safari: Memory Unknown">
+  `navigator.deviceMemory` is a Chrome/Edge-only API. On Firefox and Safari, `caps.hardware.memory` is `undefined`. The recommendation engine handles this gracefully - models with `minMemoryMB` constraints get a neutral score instead of being excluded when memory is unknown.
+</Callout>
+
+---
+
+## The Model Registry: What Is In It
+
+The recommendation engine scores models from a curated registry. The registry ships with 35+ entries across every task category and provider. Each entry is a `ModelRegistryEntry` - a provider-agnostic metadata record:
+
+```typescript
+interface ModelRegistryEntry {
+  readonly modelId: string;           // e.g., 'Xenova/bge-small-en-v1.5'
+  readonly provider: string;          // 'transformers' | 'webllm' | 'wllama' | 'chrome-ai'
+  readonly task: TaskCategory;        // 'embedding' | 'generation' | ... (21 categories)
+  readonly name: string;              // Human-readable display name
+  readonly sizeMB: number;            // Approximate download size
+  readonly minMemoryMB?: number;      // Minimum device memory recommended
+  readonly dimensions?: number;       // Output dimensions (embedding models only)
+  readonly recommendedDevice: 'webgpu' | 'wasm' | 'cpu';
+  readonly speedTier: 'fast' | 'medium' | 'slow';
+  readonly qualityTier: 'low' | 'medium' | 'high';
+  readonly description?: string;
+}
+```
+
+The registry is not a flat list. It is organized by task and provider, with entries calibrated for realistic browser workloads. Here is a representative slice across several domains:
+
+| Model | Provider | Task | Size | Speed | Quality | Device |
+|---|---|---|---|---|---|---|
+| BGE Small EN v1.5 | transformers | embedding | 33 MB | fast | medium | wasm |
+| BGE Base EN v1.5 | transformers | embedding | 110 MB | medium | high | wasm |
+| Arctic Embed XS | transformers | embedding | 23 MB | fast | medium | wasm |
+| DistilBERT SST-2 | transformers | classification | 67 MB | fast | medium | wasm |
+| Moonshine Tiny | transformers | speech-to-text | 50 MB | fast | medium | wasm |
+| Kokoro 82M | transformers | text-to-speech | 86 MB | medium | high | wasm |
+| CLIP ViT-Base/32 | transformers | multimodal-embedding | 340 MB | fast | medium | wasm |
+| SmolLM2 135M | webllm | generation | 78 MB | fast | low | webgpu |
+| Qwen 2.5 1.5B | webllm | generation | 868 MB | medium | medium | webgpu |
+| Llama 3.2 3B | webllm | generation | 1802 MB | slow | high | webgpu |
+| SmolLM2 135M (GGUF) | wllama | generation | 70 MB | fast | low | wasm |
+| Chrome AI Summarizer | chrome-ai | summarization | 0 MB | fast | medium | cpu |
+
+Notice the generation models span three providers. WebLLM models require WebGPU and offer the best speed with GPU acceleration. Wllama models use WASM and work everywhere, including Firefox and Safari. Transformers ONNX models also use WebGPU but come from the TJS v4 experimental pipeline. Chrome AI models require zero download but only work in Chrome.
+
+The `TaskCategory` type covers 21 categories: `embedding`, `classification`, `zero-shot`, `ner`, `reranking`, `generation`, `translation`, `summarization`, `fill-mask`, `question-answering`, `speech-to-text`, `text-to-speech`, `image-classification`, `image-captioning`, `object-detection`, `segmentation`, `ocr`, `document-qa`, `image-features`, `image-to-image`, and `multimodal-embedding`.
+
+---
+
+## How Scoring Works
+
+`recommendModels()` is a synchronous, pure function. It takes the capabilities object from `detectCapabilities()` and a `RecommendationOptions` object, then returns an array of `ModelRecommendation` objects sorted by score descending.
+
+Each recommendation includes the registry entry, a score from 0 to 100, and an array of human-readable reasons explaining the ranking.
+
+The composite score is a weighted blend of three factors:
+
+| Factor | Weight | What It Measures |
+|---|---|---|
+| Device Fit | 50% | Storage headroom, memory headroom, device/GPU match |
+| Quality Tier | 30% | The model's benchmark quality (low/medium/high) |
+| Speed Tier | 20% | The model's inference speed (fast/medium/slow) |
+
+**Device fit** is the most heavily weighted factor. It checks three things. First, storage headroom: a 33 MB model on a device with 4 GB free scores higher than a 1.8 GB model on the same device, because the smaller model leaves more room for other data. Second, memory headroom: if the device reports 8 GB and the model needs 4 GB minimum, it gets a moderate score; if the model needs only 512 MB, it gets a high score. Third, device match: a model that recommends WebGPU gets a bonus when WebGPU is available, and a penalty when it is not. WASM models get a "universally compatible" bonus.
+
+**Mobile bonus.** When the device type is `mobile`, fast models get an additional speed score boost. This pushes compact, quick-loading models to the top of the list on phones and tablets.
+
+Here is what a typical recommendation looks like:
+
+```typescript
+{
+  entry: {
+    modelId: 'Xenova/bge-small-en-v1.5',
+    provider: 'transformers',
+    task: 'embedding',
+    name: 'BGE Small EN v1.5',
+    sizeMB: 33,
+    dimensions: 384,
+    recommendedDevice: 'wasm',
+    speedTier: 'fast',
+    qualityTier: 'medium',
+  },
+  score: 82,
+  reasons: [
+    'Fits within available storage (33 MB of 4096 MB)',
+    'WASM device, universally compatible',
+    'Medium quality model',
+  ],
+}
+```
+
+---
+
+## Filtering and Constraining Recommendations
+
+The `RecommendationOptions` object lets you narrow the search before scoring:
+
+```typescript
+const recommendations = recommendModels(capabilities, {
+  task: 'generation',       // Required: which task category
+  maxSizeMB: 1000,          // Only models under 1 GB
+  maxMemoryMB: 4096,        // Only models that need <= 4 GB RAM
+  providers: ['webllm'],    // Only WebLLM models
+  requireWebGPU: true,      // Only models that recommend WebGPU
+  limit: 3,                 // Return top 3 only
+});
+```
+
+Every filter is optional except `task`. Models that fail any constraint are excluded before scoring, so the returned list only contains models that the device can actually run.
+
+**Hard exclusions happen automatically.** Even without explicit constraints, models that exceed the device's available storage or reported memory are silently dropped. You never get a recommendation that would fail to download or crash the tab.
+
+### Decision Flowchart: Which Constraints Should You Set?
+
+```
+Start
+  |
+  v
+What task do you need?
+  |
+  +--> Set task: 'embedding' | 'generation' | 'classification' | ...
+  |
+  v
+Do your users have WebGPU?
+  |
+  +--> Yes, all of them ---------> requireWebGPU: true
+  +--> Mixed or unknown ----------> (omit - let scoring handle it)
+  +--> No, need universal support -> providers: ['transformers', 'wllama']
+  |
+  v
+Is download size a concern?
+  |
+  +--> Mobile users / slow networks -> maxSizeMB: 200
+  +--> Desktop / fast networks ------> (omit or maxSizeMB: 2000)
+  |
+  v
+Do you know the target memory?
+  |
+  +--> Low-end devices (4 GB) -> maxMemoryMB: 2048
+  +--> Mid-range (8 GB) -------> maxMemoryMB: 4096
+  +--> High-end / unknown -----> (omit)
+  |
+  v
+How many options to show?
+  |
+  +--> Auto-select best -> limit: 1
+  +--> Let user choose ---> limit: 3 or 5
+```
+
+---
+
+## Computing Optimal Batch Size
+
+Once you have a model recommendation, `computeOptimalBatchSize()` tells you how many items to process per batch. This matters for `streamEmbedMany()` and RAG `ingest()` calls, where batch size directly affects throughput and memory pressure.
+
+The function is synchronous and uses a formula normalized against a reference device (4 cores, 8 GB RAM):
+
+```
+batchSize = base * (cores / 4) * (memoryGB / 8) * gpuMultiplier
+```
+
+The GPU multiplier is 1.5x when a GPU is detected, 1.0x otherwise. The result is clamped to task-specific bounds: embedding tasks range from 4 to 256, ingestion tasks from 8 to 512.
+
+```typescript
+import { computeOptimalBatchSize } from '@localmode/core';
+
+const result = computeOptimalBatchSize({
+  taskType: 'embedding',
+  modelDimensions: 384,
+});
+
+console.log(result.batchSize);      // 64 (on an 8-core, 16 GB machine with GPU)
+console.log(result.deviceProfile);  // { cores: 8, memoryGB: 16, hasGPU: true, source: 'detected' }
+console.log(result.reasoning);
+// "Task: embedding (384d). Device: 8 cores, 16GB RAM, GPU: yes (source: detected).
+//  Formula: 32 * 2.00 (cores) * 2.00 (mem) * 1.5 (gpu) = 192.0. Floored to 192,
+//  clamped down to max 256. Result: batchSize=192 (bounds: [4, 256])."
+```
+
+The reasoning string is designed for developer tools and debug panels. It explains every factor in the computation so you can understand why a particular batch size was chosen.
+
+For testing or SSR environments where `navigator` is unavailable, you can pass device overrides:
+
+```typescript
+const result = computeOptimalBatchSize({
+  taskType: 'embedding',
+  modelDimensions: 384,
+  deviceCapabilities: { cores: 2, memoryGB: 4, hasGPU: false },
+});
+// batchSize: 8 (low-end device, clamped to reasonable minimum)
+```
+
+---
+
+## Registering Custom Models
+
+The default registry is a starting point. If you host your own models, fine-tune open-source models, or want to include models from providers that LocalMode does not ship by default, use `registerModel()`:
+
+```typescript
+import { registerModel, recommendModels, detectCapabilities } from '@localmode/core';
+
+registerModel({
+  modelId: 'my-org/custom-embedder-v2',
+  provider: 'custom',
+  task: 'embedding',
+  name: 'Custom Embedder v2',
+  sizeMB: 85,
+  dimensions: 512,
+  recommendedDevice: 'wasm',
+  speedTier: 'fast',
+  qualityTier: 'high',
+  description: 'Fine-tuned on internal product catalog',
+});
+
+// The custom model now appears in recommendations
+const caps = await detectCapabilities();
+const recs = recommendModels(caps, { task: 'embedding' });
+
+// If the device fits, Custom Embedder v2 will rank by its quality/speed/size
+console.log(recs.map((r) => r.entry.name));
+```
+
+Registered entries are module-scoped and persist for the lifetime of the page. If you register a model with the same `modelId` as a built-in entry, your registration overrides the default. This lets you update metadata - for example, correcting a size estimate or changing the quality tier after your own benchmarking.
+
+`getModelRegistry()` returns the full combined catalog at any time:
+
+```typescript
+import { getModelRegistry } from '@localmode/core';
+
+const registry = getModelRegistry();
+console.log(`${registry.length} models in registry`);
+
+const generationModels = registry.filter((e) => e.task === 'generation');
+console.log(`${generationModels.length} generation models`);
+```
+
+---
+
+## Putting It Together: The Full Pipeline
+
+Here is the complete pattern for a feature that auto-selects the best embedding model, computes a batch size, and starts ingesting documents:
+
+```typescript
+import {
+  detectCapabilities,
+  recommendModels,
+  computeOptimalBatchSize,
+  streamEmbedMany,
+} from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+async function ingestDocuments(texts: string[]) {
+  // 1. Detect what this device can handle
+  const capabilities = await detectCapabilities();
+
+  // 2. Get the best embedding model for this device
+  const [best] = recommendModels(capabilities, {
+    task: 'embedding',
+    providers: ['transformers'],
+    limit: 1,
+  });
+
+  if (!best) {
+    throw new Error('No suitable embedding model found for this device');
+  }
+
+  console.log(`Selected: ${best.entry.name} (score: ${best.score})`);
+  console.log(`Reasons: ${best.reasons.join('; ')}`);
+
+  // 3. Compute optimal batch size
+  const { batchSize } = computeOptimalBatchSize({
+    taskType: 'embedding',
+    modelDimensions: best.entry.dimensions ?? 384,
+  });
+
+  // 4. Create the model and start embedding
+  const model = transformers.embedding(best.entry.modelId);
+
+  for await (const result of streamEmbedMany({
+    model,
+    values: texts,
+    batchSize,
+  })) {
+    console.log(`Embedded: ${result.usage.tokens} tokens`);
+  }
+}
+```
+
+The same pattern works for any task. For generation, swap `'embedding'` for `'generation'` and `providers: ['transformers']` for `providers: ['webllm']` or `providers: ['wllama']` depending on your browser support needs.
+
+---
+
+## React Integration
+
+The `@localmode/react` package provides two hooks that wrap this pipeline: `useModelRecommendations` and `useAdaptiveBatchSize`.
+
+```tsx
+import { useModelRecommendations, useAdaptiveBatchSize } from '@localmode/react';
+
+function ModelPicker() {
+  const { recommendations, capabilities, isLoading, error, refresh } =
+    useModelRecommendations({
+      task: 'embedding',
+      maxSizeMB: 200,
+      limit: 3,
+    });
+
+  const { batchSize, deviceProfile } = useAdaptiveBatchSize({
+    taskType: 'embedding',
+    modelDimensions: 384,
+  });
+
+  if (isLoading) return <p>Detecting device capabilities...</p>;
+  if (error) return <p>Detection failed: {error.message}</p>;
+
+  return (
+    <div>
+      <p>
+        Device: {deviceProfile.cores} cores, {deviceProfile.memoryGB} GB RAM,
+        GPU: {deviceProfile.hasGPU ? 'yes' : 'no'}
+      </p>
+      <p>Recommended batch size: {batchSize}</p>
+
+      <h3>Top models for this device:</h3>
+      <ul>
+        {recommendations.map((rec) => (
+          <li key={rec.entry.modelId}>
+            <strong>{rec.entry.name}</strong> - score: {rec.score}/100
+            <br />
+            {rec.entry.sizeMB} MB, {rec.entry.speedTier} speed,{' '}
+            {rec.entry.qualityTier} quality
+            <br />
+            <small>{rec.reasons.join(' | ')}</small>
+          </li>
+        ))}
+      </ul>
+
+      <button onClick={refresh}>Re-detect</button>
+    </div>
+  );
+}
+```
+
+`useModelRecommendations` runs `detectCapabilities()` on mount (client-side only, safely skipped during SSR), then passes the result to `recommendModels()`. It re-runs whenever the options change - so switching the task dropdown instantly re-ranks the models. The `refresh()` function re-triggers detection, useful after a user grants persistent storage or enables a flag.
+
+`useAdaptiveBatchSize` is synchronous - no loading or error states. It re-computes when options change.
+
+<Callout type="info" title="See It Live">
+  The [Model Advisor](/model-advisor) showcase app implements this exact pattern. Select any of the 21 task categories from the dropdown, and it shows ranked recommendations for your device, complete with scores, reasons, and batch size computation. You can also register custom models through the UI and see them appear in the rankings.
+</Callout>
+
+---
+
+## Common Patterns
+
+### Auto-selecting a generation model with browser fallback
+
+```typescript
+const caps = await detectCapabilities();
+
+// Try WebGPU models first, fall back to WASM
+let recs = recommendModels(caps, {
+  task: 'generation',
+  providers: ['webllm'],
+  limit: 1,
+});
+
+if (recs.length === 0) {
+  // No WebGPU - fall back to WASM-based GGUF models
+  recs = recommendModels(caps, {
+    task: 'generation',
+    providers: ['wllama'],
+    limit: 1,
+  });
+}
+
+if (recs.length === 0) {
+  // Last resort - ONNX models via Transformers.js v4
+  recs = recommendModels(caps, {
+    task: 'generation',
+    providers: ['transformers'],
+    limit: 1,
+  });
+}
+```
+
+### Checking if Chrome AI is available before downloading anything
+
+```typescript
+const caps = await detectCapabilities();
+
+if (caps.features.chromeAISummarizer) {
+  // Zero download - use Chrome's built-in summarizer
+  const recs = recommendModels(caps, {
+    task: 'summarization',
+    providers: ['chrome-ai'],
+  });
+  // recs[0] will be Chrome AI Summarizer with 0 MB size
+} else {
+  // Fall back to Transformers.js DistilBART
+  const recs = recommendModels(caps, {
+    task: 'summarization',
+    providers: ['transformers'],
+  });
+}
+```
+
+### Capping model size for mobile users
+
+```typescript
+const caps = await detectCapabilities();
+
+const maxSize = caps.device.type === 'mobile' ? 100 : 2000;
+
+const recs = recommendModels(caps, {
+  task: 'generation',
+  maxSizeMB: maxSize,
+});
+```
+
+---
+
+## What Happens When No Models Fit
+
+`recommendModels()` returns an empty array when no models pass the filter and device constraints. This is not an error - it is a signal that the device cannot run any model for that task under the given constraints.
+
+Handle it explicitly:
+
+```typescript
+const recs = recommendModels(caps, {
+  task: 'generation',
+  maxSizeMB: 50,
+  requireWebGPU: true,
+});
+
+if (recs.length === 0) {
+  // No WebGPU generation model under 50 MB exists
+  // Relax constraints or show a message
+  console.log('No suitable model found. Try relaxing size or WebGPU constraints.');
+}
+```
+
+You can also use `checkModelSupport()` for a specific model to get detailed failure reasons and fallback suggestions:
+
+```typescript
+import { checkModelSupport } from '@localmode/core';
+
+const result = await checkModelSupport({
+  modelId: 'Llama-3.2-3B-Instruct-q4f16_1-MLC',
+  estimatedMemory: 4_000_000_000,
+  estimatedStorage: 1_802_000_000,
+  prefersWebGPU: true,
+});
+
+if (!result.supported) {
+  console.log(result.reason);
+  // "Insufficient storage. Required: 1.68 GB, Available: 1.2 GB"
+  console.log(result.fallbackModels);
+  // [{ modelId: 'Llama-3.2-1B-...', reason: 'Smaller but capable' }]
+}
+```
+
+---
+
+## Summary
+
+The model selection problem is real. Your users have different hardware, different browsers, different amounts of storage and memory. Hardcoding a model ID works for demos but breaks in production.
+
+The `detectCapabilities()` -> `recommendModels()` -> `computeOptimalBatchSize()` pipeline gives you adaptive model selection that works across the full spectrum of devices. The curated registry covers 21 task categories and four providers. The scoring algorithm weighs device fit at 50%, quality at 30%, and speed at 20% - with automatic mobile bonuses and hard exclusions for models that would not fit. And when the built-in catalog is not enough, `registerModel()` lets you add your own entries at runtime.
+
+Three function calls. No guessing.

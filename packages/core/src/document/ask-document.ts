@@ -55,7 +55,7 @@ function resolveModel(modelOrId: DocumentQAModel | string): DocumentQAModel {
  * import { transformers } from '@localmode/transformers';
  *
  * const { answer, score, usage } = await askDocument({
- *   model: transformers.documentQA('Xenova/donut-base-finetuned-docvqa'),
+ *   model: transformers.documentQA('onnx-community/Florence-2-base-ft'),
  *   document: invoiceImage,
  *   question: 'What is the total amount?',
  * });
@@ -67,7 +67,7 @@ function resolveModel(modelOrId: DocumentQAModel | string): DocumentQAModel {
  * @example Form extraction
  * ```ts
  * const { answer } = await askDocument({
- *   model: transformers.documentQA('Xenova/donut-base-finetuned-docvqa'),
+ *   model: transformers.documentQA('onnx-community/Florence-2-base-ft'),
  *   document: formImage,
  *   question: 'What is the customer name?',
  * });

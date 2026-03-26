@@ -1,0 +1,191 @@
+---
+title: Language Model Middleware
+description: Composable middleware for language model generation.
+icon: Layers
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+Wrap language models with composable middleware for caching, logging, retry, guardrails, and more. Mirrors the [Embedding Model Middleware](/docs/core/middleware) pattern.
+
+<Callout type="info" title="See it in action">
+  Try [LLM Chat](https://localmode.ai/llm-chat) for a working demo using `wrapLanguageModel()` with semantic caching middleware.
+</Callout>
+
+## LanguageModelMiddleware
+
+The middleware interface provides three optional hooks:
+
+```typescript
+import type { LanguageModelMiddleware } from '@localmode/core';
+
+const myMiddleware: LanguageModelMiddleware = {
+  // Transform parameters before generation
+  transformParams: async ({ prompt, systemPrompt, messages }) => ({
+    prompt: sanitize(prompt),
+    systemPrompt,
+    messages,
+  }),
+
+  // Wrap the generate call
+  wrapGenerate: async ({ doGenerate, prompt, model }) => {
+    console.log(`Generating with ${model.modelId}`);
+    return doGenerate();
+  },
+
+  // Wrap the stream call
+  wrapStream: ({ doStream, prompt, model }) => {
+    return doStream();
+  },
+};
+```
+
+### Hooks
+
+<TypeTable
+  type={{
+    transformParams: { type: '(params) => params', description: 'Transform prompt, systemPrompt, and messages before they reach the model. Called before doGenerate and doStream.' },
+    wrapGenerate: { type: '({ doGenerate, prompt, model }) => Promise<DoGenerateResult>', description: 'Wrap the generation call. Controls whether the model is called at all. Used for caching, retry, logging.' },
+    wrapStream: { type: '({ doStream, prompt, model }) => AsyncIterable<StreamChunk>', description: 'Wrap the streaming call. Controls the stream output. Used for caching, filtering, logging.' },
+  }}
+/>
+
+All hooks are optional. An empty object `{}` is a valid passthrough middleware.
+
+## wrapLanguageModel()
+
+Apply middleware to a language model:
+
+```typescript
+import { wrapLanguageModel, generateText } from '@localmode/core';
+
+const wrapped = wrapLanguageModel({
+  model: webllm.languageModel('Llama-3.2-1B-Instruct-q4f16'),
+  middleware: loggingMiddleware,
+});
+
+// Use wrapped model with generateText/streamText as usual
+const { text } = await generateText({ model: wrapped, prompt: 'Hello' });
+```
+
+The wrapped model preserves `modelId`, `provider`, and `contextLength` from the original model.
+
+## composeLanguageModelMiddleware()
+
+Compose multiple middleware into one:
+
+```typescript
+import { composeLanguageModelMiddleware, wrapLanguageModel } from '@localmode/core';
+
+const composed = composeLanguageModelMiddleware([
+  guardrailsMiddleware,  // Outermost: runs first/last
+  cachingMiddleware,      // Middle
+  loggingMiddleware,      // Innermost: closest to model
+]);
+
+const model = wrapLanguageModel({
+  model: baseModel,
+  middleware: composed,
+});
+```
+
+### Composition order
+
+- **`transformParams`** -- Chained in array order (first middleware transforms first)
+- **`wrapGenerate`/`wrapStream`** -- First middleware wraps the outermost layer
+
+```
+Request:  guardrails.transformParams -> caching.transformParams -> logging.transformParams
+Generate: guardrails.wrapGenerate -> caching.wrapGenerate -> logging.wrapGenerate -> model
+```
+
+## Examples
+
+### Logging middleware
+
+```typescript
+const loggingMiddleware: LanguageModelMiddleware = {
+  wrapGenerate: async ({ doGenerate, prompt, model }) => {
+    const start = Date.now();
+    console.log(`[${model.modelId}] Generating for: "${prompt.slice(0, 50)}..."`);
+
+    const result = await doGenerate();
+
+    console.log(`[${model.modelId}] Done in ${Date.now() - start}ms, ` +
+      `${result.usage.outputTokens} tokens`);
+    return result;
+  },
+};
+```
+
+### Input guardrails
+
+```typescript
+const guardrailsMiddleware: LanguageModelMiddleware = {
+  transformParams: ({ prompt, systemPrompt, messages }) => {
+    // Add safety system prompt
+    const safeSystemPrompt = [
+      systemPrompt ?? '',
+      'You must refuse harmful or dangerous requests.',
+    ].filter(Boolean).join('\n');
+
+    return { prompt, systemPrompt: safeSystemPrompt, messages };
+  },
+};
+```
+
+### Output filtering
+
+```typescript
+const outputFilterMiddleware: LanguageModelMiddleware = {
+  wrapGenerate: async ({ doGenerate }) => {
+    const result = await doGenerate();
+    return {
+      ...result,
+      text: redactPII(result.text),
+    };
+  },
+};
+```
+
+### Semantic caching
+
+The built-in `semanticCacheMiddleware()` is the primary consumer of this system. See [Semantic Cache](/docs/core/semantic-cache) for details.
+
+```typescript
+import { createSemanticCache, semanticCacheMiddleware, wrapLanguageModel } from '@localmode/core';
+
+const cache = await createSemanticCache({ embeddingModel });
+const cachedModel = wrapLanguageModel({
+  model: llm,
+  middleware: semanticCacheMiddleware(cache),
+});
+```
+
+## Comparison with EmbeddingModelMiddleware
+
+| Aspect | EmbeddingModelMiddleware | LanguageModelMiddleware |
+|--------|------------------------|----------------------|
+| Location | `embeddings/middleware.ts` | `generation/middleware.ts` |
+| Wrap function | `wrapEmbeddingModel()` | `wrapLanguageModel()` |
+| Compose function | `composeEmbeddingMiddleware()` | `composeLanguageModelMiddleware()` |
+| Hooks | `transformParams`, `wrapEmbed` | `transformParams`, `wrapGenerate`, `wrapStream` |
+| Used with | `embed()`, `embedMany()` | `generateText()`, `streamText()` |
+
+The two middleware systems follow the same pattern. If you know one, you know the other.
+
+<Callout title="Middleware vs VectorDB Middleware">
+  `LanguageModelMiddleware` uses the **wrap pattern** (`wrapGenerate`, `wrapStream`) which gives middleware full control over whether the underlying operation executes. This is essential for caching (skip the model entirely on cache hit).
+
+  `VectorDBMiddleware` uses the **hook pattern** (`beforeAdd`, `afterAdd`) which always executes the operation and lets middleware run before/after.
+
+  The wrap pattern is more powerful but the hook pattern is simpler for logging and validation.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| LLM Chat | Wraps language models with semantic caching middleware | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |

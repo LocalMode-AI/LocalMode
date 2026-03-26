@@ -13,6 +13,10 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 
 Middleware lets you extend and modify the behavior of embedding models and vector databases.
 
+<Callout type="info" title="See it in action">
+  Try [Document Redactor](https://localmode.ai/document-redactor) for a working demo of these APIs.
+</Callout>
+
 ## Embedding Model Middleware
 
 Wrap embedding models with middleware:
@@ -21,7 +25,7 @@ Wrap embedding models with middleware:
 import { wrapEmbeddingModel, cachingMiddleware, loggingMiddleware } from '@localmode/core';
 import { transformers } from '@localmode/transformers';
 
-const baseModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const baseModel = transformers.embedding('Xenova/bge-small-en-v1.5');
 
 const model = wrapEmbeddingModel(baseModel, [
   cachingMiddleware({ maxSize: 1000 }),
@@ -303,9 +307,9 @@ const { embedding } = await embed({
 Encrypt embeddings before storage:
 
 ```ts
-import { encryptionMiddleware, deriveKey } from '@localmode/core';
+import { encryptionMiddleware, deriveEncryptionKey } from '@localmode/core';
 
-const key = await deriveKey('user-password', 'salt');
+const { key } = await deriveEncryptionKey('user-password', 'salt');
 
 const model = wrapEmbeddingModel(baseModel, [
   encryptionMiddleware({
@@ -427,6 +431,128 @@ function myCustomMiddleware(options: { threshold: number }): EmbeddingModelMiddl
 const model = wrapEmbeddingModel(baseModel, [myCustomMiddleware({ threshold: 10 })]);
 ```
 
+## Middleware Factory Functions
+
+Factory functions create pre-configured middleware instances:
+
+```typescript
+import {
+  createCachingMiddleware,
+  createLoggingMiddleware,
+  createValidationMiddleware,
+  createRetryMiddleware,
+  createRateLimitMiddleware,
+} from '@localmode/core';
+```
+
+| Factory | Options Type | Description |
+| --- | --- | --- |
+| `createCachingMiddleware(options)` | `CachingMiddlewareOptions` | Caches search results with configurable TTL and max entries |
+| `createLoggingMiddleware(options)` | `LoggingMiddlewareOptions` | Logs VectorDB operations with custom logger |
+| `createValidationMiddleware(options)` | `ValidationMiddlewareOptions` | Validates vectors, metadata, and search params |
+| `createRetryMiddleware(options)` | `RetryMiddlewareOptions` | Retries failed operations with backoff |
+| `createRateLimitMiddleware(options)` | `RateLimitMiddlewareOptions` | Rate limits operations with token bucket |
+
+```typescript
+// Example: Create caching middleware with custom TTL
+const caching = createCachingMiddleware({
+  maxEntries: 1000,
+  ttlMs: 60_000, // 1 minute cache
+});
+
+// Example: Create retry middleware with backoff
+const retry = createRetryMiddleware({
+  maxRetries: 3,
+  initialDelayMs: 100,
+  backoffMultiplier: 2,
+});
+```
+
+## Middleware Composition
+
+Combine multiple middleware into a single middleware using composition functions:
+
+```typescript
+import { composeEmbeddingMiddleware, composeVectorDBMiddleware } from '@localmode/core';
+```
+
+### Composing Embedding Middleware
+
+```typescript
+import {
+  composeEmbeddingMiddleware,
+  piiRedactionMiddleware,
+  encryptionMiddleware,
+  wrapEmbeddingModel,
+} from '@localmode/core';
+
+const combined = composeEmbeddingMiddleware([
+  piiRedactionMiddleware({ patterns: ['email', 'phone'] }),
+  encryptionMiddleware({ key }),
+]);
+
+const secureModel = wrapEmbeddingModel(baseModel, [combined]);
+```
+
+### Composing VectorDB Middleware
+
+```typescript
+import {
+  composeVectorDBMiddleware,
+  createCachingMiddleware,
+  createLoggingMiddleware,
+  createValidationMiddleware,
+  wrapVectorDB,
+} from '@localmode/core';
+
+const combined = composeVectorDBMiddleware([
+  createValidationMiddleware({ maxDimensions: 1536 }),
+  createCachingMiddleware({ maxEntries: 500 }),
+  createLoggingMiddleware({ logger: console.log }),
+]);
+
+const wrappedDB = wrapVectorDB(db, [combined]);
+```
+
+## Custom Middleware
+
+### Custom VectorDB Middleware
+
+Implement the `VectorDBMiddleware` interface to create custom middleware:
+
+```typescript
+import type { VectorDBMiddleware } from '@localmode/core';
+
+function analyticsMiddleware(): VectorDBMiddleware {
+  let searchCount = 0;
+  let addCount = 0;
+
+  return {
+    beforeSearch: async ({ query, k }) => {
+      searchCount++;
+      console.log(`Search #${searchCount}: k=${k}`);
+      return { query, k };
+    },
+
+    afterSearch: async ({ results, durationMs }) => {
+      console.log(`Found ${results.length} results in ${durationMs}ms`);
+      return results;
+    },
+
+    beforeAdd: async ({ documents }) => {
+      addCount += documents.length;
+      return { documents };
+    },
+
+    afterAdd: async () => {
+      console.log(`Total documents added: ${addCount}`);
+    },
+  };
+}
+```
+
+Available hooks: `beforeAdd`, `afterAdd`, `beforeSearch`, `afterSearch`, `beforeDelete`, `afterDelete`, `beforeClear`, `afterClear`.
+
 ## Best Practices
 
 <Callout type="tip" title="Middleware Tips">
@@ -434,7 +560,8 @@ const model = wrapEmbeddingModel(baseModel, [myCustomMiddleware({ threshold: 10 
   2. **Keep middleware focused** - One concern per middleware
   3. **Handle errors** - Middleware can throw; handle gracefully
   4. **Consider performance** - Each middleware adds overhead
-  5. **Use composition** - Stack simple middleware for complex behavior
+  5. **Use composition** - Use `composeVectorDBMiddleware` to combine related middleware
+  6. **Use factories** - Prefer `createCachingMiddleware()` over `cachingMiddleware()` for configurable instances
 </Callout>
 
 ## Next Steps
@@ -451,3 +578,9 @@ const model = wrapEmbeddingModel(baseModel, [myCustomMiddleware({ threshold: 10 
     description="Use middleware with embedding models."
   />
 </Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Document Redactor | Differential privacy middleware for embedding models | [Demo](https://localmode.ai/document-redactor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/document-redactor) |

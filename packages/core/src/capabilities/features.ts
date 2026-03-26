@@ -198,6 +198,49 @@ export function isWebCryptoSupported(): boolean {
 }
 
 // ============================================================================
+// Chrome Built-in AI Detection
+// ============================================================================
+
+/**
+ * Check if Chrome Built-in AI is supported.
+ *
+ * @returns true if Chrome AI APIs are available
+ */
+export function isChromeAISupported(): boolean {
+  return typeof self !== 'undefined' && 'ai' in self;
+}
+
+/**
+ * Check if Chrome AI Summarizer API is supported.
+ *
+ * @returns true if the Summarizer API is available
+ */
+export function isSummarizerAPISupported(): boolean {
+  if (!isChromeAISupported()) return false;
+  return 'summarizer' in (self as any).ai;
+}
+
+/**
+ * Check if Chrome AI Translator API is supported.
+ *
+ * @returns true if the Translator API is available
+ */
+export function isTranslatorAPISupported(): boolean {
+  if (!isChromeAISupported()) return false;
+  return 'translator' in (self as any).ai;
+}
+
+/**
+ * Check if Chrome AI Language Model (Prompt) API is supported.
+ *
+ * @returns true if the Language Model API is available
+ */
+export function isLanguageModelAPISupported(): boolean {
+  if (!isChromeAISupported()) return false;
+  return 'languageModel' in (self as any).ai;
+}
+
+// ============================================================================
 // Feature Object (Quick Access)
 // ============================================================================
 
@@ -246,6 +289,18 @@ export const features = {
   },
   get webnn() {
     return isWebNNSupported();
+  },
+  get chromeAI() {
+    return isChromeAISupported();
+  },
+  get chromeAISummarizer() {
+    return isSummarizerAPISupported();
+  },
+  get chromeAITranslator() {
+    return isTranslatorAPISupported();
+  },
+  get chromeAILanguageModel() {
+    return isLanguageModelAPISupported();
   },
 } as const;
 

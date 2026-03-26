@@ -1,0 +1,205 @@
+---
+title: Text Generation (Experimental)
+description: Run ONNX language models in the browser with WebGPU acceleration.
+icon: MessageSquare
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Run ONNX-format language models directly in the browser using Transformers.js v4 with WebGPU acceleration and automatic WASM fallback.
+
+<Callout type="warn">
+  **Experimental**: This feature uses Transformers.js v4 which is currently a preview release (`@next` tag). The API may change in future releases.
+</Callout>
+
+<Callout type="info">
+  For full API reference (`generateText()`, `streamText()`, options, result types, and middleware), see the [Core Generation](/docs/core/generation) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [LLM Chat](https://localmode.ai/llm-chat) for a working demo.
+</Callout>
+
+## 3-Tier Fallback
+
+LocalMode offers three LLM providers, each with different trade-offs:
+
+| Provider | Format | Best For | Speed |
+|----------|--------|----------|-------|
+| `@localmode/webllm` | MLC-compiled | Fastest inference, limited models | 60-100 tok/s |
+| `@localmode/transformers` | ONNX (TJS v4) | Broad model selection, WebGPU | 40-60 tok/s |
+| `@localmode/wllama` | GGUF (llama.cpp) | Universal browser support | 5-15 tok/s |
+
+Use `createProviderWithFallback()` for automatic failover:
+
+```typescript
+import { createProviderWithFallback } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+import { transformers } from '@localmode/transformers';
+import { wllama } from '@localmode/wllama';
+
+const model = await createProviderWithFallback({
+  providers: [
+    () => webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
+    () => transformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX'),
+    () => wllama.languageModel('bartowski/Llama-3.2-1B-Instruct-GGUF:Q4_K_M'),
+  ],
+  onFallback: (error, idx) => console.warn(`Provider ${idx} failed:`, error),
+});
+```
+
+## Recommended ONNX Models
+
+### Tiny (&lt;500MB download)
+
+| Model | Size | Context | Use Case |
+|-------|------|---------|----------|
+| `onnx-community/granite-4.0-350m-ONNX-web` | ~120MB | 4K | IBM Granite 4.0 350M, 12 languages, fastest download |
+
+### Small (500MB–1GB)
+
+| Model | Size | Context | Use Case |
+|-------|------|---------|----------|
+| `onnx-community/Qwen3.5-0.8B-ONNX` | ~500MB | 32K | **Vision** — best sub-1B multimodal, WebGPU recommended |
+| `onnx-community/Qwen3-0.6B-ONNX` | ~570MB | 4K | Smallest Qwen3 text model, fast |
+| `onnx-community/granite-4.0-1b-ONNX-web` | ~350MB | 4K | IBM Granite 4.0 1B, 12 languages |
+| `onnx-community/Llama-3.2-1B-Instruct-ONNX` | ~380MB | 8K | Meta Llama 3.2 1B, q4f16, good general quality |
+| `onnx-community/TinyLlama-1.1B-Chat-v1.0-ONNX` | ~350MB | 2K | Small, fast, q4f16, no login required |
+| `onnx-community/Qwen2.5-Coder-1.5B-Instruct` | ~450MB | 4K | Code-specialized Qwen2.5, q4f16, great for programming |
+| `onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX` | ~500MB | 4K | DeepSeek-R1 distilled, q4f16, strong reasoning |
+
+### Medium (1–2.5GB)
+
+| Model | Size | Context | Use Case |
+|-------|------|---------|----------|
+| `onnx-community/Qwen3.5-2B-ONNX` | ~1.5GB | 32K | **Vision** — high quality 2B multimodal, needs 4GB+ RAM |
+| `onnx-community/Llama-3.2-3B-Instruct-ONNX` | ~900MB | 8K | Meta Llama 3.2 3B, q4f16, strong quality |
+| `onnx-community/Phi-4-mini-instruct-web-q4f16` | ~2.3GB | 4K | Microsoft Phi-4 Mini, strong reasoning/coding, WebGPU recommended |
+| `microsoft/Phi-3-mini-4k-instruct-onnx-web` | ~1.2GB | 4K | Microsoft Phi-3, q4, strong reasoning |
+| `onnx-community/Qwen3-4B-ONNX` | ~1.2GB | 4K | Qwen3 4B text, q4f16, needs 4GB+ RAM |
+
+### Large (2.5GB+)
+
+| Model | Size | Context | Use Case |
+|-------|------|---------|----------|
+| `onnx-community/Qwen3.5-4B-ONNX` | ~2.5GB | 32K | **Vision** — best Qwen3.5 for browser, multimodal, needs 8GB+ RAM |
+
+## Quick Start
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { generateText } from '@localmode/core';
+
+const model = transformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX');
+
+const { text } = await generateText({
+  model,
+  prompt: 'Explain quantum computing in simple terms',
+  maxTokens: 200,
+});
+```
+
+## Streaming
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { streamText } from '@localmode/core';
+
+const model = transformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX');
+
+const result = await streamText({
+  model,
+  prompt: 'Write a short story about a robot learning to paint',
+  maxTokens: 500,
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+## Device Selection
+
+The provider automatically selects WebGPU when available, falling back to WASM:
+
+```typescript
+// Automatic: WebGPU if available, WASM fallback
+const model = transformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX');
+
+// Force WASM (for testing or compatibility)
+const wasmModel = transformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX', {
+  device: 'wasm',
+});
+
+// Force WebGPU (will error if unavailable)
+const gpuModel = transformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX', {
+  device: 'webgpu',
+});
+```
+
+## Custom Settings
+
+```typescript
+import { createTransformers } from '@localmode/transformers';
+
+const myTransformers = createTransformers({
+  device: 'webgpu',
+  onProgress: (p) => console.log(`Loading: ${p.progress}%`),
+});
+
+const model = myTransformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX', {
+  contextLength: 32768,
+  maxTokens: 1024,
+  temperature: 0.7,
+  topP: 0.95,
+  systemPrompt: 'You are a helpful assistant.',
+});
+```
+
+## Vision (Image Input)
+
+Qwen3.5 models support image input via their built-in vision encoder. Check `model.supportsVision` for feature detection:
+
+```typescript
+const model = transformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX');
+
+if (model.supportsVision) {
+  const result = await streamText({
+    model,
+    prompt: '',
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Describe this image.' },
+        { type: 'image', data: base64Data, mimeType: 'image/png' },
+      ],
+    }],
+  });
+}
+```
+
+<Callout type="info">
+  For full multimodal API reference including `ContentPart` types and content utilities, see the [Core Generation](/docs/core/generation#vision-multimodal-input) guide.
+</Callout>
+
+## Using Any ONNX Model
+
+The curated catalog is a starting point. You can use any HuggingFace ONNX model:
+
+```typescript
+// Any ONNX model from HuggingFace Hub
+const model = transformers.languageModel('your-org/custom-model-ONNX');
+```
+
+<Callout type="warn">
+  Not all ONNX models work in the browser. The model must support the TJS v4 `text-generation` pipeline. Stick to the recommended models above for best results.
+</Callout>
+
+## Showcase Apps
+
+The [LLM Chat](https://localmode.ai/llm-chat) showcase app demonstrates ONNX models alongside WebLLM and wllama backends. Select a Qwen3.5 model to try vision input with image uploads.
+
+| App | Description | Links |
+|-----|-------------|-------|
+| LLM Chat | Chat with local ONNX language models, including vision input on Qwen3.5 | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |

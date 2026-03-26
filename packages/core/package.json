@@ -68,6 +68,7 @@
     "clean": "rm -rf dist"
   },
   "devDependencies": {
+    "@webgpu/types": "^0.1.69",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"
   }

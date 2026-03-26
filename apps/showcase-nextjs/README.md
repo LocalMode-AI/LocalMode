@@ -27,65 +27,79 @@ This showcase serves as:
 | react-hook-form | 7.x     | Form handling                                     |
 | lucide-react    | latest  | Icon library                                      |
 
-### @localmode Packages
+### @localmode Packages Used
 
 ```json
 {
   "@localmode/core": "workspace:*",
   "@localmode/transformers": "workspace:*",
   "@localmode/webllm": "workspace:*",
-  "@localmode/pdfjs": "workspace:*",
-  "@localmode/dexie": "workspace:*",
-  "@localmode/idb": "workspace:*",
-  "@localmode/localforage": "workspace:*"
+  "@localmode/pdfjs": "workspace:*"
 }
 ```
 
-## 📱 Applications
+### Additional @localmode Packages
 
-### ✅ Live Apps
+These packages are available in the monorepo but not directly used by the showcase app:
 
-| App                           | Description                                    | Models                            | Features                                    |
-| ----------------------------- | ---------------------------------------------- | --------------------------------- | ------------------------------------------- |
-| **[LLM Chat](/llm-chat)**     | Privacy-first AI chat with streaming responses | Llama 3.2 1B, Phi-3.5, ...etc.    | Streaming, Multiple Models, Offline, WebGPU |
-| **[PDF Search](/pdf-search)** | Ask questions about PDFs with semantic search  | all-MiniLM-L6-v2, ms-marco-MiniLM | PDF Upload, RAG Pipeline, Source Citations  |
+| Package | Description |
+|---------|-------------|
+| `@localmode/ai-sdk` | Vercel AI SDK provider — use local models with `generateText`, `streamText`, and `embed` |
+| `@localmode/dexie` | Dexie.js storage adapter (~15KB) |
+| `@localmode/idb` | idb storage adapter (~3KB) |
+| `@localmode/localforage` | localForage storage adapter (~10KB, auto-fallback) |
 
-### 🔜 Coming Soon
+## 📱 Applications (23 Apps)
 
-#### Audio (3 apps)
+All apps are live at [localmode.ai](https://localmode.ai).
 
-- **Voice Notes** — Record audio, transcribe with Whisper, search semantically
-- **Meeting Assistant** — Transcription, summarization, action items
-- **Audiobook Creator** — Text-to-speech with natural voices
+### Audio (3 apps)
 
-#### Text & NLP (7 apps)
+| App | Description | Key Features |
+| --- | ----------- | ------------ |
+| **[Voice Notes](/voice-notes)** | Record, transcribe, search semantically | Whisper STT, semantic search |
+| **[Meeting Assistant](/meeting-assistant)** | Transcription, summarization, action items | STT + summarization |
+| **[Audiobook Creator](/audiobook-creator)** | Text-to-speech with natural voices | Kokoro TTS |
 
-- **Sentiment Analyzer** — Customer feedback analysis with batch processing
-- **Email Classifier** — Zero-shot intent classification with custom labels
-- **Translator** — 20+ language pairs, works offline
-- **Text Summarizer** — Extractive and abstractive document summarization
-- **Q&A Bot** — Extractive question answering with confidence scores
-- **Smart Autocomplete** — Context-aware text completion
-- **Invoice Q&A** — Visual document understanding
+### Text & NLP (8 apps)
 
-#### Vision (7 apps)
+| App | Description | Key Features |
+| --- | ----------- | ------------ |
+| **[LLM Chat](/llm-chat)** | Privacy-first AI chat with streaming | Multiple models, WebGPU |
+| **[Sentiment Analyzer](/sentiment-analyzer)** | Customer feedback analysis | Batch processing |
+| **[Email Classifier](/email-classifier)** | Zero-shot intent classification | Custom labels |
+| **[Translator](/translator)** | Multi-language translation | 20+ language pairs, offline |
+| **[Text Summarizer](/text-summarizer)** | Document summarization | Extractive and abstractive |
+| **[Q&A Bot](/qa-bot)** | Extractive question answering | Confidence scores |
+| **[Smart Autocomplete](/smart-autocomplete)** | Context-aware text completion | Fill-mask models |
+| **[Invoice Q&A](/invoice-qa)** | Visual document understanding | Document QA models |
 
-- **Background Remover** — Image segmentation with transparency export
-- **Smart Gallery** — Auto-categorization and visual search
-- **Product Search** — E-commerce visual search
-- **Image Captioner** — Accessibility alt-text generation
-- **OCR Scanner** — Text extraction from images and handwriting
-- **Object Detector** — Real-time object detection with webcam
-- **Duplicate Finder** — Visual similarity detection
+### Vision (7 apps)
 
-#### Privacy & Security (2 apps)
+| App | Description | Key Features |
+| --- | ----------- | ------------ |
+| **[Background Remover](/background-remover)** | Image segmentation | Transparency export |
+| **[Smart Gallery](/smart-gallery)** | Auto-categorization and visual search | Image features |
+| **[Product Search](/product-search)** | E-commerce visual search | Image embeddings |
+| **[Image Captioner](/image-captioner)** | Accessibility alt-text generation | Florence-2 |
+| **[OCR Scanner](/ocr-scanner)** | Text extraction from images | TrOCR |
+| **[Object Detector](/object-detector)** | Real-time object detection | D-FINE, webcam |
+| **[Duplicate Finder](/duplicate-finder)** | Visual similarity detection | Image features |
 
-- **Document Redactor** — PII detection and auto-redaction
-- **Encrypted Vault** — E2E encrypted notes and documents
+### RAG & Search (2 apps)
 
-#### RAG & Search (1 app)
+| App | Description | Key Features |
+| --- | ----------- | ------------ |
+| **[PDF Search](/pdf-search)** | Semantic PDF search with RAG | PDF upload, source citations |
+| **[Semantic Search](/semantic-search)** | Personal knowledge base | Hybrid search |
 
-- **Semantic Search** — Personal knowledge base with hybrid search
+### Privacy & Security (3 apps)
+
+| App | Description | Key Features |
+| --- | ----------- | ------------ |
+| **[Document Redactor](/document-redactor)** | PII detection and auto-redaction | NER models |
+| **[Encrypted Vault](/encrypted-vault)** | E2E encrypted notes and documents | Web Crypto API |
+| **[Photo Enhancer](/photo-enhancer)** | Image super-resolution | Swin2SR upscaling |
 
 ## 🏗️ Architecture
 
@@ -239,6 +253,17 @@ npm run build     # Production build
 npm run lint      # ESLint
 npm run type-check # TypeScript check
 ```
+
+## Acknowledgments
+
+This showcase is powered by open-source libraries wrapped by @localmode packages:
+
+- [Transformers.js](https://github.com/huggingface/transformers.js) by HuggingFace — ML models in the browser
+- [WebLLM](https://github.com/mlc-ai/web-llm) by MLC AI — LLM inference with WebGPU
+- [wllama](https://github.com/ngxson/wllama) by ngxson / [llama.cpp](https://github.com/ggml-org/llama.cpp) by Georgi Gerganov — GGUF model inference via WASM
+- [PDF.js](https://mozilla.github.io/pdf.js/) by Mozilla — PDF text extraction
+- [LangChain.js](https://github.com/langchain-ai/langchainjs) by LangChain — LLM application framework
+- [Chrome Built-in AI](https://developer.chrome.com/docs/ai/built-in) by Google — On-device Gemini Nano inference
 
 ## 📄 License
 

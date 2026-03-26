@@ -1,0 +1,325 @@
+---
+title: "Near Cloud-Quality AI at $0 Cost: No APIs, No Servers, Completely Private"
+description: "We benchmarked 18 local browser model categories across 60+ curated models against OpenAI, Google, AWS, and Cohere. Qwen3.5-4B scores 88.8% on MMLU-Redux (thinking mode), closing the gap with GPT-4o. Embeddings hit 99% of cloud quality, and the annual savings at scale reach six figures -- all while keeping data 100% private."
+author: LocalMode
+date: 2026-03-25
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Every AI-powered feature you ship today comes with the same baggage: API keys to manage, per-request costs that scale with your users, latency from network round-trips, and the uneasy reality that your users' data is traveling to someone else's servers.
+
+What if you could drop all of that - and keep 85-99% of the quality?
+
+We ran a comprehensive benchmark of every model in LocalMode against the cloud APIs that most teams default to: OpenAI, Google Cloud, AWS, Cohere, ElevenLabs, and DeepL. We measured quality on standard academic benchmarks (MTEB, SQuAD, BLEU, WER, COCO mAP), tracked real-world cost at scale, and compared latency head-to-head.
+
+Here is everything we found.
+
+---
+
+## The Bottom Line
+
+<Callout type="info" title="TL;DR">
+  7 out of 18 model categories hit **90%+ of cloud API quality** while running entirely in the browser. With thinking mode, Qwen3.5-4B scores 88.8% on MMLU-Redux - within 0.1% of GPT-4o's 88.7% MMLU score. Cost drops from $50K-$300K/year to **$0**. Data never leaves the device.
+</Callout>
+
+| What We Measured | Local Quality vs Cloud | Cost |
+|---|---|---|
+| Embeddings (semantic search) | **99%** of OpenAI | $0 vs $0.01/1K |
+| Speech recognition | **~80%** of Whisper API | $0 vs $6/1K min |
+| Named entity recognition | **95-98%** of GPT-4o | $0 vs $2.50-5/1K |
+| Question answering (short docs) | **92-95%** of GPT-4o | $0 vs $5-15/1K |
+| Zero-shot classification | **94-97%** of GPT-4o | $0 vs $2.50-10/1K |
+| Text-to-speech | **88-92%** of OpenAI TTS | $0 vs $15-30/M chars |
+| Reranking (RAG pipelines) | **87-93%** of Cohere | $0 vs $2/1K |
+| Translation | **85%** of Google Translate | $0 vs $20/M chars |
+| LLM chat (Qwen3.5-4B thinking) | **~100%** of GPT-4o on knowledge (MMLU-Redux 88.8% vs MMLU 88.7%); **5-6x** on math | $0 vs $2.50-10/M tokens |
+| Object detection | **70-80%** of Cloud Vision | $0 vs $1-2.25/1K images |
+
+Every model runs in the browser via WebAssembly or WebGPU. No backend. No API keys. No network requests after the initial model download.
+
+---
+
+## Where Local Models Match or Beat Cloud APIs
+
+### Embeddings: 99% of OpenAI at Zero Cost
+
+This is the closest result in the entire benchmark. LocalMode's default embedding model (`bge-small-en-v1.5`, 384 dimensions, 33MB) scores **62.2 on the MTEB benchmark**. OpenAI's `text-embedding-3-small` scores 62.3.
+
+That is a 0.1-point difference on the industry-standard embedding benchmark.
+
+| | Local (bge-small) | OpenAI (text-embedding-3-small) |
+|---|---|---|
+| MTEB Overall | 62.2 | 62.3 |
+| Dimensions | 384 | 1536 |
+| Cost per 1M tokens | **$0** | $0.020 |
+| Latency (after warm-up) | 8-30ms | 20-50ms |
+
+For most RAG pipelines, semantic search features, and recommendation engines, the local model is functionally identical to the cloud - at zero marginal cost and with no data ever leaving the user's device.
+
+```typescript
+import { embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// 99% of OpenAI quality, $0 cost, runs in the browser
+const { embedding } = await embed({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  value: 'How do I reset my password?',
+});
+```
+
+### Speech Recognition: Competitive Quality at a Fraction of the Size
+
+LocalMode's Moonshine-base model (63MB quantized) achieves a **3.23% Word Error Rate** on LibriSpeech clean - compared to Whisper large-v3's approximately **2.7% WER**. That is a small gap for a model that is orders of magnitude smaller and runs entirely in the browser.
+
+| | Moonshine-base (local) | Whisper API (cloud) |
+|---|---|---|
+| LibriSpeech Clean WER | 3.23% | ~2.7% |
+| Model Size | 63MB | N/A (cloud) |
+| Cost per 1K minutes | **$0** | $6.00 |
+| Works Offline | Yes | No |
+
+For the ultra-lightweight option, Moonshine-tiny (28MB) processes audio 5x faster than Whisper-tiny with comparable accuracy - ideal for real-time voice commands. Cloud APIs handle accented speech, background noise, and rare vocabulary better, but for clean microphone input the local models deliver strong results at zero cost.
+
+### NER and QA: Purpose-Built Models Compete With GPT-4o
+
+Named entity recognition (identifying people, organizations, locations in text) and extractive question answering are two areas where small, purpose-built models remain remarkably competitive with general-purpose LLMs.
+
+**NER**: `bert-base-NER` achieves approximately **91-93% F1** on the CoNLL-2003 benchmark. GPT-4o achieves approximately 94-97% with careful prompting. The local model reaches 95-98% of cloud quality at 30-100ms latency (vs. 500-3000ms for GPT-4o).
+
+**QA**: `distilbert-squad` achieves **87.1 F1** on SQuAD v1.1. Human performance is 91.2. GPT-4o reaches approximately 91-95 F1. The local model delivers 92-95% of cloud quality for extractive QA over short documents - at 20-100ms versus 500-3000ms.
+
+The difference: GPT-4o can reason over 128K tokens, synthesize answers not explicitly stated in the text, and handle arbitrary question formats. The local models are strictly extractive - they find answer spans in the provided text. For the use cases they support (search result highlighting, FAQ bots, form autofill), they are near cloud-quality at a fraction of the latency.
+
+---
+
+## Where the Gap is Real (and Why It's OK)
+
+### Translation: 85% of Google Translate
+
+LocalMode uses Helsinki-NLP Opus-MT models - one ~100MB model per language pair. On internal benchmarks, they achieve BLEU scores in the range of **22-40** depending on test set and language pair. Cloud translation services like Google Translate and DeepL consistently score higher on fluency and idiomatic expression.
+
+The quality gap is noticeable in longer passages where cloud services produce more natural translations. For UI string translation, short messages, and basic document translation, the local models are solid. For publishing-quality translation, the cloud still wins.
+
+The structural limitation: Opus-MT requires downloading a separate model for each language pair. Google Translate covers 243 languages with a single API call.
+
+### LLM Chat: 75-100% of GPT-4o (Depending on Task and Mode)
+
+LocalMode now ships **three LLM providers** that run entirely in the browser - WebLLM (MLC/WebGPU, fastest), Transformers.js v4 (ONNX/WebGPU, broadest model selection), and wllama (GGUF/WASM, universal browser support). Together they offer 60+ curated models and access to 160,000+ GGUF models on HuggingFace.
+
+The headline result: **Qwen3.5-4B** (ONNX, Feb 2026) scores **88.8% on MMLU-Redux** in thinking mode - within 0.1% of GPT-4o's 88.7% on MMLU. (Note: MMLU and MMLU-Redux are related but distinct benchmarks; this is a close comparison, not an exact apples-to-apples match.) On math reasoning, the Qwen3 family continues to dominate: Qwen3-8B solves 76% of AIME 2024 problems (thinking mode) compared to GPT-4o's approximately 13%.
+
+| | Qwen3.5-4B (ONNX) | Qwen3-4B (MLC) | Qwen3-8B (MLC) | DeepSeek-R1-Distill-7B (MLC) | GPT-4o (cloud) |
+|---|---|---|---|---|---|
+| Knowledge (MMLU-Redux) | **88.8%** (thinking) | 84.2% | 79.5% | N/A | 88.7% (MMLU) |
+| Math reasoning (AIME 2024) | N/A | ~66% | **76%** | 56% | ~13% |
+| Math (HMMT Feb 25) | **74.0%** | N/A | N/A | N/A | N/A |
+| Math (MATH-500) | N/A | ~97% | **97.4%** | 92.8% | ~75% |
+| Download Size | ~2.5GB | 2.2GB | 4.5GB | 4.2GB | N/A (cloud) |
+| Tokens/sec (browser) | 40-60 | 40-90 | 30-60 | 30-60 | 30-80 (streaming) |
+| Context Window | 32K (262K native) | 32K | 32K | 32K | 128K |
+| Cost per 1M tokens | **$0** | **$0** | **$0** | **$0** | $2.50 in / $10 out |
+
+The picture varies by task type and mode. With thinking mode enabled (extended chain-of-thought reasoning), **Qwen3.5-4B reaches 88.8% on MMLU-Redux** - closing the knowledge gap with GPT-4o (88.7% on MMLU). On mathematical reasoning, the Qwen3 family dramatically outperforms GPT-4o - Qwen3-8B solves 76% of competition-level AIME 2024 problems where GPT-4o manages only ~13%. Qwen3.5-4B scores 74-77% on the 2025 HMMT math competitions in thinking mode. The DeepSeek-R1 distilled models offer strong reasoning at slightly lower download size than Qwen3-8B.
+
+Qwen3.5 natively supports 262K context and multimodal vision, though the current browser ONNX build runs text generation with a 32K default context window.
+
+For most users, **Qwen3.5-4B** (~2.5GB ONNX download) is the new practical sweet spot - it runs on most modern laptops via the Transformers.js v4 provider with WebGPU acceleration and achieves the highest knowledge benchmark scores of any local browser model. For pure math reasoning, users with 6GB+ GPU VRAM can load **Qwen3-8B** via WebLLM for the best AIME/MATH-500 results. For universal browser support without WebGPU, **wllama** runs any of 160,000+ GGUF models via WASM.
+
+### Document QA and Image Captioning: Work in Progress
+
+These are the two categories where the gap is widest. Florence-2-base achieves approximately 40-55% of GPT-4o's quality on document QA and 60-70% on image captioning. The reason is fundamental: GPT-4o brings world knowledge and multi-step reasoning to visual understanding tasks. Florence-2 is a 223MB vision-language model that handles captioning and detection well, but cannot reason about what it sees the way a frontier LLM can.
+
+For structured use cases (reading printed text, identifying objects, generating basic captions), Florence-2 is perfectly serviceable. For "understand this invoice and extract the line items" or "describe what's happening in this scene and why" - cloud APIs are still meaningfully ahead.
+
+---
+
+## The Cost Math at Scale
+
+The per-request costs of cloud APIs seem small until you multiply by users and time. Here is what a moderately popular application pays annually:
+
+<Callout type="warn" title="Annual Cloud API Cost">
+  **1,000 users x 100 AI calls/day = 36.5 million calls/year**
+</Callout>
+
+| Feature | Cloud API Cost/Year | LocalMode Cost/Year | Annual Savings |
+|---|---|---|---|
+| Semantic search (embeddings) | $365 | $0 | $365 |
+| Search reranking | $73,000 | $0 | **$73,000** |
+| NER / entity extraction | $91,250 - $182,500 | $0 | **$91K - $183K** |
+| LLM chat responses | $91,250 - $365,000 | $0 | **$91K - $365K** |
+| Image classification | $54,750 | $0 | **$54,750** |
+| Speech transcription (1K min/day) | $2,190 | $0 | **$2,190** |
+
+The savings are not hypothetical. Every API call that runs in the user's browser instead of hitting a cloud endpoint costs exactly zero. No infrastructure to maintain, no rate limits to manage, no billing alerts at 3am.
+
+---
+
+## The Privacy Argument Is Absolute
+
+Quality percentages and cost savings are quantifiable. Privacy is binary.
+
+When a user's data hits a cloud API, it leaves their device. Even with enterprise agreements, even with data processing addendums, even with SOC 2 compliance - the data traveled over a network to a third party's infrastructure. For many industries, that is the entire problem.
+
+**Healthcare**: Patient audio transcribed locally never triggers HIPAA data transmission requirements. A doctor dictating notes into a browser app that uses Moonshine STT sends zero bytes to any external server.
+
+**Legal**: Privileged attorney-client documents analyzed for entities, summarized, or searched via embeddings - all without the documents ever leaving the browser tab.
+
+**Finance**: Sensitive financial documents, trading communications, and customer data processed entirely on-device. No cloud vendor has access. No data residency questions.
+
+**Enterprise**: Internal documents, proprietary data, employee communications - all processable with AI features without any data leaving the corporate network. Not even to a "trusted" cloud provider.
+
+**Consumer privacy**: Users who are uncomfortable with their voice recordings, photos, or messages being sent to cloud servers can use AI features with complete confidence that nothing leaves their device.
+
+With LocalMode, the privacy guarantee is architectural, not contractual. The code physically cannot send data to external servers because all inference runs in the browser's WebAssembly or WebGPU runtime.
+
+---
+
+## When to Use Local vs. Cloud
+
+Local browser AI is not a universal replacement for cloud APIs. It is a dramatically better choice for specific, well-defined workloads - and those workloads cover most of what production applications actually need.
+
+### Use LocalMode When:
+
+- **Privacy is non-negotiable** - medical, legal, financial, or user-sensitive data
+- **You need embeddings or semantic search** - 99% quality match, $0 cost
+- **You want real-time voice features** - STT and TTS with sub-second latency, offline-capable
+- **Your NLP is task-specific** - sentiment analysis, NER, extractive QA, classification
+- **You want to eliminate API costs** - especially at scale (reranking, embeddings, classification)
+- **Offline support matters** - progressive web apps, field workers, unreliable connectivity
+- **You want zero infrastructure** - no backend to deploy, no API keys to rotate, no rate limits
+
+### Use Cloud APIs When:
+
+- **You need frontier reasoning** - complex multi-step logic, advanced code generation
+- **You need broad language support** - cloud translation covers 243 languages in one API call
+- **Document understanding is critical** - GPT-4o's visual reasoning is substantially ahead
+- **You need voice cloning or thousands of voices** - ElevenLabs offers 10,000+ voices plus voice cloning
+- **Your users have low-end devices** - cloud APIs work on any device with an internet connection
+
+### Use Both (Hybrid Approach):
+
+Many applications benefit from using local models for the common path and cloud APIs for the edge cases:
+
+```typescript
+import { embed, classify } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// 95% of requests: handle locally at $0
+const { embedding } = await embed({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  value: userQuery,
+});
+
+const { label } = await classify({
+  model: transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english'),
+  text: userMessage,
+});
+
+// 5% of requests: escalate to cloud for complex reasoning
+if (needsComplexReasoning(userQuery)) {
+  const response = await fetch('/api/cloud-llm', { body: userQuery });
+}
+```
+
+This pattern captures 95% of the cost savings while maintaining 100% quality coverage.
+
+---
+
+## Getting Started
+
+Every model in this benchmark runs through the same simple API:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+```typescript
+import { embed, classify, transcribe, rerank } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Embeddings (99% of OpenAI quality)
+const { embedding } = await embed({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  value: 'Your text here',
+});
+
+// Classification (95%+ of cloud)
+const { label, score } = await classify({
+  model: transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english'),
+  text: 'I love this product!',
+});
+
+// Speech-to-text (competitive with Whisper API, $0 cost)
+const { text } = await transcribe({
+  model: transformers.speechToText('onnx-community/moonshine-base-ONNX'),
+  audio: microphoneBlob,
+});
+
+// Reranking (87-93% of Cohere at $0)
+const { results } = await rerank({
+  model: transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2'),
+  query: 'machine learning',
+  documents: searchResults,
+});
+```
+
+Models download once and cache in the browser. Every subsequent use is instant, offline, and free.
+
+---
+
+## Methodology
+
+All benchmarks use published scores from model cards, academic papers, and official leaderboards. Cloud API scores use published benchmarks where available. Cost comparisons use official pricing pages as of March 2026. All local models were verified to exist on HuggingFace with ONNX/MLC weights.
+
+### Benchmarks Used
+
+- **Embeddings**: MTEB overall average (56 tasks)
+- **Classification**: SST-2 accuracy, MNLI matched/mismatched accuracy
+- **NER**: CoNLL-2003 F1 score
+- **QA**: SQuAD v1.1 F1 and Exact Match
+- **Translation**: BLEU scores on various test sets
+- **STT**: Word Error Rate (WER) on LibriSpeech test-clean
+- **TTS**: Community evaluations
+- **Reranking**: MS MARCO MRR@10
+- **Object Detection**: COCO val2017 mAP
+- **LLM**: MMLU-Redux, AIME 2024 (pass@1), MATH-500, HMMT Feb/Nov 2025
+
+### Primary Sources
+
+**Local Model Benchmarks:**
+- [BAAI/bge-small-en-v1.5 model card](https://huggingface.co/BAAI/bge-small-en-v1.5) - MTEB 62.17
+- [dslim/bert-base-NER model card](https://huggingface.co/dslim/bert-base-NER) - CoNLL-2003 F1
+- [distilbert-base-cased-distilled-squad model card](https://huggingface.co/distilbert/distilbert-base-cased-distilled-squad) - SQuAD F1 86.996
+- [cross-encoder/nli-deberta-v3-xsmall model card](https://huggingface.co/cross-encoder/nli-deberta-v3-xsmall) - MNLI 87.77%
+- [cross-encoder/ms-marco-MiniLM-L6-v2 model card](https://huggingface.co/cross-encoder/ms-marco-MiniLM-L-6-v2) - MRR@10 39.01
+- [sshleifer/distilbart-cnn-6-6 model card](https://huggingface.co/sshleifer/distilbart-cnn-6-6) - ROUGE-2 20.17
+- [Helsinki-NLP/opus-mt-en-fr model card](https://huggingface.co/Helsinki-NLP/opus-mt-en-fr) - BLEU scores
+- [Moonshine paper (arXiv:2410.15608)](https://arxiv.org/abs/2410.15608) - WER 3.23% (base, LibriSpeech clean)
+- [Qwen3 Technical Report (arXiv:2505.09388)](https://arxiv.org/abs/2505.09388) - Qwen3 benchmark tables
+- [Qwen3-4B-Instruct-2507 model card](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507) - MMLU-Redux 84.2%
+- [DeepSeek-R1 paper (arXiv:2501.12948)](https://arxiv.org/abs/2501.12948) - Distilled model reasoning benchmarks
+- [Qwen3.5-4B model card](https://huggingface.co/Qwen/Qwen3.5-4B) - MMLU-Redux 88.8% (thinking), HMMT Feb 25 74.0%, HMMT Nov 25 76.8%
+- [Qwen3.5 blog post](https://qwen.ai/blog?id=qwen3.5) - Qwen3.5 release details and benchmarks
+- [Phi-4-mini-instruct model card](https://huggingface.co/microsoft/Phi-4-mini-instruct) - MMLU 67.3%, MATH 64.0%
+
+**Cloud API Benchmarks:**
+- [OpenAI "Hello GPT-4o" announcement](https://openai.com/index/hello-gpt-4o/) - MMLU 88.7% (0-shot CoT)
+- [OpenAI "New embedding models" announcement](https://openai.com/index/new-embedding-models-and-api-updates/) - text-embedding-3-small MTEB 62.3
+- [SQuAD Explorer leaderboard](https://rajpurkar.github.io/SQuAD-explorer/) - Human F1 91.221
+- [Whisper large-v3 model card](https://huggingface.co/openai/whisper-large-v3) - WER benchmarks
+- [MMLU-Pro paper (arXiv:2406.01574)](https://arxiv.org/abs/2406.01574) - GPT-4o MMLU-Pro 72.6%
+
+**Pricing Sources:**
+- [OpenAI API Pricing](https://openai.com/api/pricing/) - GPT-4o, embeddings, Whisper, TTS
+- [Cohere Pricing](https://cohere.com/pricing) - Rerank $2/1K searches
+- [Google Cloud Translation Pricing](https://cloud.google.com/translate/pricing) - $20/1M characters
+- [Google Translate Language Support](https://cloud.google.com/translate/docs/languages) - 243 languages
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

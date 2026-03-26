@@ -5,7 +5,7 @@ PDF text extraction for local-first document processing. Uses PDF.js for efficie
 [![npm](https://img.shields.io/npm/v/@localmode/pdfjs)](https://www.npmjs.com/package/@localmode/pdfjs)
 [![license](https://img.shields.io/npm/l/@localmode/pdfjs)](../../LICENSE)
 
-[![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev)
+[![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev/docs/pdfjs)
 [![Demo](https://img.shields.io/badge/Demo-LocalMode.ai-purple)](https://localmode.ai)
 
 ## Installation
@@ -67,7 +67,7 @@ import { transformers } from '@localmode/transformers';
 
 // Setup
 const db = await createVectorDB({ name: 'docs', dimensions: 384 });
-const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
 const loader = new PDFLoader({ splitByPage: true });
 
 // Load and ingest PDF
@@ -95,7 +95,7 @@ Extract text from a PDF file.
 const { text, pageCount, pages, metadata } = await extractPDFText(pdfBlob, {
   maxPages: 10, // Limit pages
   includePageNumbers: true, // Add [Page N] headers
-  pageSeparator: '\n---\n', // Between pages
+  pageSeparator: '\n\n---\n\n', // Between pages (default)
   password: 'secret', // For encrypted PDFs
 });
 ```
@@ -130,6 +130,10 @@ if (await isPDF(file)) {
   // Handle PDF
 }
 ```
+
+## Acknowledgments
+
+This package is built on [PDF.js](https://mozilla.github.io/pdf.js/) by [Mozilla](https://mozilla.org/) — an open-source PDF rendering and text extraction library.
 
 ## License
 

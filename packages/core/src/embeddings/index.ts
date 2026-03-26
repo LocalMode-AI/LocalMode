@@ -17,6 +17,17 @@ export { semanticSearch, streamSemanticSearch } from './semantic-search.js';
 
 export { wrapEmbeddingModel, composeEmbeddingMiddleware } from './middleware.js';
 
+export {
+  extractFingerprint,
+  fingerprintsMatch,
+  checkModelCompatibility,
+  reindexCollection,
+} from './reindex.js';
+
+export { calibrateThreshold } from './calibrate-threshold.js';
+
+export { getDefaultThreshold, MODEL_THRESHOLD_PRESETS } from './threshold-presets.js';
+
 // ═══════════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════════
@@ -60,5 +71,18 @@ export type {
   // Registry types
   EmbeddingModelRegistry,
   ModelRegistryOptions,
+
+  // Model fingerprint & drift detection types
+  ModelFingerprint,
+  ModelCompatibilityStatus,
+  ModelCompatibilityResult,
+  ReindexProgress,
+  ReindexOptions,
+  ReindexResult,
+
+  // Threshold calibration types
+  CalibrateThresholdOptions,
+  ThresholdCalibration,
+  ThresholdDistributionStats,
 } from './types.js';
 

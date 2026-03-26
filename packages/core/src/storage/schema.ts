@@ -4,7 +4,7 @@
 
 // Note: This version is managed by the migrations system.
 // See migrations.ts for the actual version and upgrade logic.
-export const DB_VERSION = 3;
+export const DB_VERSION = 7;
 
 export const STORE_NAMES = {
   DOCUMENTS: 'documents',
@@ -63,11 +63,12 @@ export interface DocumentRecord {
 
 /**
  * Vector record as stored in IndexedDB.
+ * The vector field stores Float32Array (unquantized) or Uint8Array (quantized).
  */
 export interface VectorRecord {
   id: string;
   collectionId: string;
-  vector: Float32Array;
+  vector: Float32Array | Uint8Array;
 }
 
 /**
@@ -87,6 +88,38 @@ export interface CollectionRecord {
   name: string;
   dimensions: number;
   createdAt: number;
+  /** Serialized scalar calibration data (optional, set when quantization is enabled) */
+  calibration?: {
+    min: number[];
+    max: number[];
+  };
+  /** Embedding model fingerprint for drift detection */
+  modelFingerprint?: {
+    modelId: string;
+    provider: string;
+    dimensions: number;
+  };
+  /** Serialized product quantization codebook (optional, set when PQ is enabled) */
+  pqCodebook?: {
+    subvectors: number;
+    centroids: number;
+    subvectorDim: number;
+    data: number[][][];
+  };
+  /** Storage compression mode (optional, set when compression is enabled) */
+  compression?: {
+    type: 'sq8' | 'delta-sq8' | 'none';
+  };
+  /** Serialized compression calibration data (separate from quantization calibration) */
+  compressionCalibration?: {
+    min: number[];
+    max: number[];
+  };
+  /** Serialized delta calibration for delta-sq8 compression mode */
+  deltaCalibration?: {
+    min: number[];
+    max: number[];
+  };
 }
 
 /**

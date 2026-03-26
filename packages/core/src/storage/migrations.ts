@@ -81,6 +81,50 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 4,
+    description: 'Add calibration field to collections for vector quantization',
+    migrate: () => {
+      // Additive migration: the optional `calibration` field on CollectionRecord
+      // is handled at the application level. No IndexedDB schema changes needed
+      // because IndexedDB is schemaless for document fields — only object stores
+      // and indexes require migration.
+    },
+  },
+  {
+    version: 5,
+    description: 'Add modelFingerprint field to collections for embedding drift detection',
+    migrate: () => {
+      // Additive migration: the optional `modelFingerprint` field on CollectionRecord
+      // is handled at the application level. No IndexedDB schema changes needed
+      // because IndexedDB is schemaless for document fields — only object stores
+      // and indexes require migration. Existing records have `undefined` for
+      // modelFingerprint, which means "unknown model" (backward compatible).
+    },
+  },
+  {
+    version: 6,
+    description: 'Add product quantization codebook support',
+    migrate: () => {
+      // Additive migration: the optional `pqCodebook` field on CollectionRecord
+      // is handled at the application level. No IndexedDB schema changes needed
+      // because IndexedDB is schemaless for document fields — only object stores
+      // and indexes require migration. Existing collections without `pqCodebook`
+      // continue to function identically (backward compatible).
+    },
+  },
+  {
+    version: 7,
+    description: 'Add storage compression metadata to collections',
+    migrate: () => {
+      // Additive migration: the optional `compression`, `compressionCalibration`,
+      // and `deltaCalibration` fields on CollectionRecord are handled at the
+      // application level. No IndexedDB schema changes needed because IndexedDB
+      // is schemaless for document fields — only object stores and indexes
+      // require migration. Existing collections without these fields are treated
+      // as uncompressed (backward compatible).
+    },
+  },
 ];
 
 /**

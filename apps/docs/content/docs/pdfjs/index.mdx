@@ -14,6 +14,10 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 
 PDF text extraction using PDF.js for local document processing. Extract text, metadata, and structure from PDFs entirely in the browser.
 
+<Callout type="info" title="See it in action">
+  Try [PDF Search](https://localmode.ai/pdf-search) for a working demo.
+</Callout>
+
 ## Features
 
 - 📄 **Full PDF Support** — Extract text from any PDF document
@@ -23,10 +27,11 @@ PDF text extraction using PDF.js for local document processing. Extract text, me
 
 ## Installation
 
-<Tabs items={['pnpm', 'npm', 'yarn']}>
+<Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
   <Tab value="pnpm">```bash pnpm install @localmode/pdfjs @localmode/core ```</Tab>
   <Tab value="npm">```bash npm install @localmode/pdfjs @localmode/core ```</Tab>
   <Tab value="yarn">```bash yarn add @localmode/pdfjs @localmode/core ```</Tab>
+  <Tab value="bun">```bash bun add @localmode/pdfjs @localmode/core ```</Tab>
 </Tabs>
 
 ## Quick Start
@@ -48,12 +53,12 @@ console.log('Text:', text);
 
 ### extractPDFText()
 
-Extract text from a PDF file:
+Extract text from a PDF. Accepts `File`, `Blob`, `ArrayBuffer`, `Uint8Array`, or a URL string as the source:
 
 ```ts {3-8}
 import { extractPDFText } from '@localmode/pdfjs';
 
-const result = await extractPDFText(pdfBlob, {
+const result = await extractPDFText(source, {
   maxPages: 10, // Limit pages to extract
   includePageNumbers: true, // Add [Page N] headers
   pageSeparator: '\n---\n', // Separator between pages
@@ -62,7 +67,7 @@ const result = await extractPDFText(pdfBlob, {
 
 console.log(result.text); // Full extracted text
 console.log(result.pageCount); // Total number of pages
-console.log(result.pages); // Array of page texts
+console.log(result.pages); // Array of { pageNumber, text } objects
 console.log(result.metadata); // PDF metadata
 ```
 
@@ -75,24 +80,23 @@ console.log(result.metadata); // PDF metadata
       type: 'number',
       default: 'All pages',
     },
-    startPage: {
-      description: 'Page to start extraction from (0-indexed)',
-      type: 'number',
-      default: '0',
-    },
     includePageNumbers: {
       description: 'Add [Page N] headers to output',
       type: 'boolean',
-      default: 'false',
+      default: 'true',
     },
     pageSeparator: {
       description: 'String to separate pages in output',
       type: 'string',
-      default: "'\\n\\n'",
+      default: "'\\n\\n---\\n\\n'",
     },
     password: {
       description: 'Password for encrypted PDFs',
       type: 'string',
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
     },
   }}
 />
@@ -106,8 +110,8 @@ console.log(result.metadata); // PDF metadata
       type: 'string',
     },
     pages: {
-      description: 'Array of text for each page',
-      type: 'string[]',
+      description: 'Array of page content objects with pageNumber and text',
+      type: 'PDFPageContent[]',
     },
     pageCount: {
       description: 'Total number of pages in the PDF',
@@ -189,7 +193,7 @@ import { transformers } from '@localmode/transformers';
 import { webllm } from '@localmode/webllm';
 
 // Setup
-const embeddingModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
 const llm = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
 const db = await createVectorDB({ name: 'pdf-docs', dimensions: 384 });
 
@@ -236,7 +240,7 @@ async function queryPDF(question: string) {
 
   const context = results.map((r) => `[Page ${r.metadata.page}]\n${r.metadata.text}`).join('\n\n');
 
-  const stream = await streamText({
+  const result = await streamText({
     model: llm,
     prompt: `Answer based on the PDF content:
 
@@ -247,7 +251,7 @@ Question: ${question}
 Answer:`,
   });
 
-  return stream;
+  return result;
 }
 ```
 
@@ -296,24 +300,19 @@ For large PDFs, process in chunks:
 ```typescript
 import { extractPDFText, getPDFPageCount } from '@localmode/pdfjs';
 
-async function processLargePDF(file: File, batchSize = 10) {
-  const totalPages = await getPDFPageCount(file);
-  const allText: string[] = [];
+async function processLargePDF(file: File) {
+  const { text, pages, pageCount } = await extractPDFText(file, {
+    maxPages: 50, // Limit pages if needed
+  });
 
-  for (let start = 0; start < totalPages; start += batchSize) {
-    const { pages } = await extractPDFText(file, {
-      startPage: start,
-      maxPages: batchSize,
-    });
+  console.log(`Processed ${pages.length} of ${pageCount} pages`);
 
-    allText.push(...pages);
-
-    console.log(
-      `Processed pages ${start + 1}-${Math.min(start + batchSize, totalPages)} of ${totalPages}`
-    );
+  // Access individual page text
+  for (const page of pages) {
+    console.log(`Page ${page.pageNumber}: ${page.text.substring(0, 100)}...`);
   }
 
-  return allText.join('\n\n');
+  return text;
 }
 ```
 
@@ -345,7 +344,7 @@ if (metadata) {
   console.log('Subject:', metadata.subject);
   console.log('Creator:', metadata.creator);
   console.log('Creation Date:', metadata.creationDate);
-  console.log('Modification Date:', metadata.modDate);
+  console.log('Modification Date:', metadata.modificationDate);
 }
 ```
 
@@ -369,3 +368,9 @@ if (metadata) {
     description="Store and search PDF content."
   />
 </Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| PDF Search | Extract text from PDFs for semantic search and Q&A | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |

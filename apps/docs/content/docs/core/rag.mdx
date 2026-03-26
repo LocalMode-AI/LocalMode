@@ -14,6 +14,10 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 
 RAG (Retrieval-Augmented Generation) combines vector search with language models to answer questions from your documents. LocalMode provides all the building blocks: chunking, ingestion, semantic search, reranking, and hybrid search.
 
+<Callout type="info" title="See it in action">
+  Try [Semantic Search](https://localmode.ai/semantic-search) and [PDF Search](https://localmode.ai/pdf-search) for working demos of these APIs.
+</Callout>
+
 ## RAG Pipeline Overview
 
 <Steps>
@@ -124,7 +128,7 @@ const chunks = chunk(documentText, {
 
 chunks.forEach((c, i) => {
   console.log(`Chunk ${i}: ${c.text.substring(0, 50)}...`);
-  console.log(`  Start: ${c.startIndex}, End: ${c.endIndex}`);
+  console.log(`  Start: ${c.start}, End: ${c.end}`);
 });
 ```
 
@@ -197,11 +201,194 @@ Supported languages: `typescript`, `javascript`, `python`, `java`, `go`, `rust`,
       type: 'string',
     },
     separators: {
-      description: 'Custom separators (for recursive strategy)',
+      description: 'Custom separators (for recursive strategy only — ignored by markdown and code strategies)',
       type: 'string[]',
     },
   }}
 />
+
+<Callout type="info">
+  The `separators` and `language` options are strategy-specific. `separators` only applies to the `'recursive'` strategy. `language` only applies to the `'code'` strategy. Both are ignored when using other strategies.
+</Callout>
+
+## Semantic Chunking
+
+Semantic chunking uses an **embedding model** to split text at actual topic boundaries, rather than relying on syntactic markers like paragraphs or sentences. This produces chunks that are internally coherent and separated at natural meaning shifts.
+
+```ts
+import { semanticChunk } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+const chunks = await semanticChunk({
+  text: longDocument,
+  model,
+  size: 1000,       // Max chunk size (default: 2000)
+  minSize: 100,     // Min chunk size (default: 100)
+  threshold: 0.4,   // Optional: explicit similarity threshold
+});
+
+chunks.forEach((c) => {
+  console.log(`Chunk ${c.index}: ${c.text.substring(0, 60)}...`);
+  console.log(`  Boundaries:`, c.metadata?.semanticBoundaries);
+});
+```
+
+### How It Works
+
+1. **Pre-split** — Text is split into sentence-level segments using the recursive chunker
+2. **Embed** — Each segment is embedded using the provided model (single `embedMany()` call)
+3. **Compare** — Cosine similarity is computed between adjacent segment embeddings
+4. **Detect** — Breakpoints are identified where similarity drops below the threshold
+5. **Merge** — Segments between breakpoints are merged into final chunks with size constraints
+
+### Auto-Threshold Detection
+
+When no `threshold` is specified, the algorithm computes it automatically from the similarity distribution using **mean - standard deviation**. This adapts to any embedding model's similarity range.
+
+```ts
+// Auto-threshold (recommended for most use cases)
+const chunks = await semanticChunk({ text, model });
+
+// Explicit threshold (when you know your model's similarity range)
+const chunks = await semanticChunk({ text, model, threshold: 0.5 });
+```
+
+- `threshold: 0` produces a single chunk (no breakpoints)
+- `threshold: 1.0` produces maximum splitting (nearly every boundary is a break)
+
+### SemanticChunkOptions
+
+<TypeTable
+  type={{
+    text: {
+      description: 'The text to chunk',
+      type: 'string',
+      required: true,
+    },
+    model: {
+      description: 'Embedding model for computing segment similarities',
+      type: 'EmbeddingModel',
+      required: true,
+    },
+    threshold: {
+      description: 'Similarity threshold for breakpoint detection (0-1)',
+      type: 'number',
+      default: 'auto-detected (mean - stddev)',
+    },
+    size: {
+      description: 'Maximum chunk size in characters',
+      type: 'number',
+      default: '2000',
+    },
+    minSize: {
+      description: 'Minimum chunk size in characters',
+      type: 'number',
+      default: '100',
+    },
+    segmentSize: {
+      description: 'Target size for initial sentence segments',
+      type: 'number',
+      default: '200',
+    },
+    sentenceSeparators: {
+      description: 'Custom separators for the initial sentence split',
+      type: 'string[]',
+      default: "[\"\\n\\n\", \"\\n\", \". \", \"? \", \"! \", \"; \"]",
+    },
+    abortSignal: {
+      description: 'Signal for cancelling the operation',
+      type: 'AbortSignal',
+    },
+  }}
+/>
+
+### Boundary Metadata
+
+Each chunk includes semantic boundary scores in `metadata.semanticBoundaries`:
+
+```ts
+interface SemanticBoundaries {
+  leftSimilarity: number | null;  // null for first chunk
+  rightSimilarity: number | null; // null for last chunk
+}
+```
+
+Lower similarity at a boundary means a stronger topic shift. Use this for debugging chunk quality or implementing adaptive retrieval strategies.
+
+### Reusable Chunker Factory
+
+```ts
+import { createSemanticChunker } from '@localmode/core';
+
+const chunker = createSemanticChunker({
+  model,
+  threshold: 0.4,
+  size: 1000,
+});
+
+const chunks1 = await chunker('First document...');
+const chunks2 = await chunker('Second document...', { threshold: 0.6 });
+```
+
+### Pipeline Integration
+
+Use `pipelineSemanticChunkStep()` in pipeline workflows:
+
+```ts
+import { createPipeline, pipelineSemanticChunkStep, pipelineEmbedManyStep } from '@localmode/core';
+
+const pipeline = createPipeline('semantic-rag')
+  .step('chunk', pipelineSemanticChunkStep(embeddingModel, { size: 1000 }))
+  .step('embed', pipelineEmbedManyStep(embeddingModel))
+  .build();
+
+const { result } = await pipeline.run(documentText);
+```
+
+### React Hook
+
+Use `useSemanticChunk` from `@localmode/react` for component-level semantic chunking with built-in loading, error, and cancellation state:
+
+```tsx
+import { useSemanticChunk } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+function SemanticChunker() {
+  const { data: chunks, isLoading, error, execute, cancel } = useSemanticChunk({
+    model,
+    threshold: 0.4,
+    size: 1000,
+  });
+
+  return (
+    <div>
+      <button onClick={() => execute('Long document text...')} disabled={isLoading}>
+        Chunk
+      </button>
+      {isLoading && <button onClick={cancel}>Cancel</button>}
+      {chunks?.map((c) => <p key={c.index}>{c.text.substring(0, 80)}...</p>)}
+    </div>
+  );
+}
+```
+
+### Semantic vs. Recursive Chunking
+
+| Aspect | Recursive | Semantic |
+|--------|-----------|----------|
+| Speed | Fast (synchronous) | Slower (requires embedding) |
+| Topic awareness | None (syntactic only) | High (embedding-based) |
+| Dependencies | None | Requires `EmbeddingModel` |
+| Best for | General documents, code, markdown | Long documents with topic shifts |
+| API | `chunk(text, options)` | `semanticChunk(options)` |
+
+<Callout type="info">
+  Semantic chunking is **async** because it requires embedding each segment. For a 5,000-word document (~200 sentences at 384 dimensions), this involves a single `embedMany()` call. Use `abortSignal` for cancellation on long documents.
+</Callout>
 
 ## Ingestion
 
@@ -211,7 +398,7 @@ Ingest documents into a vector database:
 import { createVectorDB, ingest } from '@localmode/core';
 import { transformers } from '@localmode/transformers';
 
-const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
 const db = await createVectorDB({ name: 'docs', dimensions: 384 });
 
 await ingest({
@@ -286,7 +473,7 @@ const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
 const results = await semanticSearch({ db, model, query, k: 20 });
 
 // Rerank for better accuracy
-const reranked = await rerank({
+const { results: reranked } = await rerank({
   model: rerankerModel,
   query,
   documents: results.map((r) => r.metadata.text as string),
@@ -295,7 +482,7 @@ const reranked = await rerank({
 
 reranked.forEach((r) => {
   console.log(`Score: ${r.score.toFixed(3)}`);
-  console.log(`Text: ${r.document.substring(0, 100)}...`);
+  console.log(`Text: ${r.text.substring(0, 100)}...`);
 });
 ```
 
@@ -373,7 +560,7 @@ import { transformers } from '@localmode/transformers';
 import { webllm } from '@localmode/webllm';
 
 // 1. Setup models
-const embeddingModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
 const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
 const llm = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
 
@@ -396,8 +583,8 @@ async function ingestDocuments(documents: Array<{ text: string; source: string }
         text: c.text,
         metadata: {
           source: doc.source,
-          start: c.startIndex,
-          end: c.endIndex,
+          start: c.start,
+          end: c.end,
         },
       })),
     });
@@ -415,7 +602,7 @@ async function query(question: string) {
   });
 
   // Rerank
-  const reranked = await rerank({
+  const { results: reranked } = await rerank({
     model: rerankerModel,
     query: question,
     documents: results.map((r) => r.metadata.text as string),
@@ -423,7 +610,7 @@ async function query(question: string) {
   });
 
   // Generate
-  const context = reranked.map((r) => r.document).join('\n\n---\n\n');
+  const context = reranked.map((r) => r.text).join('\n\n---\n\n');
 
   const stream = await streamText({
     model: llm,
@@ -447,6 +634,10 @@ for await (const chunk of stream) {
   process.stdout.write(chunk.text);
 }
 ```
+
+<Callout type="info" title="Composable Pipelines">
+  For a builder API that chains these steps with progress tracking and cancellation, see the [Pipelines](/docs/core/pipelines) guide. Pre-built step factories like `pipelineEmbedStep`, `pipelineSearchStep`, and `pipelineRerankStep` let you assemble RAG workflows declaratively.
+</Callout>
 
 ## Document Loaders
 
@@ -477,6 +668,142 @@ const pdfLoader = new PDFLoader({ splitByPage: true });
 const { documents: pdfDocs } = await pdfLoader.load(pdfBlob);
 ```
 
+## Streaming Semantic Search
+
+Stream results progressively for real-time UI updates:
+
+```typescript
+import { streamSemanticSearch } from '@localmode/core';
+
+for await (const result of streamSemanticSearch({
+  db,
+  model,
+  query: 'authentication',
+  k: 100,
+})) {
+  // Render each result as it arrives
+  console.log(result.id, result.score);
+}
+```
+
+`streamSemanticSearch()` accepts the same options as `semanticSearch()` but returns an `AsyncGenerator` that yields results one at a time.
+
+## Chunker Factories
+
+Create reusable, pre-configured chunkers:
+
+```typescript
+import {
+  createChunker,
+  createRecursiveChunker,
+  createMarkdownChunker,
+  createCodeChunker,
+} from '@localmode/core';
+```
+
+| Factory | Description |
+| --- | --- |
+| `createChunker(options)` | Generic chunker with configurable strategy |
+| `createRecursiveChunker(options)` | Recursive text splitting with custom separators |
+| `createMarkdownChunker(options)` | Markdown-aware chunking that respects headings and structure |
+| `createCodeChunker(options)` | Code-aware chunking that respects functions and blocks |
+
+```typescript
+// Create a reusable markdown chunker
+const chunker = createMarkdownChunker({ size: 500, overlap: 50 });
+
+// Use it on multiple documents
+const chunks1 = chunker('# Document 1\n\nContent here...');
+const chunks2 = chunker('# Document 2\n\nMore content...');
+```
+
+### Chunk Statistics
+
+```typescript
+import { getChunkStats, estimateChunkCount } from '@localmode/core';
+
+// Estimate how many chunks a text will produce
+const count = estimateChunkCount(longText, { strategy: 'recursive', size: 500 });
+console.log(`Will produce ~${count} chunks`);
+
+// Get statistics from existing chunks
+const stats = getChunkStats(chunks);
+// { count, totalLength, avgLength, minLength, maxLength }
+```
+
+## Batch Processing & Ingestion Pipeline
+
+For large-scale document processing, use the ingestion utilities:
+
+### chunkDocuments
+
+Chunk multiple source documents at once:
+
+```typescript
+import { chunkDocuments } from '@localmode/core';
+
+const chunks = chunkDocuments(documents, {
+  chunking: { strategy: 'recursive', size: 500, overlap: 50 },
+  idPrefix: 'doc',
+});
+// Returns array of { id, text, sourceDocId, chunkIndex, start, end, metadata }
+```
+
+### ingest
+
+Full ingestion pipeline — chunk, embed, and store in one call:
+
+```typescript
+import { ingest } from '@localmode/core';
+
+const result = await ingest(db, documents, {
+  chunking: { strategy: 'recursive', size: 500 },
+  generateEmbeddings: true,
+  embedder: async (texts) => {
+    const { embeddings } = await embedMany({ model, values: texts });
+    return embeddings;
+  },
+  batchSize: 50,
+  onProgress: (progress) => {
+    console.log(`${progress.phase}: ${progress.chunksProcessed}/${progress.totalChunks}`);
+  },
+});
+```
+
+### createIngestPipeline
+
+Create a reusable pipeline with default options:
+
+```typescript
+import { createIngestPipeline } from '@localmode/core';
+
+const pipeline = createIngestPipeline(db, {
+  chunking: { strategy: 'recursive', size: 500 },
+  generateEmbeddings: true,
+  embedder: myEmbedder,
+});
+
+// Ingest multiple batches with same config
+await pipeline(batch1);
+await pipeline(batch2);
+```
+
+### estimateIngestion
+
+Estimate ingestion stats before processing:
+
+```typescript
+import { estimateIngestion } from '@localmode/core';
+
+const estimate = estimateIngestion(documents, {
+  chunking: { strategy: 'recursive', size: 500 },
+});
+
+console.log(`Documents: ${estimate.totalDocuments}`);
+console.log(`Estimated chunks: ${estimate.estimatedChunks}`);
+console.log(`Avg chunk size: ${estimate.avgChunkSize} chars`);
+```
+
 ## Best Practices
 
 <Callout type="tip" title="RAG Best Practices">
@@ -485,11 +812,18 @@ const { documents: pdfDocs } = await pdfLoader.load(pdfBlob);
   3. **Reranking** - Always rerank for Q&A applications
   4. **Hybrid search** - Combine semantic + keyword for robust results
   5. **Context window** - Don't exceed LLM's context limit
+  6. **Use estimateIngestion** - Check chunk counts before large ingestions
+  7. **Streaming search** - Use `streamSemanticSearch` for progressive UI rendering
 </Callout>
 
 ## Next Steps
 
 <Cards>
+  <Card
+    title="Document Loaders"
+    href="/docs/core/document-loaders"
+    description="Load documents from various formats."
+  />
   <Card
     title="Text Generation"
     href="/docs/core/generation"
@@ -497,3 +831,11 @@ const { documents: pdfDocs } = await pdfLoader.load(pdfBlob);
   />
   <Card title="WebLLM" href="/docs/webllm" description="Run LLMs locally in the browser." />
 </Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Semantic Search | Recursive and semantic chunking for document search | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
+| PDF Search | Semantic chunking of PDF content for Q&A | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |
+| LangChain RAG | End-to-end RAG with chunking and retrieval | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |

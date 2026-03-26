@@ -1,5 +1,6 @@
-import { docs } from 'collections/server';
+import { docs, blogPosts } from 'collections/server';
 import { type InferPageType, loader } from 'fumadocs-core/source';
+import { toFumadocsSource } from 'fumadocs-mdx/runtime/server';
 import { createElement } from 'react';
 import { icons } from 'lucide-react';
 
@@ -14,6 +15,11 @@ export const source = loader({
     if (!Icon) return;
     return createElement(Icon);
   },
+});
+
+export const blog = loader({
+  baseUrl: '/blog',
+  source: toFumadocsSource(blogPosts, []),
 });
 
 export function getPageImage(page: InferPageType<typeof source>) {

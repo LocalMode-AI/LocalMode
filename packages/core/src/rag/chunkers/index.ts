@@ -12,6 +12,7 @@
 export { recursiveChunk, createRecursiveChunker } from './recursive.js';
 export { markdownChunk, createMarkdownChunker } from './markdown.js';
 export { codeChunk, createCodeChunker } from './code.js';
+export { semanticChunk, createSemanticChunker } from './semantic.js';
 
 import type {
   Chunk,

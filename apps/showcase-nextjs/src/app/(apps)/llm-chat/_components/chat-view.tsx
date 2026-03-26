@@ -4,15 +4,47 @@
  */
 'use client';
 
+import { useEffect } from 'react';
 import { ModelSelector } from './model-selector';
 import { ChatInterface } from './chat-interface';
 import { ChatHeader } from './chat-header';
 import { ErrorBoundary } from './error-boundary';
 import { useUIStore } from '../_store/ui.store';
+import { useChatStore } from '../_store/chat.store';
+import { useModelStore } from '../_store/model.store';
+import { useChat } from '../_hooks';
+import { MIN_AGENT_MODEL_SIZE_BYTES } from '../_lib/constants';
 
 /** Main chat view with sidebar and chat interface */
 export function ChatView() {
   const isSidebarOpen = useUIStore((state) => state.isSidebarOpen);
+  const { cacheEnabled, setCacheEnabled, agentEnabled, setAgentEnabled, selectedModel } = useChatStore();
+  const models = useModelStore((s) => s.models);
+  const {
+    messages,
+    isStreaming,
+    streamingMessageId,
+    sendMessage,
+    cancelStreaming,
+    clearMessages,
+    cacheStats,
+    isCacheLoading,
+    clearCache,
+  } = useChat();
+
+  // Look up current model info
+  const selectedModelInfo = models.find((m) => m.id === selectedModel);
+  const supportsVision = selectedModelInfo?.vision ?? false;
+  const isAgentAvailable = Boolean(
+    selectedModel && selectedModelInfo && selectedModelInfo.sizeBytes >= MIN_AGENT_MODEL_SIZE_BYTES
+  );
+
+  // Auto-disable agent mode when switching to an incompatible model
+  useEffect(() => {
+    if (agentEnabled && !isAgentAvailable) {
+      setAgentEnabled(false);
+    }
+  }, [agentEnabled, isAgentAvailable, setAgentEnabled]);
 
   return (
     <div className="h-[calc(100vh-4rem)] bg-poster-bg text-poster-text-main font-sans selection:bg-poster-primary/30 relative overflow-hidden">
@@ -27,18 +59,36 @@ export function ChatView() {
           } overflow-hidden shrink-0`}
         >
           <ErrorBoundary>
-            <ModelSelector />
+            <ModelSelector clearMessages={clearMessages} />
           </ErrorBoundary>
         </aside>
 
         {/* Main content */}
         <div className="flex-1 flex flex-col min-w-0">
-          <ChatHeader />
+          <ChatHeader
+            isStreaming={isStreaming}
+            clearMessages={clearMessages}
+            cacheEnabled={cacheEnabled}
+            cacheStats={cacheStats}
+            isCacheLoading={isCacheLoading}
+            onToggleCache={setCacheEnabled}
+            onClearCache={clearCache}
+            agentEnabled={agentEnabled}
+            onToggleAgent={setAgentEnabled}
+            isAgentAvailable={isAgentAvailable}
+          />
 
           <div className="flex-1 overflow-hidden flex justify-center">
             <div className="w-full max-w-6xl h-full">
               <ErrorBoundary>
-                <ChatInterface />
+                <ChatInterface
+                  messages={messages}
+                  isStreaming={isStreaming}
+                  streamingMessageId={streamingMessageId}
+                  sendMessage={sendMessage}
+                  cancelStreaming={cancelStreaming}
+                  supportsVision={supportsVision}
+                />
               </ErrorBoundary>
             </div>
           </div>

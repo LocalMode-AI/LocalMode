@@ -1,0 +1,55 @@
+---
+title: Image Classification
+description: Classify images into categories using Vision Transformer models.
+icon: Image
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Classify images into predefined categories using Vision Transformer (ViT) models. The model returns the top predicted labels with confidence scores.
+
+<Callout type="info">
+  For full API reference (`classifyImage()`, options, result types, and custom providers), see the [Core Vision](/docs/core/vision) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [Smart Gallery](https://localmode.ai/smart-gallery) for a working demo.
+</Callout>
+
+## Recommended Models
+
+| Model | Size | Categories | Use Case |
+|-------|------|------------|----------|
+| `Xenova/vit-base-patch16-224` | ~86MB | 1000 ImageNet classes | General image classification |
+
+<Callout type="info" title="ImageNet Classes">
+  ViT models trained on ImageNet classify into 1000 categories including animals, vehicles, food, and everyday objects.
+  For classifying into custom categories, use [Zero-Shot Image Classification](/docs/transformers/zero-shot-image) with CLIP.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Smart Gallery | Auto-classify gallery photos by content type | [Demo](https://localmode.ai/smart-gallery) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-gallery) |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core Vision API"
+    href="/docs/core/vision"
+    description="Full API reference including classifyImage()."
+  />
+  <Card
+    title="Zero-Shot Image"
+    href="/docs/transformers/zero-shot-image"
+    description="Classify images into custom categories without training."
+  />
+  <Card
+    title="Object Detection"
+    href="/docs/transformers/object-detection"
+    description="Detect and locate objects in images."
+  />
+</Cards>

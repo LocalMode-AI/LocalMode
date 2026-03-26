@@ -12,8 +12,9 @@ import type {
   AddManyOptions,
   ExportOptions,
   ImportOptions,
+  RecalibrateOptions,
   DBStats,
-  FilterQuery,
+  TypedFilterQuery,
   WorkerRequest,
   WorkerResponse,
   WorkerMessageType,
@@ -174,7 +175,7 @@ export class VectorDBWorkerProxy implements VectorDB {
     await this.send('deleteMany', ids);
   }
 
-  async deleteWhere(filter: FilterQuery): Promise<number> {
+  async deleteWhere(filter: TypedFilterQuery): Promise<number> {
     return this.send('deleteWhere', filter);
   }
 
@@ -208,6 +209,16 @@ export class VectorDBWorkerProxy implements VectorDB {
       type: data.type,
       options,
     });
+  }
+
+  /**
+   * Recalibrate quantization.
+   * Note: Recalibration is handled by the worker.
+   */
+  async recalibrate(_options?: RecalibrateOptions): Promise<void> {
+    // Worker-based VectorDB does not support recalibrate yet.
+    // This is a no-op to satisfy the interface.
+    throw new Error('recalibrate() is not supported in worker mode. Use the main thread VectorDB instead.');
   }
 
   /**

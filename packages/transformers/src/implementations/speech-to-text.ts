@@ -151,11 +151,15 @@ export class TransformersSpeechToTextModel implements SpeechToTextModel {
     }
 
     this.loadPromise = (async () => {
-      const { pipeline } = await import('@huggingface/transformers');
+      const { pipeline, env } = await import('@huggingface/transformers');
+
+      // Suppress ONNX runtime warnings about node execution providers
+      env.backends.onnx.logLevel = 'error';
 
       const pipe = await pipeline('automatic-speech-recognition', this.baseModelId, {
         device: this.settings.device ?? 'auto',
-        dtype: this.settings.quantized !== false ? 'q8' : 'fp32',
+        // Whisper models (especially tiny/small) produce hallucinations with q8 — default to fp32
+        dtype: this.settings.quantized === true ? 'q8' : undefined,
         progress_callback: this.settings.onProgress,
       });
 
@@ -219,56 +223,52 @@ export class TransformersSpeechToTextModel implements SpeechToTextModel {
   private async prepareAudio(audio: AudioInput): Promise<string> {
     // Float32Array - convert to WAV URL for reliable processing
     if (audio instanceof Float32Array) {
-      // Debug: log audio stats
-      if (typeof console !== 'undefined') {
-        let sum = 0;
-        let max = 0;
-        for (let i = 0; i < audio.length; i++) {
-          sum += audio[i] * audio[i];
-          const abs = Math.abs(audio[i]);
-          if (abs > max) max = abs;
-        }
-        const rms = Math.sqrt(sum / audio.length);
-        console.log(
-          '[STT] Audio stats - samples:',
-          audio.length,
-          'RMS:',
-          rms.toFixed(4),
-          'Max:',
-          max.toFixed(4),
-          'Duration:',
-          (audio.length / 16000).toFixed(2) + 's'
-        );
-
-        if (rms < 0.001) {
-          console.warn('[STT] Warning: Audio appears to be nearly silent (RMS < 0.001)');
-        }
-      }
-
-      // Convert to WAV URL - this ensures transformers.js correctly interprets the format
-      const url = this.createWavUrl(audio, 16000);
-      console.log('[STT] Created WAV URL for pipeline');
-      return url;
+      return this.createWavUrl(audio, 16000);
     }
 
-    // For Blob, create an Object URL - transformers.js will fetch and decode it
-    // This handles WebM and other formats that AudioContext.decodeAudioData doesn't support
-    if (audio instanceof Blob) {
-      const url = URL.createObjectURL(audio);
-      this.objectUrls.push(url);
-      return url;
-    }
-
-    // For ArrayBuffer, create a Blob URL
-    if (audio instanceof ArrayBuffer) {
-      const blob = new Blob([audio], { type: 'audio/wav' });
-      const url = URL.createObjectURL(blob);
-      this.objectUrls.push(url);
-      return url;
+    // For Blob/ArrayBuffer, decode via AudioContext then convert to WAV.
+    // This ensures WebM, OGG, and other browser-recorded formats are properly
+    // decoded to PCM before Whisper processes them (avoids hallucination).
+    if (audio instanceof Blob || audio instanceof ArrayBuffer) {
+      const arrayBuffer = audio instanceof Blob ? await audio.arrayBuffer() : audio;
+      const pcmSamples = await this.decodeToFloat32(arrayBuffer);
+      return this.createWavUrl(pcmSamples, 16000);
     }
 
     // If it's a URL string, return as-is
     return audio as string;
+  }
+
+  /**
+   * Decode an audio ArrayBuffer to mono Float32Array at 16kHz using AudioContext.
+   * Handles WebM, OGG, MP3, WAV, and other browser-supported formats.
+   */
+  private async decodeToFloat32(arrayBuffer: ArrayBuffer): Promise<Float32Array> {
+    const audioContext = new (globalThis.AudioContext || (globalThis as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)({
+      sampleRate: 16000,
+    });
+
+    try {
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      // Get mono channel data (use first channel)
+      const channelData = audioBuffer.getChannelData(0);
+
+      // If AudioContext resampled to 16kHz, use directly
+      if (audioBuffer.sampleRate === 16000) {
+        return channelData;
+      }
+
+      // Manual resample to 16kHz
+      const ratio = audioBuffer.sampleRate / 16000;
+      const newLength = Math.floor(channelData.length / ratio);
+      const resampled = new Float32Array(newLength);
+      for (let i = 0; i < newLength; i++) {
+        resampled[i] = channelData[Math.floor(i * ratio)];
+      }
+      return resampled;
+    } finally {
+      await audioContext.close();
+    }
   }
 
   /**
@@ -311,23 +311,17 @@ export class TransformersSpeechToTextModel implements SpeechToTextModel {
     try {
       // Build pipeline options
       const pipelineOptions: Record<string, unknown> = {
-        language: language,
+        // Default to English to avoid multilingual hallucination on short/noisy clips
+        language: language ?? 'en',
         task: task ?? 'transcribe',
         return_timestamps: returnTimestamps ?? false,
-        // Chunk settings to help with short audio
-        chunk_length_s: 30,
-        stride_length_s: 5,
       };
 
       if (returnTimestamps === 'word') {
         pipelineOptions.return_timestamps = 'word';
       }
 
-      console.log('[STT] Pipeline options:', JSON.stringify(pipelineOptions));
-
       const output = await pipe(preparedAudio, pipelineOptions);
-
-      console.log('[STT] Raw output:', JSON.stringify(output));
 
       // Output format depends on options
       // Without timestamps: { text: string }

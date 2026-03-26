@@ -22,10 +22,11 @@ HuggingFace Transformers.js provider for LocalMode. Run ML models locally in the
 
 ## Installation
 
-<Tabs items={['pnpm', 'npm', 'yarn']}>
+<Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
   <Tab value="pnpm">```bash pnpm install @localmode/transformers @localmode/core ```</Tab>
   <Tab value="npm">```bash npm install @localmode/transformers @localmode/core ```</Tab>
   <Tab value="yarn">```bash yarn add @localmode/transformers @localmode/core ```</Tab>
+  <Tab value="bun">```bash bun add @localmode/transformers @localmode/core ```</Tab>
 </Tabs>
 
 ## Quick Start
@@ -35,7 +36,7 @@ import { transformers } from '@localmode/transformers';
 import { embed, rerank } from '@localmode/core';
 
 // Text Embeddings
-const embeddingModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
 const { embedding } = await embed({ model: embeddingModel, value: 'Hello world' });
 
 // Reranking for RAG
@@ -50,7 +51,7 @@ const { results } = await rerank({
 
 ## ✅ Live Features
 
-These features are production-ready and fully documented.
+All features below are production-ready with implementations available.
 
 <Cards>
   <Card
@@ -65,10 +66,50 @@ These features are production-ready and fully documented.
   />
 </Cards>
 
+### Embeddings & Reranking
+
 | Method                            | Interface        | Description        |
 | --------------------------------- | ---------------- | ------------------ |
 | `transformers.embedding(modelId)` | `EmbeddingModel` | Text embeddings    |
 | `transformers.reranker(modelId)`  | `RerankerModel`  | Document reranking |
+
+### Classification & NLP
+
+| Feature                  | Method                                     | Interface                     | Docs |
+| ------------------------ | ------------------------------------------ | ----------------------------- | ---- |
+| Text Classification      | `transformers.classifier(modelId)`         | `ClassificationModel`         | [Guide](/docs/transformers/classification) |
+| Zero-Shot Classification | `transformers.zeroShot(modelId)`           | `ZeroShotClassificationModel` | [Guide](/docs/transformers/zero-shot) |
+| Named Entity Recognition | `transformers.ner(modelId)`                | `NERModel`                    | [Guide](/docs/transformers/ner) |
+
+### Translation & Text Processing
+
+| Feature            | Method                                    | Interface                | Docs |
+| ------------------ | ----------------------------------------- | ------------------------ | ---- |
+| Translation        | `transformers.translator(modelId)`        | `TranslationModel`       | [Guide](/docs/transformers/translation) |
+| Summarization      | `transformers.summarizer(modelId)`        | `SummarizationModel`     | [Guide](/docs/transformers/summarization) |
+| Fill-Mask          | `transformers.fillMask(modelId)`          | `FillMaskModel`          | [Guide](/docs/transformers/fill-mask) |
+| Question Answering | `transformers.questionAnswering(modelId)` | `QuestionAnsweringModel` | [Guide](/docs/transformers/question-answering) |
+
+### Audio
+
+| Feature        | Method                               | Interface           | Docs |
+| -------------- | ------------------------------------ | ------------------- | ---- |
+| Speech-to-Text | `transformers.speechToText(modelId)` | `SpeechToTextModel` | [Guide](/docs/transformers/speech-to-text) |
+| Text-to-Speech | `transformers.textToSpeech(modelId)` | `TextToSpeechModel` | [Guide](/docs/transformers/text-to-speech) |
+
+### Vision
+
+| Feature                        | Method                                          | Interface                          | Docs |
+| ------------------------------ | ----------------------------------------------- | ---------------------------------- | ---- |
+| Image Captioning               | `transformers.captioner(modelId)`               | `ImageCaptionModel`                | [Guide](/docs/transformers/image-captioning) |
+| Object Detection               | `transformers.objectDetector(modelId)`          | `ObjectDetectionModel`             | [Guide](/docs/transformers/object-detection) |
+| Image Segmentation             | `transformers.segmenter(modelId)`               | `SegmentationModel`                | [Guide](/docs/transformers/image-segmentation) |
+| Image Features                 | `transformers.imageFeatures(modelId)`           | `ImageFeatureModel`                | [Guide](/docs/transformers/image-features) |
+| Image-to-Image                 | `transformers.imageToImage(modelId)`            | `ImageToImageModel`                | [Guide](/docs/transformers/image-to-image) |
+| Image Classification           | `transformers.imageClassifier(modelId)`         | `ImageClassificationModel`         | [Guide](/docs/transformers/image-classification) |
+| Zero-Shot Image Classification | `transformers.zeroShotImageClassifier(modelId)` | `ZeroShotImageClassificationModel` | [Guide](/docs/transformers/zero-shot-image) |
+| OCR                            | `transformers.ocr(modelId)`                     | `OCRModel`                         | [Guide](/docs/transformers/ocr) |
+| Document QA                    | `transformers.documentQA(modelId)`              | `DocumentQAModel`                  | [Guide](/docs/transformers/document-qa) |
 
 ### Recommended Models
 
@@ -78,76 +119,83 @@ These features are production-ready and fully documented.
 
 | Model                                          | Dimensions | Size   | Use Case              |
 | ---------------------------------------------- | ---------- | ------ | --------------------- |
-| `Xenova/all-MiniLM-L6-v2`                      | 384        | ~22MB  | Fast, general-purpose |
-| `Xenova/all-MiniLM-L12-v2`                     | 384        | ~33MB  | Better accuracy       |
+| `Snowflake/snowflake-arctic-embed-xs`           | 384        | ~23MB  | Tiny, high retrieval quality |
+| `Xenova/bge-small-en-v1.5`                     | 384        | ~33MB  | Best quality/size for RAG |
 | `Xenova/paraphrase-multilingual-MiniLM-L12-v2` | 384        | ~117MB | 50+ languages         |
+| `Xenova/bge-base-en-v1.5`                      | 768        | ~110MB | Higher quality         |
 
 </Accordion>
 
 <Accordion title="Reranking">
 
-| Model                           | Use Case                   | Size   |
-| ------------------------------- | -------------------------- | ------ |
-| `Xenova/ms-marco-MiniLM-L-6-v2` | Document reranking for RAG | ~22MB  |
-| `Xenova/bge-reranker-base`      | Advanced reranking         | ~109MB |
+| Model                            | Size   | Use Case                   |
+| -------------------------------- | ------ | -------------------------- |
+| `Xenova/ms-marco-MiniLM-L-6-v2` | ~23MB  | Document reranking for RAG (recommended) |
+| `Xenova/bge-reranker-base`       | ~279MB | Advanced reranking (large download) |
+
+</Accordion>
+
+<Accordion title="Speech-to-Text">
+
+| Model                                  | Size    | Use Case                        |
+| -------------------------------------- | ------- | ------------------------------- |
+| `onnx-community/moonshine-tiny-ONNX`  | ~50MB   | Fast, edge-optimized ASR        |
+| `onnx-community/moonshine-base-ONNX`  | ~237MB  | Best quality/size for browser   |
+
+</Accordion>
+
+<Accordion title="Text-to-Speech">
+
+| Model                                   | Size   | Use Case                          |
+| ---------------------------------------- | ------ | --------------------------------- |
+| `onnx-community/Kokoro-82M-v1.0-ONNX`  | ~92MB  | 24 natural voices, high quality   |
+
+</Accordion>
+
+<Accordion title="Classification & NLP">
+
+| Task                 | Model                                                | Size    |
+| -------------------- | ---------------------------------------------------- | ------- |
+| Sentiment            | `Xenova/distilbert-base-uncased-finetuned-sst-2-english` | ~67MB  |
+| Zero-Shot            | `Xenova/mobilebert-uncased-mnli`                     | ~21MB   |
+| NER                  | `Xenova/bert-base-NER`                               | ~110MB  |
+| Fill-Mask            | `onnx-community/ModernBERT-base-ONNX`               | ~150MB  |
+| Summarization        | `Xenova/distilbart-cnn-6-6`                          | ~200MB  |
+| Extractive QA        | `Xenova/distilbert-base-cased-distilled-squad`       | ~100MB  |
+
+</Accordion>
+
+<Accordion title="Vision">
+
+| Task                   | Model                                                  | Size    |
+| ---------------------- | ------------------------------------------------------ | ------- |
+| Image Captioning       | `onnx-community/Florence-2-base-ft`                   | ~223MB  |
+| Zero-Shot Image        | `Xenova/siglip-base-patch16-224`                       | ~400MB  |
+| Object Detection       | `onnx-community/dfine_n_coco-ONNX`                    | ~4.5MB  |
+| Background Removal     | `briaai/RMBG-1.4` (non-commercial license)             | ~170MB  |
+| Image Features         | `onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX` | ~86MB   |
+| Document QA            | `onnx-community/Florence-2-base-ft`                   | ~223MB  |
+| OCR                    | `Xenova/trocr-small-printed`                           | ~120MB  |
+| Super Resolution       | `Xenova/swin2SR-lightweight-x2-64`                     | ~6MB    |
 
 </Accordion>
 
 </Accordions>
 
-## 🚧 Coming Soon
-
-These features have interfaces defined and implementations available, but are under active development and testing. Full documentation will be added once they are production-ready.
-
-<Callout type="warn">
-  The features listed below are not yet production-ready. APIs may change before stable release.
+<Callout type="info">
+  Click the **Guide** links in the tables above for detailed documentation, recommended models, and
+  usage examples for each feature.
 </Callout>
-
-### Classification & NLP
-
-| Feature                  | Method                                     | Interface                     |
-| ------------------------ | ------------------------------------------ | ----------------------------- |
-| Text Classification      | `transformers.classifier(modelId)`         | `ClassificationModel`         |
-| Zero-Shot Classification | `transformers.zeroShotClassifier(modelId)` | `ZeroShotClassificationModel` |
-| Named Entity Recognition | `transformers.ner(modelId)`                | `NERModel`                    |
-
-### Translation & Text Processing
-
-| Feature            | Method                                    | Interface                |
-| ------------------ | ----------------------------------------- | ------------------------ |
-| Translation        | `transformers.translator(modelId)`        | `TranslationModel`       |
-| Summarization      | `transformers.summarizer(modelId)`        | `SummarizationModel`     |
-| Fill-Mask          | `transformers.fillMask(modelId)`          | `FillMaskModel`          |
-| Question Answering | `transformers.questionAnswering(modelId)` | `QuestionAnsweringModel` |
-
-### Audio
-
-| Feature        | Method                               | Interface           |
-| -------------- | ------------------------------------ | ------------------- |
-| Speech-to-Text | `transformers.speechToText(modelId)` | `SpeechToTextModel` |
-| Text-to-Speech | `transformers.textToSpeech(modelId)` | `TextToSpeechModel` |
-
-### Vision
-
-| Feature                        | Method                                          | Interface                          |
-| ------------------------------ | ----------------------------------------------- | ---------------------------------- |
-| Image Classification           | `transformers.imageClassifier(modelId)`         | `ImageClassificationModel`         |
-| Zero-Shot Image Classification | `transformers.zeroShotImageClassifier(modelId)` | `ZeroShotImageClassificationModel` |
-| Image Captioning               | `transformers.captioner(modelId)`               | `ImageCaptionModel`                |
-| Image Segmentation             | `transformers.segmenter(modelId)`               | `SegmentationModel`                |
-| Object Detection               | `transformers.objectDetector(modelId)`          | `ObjectDetectionModel`             |
-| OCR                            | `transformers.ocr(modelId)`                     | `OCRModel`                         |
-| Document QA                    | `transformers.documentQA(modelId)`              | `DocumentQAModel`                  |
 
 ## Model Options
 
 Configure model loading:
 
 ```typescript
-const model = transformers.embedding('Xenova/all-MiniLM-L6-v2', {
+const model = transformers.embedding('Xenova/bge-small-en-v1.5', {
   quantized: true, // Use quantized model (smaller, faster)
   revision: 'main', // Model revision
-  progress: (p) => {
+  onProgress: (p) => {
     console.log(`Loading: ${(p.progress * 100).toFixed(1)}%`);
   },
 });
@@ -161,16 +209,46 @@ Manage model loading and caching:
 import { preloadModel, isModelCached, getModelStorageUsage } from '@localmode/transformers';
 
 // Check if model is cached
-const cached = await isModelCached('Xenova/all-MiniLM-L6-v2');
+const cached = await isModelCached('Xenova/bge-small-en-v1.5');
 
 // Preload model with progress
-await preloadModel('Xenova/all-MiniLM-L6-v2', {
+await preloadModel('Xenova/bge-small-en-v1.5', {
   onProgress: (p) => console.log(`${p.progress}% loaded`),
 });
 
 // Check storage usage
 const usage = await getModelStorageUsage();
 ```
+
+### Custom Provider Instances
+
+Use `createTransformers()` to create a provider instance with custom settings instead of the default singleton:
+
+```typescript
+import { createTransformers } from '@localmode/transformers';
+
+// Force WebGPU device
+const gpuTransformers = createTransformers({
+  device: 'webgpu',
+  onProgress: (p) => console.log(`Loading: ${p.progress}%`),
+});
+
+const model = gpuTransformers.embedding('Xenova/bge-small-en-v1.5');
+```
+
+```typescript
+// Offload inference to a Web Worker
+const workerTransformers = createTransformers({
+  useWorker: true,
+});
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `device` | `'webgpu' \| 'wasm' \| 'cpu' \| 'auto'` | `'auto'` | Inference device |
+| `quantized` | `boolean` | `false` | Use quantized models |
+| `onProgress` | `(progress) => void` | — | Model loading progress callback |
+| `useWorker` | `boolean` | `false` | Run inference in a Web Worker |
 
 ### WebGPU Detection
 
@@ -191,10 +269,19 @@ if (webgpuAvailable) {
 // Get optimal device automatically
 const device = await getOptimalDevice(); // 'webgpu' or 'wasm'
 
-const model = transformers.embedding('Xenova/all-MiniLM-L6-v2', {
+const model = transformers.embedding('Xenova/bge-small-en-v1.5', {
   device, // Uses WebGPU if available, otherwise WASM
 });
 ```
+
+<Callout type="info" title="isWebGPUAvailable() vs isWebGPUSupported()">
+  `isWebGPUAvailable()` from `@localmode/transformers` is a provider-specific check for this package.
+
+  `isWebGPUSupported()` from `@localmode/core` is a general capability detection function.
+
+  Both are async and check for a GPU adapter. Use the one from whichever package you're working with.
+  See [Capabilities](/docs/core/capabilities) for the full feature detection reference.
+</Callout>
 
 ## Browser Compatibility
 
@@ -206,6 +293,175 @@ const model = transformers.embedding('Xenova/all-MiniLM-L6-v2', {
 | Safari 18+  | ✅     | ✅   | WebGPU available             |
 | iOS Safari  | ✅     | ✅   | WebGPU available (iOS 26+)   |
 
+## Best Practices
+
+### Model Lifecycle — Singleton Caching
+
+Model creation in `@localmode/transformers` triggers a download (first load) or cache read (subsequent loads). Always reuse model instances rather than creating new ones on every call:
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import type { EmbeddingModel } from '@localmode/core';
+
+// ✅ CORRECT: Create once, reuse everywhere
+let embeddingModel: EmbeddingModel | null = null;
+
+function getEmbeddingModel() {
+  if (!embeddingModel) {
+    embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
+  }
+  return embeddingModel;
+}
+
+// In your service functions
+export async function embedText(text: string) {
+  const model = getEmbeddingModel();
+  return embed({ model, value: text });
+}
+```
+
+```typescript
+// ❌ WRONG: Creating a new instance every call
+export async function embedText(text: string) {
+  const model = transformers.embedding('Xenova/bge-small-en-v1.5'); // Wasteful!
+  return embed({ model, value: text });
+}
+```
+
+<Callout type="tip">
+  Model creation is lightweight (it returns a lazy proxy), but keeping a single reference avoids redundant setup. This pattern is used across all 21 showcase apps that use `@localmode/transformers`.
+</Callout>
+
+### WebGPU Device Detection
+
+WebGPU provides GPU acceleration for 3-5x faster inference compared to WASM. Use device detection to automatically select the best backend:
+
+```typescript
+import { transformers, isWebGPUAvailable } from '@localmode/transformers';
+
+// Detect optimal device at app startup
+const device = (await isWebGPUAvailable()) ? 'webgpu' : 'wasm';
+
+// Pass device to model creation
+const model = transformers.embedding('Xenova/bge-small-en-v1.5', {
+  device,
+  quantized: true,
+});
+```
+
+This is especially valuable for compute-heavy tasks like embeddings, reranking, and speech processing. For lightweight tasks (classification, fill-mask), WASM performance is often sufficient.
+
+### Abort Error Handling
+
+All `@localmode` functions support `AbortSignal` for cancellation. A clean abort pattern involves a custom error class in your service layer and proper handling in your hooks:
+
+**Service layer** — Create and throw a recognizable abort error:
+
+```typescript
+// _services/embedding.service.ts
+export class EmbeddingAbortError extends Error {
+  constructor() {
+    super('Embedding was cancelled');
+    this.name = 'EmbeddingAbortError';
+  }
+}
+
+export async function generateEmbeddings(
+  texts: string[],
+  signal?: AbortSignal
+) {
+  try {
+    return await embedMany({ model: getModel(), values: texts, abortSignal: signal });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new EmbeddingAbortError();
+    }
+    throw error;
+  }
+}
+```
+
+**Hook layer** — Manage the AbortController lifecycle and distinguish abort from real errors:
+
+```typescript
+// _hooks/use-embedding.ts
+export function useEmbedding() {
+  const store = useEmbeddingStore();
+  const controllerRef = useRef<AbortController | null>(null);
+
+  const generate = async (texts: string[]) => {
+    // Cancel any in-flight request
+    controllerRef.current?.abort();
+    controllerRef.current = new AbortController();
+
+    store.setLoading(true);
+    store.clearError();
+
+    try {
+      const result = await generateEmbeddings(texts, controllerRef.current.signal);
+      store.setResult(result);
+    } catch (error) {
+      if (error instanceof EmbeddingAbortError) {
+        return; // Silently ignore — user cancelled
+      }
+      store.setError(error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      store.setLoading(false);
+    }
+  };
+
+  const cancel = () => controllerRef.current?.abort();
+
+  return { generate, cancel };
+}
+```
+
+<Callout type="tip">
+  Always abort the previous request before starting a new one. This prevents race conditions where an old response overwrites a newer one.
+</Callout>
+
+## Vision (Image Input) — Experimental
+
+Qwen3.5 ONNX models support vision input via their built-in vision encoder. Images are processed through `AutoProcessor` and fed to the model alongside text.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX');
+
+// Qwen3.5 models have supportsVision: true
+console.log(model.supportsVision); // true
+
+const result = await streamText({
+  model,
+  prompt: '',
+  messages: [{
+    role: 'user',
+    content: [
+      { type: 'text', text: 'Describe this image.' },
+      { type: 'image', data: base64Data, mimeType: 'image/png' },
+    ],
+  }],
+});
+```
+
+### Vision-Capable ONNX Models
+
+| Model | Size | Context | Notes |
+|-------|------|---------|-------|
+| Qwen3.5 0.8B | ~500MB | 32K | Best quality sub-1B multimodal |
+| Qwen3.5 2B | ~1.5GB | 32K | Higher quality, 4GB+ RAM |
+| Qwen3.5 4B | ~2.5GB | 32K | Best quality, 8GB+ RAM, WebGPU required |
+
+<Callout type="warn" title="Experimental">
+  Vision support uses Transformers.js v4 (preview release). The API may change in future TJS versions.
+</Callout>
+
+<Callout type="info">
+  For full multimodal API reference including `ContentPart` types and utilities, see the [Core Generation](/docs/core/generation#vision-multimodal-input) guide.
+</Callout>
+
 ## Performance Tips
 
 <Callout type="tip" title="Performance">
@@ -213,6 +469,7 @@ const model = transformers.embedding('Xenova/all-MiniLM-L6-v2', {
   2. **Preload models** - Load during app init for instant inference
   3. **Use WebGPU when available** - 3-5x faster than WASM
   4. **Batch operations** - Process multiple inputs together
+  5. **Cache model instances** - Use the singleton pattern above to avoid redundant setup
 </Callout>
 
 ## Next Steps

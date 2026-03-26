@@ -1,0 +1,115 @@
+---
+title: 'Vision'
+description: Hooks for image captioning, object detection, classification, and segmentation.
+icon: Eye
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Vision Hooks
+
+<Callout type="info" title="See it in action">
+  Try [Object Detector](https://localmode.ai/object-detector) and [Background Remover](https://localmode.ai/background-remover) for working demos of these hooks.
+</Callout>
+
+## useCaptionImage
+
+Generate a text caption for an image.
+
+```tsx
+import { useCaptionImage } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.imageCaptioner('Xenova/vit-gpt2-image-captioning');
+
+function Demo() {
+  const { data, isLoading, execute } = useCaptionImage({ model });
+  // execute(imageDataUrl) => data.caption = "A cat sitting on a couch"
+}
+```
+
+## useDetectObjects
+
+Detect objects with bounding boxes.
+
+```tsx
+import { useDetectObjects } from '@localmode/react';
+
+const { data, execute } = useDetectObjects({ model });
+await execute(imageDataUrl);
+// data.objects = [{ label: 'person', score: 0.95, box: { x, y, width, height } }]
+```
+
+## useClassifyImage
+
+Classify an image into categories.
+
+```tsx
+import { useClassifyImage } from '@localmode/react';
+
+const { data, execute } = useClassifyImage({ model });
+await execute(imageDataUrl);
+// data.label = 'cat', data.score = 0.97
+```
+
+## useSegmentImage
+
+Segment an image into regions with masks.
+
+```tsx
+import { useSegmentImage } from '@localmode/react';
+
+const { data, execute } = useSegmentImage({ model });
+await execute(imageDataUrl);
+// data.masks = [{ label: 'background', mask: Uint8Array, score: 0.98 }]
+```
+
+## useClassifyImageZeroShot
+
+Zero-shot image classification with custom labels (no fine-tuning needed).
+
+```tsx
+import { useClassifyImageZeroShot } from '@localmode/react';
+
+const { data, execute } = useClassifyImageZeroShot({ model });
+await execute({ image: imageDataUrl, labels: ['cat', 'dog', 'bird'] });
+// data.label = 'cat', data.score = 0.92
+```
+
+## useExtractImageFeatures
+
+Extract feature vectors from images for similarity comparison.
+
+```tsx
+import { useExtractImageFeatures } from '@localmode/react';
+
+const { data, execute } = useExtractImageFeatures({ model });
+await execute(imageDataUrl);
+// data.features = Float32Array(768)
+```
+
+## useImageToImage
+
+Image super-resolution or style transfer.
+
+```tsx
+import { useImageToImage } from '@localmode/react';
+
+const { data, execute } = useImageToImage({ model });
+await execute(imageDataUrl);
+// data.image = 'data:image/png;base64,...' (upscaled/transformed image)
+```
+
+<Callout type="tip">
+All vision hooks accept image data URLs (from `FileReader.readAsDataURL`). For model recommendations, see the [Transformers](/docs/transformers) guide.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Object Detector | Detect objects with useDetectObjects | [Demo](https://localmode.ai/object-detector) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/object-detector) |
+| Background Remover | Segment images with useSegmentImage | [Demo](https://localmode.ai/background-remover) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/background-remover) |
+| Photo Enhancer | Enhance images with useImageToImage | [Demo](https://localmode.ai/photo-enhancer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/photo-enhancer) |
+| Image Captioner | Caption images with useOperationList | [Demo](https://localmode.ai/image-captioner) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/image-captioner) |
+| Duplicate Finder | Compare image features with useSequentialBatch | [Demo](https://localmode.ai/duplicate-finder) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/duplicate-finder) |

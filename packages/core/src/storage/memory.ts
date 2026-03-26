@@ -9,6 +9,7 @@ export class MemoryStorage {
   private vectors: Map<string, StoredVector> = new Map();
   private indexes: Map<string, SerializedHNSWIndex> = new Map();
   private collections: Map<string, Collection> = new Map();
+  private meta: Map<string, unknown> = new Map();
 
   async open(): Promise<void> {
     // No-op for memory storage
@@ -60,27 +61,39 @@ export class MemoryStorage {
   // ============================================
 
   async addVector(vec: StoredVector): Promise<void> {
+    // Preserve the original typed array type (Float32Array or Uint8Array)
+    const vectorCopy = vec.vector instanceof Uint8Array
+      ? new Uint8Array(vec.vector)
+      : new Float32Array(vec.vector);
+
     this.vectors.set(vec.id, {
       id: vec.id,
       collectionId: vec.collectionId,
-      vector: new Float32Array(vec.vector),
+      vector: vectorCopy,
     });
   }
 
-  async getVector(id: string): Promise<Float32Array | null> {
+  async getVector(id: string): Promise<Float32Array | Uint8Array | null> {
     const vec = this.vectors.get(id);
-    return vec ? new Float32Array(vec.vector) : null;
+    if (!vec) return null;
+    // Return a copy preserving the typed array type
+    return vec.vector instanceof Uint8Array
+      ? new Uint8Array(vec.vector)
+      : new Float32Array(vec.vector);
   }
 
   async deleteVector(id: string): Promise<void> {
     this.vectors.delete(id);
   }
 
-  async getAllVectors(collectionId: string): Promise<Map<string, Float32Array>> {
-    const result = new Map<string, Float32Array>();
+  async getAllVectors(collectionId: string): Promise<Map<string, Float32Array | Uint8Array>> {
+    const result = new Map<string, Float32Array | Uint8Array>();
     for (const vec of this.vectors.values()) {
       if (vec.collectionId === collectionId) {
-        result.set(vec.id, new Float32Array(vec.vector));
+        const copy = vec.vector instanceof Uint8Array
+          ? new Uint8Array(vec.vector)
+          : new Float32Array(vec.vector);
+        result.set(vec.id, copy);
       }
     }
     return result;
@@ -129,6 +142,10 @@ export class MemoryStorage {
     return Array.from(this.collections.values()).map((c) => ({ ...c }));
   }
 
+  async updateCollection(collection: Collection): Promise<void> {
+    this.collections.set(collection.id, { ...collection });
+  }
+
   async deleteCollection(id: string): Promise<void> {
     this.collections.delete(id);
   }
@@ -170,6 +187,22 @@ export class MemoryStorage {
       size += vec.vector.byteLength;
     }
     return size;
+  }
+
+  // ============================================
+  // Meta Operations (Key-Value Store)
+  // ============================================
+
+  async getMeta(key: string): Promise<unknown> {
+    return this.meta.get(key) ?? null;
+  }
+
+  async setMeta(key: string, value: unknown): Promise<void> {
+    this.meta.set(key, value);
+  }
+
+  async deleteMeta(key: string): Promise<void> {
+    this.meta.delete(key);
   }
 }
 

@@ -90,3 +90,19 @@ export function formatSearchResponse(context: string, resultCount: number, searc
   const timeStr = (searchTimeMs / 1000).toFixed(2);
   return `Based on the documents:\n\n${context}\n\n---\n*Found ${resultCount} relevant passages in ${timeStr}s*`;
 }
+
+/**
+ * Format a compression ratio for display
+ * @param ratio - Compression ratio (e.g., 4.0)
+ */
+export function formatCompressionRatio(ratio: number) {
+  return `${ratio.toFixed(1)}x`;
+}
+
+/**
+ * Format a similarity threshold value for display
+ * @param value - Threshold value (0-1)
+ */
+export function formatThreshold(value: number) {
+  return value.toFixed(2);
+}

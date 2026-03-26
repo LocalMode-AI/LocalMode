@@ -1,0 +1,268 @@
+---
+title: Typed Metadata
+description: Type-safe VectorDB metadata with compile-time filter validation.
+icon: ShieldCheck
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+The VectorDB supports generic metadata types, giving you compile-time type checking on `add()`, `search()`, `deleteWhere()`, and filter expressions. No runtime cost -- all validation happens at the TypeScript level.
+
+<Callout type="info" title="See it in action">
+  Try [Semantic Search](https://localmode.ai/semantic-search) and [Product Search](https://localmode.ai/product-search) for working demos of these APIs.
+</Callout>
+
+## Before and After
+
+<Tabs items={['Untyped (default)', 'Typed']}>
+<Tab value="Untyped (default)">
+
+```ts
+// No type parameter — metadata is Record<string, unknown>
+const db = await createVectorDB({ name: 'docs', dimensions: 384 });
+
+await db.add({
+  id: 'doc-1',
+  vector: embedding,
+  metadata: { anything: 'goes', count: 42 },
+});
+
+// Filters accept any key — typos compile fine but produce wrong results
+const results = await db.search(query, {
+  k: 5,
+  filter: { categry: { $eq: 'tech' } }, // Typo not caught!
+});
+```
+
+</Tab>
+<Tab value="Typed">
+
+```ts {1-6,10,18}
+interface ArticleMetadata {
+  title: string;
+  category: 'tech' | 'science' | 'business';
+  year: number;
+  tags: string[];
+}
+
+const db = await createVectorDB<ArticleMetadata>({
+  name: 'articles',
+  dimensions: 384,
+});
+
+await db.add({
+  id: 'doc-1',
+  vector: embedding,
+  metadata: {
+    title: 'Intro to ML',
+    category: 'tech', // Autocomplete shows 'tech' | 'science' | 'business'
+    year: 2025,
+    tags: ['ml', 'ai'],
+  },
+});
+
+// Filter keys are constrained to keyof ArticleMetadata
+const results = await db.search(query, {
+  k: 5,
+  filter: { category: { $eq: 'tech' } }, // Type-safe!
+});
+
+// TypeScript error: 'categry' does not exist on type
+// filter: { categry: { $eq: 'tech' } }
+```
+
+</Tab>
+</Tabs>
+
+## TypedFilterQuery
+
+When you pass a type parameter to `createVectorDB<TMetadata>()`, filter expressions use `TypedFilterQuery<TMetadata>` instead of the default untyped `FilterQuery`. This constrains filter keys to `keyof TMetadata` and validates operator value types.
+
+```ts
+// TypedFilterQuery<ArticleMetadata> only allows these keys:
+const results = await db.search(query, {
+  k: 10,
+  filter: {
+    category: { $eq: 'tech' },      // string operators
+    year: { $gte: 2023 },           // number operators
+    tags: { $in: ['ml', 'ai'] },    // array operators
+  },
+});
+
+// deleteWhere is also type-safe
+await db.deleteWhere({
+  year: { $lt: 2020 },
+});
+```
+
+<TypeTable
+  type={{
+    '$eq': {
+      description: 'Equals — value must match exactly',
+      type: 'TMetadata[K]',
+    },
+    '$ne': {
+      description: 'Not equals',
+      type: 'TMetadata[K]',
+    },
+    '$gt': {
+      description: 'Greater than (numbers)',
+      type: 'number',
+    },
+    '$gte': {
+      description: 'Greater than or equal (numbers)',
+      type: 'number',
+    },
+    '$lt': {
+      description: 'Less than (numbers)',
+      type: 'number',
+    },
+    '$lte': {
+      description: 'Less than or equal (numbers)',
+      type: 'number',
+    },
+    '$in': {
+      description: 'Value is in array',
+      type: 'TMetadata[K][]',
+    },
+    '$nin': {
+      description: 'Value is not in array',
+      type: 'TMetadata[K][]',
+    },
+    '$contains': {
+      description: 'String contains substring',
+      type: 'string',
+    },
+    '$startsWith': {
+      description: 'String starts with prefix',
+      type: 'string',
+    },
+  }}
+/>
+
+For the full list of filter operators, see [Vector Database — Filter Operators](/docs/core/vector-db#filter-operators).
+
+## Schema Validation
+
+For runtime validation in addition to compile-time types, pass a `schema` to `createVectorDB()`. The schema uses the same `ObjectSchema` interface as `generateObject()`.
+
+### With jsonSchema()
+
+```ts {6}
+import { createVectorDB, jsonSchema } from '@localmode/core';
+
+const db = await createVectorDB<ArticleMetadata>({
+  name: 'articles',
+  dimensions: 384,
+  schema: jsonSchema({
+    type: 'object',
+    properties: {
+      title: { type: 'string' },
+      category: { type: 'string', enum: ['tech', 'science', 'business'] },
+      year: { type: 'number' },
+      tags: { type: 'array', items: { type: 'string' } },
+    },
+    required: ['title', 'category', 'year', 'tags'],
+  }),
+});
+
+// Throws ValidationError at runtime if metadata doesn't match schema
+await db.add({
+  id: 'doc-1',
+  vector: embedding,
+  metadata: { title: 123, category: 'invalid' }, // Runtime error!
+});
+```
+
+### With Zod
+
+```ts {7}
+import { createVectorDB, jsonSchema } from '@localmode/core';
+import { z } from 'zod';
+
+const ArticleSchema = z.object({
+  title: z.string(),
+  category: z.enum(['tech', 'science', 'business']),
+  year: z.number().int().min(1900),
+  tags: z.array(z.string()),
+});
+
+type ArticleMetadata = z.infer<typeof ArticleSchema>;
+
+const db = await createVectorDB<ArticleMetadata>({
+  name: 'articles',
+  dimensions: 384,
+  schema: jsonSchema(ArticleSchema),
+});
+```
+
+<Callout type="tip" title="Schema is Optional">
+  Type-safe filters work with or without a `schema`. The generic type parameter handles compile-time safety. The `schema` adds optional runtime validation on `add()` and `addMany()`.
+</Callout>
+
+## Backward Compatibility
+
+The default generic parameter is `Record<string, unknown>`, so existing code continues to work without changes:
+
+```ts
+// These are equivalent — both use untyped metadata
+const db1 = await createVectorDB({ name: 'db', dimensions: 384 });
+const db2 = await createVectorDB<Record<string, unknown>>({ name: 'db', dimensions: 384 });
+```
+
+The `FilterQuery` type alias is kept for backward compatibility but is deprecated in favor of `TypedFilterQuery<TMetadata>`:
+
+```ts
+import type { TypedFilterQuery, FilterQuery } from '@localmode/core';
+
+// Preferred
+type MyFilter = TypedFilterQuery<ArticleMetadata>;
+
+// Deprecated alias (still works)
+type UntypedFilter = FilterQuery;
+```
+
+## Typed Search Results
+
+When using a typed VectorDB, search results have typed metadata:
+
+```ts
+const results = await db.search(queryVector, { k: 5 });
+
+results.forEach((r) => {
+  // r.metadata is typed as ArticleMetadata
+  console.log(r.metadata.title);    // string
+  console.log(r.metadata.category); // 'tech' | 'science' | 'business'
+  console.log(r.metadata.year);     // number
+});
+```
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Vector Database"
+    href="/docs/core/vector-db"
+    description="Full VectorDB API reference including filters and HNSW config."
+  />
+  <Card
+    title="RAG"
+    href="/docs/core/rag"
+    description="Build retrieval-augmented generation pipelines."
+  />
+  <Card
+    title="Storage"
+    href="/docs/core/storage"
+    description="Storage adapters and persistence options."
+  />
+</Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Semantic Search | Type-safe metadata filtering on vector search results | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
+| Product Search | Typed product metadata for filtered catalog search | [Demo](https://localmode.ai/product-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/product-search) |

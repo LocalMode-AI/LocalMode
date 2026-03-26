@@ -7,7 +7,8 @@
  * @packageDocumentation
  */
 
-import type { FilterQuery } from '../types.js';
+import type { TypedFilterQuery } from '../types.js';
+import type { EmbeddingModel } from '../embeddings/types.js';
 
 // ═══════════════════════════════════════════════════════════════
 // CHUNKING TYPES
@@ -16,7 +17,7 @@ import type { FilterQuery } from '../types.js';
 /**
  * Chunking strategy type.
  */
-export type ChunkStrategy = 'recursive' | 'markdown' | 'code' | 'sentence' | 'paragraph';
+export type ChunkStrategy = 'recursive' | 'markdown' | 'code' | 'sentence' | 'paragraph' | 'semantic';
 
 /**
  * Base configuration for all chunking strategies.
@@ -152,6 +153,14 @@ export interface ChunkMetadata {
 
   /** Whether this chunk contains a table */
   isTable?: boolean;
+
+  /** Semantic boundary similarity scores (present on chunks from `semanticChunk()`) */
+  semanticBoundaries?: {
+    /** Cosine similarity with the previous chunk (null for the first chunk) */
+    leftSimilarity: number | null;
+    /** Cosine similarity with the next chunk (null for the last chunk) */
+    rightSimilarity: number | null;
+  };
 }
 
 /**
@@ -163,6 +172,58 @@ export interface Chunker {
 
   /** Optional: Estimate chunk count without splitting */
   estimateChunks?(text: string, options?: ChunkOptionsBase): number;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SEMANTIC CHUNKING TYPES
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Configuration for semantic (embedding-aware) chunking.
+ *
+ * Splits text at points where embedding similarity between adjacent
+ * segments drops below a threshold, producing topically coherent chunks.
+ */
+export interface SemanticChunkOptions {
+  /** The text to chunk (required) */
+  text: string;
+
+  /** The embedding model for computing segment similarities (required) */
+  model: EmbeddingModel;
+
+  /** Similarity threshold for breakpoint detection (0-1). Default: auto-detected via mean - stddev */
+  threshold?: number;
+
+  /** Target maximum chunk size in characters (default: 2000) */
+  size?: number;
+
+  /** Minimum chunk size in characters (default: 100) */
+  minSize?: number;
+
+  /** Target size for initial sentence segments in characters (default: 200) */
+  segmentSize?: number;
+
+  /** Custom separators for the initial sentence split */
+  sentenceSeparators?: string[];
+
+  /** AbortSignal for cancellation */
+  abortSignal?: AbortSignal;
+}
+
+/**
+ * Metadata for semantic chunk boundaries.
+ *
+ * Each chunk produced by `semanticChunk()` carries boundary similarity scores
+ * indicating how semantically similar it is to its neighbors.
+ */
+export interface SemanticChunkMetadata {
+  /** Boundary similarity scores */
+  semanticBoundaries: {
+    /** Cosine similarity with the previous chunk (null for the first chunk) */
+    leftSimilarity: number | null;
+    /** Cosine similarity with the next chunk (null for the last chunk) */
+    rightSimilarity: number | null;
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -318,7 +379,7 @@ export interface HybridSearchOptions {
   threshold?: number;
 
   /** Metadata filter to apply */
-  filter?: FilterQuery;
+  filter?: TypedFilterQuery;
 
   /** Whether to include vectors in results (default: false) */
   includeVectors?: boolean;
@@ -382,6 +443,22 @@ export interface IngestOptions {
 
   /** Batch size for database operations (default: 100) */
   batchSize?: number;
+
+  /**
+   * Opt-in to adaptive batch size computation based on device capabilities.
+   *
+   * When `true` and no explicit `batchSize` is provided, the batch size is
+   * computed from the device's CPU cores, memory, and GPU availability using
+   * `computeOptimalBatchSize()`.
+   *
+   * When both `batchSize` and `adaptiveBatching` are set, the explicit
+   * `batchSize` always takes precedence.
+   *
+   * @defaultValue `false`
+   *
+   * @see {@link computeOptimalBatchSize} for the underlying computation
+   */
+  adaptiveBatching?: boolean;
 
   /** Progress callback */
   onProgress?: (progress: IngestProgress) => void;

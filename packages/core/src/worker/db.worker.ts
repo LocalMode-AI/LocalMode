@@ -3,7 +3,7 @@
  * All heavy computation runs here to keep the main thread responsive.
  */
 
-import type { WorkerRequest, WorkerResponse, VectorDBConfig, Document, SearchOptions, AddManyOptions, FilterQuery, ExportOptions, ImportOptions } from '../types.js';
+import type { WorkerRequest, WorkerResponse, VectorDBConfig, Document, SearchOptions, AddManyOptions, TypedFilterQuery, ExportOptions, ImportOptions } from '../types.js';
 import { VectorDBImpl } from '../db.js';
 
 let db: VectorDBImpl | null = null;
@@ -112,7 +112,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       case 'deleteWhere': {
         ensureDb();
         const targetDb = collectionId ? (db!.collection(collectionId) as VectorDBImpl) : db!;
-        const filter = payload as FilterQuery;
+        const filter = payload as TypedFilterQuery;
         result = await targetDb.deleteWhere(filter);
         break;
       }

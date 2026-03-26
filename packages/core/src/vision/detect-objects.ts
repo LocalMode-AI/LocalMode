@@ -57,7 +57,7 @@ function resolveModel(modelOrId: ObjectDetectionModel | string): ObjectDetection
  * import { transformers } from '@localmode/transformers';
  *
  * const { objects, usage } = await detectObjects({
- *   model: transformers.objectDetector('Xenova/detr-resnet-50'),
+ *   model: transformers.objectDetector('onnx-community/dfine_n_coco-ONNX'),
  *   image: imageBlob,
  *   threshold: 0.7,
  * });

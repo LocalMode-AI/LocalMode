@@ -1,0 +1,92 @@
+---
+title: Translation
+description: Multi-language translation with Helsinki-NLP models.
+icon: Languages
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Translate text between languages using Helsinki-NLP OPUS-MT models. Each model handles a specific language pair.
+
+<Callout type="info">
+  For full API reference (`translate()`, `translateMany()`, options, result types, and custom providers), see the [Core Translation](/docs/core/translation) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [Translator](https://localmode.ai/translator) and [Smart Writer](https://localmode.ai/smart-writer) for working demos.
+</Callout>
+
+## Recommended Models
+
+| Model | Direction | Size | Use Case |
+|-------|-----------|------|----------|
+| `Xenova/opus-mt-en-fr` | English → French | ~100MB | EN-FR translation |
+| `Xenova/opus-mt-en-de` | English → German | ~100MB | EN-DE translation |
+| `Xenova/opus-mt-en-es` | English → Spanish | ~100MB | EN-ES translation |
+| `Xenova/opus-mt-fr-en` | French → English | ~100MB | FR-EN translation |
+| `Xenova/opus-mt-de-en` | German → English | ~100MB | DE-EN translation |
+| `Xenova/opus-mt-es-en` | Spanish → English | ~100MB | ES-EN translation |
+
+<Callout type="info">
+  OPUS-MT models are directional — each model translates one direction only. Use the correct model
+  for your source → target language pair. Browse the full list at
+  [Helsinki-NLP on HuggingFace](https://huggingface.co/Helsinki-NLP).
+</Callout>
+
+## Multi-Language Support
+
+Based on the [Translator](https://localmode.ai/translator) showcase app — use a different model per language pair:
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { translate } from '@localmode/core';
+
+const models = {
+  'en-fr': transformers.translator('Xenova/opus-mt-en-fr'),
+  'en-de': transformers.translator('Xenova/opus-mt-en-de'),
+  'en-es': transformers.translator('Xenova/opus-mt-en-es'),
+  'fr-en': transformers.translator('Xenova/opus-mt-fr-en'),
+  'de-en': transformers.translator('Xenova/opus-mt-de-en'),
+  'es-en': transformers.translator('Xenova/opus-mt-es-en'),
+};
+
+async function translateText(text: string, pair: keyof typeof models) {
+  const { translation } = await translate({
+    model: models[pair],
+    text,
+  });
+  return translation;
+}
+```
+
+## Best Practices
+
+<Callout type="tip" title="Translation Tips">
+  1. **One model per direction** — OPUS-MT models are unidirectional
+  2. **Cache model instances** — Store models in a Map keyed by language pair
+  3. **Keep text reasonable** — Very long texts may lose quality; consider chunking
+  4. **Support cancellation** — Pass `abortSignal` for user-cancelable translations
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Translator | Translate between 200+ language pairs | [Demo](https://localmode.ai/translator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/translator) |
+| Smart Writer | Multi-language writing with translation support | [Demo](https://localmode.ai/smart-writer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-writer) |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core Translation API"
+    href="/docs/core/translation"
+    description="Full API reference, options, result types, and custom providers."
+  />
+  <Card
+    title="Summarization"
+    href="/docs/transformers/summarization"
+    description="Summarize long text into concise summaries."
+  />
+</Cards>

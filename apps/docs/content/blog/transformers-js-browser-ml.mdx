@@ -1,0 +1,352 @@
+---
+title: "How Transformers.js Runs 120 ML Models in Your Browser Tab"
+description: "A deep dive into the runtime stack that makes browser-native ML possible: HuggingFace model export, ONNX Runtime Web, WebGPU vs WASM backends, quantization tradeoffs, and how LocalMode wraps it all in 25 clean interfaces across 24 implementation files."
+author: LocalMode
+date: 2026-03-18
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+When someone first sees a 384-dimension embedding vector computed entirely inside a browser tab -- no server, no API key, no network request -- the natural question is: _how?_ The answer is a surprisingly deep stack of technologies that, until recently, did not exist together.
+
+This post traces the full path from a HuggingFace model checkpoint to inference results in your browser. We will cover the ONNX export pipeline, ONNX Runtime Web internals, the WebGPU and WASM execution backends, model quantization formats and their tradeoffs, and how LocalMode's `@localmode/transformers` package wraps this entire stack behind 25 factory methods spanning 24 implementation files -- all powered by Transformers.js v3 (with an experimental v4 bridge for text generation).
+
+If you have shipped ML features via cloud APIs, you already understand the inference side. This post is about the runtime plumbing that makes the same inference work inside `window`.
+
+---
+
+## The Runtime Stack at a Glance
+
+Every browser ML inference in LocalMode follows the same five-layer pipeline:
+
+```
+HuggingFace Model (PyTorch/TF/JAX)
+        |
+        v
+   ONNX Export (via Optimum)
+        |
+        v
+   Quantization (q4 / int8 / fp16 / fp32)
+        |
+        v
+   ONNX Runtime Web (onnxruntime-web)
+        |
+        v
+   Execution Backend (WebGPU or WASM)
+        |
+        v
+   Browser Tab (Chrome, Edge, Safari, Firefox)
+```
+
+Each layer solves a specific problem. Let us walk through them.
+
+---
+
+## Layer 1: From HuggingFace to ONNX
+
+Most ML models on HuggingFace Hub are stored as PyTorch checkpoints (`.bin` or `.safetensors`). Browsers cannot execute PyTorch. They need a portable, framework-agnostic representation: [ONNX](https://onnx.ai/) (Open Neural Network Exchange).
+
+The conversion happens via HuggingFace's [Optimum](https://huggingface.co/docs/optimum/en/index) library, which traces the model's computation graph and exports it to `.onnx` files. This is a one-time offline step. The ONNX community and HuggingFace maintain thousands of pre-converted models under the `onnx-community` and `Xenova` organizations on the Hub.
+
+What makes this viable is that ONNX is not a simplified format -- it preserves the full model architecture. A BERT encoder, a Whisper decoder, a CLIP vision transformer, a Florence-2 multimodal model: they all serialize into the same `.onnx` representation with full operator fidelity.
+
+---
+
+## Layer 2: ONNX Runtime Web
+
+[ONNX Runtime](https://onnxruntime.ai/) (ORT) is Microsoft's inference engine for ONNX models. ONNX Runtime Web (`onnxruntime-web`) is its browser-native variant, distributed as an npm package. It is the actual execution engine -- the component that takes an `.onnx` file and produces output tensors.
+
+ORT Web supports two execution providers:
+
+1. **WebGPU EP** -- Dispatches operations to the GPU via the WebGPU API. This is where the 3-100x speedups come from on supported hardware.
+2. **WASM EP** -- Compiles ONNX operators to WebAssembly and runs them on the CPU. Universal fallback that works in every modern browser.
+
+The key insight is that Transformers.js does not implement inference itself. It delegates to ORT Web, which handles the actual tensor math. Transformers.js is the model-loading, tokenization, and pre/post-processing layer that sits on top.
+
+<Callout type="info" title="How ORT Web handles the heavy lifting">
+  ONNX Runtime Web compiles each ONNX operator into optimized WebAssembly modules (WASM EP) or WGSL compute shaders (WebGPU EP). Operations like matrix multiplication, attention, and layer normalization each have hand-tuned implementations for both backends. Microsoft benchmarks report up to 19x speedup with WebGPU over multi-threaded WASM for specific compute-heavy workloads (e.g., the Segment Anything encoder), with the decoder seeing a 3.8x speedup. Gains vary significantly by task and model architecture.
+</Callout>
+
+---
+
+## Layer 3: WebGPU vs WASM -- When Each Fires
+
+The choice between WebGPU and WASM is not just a performance toggle. It determines which hardware runs your model, what browsers are supported, and what failure modes you need to handle.
+
+### WebGPU
+
+WebGPU is a modern GPU compute API that gives JavaScript direct access to GPU shader execution. For ML workloads -- which are dominated by matrix multiplications and element-wise operations -- GPU parallelism provides massive throughput gains.
+
+**Browser support (as of March 2026):**
+
+| Browser | WebGPU Status | Notes |
+|---------|--------------|-------|
+| Chrome 113+ | Shipped (stable) | Windows, macOS, ChromeOS, Android 12+ |
+| Edge 113+ | Shipped (stable) | Same engine as Chrome |
+| Safari 26+ | Shipped (stable) | macOS Tahoe, iOS 26, iPadOS 26, visionOS 26 |
+| Firefox 141+ | Shipped (Windows) | macOS ARM64 from Firefox 145; Linux/Android in progress |
+
+As of late 2025, WebGPU ships by default across all four major browsers on desktop. Mobile remains more fragmented: Chrome on Android requires recent Qualcomm/ARM hardware, Firefox on Android is still behind a flag, and Safari on iOS requires iOS 26.
+
+**When to use WebGPU:** Compute-heavy tasks like embedding generation, reranking, speech-to-text, and text generation. These are matrix-multiplication-bound and see the largest gains from GPU parallelism.
+
+### WASM (WebAssembly)
+
+WASM is the universal fallback. Every browser that ships today supports WebAssembly. Combined with WASM SIMD (Single Instruction, Multiple Data) for vectorized math and WASM threads for multi-core parallelism, the WASM backend delivers surprisingly capable inference performance.
+
+**When WASM is sufficient:** Lightweight classification, fill-mask, named entity recognition, and question answering. These models are small (20-150MB) and latency requirements are modest. The WASM backend runs them in tens of milliseconds.
+
+**When WASM is the only option:** Firefox on Linux/Android (WebGPU not yet shipped), older Safari versions, any browser where `navigator.gpu` returns `undefined`.
+
+### Automatic Backend Selection
+
+In `@localmode/transformers`, device selection happens at model creation:
+
+```typescript
+import { transformers, isWebGPUAvailable } from '@localmode/transformers';
+
+// Automatic: detect at runtime
+const device = (await isWebGPUAvailable()) ? 'webgpu' : 'wasm';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5', {
+  device,
+});
+```
+
+Under the hood, `@localmode/core` provides `isWebGPUSupported()` which probes `navigator.gpu` and attempts to request an adapter -- a reliable feature detection that avoids user-agent sniffing.
+
+---
+
+## Layer 4: Model Quantization -- Size vs Quality
+
+A full-precision (fp32) BERT-base model is ~440MB. That is not a viable browser download. Quantization compresses model weights by reducing numerical precision, trading a small amount of accuracy for dramatically smaller files and faster inference.
+
+### Quantization Formats
+
+| Format | Bits per Weight | Typical Compression | Quality Impact | Best For |
+|--------|----------------|-------------------|---------------|----------|
+| **fp32** | 32 | 1x (baseline) | None | Reference/debugging |
+| **fp16** | 16 | 2x | Negligible (&lt;0.1%) | GPU inference with ample VRAM |
+| **int8** | 8 | 4x | Minimal (&lt;1%) | Balanced size/quality |
+| **q4** | 4 | 8x | Moderate (1-3%) | LLMs, memory-constrained devices |
+| **q4f16** | 4 (weights) + 16 (activations) | ~6x | Low (0.5-2%) | LLMs on WebGPU |
+
+For most browser workloads, **int8** quantization hits the sweet spot: 4x size reduction with less than 1% quality degradation on standard benchmarks. The `Xenova/bge-small-en-v1.5` embedding model, for example, drops from ~130MB (fp32) to ~33MB (quantized) while maintaining 99%+ of its MTEB retrieval score.
+
+For text generation (LLMs), **q4** quantization is essential. A 0.8B parameter model at fp32 would be ~3.2GB -- impractical for browser download. At q4, the same model fits in ~500MB with acceptable quality for conversational tasks.
+
+### How Transformers.js Handles Quantization
+
+Transformers.js supports multiple quantization formats through its `dtype` parameter. When you set `quantized: true` or specify a `dtype`, it fetches the appropriate ONNX file variant from the HuggingFace Hub:
+
+```typescript
+// Fetch the quantized (int8) variant
+const model = transformers.embedding('Xenova/bge-small-en-v1.5', {
+  quantized: true,
+});
+
+// For language models (TJS v4), q4 is the default
+const llm = transformers.languageModel('onnx-community/SmolLM2-135M-Instruct', {
+  // dtype: 'q4' is applied automatically
+});
+```
+
+---
+
+## Layer 5: How LocalMode Wraps It All
+
+Transformers.js provides the runtime. LocalMode provides the developer interface.
+
+The `@localmode/transformers` package (version 1.0.2) depends on `@huggingface/transformers` v3.8.1+ and implements 25 model factory methods across 24 implementation files. Each factory returns an object that implements a core interface from `@localmode/core` -- meaning the same `embed()`, `classify()`, `transcribe()`, or `generateText()` function works regardless of which provider produced the model.
+
+### The Provider Pattern
+
+The provider is a single object with typed factory methods:
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { embed, classify, rerank } from '@localmode/core';
+
+// Each factory returns an interface-compliant model object
+const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
+const classifier = transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english');
+const reranker = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+
+// Core functions accept any provider's model
+const { embedding } = await embed({ model: embeddingModel, value: 'Hello world' });
+const { label } = await classify({ model: classifier, value: 'Great product!' });
+const { results } = await rerank({ model: reranker, query: 'What is ML?', documents });
+```
+
+Custom provider instances let you override defaults:
+
+```typescript
+import { createTransformers } from '@localmode/transformers';
+
+const gpuProvider = createTransformers({
+  device: 'webgpu',
+  quantized: true,
+  onProgress: (p) => console.log(`${(p.progress * 100).toFixed(1)}%`),
+});
+```
+
+### All 25 Model Types
+
+Here is the complete table of every model type `@localmode/transformers` exposes, organized by domain:
+
+| # | Factory Method | Interface | Domain | Example Model |
+|---|---------------|-----------|--------|---------------|
+| 1 | `embedding()` | `EmbeddingModel` | NLP | `Xenova/bge-small-en-v1.5` |
+| 2 | `classifier()` | `ClassificationModel` | NLP | `Xenova/distilbert-base-uncased-finetuned-sst-2-english` |
+| 3 | `zeroShot()` | `ZeroShotClassificationModel` | NLP | `Xenova/mobilebert-uncased-mnli` |
+| 4 | `ner()` | `NERModel` | NLP | `Xenova/bert-base-NER` |
+| 5 | `reranker()` | `RerankerModel` | NLP | `Xenova/ms-marco-MiniLM-L-6-v2` |
+| 6 | `fillMask()` | `FillMaskModel` | NLP | `onnx-community/ModernBERT-base-ONNX` |
+| 7 | `questionAnswering()` | `QuestionAnsweringModel` | NLP | `Xenova/distilbert-base-cased-distilled-squad` |
+| 8 | `summarizer()` | `SummarizationModel` | NLP | `Xenova/distilbart-cnn-6-6` |
+| 9 | `translator()` | `TranslationModel` | NLP | `Helsinki-NLP/opus-mt-en-fr` |
+| 10 | `speechToText()` | `SpeechToTextModel` | Audio | `onnx-community/moonshine-base-ONNX` |
+| 11 | `textToSpeech()` | `TextToSpeechModel` | Audio | `onnx-community/Kokoro-82M-v1.0-ONNX` |
+| 12 | `audioClassifier()` | `AudioClassificationModel` | Audio | Audio event classification |
+| 13 | `zeroShotAudioClassifier()` | `ZeroShotAudioClassificationModel` | Audio | Open-vocabulary audio classification |
+| 14 | `imageClassifier()` | `ImageClassificationModel` | Vision | `google/vit-base-patch16-224` |
+| 15 | `zeroShotImageClassifier()` | `ZeroShotImageClassificationModel` | Vision | `Xenova/siglip-base-patch16-224` |
+| 16 | `captioner()` | `ImageCaptionModel` | Vision | `onnx-community/Florence-2-base-ft` |
+| 17 | `objectDetector()` | `ObjectDetectionModel` | Vision | `onnx-community/dfine_n_coco-ONNX` |
+| 18 | `segmenter()` | `SegmentationModel` | Vision | `briaai/RMBG-1.4` |
+| 19 | `imageFeatures()` | `ImageFeatureModel` | Vision | `onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX` |
+| 20 | `imageToImage()` | `ImageToImageModel` | Vision | `Xenova/swin2SR-lightweight-x2-64` |
+| 21 | `ocr()` | `OCRModel` | Vision | `Xenova/trocr-small-printed` |
+| 22 | `documentQA()` | `DocumentQAModel` | Vision | `onnx-community/Florence-2-base-ft` |
+| 23 | `depthEstimator()` | `DepthEstimationModel` | Vision | Monocular depth estimation |
+| 24 | `multimodalEmbedding()` | `MultimodalEmbeddingModel` | Multimodal | CLIP/SigLIP cross-modal embeddings |
+| 25 | `languageModel()` | `LanguageModel` | Generation | `onnx-community/SmolLM2-135M-Instruct` |
+
+The first 24 are implemented on Transformers.js v3 (`@huggingface/transformers` ^3.8.1). The 25th -- `languageModel()` -- uses Transformers.js v4 via a dual-install pattern.
+
+---
+
+## The TJS v4 Dual-Install Pattern
+
+Text generation with ONNX models requires Transformers.js v4, which is currently published under the `@next` tag. Running v4 alongside v3 without conflicts required an npm alias in `package.json`:
+
+```json
+{
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "@huggingface/transformers-v4": "npm:@huggingface/transformers@next"
+  }
+}
+```
+
+This installs v4 under the alias `@huggingface/transformers-v4`. Only one file in the entire package -- `language-model.ts` -- imports from the v4 alias. All other 24 implementations import from `@huggingface/transformers` (v3). This isolation ensures the v4 preview cannot destabilize the stable implementations.
+
+The language model implementation auto-detects the loading strategy from the model ID:
+
+- **Standard pipeline** -- For text-only models (SmolLM2, Phi, Qwen3). Uses `pipeline('text-generation', modelId, { device, dtype: 'q4' })`.
+- **Qwen3.5 multimodal** -- For Qwen3.5 ONNX models with split architectures (embed_tokens + vision_encoder + decoder_model_merged). Uses `AutoModelForCausalLM.from_pretrained` with per-component dtype configuration.
+
+---
+
+## Performance: What to Expect
+
+Inference times vary by model size, task complexity, and execution backend. Here are representative measurements on a mid-range laptop (M2 MacBook Air, 8GB RAM, Chrome 124):
+
+| Task | Model | Size | WebGPU | WASM |
+|------|-------|------|--------|------|
+| Embedding (single) | bge-small-en-v1.5 | ~33MB | ~8ms | ~25ms |
+| Embedding (batch of 32) | bge-small-en-v1.5 | ~33MB | ~45ms | ~180ms |
+| Classification | distilbert-sst-2 | ~67MB | ~12ms | ~35ms |
+| NER | bert-base-NER | ~110MB | ~20ms | ~60ms |
+| Reranking (10 docs) | ms-marco-MiniLM-L6 | ~23MB | ~40ms | ~120ms |
+| Speech-to-text (10s audio) | moonshine-base | ~237MB | ~1.2s | ~4.5s |
+| Text generation (50 tokens) | SmolLM2-135M | ~100MB | ~2s | ~8s |
+| Object detection | dfine_n_coco | ~4.5MB | ~15ms | ~50ms |
+| OCR | trocr-small-printed | ~120MB | ~80ms | ~250ms |
+
+First inference includes model loading time (seconds to minutes depending on model size and network speed). Subsequent calls use the cached model and hit the times above. Models are cached in the browser's Cache API by Transformers.js, surviving page reloads.
+
+<Callout type="warn" title="First-load latency">
+  The initial model download is the primary bottleneck. A 200MB model on a 50 Mbps connection takes ~32 seconds. Use `preloadModel()` during app initialization and show progress UI via the `onProgress` callback. After the first load, models are served from the browser cache instantly.
+</Callout>
+
+---
+
+## Limitations and Edge Cases
+
+### Model Size Constraints
+
+Browser memory is finite. Practical limits for browser ML models:
+
+- **4GB RAM devices** (low-end mobile): models up to ~200MB work reliably
+- **8GB RAM devices** (most laptops): models up to ~1GB work well
+- **16GB+ RAM devices**: models up to ~2-3GB are feasible with WebGPU
+
+Beyond ~500MB, you should test on your target devices. WebGPU models consume GPU VRAM, which is shared with the display compositor on integrated GPUs.
+
+### Safari Considerations
+
+Safari 26+ ships WebGPU, but earlier Safari versions (14-17) are WASM-only. Private Browsing mode blocks IndexedDB entirely, which breaks model caching. LocalMode handles this with automatic `MemoryStorage` fallback, but models will re-download each session.
+
+### Firefox WebGPU
+
+Firefox shipped WebGPU on Windows in Firefox 141 (July 2025) and macOS ARM64 in Firefox 145. Linux and Android support is still in progress. For Firefox users on those platforms, WASM remains the only backend.
+
+### SharedArrayBuffer
+
+WASM multi-threading requires `SharedArrayBuffer`, which requires [cross-origin isolation](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer#security_requirements) (`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` headers). Without these headers, WASM runs single-threaded, roughly 2-4x slower for compute-heavy models.
+
+---
+
+## Putting It Together
+
+The stack that makes browser ML work is not any single breakthrough. It is the convergence of five independent technologies reaching maturity simultaneously:
+
+1. **ONNX** provides a universal model format that decouples training frameworks from inference runtimes.
+2. **ONNX Runtime Web** provides a production-grade inference engine compiled to WASM and WebGPU.
+3. **WebGPU** finally gives JavaScript programs access to GPU compute across all major browsers.
+4. **Quantization** compresses models from gigabytes to tens of megabytes with minimal quality loss.
+5. **Transformers.js** ties it all together with HuggingFace Hub integration, tokenizers, and pre/post-processing for 120 model architectures.
+
+LocalMode's role is the final layer: wrapping this stack in typed interfaces (`EmbeddingModel`, `ClassificationModel`, `SpeechToTextModel`, and 22 others) that work with a function-first API (`embed()`, `classify()`, `transcribe()`), support `AbortSignal` cancellation, return structured results with usage metadata, and compose with middleware, pipelines, and vector databases -- all without a single network request after model download.
+
+The browser is no longer a thin client waiting for a server to do the thinking. It is a capable ML runtime, and the tools to use it are production-ready today.
+
+---
+
+## Methodology
+
+**Transformers.js:**
+- [Transformers.js v3 release blog](https://huggingface.co/blog/transformersjs-v3) -- 120 supported architectures (v3), WebGPU support, new quantization formats
+- [Transformers.js v4 preview announcement](https://huggingface.co/blog/transformersjs-v4) -- ~200 supported architectures, text generation pipeline
+- [Transformers.js documentation](https://huggingface.co/docs/transformers.js/index)
+- [Transformers.js GitHub repository](https://github.com/huggingface/transformers.js/)
+
+**ONNX Runtime Web:**
+- [ONNX Runtime Web documentation](https://onnxruntime.ai/docs/tutorials/web/)
+- [ONNX Runtime Web WebGPU execution provider](https://onnxruntime.ai/docs/tutorials/web/ep-webgpu.html)
+- [ONNX Runtime Web WebGPU announcement](https://opensource.microsoft.com/blog/2024/02/29/onnx-runtime-web-unleashes-generative-ai-in-the-browser-using-webgpu/) -- 19x speedup for Segment Anything encoder, 3.8x for decoder
+
+**WebGPU Browser Support:**
+- [WebGPU implementation status](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status)
+- [Can I use: WebGPU](https://caniuse.com/webgpu)
+- [WebGPU supported in all major browsers (web.dev)](https://web.dev/blog/webgpu-supported-major-browsers)
+- [WebGPU hits critical mass announcement](https://www.webgpu.com/news/webgpu-hits-critical-mass-all-major-browsers-now-ship-it/)
+
+**Quantization:**
+- [ONNX Runtime quantization documentation](https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html)
+- [ONNX model quantization formats discussion](https://software.codidact.com/posts/292940)
+
+**LocalMode Source Code:**
+- `@localmode/transformers` package.json -- `@huggingface/transformers` ^3.8.1, v4 npm alias
+- `packages/transformers/src/implementations/` -- 24 implementation files, 25 factory methods
+- `packages/transformers/src/implementations/language-model.ts` -- TJS v4 dual-loading strategy
+- `packages/core/src/capabilities/features.ts` -- WebGPU and WASM feature detection
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

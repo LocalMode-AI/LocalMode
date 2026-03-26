@@ -1,0 +1,72 @@
+{
+  "name": "@localmode/wllama",
+  "version": "1.0.2",
+  "description": "wllama provider for @localmode - GGUF model inference via llama.cpp WASM with metadata inspection and browser compatibility checking",
+  "license": "MIT",
+  "author": "LocalMode",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist node_modules"
+  },
+  "dependencies": {
+    "@wllama/wllama": "^2.2.1",
+    "@huggingface/gguf": "^0.1.14"
+  },
+  "peerDependencies": {
+    "@localmode/core": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@localmode/core": "workspace:*",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "keywords": [
+    "wllama",
+    "gguf",
+    "llama.cpp",
+    "wasm",
+    "llm",
+    "local-first",
+    "privacy",
+    "ai",
+    "language-model",
+    "text-generation",
+    "offline"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LocalMode-AI/LocalMode.git",
+    "directory": "packages/wllama"
+  },
+  "homepage": "https://localmode.dev/docs/wllama",
+  "bugs": {
+    "url": "https://github.com/LocalMode-AI/LocalMode/issues"
+  }
+}

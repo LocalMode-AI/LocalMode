@@ -1,5 +1,36 @@
 {
   "title": "Transformers",
   "icon": "Sparkles",
-  "pages": ["index", "embeddings", "reranking"]
+  "pages": [
+    "index",
+    "---Text Generation---",
+    "text-generation",
+    "---Embeddings & Reranking---",
+    "embeddings",
+    "multimodal-embeddings",
+    "reranking",
+    "---Classification & NLP---",
+    "classification",
+    "zero-shot",
+    "ner",
+    "---Text Processing---",
+    "translation",
+    "summarization",
+    "fill-mask",
+    "question-answering",
+    "---Audio---",
+    "speech-to-text",
+    "text-to-speech",
+    "---Vision---",
+    "image-classification",
+    "zero-shot-image",
+    "image-captioning",
+    "object-detection",
+    "image-segmentation",
+    "image-features",
+    "image-to-image",
+    "---Document Understanding---",
+    "ocr",
+    "document-qa"
+  ]
 }

@@ -1,7 +1,6 @@
 {
   "name": "@localmode/dexie",
-  "version": "0.0.0-dev",
-  "private": true,
+  "version": "1.0.0",
   "description": "Dexie.js storage adapter for @localmode - enhanced IndexedDB with versioning",
   "license": "MIT",
   "author": "LocalMode",
@@ -53,13 +52,14 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "dexie": "^4.2.1"
+    "dexie": "^4.3.0"
   },
   "peerDependencies": {
-    "@localmode/core": "^1.0.2"
+    "@localmode/core": ">=1.0.0"
   },
   "devDependencies": {
     "@localmode/core": "workspace:*",
+    "fake-indexeddb": "^6.2.5",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"
   }

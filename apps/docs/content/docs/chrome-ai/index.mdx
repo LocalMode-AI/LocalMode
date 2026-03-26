@@ -1,0 +1,184 @@
+---
+title: 'Overview'
+description: 'Zero-download, instant AI inference via Chrome built-in Gemini Nano'
+icon: 'Zap'
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+# @localmode/chrome-ai
+
+Zero-download, instant AI inference via Chrome's built-in Gemini Nano model. No model downloads, no bundle size impact, no API keys — the model ships with the browser.
+
+<Callout type="info" title="See it in action">
+  Try [Smart Writer](https://localmode.ai/smart-writer) for a working demo using Chrome AI with automatic fallback to transformers.
+</Callout>
+
+## Features
+
+- Zero model downloads — Gemini Nano ships with Chrome
+- Zero bundle size impact — browser-native APIs
+- Instant inference — no model loading delay
+- Implements `SummarizationModel` and `TranslationModel` from `@localmode/core`
+- Feature detection utilities for graceful fallback
+
+## Installation
+
+<Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
+  <Tab value="pnpm">
+  ```bash
+  pnpm add @localmode/chrome-ai @localmode/core
+  ```
+  </Tab>
+  <Tab value="npm">
+  ```bash
+  npm install @localmode/chrome-ai @localmode/core
+  ```
+  </Tab>
+  <Tab value="yarn">
+  ```bash
+  yarn add @localmode/chrome-ai @localmode/core
+  ```
+  </Tab>
+  <Tab value="bun">
+  ```bash
+  bun add @localmode/chrome-ai @localmode/core
+  ```
+  </Tab>
+</Tabs>
+
+## Quick Start
+
+```ts
+import { summarize } from '@localmode/core';
+import { chromeAI } from '@localmode/chrome-ai';
+
+const { summary } = await summarize({
+  model: chromeAI.summarizer(),
+  text: 'Long article text...',
+});
+
+console.log(summary);
+```
+
+## Comparison
+
+| Aspect | Chrome AI | Transformers.js | WebLLM |
+|--------|-----------|-----------------|--------|
+| First inference | **Instant** | After model download (50MB–2GB) | After model download (1–4GB) |
+| Bundle size | **0 bytes** | ~2MB (WASM runtime) | ~1MB |
+| Model download | **None** | Required | Required |
+| Browser support | Chrome 138+ only | All browsers | Chrome/Edge (WebGPU) |
+| Offline | **Yes** (native) | Yes (after cache) | Yes (after cache) |
+| Model quality | Good (Gemini Nano) | Varies by model | High (larger models) |
+
+## Available APIs
+
+| API | Status | LocalMode Interface | Chrome Version |
+|-----|--------|-------------------|----------------|
+| Summarizer | **Stable** | `SummarizationModel` | 138+ |
+| Translator | **Stable** | `TranslationModel` | 138+ |
+| Prompt API | Extensions only | `LanguageModel` | 138+ |
+| Writer | Origin trial | — | — |
+| Rewriter | Origin trial | — | — |
+
+<Callout type="info">
+  Only the Summarizer and Translator APIs are currently supported by `@localmode/chrome-ai`.
+  The Prompt API is restricted to Chrome Extensions and is not available to web pages.
+</Callout>
+
+## Requirements
+
+<Callout type="warn">
+  Chrome AI is only available on **desktop** browsers. Mobile (Android/iOS) and Incognito mode are not supported.
+</Callout>
+
+| Requirement | Detail |
+|-------------|--------|
+| Browser | Chrome 138+ (or Edge 138+) |
+| OS | Windows 10+, macOS 13+ (Ventura), Linux, ChromeOS (Chromebook Plus) |
+| Disk space | 22 GB free on the volume containing your Chrome profile |
+| Hardware | GPU with >4 GB VRAM, **or** CPU with 16 GB+ RAM and 4+ cores |
+
+### Enabling Chrome AI
+
+1. Navigate to `chrome://flags/#optimization-guide-on-device-model` and set to **Enabled**
+2. Navigate to `chrome://flags/#prompt-api-for-gemini-nano` and set to **Enabled**
+3. For higher-quality summaries: `chrome://flags/#summarization-api-for-gemini-nano` → **Enabled with Adaptation**
+4. Restart Chrome
+5. Gemini Nano downloads automatically in the background (~1.5 GB)
+6. Verify in DevTools Console:
+
+```ts
+// Check if Summarizer is ready
+await Summarizer.availability(); // "readily" = ready, "after-download" = downloading
+
+// Check if Translator is ready
+const caps = await Translator.availability({ sourceLanguage: 'en', targetLanguage: 'es' });
+```
+
+<Callout type="info">
+  If `availability()` returns `"after-download"`, the model is still downloading. Creating a session
+  with `create()` requires a [user activation](https://developer.chrome.com/docs/ai/get-started) (click, tap, or keypress)
+  to trigger the download.
+</Callout>
+
+## Provider Factory
+
+```ts
+import { createChromeAI, chromeAI } from '@localmode/chrome-ai';
+
+// Default instance
+const summarizer = chromeAI.summarizer();
+const translator = chromeAI.translator({ targetLanguage: 'de' });
+
+// Custom instance
+const provider = createChromeAI();
+const customSummarizer = provider.summarizer({ type: 'key-points', format: 'markdown' });
+```
+
+## Feature Detection
+
+```ts
+import {
+  isChromeAISupported,
+  isSummarizerAPISupported,
+  isTranslatorAPISupported,
+} from '@localmode/chrome-ai';
+
+if (isChromeAISupported()) {
+  console.log('Chrome AI is available');
+}
+
+if (isSummarizerAPISupported()) {
+  console.log('Summarizer API is ready');
+}
+```
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Summarization"
+    description="Summarize text with configurable type, format, and length"
+    href="/docs/chrome-ai/summarization"
+  />
+  <Card
+    title="Translation"
+    description="Translate text between languages instantly"
+    href="/docs/chrome-ai/translation"
+  />
+  <Card
+    title="Fallback Patterns"
+    description="Graceful degradation for non-Chrome browsers"
+    href="/docs/chrome-ai/fallbacks"
+  />
+</Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Smart Writer | Chrome AI summarization and translation with automatic transformers fallback | [Demo](https://localmode.ai/smart-writer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-writer) |

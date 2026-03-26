@@ -1,0 +1,287 @@
+---
+title: Document QA
+description: Answer questions about document images and tables.
+icon: FileQuestionMark
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+Answer questions about document images and structured tables using document QA models. These models understand visual document layouts and can extract information from invoices, forms, receipts, and tables.
+
+<Callout type="info" title="See it in action">
+  Try [Invoice QA](https://localmode.ai/invoice-qa) for a working demo of these APIs.
+</Callout>
+
+## askDocument()
+
+Answer a question about a document image:
+
+<Tabs items={['Basic Usage', 'With AbortSignal']}>
+<Tab value="Basic Usage">
+
+```ts {5-9}
+import { askDocument } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.documentQA('onnx-community/Florence-2-base-ft');
+
+const { answer, score } = await askDocument({
+  model,
+  document: invoiceImage,
+  question: 'What is the total amount?',
+});
+
+console.log(answer); // '$1,234.56'
+console.log(score);  // 0.95
+```
+
+</Tab>
+<Tab value="With AbortSignal">
+
+```ts {3,7}
+const controller = new AbortController();
+
+setTimeout(() => controller.abort(), 10000);
+
+const { answer } = await askDocument({
+  model,
+  document: invoiceImage,
+  question: 'What is the total amount?',
+  abortSignal: controller.signal,
+});
+```
+
+</Tab>
+</Tabs>
+
+### AskDocumentOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The document QA model to use',
+      type: 'DocumentQAModel | string',
+      required: true,
+    },
+    document: {
+      description: 'Document image to query',
+      type: 'Blob | ImageData | string | ArrayBuffer',
+      required: true,
+    },
+    question: {
+      description: 'Question about the document',
+      type: 'string',
+      required: true,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure (default: 2)',
+      type: 'number',
+      required: false,
+    },
+  }}
+/>
+
+### AskDocumentResult
+
+<TypeTable
+  type={{
+    answer: {
+      description: 'The extracted answer',
+      type: 'string',
+    },
+    score: {
+      description: 'Confidence score (0-1)',
+      type: 'number',
+    },
+    usage: {
+      description: 'Usage info: durationMs',
+      type: 'DocumentQAUsage',
+    },
+    response: {
+      description: 'Response metadata: modelId, timestamp',
+      type: 'DocumentQAResponse',
+    },
+  }}
+/>
+
+## askTable()
+
+Answer a question about structured table data:
+
+```ts {5-13}
+import { askTable } from '@localmode/core';
+
+const { answer, cells, aggregator } = await askTable({
+  model: tableQAModel,
+  table: {
+    headers: ['Product', 'Price', 'Quantity'],
+    rows: [
+      ['Widget A', '$10', '100'],
+      ['Widget B', '$25', '50'],
+      ['Widget C', '$15', '75'],
+    ],
+  },
+  question: 'What is the most expensive product?',
+});
+
+console.log(answer);     // 'Widget B'
+console.log(cells);      // ['Widget B']
+console.log(aggregator); // 'NONE'
+```
+
+### AskTableOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The table QA model to use',
+      type: 'TableQAModel | string',
+      required: true,
+    },
+    table: {
+      description: 'Table data with headers and rows',
+      type: '{ headers: string[]; rows: string[][] }',
+      required: true,
+    },
+    question: {
+      description: 'Question about the table data',
+      type: 'string',
+      required: true,
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation',
+      type: 'AbortSignal',
+      required: false,
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts on failure (default: 2)',
+      type: 'number',
+      required: false,
+    },
+  }}
+/>
+
+### AskTableResult
+
+<TypeTable
+  type={{
+    answer: {
+      description: 'The answer to the question',
+      type: 'string',
+    },
+    cells: {
+      description: 'Relevant cells used to derive the answer',
+      type: 'string[] | undefined',
+    },
+    aggregator: {
+      description: 'Aggregation operation used (e.g., SUM, COUNT, AVERAGE, NONE)',
+      type: 'string | undefined',
+    },
+    score: {
+      description: 'Confidence score (0-1)',
+      type: 'number',
+    },
+    usage: {
+      description: 'Usage info: durationMs',
+      type: 'DocumentQAUsage',
+    },
+    response: {
+      description: 'Response metadata: modelId, timestamp',
+      type: 'DocumentQAResponse',
+    },
+  }}
+/>
+
+## Custom Provider
+
+Implement the `DocumentQAModel` or `TableQAModel` interface:
+
+<Tabs items={['DocumentQAModel', 'TableQAModel']}>
+<Tab value="DocumentQAModel">
+
+```ts
+import type { DocumentQAModel, DoAskDocumentOptions, DoAskDocumentResult } from '@localmode/core';
+
+class MyDocumentQA implements DocumentQAModel {
+  readonly modelId = 'custom:my-doc-qa';
+  readonly provider = 'custom';
+
+  async doAskDocument(options: DoAskDocumentOptions): Promise<DoAskDocumentResult> {
+    const { document, question } = options;
+
+    // Your document QA logic here
+    return {
+      answer: 'extracted answer',
+      score: 0.9,
+      usage: { durationMs: 0 },
+    };
+  }
+}
+```
+
+</Tab>
+<Tab value="TableQAModel">
+
+```ts
+import type { TableQAModel, DoAskTableOptions, DoAskTableResult } from '@localmode/core';
+
+class MyTableQA implements TableQAModel {
+  readonly modelId = 'custom:my-table-qa';
+  readonly provider = 'custom';
+
+  async doAskTable(options: DoAskTableOptions): Promise<DoAskTableResult> {
+    const { table, question } = options;
+
+    // Your table QA logic here
+    return {
+      answer: 'computed answer',
+      cells: ['cell1'],
+      aggregator: 'NONE',
+      score: 0.85,
+      usage: { durationMs: 0 },
+    };
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="info">
+  For recommended models, provider-specific options, and practical recipes, see the
+  [Transformers Document QA](/docs/transformers/document-qa) guide.
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Transformers Document QA"
+    href="/docs/transformers/document-qa"
+    description="Recommended document QA models and usage."
+  />
+  <Card
+    title="OCR"
+    href="/docs/core/ocr"
+    description="Extract text from images."
+  />
+  <Card
+    title="Question Answering"
+    href="/docs/core/question-answering"
+    description="Extractive QA from text context."
+  />
+</Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Invoice QA | Ask questions about document images | [Demo](https://localmode.ai/invoice-qa) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/invoice-qa) |

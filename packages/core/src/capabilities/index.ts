@@ -53,3 +53,16 @@ export {
 // Export report generation
 export { createCapabilityReport, formatCapabilityReport } from './report.js';
 
+// Export adaptive batch size
+export { computeOptimalBatchSize } from './batch-size.js';
+
+// Export model registry
+export {
+  DEFAULT_MODEL_REGISTRY,
+  registerModel,
+  getModelRegistry,
+} from './model-registry.js';
+
+// Export model recommendation engine
+export { recommendModels } from './recommend.js';
+

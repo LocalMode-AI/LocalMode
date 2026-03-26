@@ -46,3 +46,32 @@ export {
   deriveEncryptionKey,
   deriveKey, // Alias for backward compatibility
 } from './encryption-middleware.js';
+
+// Differential Privacy - Noise Mechanisms
+export { gaussianNoise, laplacianNoise, addNoise } from './dp-noise.js';
+
+// Differential Privacy - Sensitivity
+export {
+  lookupSensitivity,
+  getSensitivity,
+  calibrateSensitivity,
+  resolveSensitivity,
+} from './dp-sensitivity.js';
+
+// Differential Privacy - Budget
+export { createPrivacyBudget } from './dp-budget.js';
+
+// Differential Privacy - Embedding Middleware
+export {
+  dpEmbeddingMiddleware,
+  computeGaussianSigma,
+  computeLaplacianScale,
+} from './dp-middleware.js';
+
+// Differential Privacy - Types
+export type {
+  DPEmbeddingConfig,
+  DPClassificationConfig,
+  PrivacyBudgetConfig,
+  PrivacyBudget,
+} from './dp-types.js';

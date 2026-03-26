@@ -1,0 +1,94 @@
+---
+title: Text-to-Speech
+description: Generate speech audio from text with Kokoro TTS.
+icon: Volume2
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+Generate natural-sounding speech audio from text using Kokoro TTS models running locally in the browser.
+
+<Callout type="info">
+  For full API reference (`synthesizeSpeech()`, options, result types, and custom providers), see the [Core Audio](/docs/core/audio) guide.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [Audiobook Creator](https://localmode.ai/audiobook-creator) for a working demo.
+</Callout>
+
+## Recommended Models
+
+| Model | Size | Quality | Use Case |
+|-------|------|---------|----------|
+| `onnx-community/Kokoro-82M-v1.0-ONNX` | ~82MB | High | General-purpose English TTS, natural prosody |
+
+## Audiobook Creator Example
+
+Based on the [Audiobook Creator](https://localmode.ai/audiobook-creator) showcase app:
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { synthesizeSpeech } from '@localmode/core';
+
+const model = transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX');
+
+async function synthesizeChapter(text: string) {
+  // Kokoro works best with shorter segments
+  const maxLength = 5000;
+  const segments = splitText(text, maxLength);
+  const audioBlobs: Blob[] = [];
+
+  for (const segment of segments) {
+    const { audio } = await synthesizeSpeech({
+      model,
+      text: segment,
+      abortSignal: controller.signal,
+    });
+    audioBlobs.push(audio);
+  }
+
+  // Combine audio blobs
+  return new Blob(audioBlobs, { type: 'audio/wav' });
+}
+```
+
+## Best Practices
+
+<Callout type="tip" title="TTS Tips">
+  1. **Keep text segments short** — Kokoro works best with text under 5000 characters
+  2. **Use WAV output** — The audio is returned as a WAV blob, ready for playback
+  3. **Split long text** — For books or articles, split into paragraphs and synthesize each
+  4. **Support cancellation** — TTS can take several seconds per segment
+</Callout>
+
+<Callout type="warn" title="Limitations">
+  Kokoro currently supports English only. Multiple voice styles are available via the model's
+  built-in speaker options.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Audiobook Creator | Generate natural speech from text content | [Demo](https://localmode.ai/audiobook-creator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/audiobook-creator) |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Core Audio API"
+    href="/docs/core/audio"
+    description="Full API reference, options, result types, and custom providers."
+  />
+  <Card
+    title="Speech-to-Text"
+    href="/docs/transformers/speech-to-text"
+    description="Transcribe audio to text."
+  />
+  <Card
+    title="Summarization"
+    href="/docs/transformers/summarization"
+    description="Summarize text before synthesizing."
+  />
+</Cards>

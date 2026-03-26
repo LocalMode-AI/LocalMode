@@ -1,0 +1,358 @@
+---
+title: "From OpenAI to LocalMode: A Complete Migration Checklist"
+description: "A ten-phase planning document for teams migrating from cloud AI APIs to local browser inference. Covers auditing current usage, mapping models, benchmarking quality, importing vectors from Pinecone and ChromaDB, handling dimension changes, calibrating thresholds, setting up fallbacks, and rolling out gradually."
+author: LocalMode
+date: 2026-03-22
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Moving from OpenAI (or any cloud AI provider) to local browser inference is not a flip-the-switch operation. It is a systematic process that touches your embedding pipeline, your vector database, your similarity thresholds, and your monitoring stack. Done well, the migration eliminates per-request costs, removes network latency, and guarantees that user data never leaves the device. Done carelessly, it produces silent quality regressions that are hard to debug after the fact.
+
+This checklist is a planning document for engineering teams that have already decided to migrate. It is organized into ten phases, each with concrete steps, code snippets against the real LocalMode API, and decision points. Work through them in order.
+
+---
+
+## Phase 1 - Audit Your Current AI Usage
+
+Before writing any migration code, build a complete inventory of every cloud AI call your application makes.
+
+**What to catalog:**
+
+| Dimension | Example |
+|-----------|---------|
+| API endpoint | `POST /v1/embeddings`, `POST /v1/chat/completions` |
+| Model ID | `text-embedding-3-small`, `gpt-4o-mini` |
+| Call volume | 2.4M embedding calls/month, 180K chat completions/month |
+| Average latency | 120ms embeddings, 1.8s chat completions |
+| Monthly cost | Embedding: ~$48/mo, Chat: ~$270/mo |
+| Output dimensions | 1536 (embeddings), N/A (chat) |
+| Where vectors are stored | Pinecone, ChromaDB, self-hosted Postgres |
+
+**Cost baseline template:**
+
+| Service | Model | Monthly Calls | Token Volume | Unit Cost | Monthly Cost |
+|---------|-------|--------------|-------------|-----------|-------------|
+| Embeddings | text-embedding-3-small | 2,400,000 | 480M tokens | $0.02/1M tokens | $9.60 |
+| Embeddings | text-embedding-3-large | 600,000 | 300M tokens | $0.065/1M tokens | $19.50 |
+| Chat | gpt-4o-mini | 180,000 | 90M in + 45M out | $0.15/$0.60 per 1M | $40.50 |
+| Chat | gpt-4o | 12,000 | 24M in + 12M out | $2.50/$10.00 per 1M | $180.00 |
+| **Total** | | | | | **$249.60** |
+
+Fill in your own numbers. This becomes your before measurement for the cost comparison at the end of migration.
+
+---
+
+## Phase 2 - Map Cloud APIs to Local Equivalents
+
+Every cloud API endpoint has a local counterpart. The model will be smaller and the output dimensions will differ, but the function signature in LocalMode matches the same pattern.
+
+| Cloud API | Cloud Model | LocalMode Function | Local Model (Transformers) | Dimensions |
+|-----------|------------|-------------------|--------------------------|------------|
+| Embeddings | text-embedding-3-small (1536d) | `embed()` | `Xenova/bge-small-en-v1.5` | 384 |
+| Embeddings | text-embedding-3-large (3072d) | `embed()` | `Xenova/bge-base-en-v1.5` | 768 |
+| Chat completions | gpt-4o-mini | `generateText()` / `streamText()` | WebLLM: `Llama-3.2-3B-Instruct-q4f16_1-MLC` | N/A |
+| Chat completions | gpt-4o | `generateText()` / `streamText()` | Wllama: `Qwen3-4B-q4_0.gguf` | N/A |
+| Classification | custom fine-tune | `classify()` | `Xenova/distilbert-base-uncased-finetuned-sst-2-english` | N/A |
+| Summarization | gpt-4o-mini | `summarize()` | `Xenova/distilbart-cnn-6-6` | N/A |
+| Translation | gpt-4o-mini | `translate()` | `Xenova/nllb-200-distilled-600M` | N/A |
+| Speech-to-text | whisper-1 | `transcribe()` | `onnx-community/moonshine-base-ONNX` | N/A |
+
+<Callout type="warn" title="Dimension mismatch is the biggest migration risk">
+  OpenAI's `text-embedding-3-small` produces 1536-dimensional vectors. LocalMode's recommended `bge-small-en-v1.5` produces 384-dimensional vectors. Existing vectors stored in Pinecone or ChromaDB **cannot be mixed** with new local vectors. Phase 5 addresses this directly.
+</Callout>
+
+---
+
+## Phase 3 - Benchmark Quality Before Migrating
+
+Never migrate blind. Use `evaluateModel()` to run your local candidate against a labeled test set and compare scores to your cloud baseline.
+
+```ts
+import { evaluateModel, accuracy, f1Score } from '@localmode/core';
+import { classify } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.classifier(
+  'Xenova/distilbert-base-uncased-finetuned-sst-2-english'
+);
+
+const result = await evaluateModel({
+  dataset: {
+    inputs: ['great product', 'terrible service', 'okay experience', /* ... */],
+    expected: ['positive', 'negative', 'neutral', /* ... */],
+  },
+  predict: async (text, signal) => {
+    const { label } = await classify({ model, text, abortSignal: signal });
+    return label;
+  },
+  metric: f1Score,
+  onProgress: (completed, total) => {
+    console.log(`Evaluated ${completed}/${total}`);
+  },
+});
+
+console.log(`Local F1: ${result.score.toFixed(3)}`);
+console.log(`Duration: ${result.durationMs}ms over ${result.datasetSize} samples`);
+```
+
+**Decision gate:** If `result.score` is within 5% of your cloud baseline on the same test set, proceed. If the gap is larger, try a bigger local model or revisit your model mapping in Phase 2. Available metrics include `accuracy`, `precision`, `recall`, `f1Score` (with macro/micro/weighted averaging), `bleuScore`, `rougeScore`, `mrr`, and `ndcg`.
+
+---
+
+## Phase 4 - Import Existing Vectors
+
+If you have vectors stored in Pinecone, ChromaDB, or flat files, use `importFrom()` to bring them into a local VectorDB. The function auto-detects format, validates dimensions, and optionally re-embeds text-only records.
+
+```ts
+import { importFrom, createVectorDB } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const db = await createVectorDB({ name: 'migrated-docs', dimensions: 384 });
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+// pineconeExport is a JSON string exported from Pinecone
+const stats = await importFrom({
+  db,
+  content: pineconeExportJson,
+  format: 'pinecone',           // also: 'chroma', 'csv', 'jsonl'
+  model,                        // re-embeds text-only records
+  batchSize: 100,
+  onProgress: (p) => {
+    console.log(`${p.phase}: ${p.completed}/${p.total}`);
+  },
+  abortSignal: controller.signal,
+});
+
+console.log(`Imported: ${stats.imported}`);
+console.log(`Skipped: ${stats.skipped}`);
+console.log(`Re-embedded: ${stats.reEmbedded}`);
+console.log(`Format: ${stats.format}, Dimensions: ${stats.dimensions}`);
+```
+
+Supported formats: `'pinecone'` (JSON export), `'chroma'` (JSON collection export), `'csv'` (RFC 4180 with vector column), and `'jsonl'` (one record per line). If you omit the `format` option, `importFrom()` auto-detects it from the content structure.
+
+<Callout type="info" title="Preview before importing">
+  Use `parseExternalFormat(content)` to inspect record counts, vector dimensions, and format detection before committing to a full import. This is a synchronous, side-effect-free call that lets you validate the data shape.
+</Callout>
+
+---
+
+## Phase 5 - Handle the Dimension Mismatch
+
+This is the phase most teams underestimate. OpenAI `text-embedding-3-small` outputs 1536 dimensions. `bge-small-en-v1.5` outputs 384 dimensions. You cannot simply insert old vectors alongside new ones.
+
+**You have two options:**
+
+**Option A: Re-embed everything (recommended).** Pass the `model` parameter to `importFrom()`. Records that have source text in their metadata will be re-embedded with the local model. Records that only have vectors (no text) will be skipped. This is the cleanest approach because every vector in the target database is produced by the same model.
+
+**Option B: Maintain two databases.** Keep the old Pinecone-dimension database for legacy queries and build a new 384-dimension database for all new content. Route queries based on content age. This is faster to deploy but creates permanent maintenance burden.
+
+For Option A, the re-embedding happens in batches during the `'embedding'` phase of `importFrom()`. The `onProgress` callback reports which phase is active and how many records are complete. For large collections (100K+ records), consider running the import in the background with `AbortSignal` support so users can cancel if needed.
+
+---
+
+## Phase 6 - Calibrate Similarity Thresholds
+
+Different embedding models produce different similarity score distributions. A cosine similarity threshold of 0.85 that worked well with OpenAI embeddings will almost certainly be wrong for `bge-small-en-v1.5`. Use `calibrateThreshold()` to compute the right value empirically from your own corpus.
+
+```ts
+import { calibrateThreshold } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+// Use a representative sample of your actual content
+const corpus = [
+  'How to reset my password',
+  'Password recovery steps',
+  'Shipping policy for international orders',
+  'Return and refund process',
+  'Account billing FAQ',
+  // ... at least 50-100 representative texts
+];
+
+const { threshold, distribution } = await calibrateThreshold({
+  model,
+  corpus,
+  percentile: 90,          // 90th percentile = balanced threshold
+  distanceFunction: 'cosine',
+  maxSamples: 200,
+});
+
+console.log(`Calibrated threshold: ${threshold.toFixed(4)}`);
+console.log(`Distribution - mean: ${distribution.mean.toFixed(4)}, ` +
+            `stdDev: ${distribution.stdDev.toFixed(4)}, ` +
+            `min: ${distribution.min.toFixed(4)}, max: ${distribution.max.toFixed(4)}`);
+
+// Use the calibrated threshold for search
+const results = await db.search(queryVector, {
+  k: 10,
+  threshold,
+});
+```
+
+**How to choose the percentile:** 80 is permissive (more results, more noise), 90 is balanced, 95 is strict (fewer results, higher precision). Start with 90 and adjust based on user feedback after rollout.
+
+---
+
+## Phase 7 - Set Up Provider Fallbacks
+
+Not every user's device can run local inference. A 2019 Chromebook with 4 GB of RAM will struggle with a 3B-parameter LLM. Use `detectCapabilities()` and `checkModelSupport()` to detect device limits and set up graceful degradation.
+
+```ts
+import {
+  detectCapabilities,
+  recommendModels,
+  checkModelSupport,
+} from '@localmode/core';
+
+const caps = await detectCapabilities();
+
+// Check if the target LLM can run
+const support = await checkModelSupport({
+  modelId: 'Llama-3.2-3B-Instruct-q4f16_1-MLC',
+  estimatedMemory: 2_000_000_000,
+  estimatedStorage: 1_800_000_000,
+});
+
+if (!support.supported) {
+  console.warn(support.reason);
+  // support.fallbackModels provides smaller alternatives
+  for (const fallback of support.fallbackModels ?? []) {
+    console.log(`Try: ${fallback.modelId} - ${fallback.reason}`);
+  }
+}
+
+// Or let the recommendation engine pick the best model for this device
+const recs = recommendModels(caps, {
+  task: 'generation',
+  maxSizeMB: 1000,
+  limit: 3,
+});
+
+for (const rec of recs) {
+  console.log(`${rec.entry.name} - score: ${rec.score}`);
+  console.log(`  ${rec.reasons.join(', ')}`);
+}
+```
+
+For embedding models specifically, the fallback chain is simpler because even low-end devices can run `bge-small-en-v1.5` (33 MB quantized). The risk is primarily with LLMs and speech-to-text models.
+
+---
+
+## Phase 8 - Detect Device Capabilities and Optimize Batch Sizes
+
+Use `computeOptimalBatchSize()` to adapt to each user's hardware. This is especially important for the initial re-embedding pass (Phase 5) and ongoing ingestion pipelines.
+
+```ts
+import { computeOptimalBatchSize, streamEmbedMany } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+const { batchSize, reasoning, deviceProfile } = computeOptimalBatchSize({
+  taskType: 'embedding',
+  modelDimensions: 384,
+});
+
+console.log(`Batch size: ${batchSize}`);
+console.log(`Device: ${deviceProfile.cores} cores, ${deviceProfile.memoryGB}GB RAM`);
+console.log(reasoning);
+
+// Use the computed batch size for streaming embeddings
+for await (const { embedding, index } of streamEmbedMany({
+  model,
+  values: allTexts,
+  batchSize,
+  onBatch: ({ index, count, total }) => {
+    console.log(`Progress: ${index + count}/${total}`);
+  },
+})) {
+  await db.add({ id: `doc-${index}`, vector: embedding });
+}
+```
+
+The formula scales linearly with CPU cores and available RAM relative to a reference device (4 cores, 8 GB). A device with 8 cores and 16 GB RAM gets 4x the base batch size. WebGPU presence adds a 1.5x multiplier. The result is always clamped between task-specific bounds (embedding: 4-256, ingestion: 8-512).
+
+---
+
+## Phase 9 - Set Up Ongoing Monitoring
+
+After migration, you need to detect if embedding quality drifts over time -- especially if you later switch to a different local model.
+
+**Drift detection with `checkModelCompatibility()`:**
+
+```ts
+import { checkModelCompatibility, reindexCollection } from '@localmode/core';
+
+const result = await checkModelCompatibility(db, currentModel);
+
+if (result.status === 'incompatible') {
+  console.warn(
+    `Model changed: ${result.storedModel?.modelId} -> ${result.currentModel.modelId}`
+  );
+  console.log(`${result.documentCount} documents need re-embedding`);
+
+  // Automatically re-embed all documents
+  const reindexResult = await reindexCollection(db, currentModel, {
+    batchSize: 32,
+    onProgress: ({ completed, total, skipped, phase }) => {
+      console.log(`${phase}: ${completed}/${total} (${skipped} skipped)`);
+    },
+  });
+
+  console.log(`Reindexed: ${reindexResult.reindexed}, ` +
+              `Skipped: ${reindexResult.skipped}, ` +
+              `Duration: ${reindexResult.durationMs}ms`);
+}
+```
+
+`checkModelCompatibility()` compares the stored model fingerprint (model ID, provider, dimensions) against the current model. It returns one of three statuses: `'compatible'` (same model), `'incompatible'` (different model, same dimensions), or `'dimension-mismatch'` (different dimensions, requires full re-embed). `reindexCollection()` is resumable -- if interrupted, it picks up from the last completed batch on the next run.
+
+**Periodic quality checks:** Schedule `evaluateModel()` runs against a fixed golden test set on a weekly or monthly cadence. Track the score over time. A sudden drop indicates that a model update or data distribution shift needs attention.
+
+---
+
+## Phase 10 - Gradual Rollout Strategy
+
+Do not migrate 100% of traffic on day one. Use a phased rollout to catch issues early.
+
+| Week | Local Traffic | Cloud Traffic | Gate Criteria |
+|------|-------------|--------------|---------------|
+| 1 | 5% (internal/dogfood) | 95% | No crashes, embeddings produce results |
+| 2 | 20% | 80% | Search relevance within 5% of cloud baseline |
+| 3 | 50% | 50% | P95 latency acceptable, no user complaints |
+| 4 | 80% | 20% | Cost savings confirmed, edge cases handled |
+| 5 | 100% | 0% (keep API key for emergency) | Full migration, monitoring active |
+
+**At each gate:**
+
+1. Run `evaluateModel()` against your golden test set and compare to the cloud baseline score
+2. Check error rates in your application logs
+3. Monitor device capability distribution -- what percentage of users hit fallbacks?
+4. Compare search result click-through rates between local and cloud cohorts
+
+**Keep your cloud API key active** for at least 90 days after reaching 100% local. If a critical edge case surfaces, you can route specific requests back to the cloud while you address it.
+
+---
+
+## The Migration Payoff
+
+Once complete, every AI operation runs at zero marginal cost. No per-token fees, no rate limits, no API key rotation, no vendor lock-in. The initial engineering investment pays for itself within weeks for any application processing more than a few hundred thousand AI calls per month.
+
+The real win, though, is architectural: your application works offline, responds in milliseconds instead of hundreds of milliseconds, and your users' data never touches a third-party server. That is not an optimization -- it is a fundamentally different privacy posture.
+
+---
+
+## Methodology
+
+This checklist is based on the actual LocalMode API surface as implemented in `@localmode/core` (v1.x). All function signatures, option types, and return types referenced in this post match the shipped code. Pricing figures for OpenAI APIs are sourced from the [OpenAI Pricing page](https://platform.openai.com/docs/pricing) as of March 2026. Embedding dimensions for `text-embedding-3-small` (1536d) and `text-embedding-3-large` (3072d) are documented in the [OpenAI Embeddings guide](https://openai.com/index/new-embedding-models-and-api-updates/). GPT-4o pricing ($2.50/$10.00 per 1M tokens) and GPT-4o-mini pricing ($0.15/$0.60 per 1M tokens) are from the [OpenAI API pricing page](https://developers.openai.com/api/docs/pricing). Device capability detection, model recommendation, and adaptive batching are covered in the [LocalMode Core Capabilities documentation](/docs/core/capabilities). The import/export system supporting Pinecone, ChromaDB, CSV, and JSONL formats is documented in the [Import/Export guide](/docs/core/import-export). Evaluation metrics and the `evaluateModel()` orchestrator are documented in the [Evaluation guide](/docs/core/evaluation). Embedding drift detection and threshold calibration are documented in the [Embedding Drift](/docs/core/embedding-drift) and [Threshold Calibration](/docs/core/threshold-calibration) guides.
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

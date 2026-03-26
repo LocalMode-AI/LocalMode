@@ -1,33 +1,24 @@
 /**
  * @localmode/dexie
  *
- * Dexie.js storage adapter for @localmode - enhanced IndexedDB with versioning.
+ * Dexie.js storage adapter for @localmode — enhanced IndexedDB with
+ * schema versioning and transactions.
  *
  * @packageDocumentation
  *
  * @example
- * ```ts
+ * ```typescript
  * import { DexieStorage } from '@localmode/dexie';
  * import { createVectorDB } from '@localmode/core';
  *
- * const storage = new DexieStorage({ name: 'my-app', version: 1 });
- *
- * // Use with VectorDB
+ * const storage = new DexieStorage({ name: 'my-app' });
  * const db = await createVectorDB({
  *   name: 'my-app',
  *   dimensions: 384,
- *   // Pass storage adapter
+ *   storage,
  * });
  * ```
  */
 
 export { DexieStorage } from './storage.js';
-
-export type {
-  DexieStorageOptions,
-  StoredDocument,
-  StoredVector,
-  SerializedHNSWIndex,
-  Collection,
-} from './types.js';
-
+export type { DexieStorageOptions } from './types.js';

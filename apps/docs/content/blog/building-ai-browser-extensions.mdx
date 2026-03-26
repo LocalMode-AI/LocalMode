@@ -1,0 +1,442 @@
+---
+title: "Building AI-Powered Browser Extensions With LocalMode"
+description: "Browser extensions can't call localhost APIs like Ollama. LocalMode solves this by running ML models directly in the browser -- embeddings, classification, summarization, and LLM chat all work inside extension contexts. Learn the architecture patterns for content scripts, offscreen documents, and side panels."
+author: LocalMode
+date: 2026-03-03
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Browser extensions are one of the most compelling deployment targets for local AI. Millions of users install extensions to augment their browsing experience, and those users expect their data to stay private. Yet if you have tried to add AI features to an extension, you have probably run into a wall: you cannot call a localhost API.
+
+Tools like Ollama and LM Studio run a local HTTP server on `localhost:11434` or similar ports. That works fine for desktop apps and local web projects. But Chrome extensions operate under strict security policies. Content scripts run in the context of arbitrary web pages. Service workers have no DOM. And the Content Security Policy (CSP) for Manifest V3 locks down network access to prevent exactly the kind of arbitrary HTTP calls that localhost inference requires.
+
+LocalMode sidesteps this entirely. Because it runs ML models in-process using WebAssembly and WebGPU, there is no network call to make. The model loads into the same browser context as your extension code. IndexedDB stores vectors and cached models. Everything stays inside the browser sandbox Chrome already trusts.
+
+This post walks through the architecture of an AI-powered Chrome extension, the constraints you need to work within, and three practical use cases with code.
+
+---
+
+## Understanding the Extension Architecture
+
+A Manifest V3 Chrome extension has four distinct execution contexts, each with different capabilities and limitations. Knowing which context to run inference in is the single most important architectural decision.
+
+### Content Scripts
+
+Content scripts are injected into web pages. They can read and modify the DOM of any page the user visits, making them ideal for extracting text (an email body, an article, a product description) and injecting AI-generated UI back into the page.
+
+However, content scripts share the page's origin for network requests and have a restricted CSP. They are best used as the **data extraction and UI injection layer**, not the inference layer.
+
+### Service Worker (Background)
+
+The service worker replaced Manifest V2's persistent background page. It handles events, manages extension lifecycle, and coordinates between contexts. But it has hard limitations that make it unsuitable for heavy ML inference:
+
+- **No DOM access.** Many ML libraries need `document` or `OffscreenCanvas` for tensor operations.
+- **Terminates when idle.** Chrome kills the service worker after 30 seconds of inactivity. A model that takes 45 seconds to load will be interrupted.
+- **No WebGPU.** Service workers cannot access the GPU adapter, ruling out WebGPU-accelerated inference.
+
+Use the service worker for **orchestration**: receiving messages from content scripts, creating offscreen documents, and routing results back.
+
+### Offscreen Documents: The Inference Layer
+
+Offscreen documents are the solution. Introduced in Chrome 109, the `chrome.offscreen` API lets you create an invisible HTML document with full DOM access, Web Workers, WebAssembly, IndexedDB, and (in Chromium-based browsers with the right flags) WebGPU.
+
+This is where you run LocalMode. The offscreen document loads models, performs inference, stores vectors in IndexedDB, and sends results back to the service worker via `chrome.runtime.sendMessage`.
+
+<Callout type="info" title="Why offscreen documents?">
+  Offscreen documents get a full browsing context -- DOM, Canvas, WASM, IndexedDB -- without opening a visible window. They are the only Manifest V3 context that can handle sustained, heavy computation like ML inference.
+</Callout>
+
+### Side Panel
+
+Chrome's Side Panel API (available since Chrome 114) gives extensions a persistent UI panel alongside the current page. Unlike popups, side panels stay open as the user navigates. This makes them perfect for AI features that need ongoing interaction: a summarization panel, a chat assistant, or a semantic search interface.
+
+Side panels are full HTML pages with access to all Web APIs, so they can also run inference directly. For simpler use cases, you may not need an offscreen document at all.
+
+---
+
+## Manifest Configuration
+
+Here is the manifest skeleton for an AI-powered extension. The critical details are the CSP directive for WebAssembly and the permissions for offscreen documents and side panels.
+
+```json
+{
+  "manifest_version": 3,
+  "name": "AI Assistant",
+  "version": "1.0.0",
+  "permissions": [
+    "activeTab",
+    "sidePanel",
+    "offscreen",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}
+```
+
+The `wasm-unsafe-eval` directive is essential. Without it, any WebAssembly module -- including the ONNX runtime that powers `@localmode/transformers` -- will be blocked by Chrome's CSP. This directive has been supported since Chrome 103 and is the only approved way to enable WASM execution in Manifest V3 extensions.
+
+---
+
+## Handling Model Downloads and Storage
+
+### The Size Constraint
+
+The Chrome Web Store accepts extension packages up to 2GB, but that does not mean you should bundle models in your `.crx` file. A 33MB embedding model plus a 1.4GB LLM would make your extension unusably slow to install and update.
+
+Instead, download models on first use and cache them in IndexedDB. This is exactly how LocalMode works by default -- Transformers.js and WebLLM both cache downloaded models in the browser's storage.
+
+```typescript
+// offscreen.ts -- model initialization with progress tracking
+import { embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+// First call downloads the model (~33MB), subsequent calls use the cache
+const { embedding } = await embed({
+  model: embeddingModel,
+  value: 'Hello world',
+});
+```
+
+### Storage Budget
+
+Extensions share the origin's IndexedDB quota, which is typically 60% of total disk space (or up to 80% with `navigator.storage.persist()`). For most users, this gives you hundreds of gigabytes -- more than enough for several models plus a large vector database.
+
+You can check available quota from any extension context:
+
+```typescript
+const { quota, usage } = await navigator.storage.estimate();
+const availableMB = ((quota ?? 0) - (usage ?? 0)) / (1024 * 1024);
+console.log(`Available storage: ${availableMB.toFixed(0)} MB`);
+```
+
+---
+
+## Use Case 1: Email Assistant
+
+Classify and summarize emails on any webmail provider. The content script extracts email text, sends it to the offscreen document for inference, and injects a summary badge back into the page.
+
+### Content Script -- Extract and Display
+
+```typescript
+// content.ts -- injected into webmail pages
+function getEmailBody(): string {
+  // Gmail-specific selector; adapt for other providers
+  const body = document.querySelector('[data-message-id] .a3s');
+  return body?.textContent?.trim() ?? '';
+}
+
+// Listen for results from the background worker
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === 'classification-result') {
+    const badge = document.createElement('div');
+    badge.className = 'localmode-badge';
+    badge.textContent = `${msg.label} | ${msg.summary}`;
+    document.querySelector('.aDP')?.prepend(badge);
+  }
+});
+
+// Send email text for analysis when the user opens an email
+const observer = new MutationObserver(() => {
+  const body = getEmailBody();
+  if (body.length > 50) {
+    chrome.runtime.sendMessage({
+      type: 'analyze-email',
+      text: body,
+    });
+  }
+});
+
+observer.observe(document.body, { childList: true, subtree: true });
+```
+
+### Service Worker -- Orchestrate
+
+```typescript
+// background.ts -- create offscreen document and route messages
+async function ensureOffscreen() {
+  const existing = await chrome.offscreen.hasDocument();
+  if (!existing) {
+    await chrome.offscreen.createDocument({
+      url: 'offscreen.html',
+      reasons: ['WORKERS'],
+      justification: 'Run ML inference with LocalMode',
+    });
+  }
+}
+
+chrome.runtime.onMessage.addListener(async (msg, sender) => {
+  if (msg.type === 'analyze-email') {
+    await ensureOffscreen();
+    // Forward to offscreen document
+    chrome.runtime.sendMessage({
+      type: 'run-inference',
+      text: msg.text,
+      tabId: sender.tab?.id,
+    });
+  }
+
+  if (msg.type === 'inference-result') {
+    // Route result back to content script
+    chrome.tabs.sendMessage(msg.tabId, {
+      type: 'classification-result',
+      label: msg.label,
+      summary: msg.summary,
+    });
+  }
+});
+```
+
+### Offscreen Document -- Run Inference
+
+```typescript
+// offscreen.ts -- the AI engine
+import { classify, classifyZeroShot, summarize } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const classifier = transformers.zeroShot('Xenova/mobilebert-uncased-mnli');
+const summarizer = transformers.summarizer('Xenova/distilbart-cnn-6-6');
+
+chrome.runtime.onMessage.addListener(async (msg) => {
+  if (msg.type !== 'run-inference') return;
+
+  const { labels } = await classifyZeroShot({
+    model: classifier,
+    text: msg.text,
+    candidateLabels: ['urgent', 'meeting', 'newsletter', 'receipt', 'personal'],
+  });
+
+  const { summary } = await summarize({
+    model: summarizer,
+    text: msg.text,
+    maxLength: 60,
+  });
+
+  chrome.runtime.sendMessage({
+    type: 'inference-result',
+    label: labels[0],
+    summary,
+    tabId: msg.tabId,
+  });
+});
+```
+
+This gives you email classification and summarization running entirely inside the browser. No API key. No server. The email text never leaves the device.
+
+---
+
+## Use Case 2: Page Summarizer in the Side Panel
+
+A side panel that summarizes any webpage the user is viewing. Because the side panel is a full HTML page, it can run inference directly without needing an offscreen document.
+
+```typescript
+// sidepanel.ts -- summarize the active tab's content
+import { summarize } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const summarizer = transformers.summarizer('Xenova/distilbart-cnn-6-6');
+
+const summarizeBtn = document.getElementById('summarize-btn')!;
+const outputEl = document.getElementById('output')!;
+const statusEl = document.getElementById('status')!;
+
+summarizeBtn.addEventListener('click', async () => {
+  statusEl.textContent = 'Extracting page content...';
+
+  // Get text from the active tab via scripting
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [{ result: pageText }] = await chrome.scripting.executeScript({
+    target: { tabId: tab.id! },
+    func: () => document.body.innerText,
+  });
+
+  if (!pageText || pageText.length < 100) {
+    outputEl.textContent = 'Not enough text on this page to summarize.';
+    return;
+  }
+
+  statusEl.textContent = 'Summarizing...';
+
+  const { summary, usage } = await summarize({
+    model: summarizer,
+    text: pageText.slice(0, 4000), // Respect model context limits
+    maxLength: 150,
+  });
+
+  outputEl.textContent = summary;
+  statusEl.textContent = `Done in ${usage.durationMs?.toFixed(0)}ms`;
+});
+```
+
+The side panel stays open as the user browses. They can click "Summarize" on any page and get a local, private summary in seconds. After the initial model download (~300MB for DistilBART), everything works offline.
+
+---
+
+## Use Case 3: Smart Bookmarks With Semantic Search
+
+This is the most architecturally interesting use case. Every time the user bookmarks a page, the extension embeds the page title and description into a local vector database. Later, the user can search their bookmarks by meaning, not just keywords.
+
+### Embedding on Bookmark Creation
+
+```typescript
+// background.ts -- listen for new bookmarks
+import { createVectorDB, embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+// The VectorDB uses IndexedDB under the hood -- persists across sessions
+const bookmarkDB = await createVectorDB({
+  name: 'smart-bookmarks',
+  dimensions: 384,
+});
+
+chrome.bookmarks.onCreated.addListener(async (_id, bookmark) => {
+  const text = `${bookmark.title} ${bookmark.url}`;
+
+  const { embedding } = await embed({
+    model: embeddingModel,
+    value: text,
+  });
+
+  await bookmarkDB.add({
+    id: bookmark.id,
+    vector: embedding,
+    metadata: {
+      title: bookmark.title ?? '',
+      url: bookmark.url ?? '',
+      createdAt: new Date().toISOString(),
+    },
+  });
+});
+```
+
+<Callout type="warn" title="Service worker caveat">
+  The code above runs in the service worker for simplicity. For production use, move the `embed()` call to an offscreen document to avoid the 30-second idle timeout during model loading. Once loaded, embedding a single sentence takes under 50ms and fits safely within the service worker lifecycle.
+</Callout>
+
+### Semantic Search in the Side Panel
+
+```typescript
+// sidepanel-search.ts -- search bookmarks by meaning
+import { embed, semanticSearch } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+const searchInput = document.getElementById('search')! as HTMLInputElement;
+const resultsEl = document.getElementById('results')!;
+
+searchInput.addEventListener('input', async () => {
+  const query = searchInput.value.trim();
+  if (query.length < 3) return;
+
+  // Embed the query and search the vector database
+  const { embedding } = await embed({ model, value: query });
+
+  // semanticSearch returns results ranked by cosine similarity
+  const results = await bookmarkDB.search(embedding, {
+    topK: 10,
+    minScore: 0.3,
+  });
+
+  resultsEl.innerHTML = results
+    .map(
+      (r) => `
+      <a href="${r.metadata.url}" class="result">
+        <strong>${r.metadata.title}</strong>
+        <span class="score">${(r.score * 100).toFixed(0)}% match</span>
+      </a>
+    `
+    )
+    .join('');
+});
+```
+
+A user searching "that article about rust performance" will find their bookmark titled "Why Rust Is Twice as Fast as C++ for Our Workload" -- even though the search query shares no keywords with the title. The 384-dimensional embedding captures semantic meaning, and the HNSW index in LocalMode's VectorDB returns results in under 5ms for thousands of bookmarks.
+
+---
+
+## Why This Only Works With In-Browser AI
+
+The architectural insight behind all three use cases is the same: browser extensions cannot easily reach external inference servers, but they have full access to the browser's own compute.
+
+| Approach | Content Script | Service Worker | Offscreen Doc | Side Panel |
+|---|---|---|---|---|
+| Ollama (localhost) | Blocked by page CSP | Blocked by idle timeout | Requires host permission + CORS | Requires host permission + CORS |
+| Cloud API (OpenAI, etc.) | Requires API key in client code | Key exposed in source | Key exposed in source | Key exposed in source |
+| **LocalMode (in-browser)** | Extract text, inject UI | Orchestrate messages | **Full inference** | **Full inference + UI** |
+
+LocalMode's `@localmode/core` package has zero external dependencies. It does not make network requests. It uses only standard Web APIs: IndexedDB for storage, Web Workers for parallelism, WebAssembly for model execution. These are all APIs that Chrome extensions already trust and allow.
+
+The provider packages (`@localmode/transformers`, `@localmode/webllm`, `@localmode/wllama`) download model files from HuggingFace Hub on first use, then cache them permanently in IndexedDB. After that initial download, the extension works fully offline.
+
+---
+
+## Production Considerations
+
+**Model size vs. capability.** For extensions, prefer smaller models. `bge-small-en-v1.5` (33MB) handles embeddings. `distilbart-cnn-6-6` (~300MB) handles summarization. `mobilebert-uncased-mnli` (~85MB) handles zero-shot classification. If you need LLM chat, `@localmode/wllama` can run quantized GGUF models (1-4GB) via WASM with universal browser support.
+
+**First-run experience.** Show a progress bar during the initial model download. LocalMode's `onProgress` callback on all providers makes this straightforward. Consider downloading models proactively when the user installs the extension, rather than waiting for the first inference call.
+
+**AbortSignal everywhere.** All LocalMode functions accept an `abortSignal` parameter. Use it. If the user navigates away or closes the side panel, abort in-flight inference to free resources immediately.
+
+**Memory management.** Browser extensions share memory with the page. Monitor `performance.memory` (Chrome-only) and consider unloading models when they have not been used for a few minutes. LocalMode's model cache handles LRU eviction automatically.
+
+**Cross-context communication.** Use `chrome.runtime.sendMessage` for simple request/response patterns between content scripts, service workers, and offscreen documents. For streaming (like LLM token generation), use `chrome.runtime.connect` to establish a long-lived port.
+
+---
+
+## Getting Started
+
+The fastest path to an AI-powered extension:
+
+1. Create your manifest with `wasm-unsafe-eval` in the CSP and `offscreen` in permissions.
+2. Set up an offscreen document that imports `@localmode/core` and your chosen provider.
+3. Write a service worker that creates the offscreen document on demand and routes messages.
+4. Add a content script or side panel for the user-facing UI.
+5. Bundle with a tool like Vite, webpack, or Rollup (extensions need bundled JS, not bare ESM imports).
+
+The total overhead of `@localmode/core` is zero dependencies and a few kilobytes gzipped. The provider packages add the model runtime (ONNX Runtime for Transformers.js, or llama.cpp compiled to WASM for wllama). Models download on first use and cache locally forever.
+
+Your users get AI features that work offline, respect their privacy, and never send a byte of data to any server. That is not just a technical win -- for a browser extension that people install into their most personal software, it is the right default.
+
+---
+
+## Methodology
+
+This post draws on the official Chrome Extensions documentation and the LocalMode source code for API patterns and architecture guidance.
+
+- [Chrome Offscreen Documents API](https://developer.chrome.com/docs/extensions/reference/api/offscreen)
+- [Chrome Side Panel API](https://developer.chrome.com/docs/extensions/reference/api/sidePanel)
+- [Manifest V3 Content Security Policy](https://developer.chrome.com/docs/extensions/reference/manifest/content-security-policy)
+- [Migrate to Service Workers (Manifest V3)](https://developer.chrome.com/docs/extensions/develop/migrate/to-service-workers)
+- [Chrome Extension Storage and Cookies](https://developer.chrome.com/docs/extensions/develop/concepts/storage-and-cookies)
+- [Chrome Web Store Publishing Requirements](https://developer.chrome.com/docs/webstore/publish)
+- [WASM in Manifest V3 Discussion](https://github.com/GoogleChrome/chrome-extensions-samples/issues/775)
+- [LocalMode Core Package Source](https://github.com/nicholasgriffintn/LocalMode/tree/main/packages/core) -- zero-dependency core with `embed()`, `classify()`, `summarize()`, `generateText()`, and `createVectorDB()`
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

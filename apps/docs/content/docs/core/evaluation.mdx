@@ -1,0 +1,489 @@
+---
+title: Evaluation
+description: Measure model quality with pure math metric functions and a model evaluation orchestrator.
+icon: FlaskConical
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+Evaluate model quality entirely in the browser. Compare embedding models, score classifiers, measure retrieval accuracy, and assess text generation quality -- all offline, all private.
+
+<Callout type="info" title="See it in action">
+  Try [Model Evaluator](https://localmode.ai/model-evaluator) for a working demo of these APIs.
+</Callout>
+
+<Callout type="info">
+All metric functions are pure math with zero dependencies. They run synchronously and are suitable for datasets of any practical size in-browser.
+</Callout>
+
+## Classification Metrics
+
+### accuracy()
+
+Compute the fraction of correct predictions:
+
+```ts
+import { accuracy } from '@localmode/core';
+
+const score = accuracy(
+  ['cat', 'dog', 'bird', 'fish'],
+  ['cat', 'dog', 'fish', 'bird'],
+);
+// score === 0.5
+```
+
+<TypeTable
+  type={{
+    predictions: { type: 'string[]', description: 'Array of predicted labels' },
+    labels: { type: 'string[]', description: 'Array of ground-truth labels' },
+    returns: { type: 'number', description: 'Accuracy between 0 and 1' },
+  }}
+/>
+
+### precision()
+
+Compute macro-averaged precision across all classes:
+
+```ts
+import { precision } from '@localmode/core';
+
+const score = precision(['pos', 'neg'], ['pos', 'neg']);
+// score === 1.0
+```
+
+For each class, computes `TP / (TP + FP)`, then averages. Classes with zero predictions have precision 0.
+
+### recall()
+
+Compute macro-averaged recall across all classes:
+
+```ts
+import { recall } from '@localmode/core';
+
+const score = recall(['pos', 'neg'], ['pos', 'neg']);
+// score === 1.0
+```
+
+For each class, computes `TP / (TP + FN)`, then averages. Classes with zero actual instances have recall 0.
+
+### f1Score()
+
+Compute F1 score with configurable averaging:
+
+<Tabs items={['Macro (default)', 'Micro', 'Weighted']}>
+<Tab value="Macro (default)">
+
+```ts
+import { f1Score } from '@localmode/core';
+
+const score = f1Score(['cat', 'dog'], ['cat', 'dog']);
+// score === 1.0 (macro average of per-class F1)
+```
+
+</Tab>
+<Tab value="Micro">
+
+```ts
+import { f1Score } from '@localmode/core';
+
+// Micro F1 equals accuracy for single-label classification
+const score = f1Score(predictions, labels, { average: 'micro' });
+```
+
+</Tab>
+<Tab value="Weighted">
+
+```ts
+import { f1Score } from '@localmode/core';
+
+// Weighted by class support (number of true instances)
+const score = f1Score(predictions, labels, { average: 'weighted' });
+```
+
+</Tab>
+</Tabs>
+
+<TypeTable
+  type={{
+    predictions: { type: 'string[]', description: 'Array of predicted labels' },
+    labels: { type: 'string[]', description: 'Array of ground-truth labels' },
+    'options.average': { type: "'micro' | 'macro' | 'weighted'", description: 'Averaging mode (default: macro)', default: "'macro'" },
+    returns: { type: 'number', description: 'F1 score between 0 and 1' },
+  }}
+/>
+
+### confusionMatrix()
+
+Build a structured confusion matrix with helper methods:
+
+```ts
+import { confusionMatrix } from '@localmode/core';
+
+const cm = confusionMatrix(
+  ['pos', 'neg', 'pos', 'pos'],
+  ['pos', 'pos', 'neg', 'pos'],
+);
+
+console.log(cm.labels);               // ['neg', 'pos']
+console.log(cm.matrix);               // 2D count array
+console.log(cm.truePositives('pos'));  // 2
+console.log(cm.falsePositives('pos')); // 1
+console.log(cm.trueNegatives('pos')); // 0
+console.log(cm.falseNegatives('pos'));// 1
+```
+
+<TypeTable
+  type={{
+    'matrix': { type: 'number[][]', description: '2D array where matrix[i][j] = count of true labels[i] predicted as labels[j]' },
+    'labels': { type: 'string[]', description: 'Sorted unique labels defining row/column order' },
+    'truePositives(label)': { type: '(label: string) => number', description: 'Count of correct predictions for the label' },
+    'falsePositives(label)': { type: '(label: string) => number', description: 'Count of incorrect predictions of the label' },
+    'trueNegatives(label)': { type: '(label: string) => number', description: 'Count of items correctly not predicted as the label' },
+    'falseNegatives(label)': { type: '(label: string) => number', description: 'Count of items that were the label but predicted otherwise' },
+  }}
+/>
+
+## Text Generation Metrics
+
+### bleuScore()
+
+Compute BLEU-4 score for text generation evaluation:
+
+```ts
+import { bleuScore } from '@localmode/core';
+
+const score = bleuScore(
+  'the cat sat on the mat',
+  ['the cat sat on the mat'],
+);
+// score === 1.0
+
+// Multiple references (uses max n-gram count from any reference)
+const multi = bleuScore(candidate, [ref1, ref2, ref3]);
+```
+
+<TypeTable
+  type={{
+    candidate: { type: 'string', description: 'Generated text' },
+    references: { type: 'string[]', description: 'Array of reference texts (at least one)' },
+    returns: { type: 'number', description: 'BLEU score between 0 and 1' },
+  }}
+/>
+
+<Callout type="warn">
+Uses whitespace tokenization. Scores are directionally correct for model comparison but may differ from NLTK BLEU absolute values.
+</Callout>
+
+### rougeScore()
+
+Compute ROUGE score for summarization evaluation:
+
+<Tabs items={['ROUGE-1', 'ROUGE-2', 'ROUGE-L']}>
+<Tab value="ROUGE-1">
+
+```ts
+import { rougeScore } from '@localmode/core';
+
+const score = rougeScore('the cat sat', 'the cat sat');
+// score === 1.0 (unigram overlap F1)
+```
+
+</Tab>
+<Tab value="ROUGE-2">
+
+```ts
+import { rougeScore } from '@localmode/core';
+
+const score = rougeScore(
+  'the cat sat on the mat',
+  'the cat sat on a mat',
+  { type: 'rouge-2' },
+);
+// Bigram overlap F1
+```
+
+</Tab>
+<Tab value="ROUGE-L">
+
+```ts
+import { rougeScore } from '@localmode/core';
+
+const score = rougeScore(
+  'the cat is on the mat',
+  'the cat sat on the mat',
+  { type: 'rouge-l' },
+);
+// Longest common subsequence F1
+```
+
+</Tab>
+</Tabs>
+
+<TypeTable
+  type={{
+    candidate: { type: 'string', description: 'Generated text' },
+    reference: { type: 'string', description: 'Reference text' },
+    'options.type': { type: "'rouge-1' | 'rouge-2' | 'rouge-l'", description: 'ROUGE variant', default: "'rouge-1'" },
+    returns: { type: 'number', description: 'ROUGE F1 score between 0 and 1' },
+  }}
+/>
+
+## Retrieval Metrics
+
+### mrr()
+
+Compute Mean Reciprocal Rank for retrieval evaluation:
+
+```ts
+import { mrr } from '@localmode/core';
+
+const score = mrr(
+  [['a', 'b', 'c'], ['d', 'e', 'f']],
+  [['b'], ['f']],
+);
+// score === (1/2 + 1/3) / 2
+```
+
+<TypeTable
+  type={{
+    rankedResults: { type: 'string[][]', description: 'Array of ranked result ID lists, one per query' },
+    relevantIds: { type: 'string[][]', description: 'Array of relevant ID sets, one per query' },
+    returns: { type: 'number', description: 'MRR score between 0 and 1' },
+  }}
+/>
+
+### ndcg()
+
+Compute Normalized Discounted Cumulative Gain:
+
+```ts
+import { ndcg } from '@localmode/core';
+
+// Perfect ranking
+const score = ndcg(['a', 'b', 'c'], { a: 3, b: 2, c: 1 });
+// score === 1.0
+
+// NDCG at k=5
+const atK = ndcg(rankedResults, relevanceScores, 5);
+```
+
+<TypeTable
+  type={{
+    rankedResults: { type: 'string[]', description: 'Array of result IDs in ranked order' },
+    relevanceScores: { type: 'Record<string, number>', description: 'Map of item IDs to relevance scores' },
+    k: { type: 'number', description: 'Evaluation depth (default: rankedResults.length)', default: 'rankedResults.length' },
+    returns: { type: 'number', description: 'NDCG score between 0 and 1' },
+  }}
+/>
+
+## Vector Quality Metrics
+
+### evalCosineDistance()
+
+Compute cosine distance between two vectors:
+
+```ts
+import { evalCosineDistance } from '@localmode/core';
+
+const dist = evalCosineDistance(
+  new Float32Array([1, 0, 0]),
+  new Float32Array([1, 0, 0]),
+);
+// dist === 0.0 (identical direction)
+```
+
+Returns a value between 0 (identical) and 2 (opposite). Returns 1.0 for zero vectors.
+
+<Callout type="info">
+Exported as `evalCosineDistance` to avoid naming conflict with the HNSW `cosineDistance` function also exported from `@localmode/core`.
+</Callout>
+
+## Model Evaluation Orchestrator
+
+### evaluateModel()
+
+Run a model against a dataset, apply a metric, and get a structured report:
+
+<Tabs items={['Classification', 'With Progress', 'With Cancellation']}>
+<Tab value="Classification">
+
+```ts
+import { evaluateModel, accuracy } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english');
+
+const result = await evaluateModel({
+  dataset: {
+    inputs: ['great movie', 'terrible film', 'okay show'],
+    expected: ['POSITIVE', 'NEGATIVE', 'NEGATIVE'],
+  },
+  predict: async (text, signal) => {
+    const { classify } = await import('@localmode/core');
+    const { label } = await classify({ model, text, abortSignal: signal });
+    return label;
+  },
+  metric: accuracy,
+});
+
+console.log(result.score);       // 0.67
+console.log(result.predictions); // ['POSITIVE', 'NEGATIVE', 'POSITIVE']
+console.log(result.datasetSize); // 3
+console.log(result.durationMs);  // 1234
+```
+
+</Tab>
+<Tab value="With Progress">
+
+```ts
+const result = await evaluateModel({
+  dataset,
+  predict,
+  metric: f1Score,
+  onProgress: (completed, total) => {
+    console.log(`Evaluating: ${completed}/${total}`);
+  },
+});
+```
+
+</Tab>
+<Tab value="With Cancellation">
+
+```ts
+const controller = new AbortController();
+
+// Cancel after 10 seconds
+setTimeout(() => controller.abort(), 10_000);
+
+try {
+  const result = await evaluateModel({
+    dataset,
+    predict,
+    metric: accuracy,
+    abortSignal: controller.signal,
+  });
+} catch (error) {
+  console.log('Evaluation cancelled');
+}
+```
+
+</Tab>
+</Tabs>
+
+### EvaluateModelOptions
+
+<TypeTable
+  type={{
+    'dataset.inputs': { type: 'TInput[]', description: 'Array of input values to feed to the model' },
+    'dataset.expected': { type: 'TOutput[]', description: 'Array of expected output values (ground truth)' },
+    predict: { type: '(input: TInput, signal: AbortSignal) => Promise<TOutput>', description: 'Prediction function wrapping the model call' },
+    metric: { type: '(predictions: TOutput[], expected: TOutput[]) => number', description: 'Scoring function applied after all predictions' },
+    abortSignal: { type: 'AbortSignal', description: 'Optional signal for cancellation' },
+    onProgress: { type: '(completed: number, total: number) => void', description: 'Progress callback after each prediction' },
+  }}
+/>
+
+### EvaluateModelResult
+
+<TypeTable
+  type={{
+    score: { type: 'number', description: 'The computed metric score' },
+    predictions: { type: 'TOutput[]', description: 'Array of predictions generated by the model' },
+    datasetSize: { type: 'number', description: 'Number of items in the dataset' },
+    durationMs: { type: 'number', description: 'Total evaluation duration in milliseconds' },
+  }}
+/>
+
+## Custom Metrics
+
+Create custom metric functions matching the `MetricFunction` type:
+
+```ts
+import type { MetricFunction } from '@localmode/core';
+import { evaluateModel } from '@localmode/core';
+
+// Custom metric: exact match ignoring case
+const caseInsensitiveAccuracy: MetricFunction<string, string> = (predictions, labels) => {
+  let correct = 0;
+  for (let i = 0; i < predictions.length; i++) {
+    if (predictions[i].toLowerCase() === labels[i].toLowerCase()) correct++;
+  }
+  return correct / predictions.length;
+};
+
+const result = await evaluateModel({
+  dataset,
+  predict,
+  metric: caseInsensitiveAccuracy,
+});
+```
+
+## React Hook
+
+### useEvaluateModel()
+
+Wraps `evaluateModel()` with loading/error/cancel state:
+
+```tsx
+import { useEvaluateModel } from '@localmode/react';
+import { accuracy } from '@localmode/core';
+
+function EvalPanel() {
+  const { data, isLoading, error, execute, cancel, reset } = useEvaluateModel();
+
+  const runEval = () =>
+    execute({
+      dataset: { inputs: texts, expected: labels },
+      predict: async (text, signal) => {
+        const { classify } = await import('@localmode/core');
+        const { label } = await classify({ model, text, abortSignal: signal });
+        return label;
+      },
+      metric: accuracy,
+    });
+
+  return (
+    <div>
+      <button onClick={runEval} disabled={isLoading}>Evaluate</button>
+      {isLoading && <button onClick={cancel}>Cancel</button>}
+      {data && <p>Score: {data.score.toFixed(3)}</p>}
+      {error && <p>Error: {error.message}</p>}
+    </div>
+  );
+}
+```
+
+## Error Handling
+
+All metric functions throw `ValidationError` on invalid inputs:
+
+```ts
+import { accuracy } from '@localmode/core';
+
+// Empty arrays
+accuracy([], []);
+// => ValidationError: accuracy requires at least one prediction
+
+// Mismatched lengths
+accuracy(['a', 'b'], ['a']);
+// => ValidationError: accuracy requires predictions and labels to have equal length
+
+// Each error includes a hint:
+// hint: "Ensure predictions and labels arrays have the same length."
+```
+
+## Limitations
+
+- **Whitespace tokenization**: `bleuScore()` and `rougeScore()` split on whitespace. No stemming, stopword removal, or language-specific tokenization.
+- **Simplified BLEU**: Implements BLEU-4 with brevity penalty. Scores are directionally correct but may differ from NLTK BLEU.
+- **Simplified ROUGE**: ROUGE-1, ROUGE-2, and ROUGE-L only. No stemming or stopword removal.
+- **Synchronous metrics**: Metric functions are synchronous (pure math). For very large datasets (100K+ items), consider running in a Web Worker.
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Model Evaluator | Evaluate model accuracy, precision, recall, and F1 | [Demo](https://localmode.ai/model-evaluator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/model-evaluator) |

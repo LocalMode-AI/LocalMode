@@ -53,11 +53,14 @@ export class TransformersImageFeatureModel implements ImageFeatureModel {
     }
 
     this.loadPromise = (async () => {
-      const { pipeline } = await import('@huggingface/transformers');
+      const { pipeline, env } = await import('@huggingface/transformers');
+
+      // Suppress ONNX runtime warnings about node execution providers
+      env.backends.onnx.logLevel = 'error';
 
       const pipe = await pipeline('image-feature-extraction', this.baseModelId, {
         device: this.settings.device ?? 'auto',
-        dtype: this.settings.quantized !== false ? 'q8' : 'fp32',
+        dtype: this.settings.quantized === true ? 'q8' : undefined,
         progress_callback: this.settings.onProgress,
       });
 
@@ -107,15 +110,29 @@ export class TransformersImageFeatureModel implements ImageFeatureModel {
       abortSignal?.throwIfAborted();
 
       const preparedImage = this.prepareImage(image);
-      // Pass options as a plain object with type assertion to handle different transformers.js versions
-      const output = await pipe(preparedImage as unknown as string, {
-        pool: true,
-      } as Record<string, unknown>);
+      const output = await pipe(preparedImage as unknown as string);
 
-      // Output is a Tensor or nested array
+      // Extract feature vector from pipeline output.
+      // Output is a Tensor with shape [1, seq_len, hidden_dim] or [1, hidden_dim].
+      // For models without a pooler (e.g. CLIP), we take the first token (CLS) or mean-pool.
       let featureArray: number[];
-      if (output && typeof output === 'object' && 'tolist' in output) {
-        // It's a Tensor
+      if (output && typeof output === 'object' && 'dims' in output && 'data' in output) {
+        // It's a Tensor object with dims and data properties
+        const tensor = output as { dims: number[]; data: Float32Array | number[] };
+        const data = tensor.data instanceof Float32Array ? Array.from(tensor.data) : tensor.data;
+
+        if (tensor.dims.length === 3) {
+          // Shape [1, seq_len, hidden_dim] — take first token (CLS) as the feature vector
+          const hiddenDim = tensor.dims[2];
+          featureArray = data.slice(0, hiddenDim) as number[];
+        } else if (tensor.dims.length === 2) {
+          // Shape [1, hidden_dim] — already pooled
+          featureArray = data.slice(0, tensor.dims[1]) as number[];
+        } else {
+          featureArray = data as number[];
+        }
+      } else if (output && typeof output === 'object' && 'tolist' in output) {
+        // Fallback: Tensor with tolist()
         const list = (output as { tolist: () => number[][] }).tolist();
         featureArray = Array.isArray(list[0]) ? list[0] : list as unknown as number[];
       } else if (Array.isArray(output)) {

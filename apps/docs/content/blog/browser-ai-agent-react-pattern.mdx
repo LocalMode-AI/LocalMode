@@ -1,0 +1,475 @@
+---
+title: "Build an AI Agent That Runs Entirely in Your Browser Tab"
+description: "A hands-on guide to building a tool-using AI agent with the ReAct pattern - reasoning, acting, and observing in a loop - using local LLMs via WebGPU. No servers, no API keys, no data leaves the device. Includes complete code with createAgent(), tool definitions, VectorDB-backed memory, and a React hook for real-time step visualization."
+author: LocalMode
+date: 2026-02-23
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+AI agents - systems that reason about a task, take actions, observe results, and repeat until they reach an answer - have become a cornerstone of applied AI. Frameworks like LangChain, CrewAI, and AutoGen make it straightforward to wire up an agent on a server. But every one of those architectures shares a fundamental constraint: your data, your prompts, and your users' queries travel over the network to a remote GPU.
+
+What if the agent ran entirely inside a browser tab?
+
+This post walks through building a complete, tool-using AI agent that reasons step by step, calls tools, remembers past conversations, and produces a final answer - all running locally via WebGPU. No server, no API key, no data exfiltration. Every code example uses real LocalMode APIs pulled directly from the codebase.
+
+<Callout type="info" title="Working demo">
+  The [Research Agent](https://localmode.ai/research-agent) showcase app implements everything in this tutorial. Open it, type a question, and watch the agent search, take notes, and synthesize an answer - entirely offline after the initial model download.
+</Callout>
+
+---
+
+## The ReAct Pattern: Reason, Act, Observe, Repeat
+
+The architecture behind LocalMode's agent framework is **ReAct**, introduced by Yao et al. in the 2022 paper "ReAct: Synergizing Reasoning and Acting in Language Models" (published at ICLR 2023). The core insight is deceptively simple: instead of generating a single answer, the model alternates between *reasoning* about what to do and *acting* on that reasoning by calling external tools. After each action, it *observes* the result and decides whether to take another step or deliver a final answer.
+
+Here is what one iteration looks like inside the browser:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Browser Tab                                 │
+│                                                                     │
+│  ┌──────────────┐                                                   │
+│  │  User Prompt  │                                                  │
+│  └──────┬───────┘                                                   │
+│         ▼                                                           │
+│  ┌──────────────────────────────────────────────────────────┐       │
+│  │              ReAct Loop (up to maxSteps)                 │       │
+│  │                                                          │       │
+│  │   ┌─────────────────┐    ┌──────────────────────┐        │       │
+│  │   │  1. REASON      │    │  generateObject()    │        │       │
+│  │   │  Build prompt   │───▶│  → tool_call or      │        │       │
+│  │   │  with history   │    │    finish            │        │       │
+│  │   └─────────────────┘    └──────────┬───────────┘        │       │
+│  │                                      │                   │       │
+│  │              ┌───────────────────────┤                   │       │
+│  │              ▼                       ▼                   │       │
+│  │   ┌──────────────────┐   ┌──────────────────┐            │       │
+│  │   │  2. ACT          │   │  FINISH          │            │       │
+│  │   │  Execute tool    │   │  Return final    │            │       │
+│  │   │  with validated  │   │  answer          │            │       │
+│  │   │  arguments       │   └──────────────────┘            │       │
+│  │   └────────┬─────────┘                                   │       │
+│  │            ▼                                             │       │
+│  │   ┌──────────────────┐                                   │       │
+│  │   │  3. OBSERVE      │                                   │       │
+│  │   │  Append result   │──── loop back to REASON ──┐       │       │
+│  │   │  to history      │                           │       │       │
+│  │   └──────────────────┘                           │       │       │
+│  │                                                  │       │       │
+│  └──────────────────────────────────────────────────┘       │       │
+│                                                             │       │
+│  ┌───────────────┐                                          │       │
+│  │ AgentResult   │◀─────────────────────────────────────────┘       │
+│  │  .result      │                                                  │
+│  │  .steps[]     │                                                  │
+│  │  .finishReason│                                                  │
+│  └───────────────┘                                                  │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+The key mechanism is `generateObject()`. At each step, the model receives a prompt containing the task, tool descriptions, and the history of previous steps. It outputs a structured JSON object - either `{ type: "tool_call", tool: "search", args: { query: "..." } }` to invoke a tool, or `{ type: "finish", result: "..." }` to deliver the final answer. Because `generateObject()` uses schema validation with retries, the agent works reliably with any `LanguageModel` provider - no native function-calling support required.
+
+---
+
+## Step 1: Define Your Tools
+
+Tools are the agent's hands. Each tool has a name, a description (which the model reads to decide when to use it), a Zod parameter schema, and an async `execute` function. The `execute` function receives validated parameters and a `ToolExecutionContext` with an `AbortSignal` and the current step index.
+
+```ts
+import { jsonSchema } from '@localmode/core';
+import type { ToolDefinition } from '@localmode/core';
+import { z } from 'zod';
+
+// Tool 1: Search a knowledge base
+const searchTool: ToolDefinition = {
+  name: 'search',
+  description: 'Search the knowledge base for articles relevant to a query.',
+  parameters: jsonSchema(z.object({
+    query: z.string().describe('The search query'),
+    maxResults: z.number().default(3),
+  })),
+  execute: async ({ query, maxResults }, { abortSignal }) => {
+    abortSignal.throwIfAborted();
+    // Your search logic here - VectorDB, keyword match, API call, etc.
+    const results = await searchKnowledgeBase(query, maxResults);
+    return results.map(r => `[${r.title}]\n${r.content}`).join('\n\n');
+  },
+};
+
+// Tool 2: Save a research note
+const noteTool: ToolDefinition = {
+  name: 'note',
+  description: 'Save a key finding as a note for later reference.',
+  parameters: jsonSchema(z.object({
+    text: z.string().describe('The note content'),
+    source: z.string().optional().describe('Where this finding came from'),
+  })),
+  execute: async ({ text, source }) => {
+    notes.push({ text, source: source ?? 'research', timestamp: Date.now() });
+    return `Note saved (${notes.length} total).`;
+  },
+};
+
+// Tool 3: Calculate a math expression
+const calculateTool: ToolDefinition = {
+  name: 'calculate',
+  description: 'Evaluate a mathematical expression and return the result.',
+  parameters: jsonSchema(z.object({
+    expression: z.string().describe('Math expression like "2 + 2"'),
+  })),
+  execute: async ({ expression }) => {
+    const sanitized = expression.replace(/[^0-9+\-*/().%\s]/g, '');
+    return String(new Function(`return (${sanitized})`)());
+  },
+};
+```
+
+The `jsonSchema()` adapter converts a Zod schema into the `ObjectSchema` format that `generateObject()` uses internally. The model sees the JSON Schema representation in its prompt, while the `parse` function validates arguments at runtime before `execute` is called. If the model produces invalid arguments, they are caught and the error message becomes an observation - the model can adapt on its next step.
+
+---
+
+## Step 2: Create and Run the Agent
+
+LocalMode provides two ways to run an agent. The `runAgent()` one-shot function creates an agent and runs it immediately. The `createAgent()` factory returns a reusable `Agent` instance you can run multiple times - useful when you want the same configuration for different prompts.
+
+### One-Shot with runAgent()
+
+```ts
+import { runAgent } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+const result = await runAgent({
+  model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+  tools: [searchTool, noteTool, calculateTool],
+  prompt: 'What are the main benefits and challenges of quantum computing?',
+  systemPrompt: 'You are a thorough research assistant. Always search before answering.',
+  maxSteps: 8,
+  temperature: 0,
+  onStep: (step) => {
+    if (step.type === 'tool_call') {
+      console.log(`Step ${step.index}: Called "${step.toolName}" → ${step.observation}`);
+    } else {
+      console.log(`Step ${step.index}: Finished → ${step.result}`);
+    }
+  },
+});
+
+console.log(result.result);           // The final synthesized answer
+console.log(result.steps.length);     // Number of steps the agent took
+console.log(result.finishReason);     // 'finish' | 'max_steps' | 'timeout' | ...
+console.log(result.totalDurationMs);  // Wall-clock time in ms
+console.log(result.totalUsage);       // { inputTokens, outputTokens, totalTokens }
+```
+
+### Reusable with createAgent()
+
+```ts
+import { createAgent } from '@localmode/core';
+
+const agent = createAgent({
+  model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+  tools: [searchTool, noteTool, calculateTool],
+  systemPrompt: 'You are a thorough research assistant.',
+  maxSteps: 10,
+  temperature: 0,
+});
+
+// Each run is independent
+const result1 = await agent.run({ prompt: 'Research quantum computing' });
+const result2 = await agent.run({ prompt: 'Compare solar panels and photosynthesis' });
+```
+
+Under the hood, `createAgent()` builds a `ToolRegistry` from your tool array and delegates to `executeReActLoop()`, which orchestrates the generate-execute-observe cycle. The loop constructs a system prompt containing your tool descriptions and ReAct instructions, builds a user prompt with task context and step history, calls `generateObject()` with a discriminated union schema (`tool_call | finish`), and either executes the selected tool or returns the final answer.
+
+---
+
+## Step 3: Add VectorDB-Backed Memory
+
+Out of the box, each agent run is stateless - it knows only what you pass in the prompt and what it discovers through tool calls. For multi-turn interactions where the agent should recall previous conversations, LocalMode provides `createAgentMemory()`. This creates a VectorDB-backed semantic memory that automatically stores prompts and results after each run, and retrieves relevant context before the next one.
+
+```ts
+import { createAgentMemory, createAgent } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Create memory backed by an in-memory VectorDB
+const memory = await createAgentMemory({
+  embeddingModel: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  maxEntries: 500,  // LRU eviction when full
+});
+
+const agent = createAgent({
+  model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+  tools: [searchTool, noteTool],
+  memory,
+  maxSteps: 10,
+});
+
+// First run - memory is empty, agent works from scratch
+await agent.run({ prompt: 'What is quantum computing?' });
+
+// Second run - memory retrieves relevant context from the first run
+// The agent knows you already discussed quantum computing
+await agent.run({ prompt: 'How does it relate to cryptography?' });
+
+// Clean up when done
+await memory.close();
+```
+
+The memory lifecycle is straightforward:
+
+1. **Before step 1**: The agent embeds the prompt and retrieves the top 5 entries above a 0.7 cosine similarity threshold. These are injected as "Relevant past context" in the agent prompt.
+2. **After a successful run**: The user's prompt and the agent's final answer are both embedded and stored.
+3. **Eviction**: When `maxEntries` is reached, the oldest entry is removed.
+
+You can also build a "memory search" tool that lets the agent explicitly query its memory mid-run:
+
+```ts
+const memorySearchTool: ToolDefinition = {
+  name: 'recall',
+  description: 'Search past conversations for relevant information.',
+  parameters: jsonSchema(z.object({
+    query: z.string().describe('What to search for in memory'),
+  })),
+  execute: async ({ query }) => {
+    const entries = await memory.retrieve(query, { maxResults: 3 });
+    if (entries.length === 0) return 'No relevant memories found.';
+    return entries
+      .map(e => `[${e.role}] ${e.content}`)
+      .join('\n');
+  },
+};
+```
+
+This gives the agent active control over when and what it retrieves, rather than relying solely on automatic context injection.
+
+---
+
+## Step 4: Build a React UI with Real-Time Step Visualization
+
+The `useAgent()` hook from `@localmode/react` wraps `runAgent()` with React state management. Steps are pushed to state in real-time via the `onStep` callback, so your UI updates as the agent thinks.
+
+```tsx
+import { useAgent } from '@localmode/react';
+import { webllm } from '@localmode/webllm';
+
+function ResearchAgent() {
+  const { steps, result, isRunning, error, run, cancel, reset } = useAgent({
+    model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+    tools: [searchTool, noteTool, calculateTool],
+    maxSteps: 8,
+    systemPrompt: 'You are a thorough research assistant.',
+  });
+
+  return (
+    <div>
+      <button onClick={() => run('What are the benefits of quantum computing?')}>
+        Start Research
+      </button>
+      {isRunning && <button onClick={cancel}>Stop</button>}
+
+      {/* Steps appear one by one as the agent works */}
+      {steps.map((step) => (
+        <div key={step.index}>
+          {step.type === 'tool_call' ? (
+            <div>
+              <strong>Step {step.index + 1}:</strong> Called {step.toolName}
+              <pre>{JSON.stringify(step.toolArgs, null, 2)}</pre>
+              <p>{step.observation}</p>
+              <span>{step.durationMs}ms</span>
+            </div>
+          ) : (
+            <div>
+              <strong>Final Answer</strong>
+              <p>{step.result}</p>
+            </div>
+          )}
+        </div>
+      ))}
+
+      {result && (
+        <div>
+          <p>Completed in {result.totalDurationMs}ms</p>
+          <p>Finish reason: {result.finishReason}</p>
+          <p>Tokens: {result.totalUsage.totalTokens}</p>
+        </div>
+      )}
+
+      {error && <p>Error: {error.message}</p>}
+      <button onClick={reset}>Reset</button>
+    </div>
+  );
+}
+```
+
+The hook returns:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `steps` | `AgentStep[]` | Completed steps, updated in real-time |
+| `result` | `AgentResult \| null` | Final result when agent completes |
+| `isRunning` | `boolean` | Whether the agent is currently executing |
+| `error` | `Error \| null` | Error if the agent failed |
+| `run` | `(prompt, context?) => Promise` | Start the agent with a prompt |
+| `cancel` | `() => void` | Abort the current run via AbortSignal |
+| `reset` | `() => void` | Clear all state |
+
+The `cancel` function triggers the internal `AbortController`, which propagates through every `generateObject()` call and tool execution. The agent stops cleanly - no orphaned promises, no leaked resources.
+
+---
+
+## Safety Guards
+
+Running an autonomous loop in a browser tab requires guardrails. The agent framework enforces four:
+
+**Max Steps.** The `maxSteps` option (default: 10) hard-caps the number of ReAct iterations. If the agent reaches the limit without finishing, the result has `finishReason: 'max_steps'`.
+
+**Timeout.** The `maxDurationMs` option sets a wall-clock budget. If the total run exceeds this duration, the agent terminates with `finishReason: 'timeout'`.
+
+**Loop Detection.** If the model produces the exact same tool call (same name and identical arguments) on consecutive steps, the framework first injects a warning into the prompt: "You already called the same tool with identical arguments. Try a different approach." If the model repeats a third time, the agent terminates with `finishReason: 'loop_detected'`.
+
+**AbortSignal.** Pass an `abortSignal` to cancel the run at any point. The signal is checked before each step and passed to every `generateObject()` call and tool execution.
+
+```ts
+const controller = new AbortController();
+setTimeout(() => controller.abort(), 30_000); // 30s timeout
+
+const result = await runAgent({
+  model,
+  tools,
+  prompt: 'Research topic X',
+  maxSteps: 10,
+  maxDurationMs: 60_000,
+  abortSignal: controller.signal,
+});
+
+// Inspect why the agent stopped
+switch (result.finishReason) {
+  case 'finish':       /* Model produced a final answer */       break;
+  case 'max_steps':    /* Hit the step limit */                  break;
+  case 'timeout':      /* Exceeded maxDurationMs */              break;
+  case 'loop_detected':/* Repeated identical tool call */        break;
+  case 'aborted':      /* Cancelled via AbortSignal */           break;
+  case 'error':        /* Unrecoverable model error */           break;
+}
+```
+
+---
+
+## Error Handling: Graceful Recovery
+
+One of the design decisions that makes browser agents practical is how tool errors are handled. When a tool throws an exception, the error message becomes the *observation* for that step - it is fed back to the model as context, not surfaced as a crash. The model can then decide to retry with different arguments, try a different tool, or finish with the information it already has.
+
+```ts
+const flakytool: ToolDefinition = {
+  name: 'fetch_data',
+  description: 'Fetch data from a source',
+  parameters: jsonSchema(z.object({ source: z.string() })),
+  execute: async ({ source }) => {
+    throw new Error('Source not available');
+    // This becomes observation: "Error: Source not available"
+    // The model sees the error and can adapt
+  },
+};
+```
+
+For unrecoverable errors - when the model itself cannot produce valid JSON after all retries - the framework throws an `AgentError` with the completed steps and a diagnostic hint:
+
+```ts
+import { AgentError } from '@localmode/core';
+
+try {
+  await runAgent({ model, tools, prompt });
+} catch (error) {
+  if (error instanceof AgentError) {
+    console.log('Steps completed before failure:', error.steps.length);
+    console.log('Hint:', error.hint);
+    // "The model could not produce a valid action. Try a more capable model
+    //  (Qwen3 8B recommended) or simplify the tool definitions."
+  }
+}
+```
+
+---
+
+## Choosing the Right Model
+
+The agent framework is provider-agnostic - it works with any `LanguageModel` from WebLLM, wllama, Transformers.js, or a custom provider. That said, tool-calling requires a model that can reliably produce structured JSON and reason across multiple steps.
+
+| Model | Provider | Download | Tool Calling Quality | Best For |
+|-------|----------|----------|---------------------|----------|
+| Qwen3 8B | WebLLM | 4.5 GB | Excellent | Complex multi-tool research |
+| Qwen3 1.7B | WebLLM | 1.1 GB | Good | Simple tasks, demos, quick prototypes |
+| Phi 3.5 Mini | WebLLM | 2.1 GB | Good | General-purpose agents |
+| Llama 3.2 1B | WebLLM | 712 MB | Basic | Single-tool tasks |
+
+Qwen3 1.7B hits a practical sweet spot for browser agents. At 1.1 GB quantized, it downloads quickly and fits comfortably in GPU memory on most laptops and desktops. The model supports a 32K token context window, uses grouped query attention with 16 query heads and 8 key-value heads, and ships with dual-mode capability (thinking mode for step-by-step reasoning, non-thinking mode for fast responses). For complex tasks where the agent needs 6 or more steps with multiple tools, stepping up to Qwen3 8B significantly improves reliability.
+
+<Callout type="info" title="Model recommendation">
+  For reliable browser-based agents, start with **Qwen3 1.7B** for development and demos. Move to **Qwen3 8B** when you need production-grade multi-step reasoning with three or more tools.
+</Callout>
+
+---
+
+## The Complete Picture: Research Agent Showcase
+
+The [Research Agent](https://localmode.ai/research-agent) showcase app puts all of these pieces together. It ships with three tools - `search` (keyword search over a built-in knowledge base), `note` (accumulate findings), and `calculate` (evaluate math expressions) - wired up to Qwen3 1.7B via WebLLM. The `useAgent()` hook drives a React UI that renders each step as a card with the tool name, arguments, observation, and duration.
+
+The architecture follows LocalMode's self-contained app pattern:
+
+```
+research-agent/
+├── _components/
+│   ├── agent-view.tsx       # Main view with input, step timeline, result
+│   ├── step-card.tsx        # Renders a single AgentStep as a visual card
+│   ├── ui.tsx               # Button, Spinner, IconBox
+│   └── error-boundary.tsx   # ErrorBoundary + ErrorAlert
+├── _hooks/
+│   └── use-research-agent.ts  # Wraps useAgent() with app-specific tools
+├── _services/
+│   └── agent.service.ts     # Model factory + tool definitions
+├── _lib/
+│   ├── types.ts             # AppError, KnowledgeArticle, ResearchNote
+│   ├── constants.ts         # MODEL_ID, MAX_STEPS, KNOWLEDGE_BASE
+│   └── utils.ts             # cn(), formatDuration(), formatToolArgs()
+└── page.tsx                 # Entry point
+```
+
+The service layer creates tool definitions with Zod-compatible schemas and returns the model instance. The hook layer calls `useAgent()` with those tools and reformats errors into the app's `AppError` shape. The component layer reads from the hook and renders the step-by-step timeline with auto-scroll. Each step card shows the tool badge, arguments, observation text (collapsible for long results), and duration.
+
+---
+
+## Why This Matters
+
+Running AI agents in the browser is not just a technical curiosity. It addresses three real constraints that server-based agents cannot:
+
+**Privacy.** Every prompt, every tool call result, every intermediate reasoning step stays on the user's device. For domains like healthcare, legal, and finance - where data governance is non-negotiable - this is not a nice-to-have but a prerequisite.
+
+**Latency.** There is no network round-trip between each step of the ReAct loop. The model generates, the tool executes, and the observation feeds back - all within the same process. For an 8-step agent run, eliminating even 200ms of network latency per step saves over a second of wall-clock time.
+
+**Cost.** No GPU servers, no API metering, no per-token charges. The model runs on hardware the user already owns. For applications with high agent volume - customer support bots, research assistants, document analyzers - the cost difference between zero and $0.01 per run adds up fast.
+
+The tradeoff is model size. Browser-friendly quantized models top out at around 8 billion parameters today, which means they will not match the raw capability of a 70B or 400B server-side model. But for focused tasks with well-defined tools and clear instructions, a 1.7B model with the ReAct pattern produces remarkably useful results - entirely offline, entirely private.
+
+---
+
+## Methodology
+
+This post is based on the LocalMode agent framework implementation in `packages/core/src/agents/` and the Research Agent showcase app in `apps/showcase-nextjs/src/app/(apps)/research-agent/`. All API signatures, type definitions, and code examples were verified against the codebase.
+
+- [ReAct: Synergizing Reasoning and Acting in Language Models (Yao et al., ICLR 2023)](https://arxiv.org/abs/2210.03629) - The foundational paper introducing the Reason-Act-Observe pattern
+- [Google Research: ReAct blog post](https://research.google/blog/react-synergizing-reasoning-and-acting-in-language-models/) - Overview of the ReAct framework from Google Research
+- [Qwen3 Technical Report (Qwen Team, 2025)](https://arxiv.org/pdf/2505.09388) - Architecture details, benchmarks, and dual-mode capability for the Qwen3 model family
+- [Qwen3 1.7B Specifications (apxml.com)](https://apxml.com/models/qwen3-1-7b) - Model architecture: 28 layers, 2048 hidden dim, GQA with 16/8 heads, 32K context
+- [WebLLM: High-Performance In-Browser LLM Inference (MLC)](https://webllm.mlc.ai/) - The WebGPU inference engine used by `@localmode/webllm`
+- [WebGPU Browser AI Inference in 2026 (buildmvpfast.com)](https://www.buildmvpfast.com/blog/webgpu-browser-ai-inference-cost-savings-2026) - Industry analysis of client-side inference economics
+- [LocalMode Core Agents documentation](/docs/core/agents) - Full API reference for `createAgent()`, `runAgent()`, tool definitions, memory, and safety guards
+- [LocalMode React Agents documentation](/docs/react/agents) - `useAgent()` hook reference with options, return values, and examples
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

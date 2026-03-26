@@ -95,6 +95,15 @@ const FEATURE_INFO: Record<
     howToEnable:
       'Server must send headers: Cross-Origin-Opener-Policy: same-origin and Cross-Origin-Embedder-Policy: require-corp.',
   },
+  'Chrome AI': {
+    name: 'Chrome Built-in AI',
+    description:
+      'Browser-native AI via Gemini Nano — zero-download summarization and translation. Requires Chrome 138+ on desktop (Windows 10+, macOS 13+, Linux, ChromeOS).',
+    importance:
+      'Enables instant AI inference with no model downloads, no bundle size impact, and no API keys. Data never leaves the device. Requires 22 GB free disk space and either >4 GB VRAM (GPU) or 16 GB RAM + 4 cores (CPU).',
+    howToEnable:
+      'Use Chrome 138+ desktop. Enable chrome://flags/#optimization-guide-on-device-model, then enable chrome://flags/#prompt-api-for-gemini-nano, restart Chrome, and wait for the Gemini Nano model to download (~1.5 GB). Not available on mobile or in Incognito.',
+  },
 };
 
 function FeatureIndicator({ supported, label }: { supported: boolean; label: string }) {
@@ -323,6 +332,7 @@ export function DeviceStats() {
         <FeatureIndicator supported={features.sharedarraybuffer} label="SAB" />
         <FeatureIndicator supported={features.serviceworker} label="SW" />
         <FeatureIndicator supported={features.crossOriginisolated} label="COI" />
+        <FeatureIndicator supported={features.chromeAI} label="Chrome AI" />
       </div>
     </div>
   );

@@ -58,6 +58,34 @@ export interface VectorDBEvents extends Record<string, unknown> {
   /** Emitted when database is closed */
   close: { name: string };
 
+  /** Emitted when model drift is detected during VectorDB initialization */
+  modelDriftDetected: {
+    collection: string;
+    storedModel: { modelId: string; provider: string; dimensions: number };
+    currentModel: { modelId: string; provider: string; dimensions: number };
+    documentCount: number;
+  };
+
+  /** Emitted when a reindex operation starts */
+  reindexStart: { collection: string; total: number; resumed: boolean };
+
+  /** Emitted during reindex progress */
+  reindexProgress: {
+    collection: string;
+    completed: number;
+    total: number;
+    skipped: number;
+    phase: 'embedding' | 'indexing';
+  };
+
+  /** Emitted when a reindex operation completes */
+  reindexComplete: {
+    collection: string;
+    reindexed: number;
+    skipped: number;
+    durationMs: number;
+  };
+
   /** Index signature for Record<string, unknown> compatibility */
   [key: string]: unknown;
 }

@@ -42,6 +42,15 @@ export const ROUTES = {
   AUDIOBOOK_CREATOR: '/audiobook-creator',
   DUPLICATE_FINDER: '/duplicate-finder',
   ENCRYPTED_VAULT: '/encrypted-vault',
+  SMART_WRITER: '/smart-writer',
+  DATA_EXTRACTOR: '/data-extractor',
+  LANGCHAIN_RAG: '/langchain-rag',
+  CROSS_MODAL_SEARCH: '/cross-modal-search',
+  RESEARCH_AGENT: '/research-agent',
+  DATA_MIGRATOR: '/data-migrator',
+  GGUF_EXPLORER: '/gguf-explorer',
+  MODEL_ADVISOR: '/model-advisor',
+  MODEL_EVALUATOR: '/model-evaluator',
 } as const;
 
 export type RouteKey = keyof typeof ROUTES;
@@ -58,7 +67,6 @@ export interface AppMetadata {
   category: Category;
   modelSize: string;
   route: RoutePath;
-  priority: 'P0' | 'P1' | 'P2' | 'P3';
   features: string[];
   models: string[];
   comingSoon?: boolean;

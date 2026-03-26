@@ -36,10 +36,10 @@
     "clean": "rm -rf dist node_modules"
   },
   "dependencies": {
-    "@mlc-ai/web-llm": "^0.2.80"
+    "@mlc-ai/web-llm": "^0.2.82"
   },
   "peerDependencies": {
-    "@localmode/core": "^1.0.2"
+    "@localmode/core": ">=1.0.0"
   },
   "devDependencies": {
     "@localmode/core": "workspace:*",

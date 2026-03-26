@@ -1,0 +1,135 @@
+---
+title: 'Chat Model'
+description: ChatLocalMode — use any LocalMode language model with LangChain.
+icon: MessageSquare
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# ChatLocalMode
+
+Drop-in replacement for `ChatOpenAI` or any LangChain `BaseChatModel`, backed by local LLM inference.
+
+<Callout type="info" title="See it in action">
+  Try [LangChain RAG](https://localmode.ai/langchain-rag) for a working demo.
+</Callout>
+
+## Constructor
+
+```typescript
+import { ChatLocalMode } from '@localmode/langchain';
+import { webllm } from '@localmode/webllm';
+
+const llm = new ChatLocalMode({
+  model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+  temperature: 0.7,
+  maxTokens: 500,
+  systemPrompt: 'You are a helpful assistant.',
+});
+```
+
+| Option | Type | Required | Default | Description |
+|--------|------|----------|---------|-------------|
+| `model` | `LanguageModel` | Yes | — | Any `@localmode/core` `LanguageModel` instance |
+| `temperature` | `number` | No | — | Default sampling temperature (0-2) |
+| `maxTokens` | `number` | No | — | Default max tokens to generate |
+| `systemPrompt` | `string` | No | — | Default system prompt |
+
+## Basic Usage
+
+### invoke
+
+```typescript
+const result = await llm.invoke('What is the capital of France?');
+console.log(result.content); // "The capital of France is Paris."
+```
+
+### With Messages
+
+```typescript
+import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
+
+const result = await llm.invoke([
+  new SystemMessage('You are a helpful coding assistant.'),
+  new HumanMessage('Write a hello world in Python'),
+]);
+```
+
+### Message Mapping
+
+The adapter maps LangChain message types to LocalMode roles:
+
+| LangChain Message | LocalMode Role | Notes |
+|------------------|---------------|-------|
+| `HumanMessage` | `user` | |
+| `AIMessage` | `assistant` | |
+| `SystemMessage` | `system` | First SystemMessage extracted as `systemPrompt` |
+
+If the first message is a `SystemMessage`, its content is passed as the `systemPrompt` parameter to `doGenerate()` — it is not included in the `messages` array.
+
+## Streaming
+
+`ChatLocalMode` supports streaming via `_streamResponseChunks()`:
+
+```typescript
+const stream = await llm.stream('Tell me a story');
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk.content);
+}
+```
+
+### Streaming Behavior
+
+- If the wrapped `LanguageModel` has a `doStream()` method (e.g., WebLLM models), the adapter yields real `ChatGenerationChunk` objects as tokens arrive.
+- If `doStream()` is not available, the adapter falls back to `_generate()` and yields the full response as a single chunk.
+
+## Finish Reason
+
+The `ChatResult` includes the model's finish reason:
+
+```typescript
+const result = await llm._generate([new HumanMessage('hello')]);
+console.log(result.llmOutput?.finishReason); // 'stop' | 'length'
+```
+
+## Supported Models
+
+Any `LanguageModel` from `@localmode/webllm`:
+
+| Model | Size | Best For |
+|-------|------|----------|
+| `Llama-3.2-1B-Instruct-q4f16_1-MLC` | 712MB | Fast, small tasks |
+| `Qwen2.5-1.5B-Instruct-q4f16_1-MLC` | 1.0GB | Balanced |
+| `Qwen3-1.7B-q4f16_1-MLC` | 1.1GB | Best quality (small) |
+| `Phi-3.5-mini-instruct-q4f16_1-MLC` | 2.1GB | Reasoning tasks |
+
+<Callout type="warn">
+**Limitations:** Local models do not support tool calling or structured output via LangChain's tool/schema APIs. Use `ChatLocalMode` for text generation only. For structured output, use `generateObject()` from `@localmode/core` directly.
+</Callout>
+
+## Migration from OpenAI
+
+```diff
+- import { ChatOpenAI } from '@langchain/openai';
++ import { ChatLocalMode } from '@localmode/langchain';
++ import { webllm } from '@localmode/webllm';
+
+- const llm = new ChatOpenAI({ modelName: 'gpt-4o-mini', temperature: 0.7 });
++ const llm = new ChatLocalMode({
++   model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
++   temperature: 0.7,
++ });
+
+// Usage is identical:
+const result = await llm.invoke('Hello');
+const stream = await llm.stream('Tell me a story');
+```
+
+The `_llmType()` method returns `'localmode'` for identification in LangChain logging and callbacks.
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| LangChain RAG | Chat interface using ChatLocalMode adapter | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |

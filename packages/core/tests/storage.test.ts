@@ -15,7 +15,21 @@ import {
   runMigrations,
   WAL,
 } from '../src/index.js';
-import type { StorageQuota, CleanupOptions } from '../src/index.js';
+import type { StorageQuota, CleanupOptions, StorageAdapter } from '../src/index.js';
+
+describe('StorageAdapter interface', () => {
+  it('IndexedDBStorage satisfies StorageAdapter', () => {
+    // Compile-time check: assigning IndexedDBStorage to StorageAdapter must not error
+    const _check: StorageAdapter = {} as IndexedDBStorage;
+    expect(_check).toBeDefined();
+  });
+
+  it('MemoryStorage satisfies StorageAdapter', () => {
+    // Compile-time check: assigning MemoryStorage to StorageAdapter must not error
+    const _check: StorageAdapter = {} as MemoryStorage;
+    expect(_check).toBeDefined();
+  });
+});
 
 describe('MemoryStorage', () => {
   let storage: MemoryStorage;

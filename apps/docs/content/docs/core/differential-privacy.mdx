@@ -1,0 +1,614 @@
+---
+title: Differential Privacy
+description: Add mathematical privacy guarantees to embeddings and classification with calibrated noise mechanisms.
+icon: ShieldCheck
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+Differential privacy (DP) adds calibrated mathematical noise to outputs so that no single input can be identified from the result. LocalMode provides DP for both embeddings and classification, using cryptographically secure noise and privacy budget tracking.
+
+<Callout type="info" title="See it in action">
+  Try [Document Redactor](https://localmode.ai/document-redactor) for a working demo of these APIs.
+</Callout>
+
+## Threat Model
+
+Embedding vectors encode semantic meaning of their inputs. Research has demonstrated that **embedding inversion attacks** can reconstruct original text from vectors with up to 92% fidelity. This means even if raw text is never stored, the vectors in IndexedDB expose user data.
+
+Differential privacy mitigates this by adding noise calibrated to a privacy parameter **epsilon**. The guarantee: for any two inputs that differ by one record, the probability of producing any particular output changes by at most a factor of e^epsilon. Lower epsilon means stronger privacy (more noise), higher epsilon means weaker privacy (less noise).
+
+<Callout type="info" title="Complementary with PII Redaction">
+  DP noise is **probabilistic** protection on the output vectors. PII redaction is **deterministic** protection on the input text. For maximum security, combine both via `composeEmbeddingMiddleware()`.
+</Callout>
+
+## Noise Mechanisms
+
+Two noise mechanisms are available, each with different privacy guarantees:
+
+| Mechanism | Guarantee | Calibration | Best For |
+|-----------|-----------|-------------|----------|
+| **Gaussian** (default) | (epsilon, delta)-DP | sigma = (sensitivity * sqrt(2 * ln(1.25 / delta))) / epsilon | General use, high-dimensional embeddings |
+| **Laplacian** | Pure epsilon-DP (no delta) | scale = sensitivity / epsilon | When delta=0 is required |
+
+Both mechanisms use `crypto.getRandomValues()` for cryptographically secure randomness. `Math.random()` is never used.
+
+### Direct Noise Generation
+
+Generate noise vectors directly for custom use cases:
+
+```ts
+import { gaussianNoise, laplacianNoise, addNoise } from '@localmode/core';
+
+// Gaussian noise: 384-dimensional, sigma = 0.1
+const gNoise = gaussianNoise(384, 0.1);
+
+// Laplacian noise: 384-dimensional, scale = 0.5
+const lNoise = laplacianNoise(384, 0.5);
+
+// Add noise to an embedding (element-wise addition)
+const noisyEmbedding = addNoise(originalEmbedding, gNoise);
+```
+
+<Callout type="info" title="Box-Muller Transform">
+  Gaussian noise is generated via the Box-Muller transform: given U1, U2 ~ Uniform(0,1), Z = sqrt(-2 * ln(U1)) * cos(2 * pi * U2) produces Z ~ Normal(0,1). Computation uses Float64 precision; results are stored as Float32.
+</Callout>
+
+## dpEmbeddingMiddleware()
+
+The primary way to use DP is through the embedding middleware, which integrates with `wrapEmbeddingModel()`:
+
+<Tabs items={['Gaussian (Default)', 'Laplacian', 'With Budget']}>
+<Tab value="Gaussian (Default)">
+
+```ts {6-12}
+import { embed, wrapEmbeddingModel, dpEmbeddingMiddleware } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const baseModel = transformers.embedding('Xenova/all-MiniLM-L6-v2');
+
+const privateModel = wrapEmbeddingModel({
+  model: baseModel,
+  middleware: dpEmbeddingMiddleware({
+    epsilon: 1.0,
+    delta: 1e-5,
+    mechanism: 'gaussian',
+  }),
+});
+
+// Embeddings now have calibrated Gaussian noise
+const { embedding } = await embed({
+  model: privateModel,
+  value: 'sensitive medical record',
+});
+```
+
+</Tab>
+<Tab value="Laplacian">
+
+```ts {3-6}
+const privateModel = wrapEmbeddingModel({
+  model: baseModel,
+  middleware: dpEmbeddingMiddleware({
+    epsilon: 1.0,
+    mechanism: 'laplacian', // Pure epsilon-DP, no delta needed
+  }),
+});
+```
+
+</Tab>
+<Tab value="With Budget">
+
+```ts {1-5,9}
+const budget = await createPrivacyBudget({
+  maxEpsilon: 10.0,
+  persistKey: 'medical-notes',
+  onExhausted: 'block',
+});
+
+const privateModel = wrapEmbeddingModel({
+  model: baseModel,
+  middleware: dpEmbeddingMiddleware({ epsilon: 1.0 }, budget),
+});
+
+// Each call consumes 1.0 epsilon
+await embed({ model: privateModel, value: 'record 1' }); // 9.0 remaining
+await embed({ model: privateModel, value: 'record 2' }); // 8.0 remaining
+```
+
+</Tab>
+</Tabs>
+
+### DPEmbeddingConfig
+
+<TypeTable
+  type={{
+    epsilon: {
+      description: 'Privacy parameter. Lower = more privacy, more noise. Typical range: 0.1 to 10.0.',
+      type: 'number',
+      required: true,
+    },
+    delta: {
+      description: 'Probability of privacy failure (Gaussian mechanism only). Must be less than 1/n where n is dataset size.',
+      type: 'number',
+      default: '1e-5',
+    },
+    sensitivity: {
+      description: "L2 sensitivity of the embedding function. Set to a number for explicit control, or 'auto' for lookup/default.",
+      type: "number | 'auto'",
+      default: "'auto'",
+    },
+    modelId: {
+      description: 'Model ID for sensitivity lookup when sensitivity is auto. Falls back to the wrapped model\'s modelId.',
+      type: 'string',
+    },
+    mechanism: {
+      description: 'Noise mechanism. Gaussian provides (epsilon, delta)-DP; Laplacian provides pure epsilon-DP.',
+      type: "'gaussian' | 'laplacian'",
+      default: "'gaussian'",
+    },
+  }}
+/>
+
+The second argument to `dpEmbeddingMiddleware()` is an optional `PrivacyBudget` instance. When provided, `budget.consume(epsilon)` is called before each embed operation.
+
+## Privacy Budget
+
+Sequential composition states that total privacy loss is the sum of per-query epsilons. The privacy budget tracker enforces an upper bound on cumulative epsilon across operations.
+
+### createPrivacyBudget()
+
+```ts
+import { createPrivacyBudget } from '@localmode/core';
+
+const budget = await createPrivacyBudget({
+  maxEpsilon: 10.0,
+  persistKey: 'my-app-budget',
+  onExhausted: 'block',
+});
+
+// Consume epsilon manually or via middleware
+budget.consume(1.0);
+console.log(budget.remaining());   // 9.0
+console.log(budget.consumed());    // 1.0
+console.log(budget.isExhausted()); // false
+
+// Reset when privacy period expires
+budget.reset();
+
+// Clean up persisted state
+await budget.destroy();
+```
+
+### PrivacyBudgetConfig
+
+<TypeTable
+  type={{
+    maxEpsilon: {
+      description: 'Maximum cumulative epsilon allowed before the budget is considered exhausted.',
+      type: 'number',
+      required: true,
+    },
+    collectionId: {
+      description: 'Optional collection ID to scope the budget. Different collections can have independent budgets.',
+      type: 'string',
+    },
+    persistKey: {
+      description: 'IndexedDB key for persisting budget state across sessions. If omitted, budget is tracked in memory only.',
+      type: 'string',
+    },
+    onExhausted: {
+      description: "Policy when budget is exhausted. 'warn' logs a warning and continues. 'block' throws PrivacyBudgetExhaustedError.",
+      type: "'warn' | 'block'",
+      default: "'warn'",
+    },
+  }}
+/>
+
+### PrivacyBudget Interface
+
+<TypeTable
+  type={{
+    'consume(epsilon)': {
+      description: 'Consume epsilon from the budget. Throws PrivacyBudgetExhaustedError if policy is block and budget is exceeded.',
+      type: '(epsilon: number) => void',
+    },
+    'remaining()': {
+      description: 'Get the remaining epsilon budget. May be negative if warn policy allows overshoot.',
+      type: '() => number',
+    },
+    'consumed()': {
+      description: 'Get the total epsilon consumed so far.',
+      type: '() => number',
+    },
+    'isExhausted()': {
+      description: 'Check if consumed epsilon >= maxEpsilon.',
+      type: '() => boolean',
+    },
+    'reset()': {
+      description: 'Reset the budget to zero consumption.',
+      type: '() => void',
+    },
+    'destroy()': {
+      description: 'Persist current state and clean up resources.',
+      type: '() => Promise<void>',
+    },
+  }}
+/>
+
+### Exhaustion Policies
+
+<Tabs items={['warn (default)', 'block']}>
+<Tab value="warn (default)">
+
+```ts
+const budget = await createPrivacyBudget({
+  maxEpsilon: 5.0,
+  onExhausted: 'warn',
+});
+
+// After budget is spent, operations continue with a console.warn()
+budget.consume(5.0);
+budget.consume(1.0); // Logs: "[LocalMode] Privacy budget exhausted: consumed 6.00 of 5.00 epsilon"
+// Operation still proceeds
+```
+
+</Tab>
+<Tab value="block">
+
+```ts
+import { PrivacyBudgetExhaustedError } from '@localmode/core';
+
+const budget = await createPrivacyBudget({
+  maxEpsilon: 5.0,
+  onExhausted: 'block',
+});
+
+budget.consume(5.0);
+
+try {
+  budget.consume(1.0); // Throws!
+} catch (error) {
+  if (error instanceof PrivacyBudgetExhaustedError) {
+    console.log(error.maxEpsilon);      // 5.0
+    console.log(error.consumedEpsilon); // 5.0 (the failed consume is rolled back)
+    // Handle: reset budget, switch to non-DP mode, or show UI notification
+  }
+}
+```
+
+</Tab>
+</Tabs>
+
+### Persistence
+
+When `persistKey` is provided, budget state is stored in IndexedDB and restored across browser sessions:
+
+```ts
+// Session 1
+const budget = await createPrivacyBudget({
+  maxEpsilon: 10.0,
+  persistKey: 'user-vectors',
+});
+budget.consume(3.0);
+// Page closes — state is persisted
+
+// Session 2
+const budget2 = await createPrivacyBudget({
+  maxEpsilon: 10.0,
+  persistKey: 'user-vectors',
+});
+console.log(budget2.consumed());  // 3.0 (restored from IndexedDB)
+console.log(budget2.remaining()); // 7.0
+```
+
+When `persistKey` is omitted, the budget is tracked in memory only and resets on page reload.
+
+## Sensitivity Calibration
+
+Sensitivity is the maximum change in embedding output (L2 norm) when a single input changes. It determines how much noise is needed for a given epsilon.
+
+### Lookup Table
+
+For known models, `getSensitivity()` returns the pre-computed sensitivity:
+
+```ts
+import { getSensitivity } from '@localmode/core';
+
+getSensitivity('Xenova/bge-small-en-v1.5');  // 2.0
+getSensitivity('Xenova/all-MiniLM-L6-v2');   // 2.0
+getSensitivity('unknown-model');              // 2.0 (default for normalized models)
+```
+
+All models that produce unit-normalized embeddings (L2 norm = 1) have a theoretical sensitivity bound of **2.0** -- the maximum L2 distance between two unit vectors.
+
+### Runtime Calibration
+
+For models not in the lookup table, estimate sensitivity empirically:
+
+```ts
+import { calibrateSensitivity } from '@localmode/core';
+
+const sensitivity = await calibrateSensitivity(model);
+console.log(`Empirical sensitivity: ${sensitivity}`);
+
+// With custom samples
+const sensitivity2 = await calibrateSensitivity(model, [
+  'First sample text',
+  'Second sample text',
+  'Third very different text',
+]);
+```
+
+`calibrateSensitivity()` embeds a diverse set of texts (10 built-in samples or custom ones), computes all pairwise L2 distances, and returns the maximum distance with a 10% safety margin. If all embeddings are unit-normalized, it short-circuits and returns 2.0.
+
+### Auto Sensitivity in Middleware
+
+When `sensitivity` is set to `'auto'` (the default), `dpEmbeddingMiddleware` resolves sensitivity in this order:
+
+1. **Explicit `modelId`** in config -- looked up in the known sensitivities table
+2. **Wrapped model's `modelId`** -- looked up in the known sensitivities table
+3. **Default 2.0** -- safe upper bound for normalized embeddings
+
+```ts
+// Auto-detect from the wrapped model's ID
+const privateModel = wrapEmbeddingModel({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  middleware: dpEmbeddingMiddleware({ epsilon: 1.0 }), // sensitivity auto-resolved to 2.0
+});
+
+// Override with explicit sensitivity
+const customModel = wrapEmbeddingModel({
+  model: myCustomModel,
+  middleware: dpEmbeddingMiddleware({
+    epsilon: 1.0,
+    sensitivity: 1.5, // Explicit value from your own calibration
+  }),
+});
+```
+
+## Classification DP (Randomized Response)
+
+For classification outputs, DP uses **randomized response** instead of continuous noise. Given k possible labels, the true label is returned with probability p = e^epsilon / (e^epsilon + k - 1), and each other label with probability 1 / (e^epsilon + k - 1).
+
+### randomizedResponse()
+
+```ts
+import { randomizedResponse } from '@localmode/core';
+
+// High epsilon = low privacy, high utility (true label almost always returned)
+const label1 = randomizedResponse(
+  'positive',                              // true label
+  ['positive', 'negative', 'neutral'],     // all possible labels
+  10.0                                     // epsilon
+);
+// label1 is almost certainly 'positive'
+
+// Low epsilon = high privacy, low utility (label is nearly uniform random)
+const label2 = randomizedResponse(
+  'positive',
+  ['positive', 'negative', 'neutral'],
+  0.5
+);
+// label2 could be any of the three labels
+```
+
+### dpClassificationMiddleware()
+
+Apply randomized response as middleware on classification models:
+
+```ts
+import { dpClassificationMiddleware } from '@localmode/core';
+
+const middleware = dpClassificationMiddleware({
+  epsilon: 2.0,
+  labels: ['positive', 'negative', 'neutral'],
+});
+```
+
+When the randomized response flips a label, the `score` is set to `1 / labels.length` (uniform prior) and `allScores` is cleared to prevent leaking the original distribution. When the label is preserved, scores remain unchanged.
+
+### DPClassificationConfig
+
+<TypeTable
+  type={{
+    epsilon: {
+      description: 'Privacy parameter for randomized response. Higher = less randomization.',
+      type: 'number',
+      required: true,
+    },
+    labels: {
+      description: 'All possible classification labels. Must include every label the model can output.',
+      type: 'string[]',
+      required: true,
+    },
+  }}
+/>
+
+## Parameter Tuning Guide
+
+Choosing epsilon is a tradeoff between privacy and utility. Here is a practical guide:
+
+### Epsilon Ranges
+
+| Epsilon | Privacy Level | Noise Impact | Use Case |
+|---------|--------------|-------------|----------|
+| 0.1 - 0.5 | Strong | High noise, significant recall loss | Highly sensitive data (medical, legal) |
+| 1.0 - 3.0 | Moderate | Moderate noise, less than 15% recall degradation | General privacy-sensitive applications |
+| 3.0 - 10.0 | Weak | Low noise, minimal recall impact | Compliance or audit requirements |
+
+### Epsilon vs Recall Tradeoff
+
+At **epsilon 1.0** with Gaussian mechanism and 384-dimensional embeddings:
+- Sigma is approximately 0.1 for normalized embeddings (sensitivity=2.0, delta=1e-5)
+- Top-10 recall typically drops less than 10%
+- Cosine similarity ordering is largely preserved for well-separated clusters
+
+At **epsilon 0.5**, noise doubles and recall may drop 15-25%. At **epsilon 3.0**, noise is minimal and recall loss is typically under 5%.
+
+<Callout type="tip" title="Start with epsilon=1.0">
+  A good starting point is epsilon=1.0 with the Gaussian mechanism. Measure your search recall on a test set,
+  then adjust: decrease epsilon if privacy is paramount, increase if utility is too degraded.
+</Callout>
+
+### Delta Guidelines
+
+Delta represents the probability that the (epsilon, delta)-DP guarantee fails. Standard practice:
+
+- Set delta < 1/n where n is the number of records in your dataset
+- The default `1e-5` is suitable for datasets up to ~100,000 records
+- For larger datasets, consider `1e-7` or smaller
+
+## Composing with Other Middleware
+
+For maximum privacy, compose PII redaction (deterministic, on input text) with DP noise (probabilistic, on output vectors):
+
+```ts {7-10}
+import {
+  wrapEmbeddingModel,
+  composeEmbeddingMiddleware,
+  piiRedactionMiddleware,
+  dpEmbeddingMiddleware,
+} from '@localmode/core';
+
+const secureModel = wrapEmbeddingModel({
+  model: baseModel,
+  middleware: composeEmbeddingMiddleware([
+    piiRedactionMiddleware({ patterns: ['email', 'phone', 'ssn'] }),
+    dpEmbeddingMiddleware({ epsilon: 1.0 }),
+  ]),
+});
+
+// Input text is PII-redacted, then the embedding has calibrated noise added
+const { embedding } = await embed({
+  model: secureModel,
+  value: 'Patient John Doe, email john@example.com, diagnosed with...',
+});
+```
+
+<Callout type="info" title="Middleware Order">
+  PII redaction uses `transformParams` to modify input text before embedding. DP noise uses `wrapEmbed` to modify output vectors after embedding. Order in `composeEmbeddingMiddleware` ensures both apply correctly.
+</Callout>
+
+### Full Secure Pipeline with Budget
+
+```ts
+import {
+  wrapEmbeddingModel,
+  composeEmbeddingMiddleware,
+  piiRedactionMiddleware,
+  dpEmbeddingMiddleware,
+  createPrivacyBudget,
+  createVectorDB,
+  embed,
+} from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// 1. Create a privacy budget that persists across sessions
+const budget = await createPrivacyBudget({
+  maxEpsilon: 50.0,
+  persistKey: 'patient-records',
+  onExhausted: 'block',
+});
+
+// 2. Wrap the model with PII redaction + DP noise
+const secureModel = wrapEmbeddingModel({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  middleware: composeEmbeddingMiddleware([
+    piiRedactionMiddleware({ patterns: ['email', 'phone', 'ssn'] }),
+    dpEmbeddingMiddleware({ epsilon: 1.0, mechanism: 'gaussian' }, budget),
+  ]),
+});
+
+// 3. Create a vector database
+const db = await createVectorDB({ name: 'records', dimensions: 384 });
+
+// 4. Embed and store — budget is consumed automatically
+const { embedding } = await embed({
+  model: secureModel,
+  value: 'Patient record: diagnosed with condition X',
+});
+
+await db.add({ id: 'rec-1', vector: embedding, metadata: { type: 'diagnosis' } });
+
+console.log(`Budget remaining: ${budget.remaining()}`); // 49.0
+```
+
+## Error Handling
+
+### PrivacyBudgetExhaustedError
+
+Thrown when a budget with `onExhausted: 'block'` is exceeded:
+
+```ts
+import { PrivacyBudgetExhaustedError } from '@localmode/core';
+
+try {
+  budget.consume(1.0);
+} catch (error) {
+  if (error instanceof PrivacyBudgetExhaustedError) {
+    console.log(error.code);            // 'PRIVACY_BUDGET_EXHAUSTED'
+    console.log(error.maxEpsilon);      // Total budget
+    console.log(error.consumedEpsilon); // Amount consumed before the failed call
+    console.log(error.hint);            // Actionable guidance
+  }
+}
+```
+
+The failed `consume()` call is rolled back -- `consumedEpsilon` reflects the state before the blocked operation.
+
+## API Reference
+
+### Functions
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `dpEmbeddingMiddleware` | `(config: DPEmbeddingConfig, budget?: PrivacyBudget) => EmbeddingModelMiddleware` | Create DP middleware for embedding models |
+| `dpClassificationMiddleware` | `(config: DPClassificationConfig) => ClassificationModelMiddleware` | Create DP middleware for classification models |
+| `createPrivacyBudget` | `(config: PrivacyBudgetConfig) => Promise<PrivacyBudget>` | Create a privacy budget tracker |
+| `randomizedResponse` | `(trueLabel: string, allLabels: string[], epsilon: number) => string` | Apply randomized response to a label |
+| `gaussianNoise` | `(dimensions: number, sigma: number) => Float32Array` | Generate Gaussian noise vector |
+| `laplacianNoise` | `(dimensions: number, scale: number) => Float32Array` | Generate Laplacian noise vector |
+| `addNoise` | `(embedding: Float32Array, noise: Float32Array) => Float32Array` | Add noise to an embedding (element-wise) |
+| `getSensitivity` | `(modelId?: string) => number` | Look up model sensitivity (returns 2.0 for unknown models) |
+| `calibrateSensitivity` | `(model: EmbeddingModel, samples?: string[]) => Promise<number>` | Estimate sensitivity empirically from sample embeddings |
+| `computeGaussianSigma` | `(sensitivity: number, epsilon: number, delta: number) => number` | Compute Gaussian noise sigma from DP parameters |
+| `computeLaplacianScale` | `(sensitivity: number, epsilon: number) => number` | Compute Laplacian noise scale from DP parameters |
+
+### Types
+
+| Type | Description |
+|------|-------------|
+| `DPEmbeddingConfig` | Configuration for DP embedding middleware |
+| `DPClassificationConfig` | Configuration for DP classification middleware |
+| `PrivacyBudgetConfig` | Configuration for privacy budget creation |
+| `PrivacyBudget` | Privacy budget tracker interface |
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Security"
+    href="/docs/core/security"
+    description="Encryption, PII redaction, and security best practices."
+  />
+  <Card
+    title="Middleware"
+    href="/docs/core/middleware"
+    description="Learn about embedding and VectorDB middleware composition."
+  />
+  <Card
+    title="Embeddings"
+    href="/docs/core/embeddings"
+    description="Core embedding functions and options."
+  />
+</Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Document Redactor | Apply differential privacy noise to NER + embeddings | [Demo](https://localmode.ai/document-redactor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/document-redactor) |

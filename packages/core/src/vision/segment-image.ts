@@ -55,7 +55,7 @@ function resolveModel(modelOrId: SegmentationModel | string): SegmentationModel 
  * import { transformers } from '@localmode/transformers';
  *
  * const { masks, usage } = await segmentImage({
- *   model: transformers.segmenter('Xenova/segformer-b0-finetuned-ade-512-512'),
+ *   model: transformers.segmenter('briaai/RMBG-1.4'),
  *   image: imageBlob,
  * });
  *

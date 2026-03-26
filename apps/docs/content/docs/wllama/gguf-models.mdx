@@ -1,0 +1,317 @@
+---
+title: 'GGUF Models'
+description: Browse, inspect, and check browser compatibility of GGUF models before downloading.
+icon: FileSearch
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+# GGUF Model Browsing and Compatibility
+
+The GGUF format is the standard for quantized LLM models, with 135,000+ models on HuggingFace. The `@localmode/wllama` package provides tools to inspect model metadata and check browser compatibility before downloading multi-GB files.
+
+<Callout type="info" title="See it in action">
+  Try [GGUF Explorer](https://localmode.ai/gguf-explorer) for a working demo.
+</Callout>
+
+## What is GGUF?
+
+GGUF (GPT-Generated Unified Format) is a binary format for storing quantized LLM models. It stores model weights, architecture metadata, tokenizer data, and configuration in a single file. The format is used by llama.cpp and supports many quantization levels (Q2_K through F32).
+
+## Inspect Models Before Download
+
+Use `parseGGUFMetadata()` to read a model's metadata via HTTP Range requests. This downloads only ~4KB of header data, not the full model file.
+
+```typescript
+import { parseGGUFMetadata } from '@localmode/wllama';
+
+const metadata = await parseGGUFMetadata(
+  'bartowski/Llama-3.2-1B-Instruct-GGUF:Llama-3.2-1B-Instruct-Q4_K_M.gguf'
+);
+
+console.log(metadata.architecture);   // 'llama'
+console.log(metadata.contextLength);  // 131072
+console.log(metadata.quantization);   // 'Q4_K_M'
+console.log(metadata.parameterCount); // ~1.24 billion
+console.log(metadata.vocabSize);      // 32000
+console.log(metadata.layerCount);     // 22
+console.log(metadata.headCount);      // 32
+console.log(metadata.modelName);      // 'Llama 3.2 1B Instruct'
+```
+
+### URL Formats
+
+`parseGGUFMetadata()` accepts multiple URL formats:
+
+```typescript
+// HuggingFace shorthand (repo:filename)
+await parseGGUFMetadata('bartowski/Llama-3.2-1B-Instruct-GGUF:Llama-3.2-1B-Instruct-Q4_K_M.gguf');
+
+// Full HuggingFace URL
+await parseGGUFMetadata('https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf');
+
+// Any CDN that supports Range requests
+await parseGGUFMetadata('https://your-cdn.com/models/custom-model.gguf');
+```
+
+## Check Browser Compatibility
+
+Use `checkGGUFBrowserCompatFromURL()` to check if a model can run on the current device:
+
+```typescript
+import { checkGGUFBrowserCompatFromURL } from '@localmode/wllama';
+
+const result = await checkGGUFBrowserCompatFromURL(
+  'bartowski/Llama-3.2-1B-Instruct-GGUF:Llama-3.2-1B-Instruct-Q4_K_M.gguf'
+);
+
+console.log(result.canRun);             // true
+console.log(result.estimatedRAMHuman);   // '900 MB'
+console.log(result.deviceRAMHuman);      // '8 GB'
+console.log(result.estimatedSpeed);      // '~30-50 tok/s multi-thread'
+console.log(result.hasCORS);             // true (multi-threading available)
+console.log(result.warnings);            // []
+console.log(result.recommendations);     // []
+
+// Full metadata is also attached
+console.log(result.metadata.architecture); // 'llama'
+```
+
+### Two-Step Workflow
+
+You can also separate parsing from compatibility checking:
+
+```typescript
+import { parseGGUFMetadata, checkGGUFBrowserCompat } from '@localmode/wllama';
+
+// Step 1: Parse metadata (light HTTP Range request)
+const metadata = await parseGGUFMetadata(modelUrl);
+
+// Step 2: Check compatibility (no network, instant)
+const compat = await checkGGUFBrowserCompat(metadata);
+```
+
+## Complete Workflow: Browse, Inspect, Check, Run
+
+```typescript
+import {
+  parseGGUFMetadata,
+  checkGGUFBrowserCompat,
+  wllama,
+} from '@localmode/wllama';
+import { streamText } from '@localmode/core';
+
+// 1. User selects a model from HuggingFace
+const modelUrl = 'bartowski/Llama-3.2-1B-Instruct-GGUF:Llama-3.2-1B-Instruct-Q4_K_M.gguf';
+
+// 2. Inspect metadata (~4KB download)
+const metadata = await parseGGUFMetadata(modelUrl);
+showModelInfo(metadata); // Display to user
+
+// 3. Check compatibility (instant, no download)
+const compat = await checkGGUFBrowserCompat(metadata);
+
+if (!compat.canRun) {
+  showWarnings(compat.warnings);
+  showRecommendations(compat.recommendations);
+  return;
+}
+
+// 4. Download and run
+const model = wllama.languageModel(modelUrl, {
+  onProgress: (p) => updateProgressBar(p.progress ?? 0),
+});
+
+const result = await streamText({ model, prompt: 'Hello!' });
+```
+
+## Recommended Models
+
+These Q4_K_M quantized models are curated for browser use (compatible with wllama v2.3.7 / llama.cpp b7179):
+
+### Tiny (&lt; 500MB)
+
+| Model | Size | Context | Parameters | Best For |
+| ----- | ---- | ------- | ---------- | -------- |
+| SmolLM2-135M Q4_K_M | 70MB | 8K | 135M | Instant loading, testing |
+| SmolLM2-360M Q4_K_M | 234MB | 8K | 360M | Very small, fast responses |
+| Qwen 2.5 0.5B Q4_K_M | 386MB | 4K | 500M | Tiny with great quality |
+
+### Small (500MB -- 1GB)
+
+| Model | Size | Context | Parameters | Best For |
+| ----- | ---- | ------- | ---------- | -------- |
+| TinyLlama 1.1B Chat Q4_K_M | 670MB | 2K | 1.1B | Classic, fast and reliable |
+| Llama 3.2 1B Q4_K_M | 750MB | 128K | 1.2B | General purpose, huge context |
+| Qwen 2.5 1.5B Q4_K_M | 986MB | 32K | 1.5B | Multilingual |
+
+### Medium (1 -- 2GB)
+
+| Model | Size | Context | Parameters | Best For |
+| ----- | ---- | ------- | ---------- | -------- |
+| Qwen 2.5 Coder 1.5B Q4_K_M | 1.0GB | 32K | 1.5B | Code-specialized, programming |
+| SmolLM2 1.7B Q4_K_M | 1.06GB | 8K | 1.7B | Efficient, great per-param quality |
+| Phi 3.5 Mini Q4_K_M | 1.24GB | 4K | 3.8B | Reasoning, coding |
+| Gemma 2 2B IT Q4_K_M | 1.3GB | 8K | 2B | Instruction following |
+| Llama 3.2 3B Q4_K_M | 1.93GB | 128K | 3.2B | High quality, huge context |
+| Qwen 2.5 3B Q4_K_M | 1.94GB | 32K | 3B | High quality multilingual |
+
+### Large (2 -- 5GB)
+
+| Model | Size | Context | Parameters | Best For |
+| ----- | ---- | ------- | ---------- | -------- |
+| Phi-4 Mini Q4_K_M | 2.3GB | 4K | 3.8B | Strong reasoning and coding |
+| Qwen 2.5 Coder 7B Q4_K_M | 4.5GB | 32K | 7B | Best code generation quality |
+| Mistral 7B v0.3 Q4_K_M | 4.37GB | 32K | 7.2B | Strong general performance |
+| Llama 3.1 8B Q4_K_M | 4.92GB | 128K | 8B | Best quality (8GB+ RAM) |
+
+Access them programmatically:
+
+```typescript
+import { WLLAMA_MODELS } from '@localmode/wllama';
+
+for (const [id, info] of Object.entries(WLLAMA_MODELS)) {
+  console.log(`${info.name}: ${info.size}, ${info.quantization}, ${info.description}`);
+}
+```
+
+## Quantization Comparison
+
+| Format | Bits/Weight | Size (7B) | Quality | Speed |
+| ------ | ----------- | --------- | ------- | ----- |
+| Q2_K | ~2.5 | ~2.5GB | Low | Fastest |
+| Q3_K_M | ~3.5 | ~3.3GB | Fair | Fast |
+| Q4_K_M | ~4.5 | ~4.1GB | Good | Good |
+| Q5_K_M | ~5.5 | ~4.8GB | Very Good | Moderate |
+| Q6_K | ~6.5 | ~5.5GB | Excellent | Slower |
+| Q8_0 | ~8.5 | ~7.2GB | Near-FP16 | Slow |
+| F16 | 16 | ~14GB | Full | Slowest |
+
+<Callout type="tip" title="Recommended Quantization">
+  **Q4_K_M** is the sweet spot for browser use -- it provides good quality while keeping model sizes manageable. Use Q5_K_M for higher quality when your device has enough RAM.
+</Callout>
+
+## Finding GGUF Models on HuggingFace
+
+Search HuggingFace for GGUF models:
+- [Browse GGUF models](https://huggingface.co/models?search=gguf)
+- Filter by model family (Llama, Mistral, Qwen, Phi, etc.)
+- Look for repositories with "-GGUF" suffix (e.g., `bartowski/Llama-3.2-1B-Instruct-GGUF`)
+- Choose Q4_K_M files for the best size/quality balance
+
+### Popular GGUF Repositories
+
+- **bartowski** -- High-quality quantizations of popular models
+- **TheBloke** -- Extensive GGUF catalog
+- **Qwen** -- Official Qwen GGUF releases
+- **meta-llama** -- Official Meta Llama releases (often converted by community)
+
+## GGUFMetadata Fields
+
+<TypeTable
+  type={{
+    architecture: {
+      description: "Model family (e.g., 'llama', 'mistral', 'qwen2', 'phi', 'gemma')",
+      type: 'string',
+    },
+    contextLength: {
+      description: 'Maximum context window from metadata',
+      type: 'number',
+    },
+    quantization: {
+      description: "Quantization type (e.g., 'Q4_K_M', 'Q8_0', 'F16')",
+      type: 'string',
+    },
+    parameterCount: {
+      description: 'Total model parameters',
+      type: 'number',
+    },
+    fileSize: {
+      description: 'Total file size in bytes',
+      type: 'number',
+    },
+    vocabSize: {
+      description: 'Vocabulary token count',
+      type: 'number',
+    },
+    headCount: {
+      description: 'Number of attention heads',
+      type: 'number',
+    },
+    layerCount: {
+      description: 'Number of transformer layers',
+      type: 'number',
+    },
+    modelName: {
+      description: 'Human-readable name (if present in metadata)',
+      type: 'string | undefined',
+    },
+    rawMetadata: {
+      description: 'All raw metadata key-value pairs for advanced inspection',
+      type: 'Record<string, unknown>',
+    },
+  }}
+/>
+
+## GGUFBrowserCompat Fields
+
+<TypeTable
+  type={{
+    canRun: {
+      description: 'Whether the model is estimated to run on this device',
+      type: 'boolean',
+    },
+    estimatedRAM: {
+      description: 'Estimated RAM required in bytes',
+      type: 'number',
+    },
+    estimatedRAMHuman: {
+      description: "Human-readable RAM estimate (e.g., '1.2 GB')",
+      type: 'string',
+    },
+    deviceRAM: {
+      description: 'Device RAM in bytes (null if unavailable)',
+      type: 'number | null',
+    },
+    hasCORS: {
+      description: 'Whether multi-threading is available',
+      type: 'boolean',
+    },
+    estimatedSpeed: {
+      description: "Speed estimate (e.g., '~15-30 tok/s multi-thread')",
+      type: 'string',
+    },
+    warnings: {
+      description: 'Human-readable warnings',
+      type: 'string[]',
+    },
+    recommendations: {
+      description: 'Actionable suggestions',
+      type: 'string[]',
+    },
+  }}
+/>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="wllama Overview"
+    href="/docs/wllama"
+    description="Installation, usage, and configuration guide."
+  />
+  <Card
+    title="Text Generation"
+    href="/docs/core/generation"
+    description="Learn about streaming and generation options."
+  />
+</Cards>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| GGUF Explorer | Browse 135K+ GGUF models with metadata inspection and chat | [Demo](https://localmode.ai/gguf-explorer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/gguf-explorer) |

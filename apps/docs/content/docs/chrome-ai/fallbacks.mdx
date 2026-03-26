@@ -1,0 +1,135 @@
+---
+title: 'Fallback Patterns'
+description: 'Graceful degradation from Chrome AI to Transformers.js'
+icon: ShieldCheck
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Fallback Patterns
+
+Chrome AI is only available in Chrome 138+. For broader browser support, pair it with `@localmode/transformers` as a fallback.
+
+<Callout type="info" title="See it in action">
+  Try [Smart Writer](https://localmode.ai/smart-writer) for a working demo.
+</Callout>
+
+## The Provider Cascade
+
+```
+User's Browser
+  │
+  ├─ Chrome 138+ with AI?  ──→  @localmode/chrome-ai    (instant, 0 bytes)
+  │
+  └─ Other browser?        ──→  @localmode/transformers  (model download, then cached)
+```
+
+## Basic Fallback
+
+```ts
+import { summarize } from '@localmode/core';
+import { chromeAI, isSummarizerAPISupported } from '@localmode/chrome-ai';
+import { transformers } from '@localmode/transformers';
+
+// Pick the best available provider
+const model = isSummarizerAPISupported()
+  ? chromeAI.summarizer()
+  : transformers.summarizer('Xenova/distilbart-cnn-6-6');
+
+// Same API regardless of provider
+const { summary } = await summarize({ model, text: longArticle });
+```
+
+## Translation Fallback
+
+```ts
+import { translate } from '@localmode/core';
+import { chromeAI, isTranslatorAPISupported } from '@localmode/chrome-ai';
+import { transformers } from '@localmode/transformers';
+
+const model = isTranslatorAPISupported()
+  ? chromeAI.translator({ targetLanguage: 'de' })
+  : transformers.translator('Xenova/opus-mt-en-de');
+
+const { translation } = await translate({
+  model,
+  text: 'Hello world',
+  targetLanguage: 'de',
+});
+```
+
+## Service Pattern (Recommended)
+
+For showcase apps and production code, encapsulate provider selection in a service:
+
+```ts
+// _services/summarizer.service.ts
+import type { SummarizationModel } from '@localmode/core';
+
+let cachedModel: SummarizationModel | null = null;
+
+export async function getSummarizerModel(): Promise<SummarizationModel> {
+  if (cachedModel) return cachedModel;
+
+  if (typeof self !== 'undefined' && 'ai' in self && 'summarizer' in (self as any).ai) {
+    const { chromeAI } = await import('@localmode/chrome-ai');
+    cachedModel = chromeAI.summarizer();
+  } else {
+    const { transformers } = await import('@localmode/transformers');
+    cachedModel = transformers.summarizer('Xenova/distilbart-cnn-6-6');
+  }
+
+  return cachedModel;
+}
+```
+
+## React Hook Pattern
+
+```tsx
+import { useSummarize } from '@localmode/react';
+import { getSummarizerModel } from '../_services/summarizer.service';
+
+function useSummarizer() {
+  const [model, setModel] = useState(null);
+
+  useEffect(() => {
+    getSummarizerModel().then(setModel);
+  }, []);
+
+  const { data, isLoading, execute } = useSummarize({ model: model! });
+
+  return { summary: data?.summary, isLoading, summarize: execute };
+}
+```
+
+## Showing Provider Status
+
+Display which provider is active to help users understand what's happening:
+
+```tsx
+import { isSummarizerAPISupported } from '@localmode/chrome-ai';
+
+function ProviderStatus() {
+  const isChrome = isSummarizerAPISupported();
+
+  return (
+    <div>
+      {isChrome ? (
+        <span>⚡ Chrome AI (instant, no download)</span>
+      ) : (
+        <span>📦 Transformers.js (model download required)</span>
+      )}
+    </div>
+  );
+}
+```
+
+<Callout type="tip">
+  The Smart Writer showcase app at [localmode.ai/smart-writer](https://localmode.ai/smart-writer) demonstrates this fallback pattern in action.
+</Callout>
+
+## Showcase Apps
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Smart Writer | Chrome AI with transformers fallback for writing assistance | [Demo](https://localmode.ai/smart-writer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-writer) |

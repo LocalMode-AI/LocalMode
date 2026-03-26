@@ -102,3 +102,54 @@ export interface AppError {
   /** Whether the error is recoverable */
   recoverable?: boolean;
 }
+
+/**
+ * Typed metadata stored with each vector in the VectorDB.
+ * Enables type-safe filters and autocomplete on search results.
+ */
+export interface PdfChunkMetadata extends Record<string, unknown> {
+  /** Full text content of the chunk */
+  text: string;
+  /** Source PDF filename */
+  filename: string;
+  /** Page number in the source PDF */
+  pageNumber: number;
+  /** Index of this chunk within the document */
+  chunkIndex: number;
+  /** ID of the parent document (for deletion) */
+  documentId: string;
+}
+
+/** Chunking strategy for PDF text processing */
+export type ChunkingStrategy = 'semantic' | 'recursive';
+
+/** Compression statistics for display in the sidebar */
+export interface CompressionDisplayStats {
+  /** Number of vectors stored */
+  vectorCount: number;
+  /** Original (uncompressed) size in bytes */
+  originalSize: number;
+  /** Compressed size in bytes */
+  compressedSize: number;
+  /** Compression ratio (e.g., 4.0 means 4x smaller) */
+  ratio: number;
+}
+
+/** Threshold information for search relevance filtering */
+export interface ThresholdInfo {
+  /** The similarity threshold value (0-1) */
+  value: number;
+  /** Whether this is a model preset or calibrated from the corpus */
+  source: 'preset' | 'calibrated';
+  /** Number of samples used during calibration (only present when source is 'calibrated') */
+  sampleSize?: number;
+}
+
+/** Pipeline stage names for progress display */
+export type PipelineStage =
+  | 'extracting'
+  | 'chunking'
+  | 'semantic-chunking'
+  | 'embedding'
+  | 'storing'
+  | 'complete';

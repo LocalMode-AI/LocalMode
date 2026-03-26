@@ -31,11 +31,24 @@ export const metadata: Metadata = {
     'local-first-ai',
   ],
   authors: [{ name: 'LocalMode' }],
+  alternates: {
+    types: {
+      'application/rss+xml': [
+        { title: 'LocalMode Blog', url: '/blog/rss.xml' },
+      ],
+    },
+  },
   openGraph: {
     title: 'LocalMode.dev - Local-First AI for the Web',
     description:
       'Privacy-first AI utilities. Run embeddings, vector search, RAG, classification, vision, and LLMs - all locally in the browser.',
     type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'LocalMode.dev - Local-First AI for the Web',
+    description:
+      'Privacy-first AI utilities. Run embeddings, vector search, RAG, classification, vision, and LLMs - all locally in the browser.',
   },
 };
 
