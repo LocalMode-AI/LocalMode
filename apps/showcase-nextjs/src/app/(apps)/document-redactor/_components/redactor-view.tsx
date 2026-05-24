@@ -4,11 +4,13 @@
  */
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { Shield, Sparkles, Play, Download, ArrowLeft, Lock, ScanEye, FileDown, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { redactPII } from '@localmode/core';
 import { Button, Spinner } from './ui';
 import { ErrorAlert } from './error-boundary';
-import { cn, redactText, getPrivacyLevel } from '../_lib/utils';
+import { cn, getPrivacyLevel } from '../_lib/utils';
 import {
   MODEL_SIZE,
   SAMPLE_TEXT,
@@ -38,7 +40,7 @@ const ENTITY_DOT_COLORS: Record<string, string> = {
   MISC: 'bg-poster-accent-orange',
 };
 
-/** Build redacted output with inline styled entity spans */
+/** Build redacted output with inline styled entity spans and regex PII redaction */
 function buildRedactedSegments(text: string, entities: DetectedEntity[]) {
   if (entities.length === 0) return null;
 
@@ -48,13 +50,13 @@ function buildRedactedSegments(text: string, entities: DetectedEntity[]) {
 
   for (const entity of sorted) {
     if (entity.start > cursor) {
-      segments.push({ text: text.slice(cursor, entity.start) });
+      segments.push({ text: redactPII(text.slice(cursor, entity.start)) });
     }
     segments.push({ text: `[${entity.label}]`, label: entity.label });
     cursor = entity.end;
   }
   if (cursor < text.length) {
-    segments.push({ text: text.slice(cursor) });
+    segments.push({ text: redactPII(text.slice(cursor)) });
   }
 
   return segments;
@@ -201,7 +203,6 @@ export function RedactorView() {
     setInput(SAMPLE_TEXT);
   };
 
-  const redacted = entities.length > 0 ? redactText(input, entities) : '';
   const redactedSegments = buildRedactedSegments(input, entities);
 
   const entityCounts = entities.reduce(
@@ -224,12 +225,12 @@ export function RedactorView() {
         {/* Header */}
         <div className="h-14 min-h-14 border-b border-poster-border/20 flex items-center justify-between px-5 bg-poster-surface/60 backdrop-blur-xl">
           <div className="flex items-center gap-3">
-            <a
+            <Link
               href="/"
               className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-poster-surface-lighter/50 text-poster-text-sub hover:text-poster-text-main transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
-            </a>
+            </Link>
             <div className="w-px h-5 bg-poster-border/20" />
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-poster-accent-pink/15 flex items-center justify-center ring-1 ring-poster-accent-pink/30 relative">

@@ -32,7 +32,6 @@ export function GalleryView() {
     searchQuery,
     searchResults,
     viewMode,
-    isProcessing,
     isSearching,
     activeCategory,
     error,

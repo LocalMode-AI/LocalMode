@@ -3,7 +3,7 @@
  *
  * wllama provider for local-first LLM inference via llama.cpp WASM.
  * Runs any standard GGUF model in the browser without WebGPU.
- * Access 135,000+ GGUF models from HuggingFace.
+ * Access 160,000+ GGUF models from HuggingFace.
  *
  * @packageDocumentation
  */

@@ -60,7 +60,7 @@ export class TransformersImageToImageModel implements ImageToImageModel {
       const pipe = await pipeline('image-to-image', this.baseModelId, {
         device: this.settings.device ?? 'auto',
         // Image-to-image models (super-resolution) rarely have quantized variants — default to fp32
-        dtype: this.settings.quantized === true ? 'q8' : undefined,
+        dtype: this.settings.quantized === true ? 'q8' : 'fp32',
         progress_callback: this.settings.onProgress,
       });
 

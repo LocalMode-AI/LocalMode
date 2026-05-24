@@ -1,6 +1,6 @@
 ---
 title: Introduction
-description: Local-first, privacy-first, offline-first AI for the browser. 13 packages. 32 demo apps. Zero cloud dependencies.
+description: Local-first, privacy-first, offline-first AI for the browser. 15 packages. 34 demo apps. Zero cloud dependencies.
 icon: House
 ---
 
@@ -11,9 +11,9 @@ import { Steps } from 'fumadocs-ui/components/steps';
 
 # LocalMode
 
-**LocalMode** is a modular, local-first AI engine for the browser. Run embeddings, vector search, RAG pipelines, LLM chat, agents, structured output, text classification, NER, translation, summarization, speech-to-text, text-to-speech, image captioning, object detection, image segmentation, OCR, document Q&A, multimodal search, and evaluation — all directly in the browser with zero server dependencies.
+**LocalMode** is a modular, local-first AI engine for the browser. Run embeddings, vector search, RAG pipelines, LLM chat, agents, structured output, text classification, NER, translation, summarization, speech-to-text, text-to-speech, image captioning, object detection, image segmentation, OCR, document Q&A, multimodal search, hand/pose/face tracking, gesture recognition, language detection, and evaluation — all directly in the browser with zero server dependencies.
 
-**13 packages. 32 demo apps. Zero cloud dependencies.**
+**15 packages. 34 demo apps. Zero cloud dependencies.**
 
 <Callout type="info" title="Privacy by Default">
   All processing happens locally. No data ever leaves the user's device. Zero telemetry. Zero
@@ -42,7 +42,7 @@ import { Steps } from 'fumadocs-ui/components/steps';
   <Card
     title="@localmode/react"
     href="/docs/react"
-    description="46 React hooks for all core functions — useChat, useEmbed, useClassify, useTranscribe, and more with built-in loading, error handling, and cancellation."
+    description="56 React hooks for all core functions — useChat, useEmbed, useClassify, useTranscribe, and more with built-in loading, error handling, and cancellation."
   />
 </Cards>
 
@@ -52,17 +52,27 @@ import { Steps } from 'fumadocs-ui/components/steps';
   <Card
     title="@localmode/transformers"
     href="/docs/transformers"
-    description="HuggingFace Transformers.js provider — 25 model factories for embeddings, classification, vision, audio, OCR, multimodal (CLIP), and LLM inference via ONNX."
+    description="HuggingFace Transformers.js provider — 26 model factories for embeddings, classification, vision, audio, OCR, multimodal (CLIP), and LLM inference via ONNX."
   />
   <Card
     title="@localmode/webllm"
     href="/docs/webllm"
-    description="WebLLM provider — 30 curated WebGPU models including DeepSeek-R1, Qwen3, Llama 3.2, Phi 3.5 Vision. Fastest LLM inference."
+    description="WebLLM provider — 32 curated WebGPU models including DeepSeek-R1, Qwen3, Llama 3.2, Phi 3.5 Vision. Fastest LLM inference."
   />
   <Card
     title="@localmode/wllama"
     href="/docs/wllama"
-    description="GGUF model provider via llama.cpp WASM — 135K+ HuggingFace models, GGUF metadata inspection, universal browser support."
+    description="GGUF model provider via llama.cpp WASM — 160K+ HuggingFace models, GGUF metadata inspection, universal browser support."
+  />
+  <Card
+    title="@localmode/litert"
+    href="/docs/litert"
+    description="Google LiteRT-LM provider — .litertlm models via WebGPU with CPU WASM fallback. Catalog ships Gemma 4 E2B/E4B and Qwen3 0.6B, all verified end-to-end."
+  />
+  <Card
+    title="@localmode/mediapipe"
+    href="/docs/mediapipe"
+    description="Google MediaPipe Tasks provider — hand, pose, and face landmarks, gesture recognition, image/audio classification, segmentation, language detection, and text embeddings via WASM + WebGL. Works in every browser."
   />
   <Card
     title="@localmode/chrome-ai"
@@ -167,7 +177,7 @@ const results = await db.search(query, { k: 5 });
 
 ### LLM chat with streaming
 
-Three providers implement the same `LanguageModel` interface — choose based on your needs:
+Four providers implement the same `LanguageModel` interface — choose based on your needs:
 
 ```typescript
 import { streamText } from '@localmode/core';
@@ -247,6 +257,8 @@ function ChatApp() {
 | **Document QA** | `askDocument()`, `askTable()` | Visual document and table understanding |
 | **Audio** | `transcribe()`, `synthesizeSpeech()`, `classifyAudio()` | Speech-to-text, TTS, audio classification |
 | **Vision** | `classifyImage()`, `captionImage()`, `detectObjects()`, `segmentImage()` | Image processing and analysis |
+| **Landmarks & Gestures** | `detectHands()`, `detectPose()`, `detectFace()`, `detectFaceLandmarks()`, `recognizeGesture()` | Hand, pose, and face tracking, gesture recognition |
+| **Language Detection** | `detectLanguage()` | Identify language from text (110 languages) |
 
 ### Vector Database & RAG
 
@@ -284,14 +296,14 @@ function ChatApp() {
 
 ## LLM Provider Comparison
 
-| | WebLLM | Wllama | Transformers.js |
-|-|--------|--------|--------------------|
-| **Runtime** | WebGPU | WASM (llama.cpp) | ONNX Runtime |
-| **Models** | 30 curated (MLC) | 135K+ GGUF from HuggingFace | 14 ONNX (TJS v4) |
-| **Speed** | Fastest (GPU) | Good (CPU) | Good (CPU/GPU) |
-| **Vision** | Phi 3.5 Vision | — | Qwen3.5 Vision |
-| **Browser Support** | Chrome/Edge 113+ | All modern browsers | All modern browsers |
-| **Best For** | Maximum performance | Universal compatibility, model variety | Multi-task (embeddings + LLM in one package) |
+| | WebLLM | Wllama | Transformers.js | LiteRT |
+|-|--------|--------|--------------------|--------|
+| **Runtime** | WebGPU | WASM (llama.cpp) | ONNX Runtime | Google LiteRT-LM (WebGPU + WASM) |
+| **Models** | 32 curated (MLC) | 18 curated + 160K+ GGUF from HuggingFace | 16 ONNX (TJS v4) | 3 curated `.litertlm` — Gemma 4 E2B/E4B, Qwen3 0.6B |
+| **Speed** | Fastest (GPU) | Good (CPU) | Good (CPU/GPU) | Good (early preview) |
+| **Vision** | Phi 3.5 Vision | Holo2 4B/8B | 5 vision variants (Qwen3.5 + Gemma 4) | — (text-only) |
+| **Browser Support** | Chrome/Edge 113+, Safari 26+, Firefox 141+ | All modern browsers | All modern browsers (WebGPU optional) | Chrome/Edge 113+, Safari 26+, Firefox 141+ (WebGPU); Qwen3 0.6B also runs on CPU WASM |
+| **Best For** | Maximum performance | Universal compatibility, model variety | Multi-task (embeddings + LLM in one package) | First-party Google runtime for Gemma |
 
 ## Architecture
 
@@ -301,7 +313,7 @@ LocalMode follows a **"zero-dependency core, thin provider wrappers"** architect
 ┌───────────────────────────────────────────────────────────────────────┐
 │                          Your Application                             │
 ├───────────────────────────────────────────────────────────────────────┤
-│                    @localmode/react  (46 hooks)                       │
+│                    @localmode/react  (56 hooks)                       │
 ├───────────────────────┬───────────────────────┬───────────────────────┤
 │   @localmode/ai-sdk   │  @localmode/langchain │  @localmode/devtools  │
 ├───────────────────────┴───────────────────────┴───────────────────────┤
@@ -317,9 +329,11 @@ LocalMode follows a **"zero-dependency core, thin provider wrappers"** architect
 ├───────────────────────────────────────────────────────────────────────┤
 │                        Provider Packages                              │
 │                                                                       │
-│  @localmode/transformers    HF Transformers.js       25 factories     │
-│  @localmode/webllm          WebGPU                      30 models     │
-│  @localmode/wllama          llama.cpp WASM           135K+ models     │
+│  @localmode/transformers    HF Transformers.js       26 factories     │
+│  @localmode/webllm          WebGPU                      32 models     │
+│  @localmode/wllama          llama.cpp WASM           160K+ models     │
+│  @localmode/litert          Google LiteRT-LM        .litertlm models  │
+│  @localmode/mediapipe       MediaPipe Tasks    WASM+WebGL landmarks   │
 │  @localmode/chrome-ai       Gemini Nano             zero-download     │
 ├───────────────────────────────────────────────────────────────────────┤
 │                          Browser APIs                                 │
@@ -330,7 +344,7 @@ LocalMode follows a **"zero-dependency core, thin provider wrappers"** architect
 
 ## Demo Applications
 
-See LocalMode in action at [localmode.ai](https://localmode.ai) — 32 apps showcasing every feature.
+See LocalMode in action at [localmode.ai](https://localmode.ai) — 34 apps showcasing every feature.
 
 | Category | Apps |
 | -------- | ---- |
@@ -349,7 +363,7 @@ See LocalMode in action at [localmode.ai](https://localmode.ai) — 32 apps show
 | Chrome 138+ | Yes     | Yes  | Yes       | Yes     | Yes       |
 | Edge 138+   | Yes     | Yes  | Yes       | Yes     | Yes       |
 | Firefox 75+ | Nightly | Yes  | Yes       | Yes     | No        |
-| Safari 18+  | Yes     | Yes  | Yes       | Partial | No        |
+| Safari 26+  | Yes     | Yes  | Yes       | Partial | No        |
 
 <Callout type="warn" title="Platform Notes">
   - **Chrome AI**: Zero-download inference via Gemini Nano (fallback to Transformers.js)
@@ -375,21 +389,31 @@ See LocalMode in action at [localmode.ai](https://localmode.ai) — 32 apps show
   <Card
     title="React Hooks"
     href="/docs/react"
-    description="46 hooks for chat, embeddings, classification, vision, audio, and more."
+    description="56 hooks for chat, embeddings, classification, vision, audio, and more."
   />
   <Card
     title="Transformers Provider"
     href="/docs/transformers"
-    description="25 model factories for text, vision, audio, and multimodal tasks."
+    description="26 model factories for text, vision, audio, and multimodal tasks."
   />
   <Card
     title="WebLLM Provider"
     href="/docs/webllm"
-    description="30 curated WebGPU models for fastest LLM inference."
+    description="32 curated WebGPU models for fastest LLM inference."
   />
   <Card
     title="Wllama Provider"
     href="/docs/wllama"
-    description="135K+ GGUF models via llama.cpp WASM — universal browser support."
+    description="160K+ GGUF models via llama.cpp WASM — universal browser support."
+  />
+  <Card
+    title="LiteRT Provider"
+    href="/docs/litert"
+    description="Google LiteRT-LM .litertlm models — WebGPU with CPU WASM fallback. Catalog ships Gemma 4 E2B/E4B and Qwen3 0.6B."
+  />
+  <Card
+    title="MediaPipe Provider"
+    href="/docs/mediapipe"
+    description="Hand, pose, and face landmarks, gesture recognition, audio/image classification, language detection — WASM + WebGL."
   />
 </Cards>

@@ -222,7 +222,7 @@ console.log(answer.content);
 Everything after the provider setup - `asRetriever()`, `invoke()`, prompt construction - is standard LangChain code that works with any provider. If you later decide to switch back to cloud for certain use cases, you only change the constructor lines.
 
 <Callout type="info" title="Working demo">
-  The [LangChain RAG showcase app](https://localmode.ai/langchain-rag) implements this exact pattern with a full UI: paste a document, ask questions, and see retrieved sources with relevance scores. All inference runs in your browser. [View the source code](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag).
+  The [LangChain RAG showcase app](https://localmode.ai/langchain-rag) implements this exact pattern with a full UI: paste a document, ask questions, and see retrieved sources with relevance scores. All inference runs in your browser. [View the source code](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/%28apps%29/langchain-rag).
 </Callout>
 
 ---
@@ -266,7 +266,7 @@ The adapter implementations are open source and can be inspected directly:
 - [LocalModeEmbeddings source](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/langchain/src/embeddings.ts) - 61 lines, extends `@langchain/core` `Embeddings`
 - [ChatLocalMode source](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/langchain/src/chat-model.ts) - 172 lines, extends `@langchain/core` `BaseChatModel`
 - [LocalModeVectorStore source](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/langchain/src/vector-store.ts) - 148 lines, extends `@langchain/core` `VectorStore`
-- [LangChain RAG showcase app](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) - full working demo
+- [LangChain RAG showcase app](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/%28apps%29/langchain-rag) - full working demo
 - [LangChain.js documentation](https://docs.langchain.com/oss/javascript/langchain/overview) - official framework docs
 - [LocalMode LangChain integration docs](/docs/langchain) - full adapter API reference and migration guide
 - Quality benchmarks referenced from our [Local AI vs Cloud](/blog/local-ai-vs-cloud) analysis

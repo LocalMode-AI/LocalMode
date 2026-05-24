@@ -211,21 +211,25 @@ export function FeatureCard3D({
 
   // Apply external influence when not hovering
   useEffect(() => {
-    if (isHovering || isAnimating || !externalInfluence) {
-      if (!isHovering && !isAnimating && !externalInfluence) {
-        // Reset when no influence and not hovering
+    if (isHovering || isAnimating) return;
+
+    if (!externalInfluence) {
+      // Reset when no influence and not hovering — defer to avoid synchronous setState
+      queueMicrotask(() => {
         setTransform('perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)');
         setGlowPosition({ x: 50, y: 50 });
-      }
+      });
       return;
     }
 
     const { rotateY, glowX, intensity } = externalInfluence;
     const scale = 1 + 0.02 * intensity;
-    setTransform(
-      `perspective(1000px) rotateX(0deg) rotateY(${rotateY}deg) scale3d(${scale}, ${scale}, ${scale})`
-    );
-    setGlowPosition({ x: glowX, y: 50 });
+    queueMicrotask(() => {
+      setTransform(
+        `perspective(1000px) rotateX(0deg) rotateY(${rotateY}deg) scale3d(${scale}, ${scale}, ${scale})`
+      );
+      setGlowPosition({ x: glowX, y: 50 });
+    });
   }, [externalInfluence, isHovering, isAnimating]);
 
   // Initial animation effect

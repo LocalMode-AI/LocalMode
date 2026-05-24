@@ -90,17 +90,72 @@ export interface AITranslatorFactory {
   capabilities(): Promise<AITranslatorCapabilities>;
 }
 
+/** Availability status reported by Chrome's Prompt API `LanguageModel.availability()` */
+export type AILanguageModelAvailability =
+  | 'available'
+  | 'downloadable'
+  | 'downloading'
+  | 'unavailable';
+
+/** Options accepted by Chrome's `LanguageModel.create()` factory */
+export interface AILanguageModelCreateOptions {
+  /** Initial conversation prompts (system + history) */
+  initialPrompts?: { role: 'system' | 'user' | 'assistant'; content: string }[];
+  /** Sampling temperature (0–1) */
+  temperature?: number;
+  /** Top-K sampling cutoff */
+  topK?: number;
+  /** Optional callback receiving an EventTarget that fires `downloadprogress` events */
+  monitor?: (m: EventTarget) => void;
+  /** AbortSignal for cancellation of session creation */
+  signal?: AbortSignal;
+}
+
+/** Options for per-call `prompt()` / `promptStreaming()` invocations */
+export interface AILanguageModelPromptOptions {
+  /** AbortSignal for cancellation of the in-flight prompt */
+  signal?: AbortSignal;
+}
+
+/** Chrome AI Prompt API session (Gemini Nano) */
+export interface AILanguageModel {
+  /** Generate a single completion */
+  prompt(input: string, options?: AILanguageModelPromptOptions): Promise<string>;
+  /** Stream a completion as a `ReadableStream<string>` of deltas */
+  promptStreaming(input: string, options?: AILanguageModelPromptOptions): ReadableStream<string>;
+  /** Destroy the session and free resources */
+  destroy(): void;
+  /** Tokens consumed by the session so far (where exposed) */
+  readonly inputUsage?: number;
+  /** Maximum input budget the session was created with (where exposed) */
+  readonly inputQuota?: number;
+  /** Clone the session for branching conversations (where exposed) */
+  clone?(): Promise<AILanguageModel>;
+}
+
+/** Chrome AI Prompt API factory (`window.LanguageModel`) */
+export interface AILanguageModelFactory {
+  /** Create a Prompt API session (Gemini Nano) */
+  create(options?: AILanguageModelCreateOptions): Promise<AILanguageModel>;
+  /** Check whether the on-device model is available */
+  availability(options?: AILanguageModelCreateOptions): Promise<AILanguageModelAvailability>;
+}
+
 /** Chrome AI namespace on the global scope */
 export interface ChromeAINamespace {
   summarizer?: AISummarizerFactory;
   translator?: AITranslatorFactory;
-  languageModel?: unknown;
+  languageModel?: AILanguageModelFactory;
 }
 
 // Extend the global scope
 declare global {
   interface WindowOrWorkerGlobalScope {
     ai?: ChromeAINamespace;
+  }
+  interface Window {
+    /** Chrome 138+ Prompt API (top-level surface) */
+    LanguageModel?: AILanguageModelFactory;
   }
 }
 
@@ -133,10 +188,26 @@ export interface ChromeAITranslatorSettings {
   targetLanguage?: string;
 }
 
+/** Settings for creating a Chrome AI language model (Prompt API / Gemini Nano) */
+export interface ChromeAILanguageModelSettings {
+  /** System prompt prepended to every session as `initialPrompts[0]` */
+  systemPrompt?: string;
+  /** Sampling temperature (0–1) forwarded to `LanguageModel.create()` */
+  temperature?: number;
+  /** Top-K sampling cutoff forwarded to `LanguageModel.create()` */
+  topK?: number;
+  /** Soft documentation value for `model.contextLength` (default 6144) */
+  contextLength?: number;
+  /** Callback for Gemini Nano download progress (forwarded via `monitor`) */
+  onProgress?: (progress: { loaded: number; total: number }) => void;
+}
+
 /** Chrome AI provider interface */
 export interface ChromeAIProvider {
   /** Create a summarization model using Chrome's built-in Summarizer API */
   summarizer(settings?: ChromeAISummarizerSettings): import('@localmode/core').SummarizationModel;
   /** Create a translation model using Chrome's built-in Translator API */
   translator(settings?: ChromeAITranslatorSettings): import('@localmode/core').TranslationModel;
+  /** Create a language model using Chrome's built-in Prompt API (Gemini Nano) */
+  languageModel(settings?: ChromeAILanguageModelSettings): import('@localmode/core').LanguageModel;
 }

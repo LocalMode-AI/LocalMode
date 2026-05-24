@@ -10,7 +10,7 @@ import type { SummarizationModel, TranslationModel } from '@localmode/core';
 import { getSummarizerModel, getActiveProvider } from '../_services/summarizer.service';
 import { getTranslatorModel, getTranslatorProvider } from '../_services/translator.service';
 import { LANGUAGE_PAIRS } from '../_lib/constants';
-import type { ActiveProvider, WriterTab, SummaryType } from '../_lib/types';
+import type { ActiveProvider, WriterTab } from '../_lib/types';
 
 /** Hook for Smart Writer operations */
 export function useSmartWriter() {
@@ -41,7 +41,7 @@ export function useSmartWriter() {
   const summarizeHook = useSummarize({ model: summarizerModel! });
   const translateHook = useTranslate({ model: translatorModel! });
 
-  const handleSummarize = async (text: string, _type?: SummaryType) => {
+  const handleSummarize = async (text: string) => {
     if (!text.trim() || !summarizerModel) return;
     await summarizeHook.execute({ text, maxLength: 150 });
   };

@@ -1,0 +1,142 @@
+---
+title: "Private/Incognito Browsing"
+description: "How LocalMode handles Private Browsing mode - IndexedDB blocked in Safari, workarounds and fallbacks."
+author: "LocalMode"
+date: "2026-05-14"
+---
+
+# Private/Incognito Browsing
+
+How LocalMode handles Private Browsing mode - IndexedDB blocked in Safari, workarounds and fallbacks.
+
+*Category: Deployment Scenario Compatibility*
+
+## Feature Support Matrix
+
+The following table summarizes which web platform features are available on Private/Incognito Browsing and how they affect LocalMode's capabilities. Features marked as supported enable full functionality; partial or unsupported features trigger automatic fallbacks.
+
+| Feature | Supported | Notes |
+| --- | --- | --- |
+| **Chrome Incognito** | Degraded | IndexedDB works but is stored in-memory only (never written to disk). Storage quota is capped at roughly 5% of disk. Data cleared when all incognito windows close. |
+| **Firefox Private** | Degraded | IndexedDB works using encrypted on-disk storage since Firefox 115 (July 2023). Data cleared when the private window closes. Older Firefox versions (before 115) blocked IndexedDB entirely. |
+| **Safari Private** | Degraded | IndexedDB is available but uses ephemeral (in-memory) storage - data is never written to disk and is cleared when the private window closes. Models cannot be cached between sessions. |
+| **Edge InPrivate** | Degraded | Same as Chrome Incognito: in-memory only, quota capped at roughly 5% of disk. Data cleared when InPrivate windows close. |
+
+## Understanding the Impact
+
+Each feature in the matrix above maps to specific LocalMode capabilities:
+
+- **WebGPU** - Required for `@localmode/webllm` (GPU-accelerated LLM inference at 30-90 tokens/second). When unavailable, use `@localmode/wllama` (WASM, 5-20 tokens/second) as a fallback. Non-LLM tasks (embeddings, classification, vision, audio) do not require WebGPU.
+- **WebAssembly** - The universal inference backend. Required for `@localmode/transformers` and `@localmode/wllama`. WASM is supported in 97%+ of web traffic. SIMD support (for optimized vector operations) requires newer browser versions.
+- **IndexedDB** - Used for persistent vector storage (`VectorDB`) and model caching (`createModelLoader`). When blocked (Safari Private Browsing), LocalMode falls back to `MemoryStorage` (data lost on tab close).
+- **Web Workers** - Enable background model loading and inference without blocking the main UI thread. Module workers (for ES module imports in workers) require newer browser versions.
+- **SharedArrayBuffer** - Enables multi-threaded WASM inference for improved performance. Requires Cross-Origin Isolation headers (COOP/COEP). Not required for basic functionality.
+- **Web Locks** - Used for cross-tab model loading coordination (prevents multiple tabs from downloading the same model simultaneously). Falls back to `InMemoryLockManager` when unavailable.
+- **BroadcastChannel** - Used for cross-tab VectorDB synchronization. Falls back to `LocalStorageBroadcaster` when unavailable.
+
+## Fallback Strategies
+
+All major private browsing modes restrict IndexedDB persistence: Chrome Incognito and Edge InPrivate store IndexedDB in-memory only (never written to disk); Safari Private uses ephemeral in-memory storage; Firefox Private (since Firefox 115) uses encrypted on-disk storage that is deleted when the session ends. In all cases, VectorDB cannot persist vectors between sessions, and models must be re-downloaded each time a new private window is opened. Wrap storage creation in a try/catch and fall back to MemoryStorage as the last resort. Detect the situation early and inform users: "Private Browsing detected. AI features will work but data won't persist between sessions. For the best experience, use normal browsing mode."
+
+LocalMode is designed with progressive enhancement in mind. The core principle: detect capabilities at runtime and use the best available path. The `@localmode/core` package exports detection utilities for this purpose:
+
+```typescript
+import {
+  isWebGPUSupported,
+  isIndexedDBSupported,
+  isCrossOriginIsolated,
+  detectCapabilities,
+  recommendModels,
+} from '@localmode/core';
+
+async function detectAndConfigure() {
+  const caps = await detectCapabilities();
+  console.log(caps);
+  // caps.features.webgpu, caps.hardware.memory (GB), caps.storage.availableBytes
+
+  // isWebGPUSupported() is async - it must be awaited
+  if (await isWebGPUSupported()) {
+    // Use @localmode/webllm for GPU-accelerated inference
+  }
+
+  // recommendModels() is synchronous: capabilities first, options second
+  const recommendations = recommendModels(caps, {
+    task: 'generation',
+    maxSizeMB: 1500,
+  });
+}
+```
+
+## Fallback Code Example
+
+```typescript
+import { createVectorDB, MemoryStorage, IndexedDBStorage } from '@localmode/core';
+
+// Detect private browsing by attempting to open and use IndexedDB
+async function getStorage() {
+  try {
+    const test = new IndexedDBStorage('__probe');
+    await test.open();
+    await test.clear();
+    return new IndexedDBStorage('app');
+  } catch {
+    console.warn('IndexedDB unavailable (Private Browsing?) - using MemoryStorage');
+    return new MemoryStorage();
+  }
+}
+```
+
+## Recommended Providers
+
+For Private/Incognito Browsing, the recommended LocalMode providers are:
+
+- **Transformers.js** - Broadest model catalog for non-LLM tasks (embeddings, classification, vision, audio). WASM-based, works everywhere.
+- **wllama (WASM)** - Universal LLM inference via WASM. Works without WebGPU. The safe choice for broad compatibility.
+
+## Recommended Models
+
+The following models are tested and recommended for Private/Incognito Browsing:
+
+| Model | Provider |
+| --- | --- |
+| Xenova/bge-small-en-v1.5 | Transformers.js |
+| SmolLM2-135M-Instruct-Q4_K_M | wllama (WASM) |
+
+These models are chosen for their compatibility with Private/Incognito Browsing's capabilities and constraints. They represent the best balance of quality, size, and performance for this platform.
+
+## Known Issues
+
+All private browsing modes restrict storage persistence. In Chrome Incognito and Edge InPrivate, IndexedDB is backed by in-memory storage only (no disk writes) with a storage quota capped at roughly 5% of total disk space. In Safari Private Browsing, IndexedDB is available but ephemeral - data never reaches disk and vanishes when the private window closes. Firefox Private Browsing (since Firefox 115) uses encrypted on-disk storage that is wiped at session end; versions before Firefox 115 blocked IndexedDB entirely. In all cases, models cached in IndexedDB are unavailable across private sessions - they must be re-downloaded. The MemoryStorage fallback means all vectors and model caches are lost when the tab closes. There is no workaround for persistent storage in any private browsing mode.
+
+### Mitigation Strategies
+
+When building applications that target Private/Incognito Browsing, follow these practices:
+
+1. **Always detect before loading** - Use `await isWebGPUSupported()`, `isIndexedDBSupported()`, and `await detectCapabilities()` before attempting to load models or create storage. Never assume a feature is available.
+2. **Wrap model loading in try/catch** - Even when detection succeeds, model loading can fail due to memory pressure, network issues, or browser bugs. Always have a fallback path that attempts a smaller model.
+3. **Pick models with `recommendModels()`** - Pass the detected capabilities to `recommendModels(caps, { task })` to select a model appropriate for the current device. It is the recommended pattern for production deployments.
+4. **Test on real hardware** - Browser DevTools device emulation does not accurately simulate memory limits, GPU capabilities, or storage quotas. Test on actual target hardware.
+5. **Monitor storage quota** - Use `getStorageQuota()` to check available space before downloading large models. Inform users if storage is insufficient rather than failing silently.
+
+## Web Standards References
+
+- [IndexedDB API](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API)
+
+## Related Pages
+
+- [Safari Macos](/blog/compatibility/safari-macos) - compatibility guide
+- [Safari Ios](/blog/compatibility/safari-ios) - compatibility guide
+- [Indexeddb Vs Dexie](/blog/compare/indexeddb-vs-dexie) - comparison guide
+
+## Methodology
+
+Private browsing behavior was verified against primary browser sources: the WebKit blog for Safari's ephemeral-storage model, Mozilla Bugzilla (bug 1639542) for Firefox 115's encrypted IndexedDB support, and the Chromium IndexedDB source documentation for Chrome's in-memory incognito behavior. LocalMode-specific claims (constructor signatures, available methods, fallback classes) were verified directly against `packages/core/src/storage/indexeddb.ts`, `packages/core/src/storage/memory.ts`, and `packages/core/src/capabilities/features.ts`. Browser behavior in private modes continues to evolve - verify with the linked references before shipping.
+
+## Sources
+
+- [WebKit Blog - Private Browsing 2.0 (Safari ephemeral storage)](https://webkit.org/blog/15697/private-browsing-2-0/)
+- [Mozilla Bugzilla #1639542 - IndexedDB in Firefox Private Browsing (fixed in Firefox 115)](https://bugzilla.mozilla.org/show_bug.cgi?id=1639542)
+- [Chromium IndexedDB README - incognito in-memory behavior](https://chromium.googlesource.com/chromium/src/+/master/content/browser/indexed_db/docs/README.md)
+- [MDN - Storage quotas and eviction criteria](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria)
+- [WebKit Blog - Updates to Storage Policy (Safari 17 quota changes)](https://webkit.org/blog/14403/updates-to-storage-policy/)
+- LocalMode source: `packages/core/src/storage/indexeddb.ts`, `packages/core/src/storage/memory.ts`, `packages/core/src/capabilities/features.ts`

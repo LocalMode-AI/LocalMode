@@ -47,14 +47,14 @@ Most models on HuggingFace are trained in PyTorch (Python). The [Optimum](https:
 
 [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/) is Microsoft's inference engine compiled to run in the browser. It reads ONNX model files and executes the math operations they describe. It supports two backends:
 
-- **WebGPU** -- runs computations on the GPU. This is the fast path, delivering [3-10x speedups](https://opensource.microsoft.com/blog/2024/02/29/onnx-runtime-web-unleashes-generative-ai-in-the-browser-using-webgpu/) over CPU execution. As of early 2026, WebGPU ships by default in [Chrome, Edge, Firefox, and Safari](https://caniuse.com/webgpu).
+- **WebGPU** -- runs computations on the GPU. This is the fast path, delivering [substantial speedups](https://opensource.microsoft.com/blog/2024/02/29/onnx-runtime-web-unleashes-generative-ai-in-the-browser-using-webgpu/) over CPU execution (Microsoft measured up to 19x for Segment Anything, 3.8x for the decoder). As of mid-2026, WebGPU ships by default in Chrome 113+, Edge 113+, and Safari 26+. Firefox enabled WebGPU on Windows in Firefox 141 (July 2025) and on Apple Silicon macOS in Firefox 145; Linux and Android support is still rolling out - check [caniuse.com/webgpu](https://caniuse.com/webgpu) for the latest.
 - **WebAssembly (WASM)** -- runs computations on the CPU. This is the universal fallback that works in every modern browser, with SIMD and multi-threading support for solid performance.
 
 ### 3. Transformers.js: The Developer-Friendly Layer
 
 [Transformers.js](https://github.com/huggingface/transformers.js/) from HuggingFace wraps ONNX Runtime Web in a high-level API designed to mirror Python's `transformers` library. It handles model downloading, caching, tokenization, and pre/post-processing -- all the boilerplate that would otherwise require hundreds of lines of code.
 
-LocalMode builds on top of this stack. The `@localmode/transformers` package uses [Transformers.js v3](https://www.npmjs.com/package/@huggingface/transformers) (with v4 for text generation models) to implement a clean, function-first TypeScript API across 25+ model implementations.
+LocalMode builds on top of this stack. The `@localmode/transformers` package uses [Transformers.js v4](https://huggingface.co/blog/transformersjs-v4) (`@huggingface/transformers@^4.2.0`) to implement a clean, function-first TypeScript API across 27 model implementations.
 
 Here is the full picture:
 
@@ -82,9 +82,9 @@ The impact is dramatic:
 
 | Model | Full Size (FP32) | Quantized (INT8) | Quality Retained |
 |-------|-------------------|-------------------|-----------------|
-| bge-small-en-v1.5 (embeddings) | ~127MB | ~33MB | 99%+ |
-| distilbert-sst-2 (classification) | ~254MB | ~67MB | 98%+ |
-| Moonshine-tiny (speech) | ~109MB | ~27MB | ~95% |
+| bge-small-en-v1.5 (embeddings) | ~127MB | ~32MB | 99%+ |
+| distilbert-sst-2 (classification) | ~268MB | ~67MB | 98%+ |
+| Whisper-tiny (speech) | ~146MB | ~39MB | ~95% |
 
 Quantization typically reduces model size by 4x with [minimal quality loss](https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html). For embeddings specifically, our benchmarks show quantized models score within 0.1 points of their full-precision counterparts on standard benchmarks (MTEB).
 
@@ -92,7 +92,7 @@ In LocalMode, you enable quantization with a single option:
 
 ```ts
 const model = transformers.embedding('Xenova/bge-small-en-v1.5', {
-  quantized: true, // ~127MB -> ~33MB, negligible quality difference
+  quantized: true, // ~127MB -> ~32MB, negligible quality difference
 });
 ```
 
@@ -194,14 +194,16 @@ This is the most common objection, and the answer has nuance.
 
 **For inference: the gap is small and narrowing.** When you run a model, the actual computation happens in optimized C++/GPU kernels regardless of the calling language. ONNX Runtime Web uses the same core engine as ONNX Runtime for Python. The overhead of JavaScript calling into WASM or WebGPU is measured in microseconds -- negligible compared to the milliseconds spent on matrix multiplication.
 
-Real-world numbers for `bge-small-en-v1.5` embedding a single sentence:
+Illustrative ballpark numbers for embedding a single sentence with `bge-small-en-v1.5` on an M-series MacBook (results vary by hardware and warm-up state):
 
-| Runtime | Time |
+| Runtime | Approximate Time |
 |---------|------|
 | Python (PyTorch, CPU) | ~15ms |
 | Python (ONNX Runtime, CPU) | ~8ms |
 | Browser (ONNX Runtime Web, WASM) | ~12ms |
 | Browser (ONNX Runtime Web, WebGPU) | ~5ms |
+
+These are order-of-magnitude estimates, not independently audited benchmarks. Published research on the all-MiniLM-L6-v2 embedding model (a similar-size transformer) shows WASM latency of 8–12ms on an M2 MacBook Air, consistent with the range above.
 
 With WebGPU, the browser can actually be *faster* than Python on CPU for inference, because it has direct access to GPU compute without the overhead of CUDA driver initialization.
 
@@ -242,7 +244,7 @@ Running models in the browser is not just "Python but worse." It unlocks capabil
 Honesty matters. Here is what browser ML cannot do well today:
 
 - **Training.** Do not try to train models in the browser. Use Python, then export to ONNX.
-- **Models above ~4B parameters.** Browser memory limits cap practical LLM size at around 4 billion parameters (quantized). For GPT-4-class models, you still need a server.
+- **Models above ~8B parameters.** Browser memory limits cap practical LLM size at around 8 billion parameters (quantized). For GPT-4-class models, you still need a server.
 - **Batch processing at scale.** If you need to embed a million documents, a server with a dedicated GPU will finish in minutes rather than hours.
 - **First load.** Models must be downloaded once (33MB-2GB depending on the task). After that, they are cached in IndexedDB and load from disk in seconds.
 
@@ -294,17 +296,23 @@ You do not need to learn Python to ship AI features. You just need to `npm insta
 
 ## Methodology
 
-This post draws on the following sources for technical claims and benchmarks:
+Technical claims were verified against primary sources: the ONNX Runtime Web documentation, the official Microsoft WebGPU announcement blog, the HuggingFace ONNX model repositories for model sizes, the Transformers.js v4 release blog, and the caniuse.com WebGPU page for browser support status. Code examples were verified against the `@localmode/core` and `@localmode/transformers` source in the LocalMode monorepo. Inference timing figures are order-of-magnitude estimates from internal measurements; they are labeled as such in the text and consistent with published third-party benchmarks for similar-sized models.
 
-- [ONNX Runtime Web documentation](https://onnxruntime.ai/docs/tutorials/web/) and [WebGPU execution provider guide](https://onnxruntime.ai/docs/tutorials/web/ep-webgpu.html) for browser inference architecture
-- [Microsoft's ONNX Runtime Web + WebGPU announcement](https://opensource.microsoft.com/blog/2024/02/29/onnx-runtime-web-unleashes-generative-ai-in-the-browser-using-webgpu/) for WebGPU performance claims (3-10x over WASM)
-- [ONNX Runtime quantization documentation](https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html) for INT8 compression ratios and quality trade-offs
-- [Transformers.js GitHub repository](https://github.com/huggingface/transformers.js/) and [v3 release blog](https://huggingface.co/blog/transformersjs-v3) for architecture and supported tasks
-- [Can I Use: WebGPU](https://caniuse.com/webgpu) and [web.dev WebGPU announcement](https://web.dev/blog/webgpu-supported-major-browsers) for browser support status
-- [ONNX Runtime HuggingFace integration page](https://onnxruntime.ai/huggingface) for supported model architecture count
-- [DLabs performance comparison: JavaScript vs Python for ML](https://dlabs.ai/blog/performance-comparison-javascript-vs-python-for-machine-learning/) for cross-language inference benchmarks
-- [HuggingFace Optimum ONNX export guide](https://huggingface.co/blog/convert-transformers-to-onnx) for model conversion workflow
-- Inference timing benchmarks run internally using LocalMode on an M3 MacBook Pro (Chrome 134, WebGPU enabled)
+## Sources
+
+- [ONNX Runtime Web documentation](https://onnxruntime.ai/docs/tutorials/web/) and [WebGPU execution provider guide](https://onnxruntime.ai/docs/tutorials/web/ep-webgpu.html) - browser inference architecture
+- [Microsoft ONNX Runtime Web + WebGPU announcement (Feb 2024)](https://opensource.microsoft.com/blog/2024/02/29/onnx-runtime-web-unleashes-generative-ai-in-the-browser-using-webgpu/) - WebGPU performance data (19x SAM encoder, 3.8x decoder vs WASM on RTX 3060)
+- [ONNX Runtime quantization documentation](https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html) - INT8 compression ratios and quality trade-offs
+- [Transformers.js v4 release blog](https://huggingface.co/blog/transformersjs-v4) - v4 architecture, npm package `@huggingface/transformers`, ONNX Runtime integration
+- [Transformers.js GitHub repository](https://github.com/huggingface/transformers.js/) - supported tasks and model list
+- [Can I Use: WebGPU](https://caniuse.com/webgpu) - browser support status (Chrome 113+, Edge 113+, Safari 26+, Firefox 141+ on Windows)
+- [Firefox 141 WebGPU announcement](https://winaero.com/firefox-webgpu-support/) - Firefox WebGPU enabled by default on Windows, Firefox 145 for Apple Silicon macOS
+- [ONNX Runtime HuggingFace integration page](https://onnxruntime.ai/huggingface) - "top 30 most popular model architectures on Hugging Face are all supported by ONNX Runtime"
+- [HuggingFace Optimum ONNX export guide](https://huggingface.co/blog/convert-transformers-to-onnx) - model conversion workflow from PyTorch to ONNX
+- [onnx-community/bge-small-en-v1.5-ONNX on HuggingFace](https://huggingface.co/onnx-community/bge-small-en-v1.5-ONNX) - verified fp32 (~127MB) and int8 (~32MB) model sizes
+- [Xenova/distilbert-base-uncased-finetuned-sst-2-english on HuggingFace](https://huggingface.co/Xenova/distilbert-base-uncased-finetuned-sst-2-english) - verified fp32 (~268MB) and quantized (~67MB) model sizes
+- [Xenova/whisper-tiny on HuggingFace](https://huggingface.co/Xenova/whisper-tiny) - verified encoder+decoder fp32 (~146MB total) and quantized (~39MB total) sizes
+- [WebGPU vs WebAssembly inference benchmarks (SitePoint)](https://www.sitepoint.com/webgpu-vs-webasm-transformers-js/) - third-party WASM latency 8–12ms for small embedding models on M2 MacBook Air
 
 ---
 

@@ -1,0 +1,111 @@
+---
+title: "BGE Embeddings Models in the Browser"
+description: "BAAI's BGE embedding models - the most popular text embedding models for browser-based semantic search and RAG."
+author: "LocalMode"
+date: "2026-05-08"
+---
+
+# BGE Embeddings Models in the Browser
+
+BAAI's BGE embedding models - the most popular text embedding models for browser-based semantic search and RAG.
+
+## Overview
+
+The BGE Embeddings family is available through Transformers.js in LocalMode, with model sizes ranging from 33MB–110MB. The primary task for these models is **embedding**, and they can be used with any application built on the LocalMode SDK.
+
+Running BGE Embeddings models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+BGE (BAAI General Embedding) models from the Beijing Academy of Artificial Intelligence are the de facto standard for browser-based text embeddings. BGE-small-en-v1.5 at just 33MB with 384 dimensions is LocalMode's default recommended embedding model - it loads in seconds, produces high-quality embeddings for English text, and scores within 5% of much larger models on retrieval benchmarks.
+
+For applications needing higher precision, BGE-base-en-v1.5 scales up to 768 dimensions at 110MB. The larger dimension space captures finer semantic distinctions, which matters for use cases like legal document search, technical documentation retrieval, and fine-grained content recommendation. The trade-off is 2x the storage per vector in your IndexedDB-backed VectorDB (768 vs 384 float32 values per embedding).
+
+Both models run through Transformers.js on WASM, meaning they work in every browser - including Safari on iOS and Firefox - without requiring WebGPU. They support batch embedding via embedMany() with automatic adaptive batching based on device capabilities. For most LocalMode applications, BGE-small-en-v1.5 is the right starting point; upgrade to base when retrieval quality becomes the bottleneck.
+
+## Variant Comparison
+
+The following table lists every BGE Embeddings variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Dims | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Xenova/bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5) | Transformers.js | 33MB | Fast | Good | 384 | WASM |
+| [Xenova/bge-base-en-v1.5](https://huggingface.co/BAAI/bge-base-en-v1.5) | Transformers.js | 110MB | Medium | High | 768 | WASM |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| Under 200MB | 2 | variants |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All BGE Embeddings variants use the same `EmbeddingModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### Transformers.js
+
+Transformers.js runs ONNX-optimized models via ONNX Runtime Web. WebGPU acceleration where available, WASM fallback otherwise.
+
+```typescript
+import { embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+const { embedding } = await embed({
+  model,
+  value: 'Semantic search query',
+});
+
+console.log(embedding); // Float32Array(384)
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred model first, and fall back to an alternative variant if it fails to load.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+// Try the preferred model, fall back to an alternative on failure
+let model;
+try {
+  model = transformers.embedding('Xenova/bge-base-en-v1.5');
+} catch (error) {
+  console.warn('Primary model failed, using fallback:', error);
+  model = transformers.embedding('Xenova/bge-small-en-v1.5');
+}
+```
+
+## When to Use BGE Embeddings
+
+BGE Embeddings models are a strong choice when:
+
+- **You need text embeddings** - BGE Embeddings is optimized for embedding tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 1 provider (transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The 33MB–110MB range means you can target everything from mobile devices to high-end desktops with the same model family.
+
+
+## HuggingFace Model Cards
+
+- [bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5)
+- [bge-base-en-v1.5](https://huggingface.co/BAAI/bge-base-en-v1.5)
+
+## Related Pages
+
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+Model sizes (33MB for bge-small-en-v1.5, 110MB for bge-base-en-v1.5) were verified against the `model_int8.onnx` and `model_quantized.onnx` files in the respective Xenova HuggingFace repositories. Embedding dimensions (384, 768) and max sequence length (512 tokens) were verified from the BAAI model cards. MTEB benchmark scores (62.17 average for small, 63.55 for base, 64.23 for large) were sourced from the official BAAI HuggingFace model cards. The "within 5% of much larger models" claim refers to BGE-small (62.17) vs BGE-large-en-v1.5 (64.23), a gap of approximately 3.2%. Performance tiers (speed, quality) reflect LocalMode's curated assessments based on model size and architecture. Always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [BAAI/bge-small-en-v1.5 model card](https://huggingface.co/BAAI/bge-small-en-v1.5)
+- [BAAI/bge-base-en-v1.5 model card](https://huggingface.co/BAAI/bge-base-en-v1.5)
+- [BAAI/bge-large-en-v1.5 model card](https://huggingface.co/BAAI/bge-large-en-v1.5)
+- [Xenova/bge-small-en-v1.5 ONNX files](https://huggingface.co/Xenova/bge-small-en-v1.5/tree/main/onnx)
+- [Xenova/bge-base-en-v1.5 ONNX files](https://huggingface.co/Xenova/bge-base-en-v1.5/tree/main/onnx)
+- [Transformers.js documentation](https://huggingface.co/docs/transformers.js)

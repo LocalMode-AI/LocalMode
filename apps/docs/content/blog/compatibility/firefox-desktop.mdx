@@ -1,0 +1,146 @@
+---
+title: "Firefox Desktop"
+description: "LocalMode on Firefox - full WASM support, WebGPU on Windows (141+) and macOS Apple Silicon (147+), all non-GPU models work perfectly."
+author: "LocalMode"
+date: "2026-04-05"
+---
+
+# Firefox Desktop
+
+LocalMode on Firefox - full WASM support, WebGPU on Windows (141+) and macOS Apple Silicon (147+), all non-GPU models work perfectly.
+
+*Category: Browser Compatibility*
+
+## Feature Support Matrix
+
+The following table summarizes which web platform features are available on Firefox Desktop and how they affect LocalMode's capabilities. Features marked as supported enable full functionality; partial or unsupported features trigger automatic fallbacks.
+
+| Feature | Supported | Notes |
+| --- | --- | --- |
+| **WebGPU** | Firefox 141+ (Windows), 147+ (macOS Apple Silicon) | WebGPU enabled by default on Windows from Firefox 141 (July 2025). macOS Apple Silicon support arrived in Firefox 145 but only for macOS 26 (Tahoe); full Apple Silicon support across all macOS versions shipped in Firefox 147 (January 2026). Not available on Linux or macOS Intel (Nightly only). |
+| **WebAssembly** | Yes (Firefox 52+) | Excellent WASM performance. SIMD support. SpiderMonkey JIT compiles WASM efficiently. |
+| **IndexedDB** | Yes | Full support. No Private Browsing issues (Firefox handles it differently than Safari). |
+| **Web Workers** | Yes | Full support including module workers. |
+| **SharedArrayBuffer** | Yes (with COOP/COEP) | Requires cross-origin isolation headers. Firefox was first to require this. |
+| **Web Locks** | Yes (Firefox 96+) | Full support. Falls back to InMemoryLockManager on older versions. |
+| **BroadcastChannel** | Yes (Firefox 38+) | Full support. Firefox was among the first browsers to implement this. |
+
+## Understanding the Impact
+
+Each feature in the matrix above maps to specific LocalMode capabilities:
+
+- **WebGPU** - Required for `@localmode/webllm` (GPU-accelerated LLM inference at 30-90 tokens/second). When unavailable, use `@localmode/wllama` (WASM, 5-20 tokens/second) as a fallback. Non-LLM tasks (embeddings, classification, vision, audio) do not require WebGPU.
+- **WebAssembly** - The universal inference backend. Required for `@localmode/transformers` and `@localmode/wllama`. WASM is supported in 97%+ of web traffic. SIMD support (for optimized vector operations) requires newer browser versions.
+- **IndexedDB** - Used for persistent vector storage (`VectorDB`) and model caching (`createModelLoader`). When blocked (Safari Private Browsing), LocalMode falls back to `MemoryStorage` (data lost on tab close).
+- **Web Workers** - Enable background model loading and inference without blocking the main UI thread. Module workers (for ES module imports in workers) require newer browser versions.
+- **SharedArrayBuffer** - Enables multi-threaded WASM inference for improved performance. Requires Cross-Origin Isolation headers (COOP/COEP). Not required for basic functionality.
+- **Web Locks** - Used for cross-tab model loading coordination (prevents multiple tabs from downloading the same model simultaneously). Falls back to `InMemoryLockManager` when unavailable.
+- **BroadcastChannel** - Used for cross-tab VectorDB synchronization. Falls back to `LocalStorageBroadcaster` when unavailable.
+
+## Fallback Strategies
+
+WebGPU is now available on Firefox for Windows (141+) and macOS Apple Silicon (147+ for all supported macOS versions; 145+ was limited to macOS 26 Tahoe only), but not on Linux or macOS Intel (Nightly-only on those platforms). On unsupported platforms, WebLLM models will not work - use wllama (WASM-based) for LLM inference instead. All other LocalMode features (embeddings, classification, NER, vision, audio, VectorDB) work perfectly via Transformers.js on WASM. Use isWebGPUSupported() to detect and conditionally load the appropriate LLM provider.
+
+LocalMode is designed with progressive enhancement in mind. The core principle: detect capabilities at runtime and use the best available path. The `@localmode/core` package exports detection utilities for this purpose:
+
+```typescript
+import {
+  isWebGPUSupported,
+  isIndexedDBSupported,
+  isCrossOriginIsolated,
+  detectCapabilities,
+  recommendModels,
+} from '@localmode/core';
+
+async function detectAndConfigure() {
+  const caps = await detectCapabilities();
+  console.log(caps);
+  // caps.features.webgpu, caps.hardware.memory (GB), caps.storage.availableBytes
+
+  // isWebGPUSupported() is async - it must be awaited
+  if (await isWebGPUSupported()) {
+    // Use @localmode/webllm for GPU-accelerated inference
+  }
+
+  // recommendModels() is synchronous: capabilities first, options second
+  const recommendations = recommendModels(caps, {
+    task: 'generation',
+    maxSizeMB: 1500,
+  });
+}
+```
+
+## Fallback Code Example
+
+```typescript
+import { isWebGPUSupported } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+import { wllama } from '@localmode/wllama';
+
+// Auto-select LLM provider based on browser capability
+// isWebGPUSupported() is async - must be awaited
+const llmModel = (await isWebGPUSupported())
+  ? webllm.languageModel('Qwen2.5-3B-Instruct-q4f16_1-MLC')
+  : wllama.languageModel('Qwen2.5-3B-Instruct-Q4_K_M');
+```
+
+## Recommended Providers
+
+For Firefox Desktop, the recommended LocalMode providers are:
+
+- **wllama (WASM)** - Universal LLM inference via WASM. Works without WebGPU. The safe choice for broad compatibility.
+- **Transformers.js** - Broadest model catalog for non-LLM tasks (embeddings, classification, vision, audio). WASM-based, works everywhere.
+
+## Recommended Models
+
+The following models are tested and recommended for Firefox Desktop:
+
+| Model | Provider |
+| --- | --- |
+| Qwen2.5-3B-Instruct-Q4_K_M | wllama (WASM) |
+| Xenova/bge-small-en-v1.5 | Transformers.js |
+| Xenova/bert-base-NER | Transformers.js |
+
+These models are chosen for their compatibility with Firefox Desktop's capabilities and constraints. They represent the best balance of quality, size, and performance for this platform.
+
+## Known Issues
+
+WebGPU is available on Windows (Firefox 141+) and macOS Apple Silicon (Firefox 147+ for all supported macOS versions; Firefox 145 only covered macOS 26 Tahoe). Linux and macOS Intel remain Nightly-only with no stable ETA. WebLLM models will fail on unsupported platforms - always check isWebGPUSupported() before loading WebLLM. Firefox's Enhanced Tracking Protection may block model CDN requests in Strict mode.
+
+### Mitigation Strategies
+
+When building applications that target Firefox Desktop, follow these practices:
+
+1. **Always detect before loading** - Use `await isWebGPUSupported()`, `isIndexedDBSupported()`, and `await detectCapabilities()` before attempting to load models or create storage. Never assume a feature is available.
+2. **Wrap model loading in try/catch** - Even when detection succeeds, model loading can fail due to memory pressure, network issues, or browser bugs. Always have a fallback path that attempts a smaller model.
+3. **Pick models with `recommendModels()`** - Pass the detected capabilities to `recommendModels(caps, { task })` to select a model appropriate for the current device. It is the recommended pattern for production deployments.
+4. **Test on real hardware** - Browser DevTools device emulation does not accurately simulate memory limits, GPU capabilities, or storage quotas. Test on actual target hardware.
+5. **Monitor storage quota** - Use `getStorageQuota()` to check available space before downloading large models. Inform users if storage is insufficient rather than failing silently.
+
+## Web Standards References
+
+- [WebAssembly on MDN](https://developer.mozilla.org/en-US/docs/WebAssembly)
+- [Firefox WebGPU Status](https://bugzilla.mozilla.org/show_bug.cgi?id=1616739)
+
+## Related Pages
+
+- [Webgpu Support](/blog/compatibility/webgpu-support) - compatibility guide
+- [Wasm Support](/blog/compatibility/wasm-support) - compatibility guide
+- [Wllama Vs Transformers Js](/blog/compare/wllama-vs-transformers-js) - comparison guide
+
+## Methodology
+
+Browser feature support data on this page is sourced from MDN Web Docs (Firefox release notes for versions 141, 145, 147), the Mozilla Graphics Team blog, the WebGPU Working Group implementation status wiki, and caniuse.com - cross-referenced with LocalMode's runtime feature detection in `packages/core/src/capabilities/features.ts`. Version numbers reflect when each feature shipped enabled by default in stable Firefox. Browser support evolves - verify current support with the linked references before making production decisions.
+
+## Sources
+
+- [Shipping WebGPU on Windows in Firefox 141 - Mozilla Gfx Team Blog](https://mozillagfx.wordpress.com/2025/07/15/shipping-webgpu-on-windows-in-firefox-141/)
+- [Firefox 141 release notes for developers - MDN](https://developer.mozilla.org/en-US/docs/Mozilla/Firefox/Releases/141)
+- [Firefox 145 release notes for developers - MDN](https://developer.mozilla.org/en-US/docs/Mozilla/Firefox/Releases/145)
+- [Firefox 147 release notes for developers - MDN](https://developer.mozilla.org/en-US/docs/Mozilla/Firefox/Releases/147)
+- [WebGPU Implementation Status - gpuweb/gpuweb Wiki](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status)
+- [WebGPU - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/API/WebGPU_API)
+- [Web Locks API - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API)
+- [WebGPU: release on stable on Windows - Mozilla Bugzilla #1972486](https://bugzilla.mozilla.org/show_bug.cgi?id=1972486)
+- [WebGPU Supported on Firefox 145 on macOS 26+ (AS) - MDN browser-compat-data issue #28555](https://github.com/mdn/browser-compat-data/issues/28555)
+- LocalMode capability detection source: `packages/core/src/capabilities/features.ts`

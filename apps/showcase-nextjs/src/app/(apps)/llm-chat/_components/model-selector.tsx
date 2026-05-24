@@ -50,6 +50,7 @@ export function ModelSelector({ clearMessages }: ModelSelectorProps) {
     webgpu: models.filter((m) => m.backend === 'webgpu').length,
     onnx: models.filter((m) => m.backend === 'onnx').length,
     wasm: models.filter((m) => m.backend === 'wasm').length,
+    litert: models.filter((m) => m.backend === 'litert').length,
   };
 
   /** Handle delete button click with event propagation stop */
@@ -90,7 +91,7 @@ export function ModelSelector({ clearMessages }: ModelSelectorProps) {
         </div>
 
         {/* Backend filter tabs */}
-        <div className="grid grid-cols-4 gap-1 p-0.5 rounded-lg bg-poster-bg/50 border border-poster-border/20">
+        <div className="grid grid-cols-5 gap-1 p-0.5 rounded-lg bg-poster-bg/50 border border-poster-border/20">
           {BACKEND_FILTER_TABS.map((tab) => {
             const isActive = backendFilter === tab.value;
             return (

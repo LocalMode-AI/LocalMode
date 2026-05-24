@@ -3,9 +3,9 @@
  * @description Hook for managing vector data migration operations
  */
 import { useState, useRef } from 'react';
-import { useImportExport, validateFile, toAppError } from '@localmode/react';
+import { useImportExport, validateFile } from '@localmode/react';
 import { createVectorDB } from '@localmode/core';
-import type { VectorDB, ParseResult, ImportStats, ImportProgress } from '@localmode/core';
+import type { VectorDB } from '@localmode/core';
 import { getEmbeddingModel } from '../_services/migrator.service';
 import {
   EMBEDDING_DIMENSIONS,
@@ -116,7 +116,7 @@ export function useMigrator() {
 
     // Determine dimensions for the VectorDB
     const dimensions = parseResult.dimensions ?? EMBEDDING_DIMENSIONS;
-    const targetDb = await initDB(dimensions);
+    await initDB(dimensions);
 
     // Import into the new db
     await importData({ content: fileContent, format: parseResult.format });

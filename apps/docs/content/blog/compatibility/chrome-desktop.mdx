@@ -1,0 +1,139 @@
+---
+title: "Chrome Desktop"
+description: "Full LocalMode support on Chrome Desktop - WebGPU, WASM, IndexedDB, Web Workers, and all 136 curated models."
+author: "LocalMode"
+date: "2026-04-11"
+---
+
+# Chrome Desktop
+
+Full LocalMode support on Chrome Desktop - WebGPU, WASM, IndexedDB, Web Workers, and all 136 curated models.
+
+*Category: Browser Compatibility*
+
+## Feature Support Matrix
+
+The following table summarizes which web platform features are available on Chrome Desktop and how they affect LocalMode's capabilities. Features marked as supported enable full functionality; partial or unsupported features trigger automatic fallbacks.
+
+| Feature | Supported | Notes |
+| --- | --- | --- |
+| **WebGPU** | Yes (Chrome 113+) | Full WebGPU support. Required for WebLLM. Enables fastest LLM inference (30-90 tok/s). |
+| **WebAssembly** | Yes (Chrome 57+) | Full WASM + SIMD support. Required for wllama and Transformers.js. |
+| **IndexedDB** | Yes | Full support. Used for VectorDB persistence and model caching. Quota: up to 60% of total disk size per origin (Chrome). |
+| **Web Workers** | Yes | Full support including module workers. Enables background model loading and inference. |
+| **SharedArrayBuffer** | Yes (with COOP/COEP headers) | Requires Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy headers. |
+| **Web Locks** | Yes (Chrome 69+) | Full support. Used for cross-tab model loading coordination. |
+| **BroadcastChannel** | Yes (Chrome 54+) | Full support. Used for cross-tab VectorDB sync. |
+| **Chrome Built-in AI** | Chrome 138+ (Summarizer/Translator stable, Prompt API origin trial) | @localmode/chrome-ai for zero-download summarization and translation via Gemini Nano. |
+
+## Understanding the Impact
+
+Each feature in the matrix above maps to specific LocalMode capabilities:
+
+- **WebGPU** - Required for `@localmode/webllm` (GPU-accelerated LLM inference at 30-90 tokens/second). When unavailable, use `@localmode/wllama` (WASM, 5-20 tokens/second) as a fallback. Non-LLM tasks (embeddings, classification, vision, audio) do not require WebGPU.
+- **WebAssembly** - The universal inference backend. Required for `@localmode/transformers` and `@localmode/wllama`. WASM is supported in 97%+ of web traffic. SIMD support (for optimized vector operations) requires newer browser versions.
+- **IndexedDB** - Used for persistent vector storage (`VectorDB`) and model caching (`createModelLoader`). When blocked (Safari Private Browsing), LocalMode falls back to `MemoryStorage` (data lost on tab close).
+- **Web Workers** - Enable background model loading and inference without blocking the main UI thread. Module workers (for ES module imports in workers) require newer browser versions.
+- **SharedArrayBuffer** - Enables multi-threaded WASM inference for improved performance. Requires Cross-Origin Isolation headers (COOP/COEP). Not required for basic functionality.
+- **Web Locks** - Used for cross-tab model loading coordination (prevents multiple tabs from downloading the same model simultaneously). Falls back to `InMemoryLockManager` when unavailable.
+- **BroadcastChannel** - Used for cross-tab VectorDB synchronization. Falls back to `LocalStorageBroadcaster` when unavailable.
+
+## Fallback Strategies
+
+Chrome Desktop supports all LocalMode features. No fallbacks needed. This is the recommended development target - if your app works in Chrome Desktop, you've covered the majority of your user base. The main consideration is WebGPU availability: Chrome 113+ has full support, but users on Chrome 80-112 will fall back to WASM-based inference (wllama, Transformers.js).
+
+LocalMode is designed with progressive enhancement in mind. The core principle: detect capabilities at runtime and use the best available path. The `@localmode/core` package exports detection utilities for this purpose:
+
+```typescript
+import {
+  isWebGPUSupported,
+  isIndexedDBSupported,
+  isCrossOriginIsolated,
+  detectCapabilities,
+  recommendModels,
+} from '@localmode/core';
+
+async function detectAndConfigure() {
+  const caps = await detectCapabilities();
+  console.log(caps);
+  // caps.features.webgpu, caps.hardware.memory (GB), caps.storage.availableBytes
+
+  // isWebGPUSupported() is async - it must be awaited
+  if (await isWebGPUSupported()) {
+    // Use @localmode/webllm for GPU-accelerated inference
+  }
+
+  // recommendModels() is synchronous: capabilities first, options second
+  const recommendations = recommendModels(caps, {
+    task: 'generation',
+    maxSizeMB: 1500,
+  });
+}
+```
+
+
+
+## Recommended Providers
+
+For Chrome Desktop, the recommended LocalMode providers are:
+
+- **WebLLM (WebGPU)** - Use when WebGPU is confirmed available. Provides the fastest LLM inference.
+- **wllama (WASM)** - Universal LLM inference via WASM. Works without WebGPU. The safe choice for broad compatibility.
+- **Transformers.js** - Broadest model catalog for non-LLM tasks (embeddings, classification, vision, audio). WASM-based, works everywhere.
+- **Chrome Built-in AI** - Zero model download. Requires Chrome 138+ with flag. Provides summarization, translation, and writing assistance via Gemini Nano.
+
+## Recommended Models
+
+The following models are tested and recommended for Chrome Desktop:
+
+| Model | Provider |
+| --- | --- |
+| Qwen3-4B-q4f16_1-MLC | WebLLM (WebGPU) |
+| Xenova/bge-small-en-v1.5 | Transformers.js |
+| onnx-community/moonshine-base-ONNX | Transformers.js |
+
+These models are chosen for their compatibility with Chrome Desktop's capabilities and constraints. They represent the best balance of quality, size, and performance for this platform.
+
+## Known Issues
+
+Memory pressure: Chrome may evict IndexedDB data under storage pressure. Use navigator.storage.persist() to request persistent storage. GPU memory: Large WebLLM models (4GB+) may compete with browser rendering for GPU VRAM - monitor for visual glitches on integrated graphics.
+
+### Mitigation Strategies
+
+When building applications that target Chrome Desktop, follow these practices:
+
+1. **Always detect before loading** - Use `await isWebGPUSupported()`, `isIndexedDBSupported()`, and `await detectCapabilities()` before attempting to load models or create storage. Never assume a feature is available.
+2. **Wrap model loading in try/catch** - Even when detection succeeds, model loading can fail due to memory pressure, network issues, or browser bugs. Always have a fallback path that attempts a smaller model.
+3. **Pick models with `recommendModels()`** - Pass the detected capabilities to `recommendModels(caps, { task })` to select a model appropriate for the current device. It is the recommended pattern for production deployments.
+4. **Test on real hardware** - Browser DevTools device emulation does not accurately simulate memory limits, GPU capabilities, or storage quotas. Test on actual target hardware.
+5. **Monitor storage quota** - Use `getStorageQuota()` to check available space before downloading large models. Inform users if storage is insufficient rather than failing silently.
+
+## Web Standards References
+
+- [WebGPU API](https://developer.mozilla.org/en-US/docs/Web/API/WebGPU_API)
+- [IndexedDB API](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API)
+
+## Related Pages
+
+- [Webgpu Support](/blog/compatibility/webgpu-support) - compatibility guide
+- [Chrome Android](/blog/compatibility/chrome-android) - compatibility guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+
+## Methodology
+
+Browser feature support data on this page is sourced from caniuse.com support tables and MDN Web Docs compatibility tables, cross-referenced with LocalMode's runtime feature detection (`packages/core/src/capabilities/features.ts`). Version numbers reflect the Chrome stable release in which each feature shipped enabled by default: WebGPU (Chrome 113, confirmed via caniuse.com and the official Chrome launch post), WebAssembly (Chrome 57), Web Locks (Chrome 69), BroadcastChannel (Chrome 54). The IndexedDB storage quota (up to 60% of total disk size per origin) is sourced from the MDN Storage quotas and eviction criteria article. Chrome Built-in AI API stable availability is sourced from the Chrome for Developers I/O 2025 announcement. Browser support evolves - verify current support with the linked Sources before making production decisions.
+
+## Sources
+
+- [WebGPU - caniuse.com](https://caniuse.com/webgpu) - Chrome 113+ desktop support confirmed
+- [Chrome ships WebGPU - Chrome for Developers](https://developer.chrome.com/blog/webgpu-release) - official Chrome 113 stable announcement
+- [WebGPU API - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/API/WebGPU_API) - feature reference and compatibility table
+- [WebAssembly - caniuse.com](https://caniuse.com/wasm) - Chrome 57+ desktop support confirmed
+- [WebAssembly SIMD - caniuse.com](https://caniuse.com/wasm-simd) - Chrome 91+ desktop support confirmed
+- [Web Locks API - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/API/Web_Locks_API) - Chrome 69+ desktop support
+- [Web Locks API - caniuse.com](https://caniuse.com/mdn-api_lock) - Chrome 69+ desktop support confirmed
+- [BroadcastChannel - caniuse.com](https://caniuse.com/broadcastchannel) - Chrome 54+ desktop support confirmed
+- [Storage quotas and eviction criteria - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria) - Chrome IndexedDB quota: up to 60% of total disk size per origin
+- [AI APIs are in stable and origin trials - Chrome for Developers](https://developer.chrome.com/blog/ai-api-updates-io25) - Chrome 138: Summarizer, Translator, Language Detector stable; Prompt API stable for extensions
+- [Built-in AI APIs - Chrome for Developers](https://developer.chrome.com/docs/ai/built-in-apis) - Chrome Built-in AI overview and per-API availability
+- [IndexedDB API - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API) - feature reference

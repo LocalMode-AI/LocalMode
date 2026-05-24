@@ -36,7 +36,7 @@ export function useRedactor() {
     () => computeBudgetState(null)
   );
 
-  const nerModel = useRef(getNERModel()).current;
+  const [nerModel] = useState(() => getNERModel());
   const budgetRef = useRef<PrivacyBudget | null>(null);
   const budgetInitialized = useRef(false);
 

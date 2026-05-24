@@ -1,0 +1,134 @@
+---
+title: 'Audio Classification'
+description: Classify environmental audio events in the browser with MediaPipe's YAMNet model — 521 sound categories, fully on-device.
+icon: AudioLines
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+# Audio Classification
+
+The MediaPipe audio classifier identifies sound events — speech, music, animal sounds, environmental noise, and more. It uses Google's **YAMNet** model, which classifies audio into **521 categories** from the AudioSet ontology.
+
+It is exposed through the standard LocalMode `classifyAudio()` function, so the call site matches every other audio provider.
+
+## Model
+
+| Catalog ID         | Model                     | Size  | Categories |
+| ------------------ | ------------------------- | ----- | ---------- |
+| `audio_classifier` | Audio Classifier (YAMNet) | 4.1MB | 521        |
+
+`mediapipe.audioClassifier()` uses this catalog model by default.
+
+## Classifying Audio
+
+Create a model with `mediapipe.audioClassifier()` and pass it to the core `classifyAudio()` function:
+
+```typescript
+import { classifyAudio } from '@localmode/core';
+import { mediapipe } from '@localmode/mediapipe';
+
+const { predictions, usage } = await classifyAudio({
+  model: mediapipe.audioClassifier(),
+  audio: audioBlob,
+  topK: 5,
+});
+
+for (const p of predictions) {
+  console.log(`${p.label}: ${p.score.toFixed(3)}`);
+}
+// e.g. Speech: 0.912, Music: 0.043, Silence: 0.011, ...
+
+console.log(`Classified in ${usage.durationMs.toFixed(0)}ms`);
+```
+
+### Options
+
+| Option        | Type                       | Default | Description                          |
+| ------------- | -------------------------- | ------- | ------------------------------------ |
+| `model`       | `AudioClassificationModel` | —       | The model from `mediapipe.audioClassifier()` |
+| `audio`       | `AudioInput`               | —       | `Blob`, `ArrayBuffer`, or `Float32Array` |
+| `topK`        | `number`                   | `5`     | Number of top predictions to return  |
+| `abortSignal` | `AbortSignal`              | —       | Cancellation signal                  |
+| `maxRetries`  | `number`                   | `2`     | Retry attempts on transient failure  |
+
+### Result
+
+`ClassifyAudioResult` contains a `predictions` array, sorted by score:
+
+```typescript
+interface AudioClassificationResultItem {
+  /** The predicted label */
+  label: string;
+  /** Confidence score (0-1) */
+  score: number;
+}
+```
+
+## Audio Input
+
+`classifyAudio()` accepts a `Blob`, an `ArrayBuffer`, or a raw `Float32Array` of samples. To classify a recording from the microphone:
+
+```typescript
+import { classifyAudio } from '@localmode/core';
+import { mediapipe } from '@localmode/mediapipe';
+
+const model = mediapipe.audioClassifier();
+
+const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+const recorder = new MediaRecorder(stream);
+const chunks: Blob[] = [];
+
+recorder.ondataavailable = (e) => chunks.push(e.data);
+recorder.onstop = async () => {
+  const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+  const { predictions } = await classifyAudio({ model, audio: audioBlob });
+  console.log('Top sound:', predictions[0]?.label);
+};
+
+recorder.start();
+setTimeout(() => recorder.stop(), 3000); // record 3s
+```
+
+<Callout type="warn" title="Isolate audio from concurrent vision tasks">
+  The MediaPipe audio and vision WASM runtimes can conflict if run **concurrently in the same thread** ([mediapipe#4737](https://github.com/google-ai-edge/mediapipe/issues/4737)). If your app classifies audio while a vision task (hand/pose/face tracking) is also running, move one of them into a **Web Worker** so each runtime gets its own thread. Running them sequentially is fine.
+</Callout>
+
+## Cancellation
+
+```typescript
+const controller = new AbortController();
+
+const promise = classifyAudio({
+  model: mediapipe.audioClassifier(),
+  audio: audioBlob,
+  abortSignal: controller.signal,
+});
+
+controller.abort(); // throws inside the promise
+```
+
+<Callout type="info" title="No audio embedder">
+  `@mediapipe/tasks-audio` ships only an `AudioClassifier` — there is no `AudioEmbedder` in the JS SDK, so `@localmode/mediapipe` does not expose one. For audio embedding, use a transformers-based model instead.
+</Callout>
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Text Tasks"
+    href="/docs/mediapipe/text"
+    description="Language detection, text embeddings, and text classification."
+  />
+  <Card
+    title="Core Audio"
+    href="/docs/core/audio"
+    description="API reference for the audio functions shared across providers."
+  />
+  <Card
+    title="MediaPipe Overview"
+    href="/docs/mediapipe"
+    description="Installation, model catalog, and provider configuration."
+  />
+</Cards>

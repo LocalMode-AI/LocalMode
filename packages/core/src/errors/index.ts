@@ -423,6 +423,28 @@ export class AudioError extends LocalModeError {
 }
 
 /**
+ * Error when microphone capture / `getUserMedia` is unavailable.
+ *
+ * Thrown by {@link createLiveTranscriber} when running in an insecure
+ * context (no `getUserMedia`), when the browser blocks microphone access,
+ * or when the active `MediaStream` track ends unexpectedly mid-session.
+ *
+ * The error code is `'media-not-supported'`.
+ */
+export class MediaNotSupportedError extends AudioError {
+  constructor(message?: string, options?: { hint?: string; cause?: Error }) {
+    super(message ?? 'Microphone capture is not supported in this environment', {
+      hint:
+        options?.hint ??
+        'Live transcription requires `navigator.mediaDevices.getUserMedia`. Serve the page over HTTPS (or `localhost`), and ensure the user has granted microphone permission.',
+      cause: options?.cause,
+    });
+    this.name = 'MediaNotSupportedError';
+    (this as { code: string }).code = 'media-not-supported';
+  }
+}
+
+/**
  * Error in vision/image processing.
  */
 export class VisionError extends LocalModeError {
@@ -941,6 +963,84 @@ export class DimensionMismatchOnImportError extends ImportExportError {
 // ============================================================================
 // Agent Errors
 // ============================================================================
+
+// ============================================================================
+// Audit Log Errors
+// ============================================================================
+
+/**
+ * Audit log error code values.
+ *
+ * - `duplicate_id` — `append()` called with an `id` that already exists in the chain.
+ * - `non_monotonic_timestamp` — explicit `timestamp` is strictly less than the tail's.
+ * - `chain_broken` — generic chain integrity failure (used by `verifyChain()`).
+ * - `signature_mismatch` — a signature failed to verify against the configured key.
+ * - `unsupported_signature_algorithm` — the supplied `CryptoKey` is neither HMAC-SHA-256 nor Ed25519.
+ * - `crypto_unsupported` — Web Crypto (`crypto.subtle`) is not available in the runtime.
+ * - `decryption_failed` — `list()` could not decrypt a payload (wrong AES-GCM key or corrupted ciphertext).
+ * - `aborted` — operation was cancelled via `AbortSignal`.
+ * - `storage_error` — underlying storage adapter threw during read/write.
+ */
+export type AuditLogErrorCode =
+  | 'duplicate_id'
+  | 'non_monotonic_timestamp'
+  | 'chain_broken'
+  | 'signature_mismatch'
+  | 'unsupported_signature_algorithm'
+  | 'crypto_unsupported'
+  | 'decryption_failed'
+  | 'aborted'
+  | 'storage_error';
+
+/**
+ * Error class for audit log operations.
+ *
+ * @example
+ * ```ts
+ * try {
+ *   await log.append('event', {}, { id: 'fixed' });
+ *   await log.append('event', {}, { id: 'fixed' }); // throws
+ * } catch (error) {
+ *   if (error instanceof AuditLogError && error.code === 'duplicate_id') {
+ *     // handle idempotency
+ *   }
+ * }
+ * ```
+ */
+export class AuditLogError extends LocalModeError {
+  constructor(
+    message: string,
+    code: AuditLogErrorCode,
+    options?: { hint?: string; context?: Record<string, unknown>; cause?: Error }
+  ) {
+    const defaultHints: Record<AuditLogErrorCode, string> = {
+      duplicate_id:
+        'Each audit entry must have a unique id. Use a fresh id, or omit the id option to auto-generate one.',
+      non_monotonic_timestamp:
+        'Audit entry timestamps must be monotonically non-decreasing. Either omit the timestamp (it will be clamped automatically) or pass a timestamp >= tail.timestamp.',
+      chain_broken:
+        'The audit chain is broken. Inspect VerifyResult.brokenAt and reason for diagnostics.',
+      signature_mismatch:
+        'The signature does not verify under the supplied key. Check that the verification key matches the key used to sign the chain.',
+      unsupported_signature_algorithm:
+        'Supported signature algorithms are HMAC-SHA-256 (default) and Ed25519. Pass a CryptoKey of one of those types.',
+      crypto_unsupported:
+        'Web Crypto API (crypto.subtle) is required for the audit log. This typically means the runtime is not a modern browser or Node 18+.',
+      decryption_failed:
+        'Could not decrypt an audit entry payload. Verify that the encryption CryptoKey matches the one used for writes.',
+      aborted: 'The audit log operation was aborted via AbortSignal.',
+      storage_error:
+        'The underlying storage adapter rejected an operation. Check the cause for details.',
+    };
+
+    super(message, code, {
+      hint: options?.hint ?? defaultHints[code],
+      context: options?.context,
+      cause: options?.cause,
+    });
+    this.name = 'AuditLogError';
+  }
+}
 
 /**
  * Error in agent execution.

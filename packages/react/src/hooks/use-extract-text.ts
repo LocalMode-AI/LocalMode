@@ -10,6 +10,8 @@ import { useOperation } from '../core/use-operation.js';
 interface UseExtractTextOptions {
   /** The OCR model to use */
   model: OCRModel;
+  /** Text prompt for generative OCR models (e.g., 'Table Recognition:') */
+  prompt?: string;
 }
 
 /**
@@ -19,12 +21,12 @@ interface UseExtractTextOptions {
  * @returns Operation state with execute(image: string) function (image as data URL)
  */
 export function useExtractText(options: UseExtractTextOptions) {
-  const { model } = options;
+  const { model, prompt } = options;
 
   return useOperation<[string], ExtractTextResult>({
     fn: async (image: string, signal: AbortSignal) => {
       const { extractText } = await import('@localmode/core');
-      return extractText({ model, image, abortSignal: signal });
+      return extractText({ model, image, prompt, abortSignal: signal });
     },
   });
 }

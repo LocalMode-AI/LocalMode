@@ -111,7 +111,7 @@ The registry is not a flat list. It is organized by task and provider, with entr
 | SmolLM2 135M (GGUF) | wllama | generation | 70 MB | fast | low | wasm |
 | Chrome AI Summarizer | chrome-ai | summarization | 0 MB | fast | medium | cpu |
 
-Notice the generation models span three providers. WebLLM models require WebGPU and offer the best speed with GPU acceleration. Wllama models use WASM and work everywhere, including Firefox and Safari. Transformers ONNX models also use WebGPU but come from the TJS v4 experimental pipeline. Chrome AI models require zero download but only work in Chrome.
+Notice the generation models span four providers. WebLLM models require WebGPU and offer the best speed with GPU acceleration. Wllama models use WASM and work everywhere, including Firefox and Safari. Transformers ONNX models also use WebGPU but come from the TJS v4 pipeline. Chrome AI models require zero download but only work in Chrome.
 
 The `TaskCategory` type covers 21 categories: `embedding`, `classification`, `zero-shot`, `ner`, `reranking`, `generation`, `translation`, `summarization`, `fill-mask`, `question-answering`, `speech-to-text`, `text-to-speech`, `image-classification`, `image-captioning`, `object-detection`, `segmentation`, `ocr`, `document-qa`, `image-features`, `image-to-image`, and `multimodal-embedding`.
 
@@ -416,7 +416,7 @@ function ModelPicker() {
 `useAdaptiveBatchSize` is synchronous - no loading or error states. It re-computes when options change.
 
 <Callout type="info" title="See It Live">
-  The [Model Advisor](/model-advisor) showcase app implements this exact pattern. Select any of the 21 task categories from the dropdown, and it shows ranked recommendations for your device, complete with scores, reasons, and batch size computation. You can also register custom models through the UI and see them appear in the rankings.
+  The [Model Advisor](https://localmode.ai/model-advisor) showcase app implements this exact pattern. Select any of the 21 task categories from the dropdown, and it shows ranked recommendations for your device, complete with scores, reasons, and batch size computation. You can also register custom models through the UI and see them appear in the rankings.
 </Callout>
 
 ---

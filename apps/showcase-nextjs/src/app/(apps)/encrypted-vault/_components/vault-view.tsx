@@ -5,6 +5,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   Lock,
   Unlock,
@@ -309,7 +310,7 @@ function LockedScreen() {
 
 /** Unlocked screen showing entries and add form */
 function UnlockedScreen() {
-  const { addEntry, viewEntry, removeEntry, lock } = useVault();
+  const { addEntry, viewEntry, removeEntry } = useVault();
   const {
     entries,
     decryptedEntryId,
@@ -541,6 +542,7 @@ export function VaultView() {
   }, []);
 
   // Local state for add form toggle (passed down)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- setter is used in header, value read by UnlockedScreen's own copy
   const [showAddForm, setShowAddForm] = useState(false);
 
   return (
@@ -552,12 +554,12 @@ export function VaultView() {
         {/* Header */}
         <div className="h-14 min-h-14 border-b border-poster-border/20 flex items-center justify-between px-5 bg-poster-surface/60 backdrop-blur-xl">
           <div className="flex items-center gap-3">
-            <a
+            <Link
               href="/"
               className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-poster-surface-lighter/50 text-poster-text-sub hover:text-poster-text-main transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
-            </a>
+            </Link>
             <div className="w-px h-5 bg-poster-border/20" />
             <div className="flex items-center gap-2.5">
               <div className={cn(

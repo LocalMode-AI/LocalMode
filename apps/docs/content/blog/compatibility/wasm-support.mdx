@@ -1,0 +1,129 @@
+---
+title: "WebAssembly Browser Support"
+description: "Universal WASM support across all modern browsers - the foundation for Transformers.js and wllama inference."
+author: "LocalMode"
+date: "2026-04-07"
+---
+
+# WebAssembly Browser Support
+
+Universal WASM support across all modern browsers - the foundation for Transformers.js and wllama inference.
+
+*Category: Web Feature Compatibility*
+
+## Feature Support Matrix
+
+The following table summarizes which web platform features are available on WebAssembly Browser Support and how they affect LocalMode's capabilities. Features marked as supported enable full functionality; partial or unsupported features trigger automatic fallbacks.
+
+| Feature | Supported | Notes |
+| --- | --- | --- |
+| **Chrome** | Yes (57+) | Full WASM + SIMD (91+) + Threads (74+). Excellent performance. |
+| **Firefox** | Yes (52+) | Full WASM + SIMD (89+) + Threads (79+). SpiderMonkey JIT compiles efficiently. |
+| **Safari** | Yes (11+) | WASM from Safari 11. SIMD from 16.4. Threads from 14.1 (requires COOP/COEP headers). |
+| **Edge** | Yes (16+) | Chromium-based Edge (79+): same as Chrome. Legacy Edge (16+): basic WASM only. |
+| **Safari iOS** | Yes (11+) | WASM from iOS 11. SIMD from iOS 16.4. Threads from iOS 14.5 (requires COOP/COEP headers). |
+| **Chrome Android** | Yes | Full support. Performance varies with device CPU. |
+
+## Understanding the Impact
+
+Each feature in the matrix above maps to specific LocalMode capabilities:
+
+- **WebGPU** - Required for `@localmode/webllm` (GPU-accelerated LLM inference at 30-90 tokens/second). When unavailable, use `@localmode/wllama` (WASM, 5-20 tokens/second) as a fallback. Non-LLM tasks (embeddings, classification, vision, audio) do not require WebGPU.
+- **WebAssembly** - The universal inference backend. Required for `@localmode/transformers` and `@localmode/wllama`. WASM is supported in ~95.5% of web traffic (caniuse, May 2026). SIMD support (for optimized vector operations) requires newer browser versions.
+- **IndexedDB** - Used for persistent vector storage (`VectorDB`) and model caching (`createModelLoader`). When blocked (Safari Private Browsing), LocalMode falls back to `MemoryStorage` (data lost on tab close).
+- **Web Workers** - Enable background model loading and inference without blocking the main UI thread. Module workers (for ES module imports in workers) require newer browser versions.
+- **SharedArrayBuffer** - Enables multi-threaded WASM inference for improved performance. Requires Cross-Origin Isolation headers (COOP/COEP). Not required for basic functionality.
+- **Web Locks** - Used for cross-tab model loading coordination (prevents multiple tabs from downloading the same model simultaneously). Falls back to `InMemoryLockManager` when unavailable.
+- **BroadcastChannel** - Used for cross-tab VectorDB synchronization. Falls back to `LocalStorageBroadcaster` when unavailable.
+
+## Fallback Strategies
+
+WebAssembly is supported in all modern browsers (~95.5% of web traffic as of May 2026, per caniuse). It's the universal inference backend for LocalMode - Transformers.js and wllama both compile to WASM. The only concern is SIMD support (needed for optimal performance): Safari 16.4+ and all Chromium/Firefox 89+ support it. On older browsers without SIMD, inference works but at reduced speed (roughly 2–4× slower for vector-heavy operations).
+
+LocalMode is designed with progressive enhancement in mind. The core principle: detect capabilities at runtime and use the best available path. The `@localmode/core` package exports detection utilities for this purpose:
+
+```typescript
+import {
+  isWebGPUSupported,
+  isIndexedDBSupported,
+  isCrossOriginIsolated,
+  detectCapabilities,
+  recommendModels,
+} from '@localmode/core';
+
+async function detectAndConfigure() {
+  const caps = await detectCapabilities();
+  console.log(caps);
+  // caps.features.webgpu, caps.hardware.memory (GB), caps.storage.availableBytes
+
+  // isWebGPUSupported() is async - it must be awaited
+  if (await isWebGPUSupported()) {
+    // Use @localmode/webllm for GPU-accelerated inference
+  }
+
+  // recommendModels() is synchronous: capabilities first, options second
+  const recommendations = recommendModels(caps, {
+    task: 'generation',
+    maxSizeMB: 1500,
+  });
+}
+```
+
+
+
+## Recommended Providers
+
+For WebAssembly Browser Support, the recommended LocalMode providers are:
+
+- **Transformers.js** - Broadest model catalog for non-LLM tasks (embeddings, classification, vision, audio). WASM-based, works everywhere.
+- **wllama (WASM)** - Universal LLM inference via WASM. Works without WebGPU. The safe choice for broad compatibility.
+
+## Recommended Models
+
+The following models are tested and recommended for WebAssembly Browser Support:
+
+| Model | Provider |
+| --- | --- |
+| Xenova/bge-small-en-v1.5 | Transformers.js |
+| Qwen2.5-1.5B-Instruct-Q4_K_M | wllama (WASM) |
+
+These models are chosen for their compatibility with WebAssembly Browser Support's capabilities and constraints. They represent the best balance of quality, size, and performance for this platform.
+
+## Known Issues
+
+Standard WASM memory uses 32-bit addressing, capping addressable space at 4 GiB (65,536 pages × 64 KiB per page). The WebAssembly Memory64 proposal lifts this cap; it is supported in Chrome 133+, Firefox 134+, and Edge 133+, but not yet in Safari (as of May 2026). WASM SIMD is not available on Safari < 16.4 (iOS < 16.4) - inference falls back to scalar operations at reduced speed. Some ad blockers may interfere with WASM module loading from CDNs.
+
+### Mitigation Strategies
+
+When building applications that target WebAssembly Browser Support, follow these practices:
+
+1. **Always detect before loading** - Use `await isWebGPUSupported()`, `isIndexedDBSupported()`, and `await detectCapabilities()` before attempting to load models or create storage. Never assume a feature is available.
+2. **Wrap model loading in try/catch** - Even when detection succeeds, model loading can fail due to memory pressure, network issues, or browser bugs. Always have a fallback path that attempts a smaller model.
+3. **Pick models with `recommendModels()`** - Pass the detected capabilities to `recommendModels(caps, { task })` to select a model appropriate for the current device. It is the recommended pattern for production deployments.
+4. **Test on real hardware** - Browser DevTools device emulation does not accurately simulate memory limits, GPU capabilities, or storage quotas. Test on actual target hardware.
+5. **Monitor storage quota** - Use `getStorageQuota()` to check available space before downloading large models. Inform users if storage is insufficient rather than failing silently.
+
+## Web Standards References
+
+- [WebAssembly](https://developer.mozilla.org/en-US/docs/WebAssembly)
+- [WASM SIMD](https://v8.dev/features/simd)
+
+## Related Pages
+
+- [Webgpu Support](/blog/compatibility/webgpu-support) - compatibility guide
+- [Firefox Desktop](/blog/compatibility/firefox-desktop) - compatibility guide
+- [Safari Ios](/blog/compatibility/safari-ios) - compatibility guide
+
+## Methodology
+
+Browser feature support data on this page was verified against caniuse.com (fetched May 2026) and MDN Web Docs, and cross-referenced with LocalMode's runtime feature detection in `packages/core/src/capabilities/features.ts` and `detect.ts`. Browser version numbers reflect the point at which each feature shipped enabled by default. The global usage figure (95.46 %) is taken directly from the caniuse WebAssembly support table. The Memory64 support matrix was verified against caniuse.com/wf-wasm-memory64. Browser support evolves - verify current support with the linked references for production decisions.
+
+## Sources
+
+- [caniuse - WebAssembly](https://caniuse.com/wasm) - global usage 95.46 %; first support: Chrome 57, Firefox 52, Safari 11, Edge 16
+- [caniuse - WebAssembly SIMD](https://caniuse.com/wasm-simd) - Chrome 91, Firefox 89, Safari 16.4, Edge 91
+- [caniuse - WebAssembly Threads and Atomics](https://caniuse.com/wasm-threads) - Chrome 74, Firefox 79, Safari 14.1 (macOS) / 14.5 (iOS), Edge 79
+- [caniuse - WebAssembly Memory64](https://caniuse.com/wf-wasm-memory64) - Chrome 133, Firefox 134, Edge 133; Safari not supported
+- [MDN - WebAssembly.Memory constructor](https://developer.mozilla.org/en-US/docs/WebAssembly/JavaScript_interface/Memory/Memory) - 32-bit WASM memory cap (65,536 pages = 4 GiB)
+- [WebKit Blog - New WebKit Features in Safari 14.1](https://webkit.org/blog/11648/new-webkit-features-in-safari-14-1/) - confirms Safari 14.1 WASM threads
+- LocalMode capability detection source: `packages/core/src/capabilities/features.ts`, `detect.ts`

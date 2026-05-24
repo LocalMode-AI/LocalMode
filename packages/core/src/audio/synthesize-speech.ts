@@ -7,55 +7,14 @@
  */
 
 import type {
-  TextToSpeechModel,
   SynthesizeSpeechOptions,
   SynthesizeSpeechResult,
-  TextToSpeechModelFactory,
 } from './types.js';
+import { resolveTTSModel, setGlobalTTSProvider } from './tts-provider.js';
 
-// Global provider for string model ID resolution
-let globalTTSProvider: TextToSpeechModelFactory | null = null;
-
-/**
- * Set the global text-to-speech provider for string model ID resolution.
- *
- * @param provider - Factory function to create TTS models from string IDs
- *
- * @example
- * ```ts
- * import { setGlobalTTSProvider } from '@localmode/core';
- * import { transformers } from '@localmode/transformers';
- *
- * setGlobalTTSProvider((modelId) => transformers.textToSpeech(modelId));
- *
- * // Now you can use string model IDs
- * const { audio } = await synthesizeSpeech({
- *   model: 'onnx-community/Kokoro-82M-v1.0-ONNX',
- *   text: 'Hello, world!',
- * });
- * ```
- */
-export function setGlobalTTSProvider(provider: TextToSpeechModelFactory | null): void {
-  globalTTSProvider = provider;
-}
-
-/**
- * Resolve a model from string ID or return the model object.
- */
-function resolveModel(modelOrId: TextToSpeechModel | string): TextToSpeechModel {
-  if (typeof modelOrId !== 'string') {
-    return modelOrId;
-  }
-
-  if (!globalTTSProvider) {
-    throw new Error(
-      'No global TTS provider configured. ' +
-        'Either pass a TextToSpeechModel object or call setGlobalTTSProvider() first.'
-    );
-  }
-
-  return globalTTSProvider(modelOrId);
-}
+// Re-export `setGlobalTTSProvider` from its shared home so existing imports
+// from `synthesize-speech.js` continue to work unchanged.
+export { setGlobalTTSProvider };
 
 /**
  * Synthesize speech from text using a text-to-speech model.
@@ -124,7 +83,7 @@ export async function synthesizeSpeech(
 
   abortSignal?.throwIfAborted();
 
-  const model = resolveModel(modelOrId);
+  const model = resolveTTSModel(modelOrId);
 
   let lastError: Error | null = null;
 

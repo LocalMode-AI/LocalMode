@@ -22,7 +22,6 @@ export function ChatInterface() {
   // Hooks
   const { askQuestion } = usePDFSearch();
   const {
-    isReady,
     isLoading,
     loadingModelName,
     loadingProgress,

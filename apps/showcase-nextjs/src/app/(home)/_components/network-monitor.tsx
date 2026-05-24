@@ -12,7 +12,6 @@ import Script from 'next/script';
 
 export function NetworkMonitorScript() {
   return (
-    // eslint-disable-next-line @next/next/no-before-interactive-script-outside-document
     <Script id="network-monitor" src="/network-monitor.js" strategy="beforeInteractive" />
   );
 }

@@ -199,19 +199,18 @@ describe('MULTIMODAL_EMBEDDING_MODELS catalog', () => {
   });
 });
 
-describe('v3 isolation', () => {
-  it('clip-embedding.ts uses dynamic import from @huggingface/transformers (v3)', () => {
+describe('unified TJS import', () => {
+  it('clip-embedding.ts uses dynamic import from @huggingface/transformers', () => {
     const filePath = path.resolve(
       __dirname,
       '../src/implementations/clip-embedding.ts'
     );
     const content = fs.readFileSync(filePath, 'utf-8');
 
-    // Uses dynamic import() for v3 transformers
     expect(content).toContain("@huggingface/transformers");
   });
 
-  it('clip-embedding.ts does NOT import from @huggingface/transformers-v4', () => {
+  it('clip-embedding.ts does not reference the removed transformers-v4 alias', () => {
     const filePath = path.resolve(
       __dirname,
       '../src/implementations/clip-embedding.ts'

@@ -1,0 +1,142 @@
+---
+title: "Cross-Origin Isolation (COOP/COEP)"
+description: "Setting up COOP/COEP headers for SharedArrayBuffer - required for multi-threaded WASM inference in some configurations."
+author: "LocalMode"
+date: "2026-04-30"
+---
+
+# Cross-Origin Isolation (COOP/COEP)
+
+Setting up COOP/COEP headers for SharedArrayBuffer - required for multi-threaded WASM inference in some configurations.
+
+*Category: Deployment Scenario Compatibility*
+
+## Feature Support Matrix
+
+The following table summarizes which web platform features are available on Cross-Origin Isolation (COOP/COEP) and how they affect LocalMode's capabilities. Features marked as supported enable full functionality; partial or unsupported features trigger automatic fallbacks.
+
+| Feature | Supported | Notes |
+| --- | --- | --- |
+| **SharedArrayBuffer** | Requires COOP/COEP headers | Needed for multi-threaded WASM inference (wllama with threads). Not required for basic WASM. |
+| **COOP Header** | Cross-Origin-Opener-Policy: same-origin | Isolates the browsing context group. May break window.opener references. |
+| **COEP Header** | `require-corp` or `credentialless` | `require-corp` requires all subresources to supply CORP/CORS headers. `credentialless` (Chrome 96+, Firefox 119+, no Safari) loads cross-origin no-cors resources without CORP by stripping credentials. Both values enable cross-origin isolation. |
+| **Impact on iframes** | Significant | Third-party iframes (ads, analytics, social embeds) may break without credentialless or CORP headers. |
+| **Impact on images** | Moderate | Cross-origin images need crossorigin attribute or CORS headers from CDN. |
+
+## Understanding the Impact
+
+Each feature in the matrix above maps to specific LocalMode capabilities:
+
+- **WebGPU** - Required for `@localmode/webllm` (GPU-accelerated LLM inference at 30-90 tokens/second). When unavailable, use `@localmode/wllama` (WASM, 5-20 tokens/second) as a fallback. Non-LLM tasks (embeddings, classification, vision, audio) do not require WebGPU.
+- **WebAssembly** - The universal inference backend. Required for `@localmode/transformers` and `@localmode/wllama`. WASM is supported in 97%+ of web traffic. SIMD support (for optimized vector operations) requires newer browser versions.
+- **IndexedDB** - Used for persistent vector storage (`VectorDB`) and model caching (`createModelLoader`). When blocked (Safari Private Browsing), LocalMode falls back to `MemoryStorage` (data lost on tab close).
+- **Web Workers** - Enable background model loading and inference without blocking the main UI thread. Module workers (for ES module imports in workers) require newer browser versions.
+- **SharedArrayBuffer** - Enables multi-threaded WASM inference for improved performance. Requires Cross-Origin Isolation headers (COOP/COEP). Not required for basic functionality.
+- **Web Locks** - Used for cross-tab model loading coordination (prevents multiple tabs from downloading the same model simultaneously). Falls back to `InMemoryLockManager` when unavailable.
+- **BroadcastChannel** - Used for cross-tab VectorDB synchronization. Falls back to `LocalStorageBroadcaster` when unavailable.
+
+## Fallback Strategies
+
+Cross-origin isolation is NOT required for most LocalMode features. Transformers.js and basic wllama inference work without it. Only multi-threaded WASM inference (using SharedArrayBuffer for parallel processing) requires these headers. If you can't set COOP/COEP (e.g., third-party iframes would break), LocalMode falls back to single-threaded inference with isCrossOriginIsolated() detection.
+
+LocalMode is designed with progressive enhancement in mind. The core principle: detect capabilities at runtime and use the best available path. The `@localmode/core` package exports detection utilities for this purpose:
+
+```typescript
+import {
+  isWebGPUSupported,
+  isIndexedDBSupported,
+  isCrossOriginIsolated,
+  detectCapabilities,
+  recommendModels,
+} from '@localmode/core';
+
+async function detectAndConfigure() {
+  const caps = await detectCapabilities();
+  console.log(caps);
+  // caps.features.webgpu, caps.hardware.memory (GB), caps.storage.availableBytes
+
+  // isWebGPUSupported() is async - it must be awaited
+  if (await isWebGPUSupported()) {
+    // Use @localmode/webllm for GPU-accelerated inference
+  }
+
+  // recommendModels() is synchronous: capabilities first, options second
+  const recommendations = recommendModels(caps, {
+    task: 'generation',
+    maxSizeMB: 1500,
+  });
+}
+```
+
+## Fallback Code Example
+
+```typescript
+// next.config.mjs - only add these if you need multi-threaded WASM
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  async headers() {
+    return [{
+      source: '/(.*)',
+      headers: [
+        { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+        { key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' },
+      ],
+    }];
+  },
+};
+```
+
+## Recommended Providers
+
+For Cross-Origin Isolation (COOP/COEP), the recommended LocalMode providers are:
+
+- **Transformers.js** - Broadest model catalog for non-LLM tasks (embeddings, classification, vision, audio). WASM-based, works everywhere.
+- **wllama (WASM)** - Universal LLM inference via WASM. Works without WebGPU. The safe choice for broad compatibility.
+
+## Recommended Models
+
+The following models are tested and recommended for Cross-Origin Isolation (COOP/COEP):
+
+
+
+These models are chosen for their compatibility with Cross-Origin Isolation (COOP/COEP)'s capabilities and constraints. They represent the best balance of quality, size, and performance for this platform.
+
+## Known Issues
+
+COEP: require-corp breaks many third-party embeds. Use COEP: credentialless (Chrome 96+, Firefox 119+; not supported in Safari) as a less restrictive alternative that still enables SharedArrayBuffer - cross-origin no-cors resources are loaded without credentials instead of requiring CORP headers. Vercel, Cloudflare Pages, and Netlify all support custom headers. Some CDNs may not send CORP headers for model files - configure your CDN to add Cross-Origin-Resource-Policy: cross-origin.
+
+### Mitigation Strategies
+
+When building applications that target Cross-Origin Isolation (COOP/COEP), follow these practices:
+
+1. **Always detect before loading** - Use `await isWebGPUSupported()`, `isIndexedDBSupported()`, and `await detectCapabilities()` before attempting to load models or create storage. Never assume a feature is available.
+2. **Wrap model loading in try/catch** - Even when detection succeeds, model loading can fail due to memory pressure, network issues, or browser bugs. Always have a fallback path that attempts a smaller model.
+3. **Pick models with `recommendModels()`** - Pass the detected capabilities to `recommendModels(caps, { task })` to select a model appropriate for the current device. It is the recommended pattern for production deployments.
+4. **Test on real hardware** - Browser DevTools device emulation does not accurately simulate memory limits, GPU capabilities, or storage quotas. Test on actual target hardware.
+5. **Monitor storage quota** - Use `getStorageQuota()` to check available space before downloading large models. Inform users if storage is insufficient rather than failing silently.
+
+## Web Standards References
+
+- [Cross-Origin Isolation](https://developer.mozilla.org/en-US/docs/Web/API/Window/crossOriginIsolated)
+- [SharedArrayBuffer](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer)
+
+## Related Pages
+
+- [Chrome Desktop](/blog/compatibility/chrome-desktop) - compatibility guide
+- [Firefox Desktop](/blog/compatibility/firefox-desktop) - compatibility guide
+- [Wasm Support](/blog/compatibility/wasm-support) - compatibility guide
+
+## Methodology
+
+Header names, values, and cross-origin isolation semantics are sourced directly from MDN Web Docs (COEP, COOP, `crossOriginIsolated`, `SharedArrayBuffer`) and web.dev's canonical COOP/COEP guide. Browser version numbers for `credentialless` support are sourced from caniuse.com's compatibility table for `mdn-http_headers_cross-origin-embedder-policy_credentialless`. All claims were cross-referenced with LocalMode's runtime feature detection in `packages/core/src/capabilities/features.ts` (`isCrossOriginIsolated()`, `isSharedArrayBufferSupported()`, `isWASMThreadsSupported()`) and `detect.ts`.
+
+## Sources
+
+- [MDN: Cross-Origin-Embedder-Policy header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Embedder-Policy)
+- [MDN: Cross-Origin-Opener-Policy header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cross-Origin-Opener-Policy)
+- [MDN: Window.crossOriginIsolated](https://developer.mozilla.org/en-US/docs/Web/API/Window/crossOriginIsolated)
+- [MDN: SharedArrayBuffer](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/SharedArrayBuffer)
+- [web.dev: Making your website cross-origin isolated using COOP and COEP](https://web.dev/articles/coop-coep)
+- [web.dev: Why you need cross-origin isolated for powerful features](https://web.dev/articles/why-coop-coep)
+- [caniuse.com: COEP credentialless browser support](https://caniuse.com/mdn-http_headers_cross-origin-embedder-policy_credentialless)
+- LocalMode capability detection source (`packages/core/src/capabilities/features.ts`, `detect.ts`)

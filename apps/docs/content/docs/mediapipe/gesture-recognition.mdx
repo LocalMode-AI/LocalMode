@@ -1,0 +1,188 @@
+---
+title: 'Gesture Recognition'
+description: Recognize 8 built-in hand gestures with MediaPipe — gesture category, confidence score, handedness, and 21-point hand landmarks in one pass.
+icon: ThumbsUp
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+# Gesture Recognition
+
+The gesture recognizer classifies hand gestures and, in the same pass, returns the 21-point hand landmarks and handedness. It recognizes **8 built-in gesture categories** out of the box — no custom training needed.
+
+## Gesture Categories
+
+`@localmode/core` exports `GESTURE_CATEGORIES` — the 8 gesture names the model can return:
+
+| Category       | Description                                  |
+| -------------- | -------------------------------------------- |
+| `None`         | No recognized gesture                        |
+| `Closed_Fist`  | Closed fist                                  |
+| `Open_Palm`    | Open hand, palm facing the camera            |
+| `Pointing_Up`  | Index finger pointing up                     |
+| `Thumb_Down`   | Thumbs down                                  |
+| `Thumb_Up`     | Thumbs up                                    |
+| `Victory`      | Victory / peace sign (index + middle finger) |
+| `ILoveYou`     | ASL "I love you" sign                        |
+
+```typescript
+import { GESTURE_CATEGORIES } from '@localmode/core';
+
+console.log(GESTURE_CATEGORIES);
+// ['None', 'Closed_Fist', 'Open_Palm', 'Pointing_Up',
+//  'Thumb_Down', 'Thumb_Up', 'Victory', 'ILoveYou']
+```
+
+## Recognizing Gestures
+
+Create a model with `mediapipe.gestureRecognizer()` and pass it to the core `recognizeGesture()` function:
+
+```typescript
+import { recognizeGesture } from '@localmode/core';
+import { mediapipe } from '@localmode/mediapipe';
+
+const { gestures, usage } = await recognizeGesture({
+  model: mediapipe.gestureRecognizer(),
+  image: imageBlob,
+  numHands: 2,
+});
+
+for (const g of gestures) {
+  console.log(`${g.handedness} hand: ${g.gesture} (${g.score.toFixed(2)})`);
+  console.log(`  with ${g.landmarks.length} landmarks`);
+}
+
+console.log(`Recognized in ${usage.durationMs.toFixed(0)}ms`);
+```
+
+### Options
+
+| Option                   | Type                      | Default | Description                              |
+| ------------------------ | ------------------------- | ------- | ---------------------------------------- |
+| `model`                  | `GestureRecognitionModel` | —       | The model from `mediapipe.gestureRecognizer()` |
+| `image`                  | `ImageInput`              | —       | Blob, `ImageData`, image/canvas/video element |
+| `numHands`               | `number`                  | `2`     | Maximum hands to recognize               |
+| `minDetectionConfidence` | `number`                  | `0.5`   | Minimum confidence threshold (0–1)       |
+| `abortSignal`            | `AbortSignal`             | —       | Cancellation signal                      |
+| `maxRetries`             | `number`                  | `2`     | Retry attempts on transient failure      |
+
+### Result
+
+`RecognizeGestureResult` contains a `gestures` array of `GestureResultItem`:
+
+```typescript
+interface GestureResultItem {
+  /** Gesture category name (e.g., 'Thumb_Up', 'Victory', 'None') */
+  gesture: string;
+  /** Recognition confidence score (0-1) */
+  score: number;
+  /** Handedness of the gesturing hand */
+  handedness: 'Left' | 'Right';
+  /** 21 hand landmarks detected alongside the gesture */
+  landmarks: Landmark[];
+}
+```
+
+<Callout type="info" title="Landmarks included">
+  The gesture recognizer is the hand landmarker plus a classification head. Every result carries the same 21-point `landmarks` array as `detectHands()`, so you can draw the hand skeleton and react to the gesture from a single call — see [Hand Tracking](/docs/mediapipe/hand-tracking#drawing-the-hand-skeleton) for the drawing code.
+</Callout>
+
+## Acting on a Gesture
+
+```typescript
+import { recognizeGesture } from '@localmode/core';
+import { mediapipe } from '@localmode/mediapipe';
+
+const model = mediapipe.gestureRecognizer();
+
+const { gestures } = await recognizeGesture({ model, image: imageBlob });
+
+const top = gestures[0];
+if (top && top.score > 0.6) {
+  switch (top.gesture) {
+    case 'Thumb_Up':
+      console.log('Approved');
+      break;
+    case 'Open_Palm':
+      console.log('Stop');
+      break;
+    case 'Victory':
+      console.log('Peace');
+      break;
+    default:
+      break;
+  }
+}
+```
+
+## React Hook
+
+`@localmode/react` provides `useRecognizeGesture`:
+
+```tsx
+'use client';
+
+import { useRecognizeGesture } from '@localmode/react';
+import { mediapipe } from '@localmode/mediapipe';
+
+const model = mediapipe.gestureRecognizer();
+
+export function GestureView() {
+  const { data, error, isLoading, execute, cancel } = useRecognizeGesture({
+    model,
+    numHands: 2,
+  });
+
+  return (
+    <div>
+      {isLoading && <button onClick={cancel}>Cancel</button>}
+      {error && <p>{error.message}</p>}
+      {data?.gestures.map((g, i) => (
+        <p key={i}>
+          {g.handedness}: {g.gesture} ({g.score.toFixed(2)})
+        </p>
+      ))}
+    </div>
+  );
+}
+```
+
+The hook takes `{ model }` (plus optional `numHands`) and returns `{ data, error, isLoading, execute, cancel, reset }`.
+
+## Real-Time Gesture Recognition
+
+For live webcam gesture control, use `createGestureTracker` — it runs MediaPipe in VIDEO mode for higher throughput. See the [Streaming guide](/docs/mediapipe/streaming).
+
+```typescript
+const tracker = mediapipe.createGestureTracker({
+  video: videoElement,
+  numHands: 2,
+  onResults: (gestures, timestampMs) => {
+    const top = gestures[0];
+    if (top && top.gesture !== 'None') handleGesture(top.gesture);
+  },
+});
+
+await tracker.start();
+```
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Real-Time Streaming"
+    href="/docs/mediapipe/streaming"
+    description="Live gesture recognition over a video element."
+  />
+  <Card
+    title="Hand Tracking"
+    href="/docs/mediapipe/hand-tracking"
+    description="The 21-point landmark topology and drawing helpers."
+  />
+  <Card
+    title="MediaPipe Overview"
+    href="/docs/mediapipe"
+    description="Installation, model catalog, and provider configuration."
+  />
+</Cards>

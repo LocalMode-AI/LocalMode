@@ -8,7 +8,7 @@ import { SUMMARIZER_MODEL_ID } from '../_lib/constants';
 
 /** Get the active summarization provider */
 export function getActiveProvider(): ActiveProvider {
-  if (typeof self !== 'undefined' && 'ai' in self && 'summarizer' in (self as any).ai) {
+  if (typeof self !== 'undefined' && 'ai' in self && 'summarizer' in ((self as unknown as Record<string, Record<string, unknown>>).ai)) {
     return 'chrome-ai';
   }
   return 'transformers';

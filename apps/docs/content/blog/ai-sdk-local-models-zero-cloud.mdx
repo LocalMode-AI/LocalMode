@@ -254,7 +254,7 @@ Cancellation works end-to-end. Pass an `AbortSignal` to `generateText()` or `str
 - **Tool calling** -- Small local models have limited tool-calling ability. The adapter returns text-only content.
 - **Structured output / JSON mode** -- AI SDK 6's `output` setting for structured data is not wired through the adapter. Use `generateObject()` from `@localmode/core` directly for structured extraction.
 - **Image generation** -- LocalMode does not include a generative image model, so `ImageModelV3` is not implemented.
-- **WebGPU required for LLMs** -- WebLLM requires WebGPU support (Chrome 113+, Edge 113+, Safari 18+). Embedding models via Transformers.js work on WASM and are broadly compatible.
+- **WebGPU required for LLMs** -- WebLLM requires WebGPU support (Chrome 113+, Edge 113+, Safari 26+). Embedding models via Transformers.js work on WASM and are broadly compatible.
 
 ---
 

@@ -16,8 +16,7 @@ export async function GET(
   return new ImageResponse(
     <DefaultImage
       title={page.data.title}
-      description={page.data.description}
-      site="LocalMode Blog"
+      site="LocalMode.dev Blog"
     />,
     {
       width: 1200,

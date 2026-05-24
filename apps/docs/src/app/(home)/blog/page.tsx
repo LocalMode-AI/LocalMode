@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { blog } from '@/lib/source';
 import type { Metadata } from 'next';
+import { BlogCategories } from './blog-categories';
 
 const baseUrl =
   process.env.NEXT_PUBLIC_SITE_URL ?? 'https://localmode.dev';
@@ -40,6 +41,9 @@ export default function BlogIndex() {
       <p className="text-fd-muted-foreground mb-12">
         Insights on local-first AI, browser ML, and privacy-first engineering.
       </p>
+
+      <BlogCategories />
+
       <div className="flex flex-col gap-8">
         {posts.map((post) => (
           <Link

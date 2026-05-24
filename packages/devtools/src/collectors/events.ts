@@ -29,7 +29,7 @@ const EMBEDDING_EVENTS = [
  */
 export function startEventCollector(
   bridge: DevToolsBridge,
-  eventBuffer: ReturnType<import('../bridge.js').createCircularBuffer>,
+  eventBuffer: ReturnType<typeof import('../bridge.js').createCircularBuffer>,
   notify: () => void
 ): CleanupFn {
   const unsubscribes: Array<() => void> = [];

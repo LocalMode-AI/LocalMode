@@ -1,0 +1,150 @@
+---
+title: "Text-to-Speech in the Browser"
+description: "Generate natural-sounding speech from text using Kokoro - phonemizer-backed synthesis with 29 English voices, speed control, and streaming playback in the browser."
+author: "LocalMode"
+date: "2026-04-20"
+---
+
+# Text-to-Speech in the Browser
+
+Generate natural-sounding speech from text using Kokoro - phonemizer-backed synthesis with 29 English voices, speed control, and streaming playback in the browser.
+
+## What Is Text-to-Speech?
+
+Text-to-speech (TTS) converts written text into spoken audio. Kokoro 82M uses phonemizer-backed synthesis for accurate pronunciation - converting text to phonemes before generating 24kHz audio with natural prosody, appropriate pauses, emphasis, and intonation. The model ships with 29 English voices (American English and British English), supports speed control from 0.5x to 2.0x, and enables streaming playback so audio begins playing before the full utterance is synthesized. The model processes text and returns an audio Blob that can be played via the Web Audio API or downloaded as a WAV/MP3 file.
+
+This capability is exposed through the `synthesizeSpeech()` function in `@localmode/core`. All processing runs entirely in the browser - no server, no API key, no data leaves the device. After the initial model download, text-to-speech works completely offline.
+
+## Real-World Applications
+
+Voice studio applications for exploring voices, languages, and speed settings. Audiobook generation from text content. Accessibility features reading page content aloud. Language learning tools with pronunciation examples. Content creation: turn blog posts into podcasts with voice and speed selection. Notification systems with audio alerts. Screen readers with natural-sounding voice.
+
+These use cases all benefit from local, on-device processing: user data stays private, there are no per-request API costs, and the application works without internet after initial setup.
+
+## Getting Started
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Import the core function and provider:
+
+```typescript
+import { synthesizeSpeech } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+```
+
+The recommended starting model is **onnx-community/Kokoro-82M-v1.0-ONNX** - it provides the best balance of quality, speed, and download size for most applications. It includes phonemizer-backed synthesis for better pronunciation, 29 English voices, speed control (0.5x-2.0x), and streaming playback support.
+
+## Code Example
+
+```typescript
+import { synthesizeSpeech } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX');
+
+const { audio } = await synthesizeSpeech({
+  model,
+  text: 'Welcome to LocalMode. All AI runs in your browser.',
+  voice: 'af_heart',   // 29 English voices available
+  speed: 1.0,          // Speed control: 0.5x to 2.0x
+});
+
+// Play the audio
+const url = URL.createObjectURL(audio);
+const audioEl = new Audio(url);
+audioEl.play();
+```
+
+This example demonstrates the core workflow: create a model instance from the provider, call the `synthesizeSpeech()` function with your input text, voice, and speed, and receive structured results. Kokoro's phonemizer-backed pipeline converts text to phonemes before synthesis, producing more accurate pronunciation than raw character-level approaches. Streaming playback allows audio to begin playing before the full utterance is synthesized, reducing perceived latency. The same pattern works identically across all 1 available provider: Transformers.js.
+
+## Available Models
+
+The following models support text-to-speech through LocalMode. Choose based on your target device, acceptable download size, and quality requirements.
+
+| Model | Provider | Size | Speed | Quality | Voices | Languages |
+| --- | --- | --- | --- | --- | --- | --- |
+| onnx-community/Kokoro-82M-v1.0-ONNX | Transformers.js | 86MB | Medium | High | 29 | English (US & GB) |
+| Xenova/speecht5_tts | Transformers.js | 100MB | Medium | Basic | 1 | 1 (EN) |
+
+**Choosing a model:** For most applications, start with the recommended model (`onnx-community/Kokoro-82M-v1.0-ONNX`). It offers phonemizer-backed synthesis for accurate pronunciation, 29 English voices, adjustable speed (0.5x-2.0x), and streaming playback. If download size is the primary constraint (e.g., mobile PWA, browser extension), pick the smallest model that meets your quality bar. If quality and English voice variety are the priority, Kokoro is the clear choice.
+
+## Cloud vs Local: Cost and Privacy Comparison
+
+Running text-to-speech locally eliminates per-request API costs and keeps all data on-device. Here is how the economics compare:
+
+| Service | Cost / Notes |
+| --- | --- |
+| Google Cloud TTS | $4-16 per million characters (Standard/WaveNet $4, Neural2 $16; Studio voices $160/M, Chirp 3 HD $30/M) |
+| Amazon Polly | $4-30 per million characters (Standard $4, Neural $16, Generative $30; Long-Form voices $100/M) |
+| ElevenLabs | $6-99/month (Starter to Pro plans; Scale and Business plans range up to $990/month) |
+| LocalMode TTS with Kokoro | $0 after 86MB download, with unlimited characters, 29 English voices, and no per-usage fees |
+
+Google Cloud TTS costs $4/M for Standard and WaveNet voices, $16/M for Neural2, $160/M for Studio, and $30/M for Chirp 3 HD. Amazon Polly costs $4/M for Standard, $16/M for Neural, $30/M for Generative, and $100/M for Long-Form voices. ElevenLabs plans range from $6/month (Starter) to $990/month (Business). LocalMode TTS with Kokoro costs $0 after the initial ~86MB model download, with unlimited characters, 29 English voices, speed control, and no per-usage fees.
+
+The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
+
+## Available Providers
+
+- **Transformers.js** - ONNX-optimized models via ONNX Runtime Web. Supports both WebGPU and WASM backends. Broadest model catalog for non-LLM tasks.
+
+## AbortSignal Support
+
+All `synthesizeSpeech()` calls support cancellation through the standard `AbortSignal` API:
+
+```typescript
+const controller = new AbortController();
+
+const promise = synthesizeSpeech({
+  model,
+  text: 'input text',
+  abortSignal: controller.signal,
+});
+
+// Cancel if needed (e.g., user navigates away)
+controller.abort();
+```
+
+This is essential for responsive UIs - cancel in-flight operations when the user navigates away, submits a new query, or closes a dialog. The underlying model inference stops immediately, freeing memory and compute resources.
+
+## React Integration
+
+If you are building a React application, `@localmode/react` provides hooks that manage loading states, error handling, and cancellation automatically:
+
+```bash
+npm install @localmode/react
+```
+
+```typescript
+import { useSynthesizeSpeech } from '@localmode/react';
+```
+
+The hook returns `{ data, error, isLoading, execute, cancel, reset }` - providing everything a UI component needs to display progress, handle errors, and offer cancellation.
+
+## Showcase Apps
+
+- **Voice Studio** - Explore all 29 English voices, and speed settings with live preview and streaming playback.
+- **Audiobook Creator** - Generate long-form audio from text content with voice and speed selection.
+
+## Related Pages
+
+- [Kokoro Tts](/blog/models/kokoro-tts) - model guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+All function signatures, hook return shapes, model IDs, voice counts, and sample rates were verified directly against the LocalMode monorepo source: `packages/core/src/audio/`, `packages/react/src/hooks/use-synthesize-speech.ts`, `packages/transformers/src/kokoro-voices.ts`, and `packages/transformers/src/models.ts`. Cloud pricing figures were fetched from the official provider pricing pages in May 2026; they are subject to change - verify with the provider before making cost decisions. Model file sizes reflect the quantized (q8) ONNX build.
+
+## Sources
+
+- [LocalMode documentation](https://localmode.dev/docs)
+- [onnx-community/Kokoro-82M-v1.0-ONNX model card](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX) - 82M params, 24 kHz, ~86MB q8
+- [Xenova/speecht5_tts model card](https://huggingface.co/Xenova/speecht5_tts) - 16 kHz output, requires HiFiGAN vocoder
+- [phonemizer npm package](https://www.npmjs.com/package/phonemizer) - eSpeak-NG WASM for text-to-phoneme conversion used by Kokoro
+- [Google Cloud Text-to-Speech pricing](https://cloud.google.com/text-to-speech/pricing) - Standard/WaveNet $4/M, Neural2 $16/M, Studio $160/M, Chirp 3 HD $30/M (May 2026)
+- [Amazon Polly pricing](https://aws.amazon.com/polly/pricing/) - Standard $4/M, Neural $16/M, Generative $30/M, Long-Form $100/M (May 2026)
+- [ElevenLabs pricing](https://elevenlabs.io/pricing) - Starter $6/mo, Creator $22/mo, Pro $99/mo, Scale $299/mo, Business $990/mo (May 2026)

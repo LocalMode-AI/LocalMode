@@ -22,6 +22,16 @@ describe('normalizeContent()', () => {
     expect(result).toBe(parts);
   });
 
+  it('passes ContentPart[] containing AudioPart through unchanged', () => {
+    const parts: ContentPart[] = [
+      { type: 'text', text: 'Transcribe this' },
+      { type: 'audio', data: 'UklGRiQA', mimeType: 'audio/wav' },
+    ];
+    const result = normalizeContent(parts);
+    expect(result).toBe(parts);
+    expect(result[1].type).toBe('audio');
+  });
+
   it('handles empty string', () => {
     const result = normalizeContent('');
     expect(result).toEqual([{ type: 'text', text: '' }]);
@@ -52,6 +62,15 @@ describe('getTextContent()', () => {
       { type: 'image', data: 'abc', mimeType: 'image/png' },
     ];
     expect(getTextContent(parts)).toBe('');
+  });
+
+  it('skips AudioPart and returns only text parts', () => {
+    const parts: ContentPart[] = [
+      { type: 'text', text: 'Transcribe' },
+      { type: 'audio', data: 'UklGR', mimeType: 'audio/wav' },
+      { type: 'text', text: 'this clip' },
+    ];
+    expect(getTextContent(parts)).toBe('Transcribe this clip');
   });
 
   it('handles empty array', () => {

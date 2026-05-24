@@ -1,0 +1,199 @@
+---
+title: 'Pose Estimation'
+description: Detect 33-point full-body pose landmarks in images and video with MediaPipe — normalized and world coordinates, visibility scores, and the POSE_CONNECTIONS skeleton helper.
+icon: PersonStanding
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+# Pose Estimation
+
+The pose landmarker detects up to `numPoses` people in an image and returns **33 body landmarks per pose** — covering the face, torso, arms, hands, legs, and feet. Each pose includes 3D world-coordinate landmarks and a confidence score.
+
+## Landmark Topology
+
+MediaPipe's 33-point body topology spans the whole body:
+
+| Range  | Region                                          |
+| ------ | ----------------------------------------------- |
+| 0–10   | Face (nose, eyes, ears, mouth)                  |
+| 11–16  | Shoulders, elbows, wrists                       |
+| 17–22  | Hands (pinky, index, thumb)                     |
+| 23–28  | Hips, knees, ankles                             |
+| 29–32  | Heels and foot index points                     |
+
+Each landmark is a `{ x, y, z, visibility }` point. `x` and `y` are normalized to `0–1`; `z` is depth; `visibility` (0–1) estimates the likelihood the point is visible and not occluded.
+
+## Model Variants
+
+The catalog ships two pose models:
+
+| Catalog ID             | Model                    | Size  | Notes                          |
+| ---------------------- | ------------------------ | ----- | ------------------------------ |
+| `pose_landmarker`      | Pose Landmarker (Lite)   | 5.8MB | Default — fast, good accuracy  |
+| `pose_landmarker_full` | Pose Landmarker (Full)   | 9.4MB | Higher accuracy, larger model  |
+
+```typescript
+// Default lite model
+const lite = mediapipe.poseLandmarker();
+
+// Higher-accuracy full model
+const full = mediapipe.poseLandmarker('pose_landmarker_full');
+```
+
+## Detecting Poses
+
+Create a model with `mediapipe.poseLandmarker()` and pass it to the core `detectPose()` function:
+
+```typescript
+import { detectPose } from '@localmode/core';
+import { mediapipe } from '@localmode/mediapipe';
+
+const { poses, usage } = await detectPose({
+  model: mediapipe.poseLandmarker(),
+  image: imageBlob,
+  numPoses: 1,
+});
+
+for (const pose of poses) {
+  console.log(`Pose score ${pose.score.toFixed(2)} — ${pose.landmarks.length} landmarks`);
+  const nose = pose.landmarks[0];
+  console.log(`  nose at (${nose.x}, ${nose.y}), visibility ${nose.visibility}`);
+}
+
+console.log(`Detected in ${usage.durationMs.toFixed(0)}ms`);
+```
+
+### Options
+
+| Option                   | Type                | Default | Description                         |
+| ------------------------ | ------------------- | ------- | ----------------------------------- |
+| `model`                  | `PoseLandmarkModel` | —       | The model from `mediapipe.poseLandmarker()` |
+| `image`                  | `ImageInput`        | —       | Blob, `ImageData`, image/canvas/video element |
+| `numPoses`               | `number`            | `1`     | Maximum poses to detect             |
+| `minDetectionConfidence` | `number`            | `0.5`   | Minimum confidence threshold (0–1)  |
+| `abortSignal`            | `AbortSignal`       | —       | Cancellation signal                 |
+| `maxRetries`             | `number`            | `2`     | Retry attempts on transient failure |
+
+### Result
+
+`DetectPoseResult` contains a `poses` array of `PoseLandmarkResultItem`:
+
+```typescript
+interface PoseLandmarkResultItem {
+  /** 33 pose landmarks in normalized image coordinates */
+  landmarks: Landmark[];
+  /** 33 pose landmarks in 3D world coordinates (meters, origin at body center) */
+  worldLandmarks: Landmark[];
+  /** Detection confidence score (0-1) */
+  score: number;
+}
+```
+
+<Callout type="tip" title="Filter by visibility">
+  Occluded joints still appear in `landmarks` but with a low `visibility` value. When drawing or measuring, skip points below a threshold (e.g. `visibility > 0.5`) for cleaner results.
+</Callout>
+
+## Drawing the Skeleton
+
+`@localmode/core` exports `POSE_CONNECTIONS` — the landmark index pairs that form the body skeleton:
+
+```typescript
+import { detectPose, POSE_CONNECTIONS } from '@localmode/core';
+import { mediapipe } from '@localmode/mediapipe';
+
+const { poses } = await detectPose({
+  model: mediapipe.poseLandmarker(),
+  image: canvas,
+});
+
+const ctx = canvas.getContext('2d')!;
+
+for (const pose of poses) {
+  ctx.strokeStyle = '#00ddff';
+  ctx.lineWidth = 4;
+  for (const [start, end] of POSE_CONNECTIONS) {
+    const a = pose.landmarks[start];
+    const b = pose.landmarks[end];
+    // Skip occluded joints
+    if ((a.visibility ?? 1) < 0.5 || (b.visibility ?? 1) < 0.5) continue;
+    ctx.beginPath();
+    ctx.moveTo(a.x * canvas.width, a.y * canvas.height);
+    ctx.lineTo(b.x * canvas.width, b.y * canvas.height);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = '#ffffff';
+  for (const point of pose.landmarks) {
+    if ((point.visibility ?? 1) < 0.5) continue;
+    ctx.beginPath();
+    ctx.arc(point.x * canvas.width, point.y * canvas.height, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+```
+
+## React Hook
+
+`@localmode/react` provides `useDetectPose`:
+
+```tsx
+'use client';
+
+import { useDetectPose } from '@localmode/react';
+import { mediapipe } from '@localmode/mediapipe';
+
+const model = mediapipe.poseLandmarker();
+
+export function PoseDetector() {
+  const { data, error, isLoading, execute, cancel } = useDetectPose({
+    model,
+    numPoses: 1,
+  });
+
+  return (
+    <div>
+      {isLoading && <button onClick={cancel}>Cancel</button>}
+      {error && <p>{error.message}</p>}
+      {data && <p>Detected {data.poses.length} pose(s)</p>}
+    </div>
+  );
+}
+```
+
+The hook takes `{ model }` (plus optional `numPoses`) and returns `{ data, error, isLoading, execute, cancel, reset }`.
+
+## Real-Time Pose Tracking
+
+For live webcam tracking, use `createPoseTracker` — it runs MediaPipe in VIDEO mode for higher throughput than calling `detectPose()` per frame. See the [Streaming guide](/docs/mediapipe/streaming).
+
+```typescript
+const tracker = mediapipe.createPoseTracker({
+  video: videoElement,
+  numPoses: 1,
+  onResults: (poses, timestampMs) => drawPoses(poses),
+});
+
+await tracker.start();
+```
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Hand Tracking"
+    href="/docs/mediapipe/hand-tracking"
+    description="21-point hand landmark detection."
+  />
+  <Card
+    title="Real-Time Streaming"
+    href="/docs/mediapipe/streaming"
+    description="Live pose tracking over a video element."
+  />
+  <Card
+    title="Face Detection"
+    href="/docs/mediapipe/face-detection"
+    description="Face bounding boxes and the 478-point face mesh."
+  />
+</Cards>

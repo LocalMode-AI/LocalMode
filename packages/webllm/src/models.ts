@@ -234,6 +234,21 @@ export const WEBLLM_MODELS = {
     size: '5GB',
     description: 'Google Gemma 2 9B, highest quality Google model',
   },
+  'Qwen3.5-4B-q4f16_1-MLC': {
+    name: 'Qwen 3.5 4B',
+    contextLength: 32768,
+    sizeBytes: 2.39 * 1024 * 1024 * 1024, // ~2.39GB
+    size: '2.39GB',
+    description: 'Qwen 3.5 4B, latest high-quality multilingual generation, 32K context',
+  },
+  'Qwen3.5-9B-q4f16_1-MLC': {
+    name: 'Qwen 3.5 9B',
+    contextLength: 32768,
+    sizeBytes: 5.06 * 1024 * 1024 * 1024, // ~5.06GB
+    size: '5.06GB',
+    description:
+      'Qwen 3.5 9B, highest-quality WebLLM preset, 32K context. Requires capable GPU and 8GB+ RAM.',
+  },
 } as const;
 
 /** Size thresholds for model categories (in bytes) */

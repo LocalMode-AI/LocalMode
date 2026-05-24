@@ -1,6 +1,6 @@
 ---
-title: "How Transformers.js Runs 120 ML Models in Your Browser Tab"
-description: "A deep dive into the runtime stack that makes browser-native ML possible: HuggingFace model export, ONNX Runtime Web, WebGPU vs WASM backends, quantization tradeoffs, and how LocalMode wraps it all in 25 clean interfaces across 24 implementation files."
+title: "How Transformers.js Runs 200+ ML Models in Your Browser Tab"
+description: "A deep dive into the runtime stack that makes browser-native ML possible: HuggingFace model export, ONNX Runtime Web, WebGPU vs WASM backends, quantization tradeoffs, and how LocalMode wraps it all in 26 factory methods across 27 implementation files."
 author: LocalMode
 date: 2026-03-18
 ---
@@ -9,7 +9,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 When someone first sees a 384-dimension embedding vector computed entirely inside a browser tab -- no server, no API key, no network request -- the natural question is: _how?_ The answer is a surprisingly deep stack of technologies that, until recently, did not exist together.
 
-This post traces the full path from a HuggingFace model checkpoint to inference results in your browser. We will cover the ONNX export pipeline, ONNX Runtime Web internals, the WebGPU and WASM execution backends, model quantization formats and their tradeoffs, and how LocalMode's `@localmode/transformers` package wraps this entire stack behind 25 factory methods spanning 24 implementation files -- all powered by Transformers.js v3 (with an experimental v4 bridge for text generation).
+This post traces the full path from a HuggingFace model checkpoint to inference results in your browser. We will cover the ONNX export pipeline, ONNX Runtime Web internals, the WebGPU and WASM execution backends, model quantization formats and their tradeoffs, and how LocalMode's `@localmode/transformers` package wraps this entire stack behind 26 factory methods spanning 27 implementation files -- all powered by Transformers.js v4.
 
 If you have shipped ML features via cloud APIs, you already understand the inference side. This post is about the runtime plumbing that makes the same inference work inside `window`.
 
@@ -84,7 +84,7 @@ WebGPU is a modern GPU compute API that gives JavaScript direct access to GPU sh
 | Chrome 113+ | Shipped (stable) | Windows, macOS, ChromeOS, Android 12+ |
 | Edge 113+ | Shipped (stable) | Same engine as Chrome |
 | Safari 26+ | Shipped (stable) | macOS Tahoe, iOS 26, iPadOS 26, visionOS 26 |
-| Firefox 141+ | Shipped (Windows) | macOS ARM64 from Firefox 145; Linux/Android in progress |
+| Firefox 141+ | Shipped (Windows) | macOS ARM64 from Firefox 147; Linux/Android in progress |
 
 As of late 2025, WebGPU ships by default across all four major browsers on desktop. Mobile remains more fragmented: Chrome on Android requires recent Qualcomm/ARM hardware, Firefox on Android is still behind a flag, and Safari on iOS requires iOS 26.
 
@@ -157,7 +157,7 @@ const llm = transformers.languageModel('onnx-community/SmolLM2-135M-Instruct', {
 
 Transformers.js provides the runtime. LocalMode provides the developer interface.
 
-The `@localmode/transformers` package (version 1.0.2) depends on `@huggingface/transformers` v3.8.1+ and implements 25 model factory methods across 24 implementation files. Each factory returns an object that implements a core interface from `@localmode/core` -- meaning the same `embed()`, `classify()`, `transcribe()`, or `generateText()` function works regardless of which provider produced the model.
+The `@localmode/transformers` package (version 4.0.0) depends on `@huggingface/transformers` ^4.2.0 and implements 26 model factory methods across 27 implementation files. Each factory returns an object that implements a core interface from `@localmode/core` -- meaning the same `embed()`, `classify()`, `transcribe()`, or `generateText()` function works regardless of which provider produced the model.
 
 ### The Provider Pattern
 
@@ -190,7 +190,7 @@ const gpuProvider = createTransformers({
 });
 ```
 
-### All 25 Model Types
+### All 26 Model Types
 
 Here is the complete table of every model type `@localmode/transformers` exposes, organized by domain:
 
@@ -221,25 +221,13 @@ Here is the complete table of every model type `@localmode/transformers` exposes
 | 23 | `depthEstimator()` | `DepthEstimationModel` | Vision | Monocular depth estimation |
 | 24 | `multimodalEmbedding()` | `MultimodalEmbeddingModel` | Multimodal | CLIP/SigLIP cross-modal embeddings |
 | 25 | `languageModel()` | `LanguageModel` | Generation | `onnx-community/SmolLM2-135M-Instruct` |
+| 26 | `vad()` | `TransformersSileroVAD` | Audio | Silero VAD voice activity detection |
 
-The first 24 are implemented on Transformers.js v3 (`@huggingface/transformers` ^3.8.1). The 25th -- `languageModel()` -- uses Transformers.js v4 via a dual-install pattern.
+All 26 are powered by a single `@huggingface/transformers@^4.2.0` dependency.
 
 ---
 
-## The TJS v4 Dual-Install Pattern
-
-Text generation with ONNX models requires Transformers.js v4, which is currently published under the `@next` tag. Running v4 alongside v3 without conflicts required an npm alias in `package.json`:
-
-```json
-{
-  "dependencies": {
-    "@huggingface/transformers": "^3.8.1",
-    "@huggingface/transformers-v4": "npm:@huggingface/transformers@next"
-  }
-}
-```
-
-This installs v4 under the alias `@huggingface/transformers-v4`. Only one file in the entire package -- `language-model.ts` -- imports from the v4 alias. All other 24 implementations import from `@huggingface/transformers` (v3). This isolation ensures the v4 preview cannot destabilize the stable implementations.
+## Language Model Loading Strategies
 
 The language model implementation auto-detects the loading strategy from the model ID:
 
@@ -290,7 +278,7 @@ Safari 26+ ships WebGPU, but earlier Safari versions (14-17) are WASM-only. Priv
 
 ### Firefox WebGPU
 
-Firefox shipped WebGPU on Windows in Firefox 141 (July 2025) and macOS ARM64 in Firefox 145. Linux and Android support is still in progress. For Firefox users on those platforms, WASM remains the only backend.
+Firefox shipped WebGPU on Windows in Firefox 141 (July 2025) and macOS ARM64 in Firefox 147 (January 2026). Linux and Android support is still in progress. For Firefox users on those platforms, WASM remains the only backend.
 
 ### SharedArrayBuffer
 
@@ -306,9 +294,9 @@ The stack that makes browser ML work is not any single breakthrough. It is the c
 2. **ONNX Runtime Web** provides a production-grade inference engine compiled to WASM and WebGPU.
 3. **WebGPU** finally gives JavaScript programs access to GPU compute across all major browsers.
 4. **Quantization** compresses models from gigabytes to tens of megabytes with minimal quality loss.
-5. **Transformers.js** ties it all together with HuggingFace Hub integration, tokenizers, and pre/post-processing for 120 model architectures.
+5. **Transformers.js** ties it all together with HuggingFace Hub integration, tokenizers, and pre/post-processing for ~200 model architectures (v4).
 
-LocalMode's role is the final layer: wrapping this stack in typed interfaces (`EmbeddingModel`, `ClassificationModel`, `SpeechToTextModel`, and 22 others) that work with a function-first API (`embed()`, `classify()`, `transcribe()`), support `AbortSignal` cancellation, return structured results with usage metadata, and compose with middleware, pipelines, and vector databases -- all without a single network request after model download.
+LocalMode's role is the final layer: wrapping this stack in typed interfaces (`EmbeddingModel`, `ClassificationModel`, `SpeechToTextModel`, and 23 others) that work with a function-first API (`embed()`, `classify()`, `transcribe()`), support `AbortSignal` cancellation, return structured results with usage metadata, and compose with middleware, pipelines, and vector databases -- all without a single network request after model download.
 
 The browser is no longer a thin client waiting for a server to do the thinking. It is a capable ML runtime, and the tools to use it are production-ready today.
 
@@ -316,32 +304,37 @@ The browser is no longer a thin client waiting for a server to do the thinking. 
 
 ## Methodology
 
+All LocalMode-specific claims (factory method counts, implementation file counts, package versions, dependency versions, API names, model IDs) were verified directly against the codebase at `packages/transformers/src/` - specifically `provider.ts`, `implementations/index.ts`, `implementations/` (27 files), and `package.json`. Transformers.js version and architecture counts were verified against the official HuggingFace v3 and v4 release blog posts fetched at time of writing. Firefox WebGPU version numbers were cross-checked against MDN release notes and the Mozilla Bugzilla tracking issues. ONNX Runtime Web speedup figures were sourced from the Microsoft Open Source Blog announcement post. No benchmark numbers were fabricated; performance table figures are representative estimates for a specific test device and should be treated as illustrative, not universal.
+
+## Sources
+
 **Transformers.js:**
-- [Transformers.js v3 release blog](https://huggingface.co/blog/transformersjs-v3) -- 120 supported architectures (v3), WebGPU support, new quantization formats
-- [Transformers.js v4 preview announcement](https://huggingface.co/blog/transformersjs-v4) -- ~200 supported architectures, text generation pipeline
+- [Transformers.js v3 release blog](https://huggingface.co/blog/transformersjs-v3) - 120 supported architectures (v3), WebGPU support, new quantization formats
+- [Transformers.js v4 release blog](https://huggingface.co/blog/transformersjs-v4) - ~200 supported architectures, released February 9, 2026
 - [Transformers.js documentation](https://huggingface.co/docs/transformers.js/index)
-- [Transformers.js GitHub repository](https://github.com/huggingface/transformers.js/)
+- [Transformers.js GitHub releases](https://github.com/huggingface/transformers.js/releases)
 
 **ONNX Runtime Web:**
 - [ONNX Runtime Web documentation](https://onnxruntime.ai/docs/tutorials/web/)
 - [ONNX Runtime Web WebGPU execution provider](https://onnxruntime.ai/docs/tutorials/web/ep-webgpu.html)
-- [ONNX Runtime Web WebGPU announcement](https://opensource.microsoft.com/blog/2024/02/29/onnx-runtime-web-unleashes-generative-ai-in-the-browser-using-webgpu/) -- 19x speedup for Segment Anything encoder, 3.8x for decoder
+- [ONNX Runtime Web WebGPU announcement](https://opensource.microsoft.com/blog/2024/02/29/onnx-runtime-web-unleashes-generative-ai-in-the-browser-using-webgpu/) - 19x speedup for Segment Anything encoder, 3.8x for decoder (RTX 3060 + Intel Core i9)
 
 **WebGPU Browser Support:**
-- [WebGPU implementation status](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status)
 - [Can I use: WebGPU](https://caniuse.com/webgpu)
-- [WebGPU supported in all major browsers (web.dev)](https://web.dev/blog/webgpu-supported-major-browsers)
-- [WebGPU hits critical mass announcement](https://www.webgpu.com/news/webgpu-hits-critical-mass-all-major-browsers-now-ship-it/)
+- [WebGPU supported in major browsers (web.dev)](https://web.dev/blog/webgpu-supported-major-browsers)
+- [Firefox 141 release notes - WebGPU on Windows](https://developer.mozilla.org/en-US/docs/Mozilla/Firefox/Releases/141)
+- [Firefox 147 release notes - WebGPU on macOS Apple Silicon](https://developer.mozilla.org/en-US/docs/Mozilla/Firefox/Releases/147)
+- [Safari 26.0 WebGPU release notes](https://webkit.org/blog/17333/webkit-features-in-safari-26-0/)
 
 **Quantization:**
 - [ONNX Runtime quantization documentation](https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html)
-- [ONNX model quantization formats discussion](https://software.codidact.com/posts/292940)
 
 **LocalMode Source Code:**
-- `@localmode/transformers` package.json -- `@huggingface/transformers` ^3.8.1, v4 npm alias
-- `packages/transformers/src/implementations/` -- 24 implementation files, 25 factory methods
-- `packages/transformers/src/implementations/language-model.ts` -- TJS v4 dual-loading strategy
-- `packages/core/src/capabilities/features.ts` -- WebGPU and WASM feature detection
+- `packages/transformers/package.json` - `@huggingface/transformers` ^4.2.0, package version 4.0.0
+- `packages/transformers/src/provider.ts` - 26 factory methods
+- `packages/transformers/src/implementations/` - 27 implementation files
+- `packages/transformers/src/implementations/language-model.ts` - dual-loading strategy (pipeline vs AutoModelForCausalLM)
+- `packages/core/src/capabilities/features.ts` - WebGPU and WASM feature detection
 
 ---
 

@@ -6,8 +6,8 @@
 
 import { useRef } from 'react';
 import Link from 'next/link';
-import { Mic, MicOff, Trash2, AudioLines, FileText, ArrowLeft, Play, Upload } from 'lucide-react';
-import { Button, IconBox, Spinner, Badge, StatusDot } from './ui';
+import { Mic, MicOff, Trash2, AudioLines, ArrowLeft, Upload } from 'lucide-react';
+import { IconBox, StatusDot } from './ui';
 import { ErrorBoundary, ErrorAlert } from './error-boundary';
 import { useVoiceRecorder } from '../_hooks/use-voice-recorder';
 import { useTranscriber } from '../_hooks/use-transcriber';

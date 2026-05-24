@@ -1,0 +1,300 @@
+---
+title: 'Overview'
+description: LiteRT provider for browser LLM inference via Google's first-party `.litertlm` runtime. WebGPU with a CPU WASM fallback, a curated catalog of Gemma 4 E2B/E4B and Qwen3 0.6B, all verified end-to-end.
+icon: Microchip
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+# @localmode/litert
+
+Run Google's LiteRT-LM `.litertlm` models directly in the browser via a WebGPU backend with a CPU WASM fallback. First-party Google inference engine. The curated catalog ships **three models** — Gemma 4 E2B, Gemma 4 E4B, and Qwen3 0.6B — all verified to load and generate end-to-end in real Chrome.
+
+<Callout type="warn" title="Early preview">
+  Wraps [`@litert-lm/core@^0.12.1`](https://www.npmjs.com/package/@litert-lm/core), the first published JavaScript release of Google's LiteRT-LM runtime. The JS API is **text-in / text-out** — the Gemma 4 models are multimodal, but the JS API does not yet expose vision or audio input (a future release may add it). APIs and model availability may change as upstream stabilizes. The WASM binaries total roughly 38MB unpacked — lazy-load this provider so the cost is only paid when LiteRT is actually used.
+</Callout>
+
+<Callout type="info" title="See it in action">
+  Try [LLM Chat](https://localmode.ai/llm-chat) for a working demo -- LiteRT is selectable as a fourth backend alongside WebLLM, wllama, and ONNX.
+</Callout>
+
+## Features
+
+- **First-party Google runtime** -- `.litertlm` models executed by the official LiteRT-LM engine
+- **Three verified models** -- Gemma 4 E2B, Gemma 4 E4B (WebGPU-only), and Qwen3 0.6B (WebGPU or CPU), all confirmed end-to-end in real Chrome
+- **WebGPU GPU backend** -- Chrome 113+, Edge 113+, Safari 26+, Firefox 141+ (Windows) / 147+ (macOS Apple Silicon)
+- **CPU WASM backend** -- for portable models (Qwen3 0.6B); Gemma 4 builds are GPU-compiled and require WebGPU
+- **Streaming** -- real-time token generation
+- **AbortSignal cancellation** -- stop generation mid-stream
+- **Lazy load + load deduplication** -- WASM binaries only fetched on first use; concurrent loads share a single promise
+
+## Installation
+
+<Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
+  <Tab value="pnpm">```bash pnpm install @localmode/litert @localmode/core ```</Tab>
+  <Tab value="npm">```bash npm install @localmode/litert @localmode/core ```</Tab>
+  <Tab value="yarn">```bash yarn add @localmode/litert @localmode/core ```</Tab>
+  <Tab value="bun">```bash bun add @localmode/litert @localmode/core ```</Tab>
+</Tabs>
+
+## Quick Start
+
+```typescript
+import { generateText } from '@localmode/core';
+import { litert } from '@localmode/litert';
+
+const { text } = await generateText({
+  model: litert.languageModel('gemma-4-E2B'),
+  prompt: 'Hello!',
+});
+
+console.log(text);
+```
+
+## Streaming
+
+```typescript
+import { streamText } from '@localmode/core';
+import { litert } from '@localmode/litert';
+
+const result = await streamText({
+  model: litert.languageModel('gemma-4-E2B'),
+  prompt: 'Write a haiku about programming.',
+});
+
+let fullText = '';
+for await (const chunk of result.stream) {
+  fullText += chunk.text;
+  // Update your UI with each chunk
+}
+```
+
+## Model Selection
+
+Use the curated catalog, a HuggingFace `repo:file` shorthand, or pass any full `.litertlm` URL:
+
+```typescript
+import { litert } from '@localmode/litert';
+
+// Curated catalog entry
+const model = litert.languageModel('gemma-4-E2B');
+
+// HuggingFace shorthand (repo:filename)
+const model2 = litert.languageModel(
+  'litert-community/Qwen3-0.6B:Qwen3-0.6B.litertlm'
+);
+
+// Full URL
+const model3 = litert.languageModel(
+  'https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B.litertlm'
+);
+```
+
+<Callout type="info" title="Recommended picks">
+  - **Gemma 4 E2B** -- 2.0GB, one of the two models Google officially supports for the JS API. The default recommendation. WebGPU-only.
+  - **Gemma 4 E4B** -- 3.0GB, higher quality than E2B. WebGPU-only.
+  - **Qwen3 0.6B** -- 614MB, Apache-2.0, the lightweight sub-1GB option. Runs on WebGPU *or* CPU.
+</Callout>
+
+<Callout type="warn" title="Gemma 4 requires WebGPU">
+  The Gemma 4 `*-it-web.litertlm` builds are GPU-compiled (their TFLite sections carry a `gpu_artisan` backend constraint) — they run on WebGPU only and **cannot run on the CPU backend**. On a browser without WebGPU, loading a Gemma 4 model fails fast with a clear `ModelLoadError`. Qwen3 0.6B is a portable build that runs on either backend — use it when CPU support matters.
+</Callout>
+
+For the full catalog and gated-model loading, see [Models](/docs/litert/models).
+
+## Configuration
+
+### Model Options
+
+```ts
+const model = litert.languageModel('gemma-4-E2B', {
+  systemPrompt: 'You are a helpful coding assistant.',
+  temperature: 0.7,
+  maxTokens: 1024,
+  topP: 0.9,
+});
+```
+
+<TypeTable
+  type={{
+    systemPrompt: {
+      description: 'System message prepended to all conversations',
+      type: 'string',
+    },
+    temperature: {
+      description: 'Randomness in generation (0.0 = deterministic, higher = more random)',
+      type: 'number',
+      default: '0.7',
+    },
+    maxTokens: {
+      description: 'Maximum tokens to generate',
+      type: 'number',
+      default: '512',
+    },
+    topP: {
+      description: 'Nucleus sampling (0.0-1.0)',
+      type: 'number',
+      default: '0.95',
+    },
+    onProgress: {
+      description: 'Called during model download and initialization. Receives a LiteRTLoadProgress object with status, progress (0–100), loaded/total bytes, and a human-readable text description.',
+      type: '(progress: LiteRTLoadProgress) => void',
+    },
+    modelUrl: {
+      description: 'Full URL to the .litertlm file (overrides ID-based URL construction). Use this with a pre-resolved Response.url to load gated models with custom Authorization headers.',
+      type: 'string',
+    },
+    contextLength: {
+      description: 'Override the catalog context length. Useful when loading a non-catalog model via modelUrl.',
+      type: 'number',
+    },
+    backend: {
+      description: "Pin a backend instead of letting LiteRT-LM choose. By default no backend is passed and LiteRT-LM picks WebGPU when available. Gemma 4 models are WebGPU-only; for portable models (Qwen3 0.6B) the provider retries on CPU if GPU streaming load fails.",
+      type: "'GPU' | 'CPU'",
+    },
+  }}
+/>
+
+### Custom Provider
+
+```typescript
+import { createLitert } from '@localmode/litert';
+
+const myLitert = createLitert({
+  onProgress: (progress) => {
+    console.log(`Loading: ${Math.round(progress.progress ?? 0)}%`);
+  },
+});
+
+const model = myLitert.languageModel('gemma-4-E2B');
+```
+
+## Model Preloading
+
+Preload a model during app initialization so the multi-GB download isn't paid on the first generation call:
+
+```typescript
+import { preloadModel, isModelCached } from '@localmode/litert';
+
+if (!(await isModelCached('gemma-4-E2B'))) {
+  await preloadModel('gemma-4-E2B', {
+    onProgress: (progress) => {
+      updateLoadingBar(progress.progress ?? 0);
+    },
+  });
+}
+```
+
+## Model Management
+
+```typescript
+import { deleteModelCache } from '@localmode/litert';
+
+await deleteModelCache('gemma-4-E2B');
+```
+
+## Browser Compatibility
+
+Check whether the current browser can run LiteRT *before* committing to a multi-GB model download:
+
+```typescript
+import { checkLiteRTBrowserCompat } from '@localmode/litert';
+
+const compat = await checkLiteRTBrowserCompat();
+
+if (compat.canRun) {
+  console.log('Backend:', compat.backend); // 'GPU' | 'CPU'
+} else {
+  console.log('Warnings:', compat.warnings);
+  console.log('Recommendations:', compat.recommendations);
+}
+```
+
+| Browser                              | WebGPU backend | WASM (CPU) backend |
+| ------------------------------------ | -------------- | ------------------ |
+| Chrome 113+                          | Yes            | Yes                |
+| Edge 113+                            | Yes            | Yes                |
+| Safari 26+                           | Yes            | Yes                |
+| Firefox 141+ (Win) / 147+ (macOS AS) | Yes            | Yes                |
+
+LiteRT-LM uses WebGPU when available. The CPU (WASM) backend works on every WebAssembly-capable browser but is slower — and note it is only usable for **portable** models. The Gemma 4 builds are GPU-compiled and run on WebGPU only; Qwen3 0.6B runs on either backend.
+
+## Provider Fallback Pattern
+
+Use LiteRT as a primary provider with `@localmode/wllama` as a fallback:
+
+```typescript
+import { litert } from '@localmode/litert';
+import { wllama } from '@localmode/wllama';
+
+let model;
+try {
+  model = litert.languageModel('gemma-4-E2B');
+} catch (error) {
+  console.warn('LiteRT unavailable, falling back to wllama:', error);
+  model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+}
+```
+
+## LocalMode LLM Provider Comparison
+
+| Provider                | When to use                                                                                              |
+| ----------------------- | -------------------------------------------------------------------------------------------------------- |
+| `@localmode/litert`     | First-party Google `.litertlm` runtime for Gemma 4; early preview, text-only                              |
+| `@localmode/webllm`     | 32 curated MLC models with mature WebGPU kernels; broadest coverage                                      |
+| `@localmode/wllama`     | Any of the 160,000+ [GGUF models on HuggingFace](/docs/wllama); runs on pure WASM without WebGPU         |
+| `@localmode/transformers` | ONNX models via Transformers.js; widest task coverage beyond text generation                           |
+| `@localmode/chrome-ai`  | Zero-download Gemini Nano via Chrome's built-in Prompt API                                               |
+
+## Known Limitations
+
+- **Early preview** -- `@litert-lm/core` is pinned at `^0.12.1`, the first published JS release. Expect breaking changes upstream.
+- **Text-only (for now)** -- the Gemma 4 models are multimodal (their `.litertlm` files ship vision and audio encoders), but the LiteRT-LM JS API (`@litert-lm/core@0.12.1`) does not yet expose those modalities. Enabling `visionModalityEnabled` / `audioModalityEnabled` throws `Vision/Audio options should not be null` — the JS API has no way to supply the required executor options (verified by direct testing). Multimodal input may arrive in a future `@litert-lm/core` release.
+- **Gemma 4 is WebGPU-only** -- the `*-it-web.litertlm` Gemma 4 builds are GPU-compiled and cannot run on the CPU backend. Only Qwen3 0.6B runs on CPU. On a non-WebGPU browser, loading a Gemma 4 model fails fast with a clear `ModelLoadError`.
+- **No `stopSequences`** -- the runtime uses token IDs, not user-supplied stop strings; use `maxTokens` or rely on the model's natural EOS.
+- **Estimated token usage** -- `usage` token counts are estimated from text length; the runtime does not expose exact tokenizer counts in this release.
+
+## Error Handling
+
+```typescript
+import { generateText, ModelLoadError, GenerationError } from '@localmode/core';
+
+try {
+  const { text } = await generateText({ model, prompt: 'Hello' });
+} catch (error) {
+  if (error instanceof ModelLoadError) {
+    console.error('Failed to load model:', error.hint);
+  } else if (error instanceof GenerationError) {
+    console.error('Generation failed:', error.hint);
+  }
+}
+```
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Models"
+    href="/docs/litert/models"
+    description="The curated catalog, the web-optimized Gemma 4 builds, and loading gated models via custom URL."
+  />
+  <Card
+    title="Text Generation"
+    href="/docs/core/generation"
+    description="API reference for streamText, generateText, and generation options."
+  />
+  <Card
+    title="wllama Provider"
+    href="/docs/wllama"
+    description="WASM-based alternative covering 160K+ GGUF models."
+  />
+</Cards>
+
+## Showcase Apps
+
+| App      | Description                                                            | Links                                                                                                                                       |
+| -------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| LLM Chat | Chat with LiteRT models alongside WebLLM, wllama, and ONNX backends    | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |

@@ -1,0 +1,112 @@
+---
+title: "TrOCR Optical Character Recognition Models in the Browser"
+description: "Microsoft's TrOCR - transformer-based OCR models for extracting printed and handwritten text from images in the browser. For document-level OCR with table and formula support, see also GLM-OCR and LightOnOCR-2."
+author: "LocalMode"
+date: "2026-05-16"
+---
+
+# TrOCR Optical Character Recognition Models in the Browser
+
+Microsoft's TrOCR - transformer-based OCR models for extracting printed and handwritten text from images in the browser. For document-level OCR with table and formula support, see also GLM-OCR and LightOnOCR-2.
+
+## Overview
+
+The TrOCR Optical Character Recognition family is available through Transformers.js in LocalMode, with model sizes ranging from 120MB. The primary task for these models is **ocr**, and they can be used with any application built on the LocalMode SDK.
+
+Running TrOCR Optical Character Recognition models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference runs entirely offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+TrOCR (Transformer-based Optical Character Recognition) by Microsoft combines a vision transformer encoder with a text transformer decoder to read text from images. Introduced in [Li et al. (2021)](https://arxiv.org/abs/2109.10282), TrOCR learns end-to-end text recognition without hand-crafted feature extraction, handling varied fonts, orientations, and image qualities.
+
+The small variant pairs a DeiT-Small encoder with a MiniLM decoder - totalling approximately 62M parameters. Unlike document-level models, TrOCR processes **one line of text at a time**. For best results, crop the input image to a single text line; feeding a full page will only capture the most prominent line.
+
+The model excels at processing images of printed or handwritten text - receipts, business cards, book pages, screenshots, and handwritten notes. At around 120MB download size, it is practical for applications where text extraction from images is a core feature: expense tracker apps that scan receipts, note-taking apps that OCR whiteboard photos, and accessibility tools that read text in images. All processing happens in the browser via Transformers.js, so sensitive document images never leave the device. For document-level OCR (tables, formulas, structured data), see GLM-OCR and LightOnOCR-2.
+
+## Variant Comparison
+
+The following table lists every TrOCR Optical Character Recognition variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Xenova/trocr-small-printed](https://huggingface.co/Xenova/trocr-small-printed) | Transformers.js | ~120MB | Medium | Good | - | WASM |
+| [Xenova/trocr-small-handwritten](https://huggingface.co/Xenova/trocr-small-handwritten) | Transformers.js | ~120MB | Medium | Good | - | WASM |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| Under 200MB | 2 | variants |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All TrOCR Optical Character Recognition variants use the same `OCRModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### Transformers.js
+
+Transformers.js runs ONNX-optimized models via ONNX Runtime Web. WebGPU acceleration where available, WASM fallback otherwise.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { extractText } from '@localmode/core';
+
+const model = transformers.ocr('Xenova/trocr-small-printed');
+
+const { text } = await extractText({
+  model,
+  image: imageDataUrlOrBlob,
+});
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred model first, and fall back to a smaller variant if it fails to load.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { extractText } from '@localmode/core';
+
+// Try the preferred model, fall back to the handwritten variant on failure
+let model;
+try {
+  model = transformers.ocr('Xenova/trocr-small-printed');
+} catch (error) {
+  console.warn('Primary model failed, using fallback:', error);
+  model = transformers.ocr('Xenova/trocr-small-handwritten');
+}
+
+const { text } = await extractText({ model, image: imageDataUrlOrBlob });
+```
+
+## When to Use TrOCR Optical Character Recognition
+
+TrOCR Optical Character Recognition models are a strong choice when:
+
+- **You need ocr** - TrOCR Optical Character Recognition is optimized for ocr tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 1 provider (transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The 120MB range means you can target everything from mobile devices to high-end desktops with the same model family.
+
+
+## HuggingFace Model Cards
+
+- [Xenova/trocr-small-printed](https://huggingface.co/Xenova/trocr-small-printed)
+- [Xenova/trocr-small-handwritten](https://huggingface.co/Xenova/trocr-small-handwritten)
+
+## Related Pages
+
+- [Ocr](/blog/tasks/ocr) - task guide
+
+## Methodology
+
+Model availability and provider support is verified directly from LocalMode's source code: `packages/transformers/src/models.ts` (the `OCR_MODELS` catalog) and `packages/transformers/src/implementations/ocr.ts`. Download size (~120MB) reflects the curated estimate in LocalMode's official [OCR guide](/docs/transformers/ocr), consistent with the Xenova ONNX model repository. The 62M parameter count comes from the original TrOCR paper (Li et al., 2021). Speed and quality tiers are LocalMode's curated assessments based on architecture and quantization; always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [Xenova/trocr-small-printed - HuggingFace model card](https://huggingface.co/Xenova/trocr-small-printed)
+- [Xenova/trocr-small-handwritten - HuggingFace model card](https://huggingface.co/Xenova/trocr-small-handwritten)
+- [microsoft/trocr-small-printed - HuggingFace model card](https://huggingface.co/microsoft/trocr-small-printed)
+- [TrOCR: Transformer-based Optical Character Recognition with Pre-trained Models (Li et al., 2021)](https://arxiv.org/abs/2109.10282)
+- [LocalMode OCR guide](/docs/transformers/ocr)
+- [Transformers.js documentation](https://huggingface.co/docs/transformers.js)

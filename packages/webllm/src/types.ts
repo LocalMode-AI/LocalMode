@@ -7,6 +7,10 @@
  */
 
 import type { LanguageModel } from '@localmode/core';
+import type { AppConfig } from '@mlc-ai/web-llm';
+
+/** WebLLM artifact cache backend. */
+export type WebLLMCacheBackend = 'cache' | 'indexeddb' | 'cross-origin';
 
 /**
  * Progress callback for model loading.
@@ -87,6 +91,25 @@ export interface WebLLMModelSettings {
    * @default 4096
    */
   contextLength?: number;
+
+  /**
+   * Use WebLLM's IndexedDB artifact cache instead of the Cache API.
+   * Useful for large models in browser-extension contexts where Cache.add()
+   * can fail during multi-gigabyte downloads.
+   * @default false
+   */
+  useIndexedDBCache?: boolean;
+
+  /**
+   * WebLLM cache backend for model artifacts.
+   * @default 'cache'
+   */
+  cacheBackend?: WebLLMCacheBackend;
+
+  /**
+   * Custom app config passed to WebLLM's CreateMLCEngine().
+   */
+  appConfig?: AppConfig;
 }
 
 /**
@@ -104,4 +127,3 @@ export interface WebLLMProvider {
    */
   languageModel(modelId: string, settings?: WebLLMModelSettings): LanguageModel;
 }
-

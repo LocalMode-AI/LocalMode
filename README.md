@@ -12,7 +12,7 @@ Run ML models entirely in your browser. No servers. No API keys. Your data never
 
 LocalMode is a monorepo of packages for building AI-powered applications that run 100% in the browser. Everything from embeddings and vector search to LLM chat, vision, audio, agents, and structured output works offline after the initial model download.
 
-**13 packages. 32 demo apps. Zero cloud dependencies.**
+**15 packages. 34 demo apps. Zero cloud dependencies.**
 
 ### Why LocalMode?
 
@@ -30,11 +30,13 @@ LocalMode is a monorepo of packages for building AI-powered applications that ru
 | Package | Version | Description |
 | ------- | ------- | ----------- |
 | [`@localmode/core`](./packages/core/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/core.svg)](https://www.npmjs.com/package/@localmode/core) | Zero-dependency core -- VectorDB (HNSW, typed metadata, WebGPU search, SQ8/PQ quantization), pipelines, inference queue, model cache, agent framework (ReAct + tools + memory), evaluation SDK, vector import/export, multimodal content, all interfaces |
-| [`@localmode/react`](./packages/react/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/react.svg)](https://www.npmjs.com/package/@localmode/react) | 46 React hooks, 10 pipeline step factories, batch/list processing, and browser helpers |
+| [`@localmode/react`](./packages/react/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/react.svg)](https://www.npmjs.com/package/@localmode/react) | 56 React hooks, 10 pipeline step factories, batch/list processing, and browser helpers |
 | [`@localmode/ai-sdk`](./packages/ai-sdk/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/ai-sdk.svg)](https://www.npmjs.com/package/@localmode/ai-sdk) | Vercel AI SDK provider for local models |
-| [`@localmode/transformers`](./packages/transformers/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/transformers.svg)](https://www.npmjs.com/package/@localmode/transformers) | HuggingFace Transformers.js provider -- 25 model factories covering embeddings, classification, vision, audio, OCR, multimodal (CLIP), and LLM inference via ONNX (Qwen3.5 vision support) |
-| [`@localmode/webllm`](./packages/webllm/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/webllm.svg)](https://www.npmjs.com/package/@localmode/webllm) | WebLLM provider for LLM inference via WebGPU -- 30 curated models including DeepSeek-R1, Qwen3, Llama 3.2, Phi 3.5 Vision |
-| [`@localmode/wllama`](./packages/wllama/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/wllama.svg)](https://www.npmjs.com/package/@localmode/wllama) | GGUF model provider via llama.cpp WASM -- curated catalog + 135K+ HuggingFace models, GGUF metadata inspection, universal browser support |
+| [`@localmode/transformers`](./packages/transformers/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/transformers.svg)](https://www.npmjs.com/package/@localmode/transformers) | HuggingFace Transformers.js provider -- 26 model factories covering embeddings, classification, vision, audio, OCR, multimodal (CLIP), and LLM inference via ONNX (Qwen3.5 vision support) |
+| [`@localmode/webllm`](./packages/webllm/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/webllm.svg)](https://www.npmjs.com/package/@localmode/webllm) | WebLLM provider for LLM inference via WebGPU -- 32 curated models including DeepSeek-R1, Qwen3, Llama 3.2, Phi 3.5 Vision |
+| [`@localmode/wllama`](./packages/wllama/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/wllama.svg)](https://www.npmjs.com/package/@localmode/wllama) | GGUF model provider via llama.cpp WASM -- curated catalog + 160K+ HuggingFace models, GGUF metadata inspection, universal browser support |
+| [`@localmode/litert`](./packages/litert/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/litert.svg)](https://www.npmjs.com/package/@localmode/litert) | Google LiteRT-LM provider (`.litertlm` models, WebGPU + CPU WASM fallback). Text-only, early preview. Catalog ships Gemma 4 E2B/E4B and Qwen3 0.6B, all verified end-to-end. Gated Gemma 3n / Gemma 3 1B loadable via custom URL. |
+| [`@localmode/mediapipe`](./packages/mediapipe/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/mediapipe.svg)](https://www.npmjs.com/package/@localmode/mediapipe) | Google MediaPipe Tasks provider -- real-time hand/pose/face landmark tracking, gesture recognition, image & audio classification, language detection. WASM + WebGL, all browsers. |
 | [`@localmode/chrome-ai`](./packages/chrome-ai/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/chrome-ai.svg)](https://www.npmjs.com/package/@localmode/chrome-ai) | Chrome Built-in AI provider -- zero-download inference via Gemini Nano with automatic fallback |
 | [`@localmode/langchain`](./packages/langchain/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/langchain.svg)](https://www.npmjs.com/package/@localmode/langchain) | LangChain.js adapters -- drop-in local embeddings, chat, vector store, and reranker for existing LangChain apps |
 | [`@localmode/devtools`](./packages/devtools/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/devtools.svg)](https://www.npmjs.com/package/@localmode/devtools) | In-app DevTools widget for model cache, VectorDB stats, and inference queue observability |
@@ -89,17 +91,20 @@ const results = await db.search(query, { k: 5 });
 
 ### LLM Chat with Streaming
 
-Three providers implement the same `LanguageModel` interface -- choose based on your needs:
+Four providers implement the same `LanguageModel` interface -- choose based on your needs:
 
 ```bash
-# WebGPU (fastest, 30 curated models)
+# WebGPU (fastest, 32 curated models)
 pnpm install @localmode/core @localmode/webllm
 
-# WASM (universal browser support, 135K+ GGUF models)
+# WASM (universal browser support, 160K+ GGUF models)
 pnpm install @localmode/core @localmode/wllama
 
 # ONNX (Transformers.js v4, same package as embeddings/vision/audio)
 pnpm install @localmode/core @localmode/transformers
+
+# Google LiteRT-LM (.litertlm models, WebGPU — Gemma 4 E2B/E4B, Qwen3 0.6B)
+pnpm install @localmode/core @localmode/litert
 ```
 
 ```typescript
@@ -107,11 +112,13 @@ import { streamText } from '@localmode/core';
 import { webllm } from '@localmode/webllm';
 import { wllama } from '@localmode/wllama';
 import { transformers } from '@localmode/transformers';
+import { litert } from '@localmode/litert';
 
 // Pick any provider -- all implement the same LanguageModel interface
 const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');       // WebGPU
 // const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');          // WASM (GGUF)
 // const model = transformers.languageModel('onnx-community/Qwen3-0.6B-ONNX');  // ONNX
+// const model = litert.languageModel('gemma-4-E2B');                            // LiteRT (WebGPU)
 
 const result = await streamText({
   model,
@@ -181,6 +188,26 @@ function ChatApp() {
 }
 ```
 
+### Real-Time Hand & Pose Tracking (MediaPipe)
+
+```typescript
+import { detectHands } from '@localmode/core';
+import { mediapipe } from '@localmode/mediapipe';
+
+// Single-frame: 21-point hand landmarks
+const { hands } = await detectHands({
+  model: mediapipe.handLandmarker(),
+  image: imageBlob,
+});
+
+// Real-time: 30-60fps tracking from a webcam video element
+const tracker = mediapipe.createHandTracker({
+  video: videoElement,
+  onResults: (hands) => drawLandmarks(hands),
+});
+await tracker.start();
+```
+
 ---
 
 ## Features
@@ -202,8 +229,11 @@ function ChatApp() {
 | **Fill-Mask** | `fillMask()` | Masked token prediction (BERT-style) |
 | **OCR** | `extractText()` | Optical character recognition |
 | **Document QA** | `askDocument()`, `askTable()` | Visual document and table understanding |
-| **Audio** | `transcribe()`, `synthesizeSpeech()`, `classifyAudio()` | Speech-to-text, TTS, audio classification |
+| **Audio** | `transcribe()`, `synthesizeSpeech()`, `streamSynthesizeSpeech()`, `playStreamedSpeech()`, `classifyAudio()` | Speech-to-text, TTS (Kokoro -- 29 English voices, phonemizer-backed), streaming TTS with real-time playback, audio classification |
+| **Live Transcription** | `createLiveTranscriber()`, `createTurnTaker()` | Real-time microphone transcription with VAD (Silero) and turn-based conversation |
 | **Vision** | `classifyImage()`, `captionImage()`, `detectObjects()`, `segmentImage()`, `imageToImage()`, `estimateDepth()` | Image processing and analysis |
+| **Landmarks & Gestures** | `detectHands()`, `detectPose()`, `detectFace()`, `detectFaceLandmarks()`, `recognizeGesture()` | Hand/pose/face landmark tracking and gesture recognition (MediaPipe) |
+| **Language Detection** | `detectLanguage()` | Identify the language of text (110 languages) |
 
 ### Vector Database
 
@@ -245,6 +275,7 @@ function ChatApp() {
 | **PII Redaction** | `redactPII()`, `piiRedactionMiddleware()` | Named entity based PII detection and redaction |
 | **Differential Privacy** | `dpEmbeddingMiddleware()`, `createPrivacyBudget()` | DP noise injection for embeddings and classification |
 | **Drift Detection** | `checkModelCompatibility()`, `reindexCollection()` | Detect model changes, auto-reindex collections |
+| **Audit Log** | `createAuditLog()` | Hash-chained, signed, append-only tamper-evident audit log (IndexedDB-backed) |
 
 ### Infrastructure
 
@@ -261,14 +292,14 @@ function ChatApp() {
 
 ## Demo Applications
 
-See LocalMode in action at [localmode.ai](https://localmode.ai) -- 32 apps showcasing every feature.
+See LocalMode in action at [localmode.ai](https://localmode.ai) -- 34 apps showcasing every feature.
 
 | Category | Apps |
 | -------- | ---- |
 | **Chat & Agents** | [LLM Chat](https://localmode.ai/llm-chat), [Research Agent](https://localmode.ai/research-agent), [GGUF Explorer](https://localmode.ai/gguf-explorer) |
-| **Audio** | [Voice Notes](https://localmode.ai/voice-notes), [Meeting Assistant](https://localmode.ai/meeting-assistant), [Audiobook Creator](https://localmode.ai/audiobook-creator) |
+| **Audio** | [Voice Notes](https://localmode.ai/voice-notes), [Meeting Assistant](https://localmode.ai/meeting-assistant), [Audiobook Creator](https://localmode.ai/audiobook-creator), [Voice Studio](https://localmode.ai/voice-studio) |
 | **Text & NLP** | [Smart Writer](https://localmode.ai/smart-writer), [Data Extractor](https://localmode.ai/data-extractor), [Sentiment Analyzer](https://localmode.ai/sentiment-analyzer), [Email Classifier](https://localmode.ai/email-classifier), [Translator](https://localmode.ai/translator), [Text Summarizer](https://localmode.ai/text-summarizer), [Q&A Bot](https://localmode.ai/qa-bot), [Smart Autocomplete](https://localmode.ai/smart-autocomplete), [Invoice Q&A](https://localmode.ai/invoice-qa) |
-| **Vision** | [Background Remover](https://localmode.ai/background-remover), [Smart Gallery](https://localmode.ai/smart-gallery), [Product Search](https://localmode.ai/product-search), [Cross-Modal Search](https://localmode.ai/cross-modal-search), [Image Captioner](https://localmode.ai/image-captioner), [OCR Scanner](https://localmode.ai/ocr-scanner), [Object Detector](https://localmode.ai/object-detector), [Duplicate Finder](https://localmode.ai/duplicate-finder), [Photo Enhancer](https://localmode.ai/photo-enhancer) |
+| **Vision** | [Background Remover](https://localmode.ai/background-remover), [Smart Gallery](https://localmode.ai/smart-gallery), [Product Search](https://localmode.ai/product-search), [Cross-Modal Search](https://localmode.ai/cross-modal-search), [Image Captioner](https://localmode.ai/image-captioner), [OCR Scanner](https://localmode.ai/ocr-scanner), [Object Detector](https://localmode.ai/object-detector), [Duplicate Finder](https://localmode.ai/duplicate-finder), [Photo Enhancer](https://localmode.ai/photo-enhancer), [MediaPipe Studio](https://localmode.ai/mediapipe-studio) |
 | **RAG & Search** | [PDF Search](https://localmode.ai/pdf-search), [Semantic Search](https://localmode.ai/semantic-search), [LangChain RAG](https://localmode.ai/langchain-rag), [Data Migrator](https://localmode.ai/data-migrator) |
 | **Privacy** | [Document Redactor](https://localmode.ai/document-redactor), [Encrypted Vault](https://localmode.ai/encrypted-vault) |
 | **Developer Tools** | [Model Advisor](https://localmode.ai/model-advisor), [Model Evaluator](https://localmode.ai/model-evaluator) |
@@ -283,7 +314,7 @@ See LocalMode in action at [localmode.ai](https://localmode.ai) -- 32 apps showc
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                            Your Application                              │
 ├──────────────────────────────────────────────────────────────────────────┤
-│                    @localmode/react  (46 React hooks)                    │
+│                    @localmode/react  (56 React hooks)                    │
 ├────────────────────────┬────────────────────────┬────────────────────────┤
 │  @localmode/langchain  │  @localmode/ai-sdk     │  @localmode/devtools   │
 ├────────────────────────┴────────────────────────┴────────────────────────┤
@@ -297,9 +328,11 @@ See LocalMode in action at [localmode.ai](https://localmode.ai) -- 32 apps showc
 │                          Provider Packages                               │
 │                                                                          │
 │  @localmode/transformers         HuggingFace Transformers.js,            │
-│                                  25 model factories (ONNX)               │
-│  @localmode/webllm               WebGPU LLM inference, 30 models         │
-│  @localmode/wllama               GGUF via llama.cpp WASM, 135K+          │
+│                                  26 model factories (ONNX)               │
+│  @localmode/webllm               WebGPU LLM inference, 32 models         │
+│  @localmode/wllama               GGUF via llama.cpp WASM, 160K+          │
+│  @localmode/litert               Google LiteRT-LM, .litertlm models      │
+│  @localmode/mediapipe            Google MediaPipe — landmarks, gestures  │
 │  @localmode/chrome-ai            Gemini Nano, zero-download              │
 ├──────────────────────────────────────────────────────────────────────────┤
 │                            Browser APIs                                  │
@@ -322,25 +355,25 @@ See LocalMode in action at [localmode.ai](https://localmode.ai) -- 32 apps showc
 
 ## LLM Provider Comparison
 
-| | WebLLM | Wllama | Transformers.js |
-|-|--------|--------|-----------------|
-| **Runtime** | WebGPU | WASM (llama.cpp) | ONNX Runtime |
-| **Models** | 30 curated (MLC) | 135K+ GGUF from HuggingFace | 14 ONNX (TJS v4) |
-| **Speed** | Fastest (GPU) | Good (CPU) | Good (CPU/GPU) |
-| **Vision** | Phi 3.5 Vision | -- | Qwen3.5 Vision |
-| **Browser Support** | Chrome/Edge 113+ | All modern browsers | All modern browsers |
-| **Best For** | Maximum performance | Universal compatibility, model variety | Multi-task (embeddings + LLM in one package) |
+| | WebLLM | Wllama | Transformers.js | LiteRT |
+|-|--------|--------|-----------------|--------|
+| **Runtime** | WebGPU | WASM (llama.cpp) | ONNX Runtime | LiteRT-LM (Google) |
+| **Models** | 32 curated (MLC) | 160K+ GGUF from HuggingFace | 16 ONNX (TJS v4) | 3 verified (.litertlm) |
+| **Speed** | Fastest (GPU) | Good (CPU) | Good (CPU/GPU) | Fast (WebGPU/CPU) |
+| **Vision** | Phi 3.5 Vision | Holo2 (Qwen3-VL) | Qwen3.5, Gemma 4 | -- |
+| **Browser Support** | Chrome/Edge 113+ | All modern browsers | All modern browsers | Chrome/Edge 113+ |
+| **Best For** | Maximum performance | Universal compatibility, model variety | Multi-task (embeddings + LLM in one package) | Google on-device models |
 
 ---
 
 ## Browser Compatibility
 
-| Browser     | WebGPU | WASM | IndexedDB | Workers | Chrome AI |
-| ----------- | ------ | ---- | --------- | ------- | --------- |
-| Chrome 138+ | Yes    | Yes  | Yes       | Yes     | Yes       |
-| Edge 138+   | Yes    | Yes  | Yes       | Yes     | Yes       |
-| Firefox 75+ | Nightly | Yes | Yes       | Yes     | No        |
-| Safari 18+  | Yes    | Yes  | Yes       | Partial | No        |
+| Browser     | WebGPU   | WASM | IndexedDB | Workers | Chrome AI |
+| ----------- | -------- | ---- | --------- | ------- | --------- |
+| Chrome 80+  | 113+     | Yes  | Yes       | Yes     | Yes       |
+| Edge 80+    | 113+     | Yes  | Yes       | Yes     | Yes       |
+| Firefox 75+ | 141+     | Yes  | Yes       | Yes     | No        |
+| Safari 14+  | 26+      | Yes  | Yes       | Partial | No        |
 
 - **Chrome AI**: Zero-download inference via Gemini Nano (fallback to Transformers.js)
 - **WebGPU**: 3-5x faster inference (fallback to WASM)
@@ -362,6 +395,8 @@ Full documentation available at [localmode.dev](https://localmode.dev)
 | Transformers Provider | [localmode.dev/docs/transformers](https://localmode.dev/docs/transformers) | [`packages/transformers/README.md`](./packages/transformers/README.md) |
 | WebLLM Provider | [localmode.dev/docs/webllm](https://localmode.dev/docs/webllm) | [`packages/webllm/README.md`](./packages/webllm/README.md) |
 | Wllama Provider | [localmode.dev/docs/wllama](https://localmode.dev/docs/wllama) | [`packages/wllama/README.md`](./packages/wllama/README.md) |
+| LiteRT Provider | [localmode.dev/docs/litert](https://localmode.dev/docs/litert) | [`packages/litert/README.md`](./packages/litert/README.md) |
+| MediaPipe Provider | [localmode.dev/docs/mediapipe](https://localmode.dev/docs/mediapipe) | [`packages/mediapipe/README.md`](./packages/mediapipe/README.md) |
 | Chrome AI Provider | [localmode.dev/docs/chrome-ai](https://localmode.dev/docs/chrome-ai) | [`packages/chrome-ai/README.md`](./packages/chrome-ai/README.md) |
 | LangChain Adapters | [localmode.dev/docs/langchain](https://localmode.dev/docs/langchain) | [`packages/langchain/README.md`](./packages/langchain/README.md) |
 | DevTools Widget | [localmode.dev/docs/devtools](https://localmode.dev/docs/devtools) | [`packages/devtools/README.md`](./packages/devtools/README.md) |
@@ -378,11 +413,13 @@ Full documentation available at [localmode.dev](https://localmode.dev)
 ```
 packages/
   core/            # Zero-dependency core (functions, interfaces, VectorDB, agents, evaluation)
-  react/           # React hooks for all core functions (46 hooks + pipeline step factories)
+  react/           # React hooks for all core functions (56 hooks + pipeline step factories)
   ai-sdk/          # Vercel AI SDK provider
-  transformers/    # HuggingFace Transformers.js provider (25 model factories)
-  webllm/          # WebLLM provider (30 curated WebGPU models)
-  wllama/          # Wllama provider (GGUF via llama.cpp WASM, 135K+ models)
+  transformers/    # HuggingFace Transformers.js provider (26 model factories)
+  webllm/          # WebLLM provider (32 curated WebGPU models)
+  wllama/          # Wllama provider (GGUF via llama.cpp WASM, 160K+ models)
+  litert/          # LiteRT-LM provider (Google's WebGPU/WASM, .litertlm models)
+  mediapipe/       # MediaPipe Tasks provider (landmarks, gestures, vision/audio/text)
   chrome-ai/       # Chrome Built-in AI provider (Gemini Nano)
   langchain/       # LangChain.js adapters (embeddings, chat, vector store, reranker)
   devtools/        # In-app DevTools widget for observability
@@ -391,7 +428,7 @@ packages/
   idb/             # idb storage adapter
   localforage/     # localForage storage adapter
 apps/
-  showcase-nextjs/ # Next.js 16 showcase with 32 self-contained demo apps (localmode.ai)
+  showcase-nextjs/ # Next.js 16 showcase with 34 self-contained demo apps (localmode.ai)
   docs/            # Documentation site (localmode.dev)
 ```
 
@@ -418,6 +455,8 @@ LocalMode is built on top of incredible open-source projects:
 | [Transformers.js](https://github.com/huggingface/transformers.js) by HuggingFace | `@localmode/transformers` | State-of-the-art ML models in the browser via ONNX Runtime |
 | [WebLLM](https://github.com/mlc-ai/web-llm) by MLC AI | `@localmode/webllm` | High-performance LLM inference with WebGPU |
 | [wllama](https://github.com/ngxson/wllama) by ngxson / [llama.cpp](https://github.com/ggml-org/llama.cpp) by Georgi Gerganov | `@localmode/wllama` | GGUF model inference via llama.cpp compiled to WASM |
+| [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) by Google AI Edge | `@localmode/litert` | Google's on-device LLM inference engine for browser (WebGPU/WASM, `.litertlm` models) |
+| [MediaPipe](https://github.com/google-ai-edge/mediapipe) by Google AI Edge | `@localmode/mediapipe` | On-device hand/pose/face landmark tracking, gesture recognition, and vision/audio/text tasks via WASM |
 | [LangChain.js](https://github.com/langchain-ai/langchainjs) by LangChain | `@localmode/langchain` | Framework for building LLM-powered applications |
 | [Vercel AI SDK](https://github.com/vercel/ai) by Vercel | `@localmode/ai-sdk` | Universal AI SDK for TypeScript |
 | [PDF.js](https://github.com/mozilla/pdf.js) by Mozilla | `@localmode/pdfjs` | PDF rendering and text extraction |

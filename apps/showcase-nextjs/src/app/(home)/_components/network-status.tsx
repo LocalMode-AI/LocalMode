@@ -415,7 +415,7 @@ export function NetworkStatus() {
             Network Activity
           </h3>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-poster-text-sub/50">
+            <span className="text-[10px] text-poster-text-sub/80">
               {recentRequests.length} requests
             </span>
             {config.icon}
@@ -455,7 +455,7 @@ export function NetworkStatus() {
         {/* Grouped Request List */}
         <div className="max-h-72 overflow-y-auto p-2 space-y-1">
           {groupedRequests.length === 0 ? (
-            <div className="p-4 text-center text-sm text-poster-text-sub/50">
+            <div className="p-4 text-center text-sm text-poster-text-sub/80">
               No recent network activity
             </div>
           ) : (
@@ -514,7 +514,7 @@ export function NetworkStatus() {
                         />
                       </div>
                       {group.totalSize && (
-                        <div className="mt-1 text-[10px] text-poster-text-sub/50 flex justify-between">
+                        <div className="mt-1 text-[10px] text-poster-text-sub/80 flex justify-between">
                           <span>{Math.round(group.latestProgress)}%</span>
                           <span>
                             {formatBytes(group.downloadedSize || 0)} /{' '}
@@ -530,7 +530,7 @@ export function NetworkStatus() {
         </div>
 
         {/* Footer */}
-        <div className="p-2 border-t border-poster-border/10 bg-poster-surface/30 text-[10px] text-center text-poster-text-sub/50 flex justify-between px-3">
+        <div className="p-2 border-t border-poster-border/10 bg-poster-surface/30 text-[10px] text-center text-poster-text-sub/80 flex justify-between px-3">
           <span>
             {groupedRequests.length} group{groupedRequests.length !== 1 ? 's' : ''}
           </span>

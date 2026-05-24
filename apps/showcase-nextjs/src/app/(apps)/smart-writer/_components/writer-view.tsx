@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { FileText, Languages, Sparkles, Copy, Check, Square, Zap, Download, Trash2 } from 'lucide-react';
 import { Button, Badge, TextArea, Select, Spinner, IconBox } from './ui';
 import { ErrorBoundary, ErrorAlert } from './error-boundary';
-import { cn, countWords, formatDuration } from '../_lib/utils';
+import { cn, countWords } from '../_lib/utils';
 import { LANGUAGE_PAIRS, SAMPLE_TEXT } from '../_lib/constants';
 import { useSmartWriter } from '../_hooks/use-smart-writer';
 

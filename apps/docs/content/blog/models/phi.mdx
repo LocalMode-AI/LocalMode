@@ -1,0 +1,172 @@
+---
+title: "Phi Models in the Browser"
+description: "Microsoft's compact yet powerful Phi models - from 3.8B parameters with vision support, optimized for reasoning tasks."
+author: "LocalMode"
+date: "2026-04-19"
+---
+
+# Phi Models in the Browser
+
+Microsoft's compact yet powerful Phi models - from 3.8B parameters with vision support, optimized for reasoning tasks.
+
+## Overview
+
+The Phi family is available through WebLLM (WebGPU), wllama (WASM), Transformers.js in LocalMode, with model sizes ranging from 1.2GB–2.4GB. The primary task for these models is **generation**, and they can be used with any application built on the LocalMode SDK.
+
+Running Phi models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+Microsoft's Phi series represents a fascinating approach to language model design: rather than scaling to hundreds of billions of parameters, Phi models achieve remarkable quality through careful data curation and training methodology. Phi-3.5-mini at 3.8B parameters punches well above its weight class, particularly in reasoning, math, and coding tasks.
+
+For browser inference, Phi occupies a sweet spot. At 2.1-2.4GB for the WebLLM variants, these models fit comfortably in most modern GPUs' VRAM while delivering quality that approaches much larger models. The Phi-3.5-vision variant adds multimodal capability - it can analyze images alongside text, making it the only vision-capable LLM available through WebLLM in LocalMode.
+
+Phi-4-mini (available via wllama) represents the latest evolution, with improved instruction following and reasoning. The wllama GGUF variants are notably smaller (1.24GB for Phi-3.5-mini) compared to the WebLLM versions, trading some speed for broader browser compatibility via WASM.
+
+One practical advantage: Phi models tend to be more concise and structured in their outputs compared to Llama or Qwen, making them excellent for applications that need focused, information-dense responses rather than verbose generation.
+
+## Variant Comparison
+
+The following table lists every Phi variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Phi-3.5-mini-instruct-q4f16_1-MLC](https://huggingface.co/microsoft/Phi-3.5-mini-instruct) | WebLLM (WebGPU) | 2.1GB | Slow | High | 4,096 tokens | WEBGPU |
+| [Phi-3-mini-4k-instruct-q4f16_1-MLC](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct) | WebLLM (WebGPU) | 2.2GB | Slow | High | 4,096 tokens | WEBGPU |
+| [Phi-3.5-vision-instruct-q4f16_1-MLC](https://huggingface.co/microsoft/Phi-3.5-vision-instruct) | WebLLM (WebGPU) | 2.4GB | Slow | High | 1,024 tokens | WEBGPU |
+| [Phi-3.5-mini-instruct-Q4_K_M](https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF) | wllama (WASM) | 1.24GB | Medium | High | 4,096 tokens | WASM |
+| [Phi-4-mini-instruct-Q4_K_M](https://huggingface.co/microsoft/Phi-4-mini-instruct) | wllama (WASM) | 2.3GB | Medium | High | 4,096 tokens | WASM |
+| [onnx-community/Phi-4-mini-instruct-web-q4f16](https://huggingface.co/onnx-community/Phi-4-mini-instruct-web-q4f16) | Transformers.js | 2.3GB | Slow | High | 4,096 tokens | WEBGPU |
+| [microsoft/Phi-3-mini-4k-instruct-onnx-web](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-onnx-web) | Transformers.js | 1.2GB | Medium | High | 4,096 tokens | WEBGPU |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| 1.5GB–3GB | 5 | variants |
+| 500MB–1.5GB | 2 | variants |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All Phi variants use the same `LanguageModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### WebLLM (WebGPU)
+
+WebLLM compiles models to WebGPU compute shaders for maximum inference speed. Requires Chrome 113+, Edge 113+, or Safari 26+.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+const model = webllm.languageModel('Phi-3.5-mini-instruct-q4f16_1-MLC');
+
+const result = await streamText({
+  model,
+  prompt: 'Explain how Phi models work.',
+  maxTokens: 300,
+  temperature: 0.7,
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+### wllama (WASM)
+
+wllama runs GGUF models via llama.cpp compiled to WebAssembly. Works in every browser including Firefox.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+const model = wllama.languageModel('Phi-3.5-mini-instruct-Q4_K_M');
+
+const result = await streamText({
+  model,
+  prompt: 'Summarize the benefits of local AI inference.',
+  maxTokens: 300,
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+### Transformers.js
+
+Transformers.js runs ONNX-optimized models via ONNX Runtime Web. WebGPU acceleration where available, WASM fallback otherwise.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.languageModel('onnx-community/Phi-4-mini-instruct-web-q4f16');
+
+const result = await streamText({
+  model,
+  prompt: 'Hello, world!',
+  maxTokens: 200,
+});
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred model first, and fall back to a smaller variant if it fails to load.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+// Try the preferred model, fall back to a smaller one on failure
+let model;
+try {
+  model = transformers.languageModel('onnx-community/Phi-4-mini-instruct-web-q4f16');
+} catch (error) {
+  console.warn('Primary model failed, using fallback:', error);
+  model = transformers.languageModel('microsoft/Phi-3-mini-4k-instruct-onnx-web');
+}
+```
+
+## When to Use Phi
+
+Phi models are a strong choice when:
+
+- **You need text generation** - Phi is optimized for generation tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 3 providers (webllm, wllama, transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The 1.2GB–2.4GB range means you can target everything from mobile devices to high-end desktops with the same model family.
+- **Offline functionality is required** - All variants work offline after the initial download, cached in IndexedDB via LocalMode's model caching system.
+
+## HuggingFace Model Cards
+
+- [Phi-3.5-mini-instruct-q4f16_1-MLC](https://huggingface.co/mlc-ai/Phi-3.5-mini-instruct-q4f16_1-MLC) (base: [microsoft/Phi-3.5-mini-instruct](https://huggingface.co/microsoft/Phi-3.5-mini-instruct))
+- [Phi-3-mini-4k-instruct-q4f16_1-MLC](https://huggingface.co/mlc-ai/Phi-3-mini-4k-instruct-q4f16_1-MLC) (base: [microsoft/Phi-3-mini-4k-instruct](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct))
+- [Phi-3.5-vision-instruct-q4f16_1-MLC](https://huggingface.co/mlc-ai/Phi-3.5-vision-instruct-q4f16_1-MLC) (base: [microsoft/Phi-3.5-vision-instruct](https://huggingface.co/microsoft/Phi-3.5-vision-instruct))
+- [Phi-3.5-mini-instruct-Q4_K_M](https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF) (bartowski GGUF)
+- [Phi-4-mini-instruct-Q4_K_M](https://huggingface.co/bartowski/microsoft_Phi-4-mini-instruct-GGUF) (bartowski GGUF; base: [microsoft/Phi-4-mini-instruct](https://huggingface.co/microsoft/Phi-4-mini-instruct))
+- [Phi-4-mini-instruct-web-q4f16](https://huggingface.co/onnx-community/Phi-4-mini-instruct-web-q4f16)
+- [Phi-3-mini-4k-instruct-onnx-web](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-onnx-web)
+
+## Related Pages
+
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Smollm2](/blog/models/smollm2) - model guide
+- [Qwen](/blog/models/qwen) - model guide
+
+## Methodology
+
+The model data on this page - sizes, context lengths, quantization formats, and provider availability - is extracted directly from LocalMode's source code: the provider catalogs (`packages/webllm/src/models.ts`, `packages/wllama/src/models.ts`, `packages/transformers/src/models.ts`). Context lengths reflect the values configured in LocalMode's catalogs for each quantized variant, which may be lower than the base model's native maximum (Phi-3.5-mini and Phi-4-mini natively support 128K tokens; the MLC and GGUF builds in LocalMode are configured at 4,096 tokens for practical browser memory constraints, and the Phi-3.5-vision MLC build at 1,024 tokens). Download sizes reflect the quantized model files as published by their respective model authors (Microsoft for WebLLM MLC/ONNX variants; bartowski on HuggingFace for wllama GGUF variants). Performance characteristics (speed and quality tiers) are LocalMode's curated assessments based on parameter count, quantization, and architecture. Always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [microsoft/Phi-3.5-mini-instruct - HuggingFace model card](https://huggingface.co/microsoft/Phi-3.5-mini-instruct) - 3.8B params, 128K context, MIT license
+- [microsoft/Phi-3.5-vision-instruct - HuggingFace model card](https://huggingface.co/microsoft/Phi-3.5-vision-instruct) - 4.2B params, 128K context, MIT license
+- [microsoft/Phi-3-mini-4k-instruct - HuggingFace model card](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct) - 3.8B params, 4K native context, MIT license, released June 2024
+- [microsoft/Phi-4-mini-instruct - HuggingFace model card](https://huggingface.co/microsoft/Phi-4-mini-instruct) - 3.8B params, 128K context, MIT license, released February 2025
+- [bartowski/Phi-3.5-mini-instruct-GGUF - HuggingFace](https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF) - Q4_K_M GGUF used by wllama, 1.24GB
+- [bartowski/microsoft_Phi-4-mini-instruct-GGUF - HuggingFace](https://huggingface.co/bartowski/microsoft_Phi-4-mini-instruct-GGUF) - Q4_K_M GGUF used by wllama, 2.3GB
+- [onnx-community/Phi-4-mini-instruct-web-q4f16 - HuggingFace](https://huggingface.co/onnx-community/Phi-4-mini-instruct-web-q4f16) - ONNX web variant used by Transformers.js
+- [microsoft/Phi-3-mini-4k-instruct-onnx-web - HuggingFace](https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-onnx-web) - Official ONNX web build used by Transformers.js
+- [WebLLM project](https://webllm.mlc.ai)
+- [wllama (llama.cpp WASM)](https://github.com/ngxson/wllama)

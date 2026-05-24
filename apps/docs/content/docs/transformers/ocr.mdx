@@ -1,28 +1,34 @@
 ---
 title: OCR
-description: Extract text from images using TrOCR models.
+description: Extract text from images using TrOCR, GLM-OCR, and LightOnOCR-2 models.
 icon: ScanText
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
 import { Card, Cards } from 'fumadocs-ui/components/card';
 
-Extract text from images using TrOCR (Transformer-based OCR) models. Works with handwritten text, printed documents, and screenshots.
+Extract text from images using OCR models — from lightweight line-level TrOCR to document-level vision-language models like GLM-OCR and LightOnOCR-2. Works with handwritten text, printed documents, tables, formulas, and screenshots.
 
 <Callout type="info">
   For full API reference (`extractText()`, `extractTextMany()`, options, result types, and custom providers), see the [Core OCR](/docs/core/ocr) guide.
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [OCR Scanner](https://localmode.ai/ocr-scanner) for a working demo.
+  Try [OCR Scanner](https://localmode.ai/ocr-scanner) for a working demo with model selection.
 </Callout>
 
 ## Recommended Models
 
-| Model | Size | Strength | Use Case |
-|-------|------|----------|----------|
-| `Xenova/trocr-small-printed` | ~120MB | Printed text | Documents, screenshots (recommended) |
-| `Xenova/trocr-small-handwritten` | ~120MB | Handwritten text | Notes, forms, handwriting |
+| Model | Size | Type | Strength | Use Case |
+|-------|------|------|----------|----------|
+| `Xenova/trocr-small-printed` | ~120MB | Line-level | Printed text | Quick extraction, screenshots (recommended for getting started) |
+| `Xenova/trocr-small-handwritten` | ~120MB | Line-level | Handwritten text | Notes, forms, handwriting |
+| `onnx-community/GLM-OCR-ONNX` | ~652MB | Document-level | Tables, formulas, structured data | Complex documents, invoices, receipts |
+| `onnx-community/LightOnOCR-2-1B-ONNX` | ~700MB | Document-level | Speed, 11 languages | High-throughput document scanning |
+
+<Callout type="tip" title="Line-level vs Document-level">
+  **TrOCR** models process one line of text at a time (~120MB, fast). **GLM-OCR** and **LightOnOCR-2** are vision-language models that process full document images (~650-700MB, WebGPU recommended) with support for tables, formulas, and structured extraction via prompt-based modes.
+</Callout>
 
 ## Document Scanner Example
 
@@ -32,23 +38,37 @@ Based on the [OCR Scanner](https://localmode.ai/ocr-scanner) showcase app:
 import { transformers } from '@localmode/transformers';
 import { extractText } from '@localmode/core';
 
+// Line-level OCR (TrOCR)
 const model = transformers.ocr('Xenova/trocr-small-printed');
 
-async function scanDocument(file: File) {
-  const dataUrl = await new Promise<string>((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.readAsDataURL(file);
-  });
+const { text } = await extractText({
+  model,
+  image: dataUrl,
+});
+```
 
-  const { text } = await extractText({
-    model,
-    image: dataUrl,
-    abortSignal: controller.signal,
-  });
+### Generative OCR (GLM-OCR / LightOnOCR-2)
 
-  return text;
-}
+```typescript
+// Document-level OCR with prompt-based modes
+const model = transformers.ocr('onnx-community/GLM-OCR-ONNX');
+
+// Text extraction (default)
+const { text } = await extractText({ model, image: documentImage });
+
+// Table recognition
+const { text: table } = await extractText({
+  model,
+  image: tableImage,
+  prompt: 'Table Recognition:',
+});
+
+// Formula recognition
+const { text: formula } = await extractText({
+  model,
+  image: mathImage,
+  prompt: 'Formula Recognition:',
+});
 ```
 
 ## Image Input Formats
@@ -60,10 +80,10 @@ The `image` parameter accepts:
 ## Best Practices
 
 <Callout type="tip" title="OCR Tips">
-  1. **Choose the right model** — Use handwritten model for handwriting, printed for documents
+  1. **Choose the right model** — TrOCR for quick single-line extraction, GLM-OCR/LightOnOCR-2 for full documents
   2. **Image quality matters** — Clear, well-lit images give much better results
-  3. **Crop to text area** — If the image has a small text region, crop it for better accuracy
-  4. **Single line focus** — TrOCR works best on single-line or small text regions
+  3. **Use prompt modes** — Generative models support `'Text Recognition:'`, `'Table Recognition:'`, and `'Formula Recognition:'` prompts
+  4. **WebGPU for generative models** — GLM-OCR and LightOnOCR-2 run significantly faster with WebGPU; WASM works but is slower
 </Callout>
 
 <Callout type="info">

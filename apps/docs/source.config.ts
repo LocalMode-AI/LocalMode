@@ -25,9 +25,60 @@ export const docs = defineDocs({
 export const blogPosts = defineCollections({
   type: 'doc',
   dir: 'content/blog',
+  files: ['*.mdx'],
   schema: frontmatterSchema.extend({
     author: z.string(),
     date: z.string().date().or(z.date()),
+  }),
+});
+
+export const modelPages = defineCollections({
+  type: 'doc',
+  dir: 'content/blog/models',
+  schema: frontmatterSchema.extend({
+    author: z.string(),
+    date: z.string().date().or(z.date()),
+    noindex: z.boolean().optional(),
+  }),
+});
+
+export const taskPages = defineCollections({
+  type: 'doc',
+  dir: 'content/blog/tasks',
+  schema: frontmatterSchema.extend({
+    author: z.string(),
+    date: z.string().date().or(z.date()),
+    noindex: z.boolean().optional(),
+  }),
+});
+
+export const comparePages = defineCollections({
+  type: 'doc',
+  dir: 'content/blog/compare',
+  schema: frontmatterSchema.extend({
+    author: z.string(),
+    date: z.string().date().or(z.date()),
+    noindex: z.boolean().optional(),
+  }),
+});
+
+export const useCasePages = defineCollections({
+  type: 'doc',
+  dir: 'content/blog/use-cases',
+  schema: frontmatterSchema.extend({
+    author: z.string(),
+    date: z.string().date().or(z.date()),
+    noindex: z.boolean().optional(),
+  }),
+});
+
+export const compatibilityPages = defineCollections({
+  type: 'doc',
+  dir: 'content/blog/compatibility',
+  schema: frontmatterSchema.extend({
+    author: z.string(),
+    date: z.string().date().or(z.date()),
+    noindex: z.boolean().optional(),
   }),
 });
 

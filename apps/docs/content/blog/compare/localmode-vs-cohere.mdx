@@ -1,0 +1,101 @@
+---
+title: "LocalMode vs Cohere API"
+description: "Comparing LocalMode's free browser-based embeddings and reranking with Cohere's cloud API for search and retrieval."
+author: "LocalMode"
+date: "2026-04-05"
+---
+
+# LocalMode vs Cohere API
+
+Comparing LocalMode's free browser-based embeddings and reranking with Cohere's cloud API for search and retrieval.
+
+## Overview
+
+This comparison examines the key differences between **LocalMode** ([https://localmode.dev](https://localmode.dev)) and **Cohere API** ([https://cohere.com](https://cohere.com)) for building AI-powered applications. Both approaches have their strengths - the right choice depends on your specific requirements around privacy, cost, performance, and target platforms.
+
+Understanding these trade-offs is essential for architects and developers evaluating local-first AI versus alternative approaches. The comparison below covers 8 dimensions, from runtime characteristics to model quality and developer experience.
+
+## Feature-by-Feature Comparison
+
+| Dimension | LocalMode | Cohere API |
+| --- | --- | --- |
+| **Privacy** | All data processed on-device. Zero network requests for inference. | Data sent to Cohere servers for processing. Subject to Cohere data policies. |
+| **Embedding Cost** | $0 per embedding. BGE-small (~34MB quantized) or MPNet (~110MB quantized / 436MB fp32) - free forever. | $0.10 per million tokens for embed-v3 (English or multilingual). Costs scale linearly with usage. |
+| **Reranking Cost** | $0 per rerank. MiniLM cross-encoder (~23MB quantized) - free forever. | $2.00 per 1,000 searches for Rerank 3.5. Significant cost at scale. |
+| **Embedding Quality** | Competitive with Cohere embed-v3 on MTEB retrieval benchmarks for English search tasks. Sufficient for most search applications. | Embed-v3 and the newer embed-v4 (128K context, multimodal) are among the best embedding models available. Highest quality for English and multilingual. |
+| **Reranking Quality** | MiniLM cross-encoder (ms-marco-MiniLM-L-6-v2). Good quality for general retrieval tasks. | Cohere Rerank 3.5 and Rerank 4 are best-in-class. Significantly better for complex queries. |
+| **Latency** | Zero network latency. Embedding: 5-50ms. Reranking: 10-100ms. | 200-500ms network latency + inference time per request. |
+| **Offline** | Full offline support after model download. | Requires internet for every request. |
+| **Model Updates** | Models are static after download. Manual update by re-downloading. | Cohere continuously improves models. Automatic access to latest versions. |
+
+## Verdict
+
+Choose LocalMode when processing sensitive data that cannot leave the device, when you need zero-cost embeddings at scale (100K+ documents), when offline capability matters, or when sub-50ms latency is critical. Choose Cohere when you need the absolute best embedding and reranking quality for complex multilingual retrieval, when you want automatic model improvements, or when your budget allows for cloud API costs. For hybrid approaches: use LocalMode for initial embedding and retrieval, then optionally call Cohere Rerank API for the final top-10 results where precision matters most.
+
+### Summary
+
+When evaluating LocalMode against Cohere API, consider your primary constraints:
+
+- **Privacy requirements** - If user data must never leave the device, solutions that process everything locally have an inherent architectural advantage.
+- **Cost at scale** - Per-request pricing models become expensive as user counts grow. Local inference shifts the cost to a one-time model download per user.
+- **Target platforms** - Browser-based solutions work on any device with a modern browser. Desktop and server-based solutions may require additional installation steps.
+- **Model quality needs** - For tasks where the absolute highest quality matters (complex multi-step reasoning, creative writing), larger server-side or cloud models still have an edge. For the majority of practical tasks (embeddings, classification, summarization, simple generation), the quality gap has narrowed significantly.
+- **Offline requirements** - Applications that must work without internet need local inference. Cloud-dependent solutions fail when connectivity drops.
+
+
+
+## Frequently Asked Questions
+
+### Can I import vectors from Cohere into LocalMode?
+
+Not directly - Cohere's embedding dimensions differ from LocalMode's models. You'd need to re-embed your documents using a LocalMode model. The importFrom() function supports migrating from Pinecone and ChromaDB; for Cohere vectors, export to CSV and use the CSV importer.
+
+### How does the cost compare at 100K documents?
+
+Assuming 500 tokens per document: Cohere embed-v3 costs ~$5 for initial embedding (100K × 500 tokens = 50M tokens × $0.10/M) plus ongoing search costs. LocalMode costs $0 total - the model download (~34MB quantized for BGE-small) is a one-time operation per user. At scale, the savings compound rapidly.
+
+### Is Cohere Rerank worth paying for over LocalMode reranking?
+
+For most applications, no - MiniLM reranking is free and fast. For applications where retrieval precision directly impacts revenue (enterprise search, legal discovery, medical research), Cohere Rerank 3.5's superior quality may justify the $2.00 per 1,000 searches cost.
+
+## Making the Decision
+
+For many teams, the answer is not either/or. A hybrid architecture uses local inference for high-volume, low-complexity tasks (embeddings, classification, NER, simple generation) at zero marginal cost, and routes the small percentage of requests that genuinely need frontier-quality reasoning to a cloud provider. A plain try/catch makes this pattern straightforward to implement:
+
+```typescript
+import { streamText } from '@localmode/core';
+
+// Try the local model first (free, private, fast)
+// Fall back to a cloud call only if local inference fails
+async function generate(prompt: string) {
+  try {
+    return await streamText({ model: localModel, prompt });
+  } catch (error) {
+    console.warn('Local inference failed, escalating to cloud:', error);
+    return await callCloudProvider(prompt);
+  }
+}
+```
+
+This approach gives you the best of both worlds: the privacy and cost benefits of local inference for the 90% of requests that don't need frontier quality, and the option to escalate to cloud APIs for the remaining 10%.
+
+## Related Pages
+
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+- [Search Reranking](/blog/tasks/search-reranking) - task guide
+- [Localmode Vs Openai](/blog/compare/localmode-vs-openai) - comparison guide
+
+## Methodology
+
+LocalMode capabilities were verified against the source code in `packages/transformers/src/` and `packages/core/src/`, including model file sizes confirmed from the Xenova HuggingFace repositories. Cohere pricing figures were sourced directly from cohere.com/pricing and corroborated by third-party pricing aggregators as of May 2026. Model names and capabilities reflect Cohere's official documentation at docs.cohere.com/docs/models. Cloud pricing is subject to change - verify current rates with Cohere before making purchasing decisions.
+
+## Sources
+
+- [LocalMode documentation](https://localmode.dev/docs)
+- [Cohere Pricing page](https://cohere.com/pricing) - embed-v3 at $0.10/M tokens, Rerank 3.5 at $2.00/1,000 searches (verified May 2026)
+- [Cohere Models overview](https://docs.cohere.com/docs/models) - embed-v4 (128K context, multimodal), embed-english/multilingual-v3.0, rerank-v3.5, rerank-v4.0
+- [Cohere Pricing mechanics](https://docs.cohere.com/docs/how-does-cohere-pricing-work) - embed priced per token, rerank priced per search
+- [Xenova/bge-small-en-v1.5 on HuggingFace](https://huggingface.co/Xenova/bge-small-en-v1.5/tree/main/onnx) - model_quantized.onnx: 34MB
+- [Xenova/all-mpnet-base-v2 on HuggingFace](https://huggingface.co/Xenova/all-mpnet-base-v2/tree/main/onnx) - model.onnx: 436MB, model_quantized.onnx: 110MB
+- [Xenova/ms-marco-MiniLM-L-6-v2 on HuggingFace](https://huggingface.co/Xenova/ms-marco-MiniLM-L-6-v2/tree/main/onnx) - model_quantized.onnx: 23MB
+- [Cohere embed-v3 pricing corroboration](https://pricepertoken.com/embedding/author/cohere) - embed-english-v3.0 and embed-multilingual-v3.0 at $0.100/M tokens

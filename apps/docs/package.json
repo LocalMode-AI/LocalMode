@@ -9,6 +9,7 @@
     "start": "next start",
     "types:check": "fumadocs-mdx && next typegen && tsc --noEmit",
     "postinstall": "fumadocs-mdx",
+    "generate:seo": "tsx scripts/generate-seo-content.ts",
     "lint": "eslint"
   },
   "dependencies": {

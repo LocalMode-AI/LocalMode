@@ -13,8 +13,8 @@ Zero-download, instant AI inference via Chrome's built-in Gemini Nano model. Par
 - Zero model downloads — Gemini Nano ships with Chrome
 - Zero bundle size impact — browser-native APIs
 - Instant inference — no model loading delay
-- Implements `SummarizationModel` and `TranslationModel` from `@localmode/core`
-- Automatic fallback support — pair with `@localmode/transformers` for non-Chrome browsers
+- Implements `SummarizationModel`, `TranslationModel`, and `LanguageModel` from `@localmode/core`
+- Automatic fallback support — pair with `@localmode/transformers`, `@localmode/webllm`, `@localmode/wllama`, or `@localmode/litert` for non-Chrome browsers
 
 ## Requirements
 
@@ -43,7 +43,7 @@ pnpm add @localmode/chrome-ai @localmode/core
 ## Quick Start
 
 ```typescript
-import { summarize, translate } from '@localmode/core';
+import { generateText, summarize, translate } from '@localmode/core';
 import { chromeAI } from '@localmode/chrome-ai';
 
 // Summarize text (instant, no download)
@@ -56,6 +56,12 @@ const { summary } = await summarize({
 const { translation } = await translate({
   model: chromeAI.translator({ targetLanguage: 'de' }),
   text: 'Hello, world!',
+});
+
+// Generate text with Gemini Nano via the Prompt API
+const { text } = await generateText({
+  model: chromeAI.languageModel({ systemPrompt: 'You are concise.' }),
+  prompt: 'Explain TLS in one sentence.',
 });
 ```
 
@@ -95,14 +101,115 @@ Creates a `TranslationModel` using Chrome's Translator API.
 | `sourceLanguage` | `string` | `'en'` | Source language (BCP 47) |
 | `targetLanguage` | `string` | `'es'` | Target language (BCP 47) |
 
+### `chromeAI.languageModel(settings?)`
+
+Creates a `LanguageModel` using Chrome's Prompt API (Gemini Nano). Supports `generateText()`, `streamText()`, `generateObject()`, and the model-warmup protocol via `warmUp()` / `isReady()`.
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `systemPrompt` | `string` | — | Prepended to every session as `initialPrompts[0]` |
+| `temperature` | `number` | Chrome default | Sampling temperature (0–1) |
+| `topK` | `number` | Chrome default | Top-K sampling cutoff |
+| `contextLength` | `number` | `6144` | Soft documentation value for `model.contextLength` |
+| `onProgress` | `(p: { loaded: number; total: number }) => void` | — | Forwarded to `monitor` for Gemini Nano download progress |
+
+```typescript
+import { generateText } from '@localmode/core';
+import { chromeAI } from '@localmode/chrome-ai';
+
+const { text } = await generateText({
+  model: chromeAI.languageModel({ systemPrompt: 'You are concise.' }),
+  prompt: 'Explain quantum tunnelling in one sentence.',
+});
+```
+
+#### Lifecycle Methods
+
+`ChromeAILanguageModel` exposes lifecycle methods for fine-grained control:
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `warmUp()` | `Promise<void>` | Pre-initialize the Gemini Nano session so the next `doGenerate()` / `doStream()` has zero creation latency. Pairs with `useModelWarmup()` from `@localmode/react`. |
+| `isReady()` | `boolean` | `true` once a session is cached on this instance; `false` otherwise. |
+| `destroy()` | `void` | Release the cached session and free resources. Idempotent. Subsequent calls recreate a fresh session. |
+
+```typescript
+import { ChromeAILanguageModel } from '@localmode/chrome-ai';
+
+const model = new ChromeAILanguageModel({
+  systemPrompt: 'You are concise.',
+  temperature: 0.3,
+});
+
+await model.warmUp();
+console.log(model.isReady()); // true
+
+// ... use model with generateText() / streamText() ...
+
+model.destroy(); // release resources
+```
+
+See the [Language Model docs](https://localmode.dev/docs/chrome-ai/language-model) for streaming, structured output, fallback chains, and the full error reference.
+
 ### Feature Detection
 
 ```typescript
-import { isChromeAISupported, isSummarizerAPISupported, isTranslatorAPISupported } from '@localmode/chrome-ai';
+import {
+  isChromeAISupported,
+  isPromptAPISupported,
+  isSummarizerAPISupported,
+  isTranslatorAPISupported,
+} from '@localmode/chrome-ai';
 
 if (isChromeAISupported()) { /* Chrome AI available */ }
+if (isPromptAPISupported()) { /* Prompt API (LanguageModel) available */ }
 if (isSummarizerAPISupported()) { /* Summarizer API available */ }
 if (isTranslatorAPISupported()) { /* Translator API available */ }
+```
+
+### Exported Types
+
+The package exports TypeScript types for Chrome's built-in AI APIs:
+
+| Type | Description |
+|------|-------------|
+| `ChromeAIProvider` | Provider interface with `summarizer()`, `translator()`, `languageModel()` |
+| `ChromeAIProviderSettings` | Provider-level configuration |
+| `ChromeAILanguageModelSettings` | Settings for `languageModel()` (systemPrompt, temperature, topK, etc.) |
+| `ChromeAISummarizerSettings` | Settings for `summarizer()` (type, format, length) |
+| `ChromeAITranslatorSettings` | Settings for `translator()` (sourceLanguage, targetLanguage) |
+| `AILanguageModel` | Chrome Prompt API session interface |
+| `AILanguageModelAvailability` | Availability status: `'available' \| 'downloadable' \| 'downloading' \| 'unavailable'` |
+| `AILanguageModelCreateOptions` | Options for `LanguageModel.create()` |
+| `AILanguageModelFactory` | Chrome Prompt API factory (`window.LanguageModel`) |
+| `AILanguageModelPromptOptions` | Per-call options for `prompt()` / `promptStreaming()` |
+| `AISummarizer` | Chrome Summarizer API session interface |
+| `AISummarizerFactory` | Chrome Summarizer API factory |
+| `AISummarizerCapabilities` | Summarizer capability detection |
+| `AISummarizerCreateOptions` | Options for `Summarizer.create()` |
+| `AITranslator` | Chrome Translator API session interface |
+| `AITranslatorFactory` | Chrome Translator API factory |
+| `AITranslatorCapabilities` | Translator capability detection |
+| `AITranslatorCreateOptions` | Options for `Translator.create()` |
+
+### Implementation Classes
+
+The implementation classes are exported for direct instantiation or advanced wiring:
+
+| Class | Implements |
+|-------|------------|
+| `ChromeAILanguageModel` | `LanguageModel` from `@localmode/core` |
+| `ChromeAISummarizer` | `SummarizationModel` from `@localmode/core` |
+| `ChromeAITranslator` | `TranslationModel` from `@localmode/core` |
+
+```typescript
+import { ChromeAILanguageModel } from '@localmode/chrome-ai';
+
+// Direct instantiation (bypasses provider factory)
+const model = new ChromeAILanguageModel({
+  systemPrompt: 'You are helpful.',
+  topK: 40,
+});
 ```
 
 ## Acknowledgments

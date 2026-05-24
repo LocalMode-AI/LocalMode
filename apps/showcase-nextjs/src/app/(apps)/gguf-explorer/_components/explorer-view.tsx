@@ -9,9 +9,6 @@ import Link from 'next/link';
 import {
   ArrowLeft,
   Cpu,
-  Search,
-  FileText,
-  MessageSquare,
 } from 'lucide-react';
 import { IconBox, TabBar, Badge } from './ui';
 import { ErrorBoundary, ErrorAlert } from './error-boundary';
@@ -22,13 +19,6 @@ import { useExplorer } from '../_hooks';
 import { cn } from '../_lib/utils';
 import { TABS, TAB_LABELS } from '../_lib/constants';
 import type { ExplorerTab } from '../_lib/types';
-
-/** Tab icon mapping */
-const TAB_ICONS: Record<ExplorerTab, React.ReactNode> = {
-  browse: <Search className="w-3.5 h-3.5" />,
-  inspect: <FileText className="w-3.5 h-3.5" />,
-  chat: <MessageSquare className="w-3.5 h-3.5" />,
-};
 
 /** Main explorer view component */
 export function ExplorerView() {

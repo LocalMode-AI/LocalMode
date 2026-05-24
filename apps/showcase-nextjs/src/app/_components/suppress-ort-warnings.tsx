@@ -1,11 +1,10 @@
 /**
  * @file suppress-ort-warnings.tsx
- * @description Client-side script to suppress noisy ONNX Runtime WASM warnings.
+ * @description Client-side script to suppress noisy ONNX Runtime and LiteRT WASM warnings.
  *
- * ONNX Runtime's WASM binary emits warnings via console.error that cannot be
- * suppressed through the JS-level ort.env.logLevel setting (the WASM binary
- * routes all log levels through console.error). This component patches
- * console.error and console.warn to filter known harmless messages.
+ * ONNX Runtime's and LiteRT's WASM binaries emit internal C++ log messages via
+ * console.error that cannot be suppressed through JS-level settings. This
+ * component patches console.error and console.warn to filter known harmless messages.
  */
 'use client';
 
@@ -20,11 +19,31 @@ const TJS_WARNING_PATTERNS = [
   'Unable to determine content-length from response headers',
 ];
 
-const ALL_PATTERNS = [...ORT_WARNING_PATTERNS, ...TJS_WARNING_PATTERNS];
+const LITERT_WARNING_PATTERNS = [
+  'litert_lm_loader',
+  'llm_executor_settings_utils',
+  'accelerator_registry',
+  'gpu_registry',
+  'cpu_registry',
+  'npu_registry',
+  'compiled_model',
+  'environment.cc',
+  'Created TensorFlow Lite XNNPACK delegate',
+];
 
-function isOrtWarning(args: unknown[]): boolean {
+const ALL_PATTERNS = [
+  ...ORT_WARNING_PATTERNS,
+  ...TJS_WARNING_PATTERNS,
+  ...LITERT_WARNING_PATTERNS,
+];
+
+const LITERT_TIMESTAMP_RE = /^W\d{4} \d{2}:\d{2}:\d{2}\.\d+/;
+
+function isSuppressedWarning(args: unknown[]): boolean {
   return args.some(
-    (arg) => typeof arg === 'string' && ALL_PATTERNS.some((p) => arg.includes(p))
+    (arg) =>
+      typeof arg === 'string' &&
+      (ALL_PATTERNS.some((p) => arg.includes(p)) || LITERT_TIMESTAMP_RE.test(arg))
   );
 }
 
@@ -33,11 +52,11 @@ if (typeof window !== 'undefined') {
   const originalWarn = console.warn;
 
   console.error = (...args: unknown[]) => {
-    if (!isOrtWarning(args)) originalError.apply(console, args);
+    if (!isSuppressedWarning(args)) originalError.apply(console, args);
   };
 
   console.warn = (...args: unknown[]) => {
-    if (!isOrtWarning(args)) originalWarn.apply(console, args);
+    if (!isSuppressedWarning(args)) originalWarn.apply(console, args);
   };
 }
 

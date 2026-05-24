@@ -6,8 +6,8 @@
 
 import { useRef, useState } from 'react';
 import Link from 'next/link';
-import { Upload, Scissors, X, Download, ArrowLeft, Image } from 'lucide-react';
-import { Button, IconBox, Spinner } from './ui';
+import { Scissors, X, Download, ArrowLeft, Image } from 'lucide-react';
+import { Button, IconBox } from './ui';
 import { ErrorBoundary, ErrorAlert } from './error-boundary';
 import { useSegmenter } from '../_hooks/use-segmenter';
 import { cn } from '../_lib/utils';

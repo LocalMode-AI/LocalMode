@@ -1,0 +1,160 @@
+---
+title: 'Models'
+description: The LiteRT catalog ships three verified .litertlm models — Gemma 4 E2B, Gemma 4 E4B, and Qwen3 0.6B — plus instructions for loading gated Gemma models with your own HuggingFace token.
+icon: Database
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+# LiteRT Model Catalog
+
+The `@localmode/litert` package ships a curated catalog (`LITERT_MODELS`) with **three models**, all verified to load and generate end-to-end with `@litert-lm/core@^0.12.1` in real Chrome.
+
+Gemma 4 E2B and Gemma 4 E4B are the two models Google officially lists as supported by the LiteRT-LM JS API — they use the web-optimized `*-it-web.litertlm` builds published for browser WebGPU loading. Qwen3 0.6B is a small general `.litertlm` model included as a lightweight option.
+
+<Callout type="info" title="URL formats">
+  Every model can be referenced three ways: the **catalog shorthand** (e.g. `'gemma-4-E2B'`), a **HuggingFace `repo:file` shorthand**, or a **full URL**. Use the latter two — combined with the `modelUrl` and `contextLength` overrides — to load `.litertlm` files outside the catalog, including the gated Gemma models below.
+</Callout>
+
+## Catalog
+
+| ID            | Name        | Family | Size   | Context | Backend          | Notes                                                    |
+| ------------- | ----------- | ------ | ------ | ------- | ---------------- | -------------------------------------------------------- |
+| `gemma-4-E2B` | Gemma 4 E2B | Gemma  | 2.0GB  | 8K      | **WebGPU only**  | Officially supported by the LiteRT-LM JS API             |
+| `gemma-4-E4B` | Gemma 4 E4B | Gemma  | 3.0GB  | 8K      | **WebGPU only**  | Officially supported by the LiteRT-LM JS API; higher quality |
+| `qwen3-0.6B`  | Qwen3 0.6B  | Qwen   | 614MB  | 4K      | WebGPU or CPU    | Smallest catalog model, fast loading                     |
+
+<Callout type="info" title="Multimodal models, text-only API (for now)">
+  The Gemma 4 models are **multimodal** — their `.litertlm` files ship vision and audio encoders. But as of `@litert-lm/core@0.12.1` (the current version), the LiteRT-LM **JavaScript API** does not expose those modalities: it accepts the `visionModalityEnabled` / `audioModalityEnabled` flags, but enabling either throws `Vision/Audio options should not be null` because the JS API provides no way to supply the executor options the engine requires (verified by direct testing). So `@localmode/litert` is **text-only** for now. Multimodal (image + audio) input may arrive in a future `@litert-lm/core` release.
+</Callout>
+
+<Callout type="warn" title="Gemma 4 is WebGPU-only">
+  The Gemma 4 `*-it-web.litertlm` builds are GPU-compiled — their TFLite sections carry a `gpu_artisan` backend constraint, so they **cannot run on the CPU backend**. Loading a Gemma 4 model on a browser without WebGPU (or with `backend: 'CPU'`) fails fast with a clear `ModelLoadError`. Qwen3 0.6B is a portable build that runs on either backend.
+</Callout>
+
+### Gemma 4 E2B
+
+```typescript
+import { litert } from '@localmode/litert';
+
+const model = litert.languageModel('gemma-4-E2B');
+```
+
+- **Size**: 2.0GB (`gemma-4-E2B-it-web.litertlm`)
+- **Context**: 8192 tokens
+- **License**: Gemma
+- **Backend**: WebGPU only (GPU-compiled build — cannot run on CPU)
+- **Status**: Verified end-to-end on Chrome 145 with WebGPU (2026-05-20)
+- **Best for**: The default recommendation — one of the two models Google officially supports for the JS API
+
+### Gemma 4 E4B
+
+```typescript
+const model = litert.languageModel('gemma-4-E4B');
+```
+
+- **Size**: 3.0GB (`gemma-4-E4B-it-web.litertlm`)
+- **Context**: 8192 tokens
+- **License**: Gemma
+- **Backend**: WebGPU only (GPU-compiled build — cannot run on CPU)
+- **Status**: Verified end-to-end on Chrome 145 with WebGPU (2026-05-20)
+- **Best for**: Higher quality than E2B when the larger download is acceptable
+
+### Qwen3 0.6B
+
+```typescript
+const model = litert.languageModel('qwen3-0.6B');
+```
+
+- **Size**: 614MB (`Qwen3-0.6B.litertlm`)
+- **Context**: 4096 tokens
+- **Parameters**: ~600M
+- **License**: Apache-2.0
+- **Backend**: WebGPU or CPU (portable build — verified on both)
+- **Status**: Verified end-to-end on Chrome 145 (2026-05-20)
+- **Best for**: Fast loading, quick prototyping, and the only catalog model that runs on the CPU backend
+
+## Gated models — not in catalog
+
+The following `.litertlm` files exist on HuggingFace but are **not** in the curated catalog: they live behind a HuggingFace account + a click-through Gemma license, which a browser-side `fetch()` cannot complete. To use them, accept the Gemma license once on the model's HuggingFace page, mint a [User Access Token](https://huggingface.co/docs/hub/security-tokens), and load via the `modelUrl` override.
+
+| Name               | HuggingFace repo                                                                                   |
+| ------------------ | -------------------------------------------------------------------------------------------------- |
+| Gemma 3 1B         | [`litert-community/Gemma3-1B-IT`](https://huggingface.co/litert-community/Gemma3-1B-IT)             |
+| FunctionGemma 270M | [`google/functiongemma-270m-litert-lm`](https://huggingface.co/google/functiongemma-270m-litert-lm) |
+| Gemma 3n E2B/E4B   | [`google/gemma-3n-E2B-it-litert-lm`](https://huggingface.co/google/gemma-3n-E2B-it-litert-lm)       |
+
+### Loading pattern
+
+Resolve the gated file yourself with an `Authorization` header, then hand the resulting URL to `litert.languageModel()` via `modelUrl`:
+
+```typescript
+import { litert } from '@localmode/litert';
+
+// 1. Accept the Gemma license on HuggingFace, then mint an Access Token.
+const HF_TOKEN = import.meta.env.VITE_HF_TOKEN;
+
+// 2. Fetch with the token so HuggingFace returns a signed redirect URL.
+const response = await fetch(
+  'https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/Gemma3-1B-IT_multi-prefill-seq_q8_ekv2048.litertlm',
+  { headers: { Authorization: `Bearer ${HF_TOKEN}` } },
+);
+
+// 3. Pass the resolved URL to LiteRT.
+const model = litert.languageModel('gemma-3-1B', { modelUrl: response.url });
+```
+
+<Callout type="warn" title="Don't ship raw tokens to browsers">
+  A `Bearer` token in client-side code is visible to anyone who opens DevTools. For production, proxy the resolve step through your backend (or a serverless Edge Function) and forward the signed redirect URL to the browser. The model bytes themselves are still downloaded directly by the user — only the token-bearing request is server-side.
+</Callout>
+
+## Programmatic Access
+
+Access the catalog at runtime via `LITERT_MODELS`:
+
+```typescript
+import { LITERT_MODELS, getModelCategory } from '@localmode/litert';
+import type { LiteRTModelId } from '@localmode/litert';
+
+for (const [id, info] of Object.entries(LITERT_MODELS)) {
+  const category = getModelCategory(info.sizeBytes);
+  console.log(`[${category}] ${info.name}: ${info.size}`);
+}
+
+const modelId: LiteRTModelId = 'gemma-4-E2B';
+const entry = LITERT_MODELS[modelId];
+console.log(entry.url); // HuggingFace .litertlm URL
+```
+
+The `LiteRTModelEntry` shape:
+
+```typescript
+interface LiteRTModelEntry {
+  name: string;
+  contextLength: number;
+  sizeBytes: number;
+  size: string;           // e.g. '2.0GB'
+  description: string;
+  url: string;            // HuggingFace .litertlm URL
+  parameterCount: number;
+  requiresWebGPU?: boolean; // true = GPU-compiled build, cannot run on CPU backend
+}
+```
+
+For per-instance overrides used when loading non-catalog models, see `LiteRTModelSettings` — notably `modelUrl` and `contextLength` — documented on the [Overview](/docs/litert#model-options) page.
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="LiteRT Overview"
+    href="/docs/litert"
+    description="Installation, configuration, browser compatibility, and provider fallback."
+  />
+  <Card
+    title="Text Generation"
+    href="/docs/core/generation"
+    description="API reference for streamText, generateText, and generation options."
+  />
+</Cards>

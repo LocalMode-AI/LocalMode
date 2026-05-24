@@ -1,0 +1,208 @@
+---
+title: "Qwen Models in the Browser"
+description: "Alibaba's Qwen family spans 0.5B to 9B parameters with general-purpose, coding, and vision-capable variants, available across all four browser LLM providers."
+author: "LocalMode"
+date: "2026-05-07"
+---
+
+# Qwen Models in the Browser
+
+Alibaba's Qwen family spans 0.5B to 9B parameters with general-purpose, coding, and vision-capable variants, available across all four browser LLM providers.
+
+## Overview
+
+The Qwen family is available through WebLLM (WebGPU), wllama (WASM), Transformers.js, and LiteRT in LocalMode, with model sizes ranging from 278MB–5.06GB. The primary task for these models is **generation**, and they can be used with any application built on the LocalMode SDK.
+
+Running Qwen models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+Qwen is Alibaba Cloud's open-weight large language model family and one of the most versatile model lines available for browser inference. The Qwen2.5 series introduced significant improvements in instruction following, coding, and multilingual support over its predecessor. Qwen3 pushed further with enhanced reasoning capabilities - Qwen3-4B scores 83.7% on MMLU-Redux in thinking mode, approaching GPT-4o territory from a model that fits in browser memory.
+
+What makes Qwen particularly compelling for LocalMode users is the breadth of sizes: from the 0.5B model at just 278MB (perfect for quick responses on mobile devices) to the 9B model at 5.06GB (rivaling cloud API quality for complex tasks). The Coder variants add specialized programming knowledge while maintaining the same interface. All Qwen models support the same LanguageModel interface, so you can swap sizes without changing application code.
+
+Across LocalMode's browser LLM providers, Qwen has the widest coverage: WebLLM offers WebGPU-accelerated inference for maximum speed, wllama provides WASM-based inference that works in every browser including Firefox, Transformers.js runs ONNX-optimized versions, and LiteRT runs Google's .litertlm format on the LiteRT-LM engine. Qwen3 0.6B is the first model verified end-to-end on the @localmode/litert provider. This means every user can run a Qwen model regardless of their browser or hardware. The Qwen3.5 ONNX variants (0.8B, 2B, 4B) are multimodal - they accept image input alongside text, making them the vision-capable option in the Qwen family for Transformers.js.
+
+## Variant Comparison
+
+The following table lists every Qwen variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Qwen2.5-0.5B-Instruct-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct) | WebLLM (WebGPU) | 278MB | Fast | Good | 4,096 tokens | WEBGPU |
+| [Qwen3-0.6B-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen3-0.6B) | WebLLM (WebGPU) | 350MB | Fast | Good | 4,096 tokens | WEBGPU |
+| [Qwen2.5-1.5B-Instruct-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct) | WebLLM (WebGPU) | 868MB | Medium | Good | 4,096 tokens | WEBGPU |
+| [Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct) | WebLLM (WebGPU) | 868MB | Medium | Good | 4,096 tokens | WEBGPU |
+| [Qwen3-1.7B-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen3-1.7B) | WebLLM (WebGPU) | 1.1GB | Medium | Good | 4,096 tokens | WEBGPU |
+| [Qwen2.5-3B-Instruct-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct) | WebLLM (WebGPU) | 1.7GB | Medium | High | 4,096 tokens | WEBGPU |
+| [Qwen2.5-Coder-3B-Instruct-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct) | WebLLM (WebGPU) | 1.7GB | Medium | High | 4,096 tokens | WEBGPU |
+| [Qwen3-4B-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen3-4B) | WebLLM (WebGPU) | 2.2GB | Slow | High | 4,096 tokens | WEBGPU |
+| [Qwen2.5-7B-Instruct-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct) | WebLLM (WebGPU) | 4.0GB | Slow | High | 4,096 tokens | WEBGPU |
+| [Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct) | WebLLM (WebGPU) | 4.0GB | Slow | High | 4,096 tokens | WEBGPU |
+| [Qwen3-8B-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen3-8B) | WebLLM (WebGPU) | 4.5GB | Slow | High | 4,096 tokens | WEBGPU |
+| [Qwen3.5-4B-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen3.5-4B) | WebLLM (WebGPU) | 2.39GB | Slow | High | 32,768 tokens | WEBGPU |
+| [Qwen3.5-9B-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen3.5-9B) | WebLLM (WebGPU) | 5.06GB | Slow | High | 32,768 tokens | WEBGPU |
+| [Qwen2.5-0.5B-Instruct-Q4_K_M](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF) | wllama (WASM) | 386MB | Fast | Good | 4,096 tokens | WASM |
+| [Qwen2.5-1.5B-Instruct-Q4_K_M](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF) | wllama (WASM) | 986MB | Medium | Good | 32,768 tokens | WASM |
+| [Qwen2.5-Coder-1.5B-Instruct-Q4_K_M](https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF) | wllama (WASM) | 1.0GB | Medium | Good | 32,768 tokens | WASM |
+| [Qwen2.5-3B-Instruct-Q4_K_M](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF) | wllama (WASM) | 1.9GB | Medium | High | 32,768 tokens | WASM |
+| [Qwen2.5-Coder-7B-Instruct-Q4_K_M](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF) | wllama (WASM) | 4.5GB | Slow | High | 32,768 tokens | WASM |
+| [onnx-community/Qwen3-0.6B-ONNX](https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX) | Transformers.js | 570MB | Medium | Good | 4,096 tokens | WEBGPU |
+| [onnx-community/Qwen3.5-0.8B-ONNX](https://huggingface.co/onnx-community/Qwen3.5-0.8B-ONNX) *(vision)* | Transformers.js | 500MB | Fast | Good | 32,768 tokens | WEBGPU |
+| [onnx-community/Qwen3.5-2B-ONNX](https://huggingface.co/onnx-community/Qwen3.5-2B-ONNX) *(vision)* | Transformers.js | 1.5GB | Medium | High | 32,768 tokens | WEBGPU |
+| [onnx-community/Qwen3.5-4B-ONNX](https://huggingface.co/onnx-community/Qwen3.5-4B-ONNX) *(vision)* | Transformers.js | 2.5GB | Slow | High | 32,768 tokens | WEBGPU |
+| [onnx-community/Qwen3-4B-ONNX](https://huggingface.co/onnx-community/Qwen3-4B-ONNX) | Transformers.js | 1.2GB | Medium | High | 4,096 tokens | WEBGPU |
+| [onnx-community/Qwen2.5-Coder-1.5B-Instruct](https://huggingface.co/onnx-community/Qwen2.5-Coder-1.5B-Instruct) | Transformers.js | 450MB | Medium | Good | 4,096 tokens | WEBGPU |
+
+> **Vision-capable variants:** onnx-community/Qwen3.5-0.8B-ONNX, onnx-community/Qwen3.5-2B-ONNX, onnx-community/Qwen3.5-4B-ONNX accept image input alongside text (multimodal). Marked *(vision)* in the table above.
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| 200MB–500MB | 4 | variants |
+| 500MB–1.5GB | 8 | variants |
+| 1.5GB–3GB | 7 | variants |
+| Over 3GB | 5 | variants |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All Qwen variants use the same `LanguageModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### WebLLM (WebGPU)
+
+WebLLM compiles models to WebGPU compute shaders for maximum inference speed. Requires Chrome 113+, Edge 113+, or Safari 26+.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+const model = webllm.languageModel('Qwen2.5-0.5B-Instruct-q4f16_1-MLC');
+
+const result = await streamText({
+  model,
+  prompt: 'Explain how Qwen models work.',
+  maxTokens: 300,
+  temperature: 0.7,
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+### wllama (WASM)
+
+wllama runs GGUF models via llama.cpp compiled to WebAssembly. Works in every browser including Firefox.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+const model = wllama.languageModel('Qwen2.5-0.5B-Instruct-Q4_K_M');
+
+const result = await streamText({
+  model,
+  prompt: 'Summarize the benefits of local AI inference.',
+  maxTokens: 300,
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+### Transformers.js
+
+Transformers.js runs ONNX-optimized models via ONNX Runtime Web. WebGPU acceleration where available, WASM fallback otherwise.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.languageModel('onnx-community/Qwen3-0.6B-ONNX');
+
+const result = await streamText({
+  model,
+  prompt: 'Hello, world!',
+  maxTokens: 200,
+});
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred model first, and fall back to a smaller variant if it fails to load.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+// Try the preferred model, fall back to a smaller one on failure
+let model;
+try {
+  model = transformers.languageModel('onnx-community/Qwen3-0.6B-ONNX');
+} catch (error) {
+  console.warn('Primary model failed, using fallback:', error);
+  model = transformers.languageModel('onnx-community/Qwen2.5-Coder-1.5B-Instruct');
+}
+```
+
+## When to Use Qwen
+
+Qwen models are a strong choice when:
+
+- **You need text generation** - Qwen is optimized for generation tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 4 providers (webllm, wllama, transformers, litert), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The 278MB–5.06GB range means you can target everything from mobile devices to high-end desktops with the same model family.
+- **Offline functionality is required** - All variants work offline after the initial download, cached in IndexedDB via LocalMode's model caching system.
+
+## HuggingFace Model Cards
+
+- [Qwen2.5-0.5B-Instruct-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct)
+- [Qwen3-0.6B-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen3-0.6B)
+- [Qwen2.5-1.5B-Instruct-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct)
+- [Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct)
+- [Qwen3-1.7B-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen3-1.7B)
+- [Qwen2.5-3B-Instruct-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct)
+- [Qwen2.5-Coder-3B-Instruct-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct)
+- [Qwen3-4B-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen3-4B)
+- [Qwen2.5-7B-Instruct-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct)
+- [Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct)
+- [Qwen3-8B-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen3-8B)
+- [Qwen3.5-4B-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen3.5-4B)
+- [Qwen3.5-9B-q4f16_1-MLC](https://huggingface.co/Qwen/Qwen3.5-9B)
+- [Qwen2.5-0.5B-Instruct-Q4_K_M](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF)
+- [Qwen2.5-1.5B-Instruct-Q4_K_M](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF)
+- [Qwen2.5-Coder-1.5B-Instruct-Q4_K_M](https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF)
+- [Qwen2.5-3B-Instruct-Q4_K_M](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF)
+- [Qwen2.5-Coder-7B-Instruct-Q4_K_M](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF)
+- [Qwen3-0.6B-ONNX](https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX)
+- [Qwen3.5-0.8B-ONNX](https://huggingface.co/onnx-community/Qwen3.5-0.8B-ONNX)
+- [Qwen3.5-2B-ONNX](https://huggingface.co/onnx-community/Qwen3.5-2B-ONNX)
+- [Qwen3.5-4B-ONNX](https://huggingface.co/onnx-community/Qwen3.5-4B-ONNX)
+- [Qwen3-4B-ONNX](https://huggingface.co/onnx-community/Qwen3-4B-ONNX)
+- [Qwen2.5-Coder-1.5B-Instruct](https://huggingface.co/onnx-community/Qwen2.5-Coder-1.5B-Instruct)
+
+## Related Pages
+
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Smollm2](/blog/models/smollm2) - model guide
+
+## Methodology
+
+Model sizes, context lengths, quantization formats, and provider availability are extracted directly from LocalMode's provider catalogs (`packages/webllm/src/models.ts`, `packages/wllama/src/models.ts`, `packages/transformers/src/models.ts`, `packages/litert/src/models.ts`). Note that MLC-compiled WebLLM builds for Qwen3 dense models cap at 4,096 tokens context even though the underlying models support 32,768 tokens natively; the table reflects the compiled limit. Context lengths for Qwen3.5 WebLLM entries (32,768) and all wllama/Transformers.js ONNX entries match their published model cards. Performance tiers (speed and quality) are LocalMode's curated assessments based on parameter count, quantization, and architecture. The Qwen3-4B MMLU-Redux score of 83.7 is sourced from the Qwen3 Technical Report (arXiv 2505.09388). Always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [Qwen3 Technical Report (arXiv 2505.09388)](https://arxiv.org/abs/2505.09388) - MMLU-Redux benchmark scores
+- [Qwen3 official blog post - qwenlm.github.io](https://qwenlm.github.io/blog/qwen3/) - context lengths, model family overview
+- [Qwen/Qwen3-0.6B model card (HuggingFace)](https://huggingface.co/Qwen/Qwen3-0.6B) - 32,768 context length verification
+- [Qwen/Qwen3-4B model card (HuggingFace)](https://huggingface.co/Qwen/Qwen3-4B) - 32,768 context length verification
+- [Qwen/Qwen2.5-0.5B-Instruct model card (HuggingFace)](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct) - 32,768 context length verification
+- [LocalMode WebLLM model catalog (packages/webllm/src/models.ts)](https://github.com/LocalMode-AI/LocalMode) - sizes, MLC context lengths
+- [LocalMode wllama model catalog (packages/wllama/src/models.ts)](https://github.com/LocalMode-AI/LocalMode) - GGUF sizes and context lengths
+- [LocalMode Transformers model catalog (packages/transformers/src/models.ts)](https://github.com/LocalMode-AI/LocalMode) - ONNX LLM catalog
+- [Transformers.js documentation](https://huggingface.co/docs/transformers.js)
+- [WebLLM project](https://webllm.mlc.ai)
+- [wllama (llama.cpp WASM)](https://github.com/ngxson/wllama)

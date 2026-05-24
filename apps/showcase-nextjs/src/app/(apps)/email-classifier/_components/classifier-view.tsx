@@ -5,8 +5,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Mail, Play, Sparkles, X, Plus, Tag, ArrowLeft, Inbox, Zap, Layers } from 'lucide-react';
-import { Button, IconBox, Spinner } from './ui';
+import Link from 'next/link';
+import { Mail, Play, Sparkles, X, Plus, Tag, ArrowLeft, Inbox, Layers } from 'lucide-react';
+import { Button, Spinner } from './ui';
 import { ErrorBoundary, ErrorAlert } from './error-boundary';
 import { cn, formatScore } from '../_lib/utils';
 import { MODEL_SIZE, SAMPLE_EMAILS, DEFAULT_CATEGORIES } from '../_lib/constants';
@@ -81,12 +82,12 @@ export function ClassifierView() {
         {/* Header */}
         <div className="h-14 min-h-14 border-b border-poster-border/20 flex items-center justify-between px-5 bg-poster-surface/60 backdrop-blur-xl">
           <div className="flex items-center gap-3">
-            <a
+            <Link
               href="/"
               className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-poster-surface-lighter/50 text-poster-text-sub hover:text-poster-text-main transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
-            </a>
+            </Link>
             <div className="w-px h-5 bg-poster-border/20" />
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-poster-accent-teal/15 flex items-center justify-center ring-1 ring-poster-accent-teal/30">

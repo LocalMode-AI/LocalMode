@@ -1,0 +1,121 @@
+---
+title: "Offline AI Chatbot"
+description: "Build a conversational AI chatbot that works without internet - perfect for field workers, kiosks, and areas with unreliable connectivity."
+author: "LocalMode"
+date: "2026-05-05"
+---
+
+# Offline AI Chatbot
+
+Build a conversational AI chatbot that works without internet - perfect for field workers, kiosks, and areas with unreliable connectivity.
+
+*Category: Feature Guide*
+
+## The Problem
+
+Many environments lack reliable internet: retail kiosks, field service tablets, healthcare facilities with restricted networks, remote work locations, and conference venues. These settings still need conversational AI for customer support, information lookup, and task assistance - but cloud-based chatbots fail when connectivity drops.
+
+This is a common challenge for teams building modern applications. Traditional approaches either compromise on privacy (by sending data to cloud APIs), require complex server infrastructure (adding cost and maintenance burden), or sacrifice functionality (by avoiding AI entirely). LocalMode provides a fourth option: run the AI locally in the browser.
+
+## The Solution
+
+Create an offline-capable chatbot using LocalMode's LLM providers. The model downloads once during setup (or on first use with onProgress feedback), caches in IndexedDB, and runs entirely in the browser from that point forward. Use streamText() for responsive streaming, generateObject() for structured data extraction, and combine with a local VectorDB for RAG-powered conversations grounded in your knowledge base. The wllama provider ensures the chatbot works in every browser, not just Chrome.
+
+### Why Local-First?
+
+Building this feature with on-device inference provides three structural advantages over cloud-based alternatives:
+
+1. **Zero marginal cost** - After the initial model download, every inference operation is free. No per-token fees, no monthly API bills, no surprise invoices. This matters especially for features used frequently or by many users.
+2. **Architectural privacy** - User data never leaves the device. This is not a policy promise ("we won't look at your data") but an architectural guarantee: the data physically cannot reach any server because the processing happens in the browser tab.
+3. **Offline capability** - Once models are cached in IndexedDB, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
+
+## Technology Stack
+
+| Package | Purpose |
+| --- | --- |
+| `@localmode/core` | streamText(), generateObject(), VectorDB for RAG |
+| `@localmode/wllama` | GGUF LLM inference (universal browser support) |
+| `@localmode/react` | useChat() hook for React chat integration |
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/wllama @localmode/react
+```
+
+## Implementation
+
+```typescript
+import { streamText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+// Works in every browser including Firefox (WASM-based)
+const model = wllama.languageModel('Qwen2.5-1.5B-Instruct-Q4_K_M');
+
+// Stream responses in real-time
+const result = await streamText({
+  model,
+  prompt: 'Where is the nearest restroom?',
+  systemPrompt: 'You are a helpful kiosk assistant.',
+  maxTokens: 300,
+});
+
+for await (const chunk of result.stream) {
+  displayText(chunk.text); // Update UI incrementally
+}
+```
+
+### How This Works
+
+The code above demonstrates the complete pipeline. Let us walk through the key decisions:
+
+- **Model selection** - The models referenced in this example are chosen for their balance of size, speed, and quality for this specific use case. Smaller models load faster and use less memory; larger models produce better results. Start with the recommended models and upgrade only if quality is insufficient for your users.
+- **Browser APIs** - LocalMode uses IndexedDB for persistent storage (vectors, model cache), Web Workers for background processing (keeping the UI responsive during inference), and the Web Crypto API for optional encryption.
+- **Error handling** - All LocalMode functions throw typed errors (`ModelLoadError`, `StorageError`, `ValidationError`) with actionable hints. Wrap calls in try/catch and use the error's `hint` property to display user-friendly messages.
+- **Cancellation** - Pass an `AbortSignal` to any long-running operation. This lets users cancel searches, embeddings, or generation without waiting for completion.
+
+## Production Considerations
+
+When deploying this solution to production, consider these factors:
+
+**Model preloading:** Download models during user onboarding or application setup, not on first use. Use `preloadModel()` from `@localmode/wllama` (or the matching provider package) with an `onProgress` callback to show download progress. This avoids the poor experience of a loading spinner on the first AI interaction.
+
+**Storage management:** IndexedDB has browser-specific quotas (up to 60% of total disk size per origin on Chrome, more restrictive on iOS Safari). Use `getStorageQuota()` to check available space and `navigator.storage.persist()` to request persistent storage that survives browser storage pressure.
+
+**Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
+
+**Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
+
+## Frequently Asked Questions
+
+### How large is the model download?
+
+Qwen2.5-1.5B at Q4_K_M is 986MB. For a kiosk or tablet deployment, you can pre-cache this during setup. Smaller options: SmolLM2-135M (70MB) for basic responses, Qwen2.5-0.5B (386MB) for better quality. All cache in IndexedDB permanently.
+
+### Can the chatbot access a knowledge base offline?
+
+Yes. Embed your knowledge base documents into a VectorDB during setup. At query time, retrieve relevant context with db.search() and include it in the LLM prompt. This RAG pattern works entirely offline since both the VectorDB and LLM are local.
+
+## Further Reading
+
+- [Service Workers on MDN](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API)
+
+## Related Pages
+
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Qwen](/blog/models/qwen) - model guide
+- [Smollm2](/blog/models/smollm2) - model guide
+- [Offline First Pwa](/blog/use-cases/offline-first-pwa) - use-case guide
+
+## Methodology
+
+All code examples were verified against the LocalMode monorepo source: `streamText` and `StreamTextOptions` in `packages/core/src/generation/`, the wllama model catalog in `packages/wllama/src/models.ts` (sizes and model IDs), and `preloadModel` in `packages/wllama/src/utils.ts`. The IndexedDB quota figure was verified against the web.dev "Storage for the web" article (primary Chrome storage documentation). The `useChat` hook signature was confirmed in `packages/react/src/hooks/use-chat.ts`.
+
+## Sources
+
+- [Storage for the web - web.dev](https://web.dev/storage-for-the-web/) - Chrome IndexedDB quota: up to 60% of total disk size per origin
+- [Service Worker API - MDN](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API) - offline caching via service workers
+- LocalMode source: `packages/wllama/src/models.ts` - model IDs, sizes (Qwen2.5-1.5B: 986MB, SmolLM2-135M: 70MB, Qwen2.5-0.5B: 386MB)
+- LocalMode source: `packages/core/src/generation/types.ts` - `StreamTextOptions` interface (required `prompt` field, `systemPrompt` separate param)
+- LocalMode source: `packages/wllama/src/utils.ts` - `preloadModel` export from `@localmode/wllama`
+- LocalMode source: `packages/react/src/hooks/use-chat.ts` - `useChat` hook API

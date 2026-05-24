@@ -27,6 +27,15 @@ import {
   preloadModel as preloadTransformers,
   clearModelCache as clearTransformersCache,
 } from '@localmode/transformers';
+import {
+  LITERT_MODELS,
+  getModelCategory as getLitertCategory,
+  isModelCached as isLitertCached,
+  preloadModel as preloadLitert,
+  deleteModelCache as deleteLitertCache,
+  type LiteRTModelId,
+  type LiteRTModelEntry,
+} from '@localmode/litert';
 import { isWebGPUSupported } from '@localmode/core';
 import type { ModelBackend } from '../_lib/types';
 
@@ -69,7 +78,18 @@ export function getAvailableModels() {
     vision: 'vision' in info ? (info as Record<string, unknown>).vision === true : undefined,
   }));
 
-  return [...webllmModels, ...wllamaModels, ...onnxModels];
+  const litertModels = (Object.entries(LITERT_MODELS) as [string, LiteRTModelEntry][]).map(([id, info]) => ({
+    id,
+    name: info.name,
+    contextLength: info.contextLength,
+    size: info.size,
+    sizeBytes: info.sizeBytes,
+    description: info.description,
+    category: getLitertCategory(info.sizeBytes),
+    backend: 'litert' as ModelBackend,
+  }));
+
+  return [...webllmModels, ...wllamaModels, ...onnxModels, ...litertModels];
 }
 
 /**
@@ -83,6 +103,9 @@ export async function checkModelCached(modelId: string, backend: ModelBackend) {
   }
   if (backend === 'wasm') {
     return isWllamaCached(modelId);
+  }
+  if (backend === 'litert') {
+    return isLitertCached(modelId);
   }
   return isWebLLMCached(modelId);
 }
@@ -108,6 +131,11 @@ export async function loadModel(
       onProgress: (p: { progress?: number }) => onProgress?.(p.progress ?? 0),
     });
   }
+  if (backend === 'litert') {
+    return preloadLitert(modelId, {
+      onProgress: (p: { progress?: number }) => onProgress?.(p.progress ?? 0),
+    });
+  }
   return preloadWebLLM(modelId, {
     onProgress: (p: { progress?: number }) => onProgress?.(p.progress ?? 0),
   });
@@ -126,6 +154,9 @@ export async function deleteCache(modelId: string, backend: ModelBackend) {
   if (backend === 'wasm') {
     return deleteWllamaCache(modelId);
   }
+  if (backend === 'litert') {
+    return deleteLitertCache(modelId);
+  }
   return deleteWebLLMCache(modelId);
 }
 
@@ -142,6 +173,9 @@ export function getModelDisplayName(modelId: string) {
 
   const onnxModel = TRANSFORMERS_LLM_MODELS[modelId];
   if (onnxModel) return onnxModel.name.replace(' (ONNX)', '');
+
+  const litertModel = LITERT_MODELS[modelId as LiteRTModelId];
+  if (litertModel) return litertModel.name;
 
   return modelId.replace('-MLC', '').replace(/_/g, ' ');
 }

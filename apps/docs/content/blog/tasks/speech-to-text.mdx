@@ -1,0 +1,147 @@
+---
+title: "Speech-to-Text in the Browser"
+description: "Transcribe spoken audio to text in real-time using Moonshine models - entirely offline, entirely private."
+author: "LocalMode"
+date: "2026-05-02"
+---
+
+# Speech-to-Text in the Browser
+
+Transcribe spoken audio to text in real-time using Moonshine models - entirely offline, entirely private.
+
+## What Is Speech-to-Text?
+
+Speech-to-text (automatic speech recognition) converts audio recordings or real-time microphone input into text transcripts. LocalMode uses Moonshine models - designed specifically for edge deployment - which process audio chunks and return timestamped text segments. The models accept Float32Array audio samples at 16kHz sample rate.
+
+This capability is exposed through the `transcribe()` function in `@localmode/core`. All processing runs entirely in the browser - no server, no API key, no data leaves the device. After the initial model download, speech-to-text works completely offline.
+
+## Real-World Applications
+
+Voice note apps with automatic transcription. Meeting transcription and summarization. Accessibility features (live captions). Voice-controlled interfaces. Podcast and video transcription. Interview recording tools.
+
+These use cases all benefit from local, on-device processing: user data stays private, there are no per-request API costs, and the application works without internet after initial setup.
+
+## Getting Started
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Import the core function and provider:
+
+```typescript
+import { transcribe } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+```
+
+The recommended starting model is **onnx-community/moonshine-base-ONNX** - it provides the best balance of quality, speed, and download size for most applications.
+
+## Code Example
+
+```typescript
+import { transcribe } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.speechToText('onnx-community/moonshine-base-ONNX');
+
+// Transcribe an audio file
+const { text, segments } = await transcribe({
+  model,
+  audio: audioFloat32Array, // 16kHz mono Float32Array
+});
+
+console.log(text); // "Hello, this is a test recording."
+console.log(segments); // [{ start: 0.0, end: 1.5, text: "Hello," }, ...]
+
+// With React: useVoiceRecorder() hook handles microphone capture
+// import { useVoiceRecorder } from '@localmode/react';
+```
+
+This example demonstrates the core workflow: create a model instance from the provider, call the `transcribe()` function with your input, and receive structured results. The same pattern works identically across all 1 available provider: Transformers.js.
+
+## Available Models
+
+The following models support speech-to-text through LocalMode. Choose based on your target device, acceptable download size, and quality requirements.
+
+| Model | Provider | Size | Speed | Quality |
+| --- | --- | --- | --- | --- |
+| onnx-community/moonshine-tiny-ONNX | Transformers.js | 50MB | Fast | Good |
+| onnx-community/moonshine-base-ONNX | Transformers.js | 237MB | Medium | High |
+| Xenova/whisper-tiny | Transformers.js | 70MB | Fast | Basic |
+| Xenova/whisper-small | Transformers.js | 240MB | Medium | Good |
+
+**Choosing a model:** For most applications, start with the recommended model (`onnx-community/moonshine-base-ONNX`). If download size is the primary constraint (e.g., mobile PWA, browser extension), pick the smallest model that meets your quality bar. If quality is the priority (e.g., enterprise search, content analysis), use the largest model your target devices can handle.
+
+## Cloud vs Local: Cost and Privacy Comparison
+
+Running speech-to-text locally eliminates per-request API costs and keeps all data on-device. Here is how the economics compare:
+
+| Service | Cost / Notes |
+| --- | --- |
+| OpenAI Whisper API | $0.006 per minute |
+| Google Speech-to-Text | $0.006-0.009 per 15 seconds |
+| AWS Transcribe | $0.024 per minute |
+| LocalMode speech-to-text | $0 after model download (50-237MB) |
+
+OpenAI Whisper API costs $0.006 per minute. Google Speech-to-Text costs $0.006-0.009 per 15 seconds. AWS Transcribe costs $0.024 per minute. LocalMode speech-to-text costs $0 after model download (50-237MB). For voice note apps processing 30+ minutes daily, local inference saves hundreds of dollars annually.
+
+The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
+
+## Available Providers
+
+- **Transformers.js** - ONNX-optimized models via ONNX Runtime Web. Supports both WebGPU and WASM backends. Broadest model catalog for non-LLM tasks.
+
+## AbortSignal Support
+
+All `transcribe()` calls support cancellation through the standard `AbortSignal` API:
+
+```typescript
+const controller = new AbortController();
+
+const promise = transcribe({
+  model,
+  audio: audioData,
+  abortSignal: controller.signal,
+});
+
+// Cancel if needed (e.g., user navigates away)
+controller.abort();
+```
+
+This is essential for responsive UIs - cancel in-flight operations when the user navigates away, submits a new query, or closes a dialog. The underlying model inference stops immediately, freeing memory and compute resources.
+
+## React Integration
+
+If you are building a React application, `@localmode/react` provides hooks that manage loading states, error handling, and cancellation automatically:
+
+```bash
+npm install @localmode/react
+```
+
+```typescript
+import { useTranscribe } from '@localmode/react';
+```
+
+The hook returns `{ data, error, isLoading, execute, cancel, reset }` - providing everything a UI component needs to display progress, handle errors, offer cancellation, and reset state.
+
+## Related Pages
+
+- [Moonshine Speech](/blog/models/moonshine-speech) - model guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+Function signatures, model IDs, and hook return shapes were verified against the LocalMode source code: `packages/core/src/audio/transcribe.ts`, `packages/transformers/src/implementations/speech-to-text.ts`, `packages/transformers/src/models.ts` (`SPEECH_TO_TEXT_MODELS`), and `packages/react/src/core/use-operation.ts`. Cloud pricing figures were fetched from official provider pricing pages and are subject to change - verify current pricing with each provider before making cost decisions.
+
+## Sources
+
+- [onnx-community/moonshine-tiny-ONNX - HuggingFace Files](https://huggingface.co/onnx-community/moonshine-tiny-ONNX/tree/main/onnx) - ONNX file sizes verified
+- [onnx-community/moonshine-base-ONNX - HuggingFace Files](https://huggingface.co/onnx-community/moonshine-base-ONNX/tree/main/onnx) - ONNX file sizes verified
+- [Xenova/whisper-tiny - HuggingFace](https://huggingface.co/Xenova/whisper-tiny/tree/main/onnx) - Whisper-tiny ONNX file sizes
+- [Xenova/whisper-small - HuggingFace](https://huggingface.co/Xenova/whisper-small/tree/main/onnx) - Whisper-small ONNX file sizes
+- [OpenAI API Pricing](https://openai.com/api/pricing/) - Whisper API $0.006/min confirmed
+- [Google Cloud Speech-to-Text Pricing](https://cloud.google.com/speech-to-text/pricing) - $0.006–$0.009 per 15 seconds (V1 standard/enhanced) confirmed
+- [Amazon Transcribe Pricing](https://aws.amazon.com/transcribe/pricing/) - $0.024/min (Tier 1) confirmed

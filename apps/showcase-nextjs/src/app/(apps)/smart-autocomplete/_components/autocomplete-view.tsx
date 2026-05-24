@@ -4,6 +4,7 @@
  */
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { Sparkles, Play, ArrowLeft, Wand2, Shuffle, Command } from 'lucide-react';
 import { Button, IconBox, Spinner } from './ui';
@@ -86,12 +87,12 @@ export function AutocompleteView() {
         {/* Header */}
         <div className="h-16 min-h-16 border-b border-poster-border/30 flex items-center justify-between px-6 bg-poster-surface/80 backdrop-blur-md">
           <div className="flex items-center gap-3">
-            <a
+            <Link
               href="/"
               className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-poster-surface-lighter transition-all duration-300 text-poster-text-sub hover:text-poster-text-main"
             >
               <ArrowLeft className="w-4 h-4" />
-            </a>
+            </Link>
             <div className="w-px h-6 bg-poster-border/30" />
             <IconBox size="sm" className="bg-poster-accent-orange/10 text-poster-accent-orange ring-1 ring-poster-accent-orange/30">
               <Sparkles className="w-4 h-4" />

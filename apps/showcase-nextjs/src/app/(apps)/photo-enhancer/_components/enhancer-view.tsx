@@ -7,7 +7,7 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { Upload, Wand2, X, Download, ArrowLeft, Image, Sparkles } from 'lucide-react';
-import { Button, IconBox, Spinner } from './ui';
+import { Button, IconBox } from './ui';
 import { ErrorBoundary, ErrorAlert } from './error-boundary';
 import { useEnhancer } from '../_hooks/use-enhancer';
 import { cn } from '../_lib/utils';

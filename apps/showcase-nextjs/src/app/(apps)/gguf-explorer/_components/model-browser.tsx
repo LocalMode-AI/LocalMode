@@ -9,14 +9,13 @@ import {
   Search,
   ExternalLink,
   Cpu,
-  HardDrive,
   Layers,
   Sparkles,
   Zap,
   FileText,
 } from 'lucide-react';
 import { Button, Input } from './ui';
-import { cn, formatParams, formatBytes } from '../_lib/utils';
+import { cn, formatParams } from '../_lib/utils';
 import { SIZE_CATEGORY_LABELS, SAMPLE_URLS } from '../_lib/constants';
 import { WLLAMA_MODELS, getModelCategory } from '../_services/gguf.service';
 import type { WllamaModelEntry } from '../_services/gguf.service';
@@ -194,7 +193,7 @@ export function ModelBrowser({ onSelectCurated, onSelectCustomUrl }: ModelBrowse
       <div className="flex items-center justify-center gap-2 py-4">
         <Sparkles className="w-3.5 h-3.5 text-poster-text-sub/30" />
         <span className="text-xs text-poster-text-sub/40">
-          135,000+ GGUF models available on HuggingFace
+          160,000+ GGUF models available on HuggingFace
         </span>
       </div>
     </div>

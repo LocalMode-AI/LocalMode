@@ -1,0 +1,107 @@
+---
+title: "BERT NER & Reranking Models in the Browser"
+description: "Specialized BERT models for named entity recognition (NER) and search result reranking in the browser."
+author: "LocalMode"
+date: "2026-04-14"
+---
+
+# BERT NER & Reranking Models in the Browser
+
+Specialized BERT models for named entity recognition (NER) and search result reranking in the browser.
+
+## Overview
+
+The BERT NER & Reranking family is available through Transformers.js in LocalMode, with model sizes ranging from 23MB–279MB. The primary task for these models is **ner**, and they can be used with any application built on the LocalMode SDK.
+
+Running BERT NER & Reranking models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+Named entity recognition and search reranking are two specialized NLP tasks that benefit enormously from browser-local inference. BERT-base-NER (110MB) detects persons, organizations, locations, and miscellaneous entities in text using BIO tagging. It powers LocalMode's extractEntities() function and is essential for applications like contract analysis, content tagging, and data extraction.
+
+MiniLM-L-6-v2 for reranking (23MB) is a cross-encoder model that scores query-document pairs for relevance. Unlike embedding similarity (which computes vectors independently), cross-encoders attend to both query and document simultaneously, producing more accurate relevance scores. In a typical RAG pipeline, you'd use embeddings for initial retrieval (fast, approximate) then rerank the top results with MiniLM for precision (slower, exact).
+
+Both models are remarkably compact - MiniLM at 23MB is one of the smallest useful models in the entire catalog. Together they enable a complete information extraction and retrieval pipeline running entirely in the browser: extract entities from documents, embed and store them, search with semantic similarity, then rerank results for maximum precision.
+
+## Variant Comparison
+
+The following table lists every BERT NER & Reranking variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Xenova/bert-base-NER](https://huggingface.co/dslim/bert-base-NER) | Transformers.js | 110MB | Medium | Good | - | WASM |
+| [Xenova/ms-marco-MiniLM-L-6-v2](https://huggingface.co/cross-encoder/ms-marco-MiniLM-L-6-v2) | Transformers.js | 23MB | Fast | Good | - | WASM |
+| [Xenova/bert-base-multilingual-cased-ner-hrl](https://huggingface.co/Davlan/bert-base-multilingual-cased-ner-hrl) | Transformers.js | 178MB | Medium | Good | - | WASM |
+| [Xenova/bge-reranker-base](https://huggingface.co/BAAI/bge-reranker-base) | Transformers.js | 279MB | Medium | High | - | WASM |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| Under 200MB | 3 | variants |
+| 200MB–500MB | 1 | variant |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+NER variants use the `NERModel` interface and reranker variants use the `RerankerModel` interface, both from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### Transformers.js
+
+Transformers.js runs ONNX-optimized models via ONNX Runtime Web. WebGPU acceleration where available, WASM fallback otherwise.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.ner('Xenova/bert-base-NER');
+// Use the model with the corresponding @localmode/core function
+```
+
+### Choosing Between NER and Reranker
+
+Use `transformers.ner()` for entity extraction and `transformers.reranker()` for search result reranking - these serve different tasks and use different core interfaces.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+// Named entity recognition (NERModel interface)
+const nerModel = transformers.ner('Xenova/bert-base-NER');
+
+// Search result reranking (RerankerModel interface)
+const reranker = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+```
+
+## When to Use BERT NER & Reranking
+
+BERT NER & Reranking models are a strong choice when:
+
+- **You need ner** - BERT NER & Reranking is optimized for ner tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 1 provider (transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The 23MB–279MB range means you can target everything from mobile devices to high-end desktops with the same model family.
+
+
+## HuggingFace Model Cards
+
+- [bert-base-NER](https://huggingface.co/dslim/bert-base-NER)
+- [ms-marco-MiniLM-L-6-v2](https://huggingface.co/cross-encoder/ms-marco-MiniLM-L-6-v2)
+- [bert-base-multilingual-cased-ner-hrl](https://huggingface.co/Davlan/bert-base-multilingual-cased-ner-hrl)
+- [bge-reranker-base](https://huggingface.co/BAAI/bge-reranker-base)
+
+
+
+## Methodology
+
+Model sizes were verified against the actual ONNX file listings in each Xenova HuggingFace repository (specifically `model_quantized.onnx` in the `/onnx` subfolder, which is the default file loaded by Transformers.js). Interface names (`NERModel`, `RerankerModel`) and API method names (`transformers.ner()`, `transformers.reranker()`) were verified against the LocalMode source code in `packages/transformers/src/provider.ts` and `packages/core/src/classification/types.ts`. Entity type labels and language counts were verified against the upstream base model cards (`dslim/bert-base-NER`, `Davlan/bert-base-multilingual-cased-ner-hrl`, `cross-encoder/ms-marco-MiniLM-L6-v2`, `BAAI/bge-reranker-base`). Performance tiers (speed/quality) are LocalMode's curated assessments - always benchmark on target devices before production deployment.
+
+## Sources
+
+- [Xenova/bert-base-NER - ONNX file listing](https://huggingface.co/Xenova/bert-base-NER/tree/main/onnx)
+- [dslim/bert-base-NER - base model card (110M params, CoNLL-2003, F1 91.3)](https://huggingface.co/dslim/bert-base-NER)
+- [Xenova/ms-marco-MiniLM-L-6-v2 - ONNX file listing](https://huggingface.co/Xenova/ms-marco-MiniLM-L-6-v2/tree/main/onnx)
+- [cross-encoder/ms-marco-MiniLM-L6-v2 - base model card (22.7M params, MS MARCO)](https://huggingface.co/cross-encoder/ms-marco-MiniLM-L6-v2)
+- [Xenova/bert-base-multilingual-cased-ner-hrl - ONNX file listing](https://huggingface.co/Xenova/bert-base-multilingual-cased-ner-hrl/tree/main/onnx)
+- [Davlan/bert-base-multilingual-cased-ner-hrl - base model card (10 languages, PER/ORG/LOC)](https://huggingface.co/Davlan/bert-base-multilingual-cased-ner-hrl)
+- [Xenova/bge-reranker-base - ONNX file listing](https://huggingface.co/Xenova/bge-reranker-base/tree/main/onnx)
+- [BAAI/bge-reranker-base - base model card (XLM-RoBERTa cross-encoder)](https://huggingface.co/BAAI/bge-reranker-base)
+- [LocalMode transformers provider source](https://github.com/LocalMode-AI/LocalMode) - `packages/transformers/src/provider.ts`, `packages/core/src/classification/types.ts`

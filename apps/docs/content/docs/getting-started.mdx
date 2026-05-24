@@ -35,11 +35,15 @@ Add more capabilities as needed:
 
 ```bash
 # LLM chat (pick one or more)
-pnpm install @localmode/webllm          # WebGPU — fastest, 30 curated models
-pnpm install @localmode/wllama          # WASM — 135K+ GGUF models, all browsers
+pnpm install @localmode/webllm          # WebGPU — fastest, 32 curated models
+pnpm install @localmode/wllama          # WASM — 160K+ GGUF models, all browsers
+pnpm install @localmode/litert          # Google LiteRT-LM — .litertlm models, WebGPU + WASM
 
 # React hooks
 pnpm install @localmode/react
+
+# Vision, landmarks, audio classification
+pnpm install @localmode/mediapipe       # MediaPipe Tasks — hand/pose/face tracking, gestures, audio
 
 # Ecosystem
 pnpm install @localmode/ai-sdk          # Vercel AI SDK compatibility
@@ -240,7 +244,7 @@ reranked.forEach((r, i) => {
 
 ## Add LLM Chat
 
-Three providers implement the same `LanguageModel` interface — choose based on your needs:
+Four providers implement the same `LanguageModel` interface — choose based on your needs:
 
 ```typescript title="llm-chat.ts"
 import { streamText } from '@localmode/core';
@@ -413,6 +417,8 @@ Beyond embeddings, RAG, and LLM chat, LocalMode provides a full suite of local A
 | **NER** | `extractEntities()` | Document redaction, data extraction |
 | **Reranking** | `rerank()` | Improved RAG accuracy with cross-encoder scoring |
 | **Vision** | `captionImage()`, `detectObjects()`, `segmentImage()` | Image captioning, object detection, background removal |
+| **Landmarks & Gestures** | `detectHands()`, `detectPose()`, `detectFaceLandmarks()`, `recognizeGesture()` | Hand, pose, face tracking, gesture recognition (MediaPipe) |
+| **Language Detection** | `detectLanguage()` | Identify language from text (110 languages, MediaPipe) |
 | **Multimodal Search** | `embedImage()`, `embedManyImages()` | Cross-modal text-to-image search with CLIP |
 | **Audio** | `transcribe()`, `synthesizeSpeech()` | Voice notes, meeting transcription, audiobook creation |
 | **Translation** | `translate()` | Multi-language translation (20+ languages) |
@@ -441,22 +447,32 @@ All of these work offline after the initial model download, with no server or AP
   <Card
     title="React Hooks"
     href="/docs/react"
-    description="46 hooks for chat, embeddings, classification, vision, audio, and more."
+    description="56 hooks for chat, embeddings, classification, vision, audio, and more."
   />
   <Card
     title="Transformers Provider"
     href="/docs/transformers"
-    description="25 model factories for text, vision, audio, and multimodal tasks."
+    description="26 model factories for text, vision, audio, and multimodal tasks."
   />
   <Card
     title="WebLLM Provider"
     href="/docs/webllm"
-    description="30 curated WebGPU models for fastest LLM inference."
+    description="32 curated WebGPU models for fastest LLM inference."
   />
   <Card
     title="Wllama Provider"
     href="/docs/wllama"
-    description="135K+ GGUF models via llama.cpp WASM — universal browser support."
+    description="160K+ GGUF models via llama.cpp WASM — universal browser support."
+  />
+  <Card
+    title="LiteRT Provider"
+    href="/docs/litert"
+    description="Google LiteRT-LM .litertlm models — WebGPU with CPU WASM fallback. Catalog ships Gemma 4 E2B/E4B and Qwen3 0.6B."
+  />
+  <Card
+    title="MediaPipe Provider"
+    href="/docs/mediapipe"
+    description="Hand, pose, and face landmarks, gesture recognition, audio/image classification, language detection — WASM + WebGL."
   />
   <Card
     title="Chrome AI Provider"

@@ -86,6 +86,7 @@ export async function extractText(options: ExtractTextOptions): Promise<ExtractT
     image,
     languages,
     detectRegions = false,
+    prompt,
     abortSignal,
     maxRetries = 2,
     providerOptions,
@@ -107,6 +108,7 @@ export async function extractText(options: ExtractTextOptions): Promise<ExtractT
         images: [image],
         languages,
         detectRegions,
+        prompt,
         abortSignal,
         providerOptions,
       });
@@ -168,6 +170,7 @@ export async function extractTextMany(
     images,
     languages,
     detectRegions = false,
+    prompt,
     abortSignal,
     maxRetries = 2,
     providerOptions,
@@ -189,6 +192,7 @@ export async function extractTextMany(
         images,
         languages,
         detectRegions,
+        prompt,
         abortSignal,
         providerOptions,
       });

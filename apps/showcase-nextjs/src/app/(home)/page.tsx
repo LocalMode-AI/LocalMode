@@ -82,9 +82,9 @@ export default function HomePage() {
             <h1 className="text-5xl font-bold tracking-tight sm:text-6xl md:text-7xl lg:text-8xl leading-none">
               Local<span className="text-poster-primary">Mode</span>
             </h1>
-            <h4 className="mx-auto max-w-2xl text-lg text-poster-text-sub/80 md:text-xl leading-relaxed">
+            <p className="mx-auto max-w-2xl text-lg text-poster-text-sub md:text-xl leading-relaxed">
               Complete AI suite running 100% locally in your browser
-            </h4>
+            </p>
           </div>
         </header>
 
@@ -158,7 +158,7 @@ export default function HomePage() {
                     {getCategoryIcon(category)}
                   </div>
                   <h2 className="text-2xl font-bold text-poster-text-main">{category}</h2>
-                  <span className="text-sm font-medium text-poster-text-sub/40 bg-white/5 px-2 py-0.5 rounded-full">
+                  <span className="text-sm font-medium text-poster-text-sub bg-white/5 px-2 py-0.5 rounded-full">
                     {categoryApps.length}
                   </span>
                 </div>

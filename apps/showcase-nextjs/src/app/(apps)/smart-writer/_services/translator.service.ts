@@ -10,7 +10,7 @@ const modelCache = new Map<string, TranslationModel>();
 
 /** Get the active translation provider */
 export function getTranslatorProvider(): ActiveProvider {
-  if (typeof self !== 'undefined' && 'ai' in self && 'translator' in (self as any).ai) {
+  if (typeof self !== 'undefined' && 'ai' in self && 'translator' in ((self as unknown as Record<string, Record<string, unknown>>).ai)) {
     return 'chrome-ai';
   }
   return 'transformers';

@@ -21,8 +21,10 @@ Zero-download, instant AI inference via Chrome's built-in Gemini Nano model. No 
 - Zero model downloads — Gemini Nano ships with Chrome
 - Zero bundle size impact — browser-native APIs
 - Instant inference — no model loading delay
-- Implements `SummarizationModel` and `TranslationModel` from `@localmode/core`
+- Implements `SummarizationModel`, `TranslationModel`, and `LanguageModel` from `@localmode/core`
 - Feature detection utilities for graceful fallback
+
+The `LanguageModel` implementation wraps Chrome 138+ `window.LanguageModel` (the Prompt API) so `generateText()`, `streamText()`, `generateObject()`, and the `useGenerateText()` / `useStreamText()` / `useModelWarmup()` React hooks work on Gemini Nano with zero changes from any other provider.
 
 ## Installation
 
@@ -80,13 +82,12 @@ console.log(summary);
 |-----|--------|-------------------|----------------|
 | Summarizer | **Stable** | `SummarizationModel` | 138+ |
 | Translator | **Stable** | `TranslationModel` | 138+ |
-| Prompt API | Extensions only | `LanguageModel` | 138+ |
+| Prompt API | **Stable** | `LanguageModel` | 138+ |
 | Writer | Origin trial | — | — |
 | Rewriter | Origin trial | — | — |
 
 <Callout type="info">
-  Only the Summarizer and Translator APIs are currently supported by `@localmode/chrome-ai`.
-  The Prompt API is restricted to Chrome Extensions and is not available to web pages.
+  All three stable APIs (Summarizer, Translator, Prompt) are supported by `@localmode/chrome-ai`. The Prompt API exposes Gemini Nano text generation via `chromeAI.languageModel()` — see the [Language Model](/docs/chrome-ai/language-model) guide.
 </Callout>
 
 ## Requirements
@@ -133,6 +134,7 @@ import { createChromeAI, chromeAI } from '@localmode/chrome-ai';
 // Default instance
 const summarizer = chromeAI.summarizer();
 const translator = chromeAI.translator({ targetLanguage: 'de' });
+const llm = chromeAI.languageModel({ systemPrompt: 'You are concise.' });
 
 // Custom instance
 const provider = createChromeAI();
@@ -144,12 +146,17 @@ const customSummarizer = provider.summarizer({ type: 'key-points', format: 'mark
 ```ts
 import {
   isChromeAISupported,
+  isPromptAPISupported,
   isSummarizerAPISupported,
   isTranslatorAPISupported,
 } from '@localmode/chrome-ai';
 
 if (isChromeAISupported()) {
   console.log('Chrome AI is available');
+}
+
+if (isPromptAPISupported()) {
+  console.log('Prompt API (LanguageModel) is ready');
 }
 
 if (isSummarizerAPISupported()) {
@@ -160,6 +167,11 @@ if (isSummarizerAPISupported()) {
 ## Next Steps
 
 <Cards>
+  <Card
+    title="Language Model"
+    description="Generate text with Gemini Nano via the Prompt API"
+    href="/docs/chrome-ai/language-model"
+  />
   <Card
     title="Summarization"
     description="Summarize text with configurable type, format, and length"

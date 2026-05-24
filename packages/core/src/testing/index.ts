@@ -9,6 +9,15 @@
 import type { EmbeddingModel } from '../embeddings/types.js';
 import type { Document, SearchOptions, SearchResult, StoredDocument } from '../types.js';
 import type { Entity } from '../classification/types.js';
+import type {
+  HandLandmarkModel,
+  PoseLandmarkModel,
+  FaceDetectionModel,
+  FaceLandmarkModel,
+  GestureRecognitionModel,
+  Landmark,
+} from '../vision/types.js';
+import type { LanguageDetectionModel } from '../translation/types.js';
 
 // ============================================================================
 // Seeded Random
@@ -2648,3 +2657,295 @@ export function createMockTool(
     },
   };
 }
+
+// ============================================================================
+// Mock Landmark & Gesture Models (MediaPipe-style)
+// ============================================================================
+
+/** Generate `count` deterministic mock landmarks. */
+function mockLandmarks(count: number, seed: number = 1): Landmark[] {
+  const rng = createSeededRandom(seed);
+  const landmarks: Landmark[] = [];
+  for (let i = 0; i < count; i++) {
+    landmarks.push({ x: rng(), y: rng(), z: rng() * 0.1, visibility: 0.9 });
+  }
+  return landmarks;
+}
+
+/** Options for creating a mock hand landmark model. */
+export interface MockHandLandmarkModelOptions {
+  /** Delay in milliseconds (default: 0) */
+  delay?: number;
+  /** Number of hands the mock returns (default: 1) */
+  handCount?: number;
+}
+
+/**
+ * Create a mock hand landmark model for testing.
+ */
+export function createMockHandLandmarkModel(
+  options: MockHandLandmarkModelOptions = {}
+): HandLandmarkModel {
+  const { delay = 0, handCount = 1 } = options;
+
+  return {
+    modelId: 'mock:hand-landmarker',
+    provider: 'mock',
+
+    async doDetect({ images, numHands = 2, abortSignal }) {
+      abortSignal?.throwIfAborted?.();
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        abortSignal?.throwIfAborted?.();
+      }
+
+      const startTime = performance.now();
+      const handsToReturn = Math.min(handCount, numHands);
+
+      return {
+        results: images.map(() =>
+          Array.from({ length: handsToReturn }, (_, i) => ({
+            landmarks: mockLandmarks(21, i + 1),
+            worldLandmarks: mockLandmarks(21, i + 100),
+            handedness: (i % 2 === 0 ? 'Right' : 'Left') as 'Left' | 'Right',
+            score: 0.95 - i * 0.05,
+          }))
+        ),
+        usage: { durationMs: performance.now() - startTime },
+      };
+    },
+  };
+}
+
+/** Options for creating a mock pose landmark model. */
+export interface MockPoseLandmarkModelOptions {
+  /** Delay in milliseconds (default: 0) */
+  delay?: number;
+  /** Number of poses the mock returns (default: 1) */
+  poseCount?: number;
+}
+
+/**
+ * Create a mock pose landmark model for testing.
+ */
+export function createMockPoseLandmarkModel(
+  options: MockPoseLandmarkModelOptions = {}
+): PoseLandmarkModel {
+  const { delay = 0, poseCount = 1 } = options;
+
+  return {
+    modelId: 'mock:pose-landmarker',
+    provider: 'mock',
+
+    async doDetect({ images, numPoses = 1, abortSignal }) {
+      abortSignal?.throwIfAborted?.();
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        abortSignal?.throwIfAborted?.();
+      }
+
+      const startTime = performance.now();
+      const posesToReturn = Math.min(poseCount, numPoses);
+
+      return {
+        results: images.map(() =>
+          Array.from({ length: posesToReturn }, (_, i) => ({
+            landmarks: mockLandmarks(33, i + 1),
+            worldLandmarks: mockLandmarks(33, i + 100),
+            score: 0.92 - i * 0.05,
+          }))
+        ),
+        usage: { durationMs: performance.now() - startTime },
+      };
+    },
+  };
+}
+
+/** Options for creating a mock face detection model. */
+export interface MockFaceDetectionModelOptions {
+  /** Delay in milliseconds (default: 0) */
+  delay?: number;
+  /** Number of faces the mock returns (default: 1) */
+  faceCount?: number;
+}
+
+/**
+ * Create a mock face detection model for testing.
+ */
+export function createMockFaceDetectionModel(
+  options: MockFaceDetectionModelOptions = {}
+): FaceDetectionModel {
+  const { delay = 0, faceCount = 1 } = options;
+
+  return {
+    modelId: 'mock:face-detector',
+    provider: 'mock',
+
+    async doDetect({ images, abortSignal }) {
+      abortSignal?.throwIfAborted?.();
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        abortSignal?.throwIfAborted?.();
+      }
+
+      const startTime = performance.now();
+
+      return {
+        results: images.map(() =>
+          Array.from({ length: faceCount }, (_, i) => ({
+            box: { x: 0.1 + i * 0.1, y: 0.1, width: 0.2, height: 0.3 },
+            score: 0.97 - i * 0.05,
+            keypoints: [
+              { x: 0.2, y: 0.2, name: 'rightEye' },
+              { x: 0.3, y: 0.2, name: 'leftEye' },
+              { x: 0.25, y: 0.25, name: 'noseTip' },
+              { x: 0.25, y: 0.3, name: 'mouthCenter' },
+              { x: 0.15, y: 0.22, name: 'rightEarTragion' },
+              { x: 0.35, y: 0.22, name: 'leftEarTragion' },
+            ],
+          }))
+        ),
+        usage: { durationMs: performance.now() - startTime },
+      };
+    },
+  };
+}
+
+/** Options for creating a mock face landmark model. */
+export interface MockFaceLandmarkModelOptions {
+  /** Delay in milliseconds (default: 0) */
+  delay?: number;
+  /** Number of faces the mock returns (default: 1) */
+  faceCount?: number;
+}
+
+/**
+ * Create a mock face landmark model for testing.
+ */
+export function createMockFaceLandmarkModel(
+  options: MockFaceLandmarkModelOptions = {}
+): FaceLandmarkModel {
+  const { delay = 0, faceCount = 1 } = options;
+
+  return {
+    modelId: 'mock:face-landmarker',
+    provider: 'mock',
+
+    async doDetect({ images, numFaces = 1, outputBlendshapes = false, abortSignal }) {
+      abortSignal?.throwIfAborted?.();
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        abortSignal?.throwIfAborted?.();
+      }
+
+      const startTime = performance.now();
+      const facesToReturn = Math.min(faceCount, numFaces);
+
+      return {
+        results: images.map(() =>
+          Array.from({ length: facesToReturn }, (_, i) => ({
+            landmarks: mockLandmarks(478, i + 1),
+            score: 0.96 - i * 0.05,
+            ...(outputBlendshapes
+              ? {
+                  blendshapes: [
+                    { categoryName: 'jawOpen', score: 0.5 },
+                    { categoryName: 'mouthSmileLeft', score: 0.3 },
+                  ],
+                }
+              : {}),
+          }))
+        ),
+        usage: { durationMs: performance.now() - startTime },
+      };
+    },
+  };
+}
+
+/** Options for creating a mock gesture recognition model. */
+export interface MockGestureRecognitionModelOptions {
+  /** Delay in milliseconds (default: 0) */
+  delay?: number;
+  /** Gesture category the mock returns (default: 'Thumb_Up') */
+  gesture?: string;
+}
+
+/**
+ * Create a mock gesture recognition model for testing.
+ */
+export function createMockGestureRecognitionModel(
+  options: MockGestureRecognitionModelOptions = {}
+): GestureRecognitionModel {
+  const { delay = 0, gesture = 'Thumb_Up' } = options;
+
+  return {
+    modelId: 'mock:gesture-recognizer',
+    provider: 'mock',
+
+    async doRecognize({ images, abortSignal }) {
+      abortSignal?.throwIfAborted?.();
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        abortSignal?.throwIfAborted?.();
+      }
+
+      const startTime = performance.now();
+
+      return {
+        results: images.map(() => [
+          {
+            gesture,
+            score: 0.93,
+            handedness: 'Right' as const,
+            landmarks: mockLandmarks(21, 1),
+          },
+        ]),
+        usage: { durationMs: performance.now() - startTime },
+      };
+    },
+  };
+}
+
+/** Options for creating a mock language detection model. */
+export interface MockLanguageDetectionModelOptions {
+  /** Delay in milliseconds (default: 0) */
+  delay?: number;
+  /** Languages the mock returns (default: en/fr) */
+  languages?: Array<{ languageCode: string; confidence: number }>;
+}
+
+/**
+ * Create a mock language detection model for testing.
+ */
+export function createMockLanguageDetectionModel(
+  options: MockLanguageDetectionModelOptions = {}
+): LanguageDetectionModel {
+  const {
+    delay = 0,
+    languages = [
+      { languageCode: 'en', confidence: 0.95 },
+      { languageCode: 'fr', confidence: 0.04 },
+    ],
+  } = options;
+
+  return {
+    modelId: 'mock:language-detector',
+    provider: 'mock',
+
+    async doDetect({ abortSignal }) {
+      abortSignal?.throwIfAborted?.();
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        abortSignal?.throwIfAborted?.();
+      }
+
+      const startTime = performance.now();
+
+      return {
+        languages: languages.map((l) => ({ ...l })),
+        usage: { durationMs: performance.now() - startTime },
+      };
+    },
+  };
+}
+

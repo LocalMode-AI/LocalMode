@@ -1,0 +1,212 @@
+---
+title: "Text Generation (LLM Chat) in the Browser"
+description: "Generate text, answer questions, and have conversations using local LLMs running entirely in the browser."
+author: "LocalMode"
+date: "2026-04-28"
+---
+
+# Text Generation (LLM Chat) in the Browser
+
+Generate text, answer questions, and have conversations using local LLMs running entirely in the browser.
+
+## What Is Text Generation (LLM Chat)?
+
+Text generation uses large language models (LLMs) to produce human-like text from prompts. In the browser, these models run via WebGPU shader compilation (WebLLM), llama.cpp WASM (wllama), ONNX Runtime (Transformers.js v4), or the LiteRT-LM engine from Google (litert). Models range from 70MB to 5GB, with quality scaling proportionally. The same LanguageModel interface works across every provider, so switching backends requires changing only the model ID.
+
+This capability is exposed through the `streamText()` function in `@localmode/core`. All processing runs entirely in the browser - no server, no API key, no data leaves the device. After the initial model download, text generation (llm chat) works completely offline.
+
+## Real-World Applications
+
+AI chatbots and customer support widgets. Content drafting and writing assistants. Code generation and debugging tools. Tutoring systems and educational apps. Data analysis with natural language queries. Agentic workflows with tool use.
+
+These use cases all benefit from local, on-device processing: user data stays private, there are no per-request API costs, and the application works without internet after initial setup.
+
+## Getting Started
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Import the core function and provider:
+
+```typescript
+import { streamText, generateText, generateObject } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+```
+
+The recommended starting model is **Llama-3.2-1B-Instruct-q4f16_1-MLC** - it provides the best balance of quality, speed, and download size for most applications.
+
+## Code Example
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+
+// Stream text generation
+const result = await streamText({
+  model,
+  prompt: 'Explain how vector databases work in 3 sentences.',
+  maxTokens: 200,
+  temperature: 0.7,
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+
+// Or use wllama for universal browser support (no WebGPU needed)
+import { wllama } from '@localmode/wllama';
+const wasmModel = wllama.languageModel('Qwen2.5-0.5B-Instruct-Q4_K_M');
+```
+
+This example demonstrates the core workflow: create a model instance from the provider, call the `streamText()` function with your input, and receive structured results. The same pattern works identically across all 4 available providers: WebLLM (WebGPU), wllama (WASM), Transformers.js (ONNX), and LiteRT.
+
+## Available Models
+
+The following models support text generation (llm chat) through LocalMode. Choose based on your target device, acceptable download size, and quality requirements.
+
+| Model | Provider | Size | Speed | Quality |
+| --- | --- | --- | --- | --- |
+| Qwen2.5-0.5B-Instruct-q4f16_1-MLC | WebLLM (WebGPU) | 278MB | Fast | Good |
+| Qwen3-0.6B-q4f16_1-MLC | WebLLM (WebGPU) | 350MB | Fast | Good |
+| Qwen2.5-1.5B-Instruct-q4f16_1-MLC | WebLLM (WebGPU) | 868MB | Medium | Good |
+| Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC | WebLLM (WebGPU) | 868MB | Medium | Good |
+| Qwen3-1.7B-q4f16_1-MLC | WebLLM (WebGPU) | 1.1GB | Medium | Good |
+| Qwen2.5-3B-Instruct-q4f16_1-MLC | WebLLM (WebGPU) | 1.7GB | Medium | High |
+| Qwen2.5-Coder-3B-Instruct-q4f16_1-MLC | WebLLM (WebGPU) | 1.7GB | Medium | High |
+| Qwen3-4B-q4f16_1-MLC | WebLLM (WebGPU) | 2.2GB | Slow | High |
+| Qwen2.5-7B-Instruct-q4f16_1-MLC | WebLLM (WebGPU) | 4.0GB | Slow | High |
+| Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC | WebLLM (WebGPU) | 4.0GB | Slow | High |
+| Qwen3-8B-q4f16_1-MLC | WebLLM (WebGPU) | 4.5GB | Slow | High |
+| Qwen2.5-0.5B-Instruct-Q4_K_M | wllama (WASM) | 386MB | Fast | Good |
+| Qwen2.5-1.5B-Instruct-Q4_K_M | wllama (WASM) | 986MB | Medium | Good |
+| Qwen2.5-Coder-1.5B-Instruct-Q4_K_M | wllama (WASM) | 1.0GB | Medium | Good |
+| Qwen2.5-3B-Instruct-Q4_K_M | wllama (WASM) | 1.94GB | Medium | High |
+| Qwen2.5-Coder-7B-Instruct-Q4_K_M | wllama (WASM) | 4.5GB | Slow | High |
+| onnx-community/Qwen3-0.6B-ONNX | Transformers.js | 570MB | Medium | Good |
+| onnx-community/Qwen3.5-0.8B-ONNX | Transformers.js | 500MB | Fast | Good |
+| onnx-community/Qwen3.5-2B-ONNX | Transformers.js | 1.5GB | Medium | High |
+| onnx-community/Qwen3.5-4B-ONNX | Transformers.js | 2.5GB | Slow | High |
+| onnx-community/Qwen3-4B-ONNX | Transformers.js | 1.2GB | Medium | High |
+| onnx-community/Qwen2.5-Coder-1.5B-Instruct | Transformers.js | 450MB | Medium | Good |
+| TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC | WebLLM (WebGPU) | 400MB | Fast | Basic |
+| Llama-3.2-1B-Instruct-q4f16_1-MLC | WebLLM (WebGPU) | 712MB | Medium | Good |
+| Llama-3.2-3B-Instruct-q4f16_1-MLC | WebLLM (WebGPU) | 1.76GB | Slow | High |
+| Llama-3.1-8B-Instruct-q4f16_1-MLC | WebLLM (WebGPU) | 4.5GB | Slow | High |
+| TinyLlama-1.1B-Chat-Q4_K_M | wllama (WASM) | 670MB | Medium | Good |
+| Llama-3.2-1B-Instruct-Q4_K_M | wllama (WASM) | 750MB | Medium | Good |
+| Llama-3.2-3B-Instruct-Q4_K_M | wllama (WASM) | 1.93GB | Medium | High |
+| Llama-3.1-8B-Instruct-Q4_K_M | wllama (WASM) | 4.92GB | Slow | High |
+| onnx-community/TinyLlama-1.1B-Chat-v1.0-ONNX | Transformers.js | 350MB | Medium | Basic |
+| onnx-community/Llama-3.2-1B-Instruct-ONNX | Transformers.js | 380MB | Medium | Good |
+| onnx-community/Llama-3.2-3B-Instruct-ONNX | Transformers.js | 900MB | Medium | High |
+| Phi-3.5-mini-instruct-q4f16_1-MLC | WebLLM (WebGPU) | 2.1GB | Slow | High |
+| Phi-3-mini-4k-instruct-q4f16_1-MLC | WebLLM (WebGPU) | 2.2GB | Slow | High |
+| Phi-3.5-vision-instruct-q4f16_1-MLC | WebLLM (WebGPU) | 2.4GB | Slow | High |
+| Phi-3.5-mini-instruct-Q4_K_M | wllama (WASM) | 1.24GB | Medium | High |
+| Phi-4-mini-instruct-Q4_K_M | wllama (WASM) | 2.3GB | Medium | High |
+| onnx-community/Phi-4-mini-instruct-web-q4f16 | Transformers.js | 2.3GB | Slow | High |
+| microsoft/Phi-3-mini-4k-instruct-onnx-web | Transformers.js | 1.2GB | Medium | High |
+| SmolLM2-135M-Instruct-q0f16-MLC | WebLLM (WebGPU) | 78MB | Fast | Basic |
+| SmolLM2-360M-Instruct-q4f16_1-MLC | WebLLM (WebGPU) | 210MB | Fast | Basic |
+| SmolLM2-1.7B-Instruct-q4f16_1-MLC | WebLLM (WebGPU) | 1.0GB | Medium | Good |
+| SmolLM2-135M-Instruct-Q4_K_M | wllama (WASM) | 70MB | Fast | Basic |
+| SmolLM2-360M-Instruct-Q4_K_M | wllama (WASM) | 234MB | Fast | Basic |
+| SmolLM2-1.7B-Instruct-Q4_K_M | wllama (WASM) | 1.06GB | Medium | Good |
+| gemma-2-2b-it-q4f16_1-MLC | WebLLM (WebGPU) | 1.44GB | Medium | Good |
+| gemma-2-9b-it-q4f16_1-MLC | WebLLM (WebGPU) | 5.0GB | Slow | High |
+| Gemma-2-2B-IT-Q4_K_M | wllama (WASM) | 1.3GB | Medium | Good |
+| Ministral-3-3B-Instruct-2512-BF16-q4f16_1-MLC | WebLLM (WebGPU) | 1.8GB | Medium | Good |
+| Ministral-3-3B-Reasoning-2512-q4f16_1-MLC | WebLLM (WebGPU) | 1.8GB | Medium | Good |
+| Mistral-7B-Instruct-v0.3-q4f16_1-MLC | WebLLM (WebGPU) | 4.0GB | Slow | High |
+| Mistral-7B-Instruct-v0.3-Q4_K_M | wllama (WASM) | 4.37GB | Slow | High |
+| DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC | WebLLM (WebGPU) | 4.2GB | Slow | High |
+| DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC | WebLLM (WebGPU) | 4.4GB | Slow | High |
+| onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX | Transformers.js | 500MB | Medium | Good |
+| Hermes-3-Llama-3.2-3B-q4f16_1-MLC | WebLLM (WebGPU) | 1.76GB | Medium | High |
+| Hermes-3-Llama-3.1-8B-q4f16_1-MLC | WebLLM (WebGPU) | 4.9GB | Slow | High |
+| onnx-community/granite-4.0-350m-ONNX-web | Transformers.js | 120MB | Fast | Basic |
+| onnx-community/granite-4.0-1b-ONNX-web | Transformers.js | 350MB | Fast | Basic |
+| onnx-community/gemma-4-E2B-it-ONNX | Transformers.js | 1.5GB | Medium | High |
+| onnx-community/gemma-4-E4B-it-ONNX | Transformers.js | 3GB | Slow | High |
+
+**Choosing a model:** For most applications, start with the recommended model (`Llama-3.2-1B-Instruct-q4f16_1-MLC`). If download size is the primary constraint (e.g., mobile PWA, browser extension), pick the smallest model that meets your quality bar. If quality is the priority (e.g., enterprise search, content analysis), use the largest model your target devices can handle.
+
+## Cloud vs Local: Cost and Privacy Comparison
+
+Running text generation (llm chat) locally eliminates per-request API costs and keeps all data on-device. Here is how the economics compare:
+
+| Service | Cost / Notes |
+| --- | --- |
+| OpenAI GPT-4o | $2.50-10 per million tokens |
+| Claude 3.5 Sonnet | $3-15 per million tokens |
+| Local browser LLMs | $0 per token |
+
+OpenAI GPT-4o costs $2.50-10 per million tokens. Claude 3.5 Sonnet costs $3-15 per million tokens. Local browser LLMs cost $0 per token. The quality gap has narrowed significantly: Qwen3-4B scores 83.7% on MMLU-Redux (thinking mode), within 10% of GPT-4o. For many applications - chat, summarization, classification-via-LLM - local models are sufficient.
+
+The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
+
+## Available Providers
+
+- **WebLLM (WebGPU)** - GPU-accelerated via WebGPU compute shaders. Fastest inference. Requires Chrome 113+, Edge 113+, or Safari 26+.
+- **wllama (WASM)** - WASM-based inference via llama.cpp. Works in every modern browser including Firefox. Universal compatibility.
+- **Transformers.js** - ONNX-optimized models via ONNX Runtime Web. Supports both WebGPU and WASM backends. Broadest model catalog for non-LLM tasks.
+- **LiteRT** - Google's on-device LiteRT-LM engine for `.litertlm` models. Text-only. Gemma 4 models require WebGPU; Qwen3 0.6B runs on WebGPU or CPU.
+
+## AbortSignal Support
+
+All `streamText()` calls support cancellation through the standard `AbortSignal` API:
+
+```typescript
+const controller = new AbortController();
+
+const promise = streamText({
+  model,
+  prompt: 'input text',
+  abortSignal: controller.signal,
+});
+
+// Cancel if needed (e.g., user navigates away)
+controller.abort();
+```
+
+This is essential for responsive UIs - cancel in-flight operations when the user navigates away, submits a new query, or closes a dialog. The underlying model inference stops immediately, freeing memory and compute resources.
+
+## React Integration
+
+If you are building a React application, `@localmode/react` provides hooks that manage loading states, error handling, and cancellation automatically:
+
+```bash
+npm install @localmode/react
+```
+
+```typescript
+import { useGenerateText } from '@localmode/react';
+```
+
+The hook returns `{ data, error, isLoading, execute, cancel, reset }` - providing everything a UI component needs to display progress, handle errors, offer cancellation, and reset state.
+
+## Related Pages
+
+- [Qwen](/blog/models/qwen) - model guide
+- [Llama](/blog/models/llama) - model guide
+- [Phi](/blog/models/phi) - model guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+Model IDs, sizes, and descriptions were verified directly against the LocalMode source catalogs: `packages/webllm/src/models.ts` (32 WebLLM models), `packages/wllama/src/models.ts` (18 GGUF models), `packages/transformers/src/models.ts` (16 ONNX LLMs), and `packages/litert/src/models.ts` (3 LiteRT models). Hook return shapes were verified against `packages/react/src/hooks/use-generate-text.ts` and `packages/react/src/core/use-operation.ts`. Cloud pricing was fetched from official provider pricing pages at time of writing and is subject to change. The Qwen3-4B MMLU-Redux score of 83.7 is drawn from the Qwen3 technical report (arXiv 2505.09388); benchmark with your own data for production decisions.
+
+## Sources
+
+- [LocalMode source - WebLLM model catalog](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/webllm/src/models.ts)
+- [LocalMode source - wllama model catalog](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/wllama/src/models.ts)
+- [LocalMode source - Transformers.js LLM catalog](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/transformers/src/models.ts)
+- [LocalMode source - LiteRT model catalog](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/litert/src/models.ts)
+- [Anthropic API pricing - Claude models](https://platform.claude.com/docs/en/about-claude/pricing)
+- [OpenAI API pricing - GPT-4o](https://openai.com/api/pricing/)
+- [Qwen3 Technical Report - MMLU-Redux benchmarks](https://arxiv.org/abs/2505.09388)

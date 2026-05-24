@@ -4,6 +4,7 @@
  */
 'use client';
 
+import Link from 'next/link';
 import { useRef, useState } from 'react';
 import {
   Search,
@@ -133,12 +134,12 @@ export function SearchView() {
         {/* Header */}
         <div className="h-16 min-h-16 border-b border-poster-border/30 flex items-center justify-between px-6 bg-poster-surface/80 backdrop-blur-md">
           <div className="flex items-center gap-3">
-            <a
+            <Link
               href="/"
               className="flex items-center justify-center w-8 h-8 rounded-lg text-poster-text-sub hover:text-poster-text-main hover:bg-poster-surface-lighter transition-all duration-200 cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
-            </a>
+            </Link>
             <IconBox size="sm" variant="primary">
               <Search className="w-4 h-4" />
             </IconBox>

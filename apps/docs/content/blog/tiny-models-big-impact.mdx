@@ -24,12 +24,12 @@ Here is what that curve looks like for embedding models -- the pattern holds acr
 
 | Model | Size | MTEB Score | Quality vs Cloud | Load Time (4G) | Memory |
 |-------|------|-----------|-----------------|----------------|--------|
-| arctic-embed-xs | ~23MB | ~50-52 | ~81% | ~2s | ~60MB |
+| arctic-embed-xs | ~23MB | 50.15 (retrieval) | ~81% | ~2s | ~60MB |
 | bge-small-en-v1.5 | ~33MB | 62.17 | **99.8%** | ~3s | ~90MB |
-| bge-base-en-v1.5 | ~110MB | 64.23 | 103% | ~10s | ~280MB |
-| all-mpnet-base-v2 | ~420MB | 63.01 | 101% | ~40s | ~900MB |
+| bge-base-en-v1.5 | ~110MB | 63.55 | 102% | ~10s | ~280MB |
+| all-mpnet-base-v2 | ~420MB | 57.78 | ~93% | ~40s | ~900MB |
 
-The jump from 23MB to 33MB gets you from 81% to 99.8% of OpenAI's quality. The jump from 33MB to 420MB gets you approximately 1 additional MTEB point. For virtually every production use case, the 33MB model is the right choice.
+The jump from 23MB to 33MB gets you from 81% to 99.8% of OpenAI's quality. The jump from 33MB to 420MB buys you nothing in embedding quality -- all-mpnet-base-v2 actually scores lower on MTEB (57.78) than bge-small-en-v1.5 (62.17) despite being 12x larger. For virtually every production use case, the 33MB model is the right choice.
 
 This pattern -- massive quality gains in the small-to-medium range, diminishing returns beyond -- repeats across every task category we have benchmarked.
 
@@ -46,11 +46,11 @@ Every model in this table runs in the browser via `@localmode/transformers`. Eve
 | distilbert-sst2 | ~67MB | Sentiment | SST-2 Accuracy | 91.3% | **95%+** of cloud | ~6s |
 | ms-marco-MiniLM-L-6-v2 | 23MB | Reranking | MS MARCO MRR@10 | 39.01 | **87-93%** of Cohere | ~2s |
 | mobilebert-mnli | ~21MB | Zero-shot | MNLI | Competitive | **94-97%** of GPT-4o | ~2s |
-| bert-base-NER | ~110MB | NER | CoNLL-2003 F1 | 92.6% | **95-98%** of GPT-4o | ~10s |
+| bert-base-NER | ~110MB | NER | CoNLL-2003 F1 | 91.3% | **95-98%** of GPT-4o | ~10s |
 | distilbert-squad | ~65MB | QA | SQuAD v1.1 F1 | 87.1 | **92-95%** of GPT-4o | ~6s |
 | moonshine-tiny | ~50MB | Speech-to-Text | LibriSpeech WER | ~4.5% | **~80%** of Whisper API | ~5s |
 | kokoro-82M | ~86MB | Text-to-Speech | TTS Arena | #1 single-speaker | **88-92%** of OpenAI | ~8s |
-| D-FINE nano | ~4.5MB | Object Detection | COCO AP | ~35-42% | **~65%** of Cloud Vision | &lt;1s |
+| D-FINE nano | ~4.5MB | Object Detection | COCO AP | 42.8% | **~65%** of Cloud Vision | &lt;1s |
 
 That is 10 models totaling approximately 480MB that cover embeddings, classification, reranking, zero-shot classification, named entity recognition, extractive QA, speech-to-text, text-to-speech, and object detection. You could cache all 10 of them in less space than a single LLM download.
 
@@ -234,7 +234,7 @@ All three models cache in IndexedDB after the first download. On subsequent visi
 
 Tiny models are not universal replacements. There are tasks where model size directly determines capability, and no amount of quantization changes that.
 
-**Open-ended text generation.** Writing coherent paragraphs, following complex instructions, maintaining context across long conversations -- these require the parametric memory that only comes with billions of parameters. A 33MB model cannot write a blog post or debug your code. For LLM chat, you need at least a 1-4B parameter model (350MB-2.5GB quantized). LocalMode ships three LLM providers for this: WebLLM, Transformers.js v4, and wllama.
+**Open-ended text generation.** Writing coherent paragraphs, following complex instructions, maintaining context across long conversations -- these require the parametric memory that only comes with billions of parameters. A 33MB model cannot write a blog post or debug your code. For LLM chat, you need at least a 1-4B parameter model (350MB-2.5GB quantized). LocalMode ships four LLM providers for this: WebLLM, Transformers.js v4, wllama, and LiteRT-LM (Google's on-device engine, early preview).
 
 **Complex reasoning.** Multi-step logic, mathematical proof, code generation with architectural understanding -- these tasks scale with model size. Qwen3.5-4B (~2.5GB) matches GPT-4o on MMLU-Redux and dramatically outperforms it on math, but it is not a 30MB model. Some tasks genuinely need that capacity.
 
@@ -286,17 +286,20 @@ All benchmark scores come from published model cards, academic papers, and offic
 
 ### Primary Sources
 
-- [BAAI/bge-small-en-v1.5 model card](https://huggingface.co/BAAI/bge-small-en-v1.5) -- MTEB 62.17, 384 dimensions
-- [Snowflake/snowflake-arctic-embed-xs model card](https://huggingface.co/Snowflake/snowflake-arctic-embed-xs) -- 22M parameters, 384 dimensions, state-of-the-art at size tier
+- [BAAI/bge-small-en-v1.5 model card](https://huggingface.co/BAAI/bge-small-en-v1.5) -- MTEB average 62.17, 384 dimensions, 33.4M parameters
+- [BAAI/bge-base-en-v1.5 model card](https://huggingface.co/BAAI/bge-base-en-v1.5) -- MTEB average 63.55, 768 dimensions, ~110MB ONNX INT8
+- [BAAI/bge-large-en-v1.5 model card](https://huggingface.co/BAAI/bge-large-en-v1.5) -- MTEB average 64.23, 1024 dimensions
+- [Snowflake/snowflake-arctic-embed-xs model card](https://huggingface.co/Snowflake/snowflake-arctic-embed-xs) -- 22M parameters, 384 dimensions, MTEB Retrieval NDCG@10 50.15, state-of-the-art at size tier
+- [sentence-transformers/all-mpnet-base-v2 model card](https://huggingface.co/sentence-transformers/all-mpnet-base-v2) -- MTEB average 57.78, 768 dimensions, ~420MB
 - [Arctic-Embed paper (arXiv:2405.05374)](https://arxiv.org/abs/2405.05374) -- Retrieval benchmark comparisons
 - [distilbert-base-uncased-finetuned-sst-2-english model card](https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english) -- SST-2 accuracy 91.3%
 - [cross-encoder/ms-marco-MiniLM-L-6-v2 model card](https://huggingface.co/cross-encoder/ms-marco-MiniLM-L-6-v2) -- MRR@10 39.01
 - [cross-encoder/nli-deberta-v3-xsmall model card](https://huggingface.co/cross-encoder/nli-deberta-v3-xsmall) -- MNLI 87.77%
-- [dslim/bert-base-NER model card](https://huggingface.co/dslim/bert-base-NER) -- CoNLL-2003 F1 92.59%
+- [dslim/bert-base-NER model card](https://huggingface.co/dslim/bert-base-NER) -- CoNLL-2003 test F1 91.3%
 - [distilbert-base-cased-distilled-squad model card](https://huggingface.co/distilbert/distilbert-base-cased-distilled-squad) -- SQuAD F1 87.1
-- [Moonshine paper (arXiv:2410.15608)](https://arxiv.org/abs/2410.15608) -- Moonshine-tiny WER, 5x faster than Whisper-tiny
-- [Kokoro-82M model card](https://huggingface.co/hexgrad/Kokoro-82M) -- TTS Arena #1 single-speaker, 82M parameters, 28 voices
-- [D-FINE paper / GitHub](https://github.com/Peterande/D-FINE) -- COCO AP benchmarks, ICLR 2025 Spotlight
+- [UsefulSensors/moonshine-tiny model card](https://huggingface.co/UsefulSensors/moonshine-tiny) -- 27M parameters, LibriSpeech clean WER 4.55, other WER 11.68; 5x faster than Whisper-tiny per arXiv:2410.15608
+- [Kokoro-82M model card](https://huggingface.co/hexgrad/Kokoro-82M) -- 82M parameters; LocalMode ships 29 English voices via the ONNX port
+- [D-FINE paper / GitHub](https://github.com/Peterande/D-FINE) -- D-FINE-N (nano): 42.8 COCO AP, 4M parameters, 2.12ms T4 latency; ICLR 2025 Spotlight
 - [OpenAI "New embedding models" announcement](https://openai.com/index/new-embedding-models-and-api-updates/) -- text-embedding-3-small MTEB 62.3
 - [ONNX Runtime Quantization documentation](https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html) -- INT8/INT4 quantization techniques
 - [V8 blog: Up to 4GB of memory in WebAssembly](https://v8.dev/blog/4gb-wasm-memory) -- Browser memory limits

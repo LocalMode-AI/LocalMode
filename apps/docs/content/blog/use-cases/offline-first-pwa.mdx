@@ -1,0 +1,119 @@
+---
+title: "Offline-First AI PWA"
+description: "Build Progressive Web Apps with AI features that work on planes, in the field, and on unreliable networks."
+author: "LocalMode"
+date: "2026-04-18"
+---
+
+# Offline-First AI PWA
+
+Build Progressive Web Apps with AI features that work on planes, in the field, and on unreliable networks.
+
+*Category: Architecture Pattern*
+
+## The Problem
+
+Progressive Web Apps promise offline capability, but most AI features require cloud APIs that break when connectivity drops. Service workers can cache static assets and API responses, but they can't cache AI inference itself. The gap between "offline-capable app" and "AI-powered app" seems fundamental.
+
+This is a common challenge for teams building modern applications. Traditional approaches either compromise on privacy (by sending data to cloud APIs), require complex server infrastructure (adding cost and maintenance burden), or sacrifice functionality (by avoiding AI entirely). LocalMode provides a fourth option: run the AI locally in the browser.
+
+## The Solution
+
+LocalMode bridges this gap by running AI inference directly in the browser. Pre-cache models during installation or first use with preloadModel(). Use Service Workers to cache the LocalMode library and your app code. IndexedDB stores both the model weights and the VectorDB, persisting across sessions. Network status detection via getNetworkStatus() helps your app gracefully handle online/offline transitions.
+
+### Why Local-First?
+
+Building this feature with on-device inference provides three structural advantages over cloud-based alternatives:
+
+1. **Zero marginal cost** - After the initial model download, every inference operation is free. No per-token fees, no monthly API bills, no surprise invoices. This matters especially for features used frequently or by many users.
+2. **Architectural privacy** - User data never leaves the device. This is not a policy promise ("we won't look at your data") but an architectural guarantee: the data physically cannot reach any server because the processing happens in the browser tab.
+3. **Offline capability** - Once models are cached in IndexedDB, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
+
+## Technology Stack
+
+| Package | Purpose |
+| --- | --- |
+| `@localmode/core` | preloadModel(), getNetworkStatus(), VectorDB persistence |
+| `@localmode/transformers` | Pre-cached ML models |
+| `@localmode/wllama` | Universal LLM inference (works offline in all browsers) |
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers @localmode/wllama
+```
+
+## Implementation
+
+```typescript
+import { isModelCached, preloadModel } from '@localmode/transformers';
+import { getNetworkStatus, onNetworkChange } from '@localmode/core';
+
+// Pre-cache models during PWA installation
+async function setupOfflineAI() {
+  if (!(await isModelCached('Xenova/bge-small-en-v1.5'))) {
+    await preloadModel('Xenova/bge-small-en-v1.5', {
+      onProgress: (p) => updateInstallProgress(p),
+    });
+  }
+}
+
+// Monitor network status and adapt
+onNetworkChange((status) => {
+  if (!status.online) {
+    showBanner('Offline mode - AI features continue working locally');
+  }
+});
+```
+
+### How This Works
+
+The code above demonstrates the complete pipeline. Let us walk through the key decisions:
+
+- **Model selection** - The models referenced in this example are chosen for their balance of size, speed, and quality for this specific use case. Smaller models load faster and use less memory; larger models produce better results. Start with the recommended models and upgrade only if quality is insufficient for your users.
+- **Browser APIs** - LocalMode uses IndexedDB for persistent storage (vectors, model cache), Web Workers for background processing (keeping the UI responsive during inference), and the Web Crypto API for optional encryption.
+- **Error handling** - All LocalMode functions throw typed errors (`ModelLoadError`, `StorageError`, `ValidationError`) with actionable hints. Wrap calls in try/catch and use the error's `hint` property to display user-friendly messages.
+- **Cancellation** - Pass an `AbortSignal` to any long-running operation. This lets users cancel searches, embeddings, or generation without waiting for completion.
+
+## Production Considerations
+
+When deploying this solution to production, consider these factors:
+
+**Model preloading:** Download models during user onboarding or application setup, not on first use. Use `preloadModel()` with an `onProgress` callback to show download progress. This avoids the poor experience of a loading spinner on the first AI interaction.
+
+**Storage management:** IndexedDB has browser-specific quotas (up to 60% of total disk size per origin on Chrome/Edge, more restrictive on iOS Safari). Use `getStorageQuota()` to check available space and `navigator.storage.persist()` to request persistent storage that survives browser storage pressure.
+
+**Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
+
+**Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
+
+## Frequently Asked Questions
+
+### How much storage do models need?
+
+BGE-small (33MB) for embeddings, DistilBERT (65MB) for classification, Moonshine-tiny (50MB) for speech - a complete AI toolkit in ~150MB. LLMs add 70MB-5GB depending on model size. Use getStorageQuota() to check available space before downloading.
+
+### Do models survive app updates?
+
+Yes. Models are cached in IndexedDB, which persists across app updates and browser restarts. The only exception is Safari Private Browsing, which clears IndexedDB on close - use MemoryStorage as fallback.
+
+## Further Reading
+
+- [Progressive Web Apps on MDN](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps)
+
+## Related Pages
+
+- [Offline Chatbot](/blog/use-cases/offline-chatbot) - use-case guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+Code examples were verified against the actual exported functions in `@localmode/core` and `@localmode/transformers` (specifically `packages/core/src/utils/network.ts`, `packages/core/src/capabilities/recommend.ts`, and `packages/transformers/src/utils.ts`). Model sizes were verified against `packages/transformers/src/models.ts` in the monorepo. Storage quota figures were verified against the MDN Storage API reference page. The PWA implementation patterns (Serwist, service worker registration, offline fallback) were cross-checked against the actual LocalMode showcase app at `apps/showcase-nextjs/src/app/sw.ts`, `manifest.ts`, and `_components/sw-registrar.tsx`.
+
+## Sources
+
+- [Storage quotas and eviction criteria - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria) - Chrome quota: up to 60% of total disk size per origin
+- [Window: beforeinstallprompt event - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/API/Window/beforeinstallprompt_event) - install prompt browser compatibility
+- [Progressive Web Apps - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps) - PWA fundamentals
+- [Serwist - GitHub](https://github.com/serwist/serwist) - service worker library used in the LocalMode showcase app
+- [LocalMode monorepo - packages/transformers/src/models.ts](https://github.com/LocalMode-AI/LocalMode) - model size reference (BGE-small ~33MB, DistilBERT ~65MB, Moonshine-tiny ~50MB)

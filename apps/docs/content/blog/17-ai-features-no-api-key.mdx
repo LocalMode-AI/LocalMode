@@ -27,7 +27,7 @@ const model = transformers.embedding('Xenova/bge-small-en-v1.5');
 const db = await createVectorDB({ name: 'notes', dimensions: 384 });
 
 const { embedding } = await embed({ model, value: 'budget concerns' });
-const results = await db.search(embedding, { topK: 5 });
+const results = await db.search(embedding, { k: 5 });
 ```
 
 **Model:** `Xenova/bge-small-en-v1.5` (33 MB) | [Try the live demo](https://localmode.ai/semantic-search)
@@ -69,7 +69,7 @@ const { summary } = await summarize({
 });
 ```
 
-**Model:** `Xenova/distilbart-cnn-6-6` (300 MB) | [Try the live demo](https://localmode.ai/text-summarizer)
+**Model:** `Xenova/distilbart-cnn-6-6` (~284 MB quantized) | [Try the live demo](https://localmode.ai/text-summarizer)
 
 ---
 
@@ -89,7 +89,7 @@ const { translation } = await translate({
 // translation: "Hallo, wie geht es dir?"
 ```
 
-**Model:** `Xenova/opus-mt-en-*` (100-300 MB per pair) | [Try the live demo](https://localmode.ai/translator)
+**Model:** `Xenova/opus-mt-en-*` (~100 MB per pair) | [Try the live demo](https://localmode.ai/translator)
 
 ---
 
@@ -108,7 +108,7 @@ const { caption } = await captionImage({
 // caption: "a golden retriever playing with a ball in a park"
 ```
 
-**Model:** `onnx-community/Florence-2-base-ft` (460 MB) | [Try the live demo](https://localmode.ai/image-captioner)
+**Model:** `onnx-community/Florence-2-base-ft` (223 MB) | [Try the live demo](https://localmode.ai/image-captioner)
 
 ---
 
@@ -131,7 +131,7 @@ for (const obj of objects) {
 }
 ```
 
-**Model:** `onnx-community/dfine_n_coco-ONNX` (130 MB) | [Try the live demo](https://localmode.ai/object-detector)
+**Model:** `onnx-community/dfine_n_coco-ONNX` (15 MB) | [Try the live demo](https://localmode.ai/object-detector)
 
 ---
 
@@ -149,7 +149,7 @@ const { text } = await extractText({
 });
 ```
 
-**Model:** `Xenova/trocr-small-printed` (10-50 MB) | [Try the live demo](https://localmode.ai/ocr-scanner)
+**Model:** `Xenova/trocr-small-printed` (~64 MB quantized) | [Try the live demo](https://localmode.ai/ocr-scanner)
 
 ---
 
@@ -167,7 +167,7 @@ const redacted = redactPII(
 // redacted: "Contact John Smith at [EMAIL_REDACTED] or [PHONE_REDACTED]"
 ```
 
-**Model:** Pattern-based (0 MB, zero-dependency) + optional NER (110 MB) | [Try the live demo](https://localmode.ai/document-redactor)
+**Model:** Pattern-based (0 MB, zero-dependency) + optional NER (108 MB) | [Try the live demo](https://localmode.ai/document-redactor)
 
 ---
 
@@ -190,7 +190,7 @@ segments?.forEach(seg => {
 });
 ```
 
-**Model:** `onnx-community/moonshine-tiny-ONNX` (50 MB) | [Try the live demo](https://localmode.ai/voice-notes)
+**Model:** `onnx-community/moonshine-tiny-ONNX` (28 MB) | [Try the live demo](https://localmode.ai/voice-notes)
 
 ---
 
@@ -208,7 +208,7 @@ const { audio, sampleRate } = await synthesizeSpeech({
 });
 ```
 
-**Model:** `Xenova/mms-tts-eng` (30 MB) | [Try the live demo](https://localmode.ai/audiobook-creator)
+**Model:** `Xenova/mms-tts-eng` (~38 MB quantized) | [Try the live demo](https://localmode.ai/audiobook-creator)
 
 ---
 
@@ -228,7 +228,7 @@ const { predictions } = await fillMask({
 // predictions[0].token: "paris", predictions[0].score: 0.95
 ```
 
-**Model:** `onnx-community/ModernBERT-base-ONNX` (150 MB) | [Try the live demo](https://localmode.ai/smart-autocomplete)
+**Model:** `onnx-community/ModernBERT-base-ONNX` (151 MB) | [Try the live demo](https://localmode.ai/smart-autocomplete)
 
 ---
 
@@ -248,7 +248,7 @@ const { labels, scores } = await classifyZeroShot({
 // labels: ["account access", "billing", ...], scores: [0.72, 0.68, ...]
 ```
 
-**Model:** `Xenova/mobilebert-uncased-mnli` (25 MB) | [Try the live demo](https://localmode.ai/email-classifier)
+**Model:** `Xenova/mobilebert-uncased-mnli` (27 MB) | [Try the live demo](https://localmode.ai/email-classifier)
 
 ---
 
@@ -271,7 +271,7 @@ const { entities } = await extractEntities({
 // ]
 ```
 
-**Model:** `Xenova/bert-base-NER` (110 MB) | [Try the live demo](https://localmode.ai/document-redactor)
+**Model:** `Xenova/bert-base-NER` (108 MB) | [Try the live demo](https://localmode.ai/document-redactor)
 
 ---
 
@@ -291,7 +291,7 @@ const { answer, score } = await answerQuestion({
 // answer: "Paris", score: 0.98
 ```
 
-**Model:** `Xenova/distilbert-base-cased-distilled-squad` (100 MB) | [Try the live demo](https://localmode.ai/qa-bot)
+**Model:** `Xenova/distilbert-base-cased-distilled-squad` (~66 MB quantized) | [Try the live demo](https://localmode.ai/qa-bot)
 
 ---
 
@@ -309,7 +309,7 @@ const { masks } = await segmentImage({
 });
 ```
 
-**Model:** `briaai/RMBG-1.4` (170 MB) | [Try the live demo](https://localmode.ai/background-remover)
+**Model:** `briaai/RMBG-1.4` (176 MB) | [Try the live demo](https://localmode.ai/background-remover)
 
 ---
 
@@ -328,7 +328,7 @@ const { image } = await imageToImage({
 });
 ```
 
-**Model:** `Xenova/swin2SR-lightweight-x2-64` (50 MB) | [Try the live demo](https://localmode.ai/photo-enhancer)
+**Model:** `Xenova/swin2SR-lightweight-x2-64` (~8 MB) | [Try the live demo](https://localmode.ai/photo-enhancer)
 
 ---
 
@@ -348,36 +348,36 @@ await db.add({ id: 'photo-1', vector: imgVec });
 
 // Search with text
 const { embedding: queryVec } = await embed({ model, value: 'sunset over the ocean' });
-const results = await db.search(queryVec, { topK: 10 });
+const results = await db.search(queryVec, { k: 10 });
 ```
 
-**Model:** `Xenova/clip-vit-base-patch32` (~350 MB) | [Try the live demo](https://localmode.ai/cross-modal-search)
+**Model:** `Xenova/clip-vit-base-patch32` (~154 MB quantized) | [Try the live demo](https://localmode.ai/cross-modal-search)
 
 ---
 
 ## Summary Table
 
-| # | Feature | Function | Model | Size | Quality vs Cloud |
+| # | Feature | Function | Model | Size (quantized) | Quality vs Cloud |
 |---|---------|----------|-------|------|-----------------|
 | 1 | Semantic Search | `embed()` | `Xenova/bge-small-en-v1.5` | 33 MB | ~99% of OpenAI |
-| 2 | Sentiment Analysis | `classify()` | `Xenova/distilbert-base-uncased-finetuned-sst-2-english` | 67 MB | ~95% of GPT-4o |
-| 3 | Text Summarization | `summarize()` | `Xenova/distilbart-cnn-6-6` | 300 MB | ~85% of GPT-4o |
-| 4 | Language Translation | `translate()` | `Xenova/opus-mt-en-*` | 100-300 MB | ~80% of DeepL |
-| 5 | Image Captioning | `captionImage()` | `onnx-community/Florence-2-base-ft` | 460 MB | ~85% of GPT-4o |
-| 6 | Object Detection | `detectObjects()` | `onnx-community/dfine_n_coco-ONNX` | 130 MB | ~90% of AWS Rekognition |
-| 7 | OCR | `extractText()` | `Xenova/trocr-small-printed` | 10-50 MB | ~75% of Google Vision |
-| 8 | Document Redaction | `redactPII()` | Pattern-based + NER | 0-110 MB | ~95% of GPT-4o |
-| 9 | Voice Transcription | `transcribe()` | `onnx-community/moonshine-tiny-ONNX` | 50 MB | ~80% of Whisper API |
-| 10 | Text-to-Speech | `synthesizeSpeech()` | `Xenova/mms-tts-eng` | 30 MB | ~70% of ElevenLabs |
-| 11 | Smart Autocomplete | `fillMask()` | `onnx-community/ModernBERT-base-ONNX` | 150 MB | ~90% of GPT-4o |
-| 12 | Email Classification | `classifyZeroShot()` | `Xenova/mobilebert-uncased-mnli` | 25 MB | ~85% of GPT-4o |
-| 13 | Named Entity Recognition | `extractEntities()` | `Xenova/bert-base-NER` | 110 MB | ~95% of GPT-4o |
-| 14 | Question Answering | `answerQuestion()` | `Xenova/distilbert-base-cased-distilled-squad` | 100 MB | ~90% of GPT-4o |
-| 15 | Background Removal | `segmentImage()` | `briaai/RMBG-1.4` | 170 MB | ~90% of remove.bg |
-| 16 | Photo Enhancement | `imageToImage()` | `Xenova/swin2SR-lightweight-x2-64` | 50 MB | ~80% of Topaz AI |
-| 17 | Cross-Modal Search | `embedImage()` | `Xenova/clip-vit-base-patch32` | ~350 MB | ~85% of OpenAI CLIP |
+| 2 | Sentiment Analysis | `classify()` | `Xenova/distilbert-base-uncased-finetuned-sst-2-english` | 67 MB | strong for focused sentiment tasks |
+| 3 | Text Summarization | `summarize()` | `Xenova/distilbart-cnn-6-6` | ~284 MB | ~85% of GPT-4o (ROUGE-2: 20.17) |
+| 4 | Language Translation | `translate()` | `Xenova/opus-mt-en-*` | ~100 MB per pair | ~85% of Google Translate (BLEU) |
+| 5 | Image Captioning | `captionImage()` | `onnx-community/Florence-2-base-ft` | 223 MB | 60-70% of GPT-4o |
+| 6 | Object Detection | `detectObjects()` | `onnx-community/dfine_n_coco-ONNX` | 15 MB | 70-80% of cloud vision APIs |
+| 7 | OCR | `extractText()` | `Xenova/trocr-small-printed` | ~64 MB | strong for printed text |
+| 8 | Document Redaction | `redactPII()` | Pattern-based + NER | 0-108 MB | strong for structured PII |
+| 9 | Voice Transcription | `transcribe()` | `onnx-community/moonshine-tiny-ONNX` | 28 MB | ~80% of Whisper API (WER) |
+| 10 | Text-to-Speech | `synthesizeSpeech()` | `Xenova/mms-tts-eng` | ~38 MB | strong for TTS tasks |
+| 11 | Smart Autocomplete | `fillMask()` | `onnx-community/ModernBERT-base-ONNX` | 151 MB | strong for fill-mask tasks |
+| 12 | Email Classification | `classifyZeroShot()` | `Xenova/mobilebert-uncased-mnli` | 27 MB | 94-97% of GPT-4o (MNLI) |
+| 13 | Named Entity Recognition | `extractEntities()` | `Xenova/bert-base-NER` | 108 MB | 95-98% of GPT-4o |
+| 14 | Question Answering | `answerQuestion()` | `Xenova/distilbert-base-cased-distilled-squad` | ~66 MB | 92-95% of GPT-4o (SQuAD F1) |
+| 15 | Background Removal | `segmentImage()` | `briaai/RMBG-1.4` | 176 MB | strong for foreground segmentation |
+| 16 | Photo Enhancement | `imageToImage()` | `Xenova/swin2SR-lightweight-x2-64` | ~8 MB | strong for structured upscaling |
+| 17 | Cross-Modal Search | `embedImage()` | `Xenova/clip-vit-base-patch32` | ~154 MB | strong for cross-modal retrieval |
 
-Total size if you use every feature: under 3 GB. In practice, most apps use 2-4 models that together weigh 100-500 MB, cached in IndexedDB after the first download, and available offline forever.
+Total size if you use every feature: under 2 GB quantized. In practice, most apps use 2-4 models that together weigh 100-500 MB, cached in IndexedDB after the first download, and available offline forever.
 
 ---
 
@@ -419,11 +419,28 @@ Models are downloaded from HuggingFace Hub on first use and cached in IndexedDB.
 
 ## Methodology
 
-All function signatures, model IDs, and code snippets in this post are taken directly from the [LocalMode source code](https://github.com/nicholasareed/localmode). Every snippet uses the actual exported API.
+All function signatures, model IDs, and code snippets were verified against the LocalMode source code at `packages/core/src/` and `packages/transformers/src/`. Every function (`embed`, `classify`, `summarize`, etc.) and every provider factory (`transformers.embedding()`, `transformers.classifier()`, etc.) is a real exported API. The `SearchOptions` type uses `k` (not `topK`) for result count - this is enforced by the TypeScript interface in `packages/core/src/types.ts`.
 
-Model sizes are based on the quantized ONNX weights as downloaded by Transformers.js and reported in the [LocalMode showcase app](https://localmode.ai). Quality comparisons reference the benchmarks published in our [Local AI vs. Cloud](/blog/local-ai-vs-cloud) analysis, which tested against OpenAI, Google Cloud, AWS, Cohere, ElevenLabs, and DeepL on standard academic benchmarks (MTEB, SQuAD, BLEU, WER, COCO mAP).
+Model sizes reflect the quantized ONNX weights served by Transformers.js - specifically the `model_quantized.onnx` or `model_int8.onnx` variant, or the sum of encoder and decoder quantized components for seq2seq models - as listed in the HuggingFace model repositories (verified May 2026). Quality comparisons marked with percentages are sourced from our [Local AI vs. Cloud](/blog/local-ai-vs-cloud) benchmark post; rows marked "strong for X tasks" reflect well-established model capabilities without a specific percentage claim.
 
-All 17 demo applications are open source and available at [localmode.ai](https://localmode.ai).
+## Sources
+
+- [Xenova/bge-small-en-v1.5 ONNX files](https://huggingface.co/Xenova/bge-small-en-v1.5/tree/main/onnx) - model_int8.onnx: 33.8 MB
+- [Xenova/distilbert-base-uncased-finetuned-sst-2-english ONNX files](https://huggingface.co/Xenova/distilbert-base-uncased-finetuned-sst-2-english/tree/main/onnx) - model_int8.onnx: 67.4 MB
+- [Xenova/distilbart-cnn-6-6 ONNX files](https://huggingface.co/Xenova/distilbart-cnn-6-6/tree/main/onnx) - encoder_quantized: 129 MB + decoder_merged_quantized: 155 MB
+- [onnx-community/Florence-2-base-ft ONNX files](https://huggingface.co/onnx-community/Florence-2-base-ft/tree/main/onnx) - combined quantized components: 223 MB (per LocalMode benchmark)
+- [onnx-community/dfine_n_coco-ONNX files](https://huggingface.co/onnx-community/dfine_n_coco-ONNX/tree/main/onnx) - model.onnx: 15.3 MB
+- [Xenova/trocr-small-printed ONNX files](https://huggingface.co/Xenova/trocr-small-printed/tree/main/onnx) - encoder_quantized 23.1 MB + decoder_merged_quantized 40.5 MB = ~64 MB
+- [onnx-community/moonshine-tiny-ONNX files](https://huggingface.co/onnx-community/moonshine-tiny-ONNX/tree/main/onnx) - quantized components: 28 MB (per LocalMode benchmark)
+- [Xenova/mms-tts-eng ONNX files](https://huggingface.co/Xenova/mms-tts-eng/tree/main/onnx) - model_quantized.onnx: 38.4 MB
+- [onnx-community/ModernBERT-base-ONNX files](https://huggingface.co/onnx-community/ModernBERT-base-ONNX/tree/main/onnx) - model_int8.onnx: 151 MB
+- [Xenova/mobilebert-uncased-mnli ONNX files](https://huggingface.co/Xenova/mobilebert-uncased-mnli/tree/main/onnx) - model_int8.onnx: 26.4 MB
+- [Xenova/bert-base-NER ONNX files](https://huggingface.co/Xenova/bert-base-NER/tree/main/onnx) - model_int8.onnx: 108 MB
+- [Xenova/distilbert-base-cased-distilled-squad ONNX files](https://huggingface.co/Xenova/distilbert-base-cased-distilled-squad/tree/main/onnx) - model_int8.onnx: 65.6 MB
+- [briaai/RMBG-1.4 ONNX files](https://huggingface.co/briaai/RMBG-1.4/tree/main/onnx) - model.onnx: 176 MB
+- [Xenova/swin2SR-lightweight-x2-64 ONNX files](https://huggingface.co/Xenova/swin2SR-lightweight-x2-64/tree/main/onnx) - model.onnx: 8.08 MB
+- [Xenova/clip-vit-base-patch32 ONNX files](https://huggingface.co/Xenova/clip-vit-base-patch32/tree/main/onnx) - vision_model_quantized 89.1 MB + text_model_quantized 64.5 MB = ~154 MB
+- [LocalMode: Local AI vs. Cloud benchmark](/blog/local-ai-vs-cloud) - source for quality vs. cloud comparisons (MTEB, SQuAD F1, BLEU, WER, MNLI)
 
 ---
 

@@ -225,6 +225,30 @@ export interface CapabilityReport {
     message: string;
     suggestion?: string;
   }>;
+
+  /** Live transcription capability snapshot */
+  liveTranscribe: LiveTranscribeCapability;
+}
+
+/**
+ * Capability snapshot for the `live-transcribe` feature.
+ *
+ * Reports which browser primitives are available so callers can decide
+ * whether to enable open-mic mode, fall back to `ScriptProcessorNode`,
+ * or surface a "not supported" message to the user.
+ */
+export interface LiveTranscribeCapability {
+  /** `navigator.mediaDevices.getUserMedia` available (requires secure context). */
+  getUserMedia: boolean;
+
+  /** `AudioWorkletNode` available (preferred VAD path). */
+  audioWorklet: boolean;
+
+  /** `ScriptProcessorNode` available (deprecated fallback). */
+  scriptProcessor: boolean;
+
+  /** Page is cross-origin isolated (enables advanced VAD threading if needed). */
+  crossOriginIsolated: boolean;
 }
 
 // ============================================================================

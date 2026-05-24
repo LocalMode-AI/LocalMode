@@ -41,7 +41,7 @@ export function AppCard({ app }: AppCardProps) {
 
         {/* Description */}
         <p
-          className={`line-clamp-2 min-h-10 text-xs leading-relaxed ${app.comingSoon ? 'text-poster-text-sub/50' : 'text-poster-text-sub/70'}`}
+          className={`line-clamp-2 min-h-10 text-xs leading-relaxed ${app.comingSoon ? 'text-poster-text-sub/70' : 'text-poster-text-sub'}`}
         >
           {app.description}
         </p>
@@ -52,7 +52,7 @@ export function AppCard({ app }: AppCardProps) {
             {app.features.map((feature) => (
               <span
                 key={feature}
-                className={`rounded-md border px-1.5 py-0.5 text-[10px] ${app.comingSoon ? 'border-white/3 bg-white/3 text-poster-text-sub/40' : 'border-white/5 bg-white/5 text-poster-text-sub/60'}`}
+                className={`rounded-md border px-1.5 py-0.5 text-[10px] ${app.comingSoon ? 'border-white/3 bg-white/3 text-poster-text-sub/70' : 'border-white/5 bg-white/5 text-poster-text-sub/90'}`}
               >
                 {feature}
               </span>
@@ -60,7 +60,7 @@ export function AppCard({ app }: AppCardProps) {
           </div>
 
           <div className="flex items-center justify-between border-t border-white/5 pt-3">
-            <div className="font-mono text-[10px] text-poster-text-sub/50">{app.modelSize}</div>
+            <div className="font-mono text-[10px] text-poster-text-sub/80">{app.modelSize}</div>
 
             {/* Only show buttons for released apps */}
             {!app.comingSoon && (

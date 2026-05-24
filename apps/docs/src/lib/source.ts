@@ -1,4 +1,12 @@
-import { docs, blogPosts } from 'collections/server';
+import {
+  docs,
+  blogPosts,
+  modelPages,
+  taskPages,
+  comparePages,
+  useCasePages,
+  compatibilityPages,
+} from 'collections/server';
 import { type InferPageType, loader } from 'fumadocs-core/source';
 import { toFumadocsSource } from 'fumadocs-mdx/runtime/server';
 import { createElement } from 'react';
@@ -20,6 +28,31 @@ export const source = loader({
 export const blog = loader({
   baseUrl: '/blog',
   source: toFumadocsSource(blogPosts, []),
+});
+
+export const models = loader({
+  baseUrl: '/blog/models',
+  source: toFumadocsSource(modelPages, []),
+});
+
+export const tasks = loader({
+  baseUrl: '/blog/tasks',
+  source: toFumadocsSource(taskPages, []),
+});
+
+export const compare = loader({
+  baseUrl: '/blog/compare',
+  source: toFumadocsSource(comparePages, []),
+});
+
+export const useCases = loader({
+  baseUrl: '/blog/use-cases',
+  source: toFumadocsSource(useCasePages, []),
+});
+
+export const compatibility = loader({
+  baseUrl: '/blog/compatibility',
+  source: toFumadocsSource(compatibilityPages, []),
 });
 
 export function getPageImage(page: InferPageType<typeof source>) {

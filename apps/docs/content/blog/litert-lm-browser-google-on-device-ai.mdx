@@ -1,0 +1,180 @@
+---
+title: "Google's LiteRT-LM in the Browser: The New @localmode/litert Provider"
+description: "LocalMode now ships @localmode/litert -- a provider for Google's LiteRT-LM on-device inference engine. It runs .litertlm models on a WebGPU backend with an automatic CPU WASM fallback, behind the same LanguageModel interface as every other provider. Here is how it works and what is in the catalog."
+author: LocalMode
+date: "2026-05-21"
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+LocalMode has had three browser LLM providers for a while -- WebLLM (WebGPU), Transformers.js v4 (ONNX), and wllama (llama.cpp WASM). There is now a fourth: `@localmode/litert`, a provider for [Google's LiteRT-LM](https://ai.google.dev/edge/litert-lm/js) on-device inference engine.
+
+LiteRT-LM is the runtime Google uses to ship Gemini Nano-class models to Android, ChromeOS, and the web. It loads models in the `.litertlm` format and runs them on a WebGPU backend with a CPU WebAssembly fallback. The `@litert-lm/core` npm package -- the official JS/WASM binding -- is now usable, and `@localmode/litert` wraps it behind the exact same `LanguageModel` interface that `generateText()` and `streamText()` already speak.
+
+`@localmode/litert` is an **early preview**. The `@litert-lm/core` API surface may still change, and the JS API is text-in / text-out today. But the core path works: the catalog's three models all load and generate end-to-end in a real browser.
+
+---
+
+## What LiteRT-LM Is
+
+LiteRT (formerly TensorFlow Lite) is Google's on-device inference stack. LiteRT-LM is the LLM-specific layer on top of it: a C++ engine that handles tokenization, prefill, decode, KV-cache management, and sampling for transformer language models. It is the production inference engine Google uses to ship Gemini Nano across its own products - Chrome's built-in AI features, Chromebook Plus, and Pixel Watch's Smart Replies.
+
+The `.litertlm` file format bundles the tokenizer, model weights, and metadata into a single artifact. The `@litert-lm/core` package compiles the engine to WebAssembly and exposes a small JavaScript API:
+
+```typescript
+import { Engine } from '@litert-lm/core';
+
+const engine = await Engine.create({ model: modelUrlOrStream });
+const conversation = await engine.createConversation();
+const stream = conversation.sendMessageStreaming('Hello');
+```
+
+`@localmode/litert` does all of this for you -- model download and caching, backend selection, the conversation lifecycle, abort handling, and the mapping to LocalMode's structured results -- so your application never touches the raw engine.
+
+---
+
+## The Shared Interface
+
+The whole point of LocalMode's provider model is that the engine is an implementation detail. `@localmode/litert` implements the same `LanguageModel` interface as every other provider, so the call site does not change:
+
+```typescript
+import { generateText, streamText } from '@localmode/core';
+import { litert } from '@localmode/litert';
+
+// Non-streaming
+const { text } = await generateText({
+  model: litert.languageModel('gemma-4-E2B'),
+  prompt: 'What is the capital of France?',
+});
+
+// Streaming -- identical to webllm, wllama, transformers
+const result = await streamText({
+  model: litert.languageModel('gemma-4-E2B'),
+  prompt: 'Write a haiku about offline AI.',
+  maxTokens: 200,
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+The return types are the standard `GenerateTextResult` and `StreamTextResult`. `generateObject()`, `streamObject()`, middleware, `AbortSignal`, and the `@localmode/react` hooks all work unchanged. Swap `litert` for `webllm` and the engine changes; nothing else does.
+
+---
+
+## WebGPU Backend (and a CPU Fallback for Portable Models)
+
+LiteRT-LM runs on a WebGPU backend by default. `@localmode/litert` does not force a backend -- it lets LiteRT-LM pick (WebGPU when available), which matches Google's own documented usage. You can pin one explicitly if you need to:
+
+```typescript
+import { createLitert } from '@localmode/litert';
+
+const litert = createLitert({
+  backend: 'GPU', // or 'CPU'; omit to let LiteRT-LM choose
+  onProgress: (p) => console.log(`${p.status}: ${Math.round(p.progress ?? 0)}%`),
+});
+```
+
+One important nuance: **the Gemma 4 builds are WebGPU-only.** The `*-it-web.litertlm` files Google publishes are GPU-compiled - their TFLite sections carry a `gpu_artisan` backend constraint - so Gemma 4 E2B/E4B cannot run on the CPU backend. The provider checks WebGPU availability before downloading a Gemma 4 model and throws a clear `ModelLoadError` if WebGPU is missing, instead of failing deep inside the WASM loader. Qwen3 0.6B is a *portable* build: it runs on either backend, and if its GPU streaming load is unsupported the provider retries once on the CPU backend automatically.
+
+You can also call `checkLiteRTBrowserCompat()` to see what the current browser supports before loading anything:
+
+```typescript
+import { checkLiteRTBrowserCompat } from '@localmode/litert';
+
+const compat = await checkLiteRTBrowserCompat();
+// { canRun: true, hasWebGPU: true, backend: 'GPU', deviceRAM: 17179869184, deviceRAMHuman: '16 GB', warnings: [], recommendations: [] }
+```
+
+---
+
+## The Model Catalog
+
+The `LITERT_MODELS` catalog ships three models. Gemma 4 E2B and Gemma 4 E4B are the two models Google officially lists as supported by the LiteRT-LM JS API -- they use the web-optimized `*-it-web.litertlm` builds published specifically for browser WebGPU loading. Qwen3 0.6B is a small general model included as a lightweight option.
+
+| Model ID | Parameters | Size | Context | Backend |
+|---|---|---|---|---|
+| `gemma-4-E2B` | Gemma 4 E2B | 2.0 GB | 8,192 | WebGPU only |
+| `gemma-4-E4B` | Gemma 4 E4B | 3.0 GB | 8,192 | WebGPU only |
+| `qwen3-0.6B` | Qwen3 0.6B | 614 MB | 4,096 | WebGPU or CPU |
+
+All three were confirmed in a real Chrome session -- not just a passing unit test. On WebGPU: Gemma 4 E2B answered a factual question correctly, Gemma 4 E4B solved an arithmetic prompt, and Qwen3 0.6B produces correct streaming output. Qwen3 0.6B was additionally verified on the CPU backend; the Gemma 4 builds are GPU-compiled and only run on WebGPU.
+
+You can also load any `.litertlm` file outside the catalog with a HuggingFace `repo:file` shorthand or a full URL. Google's gated models -- Gemma 3n, Gemma 3 1B, FunctionGemma -- require a HuggingFace login and Gemma-license acceptance, which a browser `fetch()` cannot perform. Resolve them yourself and pass the URL via `modelUrl`:
+
+```typescript
+const response = await fetch(gatedUrl, {
+  headers: { Authorization: `Bearer ${HF_TOKEN}` },
+});
+const model = litert.languageModel('gemma-3-1B', { modelUrl: response.url });
+```
+
+<Callout type="info" title="Text-only, for now">
+  The Gemma 4 models are multimodal -- their `.litertlm` files include vision and audio encoders. But as of `@litert-lm/core@0.12.1`, the LiteRT-LM **JavaScript API** does not expose those modalities: enabling `visionModalityEnabled` / `audioModalityEnabled` throws `Vision/Audio options should not be null`, because the JS API has no way to supply the executor options the engine needs (we verified this by testing `@litert-lm/core` directly). So `@localmode/litert` is text-only for now -- multimodal input may land in a future release. If you need image input in the browser today, `@localmode/transformers` (Qwen3.5 vision models) is the option to reach for.
+</Callout>
+
+---
+
+## Caching and Cache Management
+
+`.litertlm` files are downloaded once and cached in browser storage. The same standalone utilities you know from the other providers are available:
+
+```typescript
+import { isModelCached, preloadModel, deleteModelCache } from '@localmode/litert';
+
+if (!(await isModelCached('gemma-4-E2B'))) {
+  await preloadModel('gemma-4-E2B', {
+    onProgress: (p) => console.log(`${Math.round(p.progress ?? 0)}%`),
+  });
+}
+
+// Free disk space later
+await deleteModelCache('gemma-4-E2B');
+```
+
+---
+
+## When to Use LiteRT-LM
+
+**Use it when** you specifically want Google's first-party on-device engine, you want Gemma 4 in the browser, or you want LiteRT-LM wired into a provider-fallback chain.
+
+**Prefer WebLLM, Transformers.js v4, or wllama when** you need a longer-established browser LLM stack, vision input, or a wider model catalog. Those three are stable and cover every browser between them.
+
+Because all four providers share one interface, there is no migration cost to revisiting this decision later. The same `streamText()` call works across every engine -- with only a model ID change.
+
+```typescript
+import { litert } from '@localmode/litert';
+import { wllama } from '@localmode/wllama';
+
+let model;
+try {
+  model = litert.languageModel('gemma-4-E2B');
+} catch (error) {
+  console.warn('LiteRT unavailable, falling back to wllama:', error);
+  model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+}
+```
+
+---
+
+## Methodology
+
+This post is based on the actual implementation of `@localmode/litert` (version 2.0.0), the pinned `@litert-lm/core@^0.12.1` binding, and end-to-end verification of all three catalog models in a real Chrome session with WebGPU. Model sizes, context lengths, and WebGPU constraints are sourced directly from `packages/litert/src/models.ts`. Claims about LiteRT-LM's production usage were verified against the official Google Developers Blog post on on-device GenAI deployment.
+
+## Sources
+
+- [Google LiteRT-LM JS API](https://ai.google.dev/edge/litert-lm/js) - official JS/TS documentation and `Engine.create` API reference
+- [On-device GenAI in Chrome, Chromebook Plus, and Pixel Watch with LiteRT-LM](https://developers.googleblog.com/en/on-device-genai-in-chrome-chromebook-plus-and-pixel-watch-with-litert-lm/) - Google Developers Blog; source for LiteRT-LM's production deployment scope
+- [LiteRT-LM Overview](https://ai.google.dev/edge/litert-lm/overview) - platform and backend coverage
+- [litert-community on HuggingFace](https://huggingface.co/litert-community) - `.litertlm` model files (gemma-4-E2B-it-web, gemma-4-E4B-it-web, Qwen3-0.6B)
+- [LocalMode LiteRT docs](/docs/litert) - full API reference and model catalog
+- [Browser LLM Providers, One API](/blog/three-llm-providers-one-api) - how LiteRT-LM compares to WebLLM, Transformers.js v4, and wllama
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. The LLM Chat demo lets you pick a backend -- including LiteRT-LM -- and run inference with no sign-up, no API keys, and no data leaving your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

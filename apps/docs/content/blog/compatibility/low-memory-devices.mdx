@@ -1,0 +1,143 @@
+---
+title: "Low-Memory Devices (2-4GB RAM)"
+description: "Running LocalMode on phones, tablets, and Chromebooks with limited RAM - model selection and memory management."
+author: "LocalMode"
+date: "2026-05-19"
+---
+
+# Low-Memory Devices (2-4GB RAM)
+
+Running LocalMode on phones, tablets, and Chromebooks with limited RAM - model selection and memory management.
+
+*Category: Deployment Scenario Compatibility*
+
+## Feature Support Matrix
+
+The following table summarizes which web platform features are available on Low-Memory Devices (2-4GB RAM) and how they affect LocalMode's capabilities. Features marked as supported enable full functionality; partial or unsupported features trigger automatic fallbacks.
+
+| Feature | Supported | Notes |
+| --- | --- | --- |
+| **Embedding Models** | Yes | BGE-small (~34MB quantized), Arctic-XS (~23MB quantized) - both work well on low-memory devices. |
+| **Classification Models** | Yes | MobileBERT (~21MB q4f16), DistilBERT-SST2 (~32MB quantized) - designed for mobile/edge deployment. |
+| **LLM (Tiny)** | Yes | SmolLM2-135M (70MB) - the safest LLM for 2GB RAM devices. |
+| **LLM (Small)** | Marginal | Qwen2.5-0.5B (386MB) - may work on 3-4GB devices but risks OOM crashes. |
+| **LLM (Medium+)** | No | Models above ~500MB will likely exhaust memory on devices with under 4GB RAM. |
+| **Vision Models** | Yes | D-FINE nano (~4.5MB quantized), SegFormer-B0 (~15MB full / ~4.4MB quantized) - tiny and work everywhere. |
+| **Audio Models** | Marginal | Moonshine-tiny (~50MB) - works on 3GB+ devices. Moonshine-base (~237MB) risky. |
+
+## Understanding the Impact
+
+Each feature in the matrix above maps to specific LocalMode capabilities:
+
+- **WebGPU** - Required for `@localmode/webllm` (GPU-accelerated LLM inference). When unavailable, use `@localmode/wllama` (WASM-based) as a fallback. WASM inference is typically several times slower than WebGPU and varies significantly by device. Non-LLM tasks (embeddings, classification, vision, audio) do not require WebGPU.
+- **WebAssembly** - The universal inference backend. Required for `@localmode/transformers` and `@localmode/wllama`. WASM is supported in approximately 95% of browsers globally (caniuse.com, 2026). SIMD support (for optimized vector operations) requires newer browser versions.
+- **IndexedDB** - Used for persistent vector storage (`VectorDB`) and model caching (`createModelLoader`). When blocked (Safari Private Browsing), LocalMode falls back to `MemoryStorage` (data lost on tab close).
+- **Web Workers** - Enable background model loading and inference without blocking the main UI thread. Module workers (for ES module imports in workers) require newer browser versions.
+- **SharedArrayBuffer** - Enables multi-threaded WASM inference for improved performance. Requires Cross-Origin Isolation headers (COOP/COEP). Not required for basic functionality.
+- **Web Locks** - Used for cross-tab model loading coordination (prevents multiple tabs from downloading the same model simultaneously). Falls back to `InMemoryLockManager` when unavailable.
+- **BroadcastChannel** - Used for cross-tab VectorDB synchronization. Falls back to `LocalStorageBroadcaster` when unavailable.
+
+## Fallback Strategies
+
+Use computeOptimalBatchSize() to dynamically adjust batch sizes based on available memory. Use recommendModels() with device capabilities to get model suggestions that fit the device. Always have a fallback to the smallest model in each category. Monitor memory pressure with performance.measureUserAgentSpecificMemory() (Chrome only) and abort operations if memory runs low.
+
+LocalMode is designed with progressive enhancement in mind. The core principle: detect capabilities at runtime and use the best available path. The `@localmode/core` package exports detection utilities for this purpose:
+
+```typescript
+import {
+  isWebGPUSupported,
+  isIndexedDBSupported,
+  isCrossOriginIsolated,
+  detectCapabilities,
+  recommendModels,
+} from '@localmode/core';
+
+async function detectAndConfigure() {
+  const caps = await detectCapabilities();
+  console.log(caps);
+  // caps.features.webgpu, caps.hardware.memory (GB), caps.storage.availableBytes
+
+  // isWebGPUSupported() is async - it must be awaited
+  if (await isWebGPUSupported()) {
+    // Use @localmode/webllm for GPU-accelerated inference
+  }
+
+  // recommendModels() is synchronous: capabilities first, options second
+  const recommendations = recommendModels(caps, {
+    task: 'generation',
+    maxSizeMB: 1500,
+  });
+}
+```
+
+## Fallback Code Example
+
+```typescript
+import { recommendModels, detectCapabilities } from '@localmode/core';
+
+const caps = await detectCapabilities();
+const recs = recommendModels(caps, { task: 'generation', maxSizeMB: 1500 });
+
+// Use the top recommendation (highest score for this device)
+const modelId = recs[0]?.modelId ?? 'SmolLM2-135M-Instruct-Q4_K_M';
+```
+
+## Recommended Providers
+
+For Low-Memory Devices (2-4GB RAM), the recommended LocalMode providers are:
+
+- **wllama (WASM)** - Universal LLM inference via WASM. Works without WebGPU. The safe choice for broad compatibility.
+- **Transformers.js** - Broadest model catalog for non-LLM tasks (embeddings, classification, vision, audio). WASM-based, works everywhere.
+
+## Recommended Models
+
+The following models are tested and recommended for Low-Memory Devices (2-4GB RAM):
+
+| Model | Provider |
+| --- | --- |
+| SmolLM2-135M-Instruct-Q4_K_M | wllama (WASM) |
+| Xenova/bge-small-en-v1.5 | Transformers.js |
+| onnx-community/dfine_n_coco-ONNX | Transformers.js |
+| Xenova/mobilebert-uncased-mnli | Transformers.js |
+
+These models are chosen for their compatibility with Low-Memory Devices (2-4GB RAM)'s capabilities and constraints. They represent the best balance of quality, size, and performance for this platform.
+
+## Known Issues
+
+Out-of-memory (OOM) kills from the OS are the primary risk. iOS Safari is especially aggressive with tab memory - it will terminate tabs under sustained memory pressure, with thresholds that vary by device model and iOS version (Apple does not publish a fixed limit). Android varies by device and OS version. Chromebooks with 2-4GB RAM behave like mobile devices. Always test on actual low-memory hardware, not just Chrome DevTools device emulation.
+
+### Mitigation Strategies
+
+When building applications that target Low-Memory Devices (2-4GB RAM), follow these practices:
+
+1. **Always detect before loading** - Use `await isWebGPUSupported()`, `isIndexedDBSupported()`, and `await detectCapabilities()` before attempting to load models or create storage. Never assume a feature is available.
+2. **Wrap model loading in try/catch** - Even when detection succeeds, model loading can fail due to memory pressure, network issues, or browser bugs. Always have a fallback path that attempts a smaller model.
+3. **Pick models with `recommendModels()`** - Pass the detected capabilities to `recommendModels(caps, { task })` to select a model appropriate for the current device. It is the recommended pattern for production deployments.
+4. **Test on real hardware** - Browser DevTools device emulation does not accurately simulate memory limits, GPU capabilities, or storage quotas. Test on actual target hardware.
+5. **Monitor storage quota** - Use `getStorageQuota()` to check available space before downloading large models. Inform users if storage is insufficient rather than failing silently.
+
+## Web Standards References
+
+- [Device Memory API](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/deviceMemory)
+
+## Related Pages
+
+- [Safari Ios](/blog/compatibility/safari-ios) - compatibility guide
+- [Chrome Android](/blog/compatibility/chrome-android) - compatibility guide
+- [Smollm2](/blog/models/smollm2) - model guide
+
+## Methodology
+
+Model sizes on this page are sourced directly from the LocalMode model catalogs (`packages/wllama/src/models.ts`, `packages/transformers/src/models.ts`) and verified against the ONNX file sizes published on HuggingFace model repositories. WebAssembly global support figure is taken from caniuse.com (95.46% as of May 2026). WASM memory limits (32-bit address space, max 65,536 pages / 4 GiB) are per the MDN WebAssembly.Memory specification. iOS Safari memory thresholds are not published by Apple; the description reflects platform behavior rather than a specific documented limit.
+
+## Sources
+
+- [MDN: Navigator.deviceMemory](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/deviceMemory)
+- [MDN: WebAssembly.Memory() constructor - 32-bit 4 GiB limit](https://developer.mozilla.org/en-US/docs/WebAssembly/Reference/JavaScript_interface/Memory/Memory)
+- [caniuse.com: WebAssembly global browser support](https://caniuse.com/wasm)
+- LocalMode model catalogs: `packages/wllama/src/models.ts`, `packages/transformers/src/models.ts`
+- LocalMode capability detection: `packages/core/src/capabilities/features.ts`, `packages/core/src/capabilities/detect.ts`
+- HuggingFace: [Xenova/bge-small-en-v1.5 ONNX files](https://huggingface.co/Xenova/bge-small-en-v1.5/tree/main/onnx)
+- HuggingFace: [Xenova/mobilebert-uncased-mnli ONNX files](https://huggingface.co/Xenova/mobilebert-uncased-mnli/tree/main/onnx)
+- HuggingFace: [Xenova/segformer-b0-finetuned-ade-512-512 ONNX files](https://huggingface.co/Xenova/segformer-b0-finetuned-ade-512-512/tree/main/onnx)
+- HuggingFace: [Snowflake/snowflake-arctic-embed-xs ONNX files](https://huggingface.co/Snowflake/snowflake-arctic-embed-xs/tree/main/onnx)

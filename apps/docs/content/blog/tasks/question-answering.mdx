@@ -1,0 +1,135 @@
+---
+title: "Extractive Question Answering in the Browser"
+description: "Answer questions by finding the exact answer span in a given context passage - fast, accurate, hallucination-free."
+author: "LocalMode"
+date: "2026-05-13"
+---
+
+# Extractive Question Answering in the Browser
+
+Answer questions by finding the exact answer span in a given context passage - fast, accurate, hallucination-free.
+
+## What Is Extractive Question Answering?
+
+Extractive QA finds the exact substring in a context passage that answers a question. Unlike generative QA (which LLMs do), extractive QA never produces text that isn't in the source - making it hallucination-free by design. The model receives a question and a context paragraph, then highlights the span of text that contains the answer.
+
+This capability is exposed through the `answerQuestion()` function in `@localmode/core`. All processing runs entirely in the browser - no server, no API key, no data leaves the device. After the initial model download, extractive question answering works completely offline.
+
+## Real-World Applications
+
+FAQ systems backed by a knowledge base. Customer support: find answers in documentation. Research: extract specific facts from papers. Legal: find relevant clauses in contracts. Education: quiz generation from textbooks.
+
+These use cases all benefit from local, on-device processing: user data stays private, there are no per-request API costs, and the application works without internet after initial setup.
+
+## Getting Started
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Import the core function and provider:
+
+```typescript
+import { answerQuestion } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+```
+
+The recommended starting model is **Xenova/distilbert-base-cased-distilled-squad** - it provides the best balance of quality, speed, and download size for most applications (~65MB quantized ONNX).
+
+## Code Example
+
+```typescript
+import { answerQuestion } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.questionAnswering('Xenova/distilbert-base-cased-distilled-squad');
+
+const { answer, score } = await answerQuestion({
+  model,
+  question: 'When was the company founded?',
+  context: 'Acme Corp was founded in 2015 by Jane Smith in San Francisco. The company...',
+});
+
+// { answer: '2015', score: 0.95 }
+```
+
+This example demonstrates the core workflow: create a model instance from the provider, call the `answerQuestion()` function with your input, and receive structured results. The result also includes `start` and `end` character positions in the context, plus `usage` and `response` metadata.
+
+## Available Models
+
+The following models support extractive question answering through LocalMode. Choose based on your target device, acceptable download size, and quality requirements.
+
+| Model | Provider | Size | Speed | Quality |
+| --- | --- | --- | --- | --- |
+| Xenova/distilbert-base-cased-distilled-squad | Transformers.js | ~65MB | Fast | Good (F1 87.1 on SQuAD v1.1) |
+| Xenova/distilbert-base-uncased-distilled-squad | Transformers.js | ~65MB | Fast | Good |
+
+**Choosing a model:** For most applications, start with the recommended model (`Xenova/distilbert-base-cased-distilled-squad`). The cased variant handles proper nouns better; the uncased variant (`Xenova/distilbert-base-uncased-distilled-squad`) is useful when input text is lowercased or mixed case. Both use the quantized (~65MB) ONNX files by default.
+
+## Cloud vs Local: Cost and Privacy Comparison
+
+Running extractive question answering locally eliminates per-request API costs and keeps all data on-device. Here is how the economics compare:
+
+
+
+Cloud QA typically uses LLMs at $2-10 per million tokens. Extractive QA with DistilBERT is faster (single forward pass), cheaper ($0), and more reliable (no hallucination) for factual retrieval from known text.
+
+The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
+
+## Available Providers
+
+- **Transformers.js** - ONNX-optimized models via ONNX Runtime Web. Supports both WebGPU and WASM backends. Broadest model catalog for non-LLM tasks.
+
+## AbortSignal Support
+
+All `answerQuestion()` calls support cancellation through the standard `AbortSignal` API:
+
+```typescript
+const controller = new AbortController();
+
+const promise = answerQuestion({
+  model,
+  question: 'What?', context: 'context text',
+  abortSignal: controller.signal,
+});
+
+// Cancel if needed (e.g., user navigates away)
+controller.abort();
+```
+
+This is essential for responsive UIs - cancel in-flight operations when the user navigates away, submits a new query, or closes a dialog. The underlying model inference stops immediately, freeing memory and compute resources.
+
+## React Integration
+
+If you are building a React application, `@localmode/react` provides hooks that manage loading states, error handling, and cancellation automatically:
+
+```bash
+npm install @localmode/react
+```
+
+```typescript
+import { useAnswerQuestion } from '@localmode/react';
+```
+
+The hook returns `{ data, error, isLoading, execute, cancel, reset }` - providing everything a UI component needs to display progress, handle errors, offer cancellation, and reset state.
+
+## Related Pages
+
+- [Nlp Specialized](/blog/models/nlp-specialized) - model guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+This guide is verified against LocalMode's source code in `packages/core/src/question-answering/` and `packages/transformers/src/implementations/question-answering.ts`. The model catalog and function signatures reflect the actual exported APIs. Model sizes are from the HuggingFace repository file listings (quantized ONNX files). SQuAD v1.1 F1 and exact match scores are from the official `distilbert/distilbert-base-cased-distilled-squad` model card on HuggingFace. Quality comparisons are general guidance; benchmark with your own data for production use.
+
+## Sources
+
+- [LocalMode Core Question Answering API](https://localmode.dev/docs/core/question-answering) - `answerQuestion()`, options, result types, custom providers
+- [LocalMode Transformers Question Answering guide](https://localmode.dev/docs/transformers/question-answering) - recommended models and usage
+- [Xenova/distilbert-base-cased-distilled-squad on HuggingFace](https://huggingface.co/Xenova/distilbert-base-cased-distilled-squad) - ONNX model card, quantized file ~65.8MB
+- [distilbert/distilbert-base-cased-distilled-squad on HuggingFace](https://huggingface.co/distilbert/distilbert-base-cased-distilled-squad) - original model card: F1 87.1, EM 79.6 on SQuAD v1.1, 65.2M parameters
+- [Xenova/distilbert-base-uncased-distilled-squad on HuggingFace](https://huggingface.co/Xenova/distilbert-base-uncased-distilled-squad) - uncased variant ONNX model card
+- [LocalMode QA Bot showcase app](https://localmode.ai/qa-bot) - live demo of `answerQuestion()` using `Xenova/distilbert-base-cased-distilled-squad`

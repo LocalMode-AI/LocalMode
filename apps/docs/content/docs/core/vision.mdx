@@ -9,7 +9,7 @@ import { Card, Cards } from 'fumadocs-ui/components/card';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 import { TypeTable } from 'fumadocs-ui/components/type-table';
 
-LocalMode provides seven vision functions that run entirely in the browser — no server required. All accept an `ImageInput` (Blob, ImageData, string URL, or ArrayBuffer) and return structured results with usage metrics.
+LocalMode provides twelve vision functions that run entirely in the browser — no server required. All accept an `ImageInput` (Blob, ImageData, string URL, or ArrayBuffer) and return structured results with usage metrics.
 
 <Callout type="info" title="See it in action">
   Try [Object Detector](https://localmode.ai/object-detector) and [Background Remover](https://localmode.ai/background-remover) for working demos of these APIs.
@@ -24,6 +24,18 @@ LocalMode provides seven vision functions that run entirely in the browser — n
 | `segmentImage()` | Produce pixel-level masks per region |
 | `extractImageFeatures()` | Extract feature vectors for similarity search |
 | `imageToImage()` | Super-resolution / image transformation |
+| `detectHands()` | Detect 21-point hand landmarks |
+| `detectPose()` | Detect 33-point body pose landmarks |
+| `detectFace()` | Detect faces with bounding boxes and keypoints |
+| `detectFaceLandmarks()` | Detect the 478-point face mesh |
+| `recognizeGesture()` | Recognize hand gestures |
+
+<Callout type="info" title="Landmark & gesture detection">
+  `detectHands()`, `detectPose()`, `detectFace()`, `detectFaceLandmarks()`, and
+  `recognizeGesture()` are implemented by the [`@localmode/mediapipe`](/docs/mediapipe)
+  provider. For real-time 30-60fps video tracking, model recommendations, and
+  practical recipes, see the [MediaPipe provider guide](/docs/mediapipe).
+</Callout>
 
 ## captionImage()
 

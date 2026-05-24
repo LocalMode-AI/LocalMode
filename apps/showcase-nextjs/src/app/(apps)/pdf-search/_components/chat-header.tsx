@@ -40,7 +40,6 @@ export function ChatHeader({ queueStats }: ChatHeaderProps) {
     setTopK,
     useReranking,
     setUseReranking,
-    modelsReady,
     chunkingStrategy,
     setChunkingStrategy,
     threshold,

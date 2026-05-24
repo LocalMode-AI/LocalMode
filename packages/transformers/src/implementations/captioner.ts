@@ -56,7 +56,7 @@ export class TransformersCaptionModel implements ImageCaptionModel {
 
       const pipe = await (pipeline as Function)(task, this.baseModelId, {
         device: this.settings.device ?? 'auto',
-        dtype: this.settings.quantized === true ? 'q8' : undefined,
+        dtype: this.settings.quantized === true ? 'q8' : 'fp32',
         progress_callback: this.settings.onProgress,
       }) as CaptionPipeline;
 

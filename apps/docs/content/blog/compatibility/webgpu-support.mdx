@@ -1,0 +1,144 @@
+---
+title: "WebGPU Browser Support"
+description: "Which browsers support WebGPU, which models require it, and how to detect and fall back gracefully."
+author: "LocalMode"
+date: "2026-05-06"
+---
+
+# WebGPU Browser Support
+
+Which browsers support WebGPU, which models require it, and how to detect and fall back gracefully.
+
+*Category: Web Feature Compatibility*
+
+## Feature Support Matrix
+
+The following table summarizes which web platform features are available on WebGPU Browser Support and how they affect LocalMode's capabilities. Features marked as supported enable full functionality; partial or unsupported features trigger automatic fallbacks.
+
+| Feature | Supported | Notes |
+| --- | --- | --- |
+| **Chrome Desktop** | Yes (113+) | Full support. Stable since 2023. |
+| **Edge Desktop** | Yes (113+) | Same Chromium engine as Chrome. Full support. |
+| **Safari macOS** | Yes (18+ behind flag, 26+ default) | Safari 18-25 behind feature flag. Enabled by default from Safari 26 (macOS Tahoe). Metal backend. |
+| **Safari iOS** | Partial (18.2+ behind flag, 26+ default) | iOS 18.2+ enabled WebGPU as a feature flag (WebKit Feature Flags in Settings). Enabled by default from iOS 26 / Safari 26. No specific chip requirement has been documented by Apple. |
+| **Firefox** | Firefox 141+ (Windows), 147+ (macOS AS) | WebGPU enabled by default on Windows (Firefox 141, July 2025). macOS Apple Silicon: Firefox 145 covered macOS 26 (Tahoe) only; Firefox 147 (January 2026) expanded to all macOS versions on Apple Silicon. Not available on macOS Intel, Linux, or Android (planned 2026). |
+| **Chrome Android** | Yes (121+, Android 12+) | Enabled by default in Chrome 121 (January 2024) on Android 12+ devices with Qualcomm or ARM GPUs. Devices with other GPU vendors have limited or no support. |
+| **Opera/Brave/Arc** | Yes (Chromium-based) | Follows Chrome's WebGPU support. Chrome 113+ equivalent. |
+
+## Understanding the Impact
+
+Each feature in the matrix above maps to specific LocalMode capabilities:
+
+- **WebGPU** - Required for `@localmode/webllm` (GPU-accelerated LLM inference at 30-90 tokens/second). When unavailable, use `@localmode/wllama` (WASM, 5-20 tokens/second) as a fallback. Non-LLM tasks (embeddings, classification, vision, audio) do not require WebGPU.
+- **WebAssembly** - The universal inference backend. Required for `@localmode/transformers` and `@localmode/wllama`. WASM is supported in 97%+ of web traffic. SIMD support (for optimized vector operations) requires newer browser versions.
+- **IndexedDB** - Used for persistent vector storage (`VectorDB`) and model caching (`createModelLoader`). When blocked (Safari Private Browsing), LocalMode falls back to `MemoryStorage` (data lost on tab close).
+- **Web Workers** - Enable background model loading and inference without blocking the main UI thread. Module workers (for ES module imports in workers) require newer browser versions.
+- **SharedArrayBuffer** - Enables multi-threaded WASM inference for improved performance. Requires Cross-Origin Isolation headers (COOP/COEP). Not required for basic functionality.
+- **Web Locks** - Used for cross-tab model loading coordination (prevents multiple tabs from downloading the same model simultaneously). Falls back to `InMemoryLockManager` when unavailable.
+- **BroadcastChannel** - Used for cross-tab VectorDB synchronization. Falls back to `LocalStorageBroadcaster` when unavailable.
+
+## Fallback Strategies
+
+WebGPU is only required for @localmode/webllm models (GPU-accelerated LLM inference). All other LocalMode models (embeddings, classification, vision, audio, OCR, NER) work via WASM without WebGPU. For LLM inference without WebGPU, use @localmode/wllama (WASM-based, works everywhere) or Transformers.js v4 (ONNX-based). Use isWebGPUSupported() to detect at runtime.
+
+LocalMode is designed with progressive enhancement in mind. The core principle: detect capabilities at runtime and use the best available path. The `@localmode/core` package exports detection utilities for this purpose:
+
+```typescript
+import {
+  isWebGPUSupported,
+  isIndexedDBSupported,
+  isCrossOriginIsolated,
+  detectCapabilities,
+  recommendModels,
+} from '@localmode/core';
+
+async function detectAndConfigure() {
+  const caps = await detectCapabilities();
+  console.log(caps);
+  // caps.features.webgpu, caps.hardware.memory (GB), caps.storage.availableBytes
+
+  // isWebGPUSupported() is async - it must be awaited
+  if (await isWebGPUSupported()) {
+    // Use @localmode/webllm for GPU-accelerated inference
+  }
+
+  // recommendModels() is synchronous: capabilities first, options second
+  const recommendations = recommendModels(caps, {
+    task: 'generation',
+    maxSizeMB: 1500,
+  });
+}
+```
+
+## Fallback Code Example
+
+```typescript
+import { isWebGPUSupported } from '@localmode/core';
+
+// isWebGPUSupported() is async - always await it
+if (await isWebGPUSupported()) {
+  // Use WebLLM for fastest LLM inference
+  const model = webllm.languageModel('Qwen2.5-3B-Instruct-q4f16_1-MLC');
+} else {
+  // Fall back to wllama (WASM, works everywhere)
+  const model = wllama.languageModel('Qwen2.5-3B-Instruct-Q4_K_M');
+}
+```
+
+## Recommended Providers
+
+For WebGPU Browser Support, the recommended LocalMode providers are:
+
+- **WebLLM (WebGPU)** - Use when WebGPU is confirmed available. Provides the fastest LLM inference.
+- **wllama (WASM)** - Universal LLM inference via WASM. Works without WebGPU. The safe choice for broad compatibility.
+
+## Recommended Models
+
+The following models are tested and recommended for WebGPU Browser Support:
+
+| Model | Provider |
+| --- | --- |
+| Qwen2.5-3B-Instruct-q4f16_1-MLC | WebLLM (WebGPU) |
+| Qwen2.5-3B-Instruct-Q4_K_M | wllama (WASM) |
+
+These models are chosen for their compatibility with WebGPU Browser Support's capabilities and constraints. They represent the best balance of quality, size, and performance for this platform.
+
+## Known Issues
+
+WebGPU detection can report false positives on some Android devices where Vulkan is present but WebGPU initialization fails. Always wrap WebLLM model loading in try/catch and fall back to wllama on failure.
+
+### Mitigation Strategies
+
+When building applications that target WebGPU Browser Support, follow these practices:
+
+1. **Always detect before loading** - Use `await isWebGPUSupported()`, `isIndexedDBSupported()`, and `await detectCapabilities()` before attempting to load models or create storage. Never assume a feature is available.
+2. **Wrap model loading in try/catch** - Even when detection succeeds, model loading can fail due to memory pressure, network issues, or browser bugs. Always have a fallback path that attempts a smaller model.
+3. **Pick models with `recommendModels()`** - Pass the detected capabilities to `recommendModels(caps, { task })` to select a model appropriate for the current device. It is the recommended pattern for production deployments.
+4. **Test on real hardware** - Browser DevTools device emulation does not accurately simulate memory limits, GPU capabilities, or storage quotas. Test on actual target hardware.
+5. **Monitor storage quota** - Use `getStorageQuota()` to check available space before downloading large models. Inform users if storage is insufficient rather than failing silently.
+
+## Web Standards References
+
+- [WebGPU API](https://developer.mozilla.org/en-US/docs/Web/API/WebGPU_API)
+- [GPU Compute (WebGPU)](https://developer.mozilla.org/en-US/docs/Web/API/GPUComputePipeline)
+
+## Related Pages
+
+- [Chrome Desktop](/blog/compatibility/chrome-desktop) - compatibility guide
+- [Firefox Desktop](/blog/compatibility/firefox-desktop) - compatibility guide
+- [Safari Macos](/blog/compatibility/safari-macos) - compatibility guide
+- [Webllm Vs Wllama](/blog/compare/webllm-vs-wllama) - comparison guide
+
+## Methodology
+
+Browser version numbers on this page are sourced directly from official vendor release notes (MDN Firefox release notes, WebKit blog, Chrome for Developers), the W3C WebGPU Working Group's Implementation Status wiki, and cross-referenced with LocalMode's runtime feature detection in `packages/core/src/capabilities/features.ts` and `detect.ts`. All version numbers reflect when a feature shipped enabled by default. Claims that could not be traced to an authoritative source were removed or softened. Data is current as of January 2026 - WebGPU support is evolving rapidly, so verify with the linked sources before making production decisions.
+
+## Sources
+
+- [W3C WebGPU Working Group - Implementation Status](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status) - authoritative per-browser version matrix (Chrome, Edge, Firefox, Safari)
+- [MDN - Firefox 141 Release Notes](https://developer.mozilla.org/en-US/docs/Mozilla/Firefox/Releases/141) - Firefox 141 WebGPU on Windows (July 22, 2025)
+- [MDN - Firefox 147 Release Notes](https://developer.mozilla.org/en-US/docs/Mozilla/Firefox/Releases/147) - Firefox 147 WebGPU on all macOS Apple Silicon (January 13, 2026)
+- [WebKit Blog - WebKit Features in Safari 26.0](https://webkit.org/blog/17333/webkit-features-in-safari-26-0/) - Safari 26 WebGPU enabled by default on macOS, iOS, iPadOS, visionOS
+- [WebKit Blog - News from WWDC25: WebKit in Safari 26 beta](https://webkit.org/blog/16993/news-from-wwdc25-web-technology-coming-this-fall-in-safari-26-beta/) - Safari 26 WebGPU announcement
+- [Chrome for Developers - What's New in WebGPU (Chrome 121)](https://developer.chrome.com/blog/new-in-webgpu-121) - Chrome 121 Android WebGPU (Android 12+, Qualcomm/ARM GPUs)
+- LocalMode capability detection source: `packages/core/src/capabilities/features.ts`, `detect.ts`

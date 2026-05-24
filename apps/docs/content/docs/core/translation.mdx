@@ -15,6 +15,14 @@ Translate text between languages using provider-agnostic translation models. Wor
   Try [Translator](https://localmode.ai/translator) and [Smart Writer](https://localmode.ai/smart-writer) for working demos of these APIs.
 </Callout>
 
+<Callout type="info" title="Language detection">
+  `detectLanguage()` identifies the language of a text string (110 languages,
+  ISO 639-1 codes) via the `LanguageDetectionModel` interface — implemented by
+  the [`@localmode/mediapipe`](/docs/mediapipe) provider. The `SUPPORTED_LANGUAGES`
+  constant maps codes to human-readable names, and the `getLanguageName(code)`
+  helper looks up a name with a fallback to the raw code for unknown languages.
+</Callout>
+
 ## translate()
 
 Translate a single text:

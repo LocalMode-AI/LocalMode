@@ -4,9 +4,10 @@
  */
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 import { Languages, ArrowRightLeft, Play, Square, Copy, Check, ArrowLeft, Globe, Wifi, Zap } from 'lucide-react';
-import { Button, IconBox, Spinner } from './ui';
+import { Button, IconBox } from './ui';
 import { ErrorBoundary, ErrorAlert } from './error-boundary';
 import { cn } from '../_lib/utils';
 import { LANGUAGE_PAIRS, MODEL_SIZE } from '../_lib/constants';
@@ -84,12 +85,12 @@ export function TranslatorView() {
         {/* Header */}
         <div className="h-16 min-h-16 border-b border-poster-border/30 flex items-center justify-between px-6 bg-poster-surface/80 backdrop-blur-md">
           <div className="flex items-center gap-3">
-            <a
+            <Link
               href="/"
               className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-poster-surface-lighter transition-all duration-300 text-poster-text-sub hover:text-poster-text-main"
             >
               <ArrowLeft className="w-4 h-4" />
-            </a>
+            </Link>
             <div className="w-px h-6 bg-poster-border/30" />
             <IconBox size="sm" className="bg-poster-accent-teal/10 text-poster-accent-teal ring-1 ring-poster-accent-teal/30">
               <Languages className="w-4 h-4" />

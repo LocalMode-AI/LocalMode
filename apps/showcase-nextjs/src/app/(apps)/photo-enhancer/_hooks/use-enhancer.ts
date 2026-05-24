@@ -33,7 +33,12 @@ export function useEnhancer() {
     await execute(dataUrl);
   };
   const error = validationError ?? toAppError(hookError);
-  const downloadEnhanced = () => { if (enhancedImage) downloadBlob(enhancedImage, `enhanced-2x-${Date.now()}.png`); };
+  const downloadEnhanced = async () => {
+    if (!enhancedImage) return;
+    const res = await fetch(enhancedImage);
+    const blob = await res.blob();
+    downloadBlob(blob, `enhanced-2x-${Date.now()}.png`);
+  };
   const clearError = () => { setValidationError(null); if (hookError) resetOp(); };
   const reset = () => { setOriginalImage(null); setEnhancedImage(null); setValidationError(null); resetOp(); };
   return { originalImage, enhancedImage, isProcessing, error, processImage, cancelProcessing: cancel, downloadEnhanced, clearError, reset };

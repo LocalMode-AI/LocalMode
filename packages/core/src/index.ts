@@ -263,6 +263,22 @@ export {
   setGlobalImageToImageProvider,
   estimateDepth,
   setGlobalDepthEstimationProvider,
+  // Landmark & gesture detection
+  detectHands,
+  setGlobalHandLandmarkProvider,
+  detectPose,
+  setGlobalPoseLandmarkProvider,
+  detectFace,
+  setGlobalFaceDetectionProvider,
+  detectFaceLandmarks,
+  setGlobalFaceLandmarkProvider,
+  recognizeGesture,
+  setGlobalGestureRecognitionProvider,
+  // Landmark topology constants
+  HAND_CONNECTIONS,
+  POSE_CONNECTIONS,
+  FACE_CONNECTIONS,
+  GESTURE_CATEGORIES,
 } from './vision/index.js';
 
 export type {
@@ -328,6 +344,47 @@ export type {
   DoTransformImageResult,
   UpscaleImageOptions,
   UpscaleImageResult,
+  // Landmark & gesture common types
+  Landmark,
+  FaceKeypoint,
+  FaceBlendshape,
+  // Hand landmark model interface
+  HandLandmarkModel,
+  DoDetectHandsOptions,
+  DoDetectHandsResult,
+  HandLandmarkResultItem,
+  DetectHandsOptions,
+  DetectHandsResult,
+  // Pose landmark model interface
+  PoseLandmarkModel,
+  DoDetectPoseOptions,
+  DoDetectPoseResult,
+  PoseLandmarkResultItem,
+  DetectPoseOptions,
+  DetectPoseResult,
+  // Face detection model interface
+  FaceDetectionModel,
+  DoDetectFacesOptions,
+  DoDetectFacesResult,
+  FaceDetectionResultItem,
+  DetectFaceOptions,
+  DetectFaceResult,
+  // Face landmark model interface
+  FaceLandmarkModel,
+  DoDetectFaceLandmarksOptions,
+  DoDetectFaceLandmarksResult,
+  FaceLandmarkResultItem,
+  DetectFaceLandmarksOptions,
+  DetectFaceLandmarksResult,
+  // Gesture recognition model interface
+  GestureRecognitionModel,
+  DoRecognizeGestureOptions,
+  DoRecognizeGestureResult,
+  GestureResultItem,
+  RecognizeGestureOptions,
+  RecognizeGestureResult,
+  // Landmark constant types
+  GestureCategory,
   // Factory types
   ImageClassificationModelFactory,
   ZeroShotImageClassificationModelFactory,
@@ -337,6 +394,11 @@ export type {
   DepthEstimationModelFactory,
   ImageFeatureModelFactory,
   ImageToImageModelFactory,
+  HandLandmarkModelFactory,
+  PoseLandmarkModelFactory,
+  FaceDetectionModelFactory,
+  FaceLandmarkModelFactory,
+  GestureRecognitionModelFactory,
 } from './vision/index.js';
 
 // ═══════════════════════════════════════════════════════════════
@@ -348,6 +410,10 @@ export {
   setGlobalSTTProvider,
   synthesizeSpeech,
   setGlobalTTSProvider,
+  streamSynthesizeSpeech,
+  splitIntoClauses,
+  playStreamedSpeech,
+  DEFAULT_ABBREVIATIONS,
   classifyAudio,
   classifyAudioZeroShot,
   setGlobalAudioClassificationProvider,
@@ -371,6 +437,12 @@ export type {
   DoSynthesizeResult,
   SynthesizeSpeechOptions,
   SynthesizeSpeechResult,
+  // Streaming text-to-speech
+  StreamSynthesizeSpeechOptions,
+  SynthesizedClause,
+  SynthesizedClauseUsage,
+  PlayStreamedSpeechOptions,
+  PlayStreamedSpeechHandle,
   // Audio classification model interface
   AudioClassificationModel,
   DoClassifyAudioOptions,
@@ -392,6 +464,8 @@ export type {
   AudioClassificationModelFactory,
   ZeroShotAudioClassificationModelFactory,
 } from './audio/index.js';
+
+export type { ClauseSplitOptions } from './audio/index.js';
 
 // ═══════════════════════════════════════════════════════════════
 // GENERATION DOMAIN (LLM Text Generation)
@@ -427,6 +501,7 @@ export type {
   ContentPart,
   TextPart,
   ImagePart,
+  AudioPart,
   // generateText() function types
   GenerateTextOptions,
   GenerateTextResult,
@@ -475,6 +550,10 @@ export type {
 export {
   translate,
   setGlobalTranslationProvider,
+  detectLanguage,
+  setGlobalLanguageDetectionProvider,
+  SUPPORTED_LANGUAGES,
+  getLanguageName,
 } from './translation/index.js';
 
 export type {
@@ -489,8 +568,16 @@ export type {
   TranslateResult,
   TranslateManyOptions,
   TranslateManyResult,
+  // Language detection
+  LanguageDetectionModel,
+  DoDetectLanguageOptions,
+  DoDetectLanguageResult,
+  DetectedLanguage,
+  DetectLanguageOptions,
+  DetectLanguageResult,
   // Factory types
   TranslationModelFactory,
+  LanguageDetectionModelFactory,
 } from './translation/index.js';
 
 // ═══════════════════════════════════════════════════════════════
@@ -1430,3 +1517,99 @@ export type {
   EvaluateModelResult,
   ConfusionMatrix,
 } from './evaluation/index.js';
+
+// ═══════════════════════════════════════════════════════════════
+// AUDIT LOG (Append-only, hash-chained, signed, optionally encrypted)
+// ═══════════════════════════════════════════════════════════════
+
+export {
+  createAuditLog,
+  verifyChain,
+  exportAuditLog,
+  deriveAuditKey,
+  generateEphemeralAuditKey,
+} from './security/index.js';
+
+export { AuditLogError } from './errors/index.js';
+export type { AuditLogErrorCode } from './errors/index.js';
+
+export type {
+  AuditLog,
+  AuditEntry,
+  AuditLogOptions,
+  AppendOptions as AuditLogAppendOptions,
+  ListOptions as AuditLogListOptions,
+  VerifyOptions as AuditLogVerifyOptions,
+  VerifyResult as AuditLogVerifyResult,
+  ExportOptions as AuditLogExportOptions,
+  DeriveAuditKeyOptions,
+  GenerateEphemeralAuditKeyOptions,
+} from './security/index.js';
+
+// ═══════════════════════════════════════════════════════════════
+// LIVE TRANSCRIPTION (Streaming STT with VAD + Voice Loop Orchestrator)
+// ═══════════════════════════════════════════════════════════════
+
+export {
+  // Factories
+  createLiveTranscriber,
+  createTurnTaker,
+  // VAD providers
+  EnergyVADProvider,
+  SileroVADProvider,
+  // Worklet helpers
+  registerEnergyVADWorklet,
+  ENERGY_VAD_PROCESSOR_NAME,
+  ENERGY_VAD_WORKLET_SOURCE,
+  createScriptProcessorVADNode,
+} from './audio/index.js';
+
+export type {
+  // live-transcribe types
+  LiveTranscriber,
+  LiveTranscriberOptions,
+  LiveTranscriberState,
+  LiveTranscriberStateChangeEvent,
+  LiveTranscriberMode,
+  LiveTranscriberVADOption,
+  LiveTranscriberUnsubscribe,
+  LiveChunk,
+  LiveChunkListener,
+  LiveUtterance,
+  LiveUtteranceListener,
+  BargeInEvent,
+  LiveBargeInListener,
+  LiveErrorListener,
+  LiveStateChangeListener,
+  AudioPlaybackHandle,
+  // VAD types
+  VADProvider,
+  VADFrame,
+  VADEvent,
+  VADStartOptions,
+  EnergyVADProviderOptions,
+  SileroVADProviderOptions,
+  RegisterEnergyVADWorkletOptions,
+  ScriptProcessorVADNode,
+  ScriptProcessorVADNodeOptions,
+  // turn-taker types
+  TurnTaker,
+  TurnTakerOptions,
+  TurnTakerState,
+  TurnTakerStateTransition,
+  TurnTakerUnsubscribe,
+  TurnTakerUserUtteranceListener,
+  TurnTakerAgentResponseListener,
+  TurnTakerStateListener,
+  TurnTakerBargeInListener,
+  TurnTakerErrorListener,
+} from './audio/index.js';
+
+// Live transcribe error + capability detection helpers
+export { MediaNotSupportedError } from './errors/index.js';
+export {
+  isAudioWorkletSupported,
+  isMediaCaptureSupported,
+  isLiveTranscribeSupported,
+} from './capabilities/features.js';
+export type { LiveTranscribeCapability } from './capabilities/types.js';

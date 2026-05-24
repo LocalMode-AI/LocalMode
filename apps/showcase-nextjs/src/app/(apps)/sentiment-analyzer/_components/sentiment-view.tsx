@@ -20,7 +20,7 @@ import {
   Zap,
   Clock,
 } from 'lucide-react';
-import { Button, IconBox, Progress } from './ui';
+import { Button, IconBox } from './ui';
 import { ErrorBoundary, ErrorAlert } from './error-boundary';
 import { cn, calculateStats, formatScore } from '../_lib/utils';
 import { SAMPLE_TEXTS, MODEL_SIZE } from '../_lib/constants';

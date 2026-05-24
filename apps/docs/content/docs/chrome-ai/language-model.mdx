@@ -1,0 +1,211 @@
+---
+title: 'Language Model'
+description: 'Generate text with Chrome built-in Gemini Nano via the Prompt API'
+icon: Sparkles
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+# Language Model
+
+Chrome AI provides on-device text generation via the built-in Prompt API (`window.LanguageModel` / Gemini Nano). Zero downloads, zero bundle weight, no API keys — everything runs locally in Chrome.
+
+<Callout type="info" title="Browser support">
+  The Prompt API is available on **Chrome 138+** and **Edge 138+** desktop. Firefox and Safari do not implement it; non-Chromium browsers report `false` from `isPromptAPISupported()` and the model rejects with a typed `GenerationError`.
+</Callout>
+
+## Capability Detection
+
+```ts
+import { isPromptAPISupported } from '@localmode/chrome-ai';
+
+if (isPromptAPISupported()) {
+  // Safe to call chromeAI.languageModel()
+}
+```
+
+`isPromptAPISupported()` checks the modern `window.LanguageModel` surface first, then falls back to the legacy `self.ai.languageModel` namespace used by Chrome 127–137 origin-trial builds. It never throws — it is safe to call in workers, Node, or non-browser environments.
+
+## Browser Support Matrix
+
+| Browser | Prompt API | Notes |
+|---------|------------|-------|
+| Chrome 138+ desktop | Stable | Top-level `window.LanguageModel` |
+| Edge 138+ desktop | Stable | Same Chromium surface |
+| Chrome 127–137 | Origin trial | Legacy `self.ai.languageModel` (auto-detected) |
+| Chrome mobile (Android/iOS) | Not available | Use `@localmode/webllm` or `@localmode/wllama` |
+| Firefox | Not available | — |
+| Safari | Not available | — |
+
+## Basic Usage
+
+```ts
+import { generateText } from '@localmode/core';
+import { chromeAI } from '@localmode/chrome-ai';
+
+const { text } = await generateText({
+  model: chromeAI.languageModel({ systemPrompt: 'You are concise.' }),
+  prompt: 'Explain quantum tunnelling in one sentence.',
+});
+
+console.log(text);
+```
+
+The factory accepts a `ChromeAILanguageModelSettings` object:
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `systemPrompt` | `string` | — | Prepended to every session as `initialPrompts[0]` |
+| `temperature` | `number` | Chrome default | Sampling temperature (0–1) |
+| `topK` | `number` | Chrome default | Top-K sampling cutoff |
+| `contextLength` | `number` | `6144` | Soft documentation value for `model.contextLength` |
+| `onProgress` | `(p: { loaded: number; total: number }) => void` | — | Forwarded to `monitor` for Gemini Nano download progress |
+
+<Callout type="info">
+  For full API reference, options, and result types, see the [Core Generate Text](/docs/core/generate-text) guide.
+</Callout>
+
+## Streaming
+
+```ts
+import { streamText } from '@localmode/core';
+import { chromeAI } from '@localmode/chrome-ai';
+
+const { stream } = await streamText({
+  model: chromeAI.languageModel(),
+  prompt: 'Write a haiku about TypeScript.',
+});
+
+for await (const chunk of stream) {
+  if (!chunk.done) process.stdout.write(chunk.text);
+}
+```
+
+With the React hook:
+
+```tsx
+import { useStreamText } from '@localmode/react';
+import { chromeAI } from '@localmode/chrome-ai';
+
+const model = chromeAI.languageModel();
+
+export function Chat() {
+  const { execute, data, isLoading } = useStreamText({ model });
+  return (
+    <div>
+      <button onClick={() => execute('Tell me a joke')} disabled={isLoading}>Go</button>
+      <pre>{data ?? ''}</pre>
+    </div>
+  );
+}
+```
+
+## Structured Output (`generateObject`)
+
+Chrome's Prompt API does not yet expose constrained decoding — but `generateObject()` from `@localmode/core` works on every `LanguageModel` via prompt engineering + Zod validation + automatic retry.
+
+```ts
+import { generateObject, jsonSchema } from '@localmode/core';
+import { chromeAI } from '@localmode/chrome-ai';
+import { z } from 'zod';
+
+const { object } = await generateObject({
+  model: chromeAI.languageModel(),
+  schema: jsonSchema(z.object({ name: z.string(), age: z.number() })),
+  prompt: 'Extract: John is 30 years old',
+});
+// object: { name: 'John', age: 30 }
+```
+
+## Warm-up
+
+Eagerly create the underlying Chrome session so the next call has zero startup latency:
+
+```ts
+import { chromeAI } from '@localmode/chrome-ai';
+
+const model = chromeAI.languageModel();
+await model.warmUp();
+console.log(model.isReady()); // true
+```
+
+With the React hook:
+
+```tsx
+import { useModelWarmup } from '@localmode/react';
+import { chromeAI } from '@localmode/chrome-ai';
+
+const model = chromeAI.languageModel();
+
+export function App() {
+  const { isReady, warmUp } = useModelWarmup({ model });
+  return <button onClick={warmUp}>{isReady ? 'Ready' : 'Warm up'}</button>;
+}
+```
+
+## Provider Fallback
+
+Chain Chrome AI → WebLLM → wllama for graceful degradation:
+
+```ts
+import { generateText } from '@localmode/core';
+import { chromeAI } from '@localmode/chrome-ai';
+import { webllm } from '@localmode/webllm';
+import { wllama } from '@localmode/wllama';
+
+let model;
+try {
+  model = chromeAI.languageModel({ systemPrompt: 'You are helpful.' });
+} catch {
+  try {
+    model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+  } catch {
+    model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+  }
+}
+
+const { text } = await generateText({ model, prompt: 'Hello' });
+```
+
+## Error Reference
+
+`ChromeAILanguageModel` throws `GenerationError` (from `@localmode/core`) with one of the following `code` values:
+
+| Code | When | Hint / Remediation |
+|------|------|--------------------|
+| `chrome-ai-not-supported` | `window.LanguageModel` is missing entirely | Update to Chrome 138+ stable on desktop; verify the page is not in Incognito mode |
+| `chrome-ai-model-not-available` | `availability()` returned `'unavailable'` | Enable `chrome://flags/#optimization-guide-on-device-model` and `chrome://flags/#prompt-api-for-gemini-nano`, then restart Chrome |
+| `chrome-ai-download-required` | Gemini Nano is `'downloadable'` / `'downloading'` and `allowDownload` is not set | Pass `providerOptions: { chromeAI: { allowDownload: true } }` from a user-gesture handler |
+| `chrome-ai-permissions-denied` | `LanguageModel.create()` threw `NotAllowedError` | Trigger generation from a user-gesture (click, tap, or keypress) on a same-origin page |
+| `chrome-ai-multimodal-not-supported` | An `ImagePart` was supplied | Use `@localmode/webllm` (vision models) or `@localmode/wllama` (vision GGUFs); no resources are allocated before the rejection |
+| `chrome-ai-quota-exceeded` | Input exceeded Gemini Nano's ~6K-token budget | Use `@localmode/webllm` with Llama-3.2 or larger for long-context generation |
+| `chrome-ai-generation-failed` | Other Chrome-side failure | Inspect `error.cause` for the underlying error; consider falling back to another provider |
+
+## Provider Options (`providerOptions.chromeAI`)
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `topK` | `number` | — | Override per-call top-K (precedence over constructor) |
+| `allowDownload` | `boolean` | `false` | Permit Chrome to download Gemini Nano on first use |
+| `warnOnUnsupported` | `boolean` | `true` | Toggle the one-time `console.warn` for unsupported `topP` |
+| `monitor` | `(m: EventTarget) => void` | — | Forwarded to `LanguageModel.create({ monitor })` for download progress |
+
+```ts
+await generateText({
+  model: chromeAI.languageModel(),
+  prompt: 'Explain TLS',
+  providerOptions: {
+    chromeAI: {
+      allowDownload: true,
+      monitor: (target) => target.addEventListener('downloadprogress', (e) => console.log(e)),
+    },
+  },
+});
+```
+
+## Notes
+
+- **`topP` is silently ignored.** Chrome's Prompt API does not accept it. The first call with `topP` set logs a one-time `console.warn`; gate this with `providerOptions.chromeAI.warnOnUnsupported`.
+- **`stopSequences` is post-processed.** Chrome's API has no stop-token field, so the result text is truncated at the first stop sequence client-side.
+- **`maxTokens` is informational.** Chrome controls the real cap via the model's input quota (`session.inputQuota`).
+- **Sessions are cached.** `ChromeAILanguageModel` reuses one session per `{ systemPrompt, messages, temperature, topK }` cache key. Changing any of those between calls destroys the previous session before creating a new one.

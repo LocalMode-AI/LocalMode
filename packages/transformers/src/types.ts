@@ -37,7 +37,10 @@ import type {
   DepthEstimationModel,
   // Generation
   LanguageModel,
+  // VAD
+  VADProvider,
 } from '@localmode/core';
+import type { SileroVADSettings } from './implementations/silero-vad.js';
 
 /**
  * Supported compute devices for Transformers.js.
@@ -132,8 +135,6 @@ export interface ModelSettings {
  *
  * Extends {@link ModelSettings} with text generation parameters.
  *
- * **Experimental**: Uses Transformers.js v4 (preview release).
- *
  * @example
  * ```ts
  * import { transformers } from '@localmode/transformers';
@@ -177,17 +178,22 @@ export interface LanguageModelSettings extends ModelSettings {
   systemPrompt?: string;
 
   /**
-   * Per-component dtype config for multimodal models (Qwen3.5).
-   * Auto-detected if not set — defaults to q4 for all components.
+   * Quantization dtype for Transformers.js v4 language models.
+   * Standard pipeline models accept a single dtype string. Multimodal models
+   * may use a per-component dtype config. Auto-detected if not set.
    *
    * @example
    * ```ts
+   * const model = transformers.languageModel('onnx-community/Qwen2.5-VL-3B-Instruct-ONNX', {
+   *   dtype: 'q4f16',
+   * });
+   *
    * const model = transformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX', {
    *   dtype: { embed_tokens: 'q4', vision_encoder: 'q4', decoder_model_merged: 'q4' },
    * });
    * ```
    */
-  dtype?: Record<string, string>;
+  dtype?: string | Record<string, string>;
 }
 
 /**
@@ -410,12 +416,19 @@ export interface TransformersProvider {
   questionAnswering(modelId: string, settings?: ModelSettings): QuestionAnsweringModel;
 
   /**
-   * Create an OCR model (TrOCR).
+   * Create an OCR model (TrOCR, GLM-OCR, or LightOnOCR-2).
+   *
+   * Auto-detects the model type from the ID: TrOCR models use the line-level
+   * pipeline, while GLM-OCR and LightOnOCR-2 use the generative vision-language
+   * pipeline with prompt-based modes (text, table, formula recognition).
    *
    * @example
    * ```ts
    * const model = transformers.ocr('Xenova/trocr-small-printed');
-   * const { fullText } = await extractText({ model, image: imageBlob });
+   * const { text } = await extractText({ model, image: imageBlob });
+   *
+   * const docModel = transformers.ocr('onnx-community/GLM-OCR-ONNX');
+   * const { text: table } = await extractText({ model: docModel, image, prompt: 'Table Recognition:' });
    * ```
    */
   ocr(modelId: string, settings?: ModelSettings): OCRModel;
@@ -500,15 +513,13 @@ export interface TransformersProvider {
   depthEstimator(modelId: string, settings?: ModelSettings): DepthEstimationModel;
 
   // ═══════════════════════════════════════════════════════════════
-  // LANGUAGE MODEL FACTORY (Experimental — TJS v4)
+  // LANGUAGE MODEL FACTORY
   // ═══════════════════════════════════════════════════════════════
 
   /**
-   * Create a language model for text generation using Transformers.js v4.
+   * Create a language model for text generation using Transformers.js.
    *
    * Uses ONNX models with WebGPU acceleration and automatic WASM fallback.
-   *
-   * **Experimental**: Uses Transformers.js v4 which is a preview release.
    *
    * @example
    * ```ts
@@ -528,4 +539,26 @@ export interface TransformersProvider {
    * ```
    */
   languageModel(modelId: string, settings?: LanguageModelSettings): LanguageModel;
+
+  // ═══════════════════════════════════════════════════════════════
+  // VOICE ACTIVITY DETECTION (VAD)
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * Create a Voice Activity Detection (VAD) provider for use with
+   * `createLiveTranscriber()`.
+   *
+   * Currently supports the silero-vad ONNX model.
+   *
+   * @example
+   * ```ts
+   * const vad = transformers.vad('onnx-community/silero-vad');
+   * const transcriber = await createLiveTranscriber({
+   *   model: transformers.speechToText('onnx-community/moonshine-tiny-ONNX'),
+   *   mode: 'open-mic',
+   *   vad,
+   * });
+   * ```
+   */
+  vad(modelId: string, settings?: SileroVADSettings): VADProvider;
 }

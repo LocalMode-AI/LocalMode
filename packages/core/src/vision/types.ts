@@ -962,3 +962,653 @@ export type ImageToImageModelFactory = (
   settings?: Record<string, unknown>
 ) => ImageToImageModel;
 
+// ═══════════════════════════════════════════════════════════════
+// LANDMARK & GESTURE COMMON TYPES
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * A single landmark point in normalized image coordinates.
+ *
+ * Coordinates `x` and `y` are normalized to `[0, 1]` relative to image
+ * width/height. `z` is the depth relative to a reference point (smaller is
+ * closer to the camera). `visibility` indicates the likelihood the landmark
+ * is visible (not occluded) where present.
+ */
+export interface Landmark {
+  /** Normalized x coordinate (0-1) */
+  x: number;
+  /** Normalized y coordinate (0-1) */
+  y: number;
+  /** Depth relative to a reference point */
+  z: number;
+  /** Likelihood the landmark is visible / not occluded (0-1) */
+  visibility?: number;
+  /** Optional landmark name */
+  name?: string;
+}
+
+/**
+ * A key facial point returned by face detection (e.g., eye, nose, mouth).
+ */
+export interface FaceKeypoint {
+  /** Normalized x coordinate (0-1) */
+  x: number;
+  /** Normalized y coordinate (0-1) */
+  y: number;
+  /** Keypoint name (e.g., 'rightEye', 'noseTip') */
+  name: string;
+}
+
+/**
+ * A face blendshape category estimating a facial expression component.
+ */
+export interface FaceBlendshape {
+  /** Blendshape category name (e.g., 'jawOpen', 'mouthSmileLeft') */
+  categoryName: string;
+  /** Activation score (0-1) */
+  score: number;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HAND LANDMARK MODEL INTERFACE
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Interface for hand landmark detection models.
+ */
+export interface HandLandmarkModel {
+  /** Unique identifier for this model */
+  readonly modelId: string;
+
+  /** Provider name */
+  readonly provider: string;
+
+  /**
+   * Detect hand landmarks in the given images.
+   *
+   * @param options - Detection options
+   * @returns Promise with hand landmark results
+   */
+  doDetect(options: DoDetectHandsOptions): Promise<DoDetectHandsResult>;
+}
+
+/**
+ * Options passed to HandLandmarkModel.doDetect()
+ */
+export interface DoDetectHandsOptions {
+  /** Images to detect hands in */
+  images: ImageInput[];
+
+  /** Maximum number of hands to detect (default: 2) */
+  numHands?: number;
+
+  /** Minimum detection confidence threshold (0-1) */
+  minDetectionConfidence?: number;
+
+  /** AbortSignal for cancellation */
+  abortSignal?: AbortSignal;
+
+  /** Provider-specific options */
+  providerOptions?: Record<string, Record<string, unknown>>;
+}
+
+/**
+ * Result from HandLandmarkModel.doDetect()
+ */
+export interface DoDetectHandsResult {
+  /** Hand detection results (one array per input image) */
+  results: HandLandmarkResultItem[][];
+
+  /** Usage information */
+  usage: VisionUsage;
+}
+
+/**
+ * A single detected hand with its landmarks.
+ */
+export interface HandLandmarkResultItem {
+  /** 21 hand landmarks in normalized image coordinates */
+  landmarks: Landmark[];
+
+  /** 21 hand landmarks in 3D world coordinates (meters, origin at hand center) */
+  worldLandmarks: Landmark[];
+
+  /** Detected handedness */
+  handedness: 'Left' | 'Right';
+
+  /** Detection confidence score (0-1) */
+  score: number;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// POSE LANDMARK MODEL INTERFACE
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Interface for pose (body) landmark detection models.
+ */
+export interface PoseLandmarkModel {
+  /** Unique identifier for this model */
+  readonly modelId: string;
+
+  /** Provider name */
+  readonly provider: string;
+
+  /**
+   * Detect pose landmarks in the given images.
+   *
+   * @param options - Detection options
+   * @returns Promise with pose landmark results
+   */
+  doDetect(options: DoDetectPoseOptions): Promise<DoDetectPoseResult>;
+}
+
+/**
+ * Options passed to PoseLandmarkModel.doDetect()
+ */
+export interface DoDetectPoseOptions {
+  /** Images to detect poses in */
+  images: ImageInput[];
+
+  /** Maximum number of poses to detect (default: 1) */
+  numPoses?: number;
+
+  /** Minimum detection confidence threshold (0-1) */
+  minDetectionConfidence?: number;
+
+  /** AbortSignal for cancellation */
+  abortSignal?: AbortSignal;
+
+  /** Provider-specific options */
+  providerOptions?: Record<string, Record<string, unknown>>;
+}
+
+/**
+ * Result from PoseLandmarkModel.doDetect()
+ */
+export interface DoDetectPoseResult {
+  /** Pose detection results (one array per input image) */
+  results: PoseLandmarkResultItem[][];
+
+  /** Usage information */
+  usage: VisionUsage;
+}
+
+/**
+ * A single detected pose with its landmarks.
+ */
+export interface PoseLandmarkResultItem {
+  /** 33 pose landmarks in normalized image coordinates */
+  landmarks: Landmark[];
+
+  /** 33 pose landmarks in 3D world coordinates (meters, origin at body center) */
+  worldLandmarks: Landmark[];
+
+  /** Detection confidence score (0-1) */
+  score: number;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FACE DETECTION MODEL INTERFACE
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Interface for face detection models (bounding boxes + keypoints).
+ */
+export interface FaceDetectionModel {
+  /** Unique identifier for this model */
+  readonly modelId: string;
+
+  /** Provider name */
+  readonly provider: string;
+
+  /**
+   * Detect faces in the given images.
+   *
+   * @param options - Detection options
+   * @returns Promise with face detection results
+   */
+  doDetect(options: DoDetectFacesOptions): Promise<DoDetectFacesResult>;
+}
+
+/**
+ * Options passed to FaceDetectionModel.doDetect()
+ */
+export interface DoDetectFacesOptions {
+  /** Images to detect faces in */
+  images: ImageInput[];
+
+  /** Minimum detection confidence threshold (0-1) */
+  minDetectionConfidence?: number;
+
+  /** AbortSignal for cancellation */
+  abortSignal?: AbortSignal;
+
+  /** Provider-specific options */
+  providerOptions?: Record<string, Record<string, unknown>>;
+}
+
+/**
+ * Result from FaceDetectionModel.doDetect()
+ */
+export interface DoDetectFacesResult {
+  /** Face detection results (one array per input image) */
+  results: FaceDetectionResultItem[][];
+
+  /** Usage information */
+  usage: VisionUsage;
+}
+
+/**
+ * A single detected face.
+ */
+export interface FaceDetectionResultItem {
+  /** Face bounding box */
+  box: BoundingBox;
+
+  /** Detection confidence score (0-1) */
+  score: number;
+
+  /** Key facial points (right eye, left eye, nose tip, mouth, ears) */
+  keypoints: FaceKeypoint[];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FACE LANDMARK MODEL INTERFACE
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Interface for face landmark (face mesh) detection models.
+ */
+export interface FaceLandmarkModel {
+  /** Unique identifier for this model */
+  readonly modelId: string;
+
+  /** Provider name */
+  readonly provider: string;
+
+  /**
+   * Detect face landmarks in the given images.
+   *
+   * @param options - Detection options
+   * @returns Promise with face landmark results
+   */
+  doDetect(options: DoDetectFaceLandmarksOptions): Promise<DoDetectFaceLandmarksResult>;
+}
+
+/**
+ * Options passed to FaceLandmarkModel.doDetect()
+ */
+export interface DoDetectFaceLandmarksOptions {
+  /** Images to detect face landmarks in */
+  images: ImageInput[];
+
+  /** Maximum number of faces to detect (default: 1) */
+  numFaces?: number;
+
+  /** Whether to output facial expression blendshapes */
+  outputBlendshapes?: boolean;
+
+  /** Minimum detection confidence threshold (0-1) */
+  minDetectionConfidence?: number;
+
+  /** AbortSignal for cancellation */
+  abortSignal?: AbortSignal;
+
+  /** Provider-specific options */
+  providerOptions?: Record<string, Record<string, unknown>>;
+}
+
+/**
+ * Result from FaceLandmarkModel.doDetect()
+ */
+export interface DoDetectFaceLandmarksResult {
+  /** Face landmark results (one array per input image) */
+  results: FaceLandmarkResultItem[][];
+
+  /** Usage information */
+  usage: VisionUsage;
+}
+
+/**
+ * A single detected face with its mesh landmarks.
+ */
+export interface FaceLandmarkResultItem {
+  /** 478 face mesh landmarks in normalized image coordinates */
+  landmarks: Landmark[];
+
+  /** Detection confidence score (0-1) */
+  score: number;
+
+  /** Facial expression blendshapes (only when requested) */
+  blendshapes?: FaceBlendshape[];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GESTURE RECOGNITION MODEL INTERFACE
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Interface for hand gesture recognition models.
+ */
+export interface GestureRecognitionModel {
+  /** Unique identifier for this model */
+  readonly modelId: string;
+
+  /** Provider name */
+  readonly provider: string;
+
+  /**
+   * Recognize hand gestures in the given images.
+   *
+   * @param options - Recognition options
+   * @returns Promise with gesture recognition results
+   */
+  doRecognize(options: DoRecognizeGestureOptions): Promise<DoRecognizeGestureResult>;
+}
+
+/**
+ * Options passed to GestureRecognitionModel.doRecognize()
+ */
+export interface DoRecognizeGestureOptions {
+  /** Images to recognize gestures in */
+  images: ImageInput[];
+
+  /** Maximum number of hands to detect (default: 2) */
+  numHands?: number;
+
+  /** Minimum detection confidence threshold (0-1) */
+  minDetectionConfidence?: number;
+
+  /** AbortSignal for cancellation */
+  abortSignal?: AbortSignal;
+
+  /** Provider-specific options */
+  providerOptions?: Record<string, Record<string, unknown>>;
+}
+
+/**
+ * Result from GestureRecognitionModel.doRecognize()
+ */
+export interface DoRecognizeGestureResult {
+  /** Gesture results (one array per input image) */
+  results: GestureResultItem[][];
+
+  /** Usage information */
+  usage: VisionUsage;
+}
+
+/**
+ * A single recognized gesture.
+ */
+export interface GestureResultItem {
+  /** Gesture category name (e.g., 'Thumb_Up', 'Victory', 'None') */
+  gesture: string;
+
+  /** Recognition confidence score (0-1) */
+  score: number;
+
+  /** Handedness of the gesturing hand */
+  handedness: 'Left' | 'Right';
+
+  /** 21 hand landmarks detected alongside the gesture */
+  landmarks: Landmark[];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LANDMARK & GESTURE FUNCTION OPTIONS & RESULTS
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Options for the detectHands() function.
+ *
+ * @example
+ * ```ts
+ * const { hands } = await detectHands({
+ *   model: mediapipe.handLandmarker(),
+ *   image: imageBlob,
+ *   numHands: 2,
+ * });
+ * ```
+ */
+export interface DetectHandsOptions {
+  /** The hand landmark model to use */
+  model: HandLandmarkModel | string;
+
+  /** The image to detect hands in */
+  image: ImageInput;
+
+  /** Maximum number of hands to detect (default: 2) */
+  numHands?: number;
+
+  /** Minimum detection confidence threshold (0-1, default: 0.5) */
+  minDetectionConfidence?: number;
+
+  /** AbortSignal for cancellation */
+  abortSignal?: AbortSignal;
+
+  /** Maximum retry attempts (default: 2) */
+  maxRetries?: number;
+
+  /** Provider-specific options */
+  providerOptions?: Record<string, Record<string, unknown>>;
+}
+
+/**
+ * Result from the detectHands() function.
+ */
+export interface DetectHandsResult {
+  /** Detected hands with landmarks */
+  hands: HandLandmarkResultItem[];
+
+  /** Usage information */
+  usage: VisionUsage;
+
+  /** Response metadata */
+  response: VisionResponse;
+}
+
+/**
+ * Options for the detectPose() function.
+ */
+export interface DetectPoseOptions {
+  /** The pose landmark model to use */
+  model: PoseLandmarkModel | string;
+
+  /** The image to detect poses in */
+  image: ImageInput;
+
+  /** Maximum number of poses to detect (default: 1) */
+  numPoses?: number;
+
+  /** Minimum detection confidence threshold (0-1, default: 0.5) */
+  minDetectionConfidence?: number;
+
+  /** AbortSignal for cancellation */
+  abortSignal?: AbortSignal;
+
+  /** Maximum retry attempts (default: 2) */
+  maxRetries?: number;
+
+  /** Provider-specific options */
+  providerOptions?: Record<string, Record<string, unknown>>;
+}
+
+/**
+ * Result from the detectPose() function.
+ */
+export interface DetectPoseResult {
+  /** Detected poses with landmarks */
+  poses: PoseLandmarkResultItem[];
+
+  /** Usage information */
+  usage: VisionUsage;
+
+  /** Response metadata */
+  response: VisionResponse;
+}
+
+/**
+ * Options for the detectFace() function.
+ */
+export interface DetectFaceOptions {
+  /** The face detection model to use */
+  model: FaceDetectionModel | string;
+
+  /** The image to detect faces in */
+  image: ImageInput;
+
+  /** Minimum detection confidence threshold (0-1, default: 0.5) */
+  minDetectionConfidence?: number;
+
+  /** AbortSignal for cancellation */
+  abortSignal?: AbortSignal;
+
+  /** Maximum retry attempts (default: 2) */
+  maxRetries?: number;
+
+  /** Provider-specific options */
+  providerOptions?: Record<string, Record<string, unknown>>;
+}
+
+/**
+ * Result from the detectFace() function.
+ */
+export interface DetectFaceResult {
+  /** Detected faces */
+  faces: FaceDetectionResultItem[];
+
+  /** Usage information */
+  usage: VisionUsage;
+
+  /** Response metadata */
+  response: VisionResponse;
+}
+
+/**
+ * Options for the detectFaceLandmarks() function.
+ */
+export interface DetectFaceLandmarksOptions {
+  /** The face landmark model to use */
+  model: FaceLandmarkModel | string;
+
+  /** The image to detect face landmarks in */
+  image: ImageInput;
+
+  /** Maximum number of faces to detect (default: 1) */
+  numFaces?: number;
+
+  /** Whether to output facial expression blendshapes */
+  outputBlendshapes?: boolean;
+
+  /** Minimum detection confidence threshold (0-1, default: 0.5) */
+  minDetectionConfidence?: number;
+
+  /** AbortSignal for cancellation */
+  abortSignal?: AbortSignal;
+
+  /** Maximum retry attempts (default: 2) */
+  maxRetries?: number;
+
+  /** Provider-specific options */
+  providerOptions?: Record<string, Record<string, unknown>>;
+}
+
+/**
+ * Result from the detectFaceLandmarks() function.
+ */
+export interface DetectFaceLandmarksResult {
+  /** Detected faces with mesh landmarks */
+  faces: FaceLandmarkResultItem[];
+
+  /** Usage information */
+  usage: VisionUsage;
+
+  /** Response metadata */
+  response: VisionResponse;
+}
+
+/**
+ * Options for the recognizeGesture() function.
+ */
+export interface RecognizeGestureOptions {
+  /** The gesture recognition model to use */
+  model: GestureRecognitionModel | string;
+
+  /** The image to recognize gestures in */
+  image: ImageInput;
+
+  /** Maximum number of hands to detect (default: 2) */
+  numHands?: number;
+
+  /** Minimum detection confidence threshold (0-1, default: 0.5) */
+  minDetectionConfidence?: number;
+
+  /** AbortSignal for cancellation */
+  abortSignal?: AbortSignal;
+
+  /** Maximum retry attempts (default: 2) */
+  maxRetries?: number;
+
+  /** Provider-specific options */
+  providerOptions?: Record<string, Record<string, unknown>>;
+}
+
+/**
+ * Result from the recognizeGesture() function.
+ */
+export interface RecognizeGestureResult {
+  /** Recognized gestures */
+  gestures: GestureResultItem[];
+
+  /** Usage information */
+  usage: VisionUsage;
+
+  /** Response metadata */
+  response: VisionResponse;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LANDMARK & GESTURE FACTORY TYPES
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Factory function type for creating hand landmark models.
+ */
+export type HandLandmarkModelFactory = (
+  modelId: string,
+  settings?: Record<string, unknown>
+) => HandLandmarkModel;
+
+/**
+ * Factory function type for creating pose landmark models.
+ */
+export type PoseLandmarkModelFactory = (
+  modelId: string,
+  settings?: Record<string, unknown>
+) => PoseLandmarkModel;
+
+/**
+ * Factory function type for creating face detection models.
+ */
+export type FaceDetectionModelFactory = (
+  modelId: string,
+  settings?: Record<string, unknown>
+) => FaceDetectionModel;
+
+/**
+ * Factory function type for creating face landmark models.
+ */
+export type FaceLandmarkModelFactory = (
+  modelId: string,
+  settings?: Record<string, unknown>
+) => FaceLandmarkModel;
+
+/**
+ * Factory function type for creating gesture recognition models.
+ */
+export type GestureRecognitionModelFactory = (
+  modelId: string,
+  settings?: Record<string, unknown>
+) => GestureRecognitionModel;
+

@@ -62,7 +62,7 @@ export class TransformersSegmentationModel implements SegmentationModel {
 
       const pipe = await pipeline('image-segmentation', this.baseModelId, {
         device: this.settings.device ?? 'auto',
-        dtype: this.settings.quantized === true ? 'q8' : undefined,
+        dtype: this.settings.quantized === true ? 'q8' : 'fp32',
         progress_callback: this.settings.onProgress,
       });
 

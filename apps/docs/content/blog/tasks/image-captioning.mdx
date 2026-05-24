@@ -1,0 +1,137 @@
+---
+title: "Image Captioning in the Browser"
+description: "Generate natural language descriptions of images using Florence 2 - entirely in the browser."
+author: "LocalMode"
+date: "2026-05-15"
+---
+
+# Image Captioning in the Browser
+
+Generate natural language descriptions of images using Florence 2 - entirely in the browser.
+
+## What Is Image Captioning?
+
+Image captioning generates a natural language description of an image's content. Florence 2 uses a vision-language architecture that encodes the image with a visual transformer and decodes a text description autoregressively. The result is a human-readable sentence describing what the image shows - people, objects, activities, and scenes.
+
+This capability is exposed through the `captionImage()` function in `@localmode/core`. All processing runs entirely in the browser - no server, no API key, no data leaves the device. After the initial model download, image captioning works completely offline.
+
+## Real-World Applications
+
+Accessibility: automatic alt-text for images. Social media: auto-generated captions for posts. Content management: image metadata generation. E-commerce: product image descriptions. Photo organization: searchable image descriptions. Assistive technology for visually impaired users.
+
+These use cases all benefit from local, on-device processing: user data stays private, there are no per-request API costs, and the application works without internet after initial setup.
+
+## Getting Started
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Import the core function and provider:
+
+```typescript
+import { captionImage } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+```
+
+The recommended starting model is **onnx-community/Florence-2-base-ft** - it provides the best balance of quality, speed, and download size for most applications.
+
+## Code Example
+
+```typescript
+import { captionImage } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.captioner('onnx-community/Florence-2-base-ft');
+
+const { caption } = await captionImage({
+  model,
+  image: photoFile, // File, Blob, or URL
+});
+
+// caption: "A group of people sitting around a table in a meeting room"
+```
+
+This example demonstrates the core workflow: create a model instance from the provider, call the `captionImage()` function with your input, and receive structured results. The same pattern works identically across all 1 available provider: Transformers.js.
+
+## Available Models
+
+The following models support image captioning through LocalMode. Choose based on your target device, acceptable download size, and quality requirements.
+
+| Model | Provider | Size | Speed | Quality |
+| --- | --- | --- | --- | --- |
+| onnx-community/Florence-2-base-ft | Transformers.js | ~460MB | Medium | High |
+| Xenova/vit-gpt2-image-captioning | Transformers.js | ~250MB | Medium | Good |
+
+**Choosing a model:** For most applications, start with the recommended model (`onnx-community/Florence-2-base-ft`). If download size is the primary constraint (e.g., mobile PWA, browser extension), pick the smallest model that meets your quality bar. If quality is the priority (e.g., enterprise search, content analysis), use the largest model your target devices can handle.
+
+## Cloud vs Local: Cost and Privacy Comparison
+
+Running image captioning locally eliminates per-request API costs and keeps all data on-device. Here is how the economics compare:
+
+| Service | Cost / Notes |
+| --- | --- |
+| Google Cloud Vision (label detection) | $1.50 per 1,000 images (units 1,001–5,000,000/month) |
+| Azure Computer Vision | varies by feature and region - check official pricing |
+| LocalMode captioning | $0 after one-time model download (~460MB), and images stay on the device |
+
+Google Cloud Vision Label Detection (the closest equivalent to image captioning) costs $1.50 per 1,000 images for units 1,001–5,000,000/month; the first 1,000 units are free. Azure Computer Vision pricing varies by feature and region - consult the official Azure pricing page for current rates. LocalMode captioning costs $0 after a one-time model download (~460MB), and images stay on the device.
+
+The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
+
+## Available Providers
+
+- **Transformers.js** - ONNX-optimized models via ONNX Runtime Web. Supports both WebGPU and WASM backends. Broadest model catalog for non-LLM tasks.
+
+## AbortSignal Support
+
+All `captionImage()` calls support cancellation through the standard `AbortSignal` API:
+
+```typescript
+const controller = new AbortController();
+
+const promise = captionImage({
+  model,
+  image: imageFile,
+  abortSignal: controller.signal,
+});
+
+// Cancel if needed (e.g., user navigates away)
+controller.abort();
+```
+
+This is essential for responsive UIs - cancel in-flight operations when the user navigates away, submits a new query, or closes a dialog. The underlying model inference stops immediately, freeing memory and compute resources.
+
+## React Integration
+
+If you are building a React application, `@localmode/react` provides hooks that manage loading states, error handling, and cancellation automatically:
+
+```bash
+npm install @localmode/react
+```
+
+```typescript
+import { useCaptionImage } from '@localmode/react';
+```
+
+The hook returns `{ data, error, isLoading, execute, cancel, reset }` - providing everything a UI component needs to display progress, handle errors, offer cancellation, and reset state.
+
+## Related Pages
+
+- [Florence Vision](/blog/models/florence-vision) - model guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+This guide is based on LocalMode's source code and curated model catalog. Function signatures, hook return shapes, and API examples were verified directly against `packages/core/src/vision/caption-image.ts`, `packages/transformers/src/implementations/captioner.ts`, `packages/react/src/hooks/use-caption-image.ts`, and the official LocalMode transformers image-captioning docs page. Model sizes reflect the fp16 ONNX files downloaded by Transformers.js at default settings (verified from HuggingFace repository file listings). Cloud pricing figures were sourced from the official Google Cloud Vision API pricing page and are subject to change - verify current pricing with each provider before making cost decisions.
+
+## Sources
+
+- [LocalMode Transformers image-captioning guide](https://localmode.dev/docs/transformers/image-captioning) - official model size reference (~460MB for Florence-2-base-ft)
+- [LocalMode Core Vision API reference](https://localmode.dev/docs/core/vision) - `captionImage()` function and options
+- [onnx-community/Florence-2-base-ft on HuggingFace](https://huggingface.co/onnx-community/Florence-2-base-ft) - ONNX file listing and sizes
+- [Xenova/vit-gpt2-image-captioning on HuggingFace](https://huggingface.co/Xenova/vit-gpt2-image-captioning) - model card and ONNX file listing
+- [Google Cloud Vision API Pricing](https://cloud.google.com/vision/pricing) - Label Detection at $1.50 per 1,000 units (units 1,001–5,000,000/month)

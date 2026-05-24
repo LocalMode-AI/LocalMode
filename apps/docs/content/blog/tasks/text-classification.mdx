@@ -1,0 +1,151 @@
+---
+title: "Text Classification in the Browser"
+description: "Classify text into categories - sentiment analysis, topic detection, intent recognition, and content moderation."
+author: "LocalMode"
+date: "2026-05-13"
+---
+
+# Text Classification in the Browser
+
+Classify text into categories - sentiment analysis, topic detection, intent recognition, and content moderation.
+
+## What Is Text Classification?
+
+Text classification assigns predefined labels to input text based on its content. Supervised classifiers (fine-tuned on labeled datasets) handle specific tasks like sentiment analysis with high accuracy. Zero-shot classifiers (trained on natural language inference) accept any set of labels at runtime, making them flexible for custom categorization without training data.
+
+This capability is exposed through the `classify()` function in `@localmode/core`. All processing runs entirely in the browser - no server, no API key, no data leaves the device. After the initial model download, text classification works completely offline.
+
+## Real-World Applications
+
+Customer feedback sentiment analysis. Support ticket routing by topic. Content moderation (toxic, spam, safe). Email categorization. Product review classification. Intent detection for chatbots.
+
+These use cases all benefit from local, on-device processing: user data stays private, there are no per-request API costs, and the application works without internet after initial setup.
+
+## Getting Started
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Import the core function and provider:
+
+```typescript
+import { classify, classifyZeroShot } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+```
+
+The recommended starting model is **Xenova/distilbert-base-uncased-finetuned-sst-2-english** - it provides the best balance of quality, speed, and download size for most applications.
+
+## Code Example
+
+```typescript
+import { classify, classifyZeroShot } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Sentiment analysis with a fine-tuned model
+const sentiment = transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english');
+const { label, score } = await classify({ model: sentiment, text: 'This product is amazing!' });
+// { label: 'POSITIVE', score: 0.9998 }
+
+// Zero-shot: classify into any categories you define
+const zeroShot = transformers.zeroShot('Xenova/nli-deberta-v3-xsmall');
+const result = await classifyZeroShot({
+  model: zeroShot,
+  text: 'The server is down and customers are complaining',
+  candidateLabels: ['urgent', 'feature-request', 'billing', 'technical'],
+});
+```
+
+This example demonstrates the core workflow: create a model instance from the provider, call the `classify()` function with your input, and receive structured results. The same pattern works identically with the Transformers.js provider.
+
+## Available Models
+
+The following models support text classification through LocalMode. Choose based on your target device, acceptable download size, and quality requirements.
+
+**Supervised classifiers** (`transformers.classifier()`) - fine-tuned on fixed label sets:
+
+| Model | Provider | Size | Speed | Quality |
+| --- | --- | --- | --- | --- |
+| Xenova/distilbert-base-uncased-finetuned-sst-2-english | Transformers.js | 67MB | Fast | Good |
+| Xenova/twitter-roberta-base-sentiment-latest | Transformers.js | 125MB | Medium | High |
+| Xenova/toxic-bert | Transformers.js | 110MB | Medium | Good |
+
+**Zero-shot classifiers** (`transformers.zeroShot()`) - accept any labels at runtime:
+
+| Model | Provider | Size | Speed | Quality |
+| --- | --- | --- | --- | --- |
+| Xenova/mobilebert-uncased-mnli | Transformers.js | ~21MB | Fast | Basic |
+| Xenova/nli-deberta-v3-xsmall | Transformers.js | ~90MB | Medium | Good |
+| onnx-community/ModernBERT-large-zeroshot-v2.0-ONNX | Transformers.js | ~297MB | Slow | High |
+
+**Choosing a model:** For most applications, start with the recommended model (`Xenova/distilbert-base-uncased-finetuned-sst-2-english`). If download size is the primary constraint (e.g., mobile PWA, browser extension), pick the smallest model that meets your quality bar. If quality is the priority (e.g., enterprise search, content analysis), use the largest model your target devices can handle.
+
+## Cloud vs Local: Cost and Privacy Comparison
+
+Running text classification locally eliminates per-request API costs and keeps all data on-device. Here is how the economics compare:
+
+
+
+Cloud classification typically uses general-purpose LLMs at $0.50-5 per million tokens, which is overkill for classification tasks. Dedicated classification models like those in LocalMode are faster (single forward pass vs. autoregressive generation), cheaper ($0), and more accurate for their specific tasks.
+
+The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
+
+## Available Providers
+
+- **Transformers.js** - ONNX-optimized models via ONNX Runtime Web. Supports both WebGPU and WASM backends. Broadest model catalog for non-LLM tasks.
+
+## AbortSignal Support
+
+All `classify()` calls support cancellation through the standard `AbortSignal` API:
+
+```typescript
+const controller = new AbortController();
+
+const promise = classify({
+  model,
+  text: 'input text',
+  abortSignal: controller.signal,
+});
+
+// Cancel if needed (e.g., user navigates away)
+controller.abort();
+```
+
+This is essential for responsive UIs - cancel in-flight operations when the user navigates away, submits a new query, or closes a dialog. The underlying model inference stops immediately, freeing memory and compute resources.
+
+## React Integration
+
+If you are building a React application, `@localmode/react` provides hooks that manage loading states, error handling, and cancellation automatically:
+
+```bash
+npm install @localmode/react
+```
+
+```typescript
+import { useClassify } from '@localmode/react';
+```
+
+The hook returns `{ data, error, isLoading, execute, cancel, reset }` - providing everything a UI component needs to display progress, handle errors, offer cancellation, and reset state.
+
+## Related Pages
+
+- [Classification Models](/blog/models/classification-models) - model guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+All function signatures, hook return shapes, and model IDs were verified directly against LocalMode source code: `packages/core/src/classification/classify.ts`, `packages/core/src/classification/types.ts`, `packages/react/src/hooks/use-classify.ts`, and `packages/transformers/src/models.ts` (the `CLASSIFICATION_MODELS` and `ZERO_SHOT_MODELS` catalogs). Model sizes are sourced from the inline JSDoc comments in `models.ts`, which reflect the quantized ONNX variants shipped to the browser. Quality and performance comparisons are general guidance; benchmark with your own data for production use.
+
+## Sources
+
+- [LocalMode `classify()` source - `packages/core/src/classification/classify.ts`](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/core/src/classification/classify.ts)
+- [LocalMode model catalog - `packages/transformers/src/models.ts`](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/transformers/src/models.ts)
+- [HuggingFace model card: Xenova/distilbert-base-uncased-finetuned-sst-2-english](https://huggingface.co/Xenova/distilbert-base-uncased-finetuned-sst-2-english)
+- [HuggingFace model card: Xenova/twitter-roberta-base-sentiment-latest](https://huggingface.co/Xenova/twitter-roberta-base-sentiment-latest)
+- [HuggingFace model card: Xenova/toxic-bert](https://huggingface.co/Xenova/toxic-bert)
+- [HuggingFace model card: Xenova/mobilebert-uncased-mnli](https://huggingface.co/Xenova/mobilebert-uncased-mnli)
+- [HuggingFace model card: Xenova/nli-deberta-v3-xsmall](https://huggingface.co/Xenova/nli-deberta-v3-xsmall)
+- [HuggingFace model card: onnx-community/ModernBERT-large-zeroshot-v2.0-ONNX](https://huggingface.co/onnx-community/ModernBERT-large-zeroshot-v2.0-ONNX)

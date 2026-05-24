@@ -11,7 +11,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 
 # GGUF Model Browsing and Compatibility
 
-The GGUF format is the standard for quantized LLM models, with 135,000+ models on HuggingFace. The `@localmode/wllama` package provides tools to inspect model metadata and check browser compatibility before downloading multi-GB files.
+The GGUF format is the standard for quantized LLM models, with 160,000+ models on HuggingFace. The `@localmode/wllama` package provides tools to inspect model metadata and check browser compatibility before downloading multi-GB files.
 
 <Callout type="info" title="See it in action">
   Try [GGUF Explorer](https://localmode.ai/gguf-explorer) for a working demo.
@@ -168,6 +168,13 @@ These Q4_K_M quantized models are curated for browser use (compatible with wllam
 | Mistral 7B v0.3 Q4_K_M | 4.37GB | 32K | 7.2B | Strong general performance |
 | Llama 3.1 8B Q4_K_M | 4.92GB | 128K | 8B | Best quality (8GB+ RAM) |
 
+### Vision-Language (UI grounding)
+
+| Model | Size | Context | Parameters | Best For |
+| ----- | ---- | ------- | ---------- | -------- |
+| Holo2 4B Q4_K_M | 2.8GB | 256K | 4B | UI grounding, browser-agent / GUI navigation |
+| Holo2 8B Q4_K_M | 5.1GB | 256K | 8B | Premium UI grounding, 8GB+ RAM required |
+
 Access them programmatically:
 
 ```typescript
@@ -314,4 +321,4 @@ Search HuggingFace for GGUF models:
 
 | App | Description | Links |
 |-----|-------------|-------|
-| GGUF Explorer | Browse 135K+ GGUF models with metadata inspection and chat | [Demo](https://localmode.ai/gguf-explorer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/gguf-explorer) |
+| GGUF Explorer | Browse 160K+ GGUF models with metadata inspection and chat | [Demo](https://localmode.ai/gguf-explorer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/gguf-explorer) |

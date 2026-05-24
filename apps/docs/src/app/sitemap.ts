@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next';
-import { source, blog } from '@/lib/source';
+import { source, blog, models, tasks, compare, useCases, compatibility } from '@/lib/source';
 
 const baseUrl =
   process.env.NEXT_PUBLIC_SITE_URL ?? 'https://localmode.dev';
@@ -9,10 +9,45 @@ export default function sitemap(): MetadataRoute.Sitemap {
     url: `${baseUrl}${page.url}`,
     lastModified: new Date(),
     changeFrequency: 'weekly' as const,
-    priority: 0.7,
+    priority: 0.5,
   }));
 
   const posts = blog.getPages().map((page) => ({
+    url: `${baseUrl}${page.url}`,
+    lastModified: new Date(page.data.date as string),
+    changeFrequency: 'monthly' as const,
+    priority: 0.6,
+  }));
+
+  const taskEntries = tasks.getPages().map((page) => ({
+    url: `${baseUrl}${page.url}`,
+    lastModified: new Date(page.data.date as string),
+    changeFrequency: 'monthly' as const,
+    priority: 0.8,
+  }));
+
+  const modelEntries = models.getPages().map((page) => ({
+    url: `${baseUrl}${page.url}`,
+    lastModified: new Date(page.data.date as string),
+    changeFrequency: 'monthly' as const,
+    priority: 0.7,
+  }));
+
+  const compareEntries = compare.getPages().map((page) => ({
+    url: `${baseUrl}${page.url}`,
+    lastModified: new Date(page.data.date as string),
+    changeFrequency: 'monthly' as const,
+    priority: 0.7,
+  }));
+
+  const useCaseEntries = useCases.getPages().map((page) => ({
+    url: `${baseUrl}${page.url}`,
+    lastModified: new Date(page.data.date as string),
+    changeFrequency: 'monthly' as const,
+    priority: 0.7,
+  }));
+
+  const compatibilityEntries = compatibility.getPages().map((page) => ({
     url: `${baseUrl}${page.url}`,
     lastModified: new Date(page.data.date as string),
     changeFrequency: 'monthly' as const,
@@ -40,5 +75,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
     ...docs,
     ...posts,
+    ...taskEntries,
+    ...modelEntries,
+    ...compareEntries,
+    ...useCaseEntries,
+    ...compatibilityEntries,
   ];
 }

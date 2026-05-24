@@ -1,7 +1,10 @@
 /**
  * Transformers Text-to-Speech Model Implementation
  *
- * Implements TextToSpeechModel interface using Transformers.js (SpeechT5, etc.)
+ * Implements TextToSpeechModel interface using Transformers.js.
+ * Routes Kokoro models to a dedicated phonemizer-backed path for
+ * dramatically better pronunciation; non-Kokoro models (SpeechT5,
+ * MMS-TTS/VITS) use the generic pipeline.
  *
  * @packageDocumentation
  */
@@ -10,6 +13,8 @@ import type {
   TextToSpeechModel,
 } from '@localmode/core';
 import type { ModelSettings, TransformersDevice, ModelLoadProgress } from '../types.js';
+import { isKokoroModel, kokoroSynthesize, getKokoroVoiceIds } from './kokoro-tts.js';
+import { KOKORO_DEFAULT_VOICE } from '../kokoro-voices.js';
 
 // Dynamic import types
 type TTSPipeline = Awaited<
@@ -22,9 +27,10 @@ type TTSPipeline = Awaited<
 export class TransformersTextToSpeechModel implements TextToSpeechModel {
   readonly modelId: string;
   readonly provider = 'transformers';
-  readonly sampleRate: number = 16000;
-  readonly voices: string[] = [];
+  readonly sampleRate: number;
+  readonly voices: string[];
 
+  private readonly isKokoro: boolean;
   private pipeline: TTSPipeline | null = null;
   private loadPromise: Promise<TTSPipeline> | null = null;
 
@@ -38,8 +44,14 @@ export class TransformersTextToSpeechModel implements TextToSpeechModel {
     } = {}
   ) {
     this.modelId = `transformers:${baseModelId}`;
-    if (settings.sampleRate) {
-      (this as { sampleRate: number }).sampleRate = settings.sampleRate;
+    this.isKokoro = isKokoroModel(baseModelId);
+
+    if (this.isKokoro) {
+      this.sampleRate = 24000;
+      this.voices = getKokoroVoiceIds();
+    } else {
+      this.sampleRate = settings.sampleRate ?? 16000;
+      this.voices = [];
     }
   }
 
@@ -55,13 +67,10 @@ export class TransformersTextToSpeechModel implements TextToSpeechModel {
     this.loadPromise = (async () => {
       const { pipeline, AutoModel, env } = await import('@huggingface/transformers');
 
-      // Suppress ONNX runtime warnings about node execution providers
       env.backends.onnx.logLevel = 'error';
 
-      // TTS models use ops (GatherND int64, MatMul) that fail on WebGPU JSEP —
-      // force WASM for TTS to avoid runtime kernel failures
       const device = this.settings.device ?? 'wasm';
-      const dtype = this.settings.quantized === true ? 'q8' : undefined;
+      const dtype = this.settings.quantized === true ? 'q8' : 'fp32';
 
       const pipe = await pipeline('text-to-speech', this.baseModelId, {
         device,
@@ -69,8 +78,6 @@ export class TransformersTextToSpeechModel implements TextToSpeechModel {
         progress_callback: this.settings.onProgress,
       });
 
-      // SpeechT5 models need a HiFi-GAN vocoder; VITS models generate waveforms directly.
-      // Only load vocoder for SpeechT5-type models (which have a processor but no built-in vocoder).
       const isSpeechT5 = this.baseModelId.toLowerCase().includes('speecht5');
       if (isSpeechT5 && !pipe.vocoder) {
         const vocoderModel = await AutoModel.from_pretrained(
@@ -102,16 +109,68 @@ export class TransformersTextToSpeechModel implements TextToSpeechModel {
       durationMs: number;
     };
   }> {
-    const { text, abortSignal } = options;
-    const startTime = Date.now();
+    const { text, voice, speed, abortSignal, providerOptions } = options;
 
     abortSignal?.throwIfAborted();
 
+    if (this.isKokoro) {
+      return this.synthesizeKokoro(text, voice, speed, abortSignal, providerOptions);
+    }
+
+    return this.synthesizeGeneric(text, abortSignal);
+  }
+
+  private async synthesizeKokoro(
+    text: string,
+    voice: string | undefined,
+    speed: number | undefined,
+    abortSignal: AbortSignal | undefined,
+    providerOptions: Record<string, Record<string, unknown>> | undefined,
+  ): Promise<{
+    audio: Blob;
+    sampleRate: number;
+    usage: { characterCount: number; durationMs: number };
+  }> {
+    const startTime = Date.now();
+    const kokoroOpts = providerOptions?.kokoro ?? {};
+    const dtype = (kokoroOpts.dtype as string) ?? 'q8';
+
+    const result = await kokoroSynthesize({
+      modelId: this.baseModelId,
+      text,
+      voice: voice ?? KOKORO_DEFAULT_VOICE,
+      speed: speed ?? 1.0,
+      dtype: dtype as 'q8' | 'fp16' | 'fp32' | 'q4' | 'q4f16',
+      device: this.settings.device ?? 'wasm',
+      abortSignal,
+      onProgress: this.settings.onProgress,
+    });
+
+    const wavBlob = this.floatToWav(result.audio, result.sampleRate);
+
+    return {
+      audio: wavBlob,
+      sampleRate: result.sampleRate,
+      usage: {
+        characterCount: text.length,
+        durationMs: Date.now() - startTime,
+      },
+    };
+  }
+
+  private async synthesizeGeneric(
+    text: string,
+    abortSignal: AbortSignal | undefined,
+  ): Promise<{
+    audio: Blob;
+    sampleRate: number;
+    usage: { characterCount: number; durationMs: number };
+  }> {
+    const startTime = Date.now();
     const pipe = await this.loadPipeline();
 
     abortSignal?.throwIfAborted();
 
-    // SpeechT5 requires speaker embeddings; VITS models (mms-tts) don't need them
     const isSpeechT5 = this.baseModelId.toLowerCase().includes('speecht5');
     const pipelineOptions: Record<string, unknown> = {};
 
@@ -125,7 +184,6 @@ export class TransformersTextToSpeechModel implements TextToSpeechModel {
     const audioData = (output as { audio: Float32Array }).audio;
     const samplingRate = (output as { sampling_rate: number }).sampling_rate || this.sampleRate;
 
-    // Convert Float32Array to WAV Blob
     const wavBlob = this.floatToWav(audioData, samplingRate);
 
     return {
@@ -138,9 +196,6 @@ export class TransformersTextToSpeechModel implements TextToSpeechModel {
     };
   }
 
-  /**
-   * Convert Float32Array audio data to WAV Blob
-   */
   private floatToWav(audioData: Float32Array, sampleRate: number): Blob {
     const numChannels = 1;
     const bitsPerSample = 16;
@@ -193,4 +248,3 @@ export function createTextToSpeechModel(
 ): TransformersTextToSpeechModel {
   return new TransformersTextToSpeechModel(modelId, settings);
 }
-

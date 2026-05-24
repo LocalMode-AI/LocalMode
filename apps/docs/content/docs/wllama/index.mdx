@@ -12,7 +12,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 
 # @localmode/wllama
 
-Run any GGUF model in the browser using llama.cpp compiled to WebAssembly. Access 135,000+ models from HuggingFace without WebGPU.
+Run any GGUF model in the browser using llama.cpp compiled to WebAssembly. Access 160,000+ models from HuggingFace without WebGPU.
 
 <Callout type="info" title="See it in action">
   Try [GGUF Explorer](https://localmode.ai/gguf-explorer) and [LLM Chat](https://localmode.ai/llm-chat) for working demos.
@@ -21,7 +21,7 @@ Run any GGUF model in the browser using llama.cpp compiled to WebAssembly. Acces
 ## Features
 
 - **Universal Browser Support** -- Works in Chrome, Firefox, Safari, and Edge (WASM only, no WebGPU needed)
-- **135K+ Models** -- Run any GGUF model from HuggingFace
+- **160K+ Models** -- Run any GGUF model from HuggingFace
 - **GGUF Inspection** -- Read model metadata before downloading via ~4KB Range requests
 - **Compatibility Check** -- Estimate if a model will run on the current device
 - **Multi-Threading** -- Auto-detects CORS isolation for 2-4x faster inference
@@ -86,11 +86,12 @@ const model3 = wllama.languageModel(
   - **Reasoning / Coding**: Phi 3.5 Mini Q4_K_M -- 1.24GB, excellent reasoning
   - **Higher Quality**: Llama 3.2 3B Q4_K_M -- 1.93GB, excellent quality with 128K context
   - **Best Quality**: Llama 3.1 8B Q4_K_M -- 4.92GB, requires 8GB+ RAM
+  - **UI Grounding / Vision**: Holo2 4B Q4_K_M -- 2.8GB, vision-language model for browser-agent / GUI navigation
 </Callout>
 
-### `WLLAMA_MODELS` Catalog (16 Models)
+### `WLLAMA_MODELS` Catalog (18 Models)
 
-The curated catalog ships 16 Q4_K_M quantized models across four size tiers:
+The curated catalog ships 18 Q4_K_M quantized models across four size tiers (including two vision-language models):
 
 #### Tiny (&lt; 500MB)
 
@@ -128,13 +129,20 @@ The curated catalog ships 16 Q4_K_M quantized models across four size tiers:
 | `Mistral-7B-Instruct-v0.3-Q4_K_M` | Mistral 7B v0.3 | 4.37GB | 32K | 7.2B | Strong general performance |
 | `Llama-3.1-8B-Instruct-Q4_K_M` | Llama 3.1 8B | 4.92GB | 128K | 8B | Best quality (8GB+ RAM) |
 
+#### Vision-Language (UI grounding)
+
+| Catalog Key | Name | Size | Context | Params | Best For |
+| --- | --- | --- | --- | --- | --- |
+| `Holo2-4B-Q4_K_M` | Holo2 4B | 2.8GB | 256K | 4B | UI grounding (vision), browser-agent / GUI navigation |
+| `Holo2-8B-Q4_K_M` | Holo2 8B | 5.1GB | 256K | 8B | Premium UI grounding (vision), 8GB+ RAM required |
+
 Access the catalog programmatically:
 
 ```typescript
 import { WLLAMA_MODELS, getModelCategory } from '@localmode/wllama';
 import type { WllamaModelId } from '@localmode/wllama';
 
-// Iterate all 16 curated models
+// Iterate all 18 curated models
 for (const [id, info] of Object.entries(WLLAMA_MODELS)) {
   const category = getModelCategory(info.sizeBytes);
   console.log(`[${category}] ${info.name}: ${info.size}, ${info.description}`);
@@ -334,17 +342,16 @@ if (isCrossOriginIsolated()) {
 Use wllama as a fallback when WebGPU is not available:
 
 ```typescript
-import { createProviderWithFallback } from '@localmode/core';
 import { webllm } from '@localmode/webllm';
 import { wllama } from '@localmode/wllama';
 
-const model = await createProviderWithFallback({
-  providers: [
-    () => webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
-    () => wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M'),
-  ],
-  onFallback: (error, idx) => console.warn(`Provider ${idx} failed:`, error),
-});
+let model;
+try {
+  model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+} catch (error) {
+  console.warn('WebLLM unavailable, falling back to wllama:', error);
+  model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+}
 ```
 
 ## Browser Support
@@ -367,7 +374,7 @@ const model = await createProviderWithFallback({
 | -------------- | ------------------------ | ------------------------ |
 | Runtime        | llama.cpp WASM           | MLC WebGPU               |
 | Browser Support| All modern browsers      | WebGPU-capable only      |
-| Models         | 135K+ GGUF models        | ~20 curated MLC models   |
+| Models         | 160K+ GGUF models        | 32 curated MLC models    |
 | Performance    | ~40-50% of WebGPU speed  | Native GPU speed         |
 | GPU Required   | No                       | Yes                      |
 | Model Format   | GGUF (standard)          | MLC (pre-compiled)       |
@@ -413,4 +420,4 @@ try {
 | App | Description | Links |
 |-----|-------------|-------|
 | GGUF Explorer | Browse, load, and chat with GGUF models via wllama | [Demo](https://localmode.ai/gguf-explorer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/gguf-explorer) |
-| LLM Chat | Chat with wllama GGUF models alongside WebLLM and ONNX | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |
+| LLM Chat | Chat with wllama GGUF models alongside the WebLLM, ONNX, and LiteRT backends | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |

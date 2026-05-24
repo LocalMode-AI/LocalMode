@@ -53,6 +53,11 @@ export { useExtractEntities } from './hooks/use-extract-entities.js';
 // Domain hooks — Audio
 export { useTranscribe } from './hooks/use-transcribe.js';
 export { useSynthesizeSpeech } from './hooks/use-synthesize-speech.js';
+export { useStreamSpeech } from './hooks/use-stream-speech.js';
+export type {
+  UseStreamSpeechOptions,
+  UseStreamSpeechReturn,
+} from './hooks/use-stream-speech.js';
 
 // Domain hooks — Vision
 export { useCaptionImage } from './hooks/use-caption-image.js';
@@ -62,6 +67,14 @@ export { useClassifyImageZeroShot } from './hooks/use-classify-image-zero-shot.j
 export { useSegmentImage } from './hooks/use-segment-image.js';
 export { useExtractImageFeatures } from './hooks/use-extract-image-features.js';
 export { useImageToImage } from './hooks/use-image-to-image.js';
+
+// Domain hooks — MediaPipe Landmarks & Gestures
+export { useDetectHands } from './hooks/use-detect-hands.js';
+export { useDetectPose } from './hooks/use-detect-pose.js';
+export { useDetectFace } from './hooks/use-detect-face.js';
+export { useDetectFaceLandmarks } from './hooks/use-detect-face-landmarks.js';
+export { useRecognizeGesture } from './hooks/use-recognize-gesture.js';
+export { useDetectLanguage } from './hooks/use-detect-language.js';
 
 // Domain hooks — Text Processing
 export { useTranslate } from './hooks/use-translate.js';
@@ -150,3 +163,20 @@ export { useEvaluateModel } from './hooks/use-evaluate-model.js';
 // Threshold Calibration
 export { useCalibrateThreshold } from './hooks/use-calibrate-threshold.js';
 export type { UseCalibrateThresholdOptions, UseCalibrateThresholdReturn } from './hooks/use-calibrate-threshold.js';
+
+// Audit Log (append-only, hash-chained, signed)
+export { useAuditLog } from './hooks/use-audit-log.js';
+export type { UseAuditLogOptions, UseAuditLogReturn } from './hooks/use-audit-log.js';
+
+// Live Transcription (Streaming STT with VAD)
+export { useLiveTranscribe } from './hooks/use-live-transcribe.js';
+export type {
+  UseLiveTranscribeOptions,
+  UseLiveTranscribeReturn,
+} from './hooks/use-live-transcribe.js';
+
+export { useTurnTaker } from './hooks/use-turn-taker.js';
+export type {
+  UseTurnTakerOptions,
+  UseTurnTakerReturn,
+} from './hooks/use-turn-taker.js';

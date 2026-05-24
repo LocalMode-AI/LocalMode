@@ -57,7 +57,7 @@ export class TransformersObjectDetectionModel implements ObjectDetectionModel {
 
       const pipe = await pipeline('object-detection', this.baseModelId, {
         device: this.settings.device ?? 'auto',
-        dtype: this.settings.quantized === true ? 'q8' : undefined,
+        dtype: this.settings.quantized === true ? 'q8' : 'fp32',
         progress_callback: this.settings.onProgress,
       });
 

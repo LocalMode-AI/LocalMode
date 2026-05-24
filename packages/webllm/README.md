@@ -114,6 +114,8 @@ await deleteModelCache('Llama-3.2-1B-Instruct-q4f16_1-MLC');
 | `Qwen3-8B-q4f16_1-MLC` | 4.5GB | 4K | Highest quality multilingual |
 | `Hermes-3-Llama-3.1-8B-q4f16_1-MLC` | 4.9GB | 4K | Hermes 3 8B, DPO-optimized chat |
 | `gemma-2-9b-it-q4f16_1-MLC` | 5GB | 1K | Google Gemma 2 9B, highest quality |
+| `Qwen3.5-4B-q4f16_1-MLC` | 2.39GB | 32K | Qwen 3.5 4B, latest high-quality multilingual generation |
+| `Qwen3.5-9B-q4f16_1-MLC` | 5.06GB | 32K | Qwen 3.5 9B, highest-quality preset. Requires capable GPU and 8GB+ RAM |
 
 ## Vision (Image Input)
 
@@ -163,6 +165,9 @@ const model = myWebLLM.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC', {
 | `topP` | `0.95` | Nucleus sampling threshold |
 | `maxTokens` | `512` | Maximum tokens to generate |
 | `contextLength` | `4096` | Context window size |
+| `useIndexedDBCache` | `false` | Use IndexedDB instead of Cache API for model storage. Useful for Chrome extensions with MV3 restrictions where `Cache.add()` can fail during multi-gigabyte downloads. |
+| `cacheBackend` | `'cache'` | Explicit cache backend selection (`'cache'`, `'indexeddb'`, or `'cross-origin'`). Overrides `useIndexedDBCache` when set. |
+| `appConfig` | `undefined` | Custom WebLLM `AppConfig` passed to `CreateMLCEngine()` for advanced model configuration. |
 
 ## Utilities
 

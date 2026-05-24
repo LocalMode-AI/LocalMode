@@ -1,0 +1,129 @@
+---
+title: "Image Classification, Detection & Segmentation Models in the Browser"
+description: "ViT for image classification, D-FINE for object detection, and SegFormer for semantic segmentation - all in the browser."
+author: "LocalMode"
+date: "2026-04-13"
+---
+
+# Image Classification, Detection & Segmentation Models in the Browser
+
+ViT for image classification, D-FINE for object detection, and SegFormer for semantic segmentation - all in the browser.
+
+## Overview
+
+The Image Classification, Detection & Segmentation family is available through Transformers.js in LocalMode, with model sizes ranging from 5MB–167MB. This family covers three primary tasks - **image classification**, **object detection**, and **semantic segmentation** - and all models can be used with any application built on the LocalMode SDK.
+
+Running Image Classification, Detection & Segmentation models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+LocalMode includes three complementary computer vision models that together cover the core image understanding tasks. Each is optimized for browser deployment - small enough to load quickly, accurate enough for production use.
+
+ViT-Base-Patch16-224 (87MB) classifies images into 1,000 ImageNet categories. It's the vision equivalent of sentiment analysis - give it an image, get back ranked labels with confidence scores. Useful for auto-tagging photo libraries, content moderation, and image organization features.
+
+D-FINE-N-COCO (quantized to ~4.5MB - the smallest model in the entire catalog) performs object detection, identifying and locating multiple objects within an image with bounding boxes. Trained on the COCO dataset (80 object categories including people, vehicles, animals, and household objects), it achieves 42.8 AP on COCO with just 4M parameters. The tiny model size makes it viable for real-time detection in video frames or camera feeds.
+
+SegFormer-B0 (3.7M parameters, 37.4 mIoU on ADE20K) performs semantic segmentation - classifying every pixel in an image into categories like road, building, sky, person, and vegetation. This enables applications like background removal, scene understanding, and augmented reality overlays. All three models process images entirely client-side through Transformers.js.
+
+## Variant Comparison
+
+The following table lists every Image Classification, Detection & Segmentation variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Xenova/vit-base-patch16-224](https://huggingface.co/google/vit-base-patch16-224) | Transformers.js | 87MB | Medium | High | - | WASM |
+| [Xenova/deit-small-distilled-patch16-224](https://huggingface.co/facebook/deit-small-distilled-patch16-224) | Transformers.js | 88MB | Fast | Good | - | WASM |
+| [Xenova/resnet-50](https://huggingface.co/microsoft/resnet-50) | Transformers.js | 98MB | Fast | Good | - | WASM |
+| [onnx-community/dfine_n_coco-ONNX](https://huggingface.co/onnx-community/dfine_n_coco-ONNX) | Transformers.js | 5MB | Fast | Good | - | WASM |
+| [Xenova/detr-resnet-50](https://huggingface.co/facebook/detr-resnet-50) | Transformers.js | 167MB | Medium | High | - | WASM |
+| [Xenova/segformer-b0-finetuned-ade-512-512](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512) | Transformers.js | 14MB | Fast | Good | - | WASM |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| Under 200MB | 6 | variants |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+Each task in this family uses its own interface from `@localmode/core`: `ImageClassificationModel`, `ObjectDetectionModel`, and `SegmentationModel`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### Transformers.js
+
+Transformers.js runs ONNX-optimized models via ONNX Runtime Web. WebGPU acceleration where available, WASM fallback otherwise.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+// Image classification
+const classifier = transformers.imageClassifier('Xenova/vit-base-patch16-224');
+
+// Object detection
+const detector = transformers.objectDetector('onnx-community/dfine_n_coco-ONNX');
+
+// Semantic segmentation
+const segmenter = transformers.segmenter('Xenova/segformer-b0-finetuned-ade-512-512');
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred model first, and fall back to a smaller variant if it fails to load.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+// Try the preferred model, fall back to a smaller one on failure
+let model;
+try {
+  model = transformers.imageClassifier('Xenova/vit-base-patch16-224');
+} catch (error) {
+  console.warn('Primary model failed, using fallback:', error);
+  model = transformers.imageClassifier('Xenova/resnet-50');
+}
+```
+
+## When to Use Image Classification, Detection & Segmentation
+
+Image Classification, Detection & Segmentation models are a strong choice when:
+
+- **You need browser-side computer vision** - This family covers image classification (ViT, DeiT, ResNet), object detection (D-FINE-N, DETR), and semantic segmentation (SegFormer), all via the same `@localmode/transformers` provider.
+- **Browser compatibility matters** - Available through 1 provider (transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The 5MB–167MB range (quantized) means you can target everything from mobile devices to high-end desktops. D-FINE-N at ~4.5MB is viable even on low-end hardware; DETR at 167MB (or ~43MB quantized) delivers the highest detection accuracy.
+
+
+## HuggingFace Model Cards
+
+- [vit-base-patch16-224](https://huggingface.co/google/vit-base-patch16-224)
+- [deit-small-distilled-patch16-224](https://huggingface.co/facebook/deit-small-distilled-patch16-224)
+- [resnet-50](https://huggingface.co/microsoft/resnet-50)
+- [dfine_n_coco-ONNX](https://huggingface.co/onnx-community/dfine_n_coco-ONNX)
+- [detr-resnet-50](https://huggingface.co/facebook/detr-resnet-50)
+- [segformer-b0-finetuned-ade-512-512](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
+
+## Related Pages
+
+- [Image Classification](/blog/tasks/image-classification) - task guide
+
+## Methodology
+
+Model availability and provider assignments were verified against LocalMode's source code at `packages/transformers/src/models.ts` (`IMAGE_CLASSIFICATION_MODELS`, `OBJECT_DETECTION_MODELS`, `SEGMENTATION_MODELS`). ONNX file sizes were verified directly from the HuggingFace repository file trees for each Xenova/onnx-community model. Parameter counts and benchmark scores (ViT ImageNet accuracy, D-FINE-N COCO AP, SegFormer ADE20K mIoU, DETR COCO AP) were verified against original model cards and peer-reviewed papers. Performance tiers (Fast/Medium, Good/High) are LocalMode's curated assessments based on architecture and quantized model size. Always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [Xenova/vit-base-patch16-224 - HuggingFace model files](https://huggingface.co/Xenova/vit-base-patch16-224/tree/main/onnx)
+- [google/vit-base-patch16-224 - original ViT model card (86.6M params)](https://huggingface.co/google/vit-base-patch16-224)
+- [Xenova/deit-small-distilled-patch16-224 - HuggingFace model files](https://huggingface.co/Xenova/deit-small-distilled-patch16-224/tree/main/onnx)
+- [facebook/deit-small-distilled-patch16-224 - DeiT model card (22M params, 81.2% top-1)](https://huggingface.co/facebook/deit-small-distilled-patch16-224)
+- [Xenova/resnet-50 - HuggingFace model files](https://huggingface.co/Xenova/resnet-50/tree/main/onnx)
+- [microsoft/resnet-50 - ResNet-50 model card](https://huggingface.co/microsoft/resnet-50)
+- [onnx-community/dfine_n_coco-ONNX - HuggingFace model files](https://huggingface.co/onnx-community/dfine_n_coco-ONNX/tree/main/onnx)
+- [Peterande/D-FINE - official GitHub repo (D-FINE-N: 4M params, 42.8 COCO AP)](https://github.com/Peterande/D-FINE)
+- [Xenova/detr-resnet-50 - HuggingFace model files](https://huggingface.co/Xenova/detr-resnet-50/tree/main/onnx)
+- [facebook/detr-resnet-50 - DETR model card (41.6M params, 42.0 COCO AP)](https://huggingface.co/facebook/detr-resnet-50)
+- [Xenova/segformer-b0-finetuned-ade-512-512 - HuggingFace model files](https://huggingface.co/Xenova/segformer-b0-finetuned-ade-512-512/tree/main/onnx)
+- [nvidia/segformer-b0-finetuned-ade-512-512 - SegFormer model card (3.75M params)](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
+- [SegFormer paper - arXiv:2105.15203 (B0: 3.7M params, 37.4 mIoU on ADE20K)](https://arxiv.org/abs/2105.15203)
+- [Transformers.js dtypes/quantization guide](https://huggingface.co/docs/transformers.js/guides/dtypes)
+- [LocalMode transformers provider catalog - packages/transformers/src/models.ts](https://localmode.dev/docs)

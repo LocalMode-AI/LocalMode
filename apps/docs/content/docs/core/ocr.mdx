@@ -97,6 +97,11 @@ const { text } = await extractText({
       type: 'boolean',
       required: false,
     },
+    prompt: {
+      description: 'Text prompt for generative OCR models (GLM-OCR, LightOnOCR-2). Controls the recognition mode: "Text Recognition:", "Table Recognition:", "Formula Recognition:". Ignored by non-generative models like TrOCR.',
+      type: 'string',
+      required: false,
+    },
     abortSignal: {
       description: 'AbortSignal for cancellation',
       type: 'AbortSignal',

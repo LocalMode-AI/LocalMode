@@ -256,7 +256,7 @@ The `streamText()` function returns an async iterable. You consume it with `for 
 ## What About React?
 
 <Callout type="info" title="React developers">
-  If you are using React, you do not have to use the vanilla API. The `@localmode/react` package provides 46 hooks - `useEmbed`, `useChat`, `useClassify`, `useTranscribe`, `useCaptionImage`, `useSemanticSearch`, and many more - with built-in loading states, error handling, and AbortSignal cancellation. See the [React hooks documentation](/docs/react) for the full API.
+  If you are using React, you do not have to use the vanilla API. The `@localmode/react` package provides 56 hooks - `useEmbed`, `useChat`, `useClassify`, `useTranscribe`, `useCaptionImage`, `useSemanticSearch`, and many more - with built-in loading states, error handling, and AbortSignal cancellation. See the [React hooks documentation](/docs/react) for the full API.
 </Callout>
 
 The `@localmode/react` package is a convenience layer. It wraps the same `@localmode/core` functions in React hooks that manage `useState`, `useRef`, and cleanup logic for you. Under the hood, `useEmbed` calls `embed()`. `useChat` calls `streamText()`. There is no separate React-only runtime.
@@ -283,9 +283,9 @@ Every package in LocalMode except `@localmode/react` is framework-agnostic:
 | `@localmode/localforage` | localForage storage adapter | Yes | Yes | Yes | Yes | Yes |
 | `@localmode/devtools` | In-app DevTools widget | Yes | Yes | Yes | Yes | Yes |
 | `@localmode/ai-sdk` | Vercel AI SDK provider | Yes | Yes | Yes | Yes | Yes |
-| `@localmode/react` | React hooks (46 hooks) | **Yes** | No | No | No | No |
+| `@localmode/react` | React hooks (56 hooks) | **Yes** | No | No | No | No |
 
-The pattern is clear: 12 out of 13 packages work with any framework. The one exception exists specifically to provide idiomatic React integration.
+The pattern is clear: 14 out of 15 packages work with any framework. The one exception exists specifically to provide idiomatic React integration.
 
 ---
 

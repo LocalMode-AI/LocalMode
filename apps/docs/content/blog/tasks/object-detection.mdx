@@ -1,0 +1,146 @@
+---
+title: "Object Detection in the Browser"
+description: "Detect and locate objects in images with bounding boxes using D-FINE - just ~4.5MB for 80 object categories."
+author: "LocalMode"
+date: "2026-05-04"
+---
+
+# Object Detection in the Browser
+
+Detect and locate objects in images with bounding boxes using D-FINE - just ~4.5MB for 80 object categories.
+
+## What Is Object Detection?
+
+Object detection identifies multiple objects within an image and returns their locations as bounding boxes along with class labels and confidence scores. D-FINE (Fine-grained Distribution Refinement) is a DETR-based real-time object detector trained on the COCO dataset, recognizing 80 common object categories including people, vehicles, animals, furniture, food, and electronics.
+
+This capability is exposed through the `detectObjects()` function in `@localmode/core`. All processing runs entirely in the browser - no server, no API key, no data leaves the device. After the initial model download, object detection works completely offline.
+
+## Real-World Applications
+
+Real-time object counting in retail or warehouse cameras. Accessibility: describing scene contents for visually impaired users. Photo editing: automatic subject selection. Security: person detection in surveillance feeds. Inventory management: product counting from shelf photos.
+
+These use cases all benefit from local, on-device processing: user data stays private, there are no per-request API costs, and the application works without internet after initial setup.
+
+## Getting Started
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Import the core function and provider:
+
+```typescript
+import { detectObjects } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+```
+
+The recommended starting model is **onnx-community/dfine_n_coco-ONNX** - it provides the best balance of quality, speed, and download size for most applications.
+
+## Code Example
+
+```typescript
+import { detectObjects } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.objectDetector('onnx-community/dfine_n_coco-ONNX');
+
+const { objects } = await detectObjects({
+  model,
+  image: imageFile,
+  threshold: 0.5,
+});
+
+// objects: [
+//   { label: 'person', score: 0.95, box: { x: 100, y: 50, width: 200, height: 400 } },
+//   { label: 'laptop', score: 0.88, box: { x: 300, y: 200, width: 150, height: 100 } },
+// ]
+```
+
+This example demonstrates the core workflow: create a model instance from the provider, call the `detectObjects()` function with your input, and receive structured results. The same pattern works identically across all 2 available providers: Transformers.js and MediaPipe.
+
+## Available Models
+
+The following models support object detection through LocalMode. Choose based on your target device, acceptable download size, and quality requirements.
+
+| Model | Provider | Size | Speed | Quality |
+| --- | --- | --- | --- | --- |
+| onnx-community/dfine_n_coco-ONNX | Transformers.js | ~4.5MB (quantized) | Fast | Good |
+| Xenova/detr-resnet-50 | Transformers.js | 167MB | Medium | High |
+| mediapipe (EfficientDet-Lite0) | MediaPipe | 7.3MB | Fast | Good |
+
+**Choosing a model:** For most applications, start with the recommended model (`onnx-community/dfine_n_coco-ONNX`). If download size is the primary constraint (e.g., mobile PWA, browser extension), the quantized D-FINE nano (~4.5MB) or MediaPipe EfficientDet-Lite0 (7.3MB) are both excellent options. If quality is the priority (e.g., enterprise search, content analysis), use `Xenova/detr-resnet-50` (167MB) for higher accuracy.
+
+## Cloud vs Local: Cost and Privacy Comparison
+
+Running object detection locally eliminates per-request API costs and keeps all data on-device. Here is how the economics compare:
+
+| Service | Cost / Notes |
+| --- | --- |
+| Google Cloud Vision object detection | $2.25 per 1,000 images (units 1,001–5,000,000/month) |
+| AWS Rekognition (DetectLabels) | $1.00 per 1,000 images (first 1M images/month) |
+| LocalMode detection | $0 with a ~4.5MB quantized model - one of the smallest models in the entire catalog |
+
+Google Cloud Vision object detection (Object Localization) costs $2.25 per 1,000 images for units 1,001–5,000,000 per month, dropping to $1.50 per 1,000 above that. AWS Rekognition (DetectLabels) costs $1.00 per 1,000 images for the first 1 million images, with lower rates at higher volumes. LocalMode detection costs $0 with a ~4.5MB quantized D-FINE nano model.
+
+The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
+
+## Available Providers
+
+- **Transformers.js** - ONNX-optimized models via ONNX Runtime Web. Supports both WebGPU and WASM backends. Broadest model catalog for non-LLM tasks.
+- **MediaPipe** - Google's MediaPipe Tasks (WASM + WebGL, no WebGPU). Includes EfficientDet-Lite0 (7.3MB, 80 COCO classes). Use `mediapipe.objectDetector()` with the same `detectObjects()` function.
+
+## AbortSignal Support
+
+All `detectObjects()` calls support cancellation through the standard `AbortSignal` API:
+
+```typescript
+const controller = new AbortController();
+
+const promise = detectObjects({
+  model,
+  image: imageFile,
+  abortSignal: controller.signal,
+});
+
+// Cancel if needed (e.g., user navigates away)
+controller.abort();
+```
+
+This is essential for responsive UIs - cancel in-flight operations when the user navigates away, submits a new query, or closes a dialog. The underlying model inference stops immediately, freeing memory and compute resources.
+
+## React Integration
+
+If you are building a React application, `@localmode/react` provides hooks that manage loading states, error handling, and cancellation automatically:
+
+```bash
+npm install @localmode/react
+```
+
+```typescript
+import { useDetectObjects } from '@localmode/react';
+```
+
+The hook returns `{ data, error, isLoading, execute, cancel, reset }` - providing everything a UI component needs to display progress, handle errors, offer cancellation, and reset state.
+
+## Related Pages
+
+- [Vision Models](/blog/models/vision-models) - model guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+This guide is based on LocalMode's source code (`packages/core/src/vision/detect-objects.ts`, `packages/transformers/src/implementations/object-detector.ts`, `packages/mediapipe/src/`, `packages/transformers/src/models.ts`) and official HuggingFace model cards. D-FINE architecture details and the expansion of its acronym ("Fine-grained Distribution Refinement") are drawn from the original arXiv paper (2410.13842). Cloud pricing figures are taken from the official pricing pages of Google Cloud and AWS as of May 2026 and are subject to change - verify current pricing with each provider before making cost decisions. Quality and performance comparisons are general guidance; benchmark with your own data for production use.
+
+## Sources
+
+- [LocalMode documentation](https://localmode.dev/docs)
+- [onnx-community/dfine_n_coco-ONNX on HuggingFace](https://huggingface.co/onnx-community/dfine_n_coco-ONNX) - quantized model files (4.48 MB int8, 15.3 MB fp32)
+- [ustc-community/dfine-nano-coco on HuggingFace](https://huggingface.co/ustc-community/dfine-nano-coco) - base model, 3.8M parameters
+- [D-FINE paper on arXiv (2410.13842)](https://arxiv.org/abs/2410.13842) - architecture, acronym expansion, COCO AP scores by variant
+- [D-FINE GitHub repository (Peterande/D-FINE)](https://github.com/Peterande/D-FINE) - D-FINE-N: 4M params, 42.8 AP on COCO val2017
+- [Xenova/detr-resnet-50 on HuggingFace](https://huggingface.co/Xenova/detr-resnet-50) - object detection, model.onnx 167 MB
+- [Google Cloud Vision API pricing](https://cloud.google.com/vision/pricing) - Object Localization: $2.25/1,000 units (1,001–5,000,000/month)
+- [AWS Rekognition pricing](https://aws.amazon.com/rekognition/pricing/) - DetectLabels: $1.00/1,000 images (first 1M/month)

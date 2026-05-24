@@ -87,7 +87,7 @@ export function DevToolsWidget({
   const panelStyle: CSSProperties = {
     ...s.panelContainer,
     ...positionStyles.panel,
-    width: '600px',
+    width: 'min(600px, calc(100vw - 32px))',
     height: `${panelHeight}px`,
     zIndex,
   };

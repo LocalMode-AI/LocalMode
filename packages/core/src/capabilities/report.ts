@@ -6,8 +6,13 @@
  * @packageDocumentation
  */
 
-import type { CapabilityReport, DeviceCapabilities } from './types.js';
+import type { CapabilityReport, DeviceCapabilities, LiveTranscribeCapability } from './types.js';
 import { detectCapabilities } from './detect.js';
+import {
+  isAudioWorkletSupported,
+  isMediaCaptureSupported,
+  isCrossOriginIsolated,
+} from './features.js';
 
 // ============================================================================
 // Report Generation
@@ -40,12 +45,23 @@ export async function createCapabilityReport(): Promise<CapabilityReport> {
   // Detect issues
   const issues = detectIssues(capabilities);
 
+  // Live transcription capability snapshot
+  const liveTranscribe: LiveTranscribeCapability = {
+    getUserMedia: isMediaCaptureSupported(),
+    audioWorklet: isAudioWorkletSupported(),
+    scriptProcessor:
+      typeof globalThis !== 'undefined' &&
+      typeof (globalThis as { ScriptProcessorNode?: unknown }).ScriptProcessorNode !== 'undefined',
+    crossOriginIsolated: isCrossOriginIsolated(),
+  };
+
   return {
     timestamp: new Date(),
     capabilities,
     scores,
     recommendations,
     issues,
+    liveTranscribe,
   };
 }
 

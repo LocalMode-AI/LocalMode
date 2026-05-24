@@ -4,6 +4,7 @@
  */
 'use client';
 
+import Link from 'next/link';
 import { useState, useRef } from 'react';
 import {
   Search,
@@ -36,7 +37,6 @@ import {
   cn,
   formatScore,
   formatRelativeTime,
-  getScoreColor,
   calculateRawStorageBytes,
   calculateQuantizedStorageBytes,
   calculatePQStorageBytes,
@@ -198,12 +198,12 @@ export function SearchView() {
         {/* Header */}
         <div className="h-14 min-h-14 border-b border-poster-border/20 flex items-center justify-between px-5 bg-poster-surface/60 backdrop-blur-xl">
           <div className="flex items-center gap-3">
-            <a
+            <Link
               href="/"
               className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-poster-surface-lighter/50 text-poster-text-sub hover:text-poster-text-main transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
-            </a>
+            </Link>
             <div className="w-px h-5 bg-poster-border/20" />
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-poster-primary/15 flex items-center justify-center ring-1 ring-poster-primary/30">
@@ -404,7 +404,7 @@ export function SearchView() {
                   </div>
 
                   <div className="rounded-lg bg-black/20 border border-poster-border/10 p-3 space-y-2">
-                    <div className="grid grid-cols-2 gap-2 text-[12px]">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12px]">
                       <div className="space-y-0.5">
                         <p className="text-poster-text-sub/50">Format</p>
                         <p className="font-medium text-poster-text-main">

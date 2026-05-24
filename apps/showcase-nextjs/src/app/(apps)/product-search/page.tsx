@@ -4,7 +4,9 @@
  */
 'use client';
 
-import { CatalogView } from './_components/catalog-view';
+import dynamic from 'next/dynamic';
+
+const CatalogView = dynamic(() => import('./_components/catalog-view').then((m) => ({ default: m.CatalogView })), { ssr: false });
 
 /** Product Search page component */
 export default function ProductSearchPage() {

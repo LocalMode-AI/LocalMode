@@ -1,9 +1,10 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { Navbar, NetworkMonitorScript } from './(home)/_components';
 import { DevTools } from './_components/devtools';
 import { SuppressOrtWarnings } from './_components/suppress-ort-warnings';
+import { SWRegistrar } from './_components/sw-registrar';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -34,6 +35,18 @@ export const metadata: Metadata = {
     description: 'Complete AI suite running 100% locally in your browser',
     type: 'website',
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'LocalMode',
+  },
+  icons: {
+    apple: '/icons/icon-192x192.png',
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#3b82f6',
 };
 
 export default function RootLayout({
@@ -47,6 +60,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}
       >
         <SuppressOrtWarnings />
+        <SWRegistrar />
         <NetworkMonitorScript />
         <Navbar />
         <main className="flex-1">{children}</main>

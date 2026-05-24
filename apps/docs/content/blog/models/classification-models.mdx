@@ -1,0 +1,125 @@
+---
+title: "Text Classification & Sentiment Models in the Browser"
+description: "DistilBERT and RoBERTa models for sentiment analysis, text classification, and zero-shot categorization in the browser."
+author: "LocalMode"
+date: "2026-03-31"
+---
+
+# Text Classification & Sentiment Models in the Browser
+
+DistilBERT and RoBERTa models for sentiment analysis, text classification, and zero-shot categorization in the browser.
+
+## Overview
+
+The Text Classification & Sentiment family is available through Transformers.js in LocalMode, with model sizes ranging from 21MB–297MB. The primary task for these models is **classification**, and they can be used with any application built on the LocalMode SDK.
+
+Running Text Classification & Sentiment models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+Text classification is the most practical entry point for browser AI - lightweight models that load in seconds and deliver immediate value. LocalMode's classification models cover two approaches: supervised classification (DistilBERT and RoBERTa fine-tuned on specific tasks) and zero-shot classification (MobileBERT and DeBERTa trained on natural language inference).
+
+For sentiment analysis, DistilBERT-SST2 (67MB) delivers fast binary positive/negative classification, while Twitter-RoBERTa (125MB) provides more nuanced three-class sentiment (positive/negative/neutral) trained on social media text. Both use the classify() function and return confidence scores.
+
+Zero-shot classification is more flexible: you define your own categories at runtime. MobileBERT-MNLI (21MB) is the fastest option - just 21MB, loading almost instantly - while DeBERTa-v3-xsmall (90MB) provides higher accuracy. Both take an array of candidate labels and return probability scores for each, without requiring any fine-tuning or labeled training data. This makes them perfect for content moderation, topic categorization, and intent detection.
+
+The practical advantage of dedicated classification models over LLM-based classification is significant. A classification model processes text in a single encoder forward pass - substantially faster than the autoregressive token-by-token generation an LLM requires for the same task. Classification models also return calibrated probability scores that can be thresholded for automated decisions - a critical requirement for content moderation and spam filtering pipelines. Combined with LocalMode's classification middleware for embedding models, you can build multi-stage classification systems where the first stage uses zero-shot for broad categorization and the second stage uses a fine-tuned model for precision.
+
+## Variant Comparison
+
+The following table lists every Text Classification & Sentiment variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Xenova/distilbert-base-uncased-finetuned-sst-2-english](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english) | Transformers.js | 67MB | Fast | Good | - | WASM |
+| [Xenova/twitter-roberta-base-sentiment-latest](https://huggingface.co/cardiffnlp/twitter-roberta-base-sentiment-latest) | Transformers.js | 125MB | Medium | High | - | WASM |
+| [Xenova/mobilebert-uncased-mnli](https://huggingface.co/typeform/mobilebert-uncased-mnli) | Transformers.js | 21MB | Fast | Basic | - | WASM |
+| [Xenova/nli-deberta-v3-xsmall](https://huggingface.co/cross-encoder/nli-deberta-v3-xsmall) | Transformers.js | 90MB | Medium | Good | - | WASM |
+| [Xenova/toxic-bert](https://huggingface.co/unitary/toxic-bert) | Transformers.js | 110MB | Medium | Good | - | WASM |
+| [onnx-community/ModernBERT-large-zeroshot-v2.0-ONNX](https://huggingface.co/onnx-community/ModernBERT-large-zeroshot-v2.0-ONNX) | Transformers.js | 297MB | Slow | High | - | WASM |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| Under 200MB | 5 | variants |
+| 200MB–500MB | 1 | variant |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All Text Classification & Sentiment variants use the same `ClassificationModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### Transformers.js
+
+Transformers.js runs ONNX-optimized models via ONNX Runtime Web. WebGPU acceleration where available, WASM fallback otherwise.
+
+```typescript
+import { classify } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english');
+
+const { label, score } = await classify({
+  model,
+  text: 'This is an excellent product.',
+});
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred model first, and fall back to a smaller variant if it fails to load.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+// Try the preferred model, fall back to a smaller one on failure
+let model;
+try {
+  model = transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english');
+} catch (error) {
+  console.warn('Primary model failed, using fallback:', error);
+  model = transformers.classifier('Xenova/toxic-bert');
+}
+```
+
+## When to Use Text Classification & Sentiment
+
+Text Classification & Sentiment models are a strong choice when:
+
+- **You need classification** - Text Classification & Sentiment is optimized for classification tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 1 provider (transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The 21MB–297MB range means you can target everything from mobile devices to high-end desktops with the same model family.
+
+
+## HuggingFace Model Cards
+
+- [distilbert-base-uncased-finetuned-sst-2-english](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english)
+- [twitter-roberta-base-sentiment-latest](https://huggingface.co/cardiffnlp/twitter-roberta-base-sentiment-latest)
+- [mobilebert-uncased-mnli](https://huggingface.co/typeform/mobilebert-uncased-mnli)
+- [nli-deberta-v3-xsmall](https://huggingface.co/cross-encoder/nli-deberta-v3-xsmall)
+- [toxic-bert](https://huggingface.co/unitary/toxic-bert)
+- [ModernBERT-large-zeroshot-v2.0-ONNX](https://huggingface.co/onnx-community/ModernBERT-large-zeroshot-v2.0-ONNX)
+
+
+
+## Methodology
+
+Model sizes on this page were verified by inspecting the ONNX file listings in each Xenova/onnx-community HuggingFace repository. Sizes reflect the quantized variant used by Transformers.js at runtime: int8/quantized for most models, q4f16 for MobileBERT-MNLI and ModernBERT-large. Architecture details (parameter counts, training datasets) were sourced from the original upstream model cards linked below. Speed and quality tiers are qualitative assessments based on parameter count and quantization; always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [Xenova/distilbert-base-uncased-finetuned-sst-2-english - ONNX file listing](https://huggingface.co/Xenova/distilbert-base-uncased-finetuned-sst-2-english/tree/main/onnx) (int8: 67.4 MB)
+- [distilbert/distilbert-base-uncased-finetuned-sst-2-english - base model card](https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english) (67M parameters, SST-2 accuracy 91.3%)
+- [Xenova/twitter-roberta-base-sentiment-latest - ONNX file listing](https://huggingface.co/Xenova/twitter-roberta-base-sentiment-latest/tree/main/onnx) (int8: 126 MB)
+- [cardiffnlp/twitter-roberta-base-sentiment-latest - base model card](https://huggingface.co/cardiffnlp/twitter-roberta-base-sentiment-latest) (RoBERTa-base, 3-class: Negative/Neutral/Positive)
+- [Xenova/mobilebert-uncased-mnli - ONNX file listing](https://huggingface.co/Xenova/mobilebert-uncased-mnli/tree/main/onnx) (q4f16: 21 MB)
+- [typeform/mobilebert-uncased-mnli - base model card](https://huggingface.co/typeform/mobilebert-uncased-mnli) (24.6M parameters, trained on MNLI)
+- [Xenova/nli-deberta-v3-xsmall - ONNX file listing](https://huggingface.co/Xenova/nli-deberta-v3-xsmall/tree/main/onnx) (int8: 90.4 MB)
+- [cross-encoder/nli-deberta-v3-xsmall - base model card](https://huggingface.co/cross-encoder/nli-deberta-v3-xsmall) (70.8M parameters, SNLI 91.64%, MultiNLI-mm 87.77%)
+- [Xenova/toxic-bert - ONNX file listing](https://huggingface.co/Xenova/toxic-bert/tree/main/onnx) (int8: 110 MB)
+- [unitary/toxic-bert - base model card](https://huggingface.co/unitary/toxic-bert) (100M parameters, 6-label multi-label toxicity)
+- [onnx-community/ModernBERT-large-zeroshot-v2.0-ONNX - ONNX file listing](https://huggingface.co/onnx-community/ModernBERT-large-zeroshot-v2.0-ONNX/tree/main/onnx) (q4f16: 297 MB)
+- [LocalMode transformers model catalog source](https://github.com/LocalMode-AI/LocalMode) (`packages/transformers/src/models.ts`)
+- [Transformers.js documentation](https://huggingface.co/docs/transformers.js)

@@ -1,0 +1,145 @@
+---
+title: "Named Entity Recognition (NER) in the Browser"
+description: "Extract named entities - people, organizations, locations, and more - from text automatically in the browser."
+author: "LocalMode"
+date: "2026-05-17"
+---
+
+# Named Entity Recognition (NER) in the Browser
+
+Extract named entities - people, organizations, locations, and more - from text automatically in the browser.
+
+## What Is Named Entity Recognition (NER)?
+
+Named entity recognition (NER) identifies and classifies proper nouns and specific terms in text into predefined categories: PER (person), ORG (organization), LOC (location), and MISC (miscellaneous). The model scans text token by token, using BIO tagging (Begin, Inside, Outside) to detect multi-word entities like "United States of America" as a single LOC entity.
+
+This capability is exposed through the `extractEntities()` function in `@localmode/core`. All processing runs entirely in the browser - no server, no API key, no data leaves the device. After the initial model download, named entity recognition (ner) works completely offline.
+
+## Real-World Applications
+
+Contract analysis to extract party names and locations. News article processing to identify mentioned companies and people. Resume parsing for candidate information. Medical record de-identification. Legal document entity linking.
+
+These use cases all benefit from local, on-device processing: user data stays private, there are no per-request API costs, and the application works without internet after initial setup.
+
+## Getting Started
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Import the core function and provider:
+
+```typescript
+import { extractEntities } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+```
+
+The recommended starting model is **Xenova/bert-base-NER** - it provides the best balance of quality, speed, and download size for most applications.
+
+## Code Example
+
+```typescript
+import { extractEntities } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.ner('Xenova/bert-base-NER');
+
+const { entities } = await extractEntities({
+  model,
+  text: 'Apple Inc. CEO Tim Cook announced new products at their Cupertino headquarters.',
+});
+
+// entities: [
+//   { text: 'Apple Inc.', type: 'ORG', start: 0, end: 10, score: 0.99 },
+//   { text: 'Tim Cook', type: 'PER', start: 15, end: 23, score: 0.98 },
+//   { text: 'Cupertino', type: 'LOC', start: 56, end: 65, score: 0.97 },
+// ]
+```
+
+This example demonstrates the core workflow: create a model instance from the provider, call the `extractEntities()` function with your input, and receive structured results. The `Entity` result shape is `{ text, type, start, end, score }`. Currently one provider supports NER: Transformers.js.
+
+## Available Models
+
+The following models support named entity recognition (ner) through LocalMode. Choose based on your target device, acceptable download size, and quality requirements.
+
+| Model | Provider | Size | Speed | Quality |
+| --- | --- | --- | --- | --- |
+| Xenova/bert-base-NER | Transformers.js | ~109MB (quantized) | Medium | Good |
+| Xenova/bert-base-multilingual-cased-ner-hrl | Transformers.js | ~178MB (quantized) | Medium | Good |
+
+`Xenova/bert-base-NER` supports PER, ORG, LOC, MISC (English only). `Xenova/bert-base-multilingual-cased-ner-hrl` supports PER, ORG, LOC across 10 languages (Arabic, German, English, Spanish, French, Italian, Latvian, Dutch, Portuguese, Chinese).
+
+**Choosing a model:** For most applications, start with the recommended model (`Xenova/bert-base-NER`). If download size is the primary constraint (e.g., mobile PWA, browser extension), pick the smallest model that meets your quality bar. If quality is the priority (e.g., enterprise search, content analysis), use the largest model your target devices can handle.
+
+## Cloud vs Local: Cost and Privacy Comparison
+
+Running named entity recognition (ner) locally eliminates per-request API costs and keeps all data on-device. Here is how the economics compare:
+
+| Service | Cost / Notes |
+| --- | --- |
+| LocalMode | runs BERT-NER entirely in the browser at $0 cost, processing sensitive documents without any data leaving the device - critical for legal, medical, and financial applications |
+
+Cloud NER services charge based on character volume, not per API call: AWS Comprehend bills at $0.0001 per 100-character unit (3-unit minimum per request); Google Cloud Natural Language bills at $0.001 per 1,000-character unit (first 5,000 units/month free). SpaCy NER requires a Python backend. LocalMode runs BERT-NER entirely in the browser at $0 cost, processing sensitive documents without any data leaving the device - critical for legal, medical, and financial applications.
+
+The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
+
+## Available Providers
+
+- **Transformers.js** - ONNX-optimized models via ONNX Runtime Web. Supports both WebGPU and WASM backends. Broadest model catalog for non-LLM tasks.
+
+## AbortSignal Support
+
+All `extractEntities()` calls support cancellation through the standard `AbortSignal` API:
+
+```typescript
+const controller = new AbortController();
+
+const promise = extractEntities({
+  model,
+  text: 'input text',
+  abortSignal: controller.signal,
+});
+
+// Cancel if needed (e.g., user navigates away)
+controller.abort();
+```
+
+This is essential for responsive UIs - cancel in-flight operations when the user navigates away, submits a new query, or closes a dialog. The underlying model inference stops immediately, freeing memory and compute resources.
+
+## React Integration
+
+If you are building a React application, `@localmode/react` provides hooks that manage loading states, error handling, and cancellation automatically:
+
+```bash
+npm install @localmode/react
+```
+
+```typescript
+import { useExtractEntities } from '@localmode/react';
+```
+
+The hook returns `{ data, error, isLoading, execute, cancel }` - providing everything a UI component needs to display progress, handle errors, and offer cancellation.
+
+## Related Pages
+
+- [Bert Ner Reranker](/blog/models/bert-ner-reranker) - model guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+This guide is based on LocalMode's source code and curated model catalog. Function signatures, entity type labels (`PER`, `ORG`, `LOC`, `MISC`), and the `Entity` result shape (`text`, `type`, `start`, `end`, `score`) were verified directly against `packages/core/src/classification/` and `packages/transformers/src/implementations/ner.ts`. Model sizes reflect the `model_quantized.onnx` file sizes from the HuggingFace repositories. Cloud pricing figures were taken from the official pricing pages of AWS Comprehend and Google Cloud Natural Language API as of May 2026 and are subject to change - verify current pricing with the provider before making cost decisions.
+
+## Sources
+
+- [LocalMode `packages/core/src/classification/extract-entities.ts`](https://github.com/LocalMode-AI/LocalMode) - `extractEntities()` function signature and retry logic
+- [LocalMode `packages/core/src/classification/types.ts`](https://github.com/LocalMode-AI/LocalMode) - `NERModel`, `Entity` interface (`text`, `type`, `start`, `end`, `score`), `useExtractEntities` hook
+- [LocalMode `packages/react/src/hooks/use-extract-entities.ts`](https://github.com/LocalMode-AI/LocalMode) - `useExtractEntities` hook
+- [Xenova/bert-base-NER on HuggingFace](https://huggingface.co/Xenova/bert-base-NER) - ONNX model files; base model is dslim/bert-base-NER
+- [dslim/bert-base-NER on HuggingFace](https://huggingface.co/dslim/bert-base-NER) - 110M parameters, CoNLL-2003 F1: 91.3 (test), entity types: PER, ORG, LOC, MISC
+- [Xenova/bert-base-multilingual-cased-ner-hrl on HuggingFace](https://huggingface.co/Xenova/bert-base-multilingual-cased-ner-hrl) - multilingual NER; base: Davlan/bert-base-multilingual-cased-ner-hrl
+- [Davlan/bert-base-multilingual-cased-ner-hrl on HuggingFace](https://huggingface.co/Davlan/bert-base-multilingual-cased-ner-hrl) - entity types: PER, ORG, LOC; 10 languages
+- [AWS Comprehend Pricing](https://aws.amazon.com/comprehend/pricing/) - NLP APIs billed at $0.0001 per 100-character unit
+- [Google Cloud Natural Language API Pricing](https://cloud.google.com/natural-language/pricing) - Entity Analysis billed at $0.001 per 1,000-character unit

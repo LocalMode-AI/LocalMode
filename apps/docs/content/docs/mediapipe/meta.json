@@ -1,0 +1,5 @@
+{
+  "title": "MediaPipe",
+  "icon": "Hand",
+  "pages": ["index", "hand-tracking", "pose-estimation", "face-detection", "gesture-recognition", "streaming", "audio", "text"]
+}

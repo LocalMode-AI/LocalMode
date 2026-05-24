@@ -162,26 +162,26 @@ export async function preloadModel(
       }
     : undefined;
 
-  // LLM models use @huggingface/transformers-v4 with different loading
+  // LLM models use different loading strategies
   const isLLMModel = modelId in TRANSFORMERS_LLM_MODELS;
   if (isLLMModel) {
-    const tjs4 = await import('@huggingface/transformers-v4');
+    const tjs = await import('@huggingface/transformers');
     const lower = modelId.toLowerCase();
     const isQwen35 = lower.includes('qwen3.5') || lower.includes('qwen3_5') || lower.includes('qwen35');
 
     if (isQwen35) {
       await Promise.all([
-        tjs4.AutoTokenizer.from_pretrained(modelId, {
+        tjs.AutoTokenizer.from_pretrained(modelId, {
           progress_callback: progressCallback,
         } as Record<string, unknown>),
-        tjs4.AutoModelForCausalLM.from_pretrained(modelId, {
+        tjs.AutoModelForCausalLM.from_pretrained(modelId, {
           dtype: { embed_tokens: 'q4', vision_encoder: 'q4', decoder_model_merged: 'q4' },
           device: 'webgpu',
           progress_callback: progressCallback,
         } as Record<string, unknown>),
       ]);
     } else {
-      await tjs4.pipeline('text-generation', modelId, {
+      await tjs.pipeline('text-generation', modelId, {
         device: 'webgpu',
         dtype: 'q4',
         progress_callback: progressCallback,
@@ -190,7 +190,7 @@ export async function preloadModel(
     return;
   }
 
-  // Create pipeline options - use type assertion as API may vary between versions
+  // Create pipeline options
   const pipelineOptions: Record<string, unknown> = {
     progress_callback: progressCallback,
   };

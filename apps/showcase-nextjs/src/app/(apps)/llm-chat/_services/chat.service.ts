@@ -1,8 +1,8 @@
 /**
  * @file chat.service.ts
- * @description Service for creating LLM chat models using @localmode/webllm
- * or @localmode/wllama, and semantic cache integration using
- * @localmode/core + @localmode/transformers.
+ * @description Service for creating LLM chat models using @localmode/webllm,
+ * @localmode/wllama, @localmode/transformers, or @localmode/litert, and
+ * semantic cache integration using @localmode/core + @localmode/transformers.
  *
  * Streaming, cancellation, and message state are now handled by `useChat`
  * from `@localmode/react`. This service only provides model instantiation
@@ -11,6 +11,7 @@
 import { webllm } from '@localmode/webllm';
 import { wllama, WLLAMA_MODELS } from '@localmode/wllama';
 import { transformers } from '@localmode/transformers';
+import { litert, LITERT_MODELS } from '@localmode/litert';
 import {
   createSemanticCache,
   semanticCacheMiddleware,
@@ -32,6 +33,10 @@ export function inferBackendFromModelId(modelId: string): ModelBackend {
   if (modelId.includes('onnx-community/') || modelId.includes('-ONNX') || modelId.includes('-onnx') || modelId.includes('onnx-web')) {
     return 'onnx';
   }
+  // Check litert catalog (Google's .litertlm models)
+  if (modelId in LITERT_MODELS) {
+    return 'litert';
+  }
   // Check wllama catalog
   if (modelId in WLLAMA_MODELS) {
     return 'wasm';
@@ -43,7 +48,7 @@ export function inferBackendFromModelId(modelId: string): ModelBackend {
  * Create a LanguageModel instance for the given model ID and backend.
  *
  * @param modelId - The model ID to instantiate
- * @param backend - The inference backend ('webgpu' for WebLLM, 'wasm' for wllama, 'onnx' for TJS v4)
+ * @param backend - The inference backend ('webgpu' for WebLLM, 'wasm' for wllama, 'onnx' for TJS v4, 'litert' for Google LiteRT-LM)
  * @returns A LanguageModel compatible with `@localmode/react` `useChat`
  */
 export function createChatModel(modelId: string, backend: ModelBackend = 'webgpu'): LanguageModel {
@@ -52,6 +57,9 @@ export function createChatModel(modelId: string, backend: ModelBackend = 'webgpu
   }
   if (backend === 'wasm') {
     return wllama.languageModel(modelId);
+  }
+  if (backend === 'litert') {
+    return litert.languageModel(modelId);
   }
   return webllm.languageModel(modelId);
 }

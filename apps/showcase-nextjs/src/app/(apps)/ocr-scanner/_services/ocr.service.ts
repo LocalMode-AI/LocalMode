@@ -1,16 +1,19 @@
 /**
  * @file ocr.service.ts
- * @description Service providing the OCR model instance for @localmode/react hooks
+ * @description Service providing OCR model instances for @localmode/react hooks.
+ * Supports both TrOCR (TJS v3) and generative OCR models (TJS v4).
  */
 import { transformers } from '@localmode/transformers';
-import { MODEL_ID } from '../_lib/constants';
+import type { OCRModel } from '@localmode/core';
 
-let model: ReturnType<typeof transformers.ocr> | null = null;
+const modelCache = new Map<string, OCRModel>();
 
-/** Returns a lazily-initialised OCR model singleton */
-export function getOCRModel() {
+/** Returns a lazily-cached OCR model for the given model ID */
+export function getOCRModel(modelId: string) {
+  let model = modelCache.get(modelId);
   if (!model) {
-    model = transformers.ocr(MODEL_ID);
+    model = transformers.ocr(modelId);
+    modelCache.set(modelId, model);
   }
   return model;
 }

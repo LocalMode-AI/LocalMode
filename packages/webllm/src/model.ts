@@ -61,23 +61,46 @@ export class WebLLMLanguageModel implements LanguageModel {
     }
 
     this.loadPromise = (async () => {
-      const { CreateMLCEngine } = await import('@mlc-ai/web-llm');
+      try {
+        const { CreateMLCEngine, prebuiltAppConfig } = await import('@mlc-ai/web-llm');
+        const cacheBackend = this.settings.cacheBackend ??
+          (this.settings.useIndexedDBCache ? 'indexeddb' : undefined);
+        const appConfig = this.settings.appConfig ??
+          (cacheBackend
+            ? {
+                ...prebuiltAppConfig,
+                cacheBackend,
+                // WebLLM <=0.2.82 used this field. Keeping it is harmless and
+                // preserves behavior if users pin an older compatible version.
+                useIndexedDBCache: cacheBackend === 'indexeddb',
+              }
+            : undefined);
 
-      const engine = await CreateMLCEngine(this.baseModelId, {
-        initProgressCallback: (report) => {
-          if (this.settings.onProgress) {
-            const progress: WebLLMLoadProgress = {
-              status: report.progress === 1 ? 'done' : 'progress',
-              progress: report.progress * 100,
-              text: report.text,
-            };
-            this.settings.onProgress(progress);
-          }
-        },
-      });
+        let loadProgress = 0;
+        const engine = await CreateMLCEngine(this.baseModelId, {
+          ...(appConfig ? { appConfig } : {}),
+          initProgressCallback: (report) => {
+            loadProgress = report.progress;
+            if (this.settings.onProgress) {
+              const progress: WebLLMLoadProgress = {
+                status: report.progress === 1 ? 'done' : 'progress',
+                progress: report.progress * 100,
+                text: report.text,
+              };
+              this.settings.onProgress(progress);
+            }
+          },
+        });
+        if (loadProgress < 1 && typeof engine.reload === 'function') {
+          await engine.reload(this.baseModelId);
+        }
 
-      this.engine = engine;
-      return engine;
+        this.engine = engine;
+        return engine;
+      } catch (error) {
+        this.loadPromise = null;
+        throw error;
+      }
     })();
 
     return this.loadPromise;
@@ -128,7 +151,7 @@ export class WebLLMLanguageModel implements LanguageModel {
     for (const part of content) {
       if (part.type === 'text') {
         parts.push({ type: 'text', text: part.text });
-      } else {
+      } else if (part.type === 'image') {
         const dataUrl = `data:${part.mimeType};base64,${part.data}`;
         const processedUrl = await this.preprocessImage(dataUrl);
         parts.push({
@@ -136,6 +159,8 @@ export class WebLLMLanguageModel implements LanguageModel {
           image_url: { url: processedUrl },
         });
       }
+      // AudioPart and other unsupported types are silently skipped —
+      // WebLLM models do not support audio input.
     }
     return parts;
   }

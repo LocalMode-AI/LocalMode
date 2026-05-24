@@ -1,0 +1,99 @@
+---
+title: "IndexedDB Storage vs Dexie.js"
+description: "Comparing LocalMode's built-in IndexedDB storage with the Dexie.js adapter for VectorDB persistence."
+author: "LocalMode"
+date: "2026-04-07"
+---
+
+# IndexedDB Storage vs Dexie.js
+
+Comparing LocalMode's built-in IndexedDB storage with the Dexie.js adapter for VectorDB persistence.
+
+## Overview
+
+This comparison examines the key differences between **IndexedDBStorage (built-in)** ([https://localmode.dev/docs/core/storage](https://localmode.dev/docs/core/storage)) and **DexieStorage (@localmode/dexie)** ([https://localmode.dev/docs/dexie](https://localmode.dev/docs/dexie)) for building AI-powered applications. Both approaches have their strengths - the right choice depends on your specific requirements around privacy, cost, performance, and target platforms.
+
+Understanding these trade-offs is essential for architects and developers evaluating local-first AI versus alternative approaches. The comparison below covers 8 dimensions, from runtime characteristics to model quality and developer experience.
+
+## Feature-by-Feature Comparison
+
+| Dimension | IndexedDBStorage (built-in) | DexieStorage (@localmode/dexie) |
+| --- | --- | --- |
+| **Dependencies** | Zero dependencies. Built into @localmode/core. | Requires @localmode/dexie (~3.4KB adapter) plus the dexie.js peer dependency (~95KB minified / ~31KB gzip). |
+| **API Ergonomics** | Basic key-value operations. Sufficient for VectorDB storage. | Rich query API with schema versioning, compound indices, and transactions. |
+| **Schema Migrations** | Manual migration handling via core's migration system. | Dexie's built-in schema versioning with upgrade functions. |
+| **Performance** | Direct IndexedDB calls. Minimal overhead. | Thin wrapper. Negligible overhead vs direct IndexedDB for typical VectorDB workloads. |
+| **Transactions** | Basic transaction support via IndexedDB native API. | Full transaction support with automatic rollback and error handling. |
+| **Bundle Size** | 0KB extra (included in @localmode/core). | ~3.4KB for the @localmode/dexie adapter (ESM, minified) + dexie.js (~95KB minified / ~31KB gzip). |
+| **Use Case** | Simple apps. When you don't want any extra dependencies. | Complex apps with multiple stores, schema evolution, and advanced queries. |
+| **Ecosystem** | No additional ecosystem. Plain IndexedDB. | Dexie ecosystem: dexie-cloud (sync), dexie-export, community plugins. |
+
+## Verdict
+
+Start with IndexedDBStorage (built-in, zero dependencies). Switch to DexieStorage when you need schema versioning across app updates, when you want Dexie's query API for non-vector data alongside your VectorDB, or when you're already using Dexie in your application. Both implement the same Storage interface, so switching is a one-line change. For most LocalMode applications focused on vector search, the built-in storage is sufficient.
+
+### Summary
+
+When evaluating IndexedDBStorage (built-in) against DexieStorage (@localmode/dexie), consider your primary constraints:
+
+- **Privacy requirements** - If user data must never leave the device, solutions that process everything locally have an inherent architectural advantage.
+- **Cost at scale** - Per-request pricing models become expensive as user counts grow. Local inference shifts the cost to a one-time model download per user.
+- **Target platforms** - Browser-based solutions work on any device with a modern browser. Desktop and server-based solutions may require additional installation steps.
+- **Model quality needs** - For tasks where the absolute highest quality matters (complex multi-step reasoning, creative writing), larger server-side or cloud models still have an edge. For the majority of practical tasks (embeddings, classification, summarization, simple generation), the quality gap has narrowed significantly.
+- **Offline requirements** - Applications that must work without internet need local inference. Cloud-dependent solutions fail when connectivity drops.
+
+
+
+## Frequently Asked Questions
+
+### Can I switch between them without losing data?
+
+No - they use different IndexedDB database structures. Switching requires re-indexing your vectors. However, the vector data itself is generated from your source documents, so re-indexing is typically straightforward with the ingest() function.
+
+### What about idb and localForage adapters?
+
+LocalMode also offers @localmode/idb (~3KB, minimal wrapper) and @localmode/localforage (~10KB, auto-fallback to WebSQL/localStorage). Use idb for minimal overhead, localforage for maximum browser compatibility including very old browsers.
+
+### Does storage choice affect VectorDB performance?
+
+Minimally. The HNSW index and vector operations are the bottleneck, not the storage layer. Storage read/write latency is negligible compared to HNSW graph traversal and model inference. Choose based on features, not performance.
+
+## Making the Decision
+
+For many teams, the answer is not either/or. A hybrid architecture uses local inference for high-volume, low-complexity tasks (embeddings, classification, NER, simple generation) at zero marginal cost, and routes the small percentage of requests that genuinely need frontier-quality reasoning to a cloud provider. A plain try/catch makes this pattern straightforward to implement:
+
+```typescript
+import { streamText } from '@localmode/core';
+
+// Try the local model first (free, private, fast)
+// Fall back to a cloud call only if local inference fails
+async function generate(prompt: string) {
+  try {
+    return await streamText({ model: localModel, prompt });
+  } catch (error) {
+    console.warn('Local inference failed, escalating to cloud:', error);
+    return await callCloudProvider(prompt);
+  }
+}
+```
+
+This approach gives you the best of both worlds: the privacy and cost benefits of local inference for the 90% of requests that don't need frontier quality, and the option to escalate to cloud APIs for the remaining 10%.
+
+## Related Pages
+
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+- [Dexie Vs Idb Vs Localforage](/blog/compare/dexie-vs-idb-vs-localforage) - comparison guide
+
+## Methodology
+
+Feature claims about LocalMode's `IndexedDBStorage` and `DexieStorage` were verified directly against the source code (`packages/core/src/storage/indexeddb.ts` and `packages/dexie/src/storage.ts`) and the built dist artifacts. The `@localmode/dexie` adapter bundle size (~3.4KB ESM) was measured from the compiled `dist/index.js`. Dexie.js bundle sizes (minified ~95KB, gzip ~31KB) were retrieved from the Bundlephobia API for dexie@4.3.0, which is the version pinned in `packages/dexie/package.json`. Performance comparisons are qualitative; no specific benchmark figures are claimed. Verify current sizes with each tool's registry page before making decisions.
+
+## Sources
+
+- [LocalMode @localmode/dexie source - packages/dexie/src/storage.ts](https://github.com/LocalMode-AI/LocalMode)
+- [LocalMode IndexedDBStorage source - packages/core/src/storage/indexeddb.ts](https://github.com/LocalMode-AI/LocalMode)
+- [Bundlephobia - dexie@4.3.0 bundle size (~95KB minified / ~31KB gzip)](https://bundlephobia.com/package/dexie@4.3.0)
+- [dexie on npm - version history and latest release](https://www.npmjs.com/package/dexie)
+- [Dexie.js GitHub releases - v4.4.2 (latest as of March 2026)](https://github.com/dexie/Dexie.js/releases)
+- [MDN - IndexedDB API](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API)
+- [Can I Use - IndexedDB (~96% global browser support)](https://caniuse.com/indexeddb)

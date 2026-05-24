@@ -11,12 +11,14 @@
 export { createChromeAI, chromeAI } from './provider.js';
 
 // Implementations
+export { ChromeAILanguageModel } from './implementations/language-model.js';
 export { ChromeAISummarizer } from './implementations/summarizer.js';
 export { ChromeAITranslator } from './implementations/translator.js';
 
 // Utilities
 export {
   isChromeAISupported,
+  isPromptAPISupported,
   isSummarizerAPISupported,
   isTranslatorAPISupported,
 } from './utils.js';
@@ -25,8 +27,14 @@ export {
 export type {
   ChromeAIProvider,
   ChromeAIProviderSettings,
+  ChromeAILanguageModelSettings,
   ChromeAISummarizerSettings,
   ChromeAITranslatorSettings,
+  AILanguageModel,
+  AILanguageModelAvailability,
+  AILanguageModelCreateOptions,
+  AILanguageModelFactory,
+  AILanguageModelPromptOptions,
   AISummarizer,
   AISummarizerFactory,
   AISummarizerCapabilities,

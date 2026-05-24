@@ -96,7 +96,7 @@ console.log(`Created ${chunks.length} chunks`);
 // Each chunk: { text, start, end, index }
 ```
 
-The `recursive` strategy splits on paragraph breaks first, then sentences, then words - preserving natural boundaries. LocalMode also provides `markdown`, `code`, `sentence`, and `semantic` strategies. The semantic chunker uses embedding similarity to detect topic boundaries, producing higher-quality chunks at the cost of an extra embedding pass.
+The `recursive` strategy splits on paragraph breaks first, then sentences, then words - preserving natural boundaries. LocalMode also provides `markdown`, `code`, and `sentence` strategies via `chunk()`. For topic-boundary detection, use `semanticChunk()` directly - it uses embedding similarity to detect natural topic shifts, producing higher-quality chunks at the cost of an extra embedding pass.
 
 <Callout type="info" title="Choosing a chunk size">
   For BGE-small-en-v1.5 (512-token context), a chunk size of 400-512 characters works well. Overlap of 50 characters ensures context is not lost at boundaries. The [PDF Search](https://localmode.ai/pdf-search) demo defaults to 512 with 50 overlap.
@@ -218,20 +218,21 @@ const reranked = await rerank({
   documents: results.map((r) => r.text ?? ''),
   topK: 3,
 });
-// reranked.results: [{ index, score, document }]
+// reranked.results: [{ index, score, text }]
 ```
 
 ---
 
 ## Step 6: Generate an Answer with a Local LLM
 
-Now feed the retrieved context to a language model running entirely in the browser. LocalMode supports three LLM providers - all using the same `streamText` function:
+Now feed the retrieved context to a language model running entirely in the browser. LocalMode supports four LLM providers - all using the same `streamText` function:
 
 | Provider | Engine | Best For | Example Model |
 |----------|--------|----------|---------------|
 | `@localmode/webllm` | WebGPU | Fastest inference, modern browsers | Llama 3.2 1B (712MB) |
-| `@localmode/wllama` | WASM (llama.cpp) | Universal browser support, 135K+ GGUF models | Llama 3.2 1B Q4_K_M |
-| `@localmode/transformers` | ONNX | Lightweight tasks, 15 curated models | Qwen 2.5 0.5B |
+| `@localmode/wllama` | WASM (llama.cpp) | Universal browser support, 160K+ GGUF models | Llama 3.2 1B Q4_K_M |
+| `@localmode/transformers` | ONNX | Lightweight tasks, 16 curated models | Qwen3 0.6B (ONNX) |
+| `@localmode/litert` | LiteRT-LM (WebGPU + WASM) | Google's on-device engine, early preview | Qwen3 0.6B (.litertlm) |
 
 Here is the complete RAG answer generation with streaming:
 
@@ -332,7 +333,7 @@ All measurements from Chrome 125 on an M2 MacBook Air (8GB RAM).
 | Vector search | HNSW (IndexedDB) | - | - | &lt;5ms for 10K vectors |
 | LLM (WebGPU) | Qwen 3 1.7B q4f16 | ~1.1GB | ~8-12s | ~30 tokens/s |
 | LLM (WebGPU) | Llama 3.2 1B q4f16 | ~712MB | ~5-8s | ~40 tokens/s |
-| LLM (WASM) | Llama 3.2 1B Q4_K_M | ~712MB | ~6-10s | ~8-12 tokens/s |
+| LLM (WASM) | Llama 3.2 1B Q4_K_M | ~750MB | ~6-10s | ~8-12 tokens/s |
 
 Models are cached in the browser after the first download. Subsequent visits load from cache with near-instant startup for the embedding model and a few seconds for LLMs.
 
@@ -356,16 +357,17 @@ For regulated industries (healthcare, legal, finance), browser-local RAG elimina
 
 ## Methodology
 
-Model specifications and benchmark scores referenced in this post:
+All LocalMode API names, function signatures, option shapes, and model IDs in this post were verified directly against the codebase (`packages/core/src/`, `packages/pdfjs/src/`, `packages/webllm/src/`, `packages/wllama/src/`, `packages/transformers/src/`). Model benchmark scores and parameter counts were verified against primary HuggingFace model cards fetched during authorship. Performance measurements (cold start, tokens/s, memory) are from internal testing on Chrome 125 / macOS with an Apple M2 chip; results vary by device, browser, and concurrent workload.
 
-- [BAAI/bge-small-en-v1.5 - HuggingFace model card](https://huggingface.co/BAAI/bge-small-en-v1.5): 33.4M parameters, 384 dimensions, 62.17 MTEB average (56 tasks), 51.68 retrieval average (15 tasks)
-- [Qwen3-1.7B - HuggingFace model card](https://huggingface.co/Qwen/Qwen3-1.7B): 1.7B parameters (1.4B non-embedding), 32K native context, dual thinking/non-thinking modes
-- [Llama 3.2 1B - Meta AI blog](https://ai.meta.com/blog/llama-3-2-connect-2024-vision-edge-mobile-devices/): 1.24B parameters, 128K context, pruned and distilled from larger Llama models
-- [MTEB benchmark](https://huggingface.co/spaces/mteb/leaderboard): Massive Text Embedding Benchmark across retrieval, classification, clustering, STS, and reranking tasks
+## Sources
+
+- [BAAI/bge-small-en-v1.5 - HuggingFace model card](https://huggingface.co/BAAI/bge-small-en-v1.5): 33.4M parameters, 384 dimensions, 512-token sequence length, 62.17 MTEB average (56 tasks), 51.68 retrieval average (15 tasks)
 - [Xenova/bge-small-en-v1.5 - ONNX quantized](https://huggingface.co/Xenova/bge-small-en-v1.5): Transformers.js-compatible ONNX export used by `@localmode/transformers`
+- [Qwen3-1.7B - HuggingFace model card](https://huggingface.co/Qwen/Qwen3-1.7B): 1.7B parameters (1.4B non-embedding), dual thinking/non-thinking modes
+- [Llama 3.2 1B - Meta AI blog](https://ai.meta.com/blog/llama-3-2-connect-2024-vision-edge-mobile-devices/): 1.24B parameters, 128K context, pruned and distilled from larger Llama models
+- [MTEB leaderboard](https://huggingface.co/spaces/mteb/leaderboard): Massive Text Embedding Benchmark across retrieval, classification, clustering, STS, and reranking tasks
 - [Qwen3 announcement - Qwen blog](https://qwenlm.github.io/blog/qwen3/): Architecture details and benchmark results for the Qwen 3 model family
-
-Performance measurements (cold start, tokens/s, memory) are from internal testing on Chrome 125 / macOS with an Apple M2 chip. Results vary by device, browser, and concurrent workload.
+- [bartowski/Llama-3.2-1B-Instruct-GGUF - HuggingFace](https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF): Q4_K_M quantized GGUF used by `@localmode/wllama`
 
 ---
 

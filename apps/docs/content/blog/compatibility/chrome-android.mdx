@@ -1,0 +1,131 @@
+---
+title: "Chrome on Android"
+description: "Mobile browser AI with Chrome Android - WebGPU on some devices, WASM everywhere, with memory constraints."
+author: "LocalMode"
+date: "2026-04-26"
+---
+
+# Chrome on Android
+
+Mobile browser AI with Chrome Android - WebGPU on some devices, WASM everywhere, with memory constraints.
+
+*Category: Browser Compatibility*
+
+## Feature Support Matrix
+
+The following table summarizes which web platform features are available on Chrome on Android and how they affect LocalMode's capabilities. Features marked as supported enable full functionality; partial or unsupported features trigger automatic fallbacks.
+
+| Feature | Supported | Notes |
+| --- | --- | --- |
+| **WebGPU** | Chrome 121+ (device-dependent) | WebGPU enabled by default on Android 12+ with Qualcomm or ARM GPUs. Requires Vulkan 1.1+. Support expanded to additional devices in subsequent releases. |
+| **WebAssembly** | Yes | Full WASM + SIMD support. Primary inference path for mobile. |
+| **IndexedDB** | Yes | Full support. Chrome grants up to 60% of total disk size per origin (based on total capacity, not free space). |
+| **Memory Limit** | Constrained | Android Chrome tab memory varies: 1-3GB depending on device RAM (4-12GB total). |
+| **Web Workers** | Yes | Full support including module workers on Chrome 80+. |
+| **Background Execution** | Limited | Android aggressively kills background tabs. Model loading may fail if user switches apps. |
+
+## Understanding the Impact
+
+Each feature in the matrix above maps to specific LocalMode capabilities:
+
+- **WebGPU** - Required for `@localmode/webllm` (GPU-accelerated LLM inference at 30-90 tokens/second). When unavailable, use `@localmode/wllama` (WASM, 5-20 tokens/second) as a fallback. Non-LLM tasks (embeddings, classification, vision, audio) do not require WebGPU.
+- **WebAssembly** - The universal inference backend. Required for `@localmode/transformers` and `@localmode/wllama`. WASM is supported in 97%+ of web traffic. SIMD support (for optimized vector operations) requires newer browser versions.
+- **IndexedDB** - Used for persistent vector storage (`VectorDB`) and model caching (`createModelLoader`). When blocked (Safari Private Browsing), LocalMode falls back to `MemoryStorage` (data lost on tab close).
+- **Web Workers** - Enable background model loading and inference without blocking the main UI thread. Module workers (for ES module imports in workers) require newer browser versions.
+- **SharedArrayBuffer** - Enables multi-threaded WASM inference for improved performance. Requires Cross-Origin Isolation headers (COOP/COEP). Not required for basic functionality.
+- **Web Locks** - Used for cross-tab model loading coordination (prevents multiple tabs from downloading the same model simultaneously). Falls back to `InMemoryLockManager` when unavailable.
+- **BroadcastChannel** - Used for cross-tab VectorDB synchronization. Falls back to `LocalStorageBroadcaster` when unavailable.
+
+## Fallback Strategies
+
+Mobile Android is highly variable. High-end phones (8GB+ RAM, recent Snapdragon/MediaTek) can run models up to ~1.5GB. Mid-range phones (4-6GB RAM) should stick to models under 500MB. Low-end phones (2-3GB RAM) are limited to tiny models (SmolLM2-135M, D-FINE at 5MB). Use detectCapabilities() to detect hardware and recommendModels() to select appropriate models. Always have a fallback to the smallest model.
+
+LocalMode is designed with progressive enhancement in mind. The core principle: detect capabilities at runtime and use the best available path. The `@localmode/core` package exports detection utilities for this purpose:
+
+```typescript
+import {
+  isWebGPUSupported,
+  isIndexedDBSupported,
+  isCrossOriginIsolated,
+  detectCapabilities,
+  recommendModels,
+} from '@localmode/core';
+
+async function detectAndConfigure() {
+  const caps = await detectCapabilities();
+  console.log(caps);
+  // caps.features.webgpu, caps.hardware.memory (GB), caps.storage.availableBytes
+
+  // isWebGPUSupported() is async - it must be awaited
+  if (await isWebGPUSupported()) {
+    // Use @localmode/webllm for GPU-accelerated inference
+  }
+
+  // recommendModels() is synchronous: capabilities first, options second
+  const recommendations = recommendModels(caps, {
+    task: 'generation',
+    maxSizeMB: 1500,
+  });
+}
+```
+
+
+
+## Recommended Providers
+
+For Chrome on Android, the recommended LocalMode providers are:
+
+- **wllama (WASM)** - Universal LLM inference via WASM. Works without WebGPU. The safe choice for broad compatibility.
+- **Transformers.js** - Broadest model catalog for non-LLM tasks (embeddings, classification, vision, audio). WASM-based, works everywhere.
+
+## Recommended Models
+
+The following models are tested and recommended for Chrome on Android:
+
+| Model | Provider |
+| --- | --- |
+| SmolLM2-360M-Instruct-Q4_K_M | wllama (WASM) |
+| Xenova/bge-small-en-v1.5 | Transformers.js |
+| onnx-community/dfine_n_coco-ONNX | Transformers.js |
+
+These models are chosen for their compatibility with Chrome on Android's capabilities and constraints. They represent the best balance of quality, size, and performance for this platform.
+
+## Known Issues
+
+Background tab killing by Android OOM killer can interrupt model downloads. Use chunked downloads with resume (built into createModelLoader). Battery impact: sustained inference will drain battery. Models above 2GB may cause Chrome to crash on 4GB RAM devices.
+
+### Mitigation Strategies
+
+When building applications that target Chrome on Android, follow these practices:
+
+1. **Always detect before loading** - Use `await isWebGPUSupported()`, `isIndexedDBSupported()`, and `await detectCapabilities()` before attempting to load models or create storage. Never assume a feature is available.
+2. **Wrap model loading in try/catch** - Even when detection succeeds, model loading can fail due to memory pressure, network issues, or browser bugs. Always have a fallback path that attempts a smaller model.
+3. **Pick models with `recommendModels()`** - Pass the detected capabilities to `recommendModels(caps, { task })` to select a model appropriate for the current device. It is the recommended pattern for production deployments.
+4. **Test on real hardware** - Browser DevTools device emulation does not accurately simulate memory limits, GPU capabilities, or storage quotas. Test on actual Android devices.
+5. **Monitor storage quota** - Use `getStorageQuota()` to check available space before downloading large models. Inform users if storage is insufficient rather than failing silently.
+
+## Web Standards References
+
+- [Chrome Android Feature Support](https://developer.chrome.com/docs/multidevice/android/)
+
+## Related Pages
+
+- [Chrome Desktop](/blog/compatibility/chrome-desktop) - compatibility guide
+- [Low Memory Devices](/blog/compatibility/low-memory-devices) - compatibility guide
+- [Smollm2](/blog/models/smollm2) - model guide
+
+## Methodology
+
+Browser feature support data on this page is sourced from MDN Web Docs, caniuse.com, and official Chrome developer documentation (developer.chrome.com), cross-referenced with LocalMode's runtime feature detection (`packages/core/src/capabilities/features.ts`). Browser version numbers reflect the point at which each feature shipped enabled by default, verified against Chrome Platform Status entries and Chrome release blog posts. Storage quota figures are taken directly from MDN's Storage API documentation and the web.dev storage guide. Browser support evolves - verify current support with the linked references for production decisions. Data current as of May 2026.
+
+## Sources
+
+- [What's New in WebGPU (Chrome 121) - WebGPU enabled on Android](https://developer.chrome.com/blog/new-in-webgpu-121) - confirms Chrome 121, Android 12+, Qualcomm/ARM GPUs
+- [Chrome ships WebGPU (Chrome 113, desktop)](https://developer.chrome.com/blog/webgpu-release) - desktop WebGPU launch reference
+- [WebGPU on Android - Chrome Platform Status](https://chromestatus.com/feature/5119617865613312)
+- [Storage quotas and eviction criteria - MDN](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria) - Chrome: 60% of total disk size
+- [Storage for the web - web.dev](https://web.dev/storage-for-the-web/) - confirms 60% of total disk, not free space
+- [Worker() constructor: ECMAScript modules support - caniuse](https://caniuse.com/mdn-api_worker_worker_ecmascript_modules) - module workers Chrome 80+
+- [ES Modules for dedicated workers - Chrome Platform Status](https://chromestatus.com/feature/5761300827209728)
+- [New in Chrome 80 - module workers](https://developer.chrome.com/blog/new-in-chrome-80)
+- LocalMode capability detection source (`packages/core/src/capabilities/features.ts`)

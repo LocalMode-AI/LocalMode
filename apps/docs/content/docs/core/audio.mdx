@@ -17,6 +17,10 @@ Transcribe speech to text and synthesize speech from text, entirely in the brows
 
 ## transcribe()
 
+<Callout type="info" title="Real-time transcription">
+  For streaming microphone-driven speech-to-text with VAD, push-to-talk, open-mic, and conversational voice loops, see [`createLiveTranscriber()` and `createTurnTaker()`](/docs/core/live-transcribe).
+</Callout>
+
 Transcribe audio to text using a speech-to-text model:
 
 <Tabs items={['Basic Usage', 'With Timestamps', 'With AbortSignal']}>
@@ -201,12 +205,18 @@ const { text: englishText } = await transcribe({
 
 ## synthesizeSpeech()
 
-Synthesize speech from text using a text-to-speech model:
+<Callout type="info" title="Streaming synthesis">
+  For real-time voice loops where users need to hear the first words while later clauses are still synthesizing, use [`streamSynthesizeSpeech()` and `playStreamedSpeech()`](/docs/core/streaming-speech) instead. They yield clause-by-clause `Float32Array` audio and play it gap-free on a Web Audio queue.
+</Callout>
+
+Synthesize speech from text using a text-to-speech model.
+
+When a Kokoro model ID is used, the Transformers provider automatically activates **phonemizer-backed synthesis** with 29 named voices across 2 English dialects (EN-US, EN-GB) and speed control. Pass a `voice` ID (e.g. `'af_heart'`, `'bf_emma'`, `'am_michael'`) and an optional `speed` multiplier to control output.
 
 <Tabs items={['Basic Usage', 'With Options', 'With AbortSignal']}>
 <Tab value="Basic Usage">
 
-```ts {5-8}
+```ts {5-10}
 import { synthesizeSpeech } from '@localmode/core';
 import { transformers } from '@localmode/transformers';
 
@@ -215,6 +225,8 @@ const model = transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX');
 const { audio, sampleRate, usage } = await synthesizeSpeech({
   model,
   text: 'Hello, how are you today?',
+  voice: 'af_heart',
+  speed: 1.0,
 });
 
 // Play the audio
@@ -287,7 +299,7 @@ try {
       required: true,
     },
     voice: {
-      description: 'Voice ID to use for synthesis',
+      description: "Voice ID to use for synthesis — Kokoro provides 29 English voices (e.g. 'af_heart', 'bf_emma', 'am_michael')",
       type: 'string',
       required: false,
     },
@@ -406,7 +418,7 @@ import type { TextToSpeechModel, DoSynthesizeOptions, DoSynthesizeResult } from 
 class MyTextToSpeech implements TextToSpeechModel {
   readonly modelId = 'custom:my-tts';
   readonly provider = 'custom';
-  readonly voices = ['default', 'narrator'];
+  readonly voices = ['af_heart', 'bf_emma', 'am_michael'];
 
   async doSynthesize(options: DoSynthesizeOptions): Promise<DoSynthesizeResult> {
     const { text, voice, speed, abortSignal } = options;
@@ -450,6 +462,16 @@ class MyTextToSpeech implements TextToSpeechModel {
     title="Text Generation"
     href="/docs/core/generation"
     description="Generate and stream text with language models."
+  />
+  <Card
+    title="Streaming Speech"
+    href="/docs/core/streaming-speech"
+    description="Stream TTS clause-by-clause for low first-audio latency."
+  />
+  <Card
+    title="Live Transcribe"
+    href="/docs/core/live-transcribe"
+    description="Streaming microphone STT with VAD, push-to-talk, and voice loops."
   />
   <Card
     title="Middleware"

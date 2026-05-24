@@ -56,7 +56,7 @@ export class TransformersRerankerModel implements RerankerModel {
       // Rerankers use text-classification pipeline with special input format
       const pipe = await pipeline('text-classification', this.baseModelId, {
         device: this.settings.device ?? 'auto',
-        dtype: this.settings.quantized === true ? 'q8' : undefined,
+        dtype: this.settings.quantized === true ? 'q8' : 'fp32',
         progress_callback: this.settings.onProgress,
       });
 

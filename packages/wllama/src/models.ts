@@ -36,6 +36,16 @@ export interface WllamaModelEntry {
 
   /** Approximate parameter count */
   parameterCount: number;
+
+  /**
+   * Set to `true` for vision-language GGUFs (multimodal text+image).
+   *
+   * Mirrors the `vision: true` convention used by `WEBLLM_MODELS`. Optional —
+   * omitted (or `false`) for text-only models. Note: GGUF VLMs typically also
+   * require a separate `mmproj` projector file at runtime; this catalog entry
+   * advertises the capability but does not currently encode the projector URL.
+   */
+  vision?: boolean;
 }
 
 /**
@@ -228,6 +238,34 @@ export const WLLAMA_MODELS = {
     architecture: 'llama',
     quantization: 'Q4_K_M',
     parameterCount: 8_030_000_000,
+  },
+
+  // === VISION-LANGUAGE MODELS (UI grounding) ===
+  'Holo2-4B-Q4_K_M': {
+    name: 'Holo2 4B',
+    contextLength: 262144, // 256K native (Qwen3-VL family)
+    sizeBytes: 2.8 * 1024 * 1024 * 1024, // ~2.8GB
+    size: '2.8GB',
+    description:
+      'Hcompany Holo2 4B UI-grounding VLM, vision + text. Best for browser-agent / GUI navigation tasks.',
+    url: 'https://huggingface.co/mradermacher/Holo2-4B-GGUF/resolve/main/Holo2-4B.Q4_K_M.gguf',
+    architecture: 'qwen3',
+    quantization: 'Q4_K_M',
+    parameterCount: 4_000_000_000,
+    vision: true,
+  },
+  'Holo2-8B-Q4_K_M': {
+    name: 'Holo2 8B',
+    contextLength: 262144, // 256K native (Qwen3-VL family)
+    sizeBytes: 5.1 * 1024 * 1024 * 1024, // ~5.1GB (upper bound of browser memory budget)
+    size: '5.1GB',
+    description:
+      'Hcompany Holo2 8B premium UI-grounding VLM, vision + text. Highest-quality grounding for capable devices.',
+    url: 'https://huggingface.co/mradermacher/Holo2-8B-GGUF/resolve/main/Holo2-8B.Q4_K_M.gguf',
+    architecture: 'qwen3',
+    quantization: 'Q4_K_M',
+    parameterCount: 8_000_000_000,
+    vision: true,
   },
 } as const;
 

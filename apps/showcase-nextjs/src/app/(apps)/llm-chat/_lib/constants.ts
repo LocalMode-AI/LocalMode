@@ -179,6 +179,15 @@ export const BACKEND_INFO: Record<ModelBackend, BackendDisplayInfo> = {
     bgColor: 'bg-poster-accent-orange/10',
     borderColor: 'border-poster-accent-orange/30',
   },
+  litert: {
+    label: 'LiteRT',
+    detail: 'Google LiteRT-LM (WebGPU/WASM)',
+    accel: 'WebGPU',
+    format: '.litertlm',
+    color: 'text-poster-accent-pink',
+    bgColor: 'bg-poster-accent-pink/10',
+    borderColor: 'border-poster-accent-pink/30',
+  },
 };
 
 /** Image upload configuration for vision models */
@@ -199,4 +208,5 @@ export const BACKEND_FILTER_TABS: { value: BackendFilter; label: string }[] = [
   { value: 'webgpu', label: 'WebLLM' },
   { value: 'onnx', label: 'TJS v4' },
   { value: 'wasm', label: 'wllama' },
+  { value: 'litert', label: 'LiteRT' },
 ];

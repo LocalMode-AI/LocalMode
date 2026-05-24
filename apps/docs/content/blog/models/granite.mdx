@@ -1,0 +1,113 @@
+---
+title: "Granite Models in the Browser"
+description: "IBM's Granite 4.0 - ultra-compact 350M and 1B ONNX models for fast browser inference via Transformers.js v4."
+author: "LocalMode"
+date: "2026-04-09"
+---
+
+# Granite Models in the Browser
+
+IBM's Granite 4.0 - ultra-compact 350M and 1B ONNX models for fast browser inference via Transformers.js v4.
+
+## Overview
+
+The Granite family is available through Transformers.js in LocalMode. The primary task for these models is **generation**, and they can be used with any application built on the LocalMode SDK. Both Granite 4.0 variants support 12 languages (English, German, Spanish, French, Japanese, Portuguese, Arabic, Czech, Italian, Korean, Dutch, and Chinese) and are released under the Apache 2.0 license.
+
+Running Granite models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+IBM's Granite 4.0 350M is the smallest ONNX-format LLM available through LocalMode's Transformers.js provider. Released on October 28, 2025, it targets on-device and browser deployments with a 32K token context window. Its training on IBM's curated enterprise data gives it an edge in formal, structured outputs. It's particularly useful for generating short-form content: email subject lines, category labels, brief descriptions, and template completions.
+
+The Granite 4.0 1B model is the larger option, with 1.6B actual parameters (the "1B" name refers to the size category) and a 128K token context window - making it suitable for long-document tasks. Both models use a decoder-only dense transformer architecture with GQA, SwiGLU, and RoPE position embeddings.
+
+As an ONNX model running through Transformers.js v4, Granite works with WebGPU acceleration where available and falls back to WASM otherwise. It uses the same LanguageModel interface as WebLLM and wllama models, so it can be swapped in as a lightweight alternative with no code changes.
+
+## Variant Comparison
+
+The following table lists every Granite variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size (q4f16) | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [onnx-community/granite-4.0-350m-ONNX-web](https://huggingface.co/onnx-community/granite-4.0-350m-ONNX-web) | Transformers.js | ~350MB | Fast | Basic | 32,768 tokens | WEBGPU |
+| [onnx-community/granite-4.0-1b-ONNX-web](https://huggingface.co/onnx-community/granite-4.0-1b-ONNX-web) | Transformers.js | ~1.25GB | Moderate | Good | 128,000 tokens | WEBGPU |
+
+### Size Distribution (q4f16 quantization)
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| 200MB–500MB | 1 | variant (350M) |
+| 1GB–2GB | 1 | variant (1B) |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All Granite variants use the same `LanguageModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### Transformers.js
+
+Transformers.js runs ONNX-optimized models via ONNX Runtime Web. WebGPU acceleration where available, WASM fallback otherwise.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.languageModel('onnx-community/granite-4.0-350m-ONNX-web');
+
+const result = await streamText({
+  model,
+  prompt: 'Hello, world!',
+  maxTokens: 200,
+});
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the larger model first, and fall back to the smaller 350M variant if it fails to load (e.g. on low-memory devices).
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+// Try the preferred model, fall back to a smaller one on failure
+let model;
+try {
+  model = transformers.languageModel('onnx-community/granite-4.0-1b-ONNX-web');
+} catch (error) {
+  console.warn('Primary model failed, using fallback:', error);
+  model = transformers.languageModel('onnx-community/granite-4.0-350m-ONNX-web');
+}
+```
+
+## When to Use Granite
+
+Granite models are a strong choice when:
+
+- **You need text generation** - Granite is optimized for generation tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 1 provider (transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Long context matters** - With 32K tokens (350M) and 128K tokens (1B), both variants handle documents far larger than most comparable small models.
+- **Offline functionality is required** - All variants work offline after the initial download, cached in IndexedDB via LocalMode's model caching system.
+
+## HuggingFace Model Cards
+
+- [granite-4.0-350m-ONNX-web](https://huggingface.co/onnx-community/granite-4.0-350m-ONNX-web)
+- [granite-4.0-1b-ONNX-web](https://huggingface.co/onnx-community/granite-4.0-1b-ONNX-web)
+
+## Related Pages
+
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Smollm2](/blog/models/smollm2) - model guide
+- [Qwen](/blog/models/qwen) - model guide
+
+## Methodology
+
+Provider availability and model IDs were verified against `packages/transformers/src/models.ts` in the LocalMode monorepo. Context lengths (32K for 350M, 128K for 1B) were confirmed from the official IBM Granite HuggingFace model cards. Download sizes reflect the q4f16 quantized ONNX data files as listed in the `onnx/` directory of each ONNX-community repository. The 1B model's actual parameter count (1.6B) was confirmed from the IBM Granite 4.0 1B model card. Note that actual download size may vary depending on which dtype is loaded at runtime; sizes shown are for the q4f16 (smallest web-optimized) quantization.
+
+## Sources
+
+- [onnx-community/granite-4.0-350m-ONNX-web model card](https://huggingface.co/onnx-community/granite-4.0-350m-ONNX-web) - ONNX file sizes, context length, usage example
+- [onnx-community/granite-4.0-1b-ONNX-web model card](https://huggingface.co/onnx-community/granite-4.0-1b-ONNX-web) - ONNX file sizes, context length, usage example
+- [ibm-granite/granite-4.0-350m model card](https://huggingface.co/ibm-granite/granite-4.0-350m) - parameter count (350M), context length (32K), languages, benchmarks, release date (Oct 28, 2025)
+- [ibm-granite/granite-4.0-1b model card](https://huggingface.co/ibm-granite/granite-4.0-1b) - parameter count (1.6B), context length (128K), languages, benchmarks
+- [LocalMode transformers provider catalog](https://localmode.dev/docs/transformers) - model IDs and provider availability
+- [Transformers.js documentation](https://huggingface.co/docs/transformers.js)

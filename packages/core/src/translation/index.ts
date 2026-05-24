@@ -12,6 +12,18 @@
 
 export { translate, translateMany, setGlobalTranslationProvider } from './translate.js';
 
+// Language Detection
+export {
+  detectLanguage,
+  setGlobalLanguageDetectionProvider,
+} from './detect-language.js';
+
+// ═══════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════
+
+export { SUPPORTED_LANGUAGES, getLanguageName } from './languages.js';
+
 // ═══════════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════════
@@ -30,6 +42,14 @@ export type {
   // translateMany() types
   TranslateManyOptions,
   TranslateManyResult,
+  // Language detection
+  LanguageDetectionModel,
+  DoDetectLanguageOptions,
+  DoDetectLanguageResult,
+  DetectedLanguage,
+  DetectLanguageOptions,
+  DetectLanguageResult,
   // Factory types
   TranslationModelFactory,
+  LanguageDetectionModelFactory,
 } from './types.js';

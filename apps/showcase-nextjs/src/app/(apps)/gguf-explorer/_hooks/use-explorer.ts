@@ -50,9 +50,11 @@ export function useExplorer() {
   const modelUrlRef = useRef<string>('');
 
   // ── useChat from @localmode/react ──────────────────────────
-  // We pass the model ref so useChat always has the latest model
+  // We track the model in state so useChat re-initializes when it changes
+  const [chatModel, setChatModel] = useState<ReturnType<typeof createChatModel> | null>(null);
+
   const chat = useChat({
-    model: modelRef.current!,
+    model: chatModel!,
     systemPrompt: CHAT_CONFIG.systemPrompt,
     maxTokens: CHAT_CONFIG.maxTokens,
     temperature: CHAT_CONFIG.temperature,
@@ -80,6 +82,7 @@ export function useExplorer() {
     setDownloadProgress({ status: 'idle', progress: 0, loaded: 0, total: 0 });
     setChatError(null);
     modelRef.current = null;
+    setChatModel(null);
     modelUrlRef.current = '';
     chat.clearMessages();
 
@@ -110,6 +113,7 @@ export function useExplorer() {
     setDownloadProgress({ status: 'idle', progress: 0, loaded: 0, total: 0 });
     setChatError(null);
     modelRef.current = null;
+    setChatModel(null);
     modelUrlRef.current = '';
     chat.clearMessages();
 
@@ -210,6 +214,7 @@ export function useExplorer() {
         systemPrompt: CHAT_CONFIG.systemPrompt,
       });
       modelRef.current = model;
+      setChatModel(model);
       modelUrlRef.current = selectedModel.url;
 
       // Trigger actual model download + WASM init by calling doGenerate with a tiny prompt.
@@ -239,7 +244,7 @@ export function useExplorer() {
 
   /** Send a chat message */
   const sendMessage = async (text: string) => {
-    if (!modelRef.current || !isModelLoaded) return;
+    if (!chatModel || !isModelLoaded) return;
     setChatError(null);
 
     try {

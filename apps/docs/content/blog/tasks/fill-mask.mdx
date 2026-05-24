@@ -1,0 +1,142 @@
+---
+title: "Fill-Mask (Masked Language Modeling) in the Browser"
+description: "Predict missing words in text using ModernBERT - for autocomplete, data augmentation, and text understanding."
+author: "LocalMode"
+date: "2026-04-23"
+---
+
+# Fill-Mask (Masked Language Modeling) in the Browser
+
+Predict missing words in text using ModernBERT - for autocomplete, data augmentation, and text understanding.
+
+## What Is Fill-Mask (Masked Language Modeling)?
+
+Fill-mask (masked language modeling) predicts the most likely word to fill a [MASK] token in a sentence. Given "The capital of France is [MASK]", the model predicts "Paris" with high confidence. This capability powers autocomplete suggestions, data augmentation (generating text variations), and probing models for their language understanding.
+
+This capability is exposed through the `fillMask()` function in `@localmode/core`. All processing runs entirely in the browser - no server, no API key, no data leaves the device. After the initial model download, fill-mask (masked language modeling) works completely offline.
+
+## Real-World Applications
+
+Text autocomplete and suggestion systems. Data augmentation for training datasets. Cloze test generation for education. Probing language understanding. Template-based text generation. Grammar and vocabulary exercises.
+
+These use cases all benefit from local, on-device processing: user data stays private, there are no per-request API costs, and the application works without internet after initial setup.
+
+## Getting Started
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Import the core function and provider:
+
+```typescript
+import { fillMask } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+```
+
+The recommended starting model is **onnx-community/ModernBERT-base-ONNX** - it provides the best balance of quality, speed, and download size for most applications.
+
+## Code Example
+
+```typescript
+import { fillMask } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.fillMask('onnx-community/ModernBERT-base-ONNX');
+
+const { predictions } = await fillMask({
+  model,
+  text: 'The weather today is [MASK] and sunny.',
+});
+
+// predictions: [
+//   { token: 'warm', score: 0.45 },
+//   { token: 'clear', score: 0.22 },
+//   { token: 'bright', score: 0.15 },
+// ]
+```
+
+This example demonstrates the core workflow: create a model instance from the provider, call the `fillMask()` function with your input, and receive structured results. The same pattern works identically across all 1 available provider: Transformers.js.
+
+## Available Models
+
+The following models support fill-mask (masked language modeling) through LocalMode. Choose based on your target device, acceptable download size, and quality requirements.
+
+| Model | Provider | Size | Speed | Quality |
+| --- | --- | --- | --- | --- |
+| onnx-community/ModernBERT-base-ONNX | Transformers.js | 140MB (q4f16) | Medium | High |
+| Xenova/bert-base-uncased | Transformers.js | 96MB (q4f16) | Fast | Good |
+
+**Choosing a model:** For most applications, start with the recommended model (`onnx-community/ModernBERT-base-ONNX`). If download size is the primary constraint (e.g., mobile PWA, browser extension), `Xenova/bert-base-uncased` (96MB q4f16) is the lighter alternative. Any HuggingFace fill-mask model (e.g., `Xenova/bert-base-multilingual-cased`, `Xenova/roberta-base`) can be used by passing its model ID directly - RoBERTa-based models use `<mask>` instead of `[MASK]`.
+
+## Cloud vs Local: Cost and Privacy Comparison
+
+Running fill-mask (masked language modeling) locally eliminates per-request API costs and keeps all data on-device. Here is how the economics compare:
+
+| Service | Cost / Notes |
+| --- | --- |
+| LocalMode | runs ModernBERT (140MB q4f16) entirely in the browser, zero per-request cost |
+
+Cloud fill-mask is not commonly offered as a standalone API - it's typically done through general-purpose LLMs at much higher cost. LocalMode runs ModernBERT at 140MB (q4f16 quantization), entirely in the browser with no per-request charges.
+
+The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
+
+## Available Providers
+
+- **Transformers.js** - ONNX-optimized models via ONNX Runtime Web. Supports both WebGPU and WASM backends. Broadest model catalog for non-LLM tasks.
+
+## AbortSignal Support
+
+All `fillMask()` calls support cancellation through the standard `AbortSignal` API:
+
+```typescript
+const controller = new AbortController();
+
+const promise = fillMask({
+  model,
+  text: 'The weather is [MASK].',
+  abortSignal: controller.signal,
+});
+
+// Cancel if needed (e.g., user navigates away)
+controller.abort();
+```
+
+This is essential for responsive UIs - cancel in-flight operations when the user navigates away, submits a new query, or closes a dialog. The underlying model inference stops immediately, freeing memory and compute resources.
+
+## React Integration
+
+If you are building a React application, `@localmode/react` provides hooks that manage loading states, error handling, and cancellation automatically:
+
+```bash
+npm install @localmode/react
+```
+
+```typescript
+import { useFillMask } from '@localmode/react';
+```
+
+The hook returns `{ data, error, isLoading, execute, cancel, reset }` - providing everything a UI component needs to display progress, handle errors, reset state, and offer cancellation.
+
+## Related Pages
+
+- [Nlp Specialized](/blog/models/nlp-specialized) - model guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+This guide is based on LocalMode's source code (`packages/core/src/fill-mask/`, `packages/transformers/src/implementations/fill-mask.ts`, `packages/transformers/src/models.ts`) and verified against primary HuggingFace model cards. Function signatures, hook return types, and model IDs were verified directly against the codebase exports. Model file sizes were taken from HuggingFace file-tree pages for the specific quantized ONNX variants used by Transformers.js (`model_q4f16.onnx`). Performance comparisons are general guidance; benchmark with your own data for production use.
+
+## Sources
+
+- [onnx-community/ModernBERT-base-ONNX model card](https://huggingface.co/onnx-community/ModernBERT-base-ONNX) - fill-mask task, ONNX file sizes
+- [onnx-community/ModernBERT-base-ONNX file tree](https://huggingface.co/onnx-community/ModernBERT-base-ONNX/tree/main/onnx) - model_q4f16.onnx = 140MB
+- [answerdotai/ModernBERT-base model card](https://huggingface.co/answerdotai/ModernBERT-base) - 149M parameters, 8192 token context, [MASK] token
+- [Xenova/bert-base-uncased model card](https://huggingface.co/Xenova/bert-base-uncased) - fill-mask task, ONNX file sizes
+- [Xenova/bert-base-uncased file tree](https://huggingface.co/Xenova/bert-base-uncased/tree/main/onnx) - model_q4f16.onnx = 96.4MB
+- [google-bert/bert-base-uncased model card](https://huggingface.co/google-bert/bert-base-uncased) - 110M parameters, [MASK] token
+- [LocalMode Core Fill-Mask API reference](https://localmode.dev/docs/core/fill-mask)
+- [LocalMode Transformers Fill-Mask guide](https://localmode.dev/docs/transformers/fill-mask)

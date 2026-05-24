@@ -1,0 +1,190 @@
+---
+title: 'Text Tasks'
+description: MediaPipe text tasks in the browser — language detection across 110 languages, semantic text embeddings, and custom-model text classification.
+icon: Languages
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+# Text Tasks
+
+`@localmode/mediapipe` wraps `@mediapipe/tasks-text` to provide three text tasks: **language detection**, **text embeddings**, and **text classification**. All run fully on-device via WebAssembly.
+
+| Task                 | Factory                     | Core function       | Default model in catalog |
+| -------------------- | --------------------------- | ------------------- | ------------------------ |
+| Language detection   | `mediapipe.languageDetector()` | `detectLanguage()` | `language_detector` (315KB) |
+| Text embeddings      | `mediapipe.textEmbedder()`  | `embed()` / `embedMany()` | `text_embedder` (6.1MB) |
+| Text classification  | `mediapipe.textClassifier(modelPath)` | `classify()` | none — custom model required |
+
+## Language Detection
+
+The language detector identifies the language of a text string across **110 languages**, returning candidate languages with ISO 639-1 codes and confidence scores, sorted by confidence.
+
+```typescript
+import { detectLanguage } from '@localmode/core';
+import { mediapipe } from '@localmode/mediapipe';
+
+const { languages, usage } = await detectLanguage({
+  model: mediapipe.languageDetector(),
+  text: 'Bonjour le monde, comment allez-vous?',
+  maxResults: 3,
+  minConfidence: 0.1,
+});
+
+for (const lang of languages) {
+  console.log(`${lang.languageCode}: ${lang.confidence.toFixed(3)}`);
+}
+// e.g. fr: 0.987
+
+console.log(`Detected in ${usage.durationMs.toFixed(0)}ms`);
+```
+
+### Options
+
+| Option          | Type                     | Default | Description                              |
+| --------------- | ------------------------ | ------- | ---------------------------------------- |
+| `model`         | `LanguageDetectionModel` | —       | The model from `mediapipe.languageDetector()` |
+| `text`          | `string`                 | —       | Text to detect the language of           |
+| `maxResults`    | `number`                 | `5`     | Maximum language candidates to return    |
+| `minConfidence` | `number`                 | `0`     | Minimum confidence threshold (0–1)       |
+| `abortSignal`   | `AbortSignal`            | —       | Cancellation signal                      |
+| `maxRetries`    | `number`                 | `2`     | Retry attempts on transient failure      |
+
+### Result
+
+`DetectLanguageResult` contains a `languages` array of `DetectedLanguage`:
+
+```typescript
+interface DetectedLanguage {
+  /** ISO 639-1 language code (e.g., 'en', 'fr', 'zh') */
+  languageCode: string;
+  /** Detection confidence (0-1) */
+  confidence: number;
+}
+```
+
+To map a code to a human-readable name, `@localmode/core` exports `SUPPORTED_LANGUAGES` — an ISO 639-1 code-to-name map:
+
+```typescript
+import { detectLanguage, SUPPORTED_LANGUAGES } from '@localmode/core';
+
+const { languages } = await detectLanguage({
+  model: mediapipe.languageDetector(),
+  text: 'こんにちは',
+});
+
+const top = languages[0];
+console.log(SUPPORTED_LANGUAGES[top.languageCode] ?? top.languageCode);
+// e.g. 'Japanese'
+```
+
+### React Hook
+
+`@localmode/react` provides `useDetectLanguage`:
+
+```tsx
+'use client';
+
+import { useDetectLanguage } from '@localmode/react';
+import { mediapipe } from '@localmode/mediapipe';
+
+const model = mediapipe.languageDetector();
+
+export function LanguageDetector() {
+  const { data, error, isLoading, execute, cancel } = useDetectLanguage({ model });
+
+  return (
+    <div>
+      <button onClick={() => execute('Hola, ¿cómo estás?')}>Detect</button>
+      {isLoading && <button onClick={cancel}>Cancel</button>}
+      {error && <p>{error.message}</p>}
+      {data && <p>Top: {data.languages[0]?.languageCode}</p>}
+    </div>
+  );
+}
+```
+
+The hook takes `{ model }` and returns `{ data, error, isLoading, execute, cancel, reset }`.
+
+## Text Embeddings
+
+The text embedder produces semantic embedding vectors using the **Universal Sentence Encoder** — useful for semantic search, clustering, and similarity. It implements the standard `EmbeddingModel` interface, so it works with `embed()` and `embedMany()`:
+
+```typescript
+import { embed, embedMany } from '@localmode/core';
+import { mediapipe } from '@localmode/mediapipe';
+
+const model = mediapipe.textEmbedder();
+
+// Single embedding
+const { embedding } = await embed({
+  model,
+  value: 'Local-first AI in the browser',
+});
+console.log(embedding.length); // 100 — Universal Sentence Encoder output dimension
+
+// Batch
+const { embeddings } = await embedMany({
+  model,
+  values: ['First document', 'Second document', 'Third document'],
+});
+```
+
+Because it is a standard `EmbeddingModel`, the text embedder also plugs straight into `createVectorDB()`, the semantic cache, RAG pipelines, and every other embedding-based core feature.
+
+<Callout type="info" title="Picking an embedding provider">
+  MediaPipe's text embedder is a compact, zero-config option. For a wider selection of embedding models (multilingual, higher-dimensional, retrieval-tuned), see [`@localmode/transformers`](/docs/transformers/embeddings).
+</Callout>
+
+## Text Classification
+
+`mediapipe.textClassifier()` implements the standard `ClassificationModel` interface and works with the core `classify()` function — but **MediaPipe ships no default text classifier model**.
+
+<Callout type="warn" title="A custom model is required">
+  `mediapipe.textClassifier()` **requires** an explicit `.tflite` model URL. Calling it with no path throws a `ValidationError`. MediaPipe text classification is intended for **custom-trained** models built with [MediaPipe Model Maker](https://ai.google.dev/edge/mediapipe/solutions/customization/text_classifier) — train a classifier on your own labels (e.g. spam vs. not-spam, intent categories), then point the provider at the resulting file.
+</Callout>
+
+```typescript
+import { classify } from '@localmode/core';
+import { mediapipe } from '@localmode/mediapipe';
+
+// Pass the URL of your Model Maker .tflite file
+const model = mediapipe.textClassifier(
+  'https://your-cdn.com/models/my-text-classifier.tflite'
+);
+
+const { label, score } = await classify({
+  model,
+  text: 'This product completely changed my workflow!',
+});
+
+console.log(`${label}: ${score.toFixed(3)}`);
+```
+
+```typescript
+// ❌ Throws ValidationError — no default text classifier exists
+const model = mediapipe.textClassifier();
+```
+
+If you need ready-made, general-purpose text classification (sentiment, topic, zero-shot), use [`@localmode/transformers`](/docs/transformers/classification) instead — it ships pre-trained ONNX classifiers.
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Audio Classification"
+    href="/docs/mediapipe/audio"
+    description="Classify 521 environmental sound categories with YAMNet."
+  />
+  <Card
+    title="Core Embeddings"
+    href="/docs/core/embeddings"
+    description="API reference for embed, embedMany, and embedding-based features."
+  />
+  <Card
+    title="MediaPipe Overview"
+    href="/docs/mediapipe"
+    description="Installation, model catalog, and provider configuration."
+  />
+</Cards>

@@ -24,7 +24,7 @@ import {
   Server,
 } from 'lucide-react';
 import { Spinner, Badge } from './ui';
-import { cn, formatParams, formatBytes, formatNumber, getCompatColor, getCompatTextColor } from '../_lib/utils';
+import { cn, formatParams, formatBytes, formatNumber } from '../_lib/utils';
 import type { InspectionResult } from '../_lib/types';
 import type { GGUFMetadata, GGUFBrowserCompat } from '../_services/gguf.service';
 

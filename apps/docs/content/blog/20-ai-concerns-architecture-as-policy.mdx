@@ -1,0 +1,403 @@
+---
+title: "Architecture as Policy: Why Most AI Criticism Is Really About Where the Compute Happens"
+description: "We mapped the 20 most common criticisms of AI from Reddit, Hacker News, and industry reports. A pattern emerged: 15 of 20 target the deployment model, not the technology. Privacy, cost, lock-in, censorship, surveillance - these are properties of the client-server architecture, not of neural networks. Move the inference to the browser and they disappear."
+author: LocalMode
+date: "2026-05-22"
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Between December 2024 and January 2025, OpenAI suffered three major outages -- a Kubernetes configuration error that took services down for roughly four hours on December 11, a data center power failure on December 26 that caused five to eight hours of degraded service, and a Cosmos DB crash on January 23 that disrupted APIs for nearly an hour. Every application built on those APIs went dark, and every team affected had the same realization: the AI worked fine. The problem was where it ran.
+
+Two months earlier, Samsung's employees had [leaked proprietary semiconductor-related source code through ChatGPT](https://www.engadget.com/three-samsung-employees-reportedly-leaked-sensitive-data-to-chatgpt-190221114.html). The AI worked fine there too. The problem was where the data went.
+
+Around the same time, Italy [temporarily banned ChatGPT](https://www.bbc.com/news/technology-65139406) over GDPR violations. The AI worked fine in Italy. The problem was which jurisdiction governed the processing.
+
+These are three different incidents affecting three different organizations in three different ways. But they share a root cause: **the computation happened on someone else's server.** The model did its job. The architecture failed.
+
+This observation is not original to us. It is the animating insight behind r/LocalLLaMA's over 650,000 members, behind the open-weight model movement, behind every enterprise that has banned cloud AI tools for sensitive work. But we wanted to test it systematically. So we mapped the 20 most common criticisms of AI and large language models -- drawn from Reddit communities, Hacker News threads, tech publications, and industry reports from Stanford HAI, Gartner, and Edelman -- and asked a simple question about each one:
+
+**Is this a criticism of AI, or a criticism of where AI runs?**
+
+The answer surprised us in its consistency: 15 of 20 concerns dissolve when you move inference from a cloud server to the user's browser. Not because local models are better -- they are often smaller, slower, and less capable. But because the concerns were never about the model. They were about the architecture.
+
+---
+
+## Find Your Concern
+
+This is a long post. If you are here for a specific reason, jump to what matters:
+
+**If you are evaluating AI for an enterprise with compliance requirements** -- start with [Data Concerns](#data-concerns-where-does-the-information-go), which covers privacy, GDPR/HIPAA compliance, data sovereignty, and surveillance risk.
+
+**If you are a developer or founder worried about costs and dependency** -- start with [Economic Concerns](#economic-concerns-who-controls-the-price), which covers API pricing, vendor lock-in, terms of service, and developer sustainability.
+
+**If you care about AI censorship, transparency, or corporate control** -- start with [Control Concerns](#control-concerns-who-owns-the-model), which covers over-alignment, model degradation, power concentration, and interpretability.
+
+**If you want the honest limitations** -- skip to [Where Local AI Falls Short](#where-local-ai-falls-short). We cover the real constraints: model size limits, first-load latency, browser support gaps, and the quality ceiling.
+
+---
+
+## Data Concerns: Where Does the Information Go?
+
+Four of the twenty most common AI criticisms are fundamentally about data flow: where user data travels, who can access it, which laws govern it, and whether it can be used for surveillance. These are the concerns that dominate enterprise procurement reviews, GDPR audits, and the r/privacy community.
+
+They share a single architectural root cause: the data leaves the device.
+
+### The Incidents That Keep CISOs Awake
+
+Samsung's ChatGPT leak was not an isolated failure. It was a predictable consequence of an architecture where sensitive data crosses a network boundary. Apple, JPMorgan, Verizon, Deutsche Bank, and Amazon all subsequently restricted or banned employees from using external AI tools. Not because the AI was bad -- because the data flow was unacceptable.
+
+The regulatory landscape confirms the risk. The GDPR enforcement tracker records [over 2,685 fines totaling EUR 6.11 billion](https://cms.law/en/int/publication/gdpr-enforcement-tracker-report/numbers-and-figures) as of March 2026. Meta alone was fined EUR 1.2 billion for transferring European user data to US servers. Every cloud AI API creates the same cross-border data transfer that Meta was fined for -- it is just that most companies have not been audited yet.
+
+OpenAI's data controls documentation states that API inputs and outputs [may be retained for up to 30 days for abuse monitoring](https://platform.openai.com/docs/guides/your-data). Consumer ChatGPT conversations are used for model training by default. Even with enterprise agreements, the data traverses networks and sits on servers you do not control, in jurisdictions you did not choose.
+
+### What Changes When Inference Stays Local
+
+When a model runs in a WebAssembly sandbox inside the browser, there is no data flow to regulate. The four data concerns collapse simultaneously:
+
+| Concern | Cloud Architecture | Browser Architecture |
+|---------|-------------------|---------------------|
+| **Privacy** - Who sees user data? | API provider, sub-processors, abuse monitoring | No one. Data stays in the browser tab. |
+| **Sovereignty** - Which laws apply? | Provider's jurisdiction (usually US) | User's jurisdiction only. No cross-border transfer. |
+| **Compliance** - What paperwork? | DPA per vendor, Article 28, SCCs, DPIA | No data processor relationship. No DPA needed. |
+| **Surveillance** - Who can observe? | Provider logs, government subpoenas to provider | No server to subpoena. No logs to request. |
+
+This is not a privacy policy. It is a physical constraint. The data cannot leave the device because the code does not make network requests.
+
+```typescript
+import { embed, redactPII, wrapEmbeddingModel, piiRedactionMiddleware } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Defense in depth: redact PII before embedding, encrypt at rest
+const safeModel = wrapEmbeddingModel({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  middleware: piiRedactionMiddleware({ emails: true, phones: true, ssn: true }),
+});
+
+// This processes user data entirely in the browser.
+// No fetch(). No API key. No server. No data leaves the device.
+const { embedding } = await embed({ model: safeModel, value: userInput });
+```
+
+The `@localmode/core` package has [zero runtime dependencies](https://www.npmjs.com/package/@localmode/core) and makes zero network requests. For defense in depth, it also provides <a href="/blog/localmode-encryption-stack" target="_blank">AES-GCM encryption</a> for data at rest, [differential privacy](/docs/core/security) noise injection on embeddings, and <a href="/blog/gdpr-compliant-ai-no-user-data" target="_blank">PII auto-redaction</a> middleware. But the primary protection is architectural: the data never leaves.
+
+**Coverage: Structurally eliminated.** Not by trust in a vendor's privacy policy, but by the physics of where the computation happens. See <a href="/blog/gdpr-compliant-ai-no-user-data" target="_blank">Build a GDPR-Compliant AI Feature Without Touching User Data</a> for four detailed compliance patterns.
+
+<Callout type="warn" title="What this does NOT cover">
+  On-device inference eliminates server-side data risks. It does not protect against client-side threats: malicious browser extensions, XSS attacks in your application, or compromised npm dependencies. Standard web security practices still apply. We are not lawyers -- consult qualified counsel for your specific compliance situation.
+</Callout>
+
+---
+
+## Economic Concerns: Who Controls the Price?
+
+Four more concerns cluster around money and dependency: API pricing that scales unpredictably, vendor lock-in that makes migration prohibitive, terms of service that change unilaterally, and developer sustainability when your margin depends on someone else's pricing page.
+
+### The Math That Breaks at Scale
+
+Cloud AI pricing is designed to look cheap. OpenAI's GPT-4o at $2.50 per million input tokens. Embeddings at $0.02 per million tokens. At prototype scale, it is pocket change.
+
+Then you launch. At 100,000 users making 10 requests per day, the annual bill lands between <a href="/blog/hybrid-ai-architecture" target="_blank">$50,000 and $300,000+</a>. And unlike traditional infrastructure costs that decrease with scale (bandwidth gets cheaper per GB, storage gets cheaper per TB), AI API costs scale linearly. Your ten-thousandth user costs exactly as much as your first.
+
+The r/startups community calls this the "demo trap" -- impressive prototypes that are economically unviable in production. The unit economics are structurally unsustainable for many products because <a href="/blog/cost-of-free-ai-apis" target="_blank">you do not control the price, and the vendor has every incentive to raise it once your switching costs are high enough</a>.
+
+The lock-in compounds the problem. Proprietary embedding spaces are geometrically incompatible -- vectors from OpenAI's `text-embedding-3-small` cannot be meaningfully compared with vectors from Cohere or Voyage. Switching embedding providers means re-embedding your entire corpus: engineering-weeks plus API fees plus quality regression testing. HashiCorp's 2023 survey found [48% of tech firms cite avoiding vendor lock-in as a key reason for multi-cloud](https://www.hashicorp.com/en/blog/hashicorp-state-of-cloud-strategy-survey-2023-the-tech-sector-perspective). The switching cost for AI embeddings is worse than for compute, because the data itself becomes provider-specific.
+
+And the terms of service can change at any time. OpenAI has modified its terms multiple times since launch. Usage policies restrict entire categories of legitimate applications. API terms may claim rights over outputs. Enterprise agreements create a two-tier system where smaller developers bear disproportionate risk.
+
+### What Changes When Inference Is Free
+
+Local inference eliminates the billing meter, the vendor dependency, the proprietary embedding space, and the terms of service -- simultaneously.
+
+| Concern | Cloud Architecture | Browser Architecture |
+|---------|-------------------|---------------------|
+| **Cost** - What is the marginal price? | $2.50-$15/M tokens, scaling linearly | $0. User's device does the work. |
+| **Lock-in** - Can you switch? | Re-embed entire corpus, rewrite integrations | One-line provider swap. Open-weight embeddings. |
+| **Terms** - Who sets the rules? | Provider, unilaterally changeable | MIT license. Irrevocable. No restrictions. |
+| **Sustainability** - Do the margins work? | COGS scales with users | Cost structure of traditional frontend software. |
+
+```typescript
+import { embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Switch providers by changing one line. Same interface, same result shape.
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+// webllm exposes: webllm.languageModel('...')     -- WebGPU-accelerated LLMs
+// wllama exposes: wllama.languageModel('...')      -- 160K+ GGUF models via WASM
+// chromeAI exposes: chromeAI.summarizer() / chromeAI.translator() -- zero-download
+
+const { embedding } = await embed({ model, value: 'No API key. No billing. No lock-in.' });
+```
+
+Four providers implement the same core interfaces. All use open-weight models with documented, reproducible embedding spaces. [Import/export adapters](/docs/core/import-export) handle migration from Pinecone, ChromaDB, CSV, and JSONL. If a better model appears next year, you re-embed at zero API cost.
+
+**Coverage: Structurally eliminated.** The business model constraint -- "your COGS scales linearly with usage" -- disappears when inference runs on hardware the user already owns. See <a href="/blog/cost-of-free-ai-apis" target="_blank">The Cost of "Free" AI APIs</a> for a deeper analysis of six hidden costs.
+
+---
+
+## Control Concerns: Who Owns the Model?
+
+Four concerns center on control: who decides what the model will and will not say, who can silently change the model's behavior, who controls the most capable systems, and whether users can understand what the model is doing.
+
+### The Censorship That Built a Movement
+
+The r/LocalLLaMA subreddit -- over 650,000 members -- exists largely for one reason: people want models they control. The "nanny AI" phenomenon, where corporate safety guardrails block legitimate use cases, is the single most emotionally charged AI concern in developer communities.
+
+A fiction writer asks for a conflict scene and gets refused. A security researcher asks about vulnerability patterns and gets a lecture. A medical professional asks about drug interactions and gets a disclaimer instead of an answer. The inconsistency compounds the frustration: models refuse benign requests while allowing harmful ones with slight rephrasing. The censorship is applied by the provider at the system level, and the user has zero recourse.
+
+Model quality degradation adds another layer. In late 2023, r/ChatGPT erupted with reports of GPT-4 becoming noticeably worse at coding, math, and reasoning. The "lazy GPT" phenomenon -- shorter, less detailed responses -- sparked widespread frustration. The suspicion: providers silently swap cheaper models behind the same API endpoint, alter system prompts, or route to smaller variants without disclosure. Users pay the same price for perceived lower quality, with no transparency about when or why things changed.
+
+Meanwhile, a small number of companies -- OpenAI, Google, Anthropic, Meta, Microsoft -- control the most capable models. The compute requirements for training create massive barriers to entry. Whether concentrating this much power in a few private entities is healthy for society is an active and unresolved debate.
+
+### What Changes When You Own the Model
+
+Local models are static files. The weights do not change unless you explicitly download a new version. No corporate system prompt is injected at serving time. No content filter sits between the model and the user. No backend can silently swap models or degrade quality.
+
+| Concern | Cloud Architecture | Browser Architecture |
+|---------|-------------------|---------------------|
+| **Censorship** - Who decides what is allowed? | Provider's RLHF + system prompt + content filter | You. Choose the model and its alignment level. |
+| **Degradation** - Can quality change silently? | Yes. Provider controls model routing. | No. Model files are static. Same output tomorrow. |
+| **Power** - Who controls the system? | 5 companies control frontier models | MIT-licensed OSS. 4 independent providers. |
+| **Transparency** - Can you inspect it? | Black box. Closed weights, closed training data. | Open weights. Full source. DevTools observability. |
+
+```typescript
+import { streamText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+// You choose the model. You write the system prompt. No corporate filter.
+// 160,000+ GGUF models on HuggingFace -- from heavily aligned to fully open.
+const result = await streamText({
+  model: wllama.languageModel('Llama-3.2-3B-Instruct-Q4_K_M'),
+  prompt: userPrompt,
+  systemPrompt: yourSystemPrompt,
+});
+```
+
+LocalMode supports four independent providers backed by different organizations -- HuggingFace (Transformers.js), CMU/MLC (WebLLM), community (Wllama), and Google (Chrome AI). No single provider failure or policy change breaks the ecosystem. The DevTools widget provides runtime observability across six dashboard tabs (Models, VectorDB, Queue, Pipeline, Events, Device) with all metrics collected locally and zero telemetry sent anywhere.
+
+For detecting drift when you intentionally upgrade models, <a href="/docs/core/embedding-drift" target="_blank">embedding drift detection</a> alerts when a model update changes the embedding space, so you can decide whether to reindex.
+
+**Coverage: Structurally eliminated.** You control what the model says because you control the model. The fundamental interpretability challenge of neural networks -- *why* a specific output was generated -- remains an open research problem regardless of where the model runs.
+
+---
+
+## Access Concerns: Does It Work for Everyone?
+
+Three concerns are about access: whether AI works without internet, whether the environmental cost is justified, and whether the technology is accessible to people with limited hardware, connectivity, or language support.
+
+### The Offline Problem Is Also a Latency Problem
+
+Cloud API latency adds 200-3000ms to every inference request. For search-as-you-type, live transcription, or interactive classification, that latency is the difference between a feature that feels magical and one that feels sluggish. For users in regions with poor connectivity, it makes the feature unusable. For users without internet -- airplanes, rural clinics, enterprise networks with restricted access -- the feature does not exist.
+
+The environmental dimension is harder to dismiss than the industry would like. Google and Microsoft have both [reported increases in carbon emissions](https://www.npr.org/2024/07/12/g-s1-9545/ai-brings-soaring-emissions-for-google-and-microsoft-a-major-contributor-to-climate-change) partly attributed to AI infrastructure. The IEA projects that [data center electricity consumption could double by 2030](https://www.iea.org/reports/energy-and-ai/energy-demand-from-ai). Every cloud inference query contributes to data center energy, water for cooling, and the networking overhead of moving data between continents.
+
+### What Changes When Compute Happens at the Edge
+
+After the initial model download (33MB-2GB depending on the task, cached in IndexedDB with resumable chunked downloads), everything runs offline. Zero network round-trip. Zero data center contribution. The model runs on hardware the user already owns and is already powering.
+
+| Concern | Cloud Architecture | Browser Architecture |
+|---------|-------------------|---------------------|
+| **Offline** - Does it work without internet? | No. | Yes, after initial model download. |
+| **Latency** - How fast is inference? | 200-3000ms (network round-trip) | 5-30ms (local, after warm-up) |
+| **Environment** - What is the energy cost? | Data center energy + cooling + networking | User's existing device power only. |
+| **Accessibility** - Who can use it? | Anyone with internet + API budget | Anyone with a modern browser. |
+
+For varying device capabilities, LocalMode provides automatic capability detection that recommends the best model each device can run, multiple quantization levels for constrained hardware, Chrome AI as a zero-download fallback, and provider cascading from WebGPU to WASM to Chrome AI.
+
+```typescript
+import { detectCapabilities, recommendModels } from '@localmode/core';
+
+// Find the best model this specific device can run
+const capabilities = await detectCapabilities();
+const recommendations = recommendModels(capabilities, {
+  task: 'embedding',
+  maxSizeMB: 100,
+});
+```
+
+**Coverage: Structurally addressed.** Local inference eliminates network dependency and data center overhead. The environmental footprint shifts from new infrastructure to existing hardware. The digital divide for AI is real -- no single framework solves it -- but eliminating API costs and adapting to device capabilities closes the gap significantly.
+
+---
+
+## Model Concerns: The Five That Architecture Cannot Fix
+
+The remaining five concerns are fundamentally different from the first fifteen. They are properties of the models themselves -- of the training data, the architecture, and the societal context -- not of where the models run. Moving inference to the browser does not fix them, and claiming otherwise would be dishonest.
+
+### Hallucinations
+
+LLMs confidently generate false information. The New York lawyer who cited [AI-hallucinated case law](https://www.nytimes.com/2023/05/27/nyregion/avianca-airline-lawsuit-chatgpt.html) demonstrated the risk. This is an inherent property of the transformer architecture, not a deployment issue.
+
+What local inference *does* enable is **private RAG** -- Retrieval-Augmented Generation where sensitive documents never leave the device. When a language model generates answers grounded in retrieved context from a local vector database, hallucinations decrease because the model references real documents rather than relying on parametric memory. And the documents stay private.
+
+```typescript
+import { createPipeline, pipelineChunkStep, pipelineEmbedStep, pipelineSearchStep, pipelineGenerateStep } from '@localmode/core';
+
+// Private RAG: ground LLM responses in local documents.
+// Sensitive data never leaves the device. Hallucinations decrease via grounding.
+const rag = createPipeline('private-rag')
+  .step('chunk', pipelineChunkStep({ size: 512, overlap: 50 }))
+  .step('embed', pipelineEmbedStep(embeddingModel))
+  .step('search', pipelineSearchStep(vectorDB, { k: 5 }))
+  .step('generate', pipelineGenerateStep(languageModel, {
+    systemPrompt: 'Answer based only on the provided context. Say "I don\'t know" if the context lacks the answer.',
+  }))
+  .build();
+```
+
+LocalMode's hybrid search combines BM25 keyword matching with semantic vector search via reciprocal rank fusion, plus reranking. This is the strongest available mitigation, not a cure.
+
+### Bias and Fairness
+
+Models reflect biases in training data. Local inference does not make a biased model less biased. But because inference is free, teams can run extensive bias audits across thousands of test cases and multiple demographic dimensions without budget constraints. Cloud API billing creates a perverse incentive to test less.
+
+### Misinformation
+
+AI makes generating convincing misinformation easy. Local inference is structurally harder to exploit at scale than cloud APIs (no bulk endpoint, constrained by device compute), and LocalMode's classification models can detect AI-generated content locally. But the broader misinformation problem is societal.
+
+### Training Data Copyright
+
+LocalMode does not train models -- it runs them. The copyright question attaches to the model weights, not the runtime. The framework is model-agnostic and works equally well with ethically sourced open-weight models. Users choose which model to download.
+
+### Job Displacement
+
+No software framework addresses job displacement directly. What local inference changes is the barrier to entry: AI capabilities move from "companies with API budgets" to "any developer with npm." Whether this net creates or displaces jobs is a societal question, not an architectural one.
+
+**Coverage: Partially or indirectly addressed.** These five concerns require better training data, better alignment techniques, and better societal policies. Local inference provides mitigations (private RAG for hallucinations, free bias auditing, defensive classification for misinformation) but cannot solve the underlying problems. We are skeptical of anyone who claims otherwise.
+
+---
+
+## Where Local AI Falls Short
+
+Everything above describes what local inference solves. Here is what it does not -- and we think honesty about limitations matters more than a clean sales pitch.
+
+### Model Size Ceiling
+
+Browser models practically cap at around 8 billion parameters (quantized to 4-bit) on devices with sufficient RAM. That means no GPT-4-class reasoning, no 128K-token context windows, no frontier-quality creative writing. For the 2026 state of the art, Qwen3.5-4B in thinking mode <a href="/blog/local-ai-vs-cloud" target="_blank">scores 88.8% on MMLU-Redux</a> -- competitive with GPT-4o on knowledge benchmarks -- but falls short on complex multi-step reasoning and nuanced generation.
+
+For most task-specific operations (embeddings, classification, NER, reranking, summarization, translation), small purpose-built models deliver <a href="/blog/local-ai-vs-cloud" target="_blank">90-99% of cloud quality</a>. For open-ended reasoning, the gap is real. The pragmatic answer is a <a href="/blog/hybrid-ai-architecture" target="_blank">hybrid architecture</a>: local for the 95% of requests that do not need frontier reasoning, cloud for the 5% that do.
+
+### First-Load Latency
+
+Models must be downloaded before they can run. An embedding model is 33MB. A language model is 1-2.5GB. On a fast connection, this takes seconds to minutes. On a slow connection, it can be painful.
+
+LocalMode mitigates this with 16MB chunked downloads, HTTP Range resume (interrupted downloads pick up where they left off), progress callbacks for UX, and LRU cache eviction for storage management. But the first-load cost is real and unavoidable. After that, models load from IndexedDB cache in milliseconds.
+
+### Browser Support Gaps
+
+WebGPU -- the fast path for inference -- has reached [over 82% global browser coverage](https://caniuse.com/webgpu) as of mid-2026 (Chrome, Edge, Safari 26+, Firefox on Windows/macOS). The remaining ~18% falls back to WebAssembly, which is slower but universally supported. Safari private browsing blocks IndexedDB, requiring a memory-only fallback. These are real constraints for applications targeting the full browser landscape.
+
+### Batch Processing
+
+If you need to embed a million documents, a cloud GPU will finish in minutes. A browser will take hours. Client-side inference is designed for interactive, user-facing workloads -- not offline batch processing of large corpora.
+
+### Model Selection Requires Judgment
+
+Cloud APIs give you one model per endpoint. Local inference gives you thousands of options across four providers. That flexibility is a feature for experienced developers and a burden for beginners. The [model registry and recommendation system](/docs/core/capabilities) helps, but choosing the right model for a task still requires understanding the trade-offs between size, quality, speed, and hardware compatibility.
+
+<Callout type="info" title="The honest recommendation">
+  Local inference is production-ready for embeddings, classification, NER, reranking, extractive QA, summarization, and translation. For LLM chat, it is strong and improving fast. For frontier reasoning tasks that require 100B+ parameter models, use cloud APIs -- or use a <a href="/blog/hybrid-ai-architecture" target="_blank">hybrid architecture</a> that routes automatically.
+</Callout>
+
+---
+
+## The Pattern
+
+Step back from the individual concerns and a clear pattern emerges.
+
+Privacy, cost, vendor lock-in, censorship, data sovereignty, surveillance, model degradation, terms of service, developer sustainability, corporate control, offline access, environmental impact, transparency, accessibility, latency. Fifteen distinct criticisms, voiced by different communities, for fifteen different reasons.
+
+**Every one of them is a consequence of where the computation happens, not what the computation does.**
+
+Privacy concerns are about data flow. Cost concerns are about billing meters. Lock-in concerns are about proprietary interfaces. Censorship concerns are about system-level content filters. Sovereignty concerns are about cross-border transfers. Surveillance concerns are about server-side logs. Every one of these problems is created by the client-server architecture -- and eliminated by removing the server from the equation.
+
+The five concerns that local inference cannot fix -- hallucinations, bias, misinformation, copyright, job displacement -- are different in kind. They are properties of the models, the training data, and the society that produces them. No deployment architecture solves them.
+
+But the other fifteen? Those are not AI problems. They are architecture problems. And architecture problems have architecture solutions.
+
+---
+
+## The Scorecard
+
+| # | Concern | Root Cause | Local Coverage |
+|---|---------|-----------|---------------|
+| 1 | Privacy and data collection | Data leaves the device | **Eliminated by architecture** |
+| 2 | Cost and unpredictable pricing | Vendor controls the meter | **Eliminated by architecture** |
+| 3 | Vendor lock-in | Proprietary interfaces and embedding spaces | **Eliminated by architecture** |
+| 4 | Data sovereignty (GDPR/HIPAA) | Cross-border data transfer | **Eliminated by architecture** |
+| 5 | Censorship and over-alignment | Provider-controlled content filters | **Eliminated by architecture** |
+| 6 | Offline access and latency | Network dependency | **Eliminated by architecture** |
+| 7 | Security risks | Server-side attack surface | **Strongly addressed** |
+| 8 | Corporate control | Concentrated model ownership | **Eliminated by architecture** |
+| 9 | Model quality degradation | Provider-controlled model routing | **Eliminated by architecture** |
+| 10 | Terms of service | Vendor-imposed restrictions | **Eliminated by architecture** |
+| 11 | Developer sustainability | Linear cost scaling with usage | **Eliminated by architecture** |
+| 12 | Transparency | Closed weights, closed infrastructure | **Strongly addressed** |
+| 13 | Environmental impact | Data center energy and cooling | **Strongly addressed** |
+| 14 | Surveillance risk | Centralized server logs | **Eliminated by architecture** |
+| 15 | Accessibility and digital divide | API cost barriers, connectivity requirements | **Strongly addressed** |
+| 16 | Hallucinations | Transformer architecture limitation | Partially mitigated (private RAG) |
+| 17 | Bias and fairness | Training data reflects societal bias | Partially mitigated (free auditing) |
+| 18 | Misinformation | Low cost of generating content | Partially mitigated (defensive tools) |
+| 19 | Training data copyright | Model training practices | Indirectly addressed (model choice) |
+| 20 | Job displacement | Macroeconomic disruption | Indirectly addressed (democratized access) |
+
+11 eliminated by architecture. 4 strongly addressed. 3 partially mitigated. 2 indirectly addressed.
+
+---
+
+## Getting Started
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+That installs the entire AI stack. No API key. No billing account. No backend. The first function call downloads the model from HuggingFace Hub and caches it in IndexedDB. Every subsequent call loads from cache and works offline.
+
+For LLM chat, add `@localmode/webllm`. For React hooks, add `@localmode/react`. For the hybrid architecture (local + cloud fallback), see <a href="/blog/hybrid-ai-architecture" target="_blank">the hybrid AI guide</a>.
+
+For deeper dives into specific concerns:
+- **Compliance** -- <a href="/blog/gdpr-compliant-ai-no-user-data" target="_blank">Build a GDPR-Compliant AI Feature Without Touching User Data</a>
+- **Cost** -- <a href="/blog/cost-of-free-ai-apis" target="_blank">The Cost of "Free" AI APIs</a>
+- **Quality** -- <a href="/blog/local-ai-vs-cloud" target="_blank">Near Cloud-Quality AI at $0 Cost</a>
+- **Encryption** -- <a href="/blog/localmode-encryption-stack" target="_blank">LocalMode's Encryption Stack</a>
+- **Hybrid routing** -- <a href="/blog/hybrid-ai-architecture" target="_blank">The Hybrid AI Architecture: Local for 95%, Cloud for the Rest</a>
+
+---
+
+## Methodology
+
+All LocalMode API claims, code examples, and feature descriptions were verified directly against the package source code in `packages/*/src/`. External claims about regulation, pricing, outages, benchmarks, and browser support were verified against the primary sources listed below. Numbers that could not be confirmed from a primary source were either replaced with a verified figure or softened to a directional claim. Code examples were checked for correctness against the actual exported function signatures and model catalog entries.
+
+## Sources
+
+**Industry Surveys:**
+[Stanford HAI AI Index 2024](https://hai.stanford.edu/ai-index-report), [Edelman Trust Barometer 2024](https://www.edelman.com/trust/trust-barometer), [Gartner AI Survey 2024](https://www.gartner.com/en/newsroom/press-releases/2024-03-21-gartner-survey-shws-ai-related-risks-see-greatest-audit-coverage-increases-in-2024) (privacy as #1 barrier), [HashiCorp State of Cloud Strategy 2023: Tech Sector](https://www.hashicorp.com/en/blog/hashicorp-state-of-cloud-strategy-survey-2023-the-tech-sector-perspective) (48% cite avoiding vendor lock-in, tied for third driver of multi-cloud).
+
+**Privacy and Compliance:**
+[OpenAI Platform: Your Data](https://platform.openai.com/docs/guides/your-data) (API inputs/outputs retained up to 30 days for abuse monitoring), [GDPR Article 28](https://gdpr-info.eu/art-28-gdpr/) (processor obligations), [CMS Enforcement Tracker](https://cms.law/en/int/publication/gdpr-enforcement-tracker-report/numbers-and-figures) (2,685 fines, EUR 6.11B as of March 2026), [EDPB: EUR 1.2B fine against Meta](https://www.edpb.europa.eu/news/news/2023/12-billion-euro-fine-facebook-result-edpb-binding-decision_en), [BBC: Italy bans ChatGPT](https://www.bbc.com/news/technology-65139406).
+
+**Incidents:**
+[Engadget: Samsung data leak](https://www.engadget.com/three-samsung-employees-reportedly-leaked-sensitive-data-to-chatgpt-190221114.html), [NYT: Lawyer cited hallucinated cases](https://www.nytimes.com/2023/05/27/nyregion/avianca-airline-lawsuit-chatgpt.html), [OpenAI Status Page](https://status.openai.com/) (December 2024-January 2025 outages), [Medium: Dec 11 Kubernetes outage explained](https://ptuladhar3.medium.com/11th-dec-2024-openais-kubernetes-outage-explained-27c60e620bc3).
+
+**Pricing:**
+[OpenAI API Pricing](https://openai.com/api/pricing/) (GPT-4o $2.50/M input tokens, text-embedding-3-small $0.02/M tokens).
+
+**Benchmarks:**
+[Qwen3.5-4B model card](https://huggingface.co/Qwen/Qwen3.5-4B) (88.8% MMLU-Redux).
+
+**Browser Support:**
+[Can I use: WebGPU](https://caniuse.com/webgpu) (82%+ global coverage as of mid-2026).
+
+**Environmental:**
+[NPR: Google/Microsoft AI emissions](https://www.npr.org/2024/07/12/g-s1-9545/ai-brings-soaring-emissions-for-google-and-microsoft-a-major-contributor-to-climate-change), [IEA: Energy and AI report](https://www.iea.org/reports/energy-and-ai/energy-demand-from-ai) (data center consumption projected to double to ~945 TWh by 2030).
+
+**Community:**
+r/LocalLLaMA, r/privacy, r/ChatGPT, r/MachineLearning, r/technology, Hacker News -- aggregated discussion patterns 2023-2026.
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

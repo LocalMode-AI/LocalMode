@@ -1,5 +1,13 @@
 # @localmode/react
 
+## 2.1.0
+
+### Minor Changes
+
+- 11 new hooks: `useDetectHands`, `useDetectPose`, `useDetectFace`, `useDetectFaceLandmarks`, `useRecognizeGesture`, `useDetectLanguage`, `useAuditLog`, `useLiveTranscribe`, `useTurnTaker`, `useStreamSpeech`, `useExtractText`
+- `useExtractText` prompt support for generative OCR
+- 10 pipeline step factories with new `semanticChunkStep` (`embedStep`, `embedManyStep`, `chunkStep`, `semanticChunkStep`, `searchStep`, `rerankStep`, `storeStep`, `classifyStep`, `summarizeStep`, `generateStep`)
+
 ## 2.0.0
 
 ### Major Changes

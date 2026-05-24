@@ -6,9 +6,9 @@
 /** Model configuration */
 export const MODEL_CONFIG = {
   /** Model ID for background removal */
-  modelId: 'briaai/RMBG-1.4',
+  modelId: 'Xenova/segformer-b0-finetuned-ade-512-512',
   /** Approximate model size for display */
-  modelSize: '~170MB',
+  modelSize: '~15MB',
 } as const;
 
 /** Storage keys for persistence */

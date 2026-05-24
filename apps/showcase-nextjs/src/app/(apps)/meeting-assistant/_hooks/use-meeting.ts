@@ -5,7 +5,7 @@
  */
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useTranscribe, useSummarize, downloadBlob } from '@localmode/react';
 import { getTranscriptionModel } from '../_services/transcriber.service';
 import { getSummarizerModel } from '../_services/summarizer.service';
@@ -27,7 +27,10 @@ export function useMeeting() {
 
   // Refs for latest state in async closures
   const stateRef = useRef({ transcript, summary, actionItems, audioUrl });
-  stateRef.current = { transcript, summary, actionItems, audioUrl };
+  // Update ref inside an effect to avoid writing refs during render
+  useEffect(() => {
+    stateRef.current = { transcript, summary, actionItems, audioUrl };
+  });
 
   const transcription = useTranscribe({ model: getTranscriptionModel() });
   const summarization = useSummarize({ model: getSummarizerModel() });

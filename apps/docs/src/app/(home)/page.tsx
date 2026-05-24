@@ -143,7 +143,7 @@ const corePackages = [
   {
     name: '@localmode/react',
     description:
-      '46 React hooks, 10 pipeline step factories, batch/list processing, and browser helpers.',
+      '56 React hooks, 10 pipeline step factories, batch/list processing, and browser helpers.',
     href: '/docs/react',
     color: 'from-cyan-500 to-teal-500',
   },
@@ -153,21 +153,35 @@ const providerPackages = [
   {
     name: '@localmode/transformers',
     description:
-      'HuggingFace Transformers.js - 25 model factories for embeddings, vision, audio, OCR, and LLM inference.',
+      'HuggingFace Transformers.js v4 - 26 model factories for embeddings, vision, audio, OCR, LLM inference.',
     href: '/docs/transformers',
     color: 'from-orange-500 to-yellow-500',
   },
   {
     name: '@localmode/webllm',
     description:
-      'WebLLM via WebGPU - 30 curated models including DeepSeek-R1, Qwen3, Llama 3.2, Phi 3.5 Vision.',
+      'WebLLM via WebGPU - 32 curated models including DeepSeek-R1, Qwen3, Llama 3.2, Phi 3.5 Vision.',
     href: '/docs/webllm',
     color: 'from-purple-500 to-pink-500',
   },
   {
+    name: '@localmode/litert',
+    description:
+      'Google LiteRT-LM provider - 3 verified models (Gemma 4 E2B/E4B, Qwen3 0.6B); WebGPU + CPU WASM fallback. Text-only.',
+    href: '/docs/litert',
+    color: 'from-blue-500 to-indigo-500',
+  },
+  {
+    name: '@localmode/mediapipe',
+    description:
+      'Google MediaPipe Tasks - 13 verified models for landmarks, gestures, face detection, classification, segmentation, language detection, and streaming trackers.',
+    href: '/docs/mediapipe',
+    color: 'from-emerald-500 to-teal-500',
+  },
+  {
     name: '@localmode/wllama',
     description:
-      'GGUF models via llama.cpp WASM - curated catalog + 135K+ HuggingFace models, universal browser support.',
+      'GGUF models via llama.cpp WASM - curated catalog + 160K+ HuggingFace models, universal browser support.',
     href: '/docs/wllama',
     color: 'from-green-500 to-emerald-500',
   },
@@ -251,7 +265,7 @@ const capabilities = [
       'Typed JSON output with Zod',
       'Semantic response caching',
       'Language model middleware',
-      '3 providers: WebGPU, WASM, ONNX',
+      '4 providers: WebGPU, WASM, ONNX, LiteRT',
     ],
     href: '/docs/core/generation',
   },
@@ -274,8 +288,8 @@ const capabilities = [
       'Image classification & captioning',
       'Object detection & segmentation',
       'Optical character recognition',
-      'Document & table QA',
-      'Image-to-image & depth',
+      'Hand, pose & face landmarks',
+      'Gesture recognition (8 classes)',
     ],
     href: '/docs/core/vision',
   },
@@ -284,10 +298,10 @@ const capabilities = [
     title: 'Audio',
     items: [
       'Speech-to-text transcription',
-      'Text-to-speech synthesis',
+      'Live transcription with VAD',
+      'Streaming TTS (29 English voices)',
       'Audio classification',
-      'Offline voice notes',
-      'Meeting summarization',
+      'Kokoro TTS with speed control',
     ],
     href: '/docs/core/audio',
   },
@@ -298,7 +312,7 @@ const capabilities = [
       'AES-GCM encryption',
       'Named-entity PII redaction',
       'Differential privacy noise',
-      'Embedding drift detection',
+      'Append-only hash-chained audit log',
       'Zero telemetry or tracking',
     ],
     href: '/docs/core/security',
@@ -333,12 +347,13 @@ const demoCategories = [
   {
     icon: MessageSquare,
     title: 'Chat, Agents & Audio',
-    count: 6,
+    count: 7,
     apps: [
       { name: 'LLM Chat', slug: 'llm-chat' },
       { name: 'Research Agent', slug: 'research-agent' },
       { name: 'GGUF Explorer', slug: 'gguf-explorer' },
       { name: 'Voice Notes', slug: 'voice-notes' },
+      { name: 'Voice Studio', slug: 'voice-studio' },
       { name: 'Meeting Assistant', slug: 'meeting-assistant' },
       { name: 'Audiobook Creator', slug: 'audiobook-creator' },
     ],
@@ -362,7 +377,7 @@ const demoCategories = [
   {
     icon: Eye,
     title: 'Vision & Images',
-    count: 9,
+    count: 10,
     apps: [
       { name: 'Background Remover', slug: 'background-remover' },
       { name: 'Smart Gallery', slug: 'smart-gallery' },
@@ -371,6 +386,7 @@ const demoCategories = [
       { name: 'Image Captioner', slug: 'image-captioner' },
       { name: 'OCR Scanner', slug: 'ocr-scanner' },
       { name: 'Object Detector', slug: 'object-detector' },
+      { name: 'MediaPipe Studio', slug: 'mediapipe-studio' },
       { name: 'Duplicate Finder', slug: 'duplicate-finder' },
       { name: 'Photo Enhancer', slug: 'photo-enhancer' },
     ],
@@ -396,7 +412,7 @@ const providerComparison = [
   {
     provider: 'WebLLM',
     runtime: 'WebGPU',
-    models: '30 curated (MLC)',
+    models: '32 curated (MLC)',
     speed: 'Fastest (GPU)',
     browsers: 'Chrome/Edge 113+',
     bestFor: 'Maximum performance',
@@ -404,7 +420,7 @@ const providerComparison = [
   {
     provider: 'Wllama',
     runtime: 'WASM (llama.cpp)',
-    models: '135K+ GGUF from HF',
+    models: '160K+ GGUF from HF',
     speed: 'Good (CPU)',
     browsers: 'All modern browsers',
     bestFor: 'Universal compatibility',
@@ -416,6 +432,14 @@ const providerComparison = [
     speed: 'Good (CPU/GPU)',
     browsers: 'All modern browsers',
     bestFor: 'Multi-task (embed + LLM)',
+  },
+  {
+    provider: 'LiteRT',
+    runtime: 'WebGPU / CPU WASM',
+    models: '3 verified (.litertlm)',
+    speed: 'Fast (GPU) / Good (CPU)',
+    browsers: 'Chrome/Edge (WebGPU)',
+    bestFor: 'Google on-device models',
   },
 ];
 
@@ -450,9 +474,36 @@ function PackageCard({
 
 // --- Page ---
 
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'LocalMode',
+    url: 'https://localmode.dev',
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'LocalMode',
+    applicationCategory: 'DeveloperApplication',
+    operatingSystem: 'Web Browser',
+    description:
+      'Privacy-first AI utilities. Run embeddings, vector search, RAG, classification, vision, and LLMs - all locally in the browser.',
+    url: 'https://localmode.dev',
+    license: 'https://opensource.org/licenses/MIT',
+    offers: {
+      '@type': 'Offer',
+      price: '0',
+      priceCurrency: 'USD',
+    },
+  },
+];
+
 export default async function HomePage() {
   return (
     <main className="flex flex-col min-h-screen">
+      <script type="application/ld+json">{JSON.stringify(jsonLd)}</script>
+
       {/* Hero */}
       <section className="relative flex flex-col items-center justify-center px-6 py-24 text-center overflow-hidden">
         <div className="inline-flex items-center gap-2 px-4 py-2 mb-6 text-sm font-medium rounded-full border border-fd-border text-fd-foreground">
@@ -484,7 +535,7 @@ export default async function HomePage() {
             href="https://localmode.ai"
             className="inline-flex items-center gap-2 px-6 py-3 text-base font-semibold rounded-lg border border-fd-border hover:bg-fd-accent transition-colors"
           >
-            Try 32 Demo Apps
+            Try 34 Demo Apps
           </Link>
           <Link
             target="_blank"
@@ -519,8 +570,8 @@ export default async function HomePage() {
       {/* Packages */}
       <section className="px-6 py-20">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-4">13 Packages</h2>
-          <p className="text-center text-fd-muted-foreground mb-12 max-w-2xl mx-auto">
+          <h2 className="text-3xl font-bold text-center mb-4">15 Packages</h2>
+          <p className="text-center text-fd-muted-foreground mb-12 max-w-3xl mx-auto">
             Modular architecture - use only what you need. Zero-dependency core provides everything;
             providers add ML framework integrations.
           </p>
@@ -542,7 +593,7 @@ export default async function HomePage() {
             <h3 className="text-xs font-semibold uppercase tracking-wider text-fd-muted-foreground mb-3">
               AI Providers
             </h3>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {providerPackages.map((pkg) => (
                 <PackageCard key={pkg.name} pkg={pkg} />
               ))}
@@ -672,8 +723,8 @@ export default async function HomePage() {
       {/* LLM Provider Comparison */}
       <section className="px-6 py-20 bg-fd-muted/30">
         <div className="max-w-5xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-4">3 LLM Providers, 1 Interface</h2>
-          <p className="text-center text-fd-muted-foreground mb-12 max-w-2xl mx-auto">
+          <h2 className="text-3xl font-bold text-center mb-4">4 LLM Providers, 1 Interface</h2>
+          <p className="text-center text-fd-muted-foreground mb-12 max-w-3xl mx-auto">
             All providers implement the same <code className="text-fd-foreground">LanguageModel</code> interface - swap with a single line change.
           </p>
           <div className="overflow-x-auto">
@@ -728,7 +779,7 @@ export default async function HomePage() {
       {/* Demo Apps */}
       <section className="px-6 py-20">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-4">32 Demo Applications</h2>
+          <h2 className="text-3xl font-bold text-center mb-4">34 Demo Applications</h2>
           <p className="text-center text-fd-muted-foreground mb-12 max-w-2xl mx-auto">
             See every feature in action at{' '}
             <Link
@@ -809,7 +860,7 @@ export default async function HomePage() {
           <Globe className="w-12 h-12 mx-auto mb-6 text-fd-primary" />
           <h2 className="text-3xl font-bold mb-4">Ready to Build?</h2>
           <p className="text-fd-muted-foreground mb-8 max-w-xl mx-auto">
-            Start building local-first AI applications with comprehensive documentation, 32 example
+            Start building local-first AI applications with comprehensive documentation, 34 example
             apps, and guides for every feature.
           </p>
           <div className="flex flex-wrap justify-center gap-4">

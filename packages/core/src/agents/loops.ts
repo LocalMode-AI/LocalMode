@@ -8,10 +8,9 @@
  * @packageDocumentation
  */
 
-import type { LanguageModel, GenerationUsage } from '../generation/types.js';
+import type { LanguageModel, GenerationUsage, ObjectSchema } from '../generation/types.js';
 import type { AgentStep, AgentResult, AgentMemory, ToolRegistry } from './types.js';
 import { generateObject } from '../generation/generate-object.js';
-import { jsonSchema } from '../generation/schema.js';
 
 // ═══════════════════════════════════════════════════════════════
 // ACTION SCHEMA (discriminated union for model output)
@@ -38,7 +37,7 @@ type AgentAction = ToolCallAction | FinishAction;
  * importing Zod (core is zero-dependency). We define a manual parse
  * function and JSON Schema representation.
  */
-function createActionSchema(): ReturnType<typeof jsonSchema<AgentAction>> {
+function createActionSchema(): ObjectSchema<AgentAction> {
   const schema = {
     parse: (value: unknown): AgentAction => {
       if (typeof value !== 'object' || value === null) {

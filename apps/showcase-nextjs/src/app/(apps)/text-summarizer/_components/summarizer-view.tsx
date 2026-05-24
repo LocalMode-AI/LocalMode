@@ -6,6 +6,7 @@
  */
 'use client';
 
+import Link from 'next/link';
 import {
   FileText,
   Trash2,
@@ -21,7 +22,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { useState } from 'react';
-import { Button, IconBox, Spinner } from './ui';
+import { Button, IconBox } from './ui';
 import { ErrorBoundary, ErrorAlert } from './error-boundary';
 import { cn, countWords, compressionRatio } from '../_lib/utils';
 import { MODEL_SIZE, SAMPLE_TEXT, LENGTH_CONFIGS } from '../_lib/constants';
@@ -161,12 +162,12 @@ export function SummarizerView() {
         {/* ── Header ── */}
         <div className="h-16 min-h-16 border-b border-poster-border/30 flex items-center justify-between px-6 bg-poster-surface/80 backdrop-blur-md">
           <div className="flex items-center gap-3">
-            <a
+            <Link
               href="/"
               className="btn btn-ghost btn-sm btn-circle text-poster-text-sub hover:text-poster-text-main transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
-            </a>
+            </Link>
             <div className="w-px h-6 bg-poster-border/30" />
             <IconBox size="sm" variant="primary" className="bg-poster-accent-purple/10 text-poster-accent-purple ring-poster-accent-purple/30">
               <FileText className="w-4 h-4" />

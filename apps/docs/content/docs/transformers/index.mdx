@@ -95,7 +95,7 @@ All features below are production-ready with implementations available.
 | Feature        | Method                               | Interface           | Docs |
 | -------------- | ------------------------------------ | ------------------- | ---- |
 | Speech-to-Text | `transformers.speechToText(modelId)` | `SpeechToTextModel` | [Guide](/docs/transformers/speech-to-text) |
-| Text-to-Speech | `transformers.textToSpeech(modelId)` | `TextToSpeechModel` | [Guide](/docs/transformers/text-to-speech) |
+| Text-to-Speech | `transformers.textToSpeech(modelId)` | `TextToSpeechModel` | [Guide](/docs/transformers/text-to-speech) — phonemizer-backed, 29 voices, English (US & GB) |
 
 ### Vision
 
@@ -148,7 +148,9 @@ All features below are production-ready with implementations available.
 
 | Model                                   | Size   | Use Case                          |
 | ---------------------------------------- | ------ | --------------------------------- |
-| `onnx-community/Kokoro-82M-v1.0-ONNX`  | ~92MB  | 24 natural voices, high quality   |
+| `onnx-community/Kokoro-82M-v1.0-ONNX`  | ~86MB  | 29 English voices (US & GB), phonemizer-backed synthesis, speed control   |
+
+Import `KOKORO_VOICES` from `@localmode/transformers` for the full voice catalog with language and style metadata.
 
 </Accordion>
 
@@ -175,7 +177,8 @@ All features below are production-ready with implementations available.
 | Background Removal     | `briaai/RMBG-1.4` (non-commercial license)             | ~170MB  |
 | Image Features         | `onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX` | ~86MB   |
 | Document QA            | `onnx-community/Florence-2-base-ft`                   | ~223MB  |
-| OCR                    | `Xenova/trocr-small-printed`                           | ~120MB  |
+| OCR (line-level)       | `Xenova/trocr-small-printed`                           | ~120MB  |
+| OCR (document-level)   | `onnx-community/GLM-OCR-ONNX`                         | ~652MB  |
 | Super Resolution       | `Xenova/swin2SR-lightweight-x2-64`                     | ~6MB    |
 
 </Accordion>
@@ -290,7 +293,7 @@ const model = transformers.embedding('Xenova/bge-small-en-v1.5', {
 | Chrome 113+ | ✅     | ✅   | Best performance with WebGPU |
 | Edge 113+   | ✅     | ✅   | Same as Chrome               |
 | Firefox     | ❌     | ✅   | WASM only                    |
-| Safari 18+  | ✅     | ✅   | WebGPU available             |
+| Safari 26+  | ✅     | ✅   | WebGPU available             |
 | iOS Safari  | ✅     | ✅   | WebGPU available (iOS 26+)   |
 
 ## Best Practices
@@ -420,7 +423,7 @@ export function useEmbedding() {
   Always abort the previous request before starting a new one. This prevents race conditions where an old response overwrites a newer one.
 </Callout>
 
-## Vision (Image Input) — Experimental
+## Vision (Image Input)
 
 Qwen3.5 ONNX models support vision input via their built-in vision encoder. Images are processed through `AutoProcessor` and fed to the model alongside text.
 
@@ -453,10 +456,6 @@ const result = await streamText({
 | Qwen3.5 0.8B | ~500MB | 32K | Best quality sub-1B multimodal |
 | Qwen3.5 2B | ~1.5GB | 32K | Higher quality, 4GB+ RAM |
 | Qwen3.5 4B | ~2.5GB | 32K | Best quality, 8GB+ RAM, WebGPU required |
-
-<Callout type="warn" title="Experimental">
-  Vision support uses Transformers.js v4 (preview release). The API may change in future TJS versions.
-</Callout>
 
 <Callout type="info">
   For full multimodal API reference including `ContentPart` types and utilities, see the [Core Generation](/docs/core/generation#vision-multimodal-input) guide.

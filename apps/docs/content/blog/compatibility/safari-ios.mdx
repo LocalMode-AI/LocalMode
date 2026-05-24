@@ -1,0 +1,143 @@
+---
+title: "Safari on iOS / iPadOS"
+description: "Running LocalMode on iPhones and iPads - WASM works, WebGPU enabled by default from iOS 26, tight memory limits, and Private Browsing caveats."
+author: "LocalMode"
+date: "2026-05-17"
+---
+
+# Safari on iOS / iPadOS
+
+Running LocalMode on iPhones and iPads - WASM works, WebGPU enabled by default from iOS 26, tight memory limits, and Private Browsing caveats.
+
+*Category: Browser Compatibility*
+
+## Feature Support Matrix
+
+The following table summarizes which web platform features are available on Safari on iOS / iPadOS and how they affect LocalMode's capabilities. Features marked as supported enable full functionality; partial or unsupported features trigger automatic fallbacks.
+
+| Feature | Supported | Notes |
+| --- | --- | --- |
+| **WebGPU** | iOS 26+ (enabled by default) | WebGPU present but disabled by default in iOS 17.4–18.7. Enabled by default from iOS 26. No chip restriction documented. |
+| **WebAssembly** | Yes (iOS 11+) | Full WASM support. SIMD from iOS 16.4. Primary inference backend on iOS. |
+| **IndexedDB** | Yes (normal mode) | Works in normal Safari. BLOCKED in Private Browsing. iOS has stricter storage quotas (~1GB). |
+| **Web Workers** | Partial | Module workers (ES modules in workers) from iOS Safari 15. Classic workers supported earlier. |
+| **Memory Limit** | Constrained | iOS Safari typically limits tab memory to 1-1.5GB. Models larger than ~800MB may cause tab crashes. |
+| **Web Locks** | Yes (iOS 15.4+) | Full support on modern iOS. |
+| **BroadcastChannel** | Yes (iOS 15.4+) | Full support on modern iOS. |
+
+## Understanding the Impact
+
+Each feature in the matrix above maps to specific LocalMode capabilities:
+
+- **WebGPU** - Required for `@localmode/webllm` (GPU-accelerated LLM inference at 30-90 tokens/second). When unavailable, use `@localmode/wllama` (WASM, 5-20 tokens/second) as a fallback. Non-LLM tasks (embeddings, classification, vision, audio) do not require WebGPU.
+- **WebAssembly** - The universal inference backend. Required for `@localmode/transformers` and `@localmode/wllama`. WASM is supported in 97%+ of web traffic. SIMD support (for optimized vector operations) requires newer browser versions.
+- **IndexedDB** - Used for persistent vector storage (`VectorDB`) and model caching (`createModelLoader`). When blocked (Safari Private Browsing), LocalMode falls back to `MemoryStorage` (data lost on tab close).
+- **Web Workers** - Enable background model loading and inference without blocking the main UI thread. Module workers (for ES module imports in workers) require newer browser versions.
+- **SharedArrayBuffer** - Enables multi-threaded WASM inference for improved performance. Requires Cross-Origin Isolation headers (COOP/COEP). Not required for basic functionality.
+- **Web Locks** - Used for cross-tab model loading coordination (prevents multiple tabs from downloading the same model simultaneously). Falls back to `InMemoryLockManager` when unavailable.
+- **BroadcastChannel** - Used for cross-tab VectorDB synchronization. Falls back to `LocalStorageBroadcaster` when unavailable.
+
+## Fallback Strategies
+
+iOS is the most constrained platform for LocalMode. Use small models exclusively: SmolLM2-135M (70MB), Qwen2.5-0.5B (386MB), or BGE-small (33MB). Models above 800MB risk crashing the Safari tab due to iOS memory limits. Private Browsing blocks IndexedDB - detect with a probe write and fall back to MemoryStorage. For apps that must work offline on iOS, pre-cache models during a normal browsing session and inform users that Private Browsing won't persist data.
+
+LocalMode is designed with progressive enhancement in mind. The core principle: detect capabilities at runtime and use the best available path. The `@localmode/core` package exports detection utilities for this purpose:
+
+```typescript
+import {
+  isWebGPUSupported,
+  isIndexedDBSupported,
+  isCrossOriginIsolated,
+  detectCapabilities,
+  recommendModels,
+} from '@localmode/core';
+
+async function detectAndConfigure() {
+  const caps = await detectCapabilities();
+  console.log(caps);
+  // caps.features.webgpu, caps.hardware.memory (GB), caps.storage.availableBytes
+
+  // isWebGPUSupported() is async - it must be awaited
+  if (await isWebGPUSupported()) {
+    // Use @localmode/webllm for GPU-accelerated inference
+  }
+
+  // recommendModels() is synchronous: capabilities first, options second
+  const recommendations = recommendModels(caps, {
+    task: 'generation',
+    maxSizeMB: 1500,
+  });
+}
+```
+
+## Fallback Code Example
+
+```typescript
+// Detect iOS memory constraints and select appropriate model
+import { detectCapabilities } from '@localmode/core';
+
+const caps = await detectCapabilities();
+const modelId = caps.hardware.memory && caps.hardware.memory < 4096
+  ? 'SmolLM2-135M-Instruct-Q4_K_M'  // 70MB, safe for 2-4GB devices
+  : 'Qwen2.5-0.5B-Instruct-Q4_K_M'; // 386MB, needs 4GB+ RAM
+```
+
+## Recommended Providers
+
+For Safari on iOS / iPadOS, the recommended LocalMode providers are:
+
+- **wllama (WASM)** - Universal LLM inference via WASM. Works without WebGPU. The safe choice for broad compatibility.
+- **Transformers.js** - Broadest model catalog for non-LLM tasks (embeddings, classification, vision, audio). WASM-based, works everywhere.
+
+## Recommended Models
+
+The following models are tested and recommended for Safari on iOS / iPadOS:
+
+| Model | Provider |
+| --- | --- |
+| SmolLM2-135M-Instruct-Q4_K_M | wllama (WASM) |
+| Xenova/bge-small-en-v1.5 | Transformers.js |
+| Xenova/distilbert-base-uncased-finetuned-sst-2-english | Transformers.js |
+
+These models are chosen for their compatibility with Safari on iOS / iPadOS's capabilities and constraints. They represent the best balance of quality, size, and performance for this platform.
+
+## Known Issues
+
+Tab memory limit (~1.5GB) is the primary constraint. Models above 800MB frequently crash. Audio models (Moonshine) may have microphone permission issues in PWA mode. IndexedDB blocked in Private Browsing. Module workers (ES module imports in workers) require iOS Safari 15+. WebGPU was present but disabled by default in iOS 17.4–18.7 and is only enabled by default from iOS 26.
+
+### Mitigation Strategies
+
+When building applications that target Safari on iOS / iPadOS, follow these practices:
+
+1. **Always detect before loading** - Use `await isWebGPUSupported()`, `isIndexedDBSupported()`, and `await detectCapabilities()` before attempting to load models or create storage. Never assume a feature is available.
+2. **Wrap model loading in try/catch** - Even when detection succeeds, model loading can fail due to memory pressure, network issues, or browser bugs. Always have a fallback path that attempts a smaller model.
+3. **Pick models with `recommendModels()`** - Pass the detected capabilities to `recommendModels(caps, { task })` to select a model appropriate for the current device. It is the recommended pattern for production deployments.
+4. **Test on real hardware** - Browser DevTools device emulation does not accurately simulate memory limits, GPU capabilities, or storage quotas. Test on actual iOS devices.
+5. **Monitor storage quota** - Use `getStorageQuota()` to check available space before downloading large models. Inform users if storage is insufficient rather than failing silently.
+
+## Web Standards References
+
+- [Safari on iOS Feature List](https://developer.apple.com/safari/resources/)
+
+## Related Pages
+
+- [Safari Macos](/blog/compatibility/safari-macos) - compatibility guide
+- [Private Browsing](/blog/compatibility/private-browsing) - compatibility guide
+- [Low Memory Devices](/blog/compatibility/low-memory-devices) - compatibility guide
+- [Smollm2](/blog/models/smollm2) - model guide
+
+## Methodology
+
+Browser feature support data on this page is sourced from caniuse.com support tables (fetched May 2026) and the official WebKit blog, cross-referenced with LocalMode's runtime feature detection (`packages/core/src/capabilities/features.ts`). Version numbers for WebGPU reflect the point at which each feature shipped enabled by default on iOS; the "disabled by default" range (iOS 17.4–18.7) is taken directly from caniuse's WebGPU table. Memory limits are based on widely-reported community testing - no official Apple figure is published. Browser support evolves; verify current support with the linked references for production decisions.
+
+## Sources
+
+- [caniuse: WebGPU - iOS Safari support table](https://caniuse.com/webgpu) - confirmed iOS 17.4–18.7 disabled by default; iOS 26.0+ enabled by default
+- [caniuse: WebAssembly](https://caniuse.com/wasm) - iOS Safari 11+ supported
+- [caniuse: WebAssembly SIMD](https://caniuse.com/wasm-simd) - iOS Safari 16.4+ supported
+- [caniuse: Worker ECMAScript modules](https://caniuse.com/mdn-api_worker_worker_ecmascript_modules) - iOS Safari 15+ supported
+- [caniuse: Web Locks API](https://caniuse.com/mdn-api_lock) - iOS Safari 15.4+ supported
+- [caniuse: BroadcastChannel](https://caniuse.com/broadcastchannel) - iOS Safari 15.4+ supported
+- [WebKit blog: News from WWDC25 - Safari 26 beta](https://webkit.org/blog/16993/news-from-wwdc25-web-technology-coming-this-fall-in-safari-26-beta/) - WebGPU enabled by default in Safari 26 for iOS/iPadOS/macOS/visionOS
+- [gpuweb/gpuweb Implementation Status](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status) - Safari 26 WebGPU enabled by default, no chip restriction documented
+- LocalMode capability detection source (`packages/core/src/capabilities/features.ts`)

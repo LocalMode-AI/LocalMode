@@ -1,0 +1,206 @@
+---
+title: "Hand, Pose & Face Tracking in the Browser with MediaPipe + LocalMode"
+description: "LocalMode now ships @localmode/mediapipe -- a provider wrapping Google's MediaPipe Tasks. Detect 21-point hand landmarks, 33-point body poses, the 478-point face mesh, and 8 hand gestures, plus real-time video trackers built for live inference. The camera never leaves the device, and it works in every browser without WebGPU."
+author: LocalMode
+date: "2026-05-21"
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Camera-based AI has a privacy problem. The moment a webcam feed leaves the browser -- to detect a hand, estimate a pose, or read a facial expression -- you have shipped someone's face to a server. For a fitness app, a sign-language tool, an avatar puppeteer, or a gesture-controlled UI, that round trip is both a latency cost and a liability.
+
+It does not have to work that way. `@localmode/mediapipe` is a new LocalMode provider that wraps [Google's MediaPipe Tasks](https://ai.google.dev/edge/mediapipe/solutions/guide) and runs hand, pose, and face tracking entirely on-device. The camera frame goes from the `<video>` element straight into a WebAssembly model and back out as landmarks. Nothing is uploaded.
+
+---
+
+## What MediaPipe Brings
+
+MediaPipe is Google's on-device perception stack -- the same technology behind hand and face tracking in Google products. The MediaPipe Tasks packages (`@mediapipe/tasks-vision`, `@mediapipe/tasks-audio`, `@mediapipe/tasks-text`) compile that stack to WebAssembly. `@localmode/mediapipe` wraps all three behind a single unified provider.
+
+The catalog ships 13 curated, verified models:
+
+- **Hand Landmarker** -- 21 points per hand, with handedness
+- **Pose Landmarker** -- 33 full-body points (lite and full variants)
+- **Face Landmarker** -- the 478-point face mesh, with optional expression blendshapes
+- **Face Detector** -- fast BlazeFace bounding boxes (just 230KB)
+- **Gesture Recognizer** -- 8 built-in hand gestures
+- Plus image classification, object detection, selfie segmentation, image embeddings, audio classification, language detection, and text embeddings
+
+Most of these models are tiny. Face detection is 230KB and selfie segmentation is 250KB; the heaviest landmark model -- the full pose landmarker -- is 9.4MB. They download once, cache in the browser, and then run offline.
+
+---
+
+## The Unified Interface
+
+The point of LocalMode's provider model is that the engine is an implementation detail. The landmark and gesture tasks are exposed through new core functions -- `detectHands()`, `detectPose()`, `detectFaceLandmarks()`, `detectFace()`, `recognizeGesture()` -- and the classification, detection, and embedding tasks reuse the existing core functions you already know.
+
+Detecting hand landmarks in a still image is five lines:
+
+```typescript
+import { detectHands } from '@localmode/core';
+import { mediapipe } from '@localmode/mediapipe';
+
+const { hands } = await detectHands({
+  model: mediapipe.handLandmarker(),
+  image: imageBlob,
+  numHands: 2,
+});
+
+for (const hand of hands) {
+  console.log(`${hand.handedness} hand -- ${hand.landmarks.length} landmarks`);
+}
+```
+
+Each detected hand carries 21 normalized landmarks, 21 world-coordinate landmarks (in meters), the handedness, and a confidence score. Pose detection returns 33 body points with visibility scores; the face landmarker returns a 478-point mesh.
+
+For drawing, `@localmode/core` exports the connection tables -- `HAND_CONNECTIONS`, `POSE_CONNECTIONS`, and `FACE_CONNECTIONS` -- so you can render the skeleton with a few `canvas` calls:
+
+```typescript
+import { HAND_CONNECTIONS } from '@localmode/core';
+
+for (const [start, end] of HAND_CONNECTIONS) {
+  const a = hand.landmarks[start];
+  const b = hand.landmarks[end];
+  ctx.beginPath();
+  ctx.moveTo(a.x * width, a.y * height);
+  ctx.lineTo(b.x * width, b.y * height);
+  ctx.stroke();
+}
+```
+
+---
+
+## Gesture Recognition, Built In
+
+The gesture recognizer classifies 8 hand gestures out of the box -- no custom training. `@localmode/core` exports the category list as `GESTURE_CATEGORIES`: `None`, `Closed_Fist`, `Open_Palm`, `Pointing_Up`, `Thumb_Down`, `Thumb_Up`, `Victory`, and `ILoveYou`.
+
+```typescript
+import { recognizeGesture } from '@localmode/core';
+import { mediapipe } from '@localmode/mediapipe';
+
+const { gestures } = await recognizeGesture({
+  model: mediapipe.gestureRecognizer(),
+  image: imageBlob,
+});
+
+const top = gestures[0];
+if (top && top.score > 0.6 && top.gesture === 'Thumb_Up') {
+  console.log('Approved');
+}
+```
+
+Every gesture result also includes the same 21-point hand landmarks, so a single call gives you both the gesture and the geometry to draw it.
+
+---
+
+## Real-Time Video Tracking
+
+Still-image detection is useful, but the headline feature is **live video**. MediaPipe Tasks exposes a dedicated `VIDEO` running mode designed for "decoded frames of a video or on a livestream of input data, such as from a camera" ([Hand Landmarker web guide](https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker/web_js)). So `@localmode/mediapipe` ships dedicated streaming trackers that run MediaPipe in VIDEO mode, keeping the model and inference context warm between frames.
+
+There are four: `createHandTracker`, `createPoseTracker`, `createFaceTracker`, and `createGestureTracker`. Each takes a `<video>` element and an `onResults` callback invoked once per processed frame:
+
+```typescript
+import { mediapipe } from '@localmode/mediapipe';
+
+const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+videoElement.srcObject = stream;
+await videoElement.play();
+
+const tracker = mediapipe.createHandTracker({
+  video: videoElement,
+  numHands: 2,
+  onResults: (hands, timestampMs) => {
+    drawHands(hands); // called every frame
+  },
+  onError: (error) => console.error('Frame error:', error),
+});
+
+await tracker.start();
+```
+
+Each tracker has a simple lifecycle: `start()` loads the model and begins the loop, `stop()` pauses it while keeping the model in memory, and `close()` disposes the MediaPipe task entirely. The `isRunning` flag tells you the current state.
+
+MediaPipe's models are built for real-time, on-device inference, but the actual frame rate is hardware-dependent -- MediaPipe's documentation publishes no fixed browser frame-rate figure, and `detectForVideo()` runs synchronously on the calling thread. Each tracker processes frames as fast as the device allows, throttled to the video's refresh rate. The `timestampMs` argument is the frame timestamp -- diff successive values to measure the real frame rate on the device you actually ship to. If a device is slow, switching the `delegate` between `'GPU'` and `'CPU'`, or picking a lighter model (`pose_landmarker` over `pose_landmarker_full`), usually closes the gap.
+
+---
+
+## Works in Every Browser
+
+Unlike WebGPU-based LLM providers, MediaPipe Tasks runs on **pure WebAssembly with a WebGL delegate**. It does not need WebGPU. That means Chrome, Edge, Firefox, and Safari all run the full task set -- no Nightly builds, no flags. The WASM runtime loads from the jsDelivr CDN by default, or you can self-host it with `wasmBasePath` for fully offline apps.
+
+<Callout type="warn" title="One caveat: combining audio + vision tasks">
+  Developers have reported compatibility problems when using `@mediapipe/tasks-audio` and `@mediapipe/tasks-vision` together in the same app ([mediapipe#4737](https://github.com/google-ai-edge/mediapipe/issues/4737) -- "tasks-audio and tasks-vision together. Compatibility issue?"). If your app needs both audio classification and a vision tracker, isolating one of them in a Web Worker so each WASM runtime is initialized in its own context is a reliable workaround.
+</Callout>
+
+---
+
+## React Hooks
+
+`@localmode/react` adds six hooks for the new tasks -- `useDetectHands`, `useDetectPose`, `useDetectFace`, `useDetectFaceLandmarks`, `useRecognizeGesture`, and `useDetectLanguage`. Each takes a `{ model }` and returns the familiar `{ data, error, isLoading, execute, cancel, reset }` shape:
+
+```tsx
+'use client';
+
+import { useDetectHands } from '@localmode/react';
+import { mediapipe } from '@localmode/mediapipe';
+
+const model = mediapipe.handLandmarker();
+
+export function HandDetector() {
+  const { data, isLoading, execute, cancel } = useDetectHands({ model, numHands: 2 });
+
+  return (
+    <div>
+      <button onClick={() => execute(imageBlob)}>Detect</button>
+      {isLoading && <button onClick={cancel}>Cancel</button>}
+      {data && <p>{data.hands.length} hand(s)</p>}
+    </div>
+  );
+}
+```
+
+---
+
+## See It Live: MediaPipe Studio
+
+The new **MediaPipe Studio** showcase app puts all of this together -- a webcam view with live hand, pose, face, and gesture tracking overlaid on the video, switchable in real time. It is the fastest way to see what on-device perception feels like with zero latency and zero uploads.
+
+Because everything runs locally, MediaPipe Studio works offline after the first model load, costs nothing to run, and never asks for an API key.
+
+---
+
+## When to Reach for MediaPipe
+
+**Use `@localmode/mediapipe`** when you need real-time human perception in the browser -- hand and gesture control, pose-based fitness or motion apps, face mesh for avatars and AR effects, or any feature that should not ship the camera off-device. It is also a tidy, zero-config option for image/audio classification and language detection.
+
+**Reach for `@localmode/transformers`** when you need a broader catalog of pre-trained models for tasks beyond perception -- general image captioning, OCR, summarization, or ready-made text classifiers.
+
+The two compose cleanly: MediaPipe handles the camera; the rest of LocalMode handles the data.
+
+---
+
+## Methodology
+
+Every API name, model count, file size, and code example in this post was verified directly against the `@localmode/mediapipe` package source code -- `package.json`, `src/models.ts` (the 13-entry `MEDIAPIPE_MODELS` catalog with exact `sizeBytes`), `src/provider.ts`, `src/types.ts`, and `src/streaming/types.ts` -- together with `@localmode/core`'s `vision/types.ts` and `vision/landmarks.ts`, and `@localmode/react`'s hook exports. The package is version 2.0.0 and declares `@mediapipe/tasks-vision`, `@mediapipe/tasks-audio`, and `@mediapipe/tasks-text` at the `^0.10.22` range. Landmark counts (21 hand, 33 pose, 478 face), the 8-gesture set, the BlazeFace short-range face detector, world landmarks in meters, and the WebAssembly + WebGL runtime were each cross-checked against Google's official MediaPipe / AI Edge documentation, and GitHub issue #4737 was verified to exist and concern audio + vision package compatibility. No specific browser frame-rate figure is claimed because MediaPipe's documentation publishes none; the post describes VIDEO mode as designed for real-time, hardware-dependent inference instead.
+
+## Sources
+
+- [MediaPipe Solutions guide](https://ai.google.dev/edge/mediapipe/solutions/guide) -- official Google AI Edge overview of MediaPipe Tasks
+- [Hand Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker) -- 21 hand-knuckle landmarks per hand, world coordinates
+- [Hand Landmarker web/JS guide](https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker/web_js) -- the `VIDEO` running mode for livestream input
+- [Pose Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker) -- 33 body landmarks, lite/full/heavy variants
+- [Face Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker) -- 478 face-mesh landmarks, optional 52 blendshapes
+- [Face Detector](https://ai.google.dev/edge/mediapipe/solutions/vision/face_detector) -- BlazeFace short-range model, 6 keypoints
+- [Gesture Recognizer](https://ai.google.dev/edge/mediapipe/solutions/vision/gesture_recognizer) -- the 8 built-in canned gesture categories
+- [mediapipe#4737](https://github.com/google-ai-edge/mediapipe/issues/4737) -- "tasks-audio and tasks-vision together. Compatibility issue?"
+- [`@mediapipe/tasks-vision` on npm](https://www.npmjs.com/package/@mediapipe/tasks-vision) -- the wrapped vision runtime package
+- [LocalMode MediaPipe docs](/docs/mediapipe) -- full API reference and task guides
+- [Real-Time Streaming guide](/docs/mediapipe/streaming) -- the four video trackers in detail
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit [localmode.ai](https://localmode.ai) to try the MediaPipe Studio demo and 30+ other AI apps running entirely in your browser -- no sign-up, no API keys, and no data leaving your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

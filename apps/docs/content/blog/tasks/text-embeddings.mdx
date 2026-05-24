@@ -1,0 +1,153 @@
+---
+title: "Text Embeddings in the Browser"
+description: "Convert text into semantic vector representations for similarity search, clustering, and RAG pipelines."
+author: "LocalMode"
+date: "2026-04-25"
+---
+
+# Text Embeddings in the Browser
+
+Convert text into semantic vector representations for similarity search, clustering, and RAG pipelines.
+
+## What Is Text Embeddings?
+
+Text embeddings transform words, sentences, or paragraphs into dense numerical vectors (Float32Arrays) that capture semantic meaning. Texts with similar meanings produce vectors that are close together in high-dimensional space - "happy dog" and "joyful puppy" have nearly identical embeddings despite sharing no words. This is the foundation of semantic search, recommendation engines, and retrieval-augmented generation (RAG) pipelines.
+
+This capability is exposed through the `embed()` function in `@localmode/core`. All processing runs entirely in the browser - no server, no API key, no data leaves the device. After the initial model download, text embeddings works completely offline.
+
+## Real-World Applications
+
+Semantic search engines that understand meaning, not just keywords. Document similarity scoring for duplicate detection. Content recommendation systems. RAG pipelines that retrieve relevant context for LLM prompts. Clustering documents by topic without predefined categories.
+
+These use cases all benefit from local, on-device processing: user data stays private, there are no per-request API costs, and the application works without internet after initial setup.
+
+## Getting Started
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Import the core function and provider:
+
+```typescript
+import { embed, embedMany, createVectorDB } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+```
+
+The recommended starting model is **Xenova/bge-small-en-v1.5** - it provides the best balance of quality, speed, and download size for most applications.
+
+## Code Example
+
+```typescript
+import { embed, embedMany, createVectorDB } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+// Embed a single text
+const { embedding } = await embed({ model, value: 'What is machine learning?' });
+console.log(embedding); // Float32Array(384)
+
+// Embed multiple texts for batch indexing
+const { embeddings } = await embedMany({
+  model,
+  values: ['Document one', 'Document two', 'Document three'],
+});
+
+// Store and search vectors
+const db = await createVectorDB<{ text: string }>({ name: 'docs', dimensions: 384 });
+await db.addMany(embeddings.map((v, i) => ({ id: String(i), vector: v, metadata: { text: texts[i] } })));
+const results = await db.search(embedding, { k: 5 });
+```
+
+This example demonstrates the core workflow: create a model instance from the provider, call the `embed()` function with your input, and receive structured results. The same pattern works identically across all 2 available providers: Transformers.js and MediaPipe (Universal Sentence Encoder).
+
+## Available Models
+
+The following models support text embeddings through LocalMode. Choose based on your target device, acceptable download size, and quality requirements.
+
+| Model | Provider | Size | Speed | Quality |
+| --- | --- | --- | --- | --- |
+| Xenova/bge-small-en-v1.5 | Transformers.js | 33MB | Fast | Good |
+| Xenova/bge-base-en-v1.5 | Transformers.js | 110MB | Medium | High |
+| Snowflake/snowflake-arctic-embed-xs | Transformers.js | 23MB | Fast | Good |
+| Xenova/paraphrase-multilingual-MiniLM-L12-v2 | Transformers.js | 120MB | Medium | Good |
+| Xenova/all-mpnet-base-v2 | Transformers.js | 420MB | Slow | High |
+
+**Choosing a model:** For most applications, start with the recommended model (`Xenova/bge-small-en-v1.5`). If download size is the primary constraint (e.g., mobile PWA, browser extension), pick the smallest model that meets your quality bar. If quality is the priority (e.g., enterprise search, content analysis), use the largest model your target devices can handle.
+
+## Cloud vs Local: Cost and Privacy Comparison
+
+Running text embeddings locally eliminates per-request API costs and keeps all data on-device. Here is how the economics compare:
+
+| Service | Cost / Notes |
+| --- | --- |
+| OpenAI text-embedding-3-small | $0.02 per million tokens |
+| Google text-embedding-004 (Vertex AI) | $0.10 per million tokens |
+| Cohere embed-v3 | $0.10 per million tokens |
+| LocalMode embedding models run at $0 cost after the initial model download (23-420MB), with data never leaving the device |  |
+
+OpenAI text-embedding-3-small costs $0.02 per million tokens. Google text-embedding-004 (Vertex AI) costs $0.10 per million tokens. Cohere embed-v3 costs $0.10 per million tokens. LocalMode embedding models run at $0 cost after the initial model download (23-420MB), with data never leaving the device. Quality is within 5% of cloud models for most retrieval tasks.
+
+The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
+
+## Available Providers
+
+- **Transformers.js** - ONNX-optimized models via ONNX Runtime Web. Supports both WebGPU and WASM backends. Broadest model catalog for non-LLM tasks.
+- **MediaPipe** - Google MediaPipe Tasks provider via `@localmode/mediapipe`. Includes text embeddings through the Universal Sentence Encoder. Uses WASM + WebGL (no WebGPU required).
+
+## AbortSignal Support
+
+All `embed()` calls support cancellation through the standard `AbortSignal` API:
+
+```typescript
+const controller = new AbortController();
+
+const promise = embed({
+  model,
+  value: 'input text',
+  abortSignal: controller.signal,
+});
+
+// Cancel if needed (e.g., user navigates away)
+controller.abort();
+```
+
+This is essential for responsive UIs - cancel in-flight operations when the user navigates away, submits a new query, or closes a dialog. The underlying model inference stops immediately, freeing memory and compute resources.
+
+## React Integration
+
+If you are building a React application, `@localmode/react` provides hooks that manage loading states, error handling, and cancellation automatically:
+
+```bash
+npm install @localmode/react
+```
+
+```typescript
+import { useEmbed } from '@localmode/react';
+```
+
+The hook returns `{ data, error, isLoading, execute, cancel, reset }` - providing everything a UI component needs to display progress, handle errors, offer cancellation, and reset state.
+
+## Related Pages
+
+- [Bge Embeddings](/blog/models/bge-embeddings) - model guide
+- [Sentence Transformers](/blog/models/sentence-transformers) - model guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+
+## Methodology
+
+Function signatures, hook return shapes, and model IDs were verified directly against `packages/core/src/embeddings/embed.ts`, `packages/react/src/hooks/use-embed.ts`, and `packages/transformers/src/models.ts` in the LocalMode monorepo. Embedding dimensions and max sequence lengths were verified against the official HuggingFace model cards for each model. Cloud pricing figures were cross-referenced across multiple third-party pricing trackers (May 2026) and are subject to change - verify current pricing at each provider's official page before making cost decisions.
+
+## Sources
+
+- [BAAI/bge-small-en-v1.5 model card - HuggingFace](https://huggingface.co/BAAI/bge-small-en-v1.5) - 384 dimensions, 512 token max seq, ~33MB
+- [BAAI/bge-base-en-v1.5 model card - HuggingFace](https://huggingface.co/BAAI/bge-base-en-v1.5) - 768 dimensions, 512 token max seq, ~110MB
+- [Snowflake/snowflake-arctic-embed-xs model card - HuggingFace](https://huggingface.co/Snowflake/snowflake-arctic-embed-xs) - 384 dimensions, 512 token max seq, ~23MB
+- [sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 - HuggingFace](https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2) - 384 dimensions, 50 languages
+- [sentence-transformers/all-mpnet-base-v2 - HuggingFace](https://huggingface.co/sentence-transformers/all-mpnet-base-v2) - 768 dimensions, ~420MB
+- [OpenAI text-embedding-3-small pricing - TokenMix (verified May 2026)](https://tokenmix.ai/blog/openai-embedding-pricing) - $0.02 per million tokens
+- [Google Vertex AI text-embedding-004 pricing - CloudPrice](https://cloudprice.net/models/text-embedding-004) - $0.10 per million tokens
+- [Cohere Embed v3 pricing - AI Pricing Guru (verified May 2026)](https://www.aipricing.guru/cohere-pricing/) - $0.10 per million tokens

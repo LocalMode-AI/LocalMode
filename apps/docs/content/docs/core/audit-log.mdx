@@ -1,0 +1,275 @@
+---
+title: Audit Log
+description: Append-only, hash-chained, signed (and optionally encrypted) audit log for compliance-driven workloads.
+icon: ScrollText
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+LocalMode ships an append-only, hash-chained, signed audit log primitive in
+`@localmode/core`. It is designed for HIPAA, SOX, and FedRAMP-aligned
+deployments where regulators require provenance — "what happened, when, by
+whom, with what payload" — rather than just durability.
+
+<Callout type="info" title="Zero network calls">
+  The audit log is local-first by design. It writes to IndexedDB (or any
+  injected `StorageAdapter`) and exports JSON Lines you can ship to S3,
+  Azure Blob, or anywhere else. The library itself does not call `fetch`,
+  `XMLHttpRequest`, `WebSocket`, `sendBeacon`, or `EventSource`.
+</Callout>
+
+## Why audit logs
+
+Three properties separate an audit log from a generic event log:
+
+1. **Append-only** — once written, an entry cannot be modified or deleted by
+   the application that wrote it. There is no `update` or `delete` method on
+   `AuditLog`. Mistakes are corrected by appending a *new* entry that
+   references the old one in its payload.
+2. **Tamper-evident** — every entry stores `prevHash` and `hash`, forming a
+   hash chain. `verifyChain()` recomputes hashes and detects modified
+   payloads, missing middle entries, or replaced signatures.
+3. **Independently verifiable** — the verifier needs only the verification
+   key and the log file; no network, no application secrets.
+
+## Quick start
+
+```typescript
+import {
+  createAuditLog,
+  verifyChain,
+  generateEphemeralAuditKey,
+} from '@localmode/core';
+
+const signatureKey = await generateEphemeralAuditKey({ extractable: true });
+
+const log = await createAuditLog({
+  name: 'app',
+  signatureKey,
+});
+
+await log.append('user.login', { userId: 'u1' });
+await log.append('policy.decision', { action: 'allow', resource: 'r1' });
+
+const result = await verifyChain(log);
+console.log(result);
+// { ok: true, entriesChecked: 2, durationMs: 12 }
+```
+
+## Entry format
+
+```typescript
+interface AuditEntry {
+  /** Globally unique id (defaults to crypto.randomUUID()) */
+  id: string;
+  /** Wall-clock ms-since-epoch, monotonically non-decreasing */
+  timestamp: number;
+  /** Base64 SHA-256 of the previous entry's hash, or null for genesis */
+  prevHash: string | null;
+  /** Base64 SHA-256 over prevHash + canonicalJSON({id, timestamp, prevHash, kind, payload}) */
+  hash: string;
+  /** Base64 HMAC-SHA-256 (default) or Ed25519 signature over `hash` */
+  signature: string;
+  /** Caller-defined event type, e.g. 'user.login', 'redaction.performed' */
+  kind: string;
+  /** Caller-defined JSON-serializable record */
+  payload: unknown;
+}
+```
+
+## Hash chain
+
+Each entry's `hash` is `SHA-256(prevHash + canonicalize({ id, timestamp, prevHash, kind, payload }))`,
+base64-encoded. The signature is over `hash`, never over the payload — so
+when payloads are encrypted at rest, chain verification still works without
+the encryption key.
+
+`verifyChain(log)` walks every entry in chain order:
+
+1. Recomputes the hash from canonical JSON of the plaintext payload (when
+   available).
+2. Verifies the signature over the stored hash.
+3. Confirms `entry.prevHash === previous.hash`.
+
+Failure cases return a structured `VerifyResult`:
+
+```typescript
+{ ok: false, brokenAt: 5, reason: 'hash_mismatch', entriesChecked: 5, durationMs: 42 }
+```
+
+Reasons: `'hash_mismatch'`, `'prev_hash_mismatch'`, `'signature_mismatch'`,
+`'storage_error'`.
+
+## Signature options: HMAC vs Ed25519
+
+| Property              | HMAC-SHA-256 (default)        | Ed25519 (opt-in)               |
+| --------------------- | ----------------------------- | ------------------------------ |
+| Browser support       | Universal                     | Chrome 112+, Firefox 130+, Safari 17+ |
+| Key shape             | Symmetric                     | Asymmetric (sign vs verify)    |
+| Forgery risk          | Anyone with the key can forge | Only private-key holder can sign |
+| Verifier needs        | Same key                      | Public key only                |
+| Recommended for       | Default; same-trust-domain    | Auditor-vs-writer trust split  |
+
+Pass an Ed25519 `CryptoKey` via `signatureKey` to opt in. The library
+detects the algorithm from `key.algorithm.name` and selects the path
+automatically. RSA, ECDSA, and other algorithms reject with
+`AuditLogError` code `'unsupported_signature_algorithm'`.
+
+## Key derivation
+
+For per-installation persistence (the user's passphrase reproduces the
+verification key after a page reload), use `deriveAuditKey()`:
+
+```typescript
+import { createAuditLog, deriveAuditKey } from '@localmode/core';
+
+// On first install, generate and persist the salt alongside your chain.
+// (The salt is not a secret. The passphrase is.)
+const salt = localStorage.getItem('audit-salt') ?? crypto.randomUUID();
+localStorage.setItem('audit-salt', salt);
+
+const key = await deriveAuditKey({ passphrase: userPassphrase, salt });
+const log = await createAuditLog({ name: 'app', signatureKey: key });
+```
+
+`deriveAuditKey` uses PBKDF2-SHA-256 (100,000 iterations by default,
+matching `@localmode/core`'s encryption helpers). The default returns a
+non-extractable HMAC-SHA-256 key. Pass `extractable: true` if you need to
+back the key up.
+
+For ephemeral / development sessions where you do not need persistence, use
+`generateEphemeralAuditKey()`.
+
+## Encryption integration
+
+Pass an AES-GCM `CryptoKey` via `encryption.key` to encrypt payloads at
+rest. Hashes and signatures remain over plaintext canonical JSON, so
+`verifyChain()` works without the encryption key.
+
+```typescript
+const aesKey = await crypto.subtle.generateKey(
+  { name: 'AES-GCM', length: 256 },
+  true,
+  ['encrypt', 'decrypt']
+);
+
+const log = await createAuditLog({
+  name: 'phi',
+  signatureKey,
+  encryption: { key: aesKey },
+});
+
+await log.append('phi.access', { patientId: 'p1', byUserId: 'u1' });
+
+// Auditor without the AES key can still verify chain integrity:
+const auditor = await createAuditLog({
+  name: 'phi',
+  signatureKey, // verification key only
+});
+const result = await verifyChain(auditor);
+console.log(result.ok); // true — even though list() returns ciphertext blobs.
+```
+
+<Callout type="warn" title="Redact before logging if payload may contain PII">
+  Encryption protects on-disk confidentiality. It does not retroactively
+  redact PII once a payload is logged. Use `redactPII()` from
+  `@localmode/core` *before* `append()` if the payload may contain
+  identifiers you do not want stored at all.
+</Callout>
+
+## JSONL export
+
+`exportAuditLog()` yields one JSON-encoded entry per line, suitable for
+upload to S3 / Azure Blob / GCS. Transport is **out of scope** — this is
+the responsibility of the calling application.
+
+```typescript
+import { exportAuditLog } from '@localmode/core';
+
+const lines: string[] = [];
+for await (const line of exportAuditLog(log)) {
+  lines.push(line);
+}
+const blob = new Blob(lines, { type: 'application/x-ndjson' });
+
+// Caller is responsible for transmitting the Blob anywhere they like.
+// The library never makes network calls.
+```
+
+The default export emits the on-disk format, including encrypted payloads
+when encryption is configured. A receiver with the verification key alone
+can independently verify the entire chain. Pass `{ decryptPayloads: true }`
+to emit plaintext payloads instead — the exporting `AuditLog` instance must
+have been created with the encryption key for this to succeed.
+
+## Verifying a chain
+
+```typescript
+const result = await verifyChain(log, {
+  abortSignal: controller.signal,
+  onProgress: (checked, total) => console.log(`${checked}/${total}`),
+});
+
+if (!result.ok) {
+  console.error(`Chain broken at ${result.brokenAt}: ${result.reason}`);
+}
+```
+
+`verifyChain()` is cancellable via `AbortSignal` and reports progress every
+`chunkSize` entries (default 1000). For a 100,000-entry chain this matters
+— audit logs grow without bound.
+
+## React hook
+
+```tsx
+import { useAuditLog } from '@localmode/react';
+
+function AuditPanel({ log }: { log: AuditLog }) {
+  const { entries, append, verify, isLoading, error } = useAuditLog(log);
+
+  return (
+    <div>
+      {entries.map((e) => (
+        <div key={e.id}>
+          {new Date(e.timestamp).toISOString()} — {e.kind}
+        </div>
+      ))}
+      <button onClick={() => append('user.click', { x: 1 })}>Log click</button>
+      <button onClick={verify}>Verify chain</button>
+    </div>
+  );
+}
+```
+
+The hook returns `{ entries, isLoading, error, append, verify, refresh }`.
+There is intentionally **no `clear`** — append-only is part of the contract.
+
+## Rotation
+
+Rotating the signature key mid-chain breaks verification by design. The
+recommended pattern is "rotation = new chain":
+
+1. Create a new `AuditLog` with a new key and a new `name` (so it persists
+   under a different IndexedDB key).
+2. In the new chain's first entry, log a `rotated_from` event whose payload
+   includes the old chain's tail hash and (for Ed25519) the old public key.
+3. Keep the old chain's storage and verification key around long enough for
+   regulators / auditors to verify it independently.
+
+The two chains are linked logically (via the `rotated_from` payload), not
+cryptographically. The old chain remains independently verifiable with its
+old key.
+
+## Compliance posture
+
+- **No network calls** — see the source: `packages/core/src/security/audit-log.ts`.
+- **No telemetry** — the same applies as elsewhere in `@localmode/core`.
+- **Append-only contract** — enforced at the type level. There is no
+  `update`, `delete`, `compact`, or `clear` on `AuditLog`.
+- **Hash over plaintext** — chain integrity does not require the encryption
+  key. Auditors can be granted the verification key without exposing the
+  underlying records.
+- **Customer-controlled sync** — `exportAuditLog()` returns JSON Lines.
+  Your application transmits them to whichever storage your compliance
+  policy requires (S3, Azure Blob, GCS, on-prem SFTP). LocalMode does not
+  proxy or observe the upload.

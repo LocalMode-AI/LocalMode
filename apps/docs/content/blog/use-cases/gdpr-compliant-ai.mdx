@@ -1,0 +1,128 @@
+---
+title: "GDPR-Friendly AI Features"
+description: "Add AI features to your European-market app - on-device inference reduces GDPR compliance burden by keeping user data on the device."
+author: "LocalMode"
+date: "2026-04-21"
+---
+
+# GDPR-Friendly AI Features
+
+Add AI features to your European-market app - on-device inference reduces GDPR compliance burden by keeping user data on the device.
+
+*Category: Compliance Guide*
+
+## The Problem
+
+Adding AI features to apps serving European users triggers GDPR data processing obligations: Data Protection Impact Assessments (Article 35), Data Processing Agreements with AI providers (Article 28), cross-border transfer mechanisms for non-EU processing (Chapter V), and ongoing compliance documentation. For startups and small teams, this compliance overhead can cost more than the AI API itself.
+
+This is a common challenge for teams building modern applications. Traditional approaches either compromise on privacy (by sending data to cloud APIs), require complex server infrastructure (adding cost and maintenance burden), or sacrifice functionality (by avoiding AI entirely). LocalMode provides a fourth option: run the AI locally in the browser.
+
+## The Solution
+
+Browser-based inference with LocalMode removes the need for a data processor agreement with a third-party AI vendor, in most cases. Since user data is processed on-device in the user's own browser and never sent to any server, no user data is transferred to a third-party processor. No DPA needed for the AI processing, no cross-border transfer issues, and on-device processing significantly reduces the risk profile that would trigger a DPIA. Combine with LocalMode's built-in PII redaction middleware to scrub personally identifiable information before any processing, encrypted vector storage for defense-in-depth, and differential privacy middleware for statistical privacy guarantees.
+
+### Why Local-First?
+
+Building this feature with on-device inference provides three structural advantages over cloud-based alternatives:
+
+1. **Zero marginal cost** - After the initial model download, every inference operation is free. No per-token fees, no monthly API bills, no surprise invoices. This matters especially for features used frequently or by many users.
+2. **Architectural privacy** - User data never leaves the device. This is not a policy promise ("we won't look at your data") but an architectural guarantee: the data physically cannot reach any server because the processing happens in the browser tab.
+3. **Offline capability** - Once models are cached in IndexedDB, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
+
+## Technology Stack
+
+| Package | Purpose |
+| --- | --- |
+| `@localmode/core` | piiRedactionMiddleware(), createVectorDB(), wrapEmbeddingModel() |
+| `@localmode/transformers` | On-device embedding and classification models |
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+## Implementation
+
+```typescript
+import { embed, wrapEmbeddingModel, piiRedactionMiddleware, createVectorDB } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// 1. PII redaction before embedding
+const baseModel = transformers.embedding('Xenova/bge-small-en-v1.5');
+const model = wrapEmbeddingModel({
+  model: baseModel,
+  middleware: piiRedactionMiddleware(), // Strips emails, phones, SSNs, etc.
+});
+
+// 2. Encrypted vector storage
+const db = await createVectorDB({
+  name: 'gdpr-safe',
+  dimensions: 384,
+  encryption: { enabled: true, passphrase: userProvidedKey }, // AES-256-GCM
+});
+
+// 3. All processing on-device - no GDPR data processor relationship
+const { embedding } = await embed({ model, value: userText });
+await db.add({ id: '1', vector: embedding, metadata: { text: '[REDACTED]' } });
+```
+
+### How This Works
+
+The code above demonstrates the complete pipeline. Let us walk through the key decisions:
+
+- **Model selection** - The models referenced in this example are chosen for their balance of size, speed, and quality for this specific use case. Smaller models load faster and use less memory; larger models produce better results. Start with the recommended models and upgrade only if quality is insufficient for your users.
+- **Browser APIs** - LocalMode uses IndexedDB for persistent storage (vectors, model cache), Web Workers for background processing (keeping the UI responsive during inference), and the Web Crypto API for optional encryption.
+- **Error handling** - All LocalMode functions throw typed errors (`ModelLoadError`, `StorageError`, `ValidationError`) with actionable hints. Wrap calls in try/catch and use the error's `hint` property to display user-friendly messages.
+- **Cancellation** - Pass an `AbortSignal` to any long-running operation. This lets users cancel searches, embeddings, or generation without waiting for completion.
+
+## Production Considerations
+
+When deploying this solution to production, consider these factors:
+
+**Model preloading:** Download models during user onboarding or application setup, not on first use. Use `preloadModel()` with an `onProgress` callback to show download progress. This avoids the poor experience of a loading spinner on the first AI interaction.
+
+**Storage management:** IndexedDB has browser-specific quotas (typically 50% of free disk space on Chrome, more restrictive on iOS Safari). Use `getStorageQuota()` to check available space and `navigator.storage.persist()` to request persistent storage that survives browser storage pressure.
+
+**Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
+
+**Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
+
+## Frequently Asked Questions
+
+### Does on-device processing truly avoid GDPR obligations?
+
+For the AI processing itself, yes - if user data never leaves the device, there is no "processing" by a third-party data processor. However, your app may still have other GDPR obligations (storing user accounts, analytics, etc.). The AI processing specifically avoids the third-party data-transfer risk that cloud AI introduces. You remain the data controller with the usual obligations (lawful basis, transparency, data subject rights).
+
+### What about the model download - does that involve data transfer?
+
+Model downloads are one-directional: the model comes to the device, no user data goes to the model server. This is similar to downloading a font or JavaScript file - it's not data processing. The models are open-source and contain no user data.
+
+### Is this legal advice?
+
+No. This guide discusses general compliance considerations for on-device AI processing. The app developer remains a data controller under GDPR with obligations including lawful basis, transparency, and data subject rights. Consult a qualified data protection attorney for guidance specific to your jurisdiction and use case.
+
+## Further Reading
+
+- [GDPR Article 28 - Processor](https://gdpr-info.eu/art-28-gdpr/)
+- [GDPR Article 35 - DPIA](https://gdpr-info.eu/art-35-gdpr/)
+
+## Related Pages
+
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+- [Private Document Search](/blog/use-cases/private-document-search) - use-case guide
+- [Data Sovereignty](/blog/use-cases/data-sovereignty) - use-case guide
+
+## Methodology
+
+This guide is based on LocalMode's documented APIs and source code in `packages/core/src/security/` (verified against `piiRedactionMiddleware`, `createVectorDB` with `EncryptionOptions`, and the no-telemetry policy). GDPR Article numbers, Article 28 processor obligations, Article 35 DPIA triggers, and Chapter V transfer mechanisms were verified against the official GDPR text at gdpr-info.eu. This is general information only, not legal advice - GDPR compliance depends on your specific data flows, jurisdictions, and processing activities; consult a qualified data protection attorney for guidance on your situation.
+
+## Sources
+
+- [LocalMode documentation](https://localmode.dev/docs)
+- [GDPR Article 28 - Processor](https://gdpr-info.eu/art-28-gdpr/) - obligations for data processors and the requirement for Data Processing Agreements
+- [GDPR Article 35 - Data Protection Impact Assessment](https://gdpr-info.eu/art-35-gdpr/) - when DPIAs are required
+- [GDPR Chapter V - International data transfers](https://gdpr-info.eu/chapter-5/) - transfer mechanisms (adequacy decisions, standard contractual clauses, binding corporate rules)
+- [GDPR Article 83 - Administrative fines](https://gdpr-info.eu/art-83-gdpr/) - fine structure: up to €10 M / 2 % turnover (lower tier) and up to €20 M / 4 % turnover (higher tier)
+- [GDPR Article 5 - Principles for processing personal data](https://gdpr-info.eu/art-5-gdpr/) - data minimization, purpose limitation, integrity and confidentiality
+- [GDPR Article 6 - Lawfulness of processing](https://gdpr-info.eu/art-6-gdpr/) - lawful bases including consent and legitimate interests

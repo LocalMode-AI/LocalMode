@@ -28,7 +28,7 @@ export function Footer() {
                 <span className="text-lg font-black tracking-tight text-poster-text-main">
                   Local<span className="text-poster-primary">Mode</span>.AI
                 </span>
-                <span className="text-xs font-semibold uppercase tracking-wider text-poster-text-sub/50">
+                <span className="text-xs font-semibold uppercase tracking-wider text-poster-text-sub/80">
                   Local-First AI Toolkit
                 </span>
               </div>
@@ -46,35 +46,35 @@ export function Footer() {
                   Private
                 </span>
               </span>
-              <span className="text-poster-text-sub/40">•</span>
+              <span className="text-poster-text-sub/70">•</span>
               <span className="inline-flex items-center gap-1 cursor-default transition-colors hover:text-poster-accent-teal group">
                 <Zap className="w-4 h-4 text-poster-accent-teal" />
                 <span className="font-semibold text-poster-text-sub/80 group-hover:text-poster-accent-teal transition-colors">
                   Fast
                 </span>
               </span>
-              <span className="text-poster-text-sub/40">•</span>
+              <span className="text-poster-text-sub/70">•</span>
               <span className="inline-flex items-center gap-1 cursor-default transition-colors hover:text-poster-accent-purple group">
                 <WifiOff className="w-4 h-4 text-poster-accent-purple" />
                 <span className="font-semibold text-poster-text-sub/80 group-hover:text-poster-accent-purple transition-colors">
                   Offline
                 </span>
               </span>
-              <span className="text-poster-text-sub/40">•</span>
+              <span className="text-poster-text-sub/70">•</span>
               <span className="inline-flex items-center gap-1 cursor-default transition-colors hover:text-poster-accent-orange group">
                 <Lock className="w-4 h-4 text-poster-accent-orange" />
                 <span className="font-semibold text-poster-text-sub/80 group-hover:text-poster-accent-orange transition-colors">
                   Secure
                 </span>
               </span>
-              <span className="text-poster-text-sub/40">•</span>
+              <span className="text-poster-text-sub/70">•</span>
               <span className="inline-flex items-center gap-1 cursor-default transition-colors hover:text-poster-accent-pink group">
                 <Coins className="w-4 h-4 text-poster-accent-pink" />
                 <span className="font-semibold text-poster-text-sub/80 group-hover:text-poster-accent-pink transition-colors">
                   No Cost
                 </span>
               </span>
-              <span className="text-poster-text-sub/40">•</span>
+              <span className="text-poster-text-sub/70">•</span>
               <span className="inline-flex items-center gap-1 cursor-default transition-colors hover:text-poster-primary-dark group">
                 <CloudOff className="w-4 h-4 text-poster-primary-dark" />
                 <span className="font-semibold text-poster-text-sub/80 group-hover:text-poster-primary-dark transition-colors">

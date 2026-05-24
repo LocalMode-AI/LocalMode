@@ -38,6 +38,10 @@ export const metadata: Metadata = {
       ],
     },
   },
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/favicon.ico',
+  },
   openGraph: {
     title: 'LocalMode.dev - Local-First AI for the Web',
     description:

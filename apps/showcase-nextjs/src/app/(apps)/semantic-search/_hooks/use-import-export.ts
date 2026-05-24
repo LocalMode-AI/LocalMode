@@ -7,7 +7,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useImportExport, validateFile, toAppError } from '@localmode/react';
+import { useImportExport, validateFile } from '@localmode/react';
 import type { VectorDB, EmbeddingModel, ParseResult, ImportStats, ImportProgress } from '@localmode/core';
 import type { AppError } from '../_lib/types';
 import {

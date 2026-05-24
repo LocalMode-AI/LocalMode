@@ -198,6 +198,65 @@ export function isWebCryptoSupported(): boolean {
 }
 
 // ============================================================================
+// Live Transcribe / Audio Capture Detection
+// ============================================================================
+
+/**
+ * Check if `AudioWorklet` (low-latency audio processing) is supported.
+ *
+ * AudioWorklet allows VAD and audio framing to run on the audio rendering
+ * thread instead of the main thread. Without it, `live-transcribe` falls
+ * back to the deprecated `ScriptProcessorNode`.
+ *
+ * @returns true if AudioWorklet is available
+ */
+export function isAudioWorkletSupported(): boolean {
+  if (typeof globalThis === 'undefined') return false;
+  const Ctx =
+    (globalThis as { AudioContext?: typeof AudioContext }).AudioContext ??
+    (globalThis as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctx) return false;
+  try {
+    return 'audioWorklet' in Ctx.prototype;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if `navigator.mediaDevices.getUserMedia` (microphone capture) is supported.
+ *
+ * Requires a secure context (HTTPS or `localhost`) in modern browsers.
+ *
+ * @returns true if media capture is available
+ */
+export function isMediaCaptureSupported(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  if (typeof navigator.mediaDevices === 'undefined') return false;
+  return typeof navigator.mediaDevices.getUserMedia === 'function';
+}
+
+/**
+ * Check if {@link createLiveTranscriber} can construct a controller in the
+ * current runtime.
+ *
+ * Live transcription requires `getUserMedia` and an `AudioContext`. The
+ * worklet path is preferred but a `ScriptProcessorNode` fallback is used
+ * when `AudioWorklet` is unavailable, so the live-transcribe capability
+ * is satisfied as long as media capture and AudioContext are present.
+ *
+ * @returns true if live transcription is supported
+ */
+export function isLiveTranscribeSupported(): boolean {
+  if (!isMediaCaptureSupported()) return false;
+  if (typeof globalThis === 'undefined') return false;
+  const Ctx =
+    (globalThis as { AudioContext?: typeof AudioContext }).AudioContext ??
+    (globalThis as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  return typeof Ctx === 'function';
+}
+
+// ============================================================================
 // Chrome Built-in AI Detection
 // ============================================================================
 
@@ -301,6 +360,15 @@ export const features = {
   },
   get chromeAILanguageModel() {
     return isLanguageModelAPISupported();
+  },
+  get audioWorklet() {
+    return isAudioWorkletSupported();
+  },
+  get mediaCapture() {
+    return isMediaCaptureSupported();
+  },
+  get liveTranscribe() {
+    return isLiveTranscribeSupported();
   },
 } as const;
 

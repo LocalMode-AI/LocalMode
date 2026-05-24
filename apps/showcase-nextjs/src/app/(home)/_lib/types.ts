@@ -51,6 +51,8 @@ export const ROUTES = {
   GGUF_EXPLORER: '/gguf-explorer',
   MODEL_ADVISOR: '/model-advisor',
   MODEL_EVALUATOR: '/model-evaluator',
+  MEDIAPIPE_STUDIO: '/mediapipe-studio',
+  VOICE_STUDIO: '/voice-studio',
 } as const;
 
 export type RouteKey = keyof typeof ROUTES;

@@ -1,0 +1,152 @@
+---
+title: "Text Summarization in the Browser"
+description: "Condense long documents into concise summaries using DistilBART or Chrome Built-in AI."
+author: "LocalMode"
+date: "2026-04-15"
+---
+
+# Text Summarization in the Browser
+
+Condense long documents into concise summaries using DistilBART or Chrome Built-in AI.
+
+## What Is Text Summarization?
+
+Text summarization generates a shorter version of input text that captures the key information. Abstractive summarization (used by DistilBART and Chrome AI) rephrases and condenses the original text rather than extracting sentences verbatim. This produces more natural, readable summaries but requires more sophisticated models.
+
+This capability is exposed through the `summarize()` function in `@localmode/core`. All processing runs entirely in the browser - no server, no API key, no data leaves the device. After the initial model download, text summarization works completely offline.
+
+## Real-World Applications
+
+Article digest and news summary apps. Meeting notes condensation. Research paper abstract generation. Email thread summarization. Document preview generation. Report executive summaries.
+
+These use cases all benefit from local, on-device processing: user data stays private, there are no per-request API costs, and the application works without internet after initial setup.
+
+## Getting Started
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Import the core function and provider:
+
+```typescript
+import { summarize } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+```
+
+The recommended starting model is **Xenova/distilbart-cnn-6-6** - it provides the best balance of quality, speed, and download size for most applications.
+
+## Code Example
+
+```typescript
+import { summarize } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.summarizer('Xenova/distilbart-cnn-6-6');
+
+const { summary } = await summarize({
+  model,
+  text: longArticleText,
+  maxLength: 150,
+  minLength: 50,
+});
+
+// With Chrome AI fallback - try Chrome's built-in AI first
+import { chromeAI } from '@localmode/chrome-ai';
+
+async function getSummarizer() {
+  try {
+    return chromeAI.summarizer();
+  } catch {
+    return transformers.summarizer('Xenova/distilbart-cnn-6-6');
+  }
+}
+```
+
+This example demonstrates the core workflow: create a model instance from the provider, call the `summarize()` function with your input, and receive structured results. The same pattern works identically across all 2 available providers: Transformers.js, Chrome Built-in AI.
+
+## Available Models
+
+The following models support text summarization through LocalMode. Choose based on your target device, acceptable download size, and quality requirements.
+
+| Model | Provider | Size | Speed | Quality |
+| --- | --- | --- | --- | --- |
+| Xenova/distilbart-cnn-6-6 | Transformers.js | ~284MB | Medium | High |
+| Xenova/distilbart-cnn-12-6 | Transformers.js | ~422MB | Slow | Higher |
+| chrome-ai:gemini-nano-summarizer | Chrome Built-in AI | 0MB | Fast | Good |
+
+**Choosing a model:** For most applications, start with the recommended model (`Xenova/distilbart-cnn-6-6`). If download size is the primary constraint (e.g., mobile PWA, browser extension), pick the smallest model that meets your quality bar. If quality is the priority (e.g., enterprise search, content analysis), use the largest model your target devices can handle.
+
+## Cloud vs Local: Cost and Privacy Comparison
+
+Running text summarization locally eliminates per-request API costs and keeps all data on-device. Here is how the economics compare:
+
+| Service | Cost / Notes |
+| --- | --- |
+| LocalMode | gives you both options at $0 ongoing cost |
+
+Cloud summarization uses general-purpose LLMs at $2-10 per million tokens. Dedicated summarization models like DistilBART are faster and cheaper for this specific task. Chrome AI summarization is instant and free in supported browsers. LocalMode gives you both options at $0 ongoing cost.
+
+The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
+
+## Available Providers
+
+- **Transformers.js** - ONNX-optimized models via ONNX Runtime Web. Supports both WebGPU and WASM backends. Broadest model catalog for non-LLM tasks.
+- **Chrome Built-in AI** - Chrome Built-in AI (Gemini Nano). Zero model download. Available in Chrome 138+ with flag.
+
+## AbortSignal Support
+
+All `summarize()` calls support cancellation through the standard `AbortSignal` API:
+
+```typescript
+const controller = new AbortController();
+
+const promise = summarize({
+  model,
+  text: 'input text',
+  abortSignal: controller.signal,
+});
+
+// Cancel if needed (e.g., user navigates away)
+controller.abort();
+```
+
+This is essential for responsive UIs - cancel in-flight operations when the user navigates away, submits a new query, or closes a dialog. The underlying model inference stops immediately, freeing memory and compute resources.
+
+## React Integration
+
+If you are building a React application, `@localmode/react` provides hooks that manage loading states, error handling, and cancellation automatically:
+
+```bash
+npm install @localmode/react
+```
+
+```typescript
+import { useSummarize } from '@localmode/react';
+```
+
+The hook returns `{ data, error, isLoading, execute, cancel, reset }` - providing everything a UI component needs to display progress, handle errors, offer cancellation, and reset state.
+
+## Related Pages
+
+- [Nlp Specialized](/blog/models/nlp-specialized) - model guide
+- [Chrome Ai](/blog/models/chrome-ai) - model guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+All function signatures, hook return shapes, model IDs, and provider API calls were verified directly against the LocalMode monorepo source: `packages/core/src/summarization/summarize.ts` and `types.ts`, `packages/transformers/src/implementations/summarizer.ts`, `packages/transformers/src/models.ts` (`SUMMARIZATION_MODELS` constant), `packages/chrome-ai/src/implementations/summarizer.ts`, and `packages/react/src/hooks/use-summarize.ts` plus `core/use-operation.ts`. The model table was corrected to exactly match the `SUMMARIZATION_MODELS` catalog (two Transformers.js models) plus the Chrome AI summarizer whose modelId is `chrome-ai:gemini-nano-summarizer`. Three models that appeared in the original table (`onnx-community/ModernBERT-base-ONNX`, `Xenova/bert-base-uncased`, `Xenova/distilbert-base-cased-distilled-squad`) belong to fill-mask and question-answering catalogs, not summarization, and were removed. Cloud pricing figures are general guidance and subject to change - verify current pricing with each provider before making cost decisions.
+
+## Sources
+
+- [`packages/transformers/src/models.ts` - `SUMMARIZATION_MODELS` constant](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/transformers/src/models.ts)
+- [`packages/core/src/summarization/summarize.ts` - `summarize()` function source](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/core/src/summarization/summarize.ts)
+- [`packages/core/src/summarization/types.ts` - `SummarizeResult` interface](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/core/src/summarization/types.ts)
+- [`packages/chrome-ai/src/implementations/summarizer.ts` - `ChromeAISummarizer` (modelId: `chrome-ai:gemini-nano-summarizer`)](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/chrome-ai/src/implementations/summarizer.ts)
+- [`packages/react/src/hooks/use-summarize.ts` - `useSummarize` hook](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/react/src/hooks/use-summarize.ts)
+- [`packages/react/src/core/use-operation.ts` - `UseOperationReturn` interface (confirmed `reset` field)](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/react/src/core/use-operation.ts)
+- [HuggingFace model card: Xenova/distilbart-cnn-6-6](https://huggingface.co/Xenova/distilbart-cnn-6-6)
+- [HuggingFace model card: Xenova/distilbart-cnn-12-6](https://huggingface.co/Xenova/distilbart-cnn-12-6)

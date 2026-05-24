@@ -1,0 +1,108 @@
+---
+title: "CLIP & SigLIP Multimodal Models in the Browser"
+description: "OpenAI's CLIP and Google's SigLIP - multimodal embedding models that connect text and images in a shared vector space."
+author: "LocalMode"
+date: "2026-04-29"
+---
+
+# CLIP & SigLIP Multimodal Models in the Browser
+
+OpenAI's CLIP and Google's SigLIP - multimodal embedding models that connect text and images in a shared vector space.
+
+## Overview
+
+The CLIP & SigLIP Multimodal family is available through Transformers.js in LocalMode, with model sizes ranging from 340MB–1.2GB (vision encoder). The primary task for these models is **multimodal-embedding**, and they can be used with any application built on the LocalMode SDK.
+
+Running CLIP & SigLIP Multimodal models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+CLIP (Contrastive Language-Image Pre-training) by OpenAI and SigLIP (Sigmoid Language Image Pre-training) by Google are multimodal embedding models that map both text and images into a shared vector space. This enables cross-modal search: index photos with their visual embeddings, then search them using natural language queries like "sunset over the ocean" or "cat sitting on a laptop."
+
+CLIP-ViT-Base-Patch32 (340MB, 512 dimensions) is the faster model - it processes images in 32x32 patches, making it suitable for real-time applications and larger image collections. SigLIP-Base-Patch16-224 (400MB, 768 dimensions) uses finer 16x16 patches and higher-dimensional embeddings for better retrieval quality at the cost of more storage per vector.
+
+Both models use the embedImage() function from @localmode/core, which accepts images as URLs, Blobs, or File objects. The resulting embeddings are stored in the same VectorDB as text embeddings, enabling unified semantic search across text and images. A photo management app, an e-commerce product search with visual similarity, or a design inspiration tool - all can be built with these models running entirely in the browser.
+
+## Variant Comparison
+
+The following table lists every CLIP & SigLIP Multimodal variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Xenova/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) | Transformers.js | 340MB | Fast | Good | 512d | WASM |
+| [Xenova/siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224) | Transformers.js | 400MB | Medium | High | 768d | WASM |
+| [Xenova/clip-vit-base-patch16](https://huggingface.co/openai/clip-vit-base-patch16) | Transformers.js | 340MB | Medium | Good | 512d | WASM |
+| [Xenova/clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14) | Transformers.js | ~1.2GB | Slow | High | 768d | WASM |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| 200MB–500MB | 3 | variants |
+| 1GB–1.5GB | 1 | variant |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All CLIP & SigLIP Multimodal variants use the same `MultimodalEmbeddingModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### Transformers.js
+
+Transformers.js runs ONNX-optimized models via ONNX Runtime Web. WebGPU acceleration where available, WASM fallback otherwise.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.multimodalEmbedding('Xenova/clip-vit-base-patch32');
+// Use the model with the corresponding @localmode/core function
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred model first, and fall back to a smaller variant if it fails to load.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+// Try the preferred model, fall back to a smaller one on failure
+let model;
+try {
+  model = transformers.multimodalEmbedding('Xenova/clip-vit-base-patch16');
+} catch (error) {
+  console.warn('Primary model failed, using fallback:', error);
+  model = transformers.multimodalEmbedding('Xenova/clip-vit-base-patch32');
+}
+```
+
+## When to Use CLIP & SigLIP Multimodal
+
+CLIP & SigLIP Multimodal models are a strong choice when:
+
+- **You need multimodal-embedding** - CLIP & SigLIP Multimodal is optimized for multimodal-embedding tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 1 provider (transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The 340MB–1.2GB range means you can target everything from mobile devices to high-end desktops with the same model family.
+
+
+## HuggingFace Model Cards
+
+- [clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32)
+- [siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224)
+- [clip-vit-base-patch16](https://huggingface.co/openai/clip-vit-base-patch16)
+- [clip-vit-large-patch14](https://huggingface.co/openai/clip-vit-large-patch14)
+
+
+
+## Methodology
+
+Model sizes and embedding dimensions were verified against HuggingFace model repositories for each Xenova ONNX model (files tab, onnx/ folder). Vision encoder sizes listed represent the full-precision `vision_model.onnx` file as the primary download for image-embedding workloads; Transformers.js loads encoders lazily so text-only users download only the text encoder. Embedding dimensions were confirmed from the Xenova model card code examples showing tensor `dims` output. LocalMode API patterns were verified against `packages/transformers/src/implementations/clip-embedding.ts` and `packages/core/src/multimodal/`. Performance tiers (speed/quality) are LocalMode's curated assessments based on patch size, parameter count, and embedding dimensionality. Always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [Xenova/clip-vit-base-patch32 on HuggingFace](https://huggingface.co/Xenova/clip-vit-base-patch32) - ONNX file sizes verified in Files tab
+- [Xenova/siglip-base-patch16-224 on HuggingFace](https://huggingface.co/Xenova/siglip-base-patch16-224) - embedding dims (768) confirmed from model card code example
+- [Xenova/clip-vit-base-patch16 on HuggingFace](https://huggingface.co/Xenova/clip-vit-base-patch16) - embedding dims (512) confirmed from model card
+- [Xenova/clip-vit-large-patch14 on HuggingFace](https://huggingface.co/Xenova/clip-vit-large-patch14) - ONNX file sizes verified in Files tab
+- [openai/clip-vit-base-patch32 on HuggingFace](https://huggingface.co/openai/clip-vit-base-patch32) - original model card (architecture reference)
+- [google/siglip-base-patch16-224 on HuggingFace](https://huggingface.co/google/siglip-base-patch16-224) - original SigLIP model card (architecture, 768d confirmed)
+- [LocalMode Transformers multimodal embeddings docs](https://localmode.dev/docs/transformers/multimodal-embeddings) - sizes cross-referenced with official docs

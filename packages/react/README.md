@@ -54,6 +54,7 @@ function Chat() {
 | `useExtractEntities` | NER | `extractEntities()` |
 | `useTranscribe` | Audio | `transcribe()` |
 | `useSynthesizeSpeech` | Audio | `synthesizeSpeech()` |
+| `useStreamSpeech` | Audio | `streamSynthesizeSpeech()` — clause-by-clause streaming TTS |
 | `useCaptionImage` | Vision | `captionImage()` |
 | `useDetectObjects` | Vision | `detectObjects()` |
 | `useClassifyImage` | Vision | `classifyImage()` |
@@ -61,6 +62,12 @@ function Chat() {
 | `useSegmentImage` | Vision | `segmentImage()` |
 | `useExtractImageFeatures` | Vision | `extractImageFeatures()` |
 | `useImageToImage` | Vision | `imageToImage()` |
+| `useDetectHands` | Vision | `detectHands()` |
+| `useDetectPose` | Vision | `detectPose()` |
+| `useDetectFace` | Vision | `detectFace()` |
+| `useDetectFaceLandmarks` | Vision | `detectFaceLandmarks()` |
+| `useRecognizeGesture` | Vision | `recognizeGesture()` |
+| `useDetectLanguage` | Text | `detectLanguage()` |
 | `useTranslate` | Text | `translate()` |
 | `useSummarize` | Text | `summarize()` |
 | `useExtractText` | OCR | `extractText()` |
@@ -72,6 +79,9 @@ function Chat() {
 | `useEvaluateModel` | Evaluation | `evaluateModel()` — run metrics against a dataset |
 | `useSemanticChunk` | RAG | `semanticChunk()` — embedding-aware topic-boundary chunking |
 | `useCalibrateThreshold` | Embeddings | `calibrateThreshold()` — empirical similarity threshold |
+| `useAuditLog` | Security | `createAuditLog()` — tamper-evident hash-chained log |
+| `useLiveTranscribe` | Audio | `createLiveTranscriber()` — streaming mic STT with VAD |
+| `useTurnTaker` | Audio | `createTurnTaker()` — full voice loop orchestrator |
 
 ## Utility Hooks
 
@@ -86,6 +96,7 @@ function Chat() {
 | `useSemanticCache` | Semantic cache lifecycle (create/destroy, stats) |
 | `useReindex` | Embedding drift re-embedding with progress and cancellation |
 | `useModelRecommendations` | Ranked model recommendations by device capabilities |
+| `useModelLoader` | Chunked model download with LRU eviction and cross-tab coordination |
 | `useAdaptiveBatchSize` | Device-aware optimal batch size for embeddings/inference |
 
 ## Batch & List Processing
@@ -108,10 +119,10 @@ function Chat() {
 
 ## Features
 
-- **35 domain hooks** — One for each AI capability in @localmode/core (including agents, import/export, evaluation, semantic chunking, threshold calibration)
-- **10 utility hooks** — Model status, capabilities, network, storage, voice recording, inference queue, semantic cache, reindex, model recommendations, adaptive batch size
+- **41 domain hooks** — One for each AI capability in @localmode/core (including agents, import/export, evaluation, semantic chunking, threshold calibration, MediaPipe landmarks/gestures, language detection, audit log, live transcription, streaming speech)
+- **11 utility hooks** — Model status, capabilities, network, storage, voice recording, inference queue, semantic cache, reindex, model recommendations, model loader, adaptive batch size
 - **4 batch/pipeline hooks** — List accumulation, concurrent batch, sequential batch, pipeline
-- **9 pipeline step factories** — embedStep, chunkStep, searchStep, rerankStep, storeStep, classifyStep, summarizeStep, generateStep, embedManyStep
+- **10 pipeline step factories** — embedStep, chunkStep, semanticChunkStep, searchStep, rerankStep, storeStep, classifyStep, summarizeStep, generateStep, embedManyStep
 - **4 helper utilities** — File reading, validation, download, error conversion
 - **Zero dependencies** — only peer deps on `react` and `@localmode/core`
 - **Streaming** — `useChat` with real-time message updates and IndexedDB persistence

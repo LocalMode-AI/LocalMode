@@ -29,6 +29,7 @@ import {
   createFillMaskModel,
   createQuestionAnsweringModel,
   createOCRModel,
+  createGenerativeOCRModel,
   createDocumentQAModel,
   // Multimodal
   createCLIPEmbeddingModel,
@@ -38,7 +39,11 @@ import {
   createDepthEstimationModel,
   // Language Model (TJS v4)
   createLanguageModel,
+  // VAD
+  createSileroVAD,
 } from './implementations/index.js';
+import type { SileroVADSettings } from './implementations/silero-vad.js';
+import { isGenerativeOCRModel } from './implementations/generative-ocr.js';
 
 /**
  * Create a Transformers.js provider with custom settings.
@@ -204,6 +209,12 @@ export function createTransformers(settings?: TransformersProviderSettings): Tra
     },
 
     ocr(modelId: string, modelSettings?: ModelSettings) {
+      if (isGenerativeOCRModel(modelId)) {
+        return createGenerativeOCRModel(modelId, {
+          ...defaultSettings,
+          ...modelSettings,
+        });
+      }
       return createOCRModel(modelId, {
         ...defaultSettings,
         ...modelSettings,
@@ -254,11 +265,22 @@ export function createTransformers(settings?: TransformersProviderSettings): Tra
     },
 
     // ═══════════════════════════════════════════════════════════════
-    // LANGUAGE MODEL FACTORY (Experimental — TJS v4)
+    // LANGUAGE MODEL FACTORY
     // ═══════════════════════════════════════════════════════════════
 
     languageModel(modelId: string, modelSettings?: LanguageModelSettings) {
       return createLanguageModel(modelId, {
+        ...defaultSettings,
+        ...modelSettings,
+      });
+    },
+
+    // ═══════════════════════════════════════════════════════════════
+    // VAD (Voice Activity Detection)
+    // ═══════════════════════════════════════════════════════════════
+
+    vad(modelId: string, modelSettings?: SileroVADSettings) {
+      return createSileroVAD(modelId, {
         ...defaultSettings,
         ...modelSettings,
       });

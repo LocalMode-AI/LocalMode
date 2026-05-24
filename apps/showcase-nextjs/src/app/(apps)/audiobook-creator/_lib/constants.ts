@@ -5,15 +5,12 @@
 
 /** Model configuration */
 export const MODEL_CONFIG = {
-  /** Model ID for text-to-speech (MMS-TTS — multilingual VITS model, ~30MB) */
-  modelId: 'Xenova/mms-tts-eng',
-  /** Approximate model size for display */
-  modelSize: '~30MB',
+  modelId: 'onnx-community/Kokoro-82M-v1.0-ONNX',
+  modelSize: '~86MB',
 } as const;
 
 /** Storage keys for persistence */
 export const STORAGE_KEYS = {
-  /** TTS store persistence key */
   tts: 'audiobook-creator-storage',
 } as const;
 
@@ -22,4 +19,10 @@ export const DEFAULT_TEXT =
   'Welcome to LocalMode Audiobook Creator. This application converts your text into natural-sounding speech, entirely in your browser. No servers, no API keys. Your text never leaves your device.';
 
 /** Maximum text length for synthesis */
-export const MAX_TEXT_LENGTH = 5000;
+export const MAX_TEXT_LENGTH = 10000;
+
+/** Speed control range */
+export const SPEED_MIN = 0.5;
+export const SPEED_MAX = 2.0;
+export const SPEED_STEP = 0.1;
+export const SPEED_DEFAULT = 1.0;

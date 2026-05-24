@@ -1,0 +1,111 @@
+---
+title: "Moonshine Speech-to-Text Models in the Browser"
+description: "Useful Sensors' Moonshine models - fast, accurate speech transcription designed specifically for edge and browser deployment."
+author: "LocalMode"
+date: "2026-04-03"
+---
+
+# Moonshine Speech-to-Text Models in the Browser
+
+Useful Sensors' Moonshine models - fast, accurate speech transcription designed specifically for edge and browser deployment.
+
+## Overview
+
+The Moonshine Speech-to-Text family is available through Transformers.js in LocalMode, with model sizes ranging from 50MB–237MB. The primary task for these models is **speech-to-text**, and they can be used with any application built on the LocalMode SDK.
+
+Running Moonshine Speech-to-Text models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+Moonshine is a speech-to-text model architecture designed from the ground up for edge deployment - unlike Whisper, which was designed for server use and adapted to the browser. Moonshine is **English-only**: both the tiny (27.1M parameters) and base (61.5M parameters) variants are trained exclusively on English speech. This architectural focus shows in the numbers: Moonshine-tiny at 50MB achieves 4.52% WER on LibriSpeech Clean, beating Whisper-tiny.en's 5.66%, while using fewer parameters (27.1M vs 37.8M). Moonshine-base at 237MB reaches 3.23% WER on LibriSpeech Clean - approaching Whisper-base.en (4.25%) and close to Whisper-small territory - with only 61.5M parameters versus Whisper-base.en's 72.6M.
+
+For browser applications, Moonshine models are the recommended choice for real-time English transcription. They process audio in chunks, enabling streaming transcription as the user speaks - perfect for voice note applications, meeting transcription tools, and accessibility features. The models accept audio as Float32Array samples and return timestamped transcript segments.
+
+Both models run through Transformers.js on WASM, which means they work across all browsers. Paired with LocalMode's `useVoiceRecorder()` hook from `@localmode/react`, you can build a complete voice-to-text interface in under 30 lines of code. Audio never leaves the device - all processing happens in the browser tab.
+
+The cost comparison is striking: cloud speech-to-text services charge $0.006-0.024 per minute of audio. A voice notes app that processes 30 minutes daily costs $5-22/month with cloud APIs. With Moonshine running locally, the cost is $0 after a one-time 50-237MB download. For applications with high audio volumes - meeting transcription, podcast processing, accessibility tools - the annual savings can reach thousands of dollars. The privacy benefit is equally compelling: medical dictation, legal depositions, and private conversations are processed without any audio data leaving the device.
+
+## Variant Comparison
+
+The following table lists every Moonshine Speech-to-Text variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [onnx-community/moonshine-tiny-ONNX](https://huggingface.co/onnx-community/moonshine-tiny-ONNX) | Transformers.js | 50MB | Fast | Good | - | WASM |
+| [onnx-community/moonshine-base-ONNX](https://huggingface.co/onnx-community/moonshine-base-ONNX) | Transformers.js | 237MB | Medium | High | - | WASM |
+| [Xenova/whisper-tiny](https://huggingface.co/openai/whisper-tiny) | Transformers.js | 70MB | Fast | Basic | - | WASM |
+| [Xenova/whisper-small](https://huggingface.co/openai/whisper-small) | Transformers.js | 240MB | Medium | Good | - | WASM |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| Under 200MB | 2 | variants |
+| 200MB–500MB | 2 | variants |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All Moonshine Speech-to-Text variants use the same `SpeechToTextModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### Transformers.js
+
+Transformers.js runs ONNX-optimized models via ONNX Runtime Web. WebGPU acceleration where available, WASM fallback otherwise.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.speechToText('onnx-community/moonshine-tiny-ONNX');
+// Use the model with the corresponding @localmode/core function
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred model first, and fall back to a smaller variant if it fails to load.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+// Try the preferred model, fall back to a smaller one on failure
+let model;
+try {
+  model = transformers.speechToText('onnx-community/moonshine-tiny-ONNX');
+} catch (error) {
+  console.warn('Primary model failed, using fallback:', error);
+  model = transformers.speechToText('Xenova/whisper-small');
+}
+```
+
+## When to Use Moonshine Speech-to-Text
+
+Moonshine Speech-to-Text models are a strong choice when:
+
+- **You need speech-to-text** - Moonshine Speech-to-Text is optimized for speech-to-text tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 1 provider (transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The 50MB–237MB range means you can target everything from mobile devices to high-end desktops with the same model family.
+
+
+## HuggingFace Model Cards
+
+- [moonshine-tiny-ONNX](https://huggingface.co/onnx-community/moonshine-tiny-ONNX)
+- [moonshine-base-ONNX](https://huggingface.co/onnx-community/moonshine-base-ONNX)
+- [whisper-tiny](https://huggingface.co/openai/whisper-tiny)
+- [whisper-small](https://huggingface.co/openai/whisper-small)
+
+## Related Pages
+
+- [Speech To Text](/blog/tasks/speech-to-text) - task guide
+
+## Methodology
+
+Model sizes (~50MB for moonshine-tiny, ~237MB for moonshine-base) and model IDs are sourced directly from LocalMode's provider catalog (`packages/transformers/src/models.ts`). Parameter counts (tiny: 27.1M, base: 61.5M), WER figures, and the English-only language scope are taken from the Moonshine paper (arXiv:2410.15608) and the official UsefulSensors HuggingFace model card. Performance tier assessments (speed/quality) are LocalMode's curated judgments based on parameter count and published benchmarks. Cloud pricing figures reflect publicly listed rates at time of writing - always verify current pricing before relying on cost estimates. Always benchmark Moonshine on your target devices before production deployment.
+
+## Sources
+
+- [Moonshine paper - arXiv:2410.15608](https://arxiv.org/abs/2410.15608)
+- [UsefulSensors/moonshine - HuggingFace model card](https://huggingface.co/UsefulSensors/moonshine)
+- [onnx-community/moonshine-tiny-ONNX - HuggingFace model card](https://huggingface.co/onnx-community/moonshine-tiny-ONNX)
+- [onnx-community/moonshine-base-ONNX - HuggingFace model card](https://huggingface.co/onnx-community/moonshine-base-ONNX)
+- [LocalMode Transformers speech-to-text provider catalog](https://localmode.dev/docs/transformers/speech-to-text)
+- [Transformers.js documentation](https://huggingface.co/docs/transformers.js)

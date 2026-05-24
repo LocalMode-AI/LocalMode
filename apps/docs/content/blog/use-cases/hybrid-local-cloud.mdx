@@ -1,0 +1,119 @@
+---
+title: "Hybrid Local-Cloud AI Architecture"
+description: "Route 90% of AI requests locally at $0 cost and reserve cloud APIs for the 10% that need frontier reasoning."
+author: "LocalMode"
+date: "2026-04-01"
+---
+
+# Hybrid Local-Cloud AI Architecture
+
+Route 90% of AI requests locally at $0 cost and reserve cloud APIs for the 10% that need frontier reasoning.
+
+*Category: Architecture Pattern*
+
+## The Problem
+
+Sending every AI request to cloud APIs is expensive, slow, and creates vendor dependency. But some tasks genuinely need frontier model quality (complex reasoning, creative writing, very long context). A pure local approach sacrifices quality on these tasks; a pure cloud approach wastes money on simple tasks.
+
+This is a common challenge for teams building modern applications. Traditional approaches either compromise on privacy (by sending data to cloud APIs), require complex server infrastructure (adding cost and maintenance burden), or sacrifice functionality (by avoiding AI entirely). LocalMode provides a fourth option: run the AI locally in the browser.
+
+## The Solution
+
+The hybrid architecture uses a simple try/catch to route requests intelligently. Embeddings, classification, NER, reranking, and simple generation run locally at $0 cost (90% of typical requests). Complex reasoning, very long context processing, and tasks requiring frontier quality fall through to cloud APIs. The decision can be automatic (try local first, fall back on error) or explicit (route based on task type).
+
+### Why Local-First?
+
+Building this feature with on-device inference provides three structural advantages over cloud-based alternatives:
+
+1. **Zero marginal cost** - After the initial model download, every inference operation is free. No per-token fees, no monthly API bills, no surprise invoices. This matters especially for features used frequently or by many users.
+2. **Architectural privacy** - User data never leaves the device. This is not a policy promise ("we won't look at your data") but an architectural guarantee: the data physically cannot reach any server because the processing happens in the browser tab.
+3. **Offline capability** - Once models are cached in IndexedDB, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
+
+## Technology Stack
+
+| Package | Purpose |
+| --- | --- |
+| `@localmode/core` | embed(), streamText(), and all local inference functions |
+| `@localmode/transformers` | Local embedding, classification, vision models |
+| `@localmode/webllm` | Local LLM for simple generation |
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers @localmode/webllm
+```
+
+## Implementation
+
+```typescript
+import { streamText } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+import { webllm } from '@localmode/webllm';
+
+// Embeddings: always local - cloud quality offers no meaningful advantage
+const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+// LLM generation: try local first, fall back to cloud for complex tasks
+async function generate(prompt: string) {
+  try {
+    const model = webllm.languageModel('Qwen2.5-3B-Instruct-q4f16_1-MLC');
+    return await streamText({ model, prompt });
+  } catch (error) {
+    console.warn('Local generation failed, using cloud:', error);
+    return await callCloudLLM(prompt); // your cloud fallback
+  }
+}
+```
+
+### How This Works
+
+The code above demonstrates the complete pipeline. Let us walk through the key decisions:
+
+- **Model selection** - The models referenced in this example are chosen for their balance of size, speed, and quality for this specific use case. Smaller models load faster and use less memory; larger models produce better results. Start with the recommended models and upgrade only if quality is insufficient for your users.
+- **Browser APIs** - LocalMode uses IndexedDB for persistent storage (vectors, model cache), Web Workers for background processing (keeping the UI responsive during inference), and the Web Crypto API for optional encryption.
+- **Error handling** - All LocalMode functions throw typed errors (`ModelLoadError`, `StorageError`, `ValidationError`) with actionable hints. Wrap calls in try/catch and use the error's `hint` property to display user-friendly messages.
+- **Cancellation** - Pass an `AbortSignal` to any long-running operation. This lets users cancel searches, embeddings, or generation without waiting for completion.
+
+## Production Considerations
+
+When deploying this solution to production, consider these factors:
+
+**Model preloading:** Download models during user onboarding or application setup, not on first use. Use `preloadModel()` from `@localmode/transformers` with an `onProgress` callback to show download progress. This avoids the poor experience of a loading spinner on the first AI interaction.
+
+**Storage management:** IndexedDB has browser-specific quotas (up to 60% of total disk space per origin on Chrome, more restrictive on iOS Safari). Use `getStorageQuota()` to check available space and `navigator.storage.persist()` to request persistent storage that survives browser storage pressure.
+
+**Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
+
+**Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
+
+## Frequently Asked Questions
+
+### How much can hybrid save vs pure cloud?
+
+A composite case study on the blog models a 100K-user SaaS app saving $212K/year by replacing cloud embeddings, classification, and reranking with LocalMode (fictional company, real pricing math - [see disclosure](/blog/cut-ai-api-bill-200k)). The key insight: 90%+ of AI requests in typical apps are embeddings, classification, and simple generation - tasks where local models match cloud quality. Only route the expensive tasks to cloud.
+
+### How does the fallback decision work?
+
+A try/catch around the local inference call handles this: if the local model throws an error (out of memory, unsupported task), the catch block routes to a cloud provider. You can also implement explicit routing based on task complexity, input length, or user tier.
+
+
+
+## Related Pages
+
+- [Localmode Vs Openai](/blog/compare/localmode-vs-openai) - comparison guide
+- [Local First Vs Cloud First](/blog/compare/local-first-vs-cloud-first) - comparison guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+
+## Methodology
+
+Every API name, function signature, and model identifier was verified against the LocalMode monorepo source (`packages/core/src/generation/`, `packages/webllm/src/models.ts`, `packages/transformers/src/`). The Chrome IndexedDB storage quota was verified against the web.dev Storage for the Web article and the MDN Storage API quota documentation (both fetched May 2026). The $212K/year figure traces to a clearly-disclosed composite case study in the same blog.
+
+## Sources
+
+- [LocalMode core - `streamText` export](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/core/src/generation/stream-text.ts)
+- [LocalMode transformers - `preloadModel` export](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/transformers/src/utils.ts)
+- [LocalMode webllm model catalog - `Qwen2.5-3B-Instruct-q4f16_1-MLC`](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/webllm/src/models.ts)
+- [Storage for the web - web.dev (Chrome quota: 60% of total disk per origin)](https://web.dev/articles/storage-for-the-web)
+- [Storage quotas and eviction criteria - MDN](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria)
+- [Composite case study - LocalMode blog: How We Cut Our AI API Bill by $200K/Year](/blog/cut-ai-api-bill-200k)

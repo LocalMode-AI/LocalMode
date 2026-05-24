@@ -1,0 +1,113 @@
+---
+title: "Kokoro Text-to-Speech Models in the Browser"
+description: "Kokoro 82M - a compact, high-quality text-to-speech model with 29 English voices (American & British), phonemizer-backed synthesis, and speed control - entirely in the browser."
+author: "LocalMode"
+date: "2026-04-12"
+---
+
+# Kokoro Text-to-Speech Models in the Browser
+
+Kokoro 82M - a compact, high-quality text-to-speech model with 29 English voices (American & British), phonemizer-backed synthesis for accurate pronunciation, and speed control (0.5–2.0x) - entirely in the browser.
+
+## Overview
+
+The Kokoro Text-to-Speech family is available through Transformers.js in LocalMode, with model sizes ranging from 86MB. The primary task for these models is **text-to-speech**, and they can be used with any application built on the LocalMode SDK. With the direct Transformers.js v4 integration, Kokoro now ships **29 English voices** (American & British English), uses a **phonemizer-backed synthesis pipeline** for significantly improved pronunciation accuracy, and supports **speed control from 0.5x to 2.0x** so users can tune playback rate at generation time. The phonemizer npm package only ships English eSpeak-NG dictionary data, so only English voices are exposed.
+
+Running Kokoro Text-to-Speech models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+Kokoro 82M is a breakthrough in compact text-to-speech - at just 86MB, it generates remarkably natural-sounding speech that competes with cloud TTS services costing $4-16 per million characters. The model produces 24kHz audio output with natural prosody, appropriate pauses, and clear pronunciation. The integration adds a **phonemizer-backed synthesis pipeline** that converts input text into phoneme sequences before generation, producing noticeably better pronunciation for complex words, proper nouns, and multilingual content compared to raw character-level synthesis.
+
+With **29 English voices** (American & British English), Kokoro covers a range of voice styles from a single 86MB model. Each voice has distinct characteristics (pitch, cadence, style), and **speed control from 0.5x to 2.0x** lets applications generate slow narration for accessibility or fast playback for productivity tools, all at generation time rather than post-processing.
+
+For browser applications, Kokoro enables entirely private audio generation. Audiobook generation from text content, accessibility features that read page content aloud, language learning tools with pronunciation examples - all without sending user text to a server. The synthesizeSpeech() function accepts text, an optional voice ID, and speed parameter, returning a Blob containing the audio data ready to play via the Web Audio API. The **Voice Studio** showcase app demonstrates the full range of voices and speed settings with a live interactive interface.
+
+Kokoro runs through Transformers.js on WASM and works in all supported browsers. The 86MB download is comparable to a high-resolution image - acceptable for applications where TTS is a core feature. Since the model is cached in IndexedDB after first download, subsequent uses start instantly. Combined with Moonshine for speech-to-text, you can build complete voice-in-voice-out applications that work offline.
+
+The economics of local TTS are compelling for content-heavy applications. Google Cloud TTS charges $4-16 per million characters. A blog-to-podcast tool converting 50 articles per month (averaging 5,000 characters each) would cost $1-4/month on cloud APIs - modest individually but significant at scale. With Kokoro, the cost is permanently $0. For audiobook generation from longer texts (50,000+ characters per book), the savings compound to hundreds of dollars annually. The quality - especially with the phonemizer pipeline - is competitive with standard cloud TTS voices, though not yet matching the most premium neural voices from ElevenLabs or Google's Neural2 and Studio tiers.
+
+## Variant Comparison
+
+The following table lists every Kokoro Text-to-Speech variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Voices | Languages | Device |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| [onnx-community/Kokoro-82M-v1.0-ONNX](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX) | Transformers.js | 86MB | Medium | High | 29 | English (US & GB) | WASM |
+| [Xenova/speecht5_tts](https://huggingface.co/microsoft/speecht5_tts) | Transformers.js | 100MB | Medium | Basic | 1 | 1 | WASM |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| Under 200MB | 2 | variants |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All Kokoro Text-to-Speech variants use the same `TextToSpeechModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### Transformers.js
+
+Transformers.js runs ONNX-optimized models via ONNX Runtime Web. WebGPU acceleration where available, WASM fallback otherwise.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX');
+// Use the model with the corresponding @localmode/core function
+// Supports voice selection (29 voices) and speed control (0.5–2.0x)
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred model first, and fall back to a smaller variant if it fails to load.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+// Try the preferred model, fall back to a smaller one on failure
+let model;
+try {
+  model = transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX');
+} catch (error) {
+  console.warn('Primary model failed, using fallback:', error);
+  model = transformers.textToSpeech('Xenova/speecht5_tts');
+}
+```
+
+## When to Use Kokoro Text-to-Speech
+
+Kokoro Text-to-Speech models are a strong choice when:
+
+- **You need text-to-speech** - Kokoro Text-to-Speech is optimized for text-to-speech tasks with phonemizer-backed synthesis for accurate pronunciation.
+- **English voice variety matters** - 29 English voices (American & British) from a single 86MB model.
+- **Speed control is required** - Generate audio at 0.5x to 2.0x speed at synthesis time, without post-processing artifacts.
+- **Browser compatibility matters** - Available through Transformers.js, ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The 86MB range means you can target everything from mobile devices to high-end desktops with the same model family.
+- **You want a demo** - The **Voice Studio** showcase app provides a live interactive interface to explore all 29 voices and speed settings.
+
+
+## HuggingFace Model Cards
+
+- [Kokoro-82M-v1.0-ONNX](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX)
+- [speecht5_tts](https://huggingface.co/microsoft/speecht5_tts)
+
+## Related Pages
+
+- [Text To Speech](/blog/tasks/text-to-speech) - task guide
+
+## Methodology
+
+The model data on this page - sizes, quantization formats, and provider availability - is extracted directly from LocalMode's source code: the provider catalog (`packages/transformers/src/models.ts`), the Kokoro voice catalog (`packages/transformers/src/kokoro-voices.ts`), and the Kokoro TTS implementation (`packages/transformers/src/implementations/kokoro-tts.ts`). The voice count (29) reflects the English voices exposed by LocalMode's catalog; the phonemizer npm package only ships English eSpeak-NG dictionary data, so non-English voices from the upstream model are not available. Each voice corresponds to a `.bin` file in the [onnx-community/Kokoro-82M-v1.0-ONNX](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX) HuggingFace repository. Download sizes reflect the quantized ONNX model files as published by onnx-community. The 86MB default size refers to the `q8` (q8f16) quantization variant. Performance characteristics (speed and quality tiers) are LocalMode's curated assessments based on parameter count, quantization, and architecture. Cloud TTS pricing (Standard $4/M, WaveNet $4/M, Neural2 $16/M, Studio $160/M characters) is sourced from [Google Cloud Text-to-Speech pricing](https://cloud.google.com/text-to-speech/pricing) (verified May 2026). The "$4–16/M" range in the text covers Standard through Neural2 tiers; Studio voices cost significantly more. Always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [hexgrad/Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) - original model by hexgrad, 82M parameters, StyleTTS 2 + ISTFTNet architecture, Apache 2.0 license, 24kHz output
+- [hexgrad/Kokoro-82M VOICES.md](https://huggingface.co/hexgrad/Kokoro-82M/blob/main/VOICES.md) - authoritative voice list: 54 voices across 9 languages in the upstream model (LocalMode exposes 29 English voices; the phonemizer npm package only ships English eSpeak-NG dictionary data)
+- [onnx-community/Kokoro-82M-v1.0-ONNX](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX) - ONNX-converted model; q8f16 variant = 86MB, fp32 = 326MB
+- [phonemizer npm package](https://www.npmjs.com/package/phonemizer) - eSpeak-NG compiled to WASM for text-to-phoneme conversion (Xenova/phonemizer.js)
+- [Google Cloud Text-to-Speech pricing](https://cloud.google.com/text-to-speech/pricing) - Standard $4/M, WaveNet $4/M, Neural2 $16/M, Studio $160/M characters (verified May 2026)
+- [Transformers.js documentation](https://huggingface.co/docs/transformers.js)
+- [LocalMode Text-to-Speech provider documentation](https://localmode.dev/docs/transformers/text-to-speech)

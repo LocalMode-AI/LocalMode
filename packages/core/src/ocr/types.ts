@@ -101,6 +101,16 @@ export interface DoOCROptions {
   /** Whether to detect text regions */
   detectRegions?: boolean;
 
+  /**
+   * Text prompt for generative OCR models (e.g., GLM-OCR, LightOnOCR-2).
+   * Controls the recognition mode. Ignored by non-generative models like TrOCR.
+   *
+   * @example 'Text Recognition:' — extract plain text (default)
+   * @example 'Table Recognition:' — extract table structure
+   * @example 'Formula Recognition:' — extract LaTeX/math notation
+   */
+  prompt?: string;
+
   /** AbortSignal for cancellation */
   abortSignal?: AbortSignal;
 
@@ -150,6 +160,16 @@ export interface ExtractTextOptions {
   /** Whether to detect text regions (default: false) */
   detectRegions?: boolean;
 
+  /**
+   * Text prompt for generative OCR models (e.g., GLM-OCR, LightOnOCR-2).
+   * Controls the recognition mode. Ignored by non-generative models like TrOCR.
+   *
+   * @example 'Text Recognition:' — extract plain text (default)
+   * @example 'Table Recognition:' — extract table structure
+   * @example 'Formula Recognition:' — extract LaTeX/math notation
+   */
+  prompt?: string;
+
   /** AbortSignal for cancellation */
   abortSignal?: AbortSignal;
 
@@ -192,6 +212,12 @@ export interface ExtractTextManyOptions {
 
   /** Whether to detect text regions (default: false) */
   detectRegions?: boolean;
+
+  /**
+   * Text prompt for generative OCR models (e.g., GLM-OCR, LightOnOCR-2).
+   * Controls the recognition mode. Ignored by non-generative models like TrOCR.
+   */
+  prompt?: string;
 
   /** AbortSignal for cancellation */
   abortSignal?: AbortSignal;

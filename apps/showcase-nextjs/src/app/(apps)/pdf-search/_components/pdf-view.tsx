@@ -14,7 +14,7 @@ import { usePDFSearch } from '../_hooks/use-pdf-search';
 
 /** Main PDF chat view with sidebar and chat interface */
 export function PDFView() {
-  const isSidebarOpen = useUIStore((state) => state.isSidebarOpen);
+  const { isSidebarOpen, toggleSidebar } = useUIStore();
   const { queueStats } = usePDFSearch();
 
   return (
@@ -23,11 +23,21 @@ export function PDFView() {
       <div className="bg-grid fixed inset-0 z-0 pointer-events-none opacity-50" />
 
       <div className="relative z-10 flex h-full">
+        {/* Mobile sidebar overlay backdrop */}
+        {isSidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+            onClick={toggleSidebar}
+          />
+        )}
+
         {/* Sidebar with error boundary */}
         <aside
-          className={`transition-all duration-300 ease-in-out ${
-            isSidebarOpen ? 'w-80' : 'w-0'
-          } overflow-hidden shrink-0`}
+          className={`transition-all duration-300 ease-in-out shrink-0 ${
+            isSidebarOpen
+              ? 'fixed left-0 top-16 bottom-0 w-80 z-40 bg-poster-bg lg:relative lg:top-0 lg:z-auto lg:bg-transparent'
+              : 'w-0'
+          } overflow-hidden`}
         >
           <ErrorBoundary>
             <DocumentSidebar />

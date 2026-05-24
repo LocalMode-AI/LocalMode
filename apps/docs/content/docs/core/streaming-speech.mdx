@@ -1,0 +1,214 @@
+---
+title: Streaming Speech
+description: Stream text-to-speech clause-by-clause for low first-audio latency. Splits text on safe linguistic boundaries and pipes the audio into a Web Audio queue for gap-free playback.
+icon: Megaphone
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+`synthesizeSpeech()` returns a single `Blob` only after the entire input has been rendered. For real-time voice loops (an LLM reply being read aloud), users hear nothing for the full synthesis duration — typically 1.5–4 seconds for a few sentences.
+
+`streamSynthesizeSpeech()` solves this. It splits the input on safe clause boundaries (sentences, then commas/semicolons), runs your existing `TextToSpeechModel` once per clause, and yields each clause's audio as soon as it finishes. Pipe the iterable into `playStreamedSpeech()` for gap-free Web Audio playback.
+
+<Callout type="info" title="See model recommendations">
+  For recommended TTS models, provider-specific options, and full recipes with Kokoro (29 English voices, speed control), see the [Transformers Text-to-Speech](/docs/transformers/text-to-speech) guide.
+</Callout>
+
+## streamSynthesizeSpeech()
+
+Async-iterable wrapper around any `TextToSpeechModel`:
+
+```ts
+import { streamSynthesizeSpeech } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX');
+
+for await (const clause of streamSynthesizeSpeech({
+  model,
+  text: 'Hello there. How are you today?',
+  voice: 'af_heart',
+  speed: 1.0,
+})) {
+  console.log(clause.clauseIndex, clause.text, clause.audio.length);
+}
+```
+
+Each yielded `SynthesizedClause` carries:
+
+<TypeTable
+  type={{
+    audio: { type: 'Float32Array', description: 'Mono PCM samples in [-1, 1].' },
+    text: { type: 'string', description: 'The source clause text.' },
+    sampleRate: { type: 'number', description: 'Provider-reported sample rate.' },
+    clauseIndex: { type: 'number', description: 'Zero-based position within the stream.' },
+    usage: { type: 'SynthesizedClauseUsage', description: '{ characterCount, durationMs }' },
+  }}
+/>
+
+### Options
+
+<TypeTable
+  type={{
+    model: { type: 'TextToSpeechModel | string', description: 'Model instance or string ID resolved via setGlobalTTSProvider().' },
+    text: { type: 'string', description: 'Text to split + synthesize.' },
+    voice: { type: 'string', description: 'Forwarded to every clause.' },
+    speed: { type: 'number', description: 'Forwarded to every clause.' },
+    pitch: { type: 'number', description: 'Forwarded to every clause.' },
+    splitOptions: { type: 'ClauseSplitOptions', description: 'Tuning for the built-in splitter.' },
+    abortSignal: { type: 'AbortSignal', description: 'Honored between clauses and forwarded into doSynthesize().' },
+    providerOptions: { type: 'Record<string, Record<string, unknown>>' },
+  }}
+/>
+
+The function never retries: if any clause's `doSynthesize()` rejects, the iterable rejects with the same error and no further clauses are synthesized. Wrap the model with retry middleware if you need per-clause retry.
+
+## splitIntoClauses()
+
+The clause splitter is exported separately for callers who want to inspect or pre-process the breakdown:
+
+```ts
+import { splitIntoClauses } from '@localmode/core';
+
+splitIntoClauses('Hello there. How are you? Great!');
+// => ['Hello there.', 'How are you?', 'Great!']
+
+splitIntoClauses('Dr. Smith met Mr. Jones at 3 p.m. today.');
+// => ['Dr. Smith met Mr. Jones at 3 p.m. today.']
+
+splitIntoClauses('Pi is 3.14 and e is 2.71.');
+// => ['Pi is 3.14 and e is 2.71.']
+```
+
+Three-pass walker:
+1. **Sentence split** on `.`, `!`, `?` — abbreviations (`Mr.`, `Dr.`, `Ph.D.`, `e.g.`, `i.e.`, `p.m.`, `U.S.`, …) and decimals (`3.14`) are preserved.
+2. **Sub-clause split** on `;` then `,` for sentences exceeding `maxWordsPerClause`.
+3. **Forward-merge** orphan one-word fragments (e.g. `OK.`) into the next clause.
+
+### Tuning
+
+<TypeTable
+  type={{
+    minWordsPerClause: { type: 'number', description: 'Default: 4. Threshold for forward-merging orphan fragments.' },
+    maxWordsPerClause: { type: 'number', description: 'Default: 24. Sentences longer than this are sub-split on commas/semicolons.' },
+    abbreviations: { type: 'readonly string[]', description: 'Override the default abbreviation list.' },
+  }}
+/>
+
+## playStreamedSpeech()
+
+Gap-free Web Audio playback for the iterable:
+
+```ts
+import { streamSynthesizeSpeech, playStreamedSpeech } from '@localmode/core';
+
+async function onSpeakClick() {
+  // Create the AudioContext inside the user-gesture handler — Safari/iOS
+  // require this for autoplay.
+  const ctx = new AudioContext();
+
+  const stream = streamSynthesizeSpeech({ model, text, voice: 'af_heart', speed: 1.0 });
+
+  const handle = await playStreamedSpeech(stream, ctx, {
+    onClause: (c) => console.log('start', c.clauseIndex),
+    onClauseEnd: (c) => console.log('end', c.clauseIndex),
+  });
+
+  // Wait for playback to finish, then close the context.
+  handle.playing.then(() => ctx.close());
+}
+```
+
+The handle exposes `pause()`, `resume()`, and `stop()`:
+
+```ts
+handle.pause();   // calls audioContext.suspend()
+handle.resume();  // calls audioContext.resume()
+handle.stop();    // halts upstream synthesis, resolves `playing`
+```
+
+### AudioContext lifecycle
+
+`playStreamedSpeech()` requires the caller to pass an `AudioContext`. The helper does NOT create or close it. Browsers (especially Safari/iOS) require the `AudioContext` to be created or resumed inside a user-gesture handler — passing it in keeps that responsibility where it belongs.
+
+If the supplied context is `suspended`, the helper calls `resume()` automatically before scheduling the first clause and surfaces any failure via `handle.playing`.
+
+### AbortSignal
+
+```ts
+const controller = new AbortController();
+const handle = await playStreamedSpeech(stream, ctx, {
+  abortSignal: controller.signal,
+});
+
+// Aborting stops scheduled sources, halts upstream synthesis,
+// and rejects `handle.playing` with the abort reason.
+controller.abort();
+```
+
+### Sample rate consistency
+
+Both `streamSynthesizeSpeech()` and `playStreamedSpeech()` assert all clauses share the same `sampleRate` as the first clause. A mismatch is a hard error rather than silent garble.
+
+## Voice loop recipe
+
+```ts
+import {
+  streamSynthesizeSpeech,
+  playStreamedSpeech,
+  warmUpModel,        // optional: pre-warm the pipeline
+} from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX');
+await warmUpModel(model); // pay the cold-start cost once, up front
+
+async function speak(text: string) {
+  const ctx = new AudioContext();
+  const stream = streamSynthesizeSpeech({ model, text, voice: 'af_heart', speed: 1.0 });
+  const handle = await playStreamedSpeech(stream, ctx);
+  await handle.playing;
+  await ctx.close();
+}
+
+document.getElementById('speak').addEventListener('click', () => {
+  speak("Sure! Here's a quick summary. First, we boot the model. Second, we run the query. Third, we stream the answer.");
+});
+```
+
+## React: useStreamSpeech()
+
+The [`@localmode/react`](/docs/react) package ships a hook that wires the iterable + playback into a single primitive:
+
+```tsx
+import { useStreamSpeech } from '@localmode/react';
+
+function VoiceReply({ model, reply }) {
+  const { speak, pause, resume, stop, isPlaying, currentClause } =
+    useStreamSpeech({ model, voice: 'af_heart', speed: 1.0 });
+
+  return (
+    <>
+      <button onClick={() => speak(reply)}>Speak</button>
+      <button onClick={pause}>Pause</button>
+      <button onClick={resume}>Resume</button>
+      <button onClick={stop}>Stop</button>
+      {isPlaying && currentClause && <p>{currentClause.text}</p>}
+    </>
+  );
+}
+```
+
+The hook lazily creates an `AudioContext` on the first `speak()` call, or accepts a caller-supplied context via `options.audioContext`. On unmount it calls `stop()` and aborts the active synthesis controller.
+
+## When to use each API
+
+| API | When |
+|-----|------|
+| `synthesizeSpeech()` | Short prompts (< 1 sentence), pre-rendered audio, batch jobs. |
+| `streamSynthesizeSpeech()` | Real-time voice loops, multi-sentence replies, low time-to-first-audio. |
+| `playStreamedSpeech()` | Pair with `streamSynthesizeSpeech()` (or any custom iterable). |
+| `useStreamSpeech()` | React UIs that drive the loop from a `speak()` button. |
+| `splitIntoClauses()` | Pre-process text yourself (e.g. log/inspect clauses before synthesis). |

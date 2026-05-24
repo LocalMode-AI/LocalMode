@@ -47,18 +47,20 @@ export function useModelLoader() {
   useEffect(() => {
     // Check if already ready
     if (isEmbeddingModelReady()) {
-      uiStore.setModelsReady(true);
+      // Defer store update to avoid synchronous setState in effect
+      queueMicrotask(() => uiStore.setModelsReady(true));
       return;
     }
 
-    loadModels();
+    // Defer to avoid synchronous setState in effect
+    queueMicrotask(() => loadModels());
   }, []);
 
   // Reload reranker when useReranking changes
   useEffect(() => {
     if (uiStore.modelsReady && uiStore.useReranking) {
-      // Reranking was just enabled, load reranker
-      loadModels();
+      // Reranking was just enabled, load reranker — defer to avoid synchronous setState
+      queueMicrotask(() => loadModels());
     }
   }, [uiStore.useReranking]);
 

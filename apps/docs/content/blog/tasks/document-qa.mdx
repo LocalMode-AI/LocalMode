@@ -1,0 +1,141 @@
+---
+title: "Document QA in the Browser"
+description: "Ask questions about document images - forms, receipts, charts, and reports - using Florence-2 or Donut in the browser."
+author: "LocalMode"
+date: "2026-05-15"
+---
+
+# Document QA in the Browser
+
+Ask questions about document images - forms, receipts, charts, and reports - using Florence-2 or Donut in the browser.
+
+## What Is Document QA?
+
+Document QA combines visual understanding with question answering: given an image of a document and a natural language question, the model extracts the relevant information. Florence 2 processes the document image visually (no OCR preprocessing needed) and generates answers based on what it "sees" in the document.
+
+This capability is exposed through the `askDocument()` function in `@localmode/core`. All processing runs entirely in the browser - no server, no API key, no data leaves the device. After the initial model download, document qa works completely offline.
+
+## Real-World Applications
+
+Invoice processing: "What is the total amount?" Form data extraction: "What is the applicant name?" Chart interpretation: "What was Q3 revenue?" Receipt scanning: "What was the tip amount?" Report analysis: "What is the main conclusion?"
+
+These use cases all benefit from local, on-device processing: user data stays private, there are no per-request API costs, and the application works without internet after initial setup.
+
+## Getting Started
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Import the core function and provider:
+
+```typescript
+import { askDocument } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+```
+
+The recommended starting model is **onnx-community/Florence-2-base-ft** - it provides the best balance of quality, speed, and download size for most applications.
+
+## Code Example
+
+```typescript
+import { askDocument } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.documentQA('onnx-community/Florence-2-base-ft');
+
+const { answer } = await askDocument({
+  model,
+  document: invoiceImage,
+  question: 'What is the total amount?',
+});
+
+console.log(answer); // "$1,250.00"
+```
+
+This example demonstrates the core workflow: create a model instance from the provider, call the `askDocument()` function with your input, and receive structured results. The same pattern works identically across all 1 available provider: Transformers.js.
+
+## Available Models
+
+The following models support document QA through LocalMode. Choose based on your target device, acceptable download size, and quality requirements.
+
+| Model | Provider | Size | Speed | Quality |
+| --- | --- | --- | --- | --- |
+| onnx-community/Florence-2-base-ft | Transformers.js | ~223MB (q4f16) | Medium | High |
+| Xenova/donut-base-finetuned-docvqa | Transformers.js | ~218MB (quantized) | Medium | Good |
+
+**Choosing a model:** For most applications, start with the recommended model (`onnx-community/Florence-2-base-ft`). If download size is the primary constraint (e.g., mobile PWA, browser extension), pick the smallest model that meets your quality bar. If quality is the priority (e.g., enterprise search, content analysis), use the largest model your target devices can handle.
+
+## Cloud vs Local: Cost and Privacy Comparison
+
+Running document qa locally eliminates per-request API costs and keeps all data on-device. Here is how the economics compare:
+
+| Service | Cost / Notes |
+| --- | --- |
+| Azure Document Intelligence | $10 per 1,000 pages (prebuilt models); $30 per 1,000 pages (custom extraction) |
+| Google Document AI | $1.50 per 1,000 pages (OCR); $30 per 1,000 pages (Custom Extractor/Form Parser) |
+| AWS Textract with Queries | $15 per 1,000 pages |
+| LocalMode document QA | $0 after ~223MB download, with documents never leaving the device |
+
+Azure Document Intelligence costs $10 per 1,000 pages for prebuilt models (invoices, receipts) and $30 per 1,000 pages for custom extraction. Google Document AI costs $1.50 per 1,000 pages for OCR and $30 per 1,000 pages for the Custom Extractor or Form Parser. AWS Textract with Queries costs $15 per 1,000 pages. LocalMode document QA costs $0 after the initial ~223MB model download, with documents never leaving the device.
+
+The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
+
+## Available Providers
+
+- **Transformers.js** - ONNX-optimized models via ONNX Runtime Web. Supports both WebGPU and WASM backends. Broadest model catalog for non-LLM tasks.
+
+## AbortSignal Support
+
+All `askDocument()` calls support cancellation through the standard `AbortSignal` API:
+
+```typescript
+const controller = new AbortController();
+
+const promise = askDocument({
+  model,
+  document: imageFile, question: 'What is this?',
+  abortSignal: controller.signal,
+});
+
+// Cancel if needed (e.g., user navigates away)
+controller.abort();
+```
+
+This is essential for responsive UIs - cancel in-flight operations when the user navigates away, submits a new query, or closes a dialog. The underlying model inference stops immediately, freeing memory and compute resources.
+
+## React Integration
+
+If you are building a React application, `@localmode/react` provides hooks that manage loading states, error handling, and cancellation automatically:
+
+```bash
+npm install @localmode/react
+```
+
+```typescript
+import { useAskDocument } from '@localmode/react';
+```
+
+The hook returns `{ data, error, isLoading, execute, cancel }` - providing everything a UI component needs to display progress, handle errors, and offer cancellation.
+
+## Related Pages
+
+- [Florence Vision](/blog/models/florence-vision) - model guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+This guide is based on LocalMode's source code and curated model catalog. Function signatures, hook names, and code examples were verified against `packages/core/src/document/`, `packages/transformers/src/implementations/document-qa.ts`, `packages/transformers/src/models.ts`, and `packages/react/src/hooks/use-ask-document.ts`. Model sizes were verified against the ONNX file listings on each model's HuggingFace repository (q4f16 variants for Florence-2, quantized variants for Donut). Cloud pricing figures were verified against official provider pricing pages and are subject to change - verify current pricing with the provider before making cost decisions.
+
+## Sources
+
+- [LocalMode Core Document QA docs](https://localmode.dev/docs/core/document-qa)
+- [LocalMode Transformers Document QA docs](https://localmode.dev/docs/transformers/document-qa)
+- [onnx-community/Florence-2-base-ft on HuggingFace](https://huggingface.co/onnx-community/Florence-2-base-ft/tree/main/onnx) - ONNX file sizes (q4f16 variant: ~223MB)
+- [Xenova/donut-base-finetuned-docvqa on HuggingFace](https://huggingface.co/Xenova/donut-base-finetuned-docvqa/tree/main/onnx) - ONNX file sizes (quantized variant: ~218MB)
+- [Google Document AI pricing](https://cloud.google.com/document-ai/pricing) - OCR $1.50/1,000 pages; Custom Extractor $30/1,000 pages
+- [AWS Textract pricing](https://aws.amazon.com/textract/pricing/) - Queries $0.015/page ($15/1,000 pages)
+- [Azure Document Intelligence pricing](https://azure.microsoft.com/en-us/pricing/details/document-intelligence/) - Prebuilt $10/1,000 pages; Custom Extraction $30/1,000 pages

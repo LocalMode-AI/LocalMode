@@ -1,0 +1,109 @@
+---
+title: "Florence 2 Vision Models in the Browser"
+description: "Microsoft's Florence 2 - a unified vision model for image captioning, document QA, and visual understanding in the browser."
+author: "LocalMode"
+date: "2026-04-17"
+---
+
+# Florence 2 Vision Models in the Browser
+
+Microsoft's Florence 2 - a unified vision model for image captioning, document QA, and visual understanding in the browser.
+
+## Overview
+
+The Florence 2 Vision family is available through Transformers.js in LocalMode, with model sizes ranging from 223MB. The primary task for these models is **image-captioning**, and they can be used with any application built on the LocalMode SDK.
+
+Running Florence 2 Vision models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+Florence 2 is Microsoft's unified vision-language model that handles multiple visual understanding tasks through a single architecture. In LocalMode, Florence-2-base-ft serves double duty: it generates detailed image captions through the captionImage() function and answers questions about document images through askDocument().
+
+What sets Florence apart from single-task vision models is its training on 126 million images with 5.4 billion annotations (the FLD-5B dataset) spanning multiple visual tasks. This means a single 223MB model download gives you both captioning and document QA capabilities - no need to download separate models for each task.
+
+For image captioning, Florence generates descriptive captions like "A person standing at a whiteboard presenting to a group of people in a conference room." For document QA, you can ask natural language questions about images of forms, receipts, charts, and reports. Both capabilities work through the same model, making Florence an efficient choice for applications that need multiple vision features.
+
+The model runs through Transformers.js on WASM and processes images client-side - the original image never leaves the device. This is particularly valuable for document processing applications in healthcare, legal, and finance where image content may be sensitive.
+
+## Variant Comparison
+
+The following table lists every Florence 2 Vision variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [onnx-community/Florence-2-base-ft](https://huggingface.co/onnx-community/Florence-2-base-ft) | Transformers.js | 223MB | Medium | High | - | WASM |
+| [Xenova/vit-gpt2-image-captioning](https://huggingface.co/Xenova/vit-gpt2-image-captioning) | Transformers.js | 250MB | Medium | Good | - | WASM |
+| [Xenova/donut-base-finetuned-docvqa](https://huggingface.co/Xenova/donut-base-finetuned-docvqa) | Transformers.js | 218MB | Medium | Good | - | WASM |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| 200MB–500MB | 3 | variants |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All Florence 2 Vision variants use the same `ImageCaptionModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### Transformers.js
+
+Transformers.js runs ONNX-optimized models via ONNX Runtime Web. WebGPU acceleration where available, WASM fallback otherwise.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.captioner('onnx-community/Florence-2-base-ft');
+// Use the model with the corresponding @localmode/core function
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred model first, and fall back to a smaller variant if it fails to load.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+// Try the preferred model, fall back to a smaller one on failure
+let model;
+try {
+  model = transformers.captioner('onnx-community/Florence-2-base-ft');
+} catch (error) {
+  console.warn('Primary model failed, using fallback:', error);
+  model = transformers.captioner('Xenova/vit-gpt2-image-captioning');
+}
+```
+
+## When to Use Florence 2 Vision
+
+Florence 2 Vision models are a strong choice when:
+
+- **You need image-captioning** - Florence 2 Vision is optimized for image-captioning tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 1 provider (transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The 223MB range means you can target everything from mobile devices to high-end desktops with the same model family.
+
+
+## HuggingFace Model Cards
+
+- [Florence-2-base-ft (ONNX)](https://huggingface.co/onnx-community/Florence-2-base-ft)
+- [Florence-2-base-ft (original, microsoft)](https://huggingface.co/microsoft/Florence-2-base-ft)
+- [vit-gpt2-image-captioning (Xenova ONNX)](https://huggingface.co/Xenova/vit-gpt2-image-captioning)
+- [donut-base-finetuned-docvqa (Xenova ONNX)](https://huggingface.co/Xenova/donut-base-finetuned-docvqa)
+
+## Related Pages
+
+- [Image Captioning](/blog/tasks/image-captioning) - task guide
+
+## Methodology
+
+Model sizes, quantization formats, and provider availability were verified directly against LocalMode's source code (`packages/transformers/src/models.ts`, `packages/transformers/src/implementations/captioner.ts`, `packages/transformers/src/implementations/document-qa.ts`). Training data figures (126 million images, 5.4 billion annotations) were confirmed against the official Florence-2 paper (arXiv:2311.06242) and the microsoft/Florence-2-base-ft HuggingFace model card. API function names (`captionImage()`, `askDocument()`) were verified against `packages/core/src/vision/caption-image.ts` and `packages/core/src/document/ask-document.ts`. Model card links were updated to point to the actual Xenova ONNX repositories used by LocalMode. Always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [microsoft/Florence-2-base-ft - HuggingFace model card](https://huggingface.co/microsoft/Florence-2-base-ft)
+- [onnx-community/Florence-2-base-ft - HuggingFace ONNX model card](https://huggingface.co/onnx-community/Florence-2-base-ft)
+- [Florence-2 paper - arXiv:2311.06242](https://arxiv.org/abs/2311.06242)
+- [Xenova/vit-gpt2-image-captioning - HuggingFace ONNX model card](https://huggingface.co/Xenova/vit-gpt2-image-captioning)
+- [Xenova/donut-base-finetuned-docvqa - HuggingFace ONNX model card](https://huggingface.co/Xenova/donut-base-finetuned-docvqa)
+- [Transformers.js documentation](https://huggingface.co/docs/transformers.js)

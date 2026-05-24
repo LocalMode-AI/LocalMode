@@ -1,25 +1,18 @@
 /**
- * Transformers Language Model Implementation (TJS v4)
+ * Transformers Language Model Implementation
  *
- * Implements LanguageModel interface using Transformers.js v4 (via npm alias
- * `@huggingface/transformers-v4`). Supports two loading strategies:
+ * Implements LanguageModel interface using Transformers.js v4.
+ * Supports two loading strategies:
  *
  * 1. **Standard pipeline** — For text-only models (SmolLM2, Phi, Qwen3, etc.)
  *    Uses `pipeline('text-generation', modelId, { device })`.
  *
- * 2. **Qwen3.5 multimodal** — For Qwen3.5 ONNX models which have a split
- *    architecture (embed_tokens + vision_encoder + decoder_model_merged).
- *    Uses `AutoModelForCausalLM.from_pretrained` with per-component dtype config
- *    and `AutoTokenizer` for tokenization.
+ * 2. **VLM (vision-language)** — For Qwen3.5, Qwen3-VL, and Qwen2.5-VL ONNX
+ *    models which have a split architecture (embed_tokens + vision_encoder +
+ *    decoder_model_merged). Uses `AutoModelForCausalLM.from_pretrained` with
+ *    per-component dtype config and `AutoTokenizer` for tokenization.
  *
  * The loading strategy is auto-detected from the model ID.
- *
- * **Experimental**: This implementation uses Transformers.js v4 which is
- * currently a preview release (`@next` tag). The API may change in future
- * releases.
- *
- * NOTE: This is the ONLY file that imports from `@huggingface/transformers-v4`.
- * All 24 existing implementations continue to use `@huggingface/transformers` (v3).
  *
  * @packageDocumentation
  */
@@ -41,7 +34,7 @@ import type { LanguageModelSettings } from '../types.js';
  * Obtained via dynamic import to avoid bundling if unused.
  */
 type TextGenerationPipeline = Awaited<
-  ReturnType<typeof import('@huggingface/transformers-v4').pipeline>
+  ReturnType<typeof import('@huggingface/transformers').pipeline>
 >;
 
 /**
@@ -54,17 +47,69 @@ function isQwen35Model(modelId: string): boolean {
 }
 
 /**
- * Internal wrapper that holds either a pipeline or a Qwen3.5 model+tokenizer pair.
+ * Detect if a model ID refers to a Qwen VL (vision-language) ONNX model.
+ * Covers Qwen2.5-VL and Qwen3-VL families. These share the same TJS v4
+ * architecture chain as Qwen3.5 and use the same loading path.
+ */
+function isQwenVLModel(modelId: string): boolean {
+  const lower = modelId.toLowerCase();
+  return /qwen[23][\._]?5?-vl/i.test(lower) || /qwen3-vl/i.test(lower);
+}
+
+/**
+ * Detect if a model ID refers to a Gemma 4 multimodal ONNX model.
+ * These use a split architecture (embed_tokens + vision_encoder + decoder_model_merged)
+ * and require the VLM loading path with Gemma4ForConditionalGeneration.
+ */
+function isGemma4Model(modelId: string): boolean {
+  const lower = modelId.toLowerCase();
+  return lower.includes('gemma-4') || lower.includes('gemma4');
+}
+
+/**
+ * Detect if a model ID refers to a GLM-OCR model.
+ * Uses AutoModelForImageTextToText instead of AutoModelForCausalLM.
+ */
+function isGlmOcrModel(modelId: string): boolean {
+  const lower = modelId.toLowerCase();
+  return lower.includes('glm-ocr') || lower.includes('glm_ocr') || lower.includes('glmocr');
+}
+
+/**
+ * Detect if a model ID refers to a LightOnOCR model.
+ * Uses AutoModelForImageTextToText instead of AutoModelForCausalLM.
+ */
+function isLightOnOCRModel(modelId: string): boolean {
+  const lower = modelId.toLowerCase();
+  return lower.includes('lightonocr') || lower.includes('lighton-ocr') || lower.includes('lighton_ocr');
+}
+
+/**
+ * Whether a model uses AutoModelForImageTextToText (generative OCR models).
+ */
+function isImageTextToTextModel(modelId: string): boolean {
+  return isGlmOcrModel(modelId) || isLightOnOCRModel(modelId);
+}
+
+/**
+ * Whether a model should use the VLM loading path (direct model class + processor).
+ */
+function isVLMModel(modelId: string): boolean {
+  return isQwen35Model(modelId) || isQwenVLModel(modelId) || isGemma4Model(modelId) || isImageTextToTextModel(modelId);
+}
+
+/**
+ * Internal wrapper that holds either a pipeline or a VLM model+tokenizer pair.
  * This abstraction lets doGenerate/doStream work the same way regardless of loading strategy.
  */
 interface LoadedModel {
-  type: 'pipeline' | 'qwen35';
+  type: 'pipeline' | 'vlm';
   /** For pipeline models */
   pipeline?: TextGenerationPipeline;
-  /** For Qwen3.5 models */
+  /** For VLM models (Qwen3.5, Qwen3-VL, Qwen2.5-VL, GLM-OCR, LightOnOCR-2) */
   model?: unknown;
   tokenizer?: unknown;
-  /** For Qwen3.5 vision — processes images into model-compatible tensors */
+  /** For VLM vision — processes images into model-compatible tensors */
   processor?: unknown;
 }
 
@@ -103,7 +148,7 @@ export class TransformersLanguageModel implements LanguageModel {
     this.settings = settings;
     this.modelId = `transformers:${baseModelId}`;
     this.contextLength = settings.contextLength ?? 4096;
-    this.supportsVision = isQwen35Model(baseModelId);
+    this.supportsVision = isVLMModel(baseModelId);
   }
 
   /**
@@ -120,7 +165,7 @@ export class TransformersLanguageModel implements LanguageModel {
   }
 
   /**
-   * Lazily load the model. Auto-detects whether to use pipeline or Qwen3.5 loading.
+   * Lazily load the model. Auto-detects whether to use pipeline or VLM loading.
    * Deduplicates concurrent calls -- only one load occurs.
    * @internal
    */
@@ -132,8 +177,10 @@ export class TransformersLanguageModel implements LanguageModel {
       try {
         const device = this.getDevice();
 
-        if (isQwen35Model(this.baseModelId)) {
-          return await this.loadQwen35(device);
+        if (isImageTextToTextModel(this.baseModelId)) {
+          return await this.loadImageTextToText(device);
+        } else if (isVLMModel(this.baseModelId)) {
+          return await this.loadVLM(device);
         } else {
           return await this.loadPipeline(device);
         }
@@ -156,14 +203,14 @@ export class TransformersLanguageModel implements LanguageModel {
    * @internal
    */
   private async loadPipeline(device: string): Promise<LoadedModel> {
-    const { pipeline, env } = await import('@huggingface/transformers-v4');
+    const { pipeline, env } = await import('@huggingface/transformers');
 
     // Suppress ONNX runtime warnings about node execution providers
     env.backends.onnx.logLevel = 'error';
 
     const pipe = await pipeline('text-generation', this.baseModelId, {
       device,
-      dtype: 'q4',
+      dtype: this.settings.dtype ?? 'q4',
       progress_callback: this.settings.onProgress,
     } as Record<string, unknown>);
 
@@ -173,19 +220,21 @@ export class TransformersLanguageModel implements LanguageModel {
   }
 
   /**
-   * Load a Qwen3.5 multimodal model using AutoModelForCausalLM + AutoTokenizer.
+   * Load a VLM (vision-language model) using AutoModelForCausalLM + AutoTokenizer.
    *
-   * Qwen3.5 ONNX repos have a split architecture:
+   * Supports Qwen3.5, Qwen3-VL, and Qwen2.5-VL ONNX repos which share a
+   * split architecture:
    * - embed_tokens (token embeddings)
    * - vision_encoder (image processing)
    * - decoder_model_merged (the actual LLM)
    *
    * Each component can be loaded with a different dtype (q4, fp16, etc.)
-   * For text-only use, we still load all 3 but use q4 for smallest size.
+   * AutoModelForCausalLM auto-detects the VL architecture from config.json
+   * and loads only embed_tokens + decoder_model_merged for text-only use.
    * @internal
    */
-  private async loadQwen35(device: string): Promise<LoadedModel> {
-    const tjs = await import('@huggingface/transformers-v4');
+  private async loadVLM(device: string): Promise<LoadedModel> {
+    const tjs = await import('@huggingface/transformers');
 
     // Suppress ONNX runtime warnings about node execution providers
     tjs.env.backends.onnx.logLevel = 'error';
@@ -197,6 +246,27 @@ export class TransformersLanguageModel implements LanguageModel {
       decoder_model_merged: 'q4',
     };
 
+    // Try the dedicated model class first for faster loading, then fall back
+    // to AutoModelForCausalLM which auto-detects architecture from config.json.
+    const modelOpts = {
+      dtype,
+      device,
+      progress_callback: this.settings.onProgress,
+    } as Record<string, unknown>;
+
+    let loadModel: Promise<unknown>;
+    if (isGemma4Model(this.baseModelId) &&
+        (tjs as Record<string, unknown>).Gemma4ForConditionalGeneration) {
+      loadModel = (tjs as { Gemma4ForConditionalGeneration: { from_pretrained: Function } })
+        .Gemma4ForConditionalGeneration.from_pretrained(this.baseModelId, modelOpts);
+    } else if (isQwen35Model(this.baseModelId) &&
+        (tjs as Record<string, unknown>).Qwen3_5ForConditionalGeneration) {
+      loadModel = (tjs as { Qwen3_5ForConditionalGeneration: { from_pretrained: Function } })
+        .Qwen3_5ForConditionalGeneration.from_pretrained(this.baseModelId, modelOpts);
+    } else {
+      loadModel = tjs.AutoModelForCausalLM.from_pretrained(this.baseModelId, modelOpts);
+    }
+
     const [tokenizer, processor, model] = await Promise.all([
       tjs.AutoTokenizer.from_pretrained(this.baseModelId, {
         progress_callback: this.settings.onProgress,
@@ -204,20 +274,56 @@ export class TransformersLanguageModel implements LanguageModel {
       tjs.AutoProcessor.from_pretrained(this.baseModelId, {
         progress_callback: this.settings.onProgress,
       } as Record<string, unknown>),
-      (tjs as Record<string, unknown>).Qwen3_5ForConditionalGeneration
-        ? (tjs as { Qwen3_5ForConditionalGeneration: { from_pretrained: Function } }).Qwen3_5ForConditionalGeneration.from_pretrained(this.baseModelId, {
+      loadModel,
+    ]);
+
+    const result: LoadedModel = { type: 'vlm', model, tokenizer, processor };
+    this.loaded = result;
+    return result;
+  }
+
+  /**
+   * Load a generative OCR model using AutoModelForImageTextToText + AutoProcessor.
+   *
+   * Used for GLM-OCR and LightOnOCR-2 ONNX repos which use a different model
+   * class from the Qwen VLM path but share the same generation flow.
+   * @internal
+   */
+  private async loadImageTextToText(device: string): Promise<LoadedModel> {
+    const tjs = await import('@huggingface/transformers');
+    tjs.env.backends.onnx.logLevel = 'error';
+
+    const dtype = this.settings.dtype ?? {
+      embed_tokens: 'q4',
+      vision_encoder: 'fp16',
+      decoder_model_merged: 'q4',
+    };
+
+    const modelLoader = (tjs as Record<string, unknown>).AutoModelForImageTextToText
+      ? (tjs as { AutoModelForImageTextToText: { from_pretrained: Function } })
+          .AutoModelForImageTextToText.from_pretrained(this.baseModelId, {
             dtype,
             device,
             progress_callback: this.settings.onProgress,
           } as Record<string, unknown>)
-        : tjs.AutoModelForCausalLM.from_pretrained(this.baseModelId, {
+      : tjs.AutoModelForCausalLM.from_pretrained(this.baseModelId, {
             dtype,
             device,
             progress_callback: this.settings.onProgress,
-          } as Record<string, unknown>),
+          } as Record<string, unknown>);
+
+    const [processor, model] = await Promise.all([
+      tjs.AutoProcessor.from_pretrained(this.baseModelId, {
+        progress_callback: this.settings.onProgress,
+      } as Record<string, unknown>),
+      modelLoader,
     ]);
 
-    const result: LoadedModel = { type: 'qwen35', model, tokenizer, processor };
+    const tokenizer = await tjs.AutoTokenizer.from_pretrained(this.baseModelId, {
+      progress_callback: this.settings.onProgress,
+    } as Record<string, unknown>);
+
+    const result: LoadedModel = { type: 'vlm', model, processor, tokenizer };
     this.loaded = result;
     return result;
   }
@@ -298,8 +404,8 @@ export class TransformersLanguageModel implements LanguageModel {
     const { messages: chatMessages, images } = this.buildMessages({ prompt, systemPrompt, messages });
 
     try {
-      if (loaded.type === 'qwen35') {
-        return await this.generateQwen35(loaded, chatMessages, {
+      if (loaded.type === 'vlm') {
+        return await this.generateVLM(loaded, chatMessages, {
           maxTokens, temperature, topP, startTime, images,
         });
       } else {
@@ -359,15 +465,15 @@ export class TransformersLanguageModel implements LanguageModel {
   }
 
   /**
-   * Generate using Qwen3.5 AutoModelForCausalLM + AutoTokenizer.
+   * Generate using VLM AutoModelForCausalLM + AutoTokenizer (Qwen3.5/Qwen3-VL/Qwen2.5-VL).
    * @internal
    */
-  private async generateQwen35(
+  private async generateVLM(
     loaded: LoadedModel,
     chatMessages: Array<{ role: string; content: unknown }>,
     opts: { maxTokens: number; temperature: number; topP: number; startTime: number; images: unknown[] }
   ): Promise<DoGenerateResult> {
-    const tjs = await import('@huggingface/transformers-v4');
+    const tjs = await import('@huggingface/transformers');
     const tokenizer = loaded.tokenizer as {
       apply_chat_template: (messages: unknown[], options: Record<string, unknown>) => unknown;
       decode: (ids: unknown, options?: Record<string, unknown>) => string;
@@ -408,6 +514,10 @@ export class TransformersLanguageModel implements LanguageModel {
       }) as Record<string, unknown>;
     }
 
+    // Count input tokens so we can slice them off the output
+    const inputIds = inputs.input_ids as { dims?: number[]; tolist?: () => number[][] };
+    const inputTokenCount = inputIds?.dims?.[1] ?? 0;
+
     // Generate
     const output = await model.generate({
       ...inputs,
@@ -417,22 +527,19 @@ export class TransformersLanguageModel implements LanguageModel {
       do_sample: opts.temperature > 0,
     });
 
-    // Decode — output is a tensor of token IDs, slice off the input tokens
-    const outputArray = output as { tolist: () => number[][] };
-    const allTokenIds = outputArray.tolist ? outputArray.tolist() : output;
-    const decoded = tokenizer.batch_decode(allTokenIds, { skip_special_tokens: true });
-    let text = Array.isArray(decoded) ? decoded[0] : String(decoded);
+    // Decode — slice off the input token IDs, decode only the generated tokens
+    const outputArray = output as { tolist: () => number[][]; slice: Function; dims?: number[] };
+    const allIds = outputArray.tolist ? outputArray.tolist() : [[]] as number[][];
+    const generatedIds = inputTokenCount > 0
+      ? allIds.map((seq: number[]) => seq.slice(inputTokenCount))
+      : allIds;
+    const decoded = tokenizer.batch_decode(generatedIds, { skip_special_tokens: true });
+    const text = (Array.isArray(decoded) ? decoded[0] : String(decoded)).trim();
 
-    // Strip the input prompt from the output if present
-    const inputText = chatMessages.map((m) =>
-      typeof m.content === 'string' ? m.content : ''
-    ).join(' ');
-    if (text.startsWith(inputText)) {
-      text = text.slice(inputText.length).trim();
-    }
-
-    const inputTokens = Math.ceil(inputText.length / 4);
-    const outputTokens = Math.ceil(text.length / 4);
+    const inputTokens = inputTokenCount || Math.ceil(
+      chatMessages.map((m) => typeof m.content === 'string' ? m.content : '').join(' ').length / 4
+    );
+    const outputTokens = generatedIds[0]?.length ?? Math.ceil(text.length / 4);
     const finishReason: FinishReason = outputTokens >= opts.maxTokens ? 'length' : 'stop';
 
     return {
@@ -472,7 +579,7 @@ export class TransformersLanguageModel implements LanguageModel {
    * Stream text generation token by token.
    *
    * For pipeline models: uses TJS v4's streamer callback.
-   * For Qwen3.5 models: uses model.generate with TextStreamer.
+   * For VLM models: uses model.generate with TextStreamer.
    */
   async *doStream(options: DoStreamOptions): AsyncIterable<StreamChunk> {
     const {
@@ -524,13 +631,13 @@ export class TransformersLanguageModel implements LanguageModel {
     // Start generation in background
     const completionPromise = (async () => {
       try {
-        if (loaded.type === 'qwen35') {
-          await this.streamQwen35(loaded, chatMessages, {
+        if (loaded.type === 'vlm') {
+          await this.streamVLM(loaded, chatMessages, {
             maxTokens, temperature, topP, streamer, images,
           });
         } else {
           // TJS v4 pipeline requires a TextStreamer instance for streaming
-          const tjs = await import('@huggingface/transformers-v4');
+          const tjs = await import('@huggingface/transformers');
           const pipelineTokenizer = (loaded.pipeline as unknown as Record<string, unknown>).tokenizer;
           const textStreamer = new tjs.TextStreamer(
             pipelineTokenizer as InstanceType<typeof tjs.PreTrainedTokenizer>,
@@ -594,15 +701,15 @@ export class TransformersLanguageModel implements LanguageModel {
   }
 
   /**
-   * Stream Qwen3.5 generation using model.generate with a callback streamer.
+   * Stream VLM generation using model.generate with a callback streamer.
    * @internal
    */
-  private async streamQwen35(
+  private async streamVLM(
     loaded: LoadedModel,
     chatMessages: Array<{ role: string; content: unknown }>,
     opts: { maxTokens: number; temperature: number; topP: number; streamer: (token: string) => void; images: unknown[] }
   ): Promise<void> {
-    const tjs = await import('@huggingface/transformers-v4');
+    const tjs = await import('@huggingface/transformers');
 
     const tokenizer = loaded.tokenizer as {
       apply_chat_template: (messages: unknown[], options: Record<string, unknown>) => unknown;
@@ -663,7 +770,7 @@ export class TransformersLanguageModel implements LanguageModel {
         if (this.loaded.type === 'pipeline' && this.loaded.pipeline) {
           const pipe = this.loaded.pipeline as unknown as { dispose?: () => Promise<void> | void };
           if (typeof pipe.dispose === 'function') await pipe.dispose();
-        } else if (this.loaded.type === 'qwen35' && this.loaded.model) {
+        } else if (this.loaded.model) {
           const m = this.loaded.model as { dispose?: () => Promise<void> | void };
           if (typeof m.dispose === 'function') await m.dispose();
         }
@@ -680,7 +787,7 @@ export class TransformersLanguageModel implements LanguageModel {
  * Create a Transformers.js v4 language model for ONNX inference.
  *
  * Auto-detects whether to use the standard text-generation pipeline
- * or Qwen3.5-specific loading based on the model ID.
+ * or VLM-specific loading based on the model ID.
  *
  * @param modelId - HuggingFace model ID (e.g., 'onnx-community/Qwen3.5-0.8B-ONNX')
  * @param settings - Model settings

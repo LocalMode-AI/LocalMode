@@ -1,0 +1,107 @@
+---
+title: "Swin2SR Super Resolution Models in the Browser"
+description: "Image upscaling models that enhance low-resolution images to 2x or 4x their original size - entirely in the browser."
+author: "LocalMode"
+date: "2026-05-01"
+---
+
+# Swin2SR Super Resolution Models in the Browser
+
+Image upscaling models that enhance low-resolution images to 2x or 4x their original size - entirely in the browser.
+
+## Overview
+
+The Swin2SR Super Resolution family is available through Transformers.js in LocalMode, with model sizes ranging from ~8–55MB. The primary task for these models is **image-to-image**, and they can be used with any application built on the LocalMode SDK.
+
+Running Swin2SR Super Resolution models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+Swin2SR (SwinV2 Transformer for Compressed Image Super-Resolution and Restoration) models perform single-image super resolution - taking a low-resolution image and producing a higher-resolution version with enhanced details. Introduced in the paper "Swin2SR: SwinV2 Transformer for Compressed Image Super-Resolution and Restoration" (Conde et al., AIM workshop at ECCV 2022, arXiv:2209.11345), the architecture builds on Swin Transformer V2 and improves training convergence and performance over the earlier SwinIR baseline. The lightweight variant handles 2x upscaling (doubling width and height), while the classical variant handles 4x upscaling with higher quality reconstruction.
+
+The lightweight 2x model is compact at ~8MB (1.01M parameters), making it viable for real-time image enhancement in the browser. The classical 4x model is larger at ~55MB (12.2M parameters), but still practical for client-side use - it processes images through a Swin Transformer V2-based architecture that captures long-range dependencies better than traditional CNN upscalers.
+
+Use cases include: enhancing user-uploaded photos before display, improving thumbnail quality for image galleries, upscaling product images for zoom views in e-commerce, and preparing low-resolution screenshots for documentation. Since all processing runs client-side via Transformers.js, the original images never leave the device - important for applications handling personal photos or proprietary visual content.
+
+Unlike cloud-based super resolution services that charge per image and require uploading your photos to a server, Swin2SR models process images instantly in the browser at zero cost. The quality is competitive with cloud upscalers for moderate enhancement (2-4x), though dedicated cloud services may produce better results at extreme upscaling ratios (8x+). For most practical applications - enhancing a 480p image to 1080p or a thumbnail to full-size - browser-based super resolution produces visually pleasing results.
+
+## Variant Comparison
+
+The following table lists every Swin2SR Super Resolution variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Xenova/swin2SR-lightweight-x2-64](https://huggingface.co/caidas/swin2SR-lightweight-x2-64) | Transformers.js | 8MB | Fast | Good | - | WASM |
+| [Xenova/swin2SR-classical-sr-x4-64](https://huggingface.co/caidas/swin2SR-classical-sr-x4-64) | Transformers.js | 55MB | Fast | High | - | WASM |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| Under 200MB | 2 | variants |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All Swin2SR Super Resolution variants use the same `ImageToImageModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### Transformers.js
+
+Transformers.js runs ONNX-optimized models via ONNX Runtime Web. WebGPU acceleration where available, WASM fallback otherwise.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.imageToImage('Xenova/swin2SR-lightweight-x2-64');
+// Use the model with the corresponding @localmode/core function
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred model first, and fall back to a smaller variant if it fails to load.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+// Try the preferred model, fall back to a smaller one on failure
+let model;
+try {
+  model = transformers.imageToImage('Xenova/swin2SR-lightweight-x2-64');
+} catch (error) {
+  console.warn('Primary model failed, using fallback:', error);
+  model = transformers.imageToImage('Xenova/swin2SR-classical-sr-x4-64');
+}
+```
+
+## When to Use Swin2SR Super Resolution
+
+Swin2SR Super Resolution models are a strong choice when:
+
+- **You need image-to-image** - Swin2SR Super Resolution is optimized for image-to-image tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 1 provider (transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The ~8–55MB range means you can target everything from mobile devices to high-end desktops with the same model family.
+
+
+## HuggingFace Model Cards
+
+- [swin2SR-lightweight-x2-64](https://huggingface.co/caidas/swin2SR-lightweight-x2-64)
+- [swin2SR-classical-sr-x4-64](https://huggingface.co/caidas/swin2SR-classical-sr-x4-64)
+
+## Related Pages
+
+- [Image To Image](/blog/tasks/image-to-image) - task guide
+
+## Methodology
+
+The model data on this page - sizes, provider availability, and variant names - is extracted directly from LocalMode's source code: the transformers provider catalog (`packages/transformers/src/models.ts`) and the image-to-image implementation (`packages/transformers/src/implementations/image-to-image.ts`). Download sizes reflect the fp32 ONNX model files as published in the Xenova HuggingFace repositories for Transformers.js v3. Parameter counts are sourced from the caidas base model cards on HuggingFace. Performance characteristics (speed and quality tiers) are LocalMode's curated assessments based on parameter count and architecture. Always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [Xenova/swin2SR-lightweight-x2-64 - HuggingFace ONNX files (model.onnx: 8.08 MB)](https://huggingface.co/Xenova/swin2SR-lightweight-x2-64/tree/main/onnx)
+- [Xenova/swin2SR-classical-sr-x4-64 - HuggingFace ONNX files (model.onnx: 55 MB)](https://huggingface.co/Xenova/swin2SR-classical-sr-x4-64/tree/main/onnx)
+- [caidas/swin2SR-lightweight-x2-64 - HuggingFace model card (1.01M params)](https://huggingface.co/caidas/swin2SR-lightweight-x2-64)
+- [caidas/swin2SR-classical-sr-x4-64 - HuggingFace model card (12.2M params)](https://huggingface.co/caidas/swin2SR-classical-sr-x4-64)
+- [Swin2SR paper - arXiv:2209.11345 (ECCV 2022 AIM workshop)](https://arxiv.org/abs/2209.11345)
+- [mv-lab/swin2sr - Official GitHub repository](https://github.com/mv-lab/swin2sr)
+- [Transformers.js documentation](https://huggingface.co/docs/transformers.js)

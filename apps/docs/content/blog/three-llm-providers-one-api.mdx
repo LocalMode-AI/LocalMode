@@ -1,6 +1,6 @@
 ---
-title: "Three LLM Providers, One API: WebLLM vs Transformers.js v4 vs wllama"
-description: "LocalMode ships three browser LLM providers -- WebLLM (WebGPU), Transformers.js v4 (ONNX), and wllama (llama.cpp WASM). All three implement the same LanguageModel interface, so your application code stays identical regardless of the engine underneath. Here is how to choose."
+title: "Browser LLM Providers, One API: WebLLM, Transformers.js v4, wllama, and LiteRT-LM"
+description: "LocalMode ships four browser LLM providers -- WebLLM (WebGPU), Transformers.js v4 (ONNX), wllama (llama.cpp WASM), and LiteRT-LM (Google's on-device engine, early preview). All four implement the same LanguageModel interface, so your application code stays identical regardless of the engine underneath. Here is how to choose."
 author: LocalMode
 date: 2026-02-11
 ---
@@ -9,9 +9,9 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 Running a large language model inside the browser used to mean picking a single runtime and coupling your entire application to it. If you chose WebLLM, you were locked into MLC-compiled models and WebGPU-only hardware. If you went with llama.cpp WASM, you accepted slower inference on CPU. And switching later meant rewriting every call site.
 
-LocalMode eliminates that trade-off. The `@localmode/core` package defines a single `LanguageModel` interface. Three separate provider packages -- `@localmode/webllm`, `@localmode/transformers`, and `@localmode/wllama` -- each implement that interface using a different engine. Your application code calls `generateText()` or `streamText()` exactly the same way no matter which provider is active. Swap a single import, and the engine changes. Your UI, your prompts, your streaming logic -- none of it moves.
+LocalMode eliminates that trade-off. The `@localmode/core` package defines a single `LanguageModel` interface. Four separate provider packages -- `@localmode/webllm`, `@localmode/transformers`, `@localmode/wllama`, and `@localmode/litert` -- each implement that interface using a different engine. Your application code calls `generateText()` or `streamText()` exactly the same way no matter which provider is active. Swap a single import, and the engine changes. Your UI, your prompts, your streaming logic -- none of it moves.
 
-This post breaks down how each provider works, what it is best at, and how to choose between them. We also show how to set up automatic fallback so your app works on every browser without a single `if` statement in your components.
+This post breaks down how each provider works, what it is best at, and how to choose between them. We also show how to set up automatic fallback so your app works on every browser without a single `if` statement in your components. Three of the four providers -- WebLLM, Transformers.js v4, and wllama -- are production-stable; the fourth, LiteRT-LM, is a new early-preview addition covered in its own section below.
 
 ---
 
@@ -40,6 +40,7 @@ import { streamText } from '@localmode/core';
 import { webllm } from '@localmode/webllm';
 import { transformers } from '@localmode/transformers';
 import { wllama } from '@localmode/wllama';
+import { litert } from '@localmode/litert';
 
 // Option A: WebLLM (WebGPU, MLC-compiled)
 const resultA = await streamText({
@@ -62,7 +63,14 @@ const resultC = await streamText({
   maxTokens: 300,
 });
 
-// All three return the same StreamTextResult shape:
+// Option D: LiteRT-LM (.litertlm, Google's on-device engine -- early preview)
+const resultD = await streamText({
+  model: litert.languageModel('qwen3-0.6B'),
+  prompt: 'Explain quantum tunneling in plain English',
+  maxTokens: 300,
+});
+
+// All four return the same StreamTextResult shape:
 for await (const chunk of resultA.stream) {
   process.stdout.write(chunk.text); // identical API
 }
@@ -80,9 +88,9 @@ WebLLM compiles models through the MLC (Machine Learning Compilation) pipeline i
 
 **How it works**: Models are pre-compiled into MLC format with 4-bit quantization (q4f16). At runtime, WebLLM loads the compiled model, creates WebGPU compute pipelines, and runs inference entirely on the GPU. The JavaScript API is OpenAI-compatible under the hood, which LocalMode wraps into the standard `LanguageModel` interface.
 
-**Curated catalog**: 30 models ranging from SmolLM2 135M (78MB) to Gemma 2 9B (5GB). Includes 1 vision model (Phi 3.5 Vision). Model families include Qwen 2.5/3, Llama 3.1/3.2, Phi 3/3.5, Gemma 2, DeepSeek R1, Mistral, and SmolLM2.
+**Curated catalog**: 32 models ranging from SmolLM2 135M (78MB) to Qwen 3.5 9B (5.06GB). Includes 1 vision model (Phi 3.5 Vision). Model families include Qwen 2.5/3/3.5, Llama 3.1/3.2, Phi 3/3.5, Gemma 2, DeepSeek R1, Mistral, Ministral, and SmolLM2.
 
-**Best for**: Applications where inference speed matters most -- interactive chat, real-time code completion, streaming agents. If your users have Chrome 113+, Edge 113+, or Safari 18+ with a discrete or integrated GPU, WebLLM delivers the best experience.
+**Best for**: Applications where inference speed matters most -- interactive chat, real-time code completion, streaming agents. If your users have Chrome 113+, Edge 113+, or Safari 26+ with a discrete or integrated GPU, WebLLM delivers the best experience.
 
 **Limitation**: Requires WebGPU. Firefox only supports WebGPU in Nightly builds. Older devices without GPU support cannot run WebLLM at all. The model catalog is fixed to MLC-compiled variants -- you cannot bring an arbitrary model file.
 
@@ -92,15 +100,15 @@ WebLLM compiles models through the MLC (Machine Learning Compilation) pipeline i
 
 **Package**: `@localmode/transformers` | **Engine**: [HuggingFace Transformers.js v4](https://github.com/huggingface/transformers.js) | **Runtime**: WebGPU with WASM fallback
 
-Transformers.js v4 runs ONNX-format models using ONNX Runtime Web. It prefers WebGPU when available but automatically falls back to WASM, meaning it works on every modern browser. The `@localmode/transformers` package installs TJS v4 via an npm alias (`@huggingface/transformers-v4`) alongside v3, keeping the experimental text-generation code isolated from the 24 stable implementations (embeddings, classification, speech-to-text, etc.) that run on TJS v3.
+Transformers.js v4 runs ONNX-format models using ONNX Runtime Web. It prefers WebGPU when available but automatically falls back to WASM, meaning it works on every modern browser. All `@localmode/transformers` implementations - embeddings, classification, speech-to-text, text generation, and more - use a unified `@huggingface/transformers@^4.2.0` dependency.
 
-**How it works**: Models are loaded from HuggingFace Hub in ONNX format with q4 quantization. For standard text models (SmolLM2, Phi, Qwen3, Granite), TJS v4 uses its `text-generation` pipeline. For Qwen3.5 multimodal models, it uses `Qwen3_5ForConditionalGeneration` with a split architecture (embed_tokens, vision_encoder, decoder). The loading strategy is auto-detected from the model ID.
+**How it works**: Models are loaded from HuggingFace Hub in ONNX format with q4 quantization. For standard text models (SmolLM2, Phi, Qwen3, Granite), TJS v4 uses its `text-generation` pipeline. For multimodal models (Qwen3.5, Gemma 4), it uses dedicated model classes with a split architecture (embed_tokens, vision_encoder, decoder). The loading strategy is auto-detected from the model ID.
 
-**Curated catalog**: 14 recommended ONNX models from 120MB (Granite 4.0 350M) to 2.5GB (Qwen3.5 4B). Includes 3 vision-capable models (Qwen3.5-0.8B, Qwen3.5-2B, Qwen3.5-4B). But any ONNX model on HuggingFace Hub can be loaded -- you are not restricted to the curated list.
+**Curated catalog**: 16 recommended ONNX models from 120MB (Granite 4.0 350M) to 3GB (Gemma 4 E4B). Includes 5 vision-capable models (Qwen3.5-0.8B, Qwen3.5-2B, Qwen3.5-4B, Gemma 4 E2B, Gemma 4 E4B). But any ONNX model on HuggingFace Hub can be loaded -- you are not restricted to the curated list.
 
 **Best for**: Applications that need vision input (image + text), broad model selection, or the ability to load custom ONNX models. Also the right choice when you want WebGPU speed where available but need guaranteed WASM fallback on older hardware.
 
-**Limitation**: Currently experimental (TJS v4 is a preview release). ONNX model availability on HuggingFace lags behind GGUF. Slightly slower than WebLLM on WebGPU due to the ONNX Runtime overhead (40-60 tok/s vs 60-100 tok/s).
+**Limitation**: ONNX model availability on HuggingFace lags behind GGUF. Slightly slower than WebLLM on WebGPU due to the ONNX Runtime overhead (40-60 tok/s vs 60-100 tok/s).
 
 ---
 
@@ -112,7 +120,7 @@ wllama is llama.cpp compiled to WebAssembly. It runs any standard GGUF model fil
 
 **How it works**: The wllama library loads GGUF files directly from HuggingFace URLs, initializes a llama.cpp WASM instance, and runs inference token by token. Multi-threaded execution is available when the page has Cross-Origin Isolation headers (`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`), which enables `SharedArrayBuffer`. Without CORS headers, wllama falls back to single-threaded mode -- functional but 2-4x slower.
 
-**Curated catalog**: 17 curated Q4_K_M models from SmolLM2 135M (70MB) to Llama 3.1 8B (4.92GB). But the real story is the open ecosystem: wllama accepts any GGUF URL, which means access to the 160,000+ GGUF models on HuggingFace Hub. Any model that bartowski, TheBloke, or the original authors have quantized to GGUF is one URL away.
+**Curated catalog**: 18 curated models from SmolLM2 135M (70MB) to Holo2 8B (5.1GB), spanning Q4_K_M text models and two vision-language models (Holo2 4B and 8B for UI grounding). But the real story is the open ecosystem: wllama accepts any GGUF URL, which means access to the 160,000+ GGUF models on HuggingFace Hub. Any model that bartowski, TheBloke, or the original authors have quantized to GGUF is one URL away.
 
 **Best for**: Maximum compatibility, maximum model selection, and environments where WebGPU is unavailable (Firefox stable, older Safari, corporate locked-down browsers). Also the right choice when you need a specific fine-tuned or quantized model that only exists in GGUF format.
 
@@ -120,25 +128,41 @@ wllama is llama.cpp compiled to WebAssembly. It runs any standard GGUF model fil
 
 ---
 
+## Provider 4: LiteRT-LM (Google On-Device Engine -- Early Preview)
+
+**Package**: `@localmode/litert` | **Engine**: [Google LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) via `@litert-lm/core` | **Runtime**: WebGPU with CPU WASM fallback
+
+LiteRT-LM is the on-device inference engine Google uses to ship Gemini Nano-class models to Android and ChromeOS. The `@litert-lm/core` package compiles it to WebAssembly, and `@localmode/litert` wraps it behind the standard `LanguageModel` interface. It loads models in the `.litertlm` format -- a single artifact bundling tokenizer, weights, and metadata.
+
+**How it works**: The provider downloads and caches the `.litertlm` file, creates a LiteRT-LM `Engine` (WebGPU backend by default), and runs a `Conversation` for generation. The Gemma 4 builds are GPU-compiled, so the provider checks WebGPU availability up front and fails fast with a clear error if it is missing. For portable models (Qwen3 0.6B), if GPU streaming load is unsupported it retries once on the CPU backend automatically.
+
+**Curated catalog**: Three models -- `gemma-4-E2B` (Gemma 4 E2B, 2.0GB), `gemma-4-E4B` (Gemma 4 E4B, 3.0GB), and `qwen3-0.6B` (Qwen3 0.6B, 614MB) -- all verified end-to-end in real Chrome. The Gemma 4 entries use the web-optimized `*-it-web.litertlm` builds Google publishes as the models officially supported by the LiteRT-LM JS API; those builds are **WebGPU-only**. Qwen3 0.6B is a portable build that also runs on the CPU backend. Any other `.litertlm` file loads via a HuggingFace shorthand or full URL; gated Google models (Gemma 3n, Gemma 3 1B, FunctionGemma) load via a resolved `modelUrl`.
+
+**Best for**: Running Gemma 4 in the browser via Google's first-party engine (on WebGPU-capable hardware), or wiring LiteRT-LM into a provider-fallback chain. The other three providers are longer-established if you need a wider catalog or vision input.
+
+**Limitation**: Early preview. The `@litert-lm/core` API surface may still change, the JS API is text-in / text-out (no vision or audio input), Gemma 4 is WebGPU-only, `stopSequences` is unsupported (LiteRT-LM uses token IDs), and token usage counts are estimated from text length. See the dedicated post, [Google's LiteRT-LM in the Browser](/blog/litert-lm-browser-google-on-device-ai), for the full details.
+
+---
+
 ## Master Comparison Table
 
-| Dimension | WebLLM | Transformers.js v4 | wllama |
-|---|---|---|---|
-| **Engine** | MLC-AI WebLLM | ONNX Runtime Web (TJS v4) | llama.cpp WASM |
-| **Model format** | MLC-compiled (q4f16) | ONNX (q4/fp16) | GGUF (Q4_K_M, Q5, Q6, etc.) |
-| **Primary runtime** | WebGPU (GPU) | WebGPU + WASM fallback | WASM (CPU) |
-| **Curated models** | 30 | 14 | 17 (+ 160K+ via any GGUF URL) |
-| **Vision models** | 1 (Phi 3.5 Vision) | 3 (Qwen3.5 family) | None |
-| **Custom models** | No (MLC-compiled only) | Yes (any ONNX on HF Hub) | Yes (any GGUF on HF Hub) |
-| **Size range** | 78MB -- 5GB | 120MB -- 2.5GB | 70MB -- 4.92GB |
-| **Inference speed** | 60-100 tok/s | 40-60 tok/s (WebGPU) | 5-15 tok/s (multi-thread) |
-| **Min browser** | Chrome/Edge 113+, Safari 18+ | Chrome 80+, any modern browser | Any browser with WASM |
-| **WebGPU required** | Yes | No (preferred, not required) | No |
-| **Multi-threading** | N/A (GPU) | N/A (GPU or single-thread WASM) | Yes (needs CORS headers) |
-| **Structured output** | `generateObject()` / `streamObject()` | `generateObject()` / `streamObject()` | `generateObject()` / `streamObject()` |
-| **AbortSignal** | Yes | Yes | Yes |
-| **Streaming** | Yes | Yes | Yes |
-| **Maturity** | Stable | Experimental (TJS v4 preview) | Stable |
+| Dimension | WebLLM | Transformers.js v4 | wllama | LiteRT-LM (Preview) |
+|---|---|---|---|---|
+| **Engine** | MLC-AI WebLLM | ONNX Runtime Web (TJS v4) | llama.cpp WASM | LiteRT-LM (`@litert-lm/core`) |
+| **Model format** | MLC-compiled (q4f16) | ONNX (q4/fp16) | GGUF (Q4_K_M, Q5, Q6, etc.) | `.litertlm` |
+| **Primary runtime** | WebGPU (GPU) | WebGPU + WASM fallback | WASM (CPU) | WebGPU (Gemma 4); WebGPU or CPU (Qwen3 0.6B) |
+| **Curated models** | 32 | 16 | 18 (+ 160K+ via any GGUF URL) | 3 (Gemma 4 E2B/E4B, Qwen3 0.6B) |
+| **Vision models** | 1 (Phi 3.5 Vision) | 5 (Qwen3.5 family, Gemma 4 E2B/E4B) | 2 (Holo2 4B/8B, UI grounding) | None (JS API is text-only) |
+| **Custom models** | No (MLC-compiled only) | Yes (any ONNX on HF Hub) | Yes (any GGUF on HF Hub) | Yes (any `.litertlm` URL) |
+| **Size range** | 78MB -- 5.06GB | 120MB -- 3GB | 70MB -- 5.1GB | 614MB -- 3.0GB |
+| **Inference speed** | 60-100 tok/s | 40-60 tok/s (WebGPU) | 5-15 tok/s (multi-thread) | Not yet benchmarked |
+| **Min browser** | Chrome/Edge 113+, Safari 26+ | Chrome 80+, any modern browser | Any browser with WASM | Chrome/Edge 113+ with WebGPU (Gemma 4 is WebGPU-only) |
+| **WebGPU required** | Yes | No (preferred, not required) | No | Yes for Gemma 4; no for Qwen3 0.6B |
+| **Multi-threading** | N/A (GPU) | N/A (GPU or single-thread WASM) | Yes (needs CORS headers) | N/A |
+| **Structured output** | `generateObject()` / `streamObject()` | `generateObject()` / `streamObject()` | `generateObject()` / `streamObject()` | `generateObject()` / `streamObject()` |
+| **AbortSignal** | Yes | Yes | Yes | Yes |
+| **Streaming** | Yes | Yes | Yes | Yes |
+| **Maturity** | Stable | Stable | Stable | Early preview |
 
 ---
 
@@ -155,7 +179,7 @@ Does the user's browser support WebGPU?
   +-- YES --> Do you need vision (image input)?
   |             |
   |             +-- YES --> Use @localmode/transformers
-  |             |           (Qwen3.5 ONNX models)
+  |             |           (Qwen3.5 / Gemma 4 ONNX models)
   |             |
   |             +-- NO --> Is inference speed the top priority?
   |                          |
@@ -176,6 +200,8 @@ Does the user's browser support WebGPU?
                +-- NO --> Skip LLM, use lighter models
                           (embeddings, classification, etc.)
 ```
+
+The flowchart covers the three production-stable providers. `@localmode/litert` is intentionally left off the default decision path while it is in early preview -- opt into it explicitly when you want to experiment with Google's engine, or add it to a fallback chain so your app picks it up once its catalog grows.
 
 ---
 
@@ -199,11 +225,13 @@ const model = hasGPU
 
 ## When to Use Each Provider
 
-**Use WebLLM when** you are building a chat application, coding assistant, or any interactive feature where response latency directly impacts user experience. Your users have modern hardware with WebGPU, and you are satisfied with the 30 curated model options. This is the default choice for most consumer-facing applications in 2026.
+**Use WebLLM when** you are building a chat application, coding assistant, or any interactive feature where response latency directly impacts user experience. Your users have modern hardware with WebGPU, and you are satisfied with the 32 curated model options. This is the default choice for most consumer-facing applications in 2026.
 
 **Use Transformers.js v4 when** you need multimodal input (image + text), want to load custom ONNX models, or need the safety net of automatic WASM fallback without maintaining two separate code paths. The Qwen3.5 vision models are currently the best sub-4B multimodal option for the browser.
 
-**Use wllama when** you need to reach every user regardless of hardware, want access to a specific GGUF model from the 160K+ available on HuggingFace, or are targeting environments where WebGPU is blocked. Corporate intranets, kiosk browsers, and older devices are where wllama shines.
+**Use wllama when** you need to reach every user regardless of hardware, want access to a specific GGUF model from the 160K+ available on HuggingFace, or are targeting environments where WebGPU is blocked. Corporate intranets, kiosk browsers, and older devices are where wllama shines. It also carries the curated Holo2 4B and 8B vision-language models for UI grounding tasks.
+
+**Use LiteRT-LM when** you want Gemma 4 in the browser via Google's first-party on-device engine, or want the provider wired into a fallback chain. Treat it as early preview -- the other three providers are longer-established if you need a wider catalog or vision input.
 
 **Use the fallback chain when** you do not control the deployment environment and want the best possible experience on every device. This is the recommended approach for open-ended web applications where you cannot predict your users' hardware.
 
@@ -220,16 +248,18 @@ Regardless of which provider you choose, you get the same core capabilities thro
 - **Usage tracking** with input tokens, output tokens, and duration on every response
 - **React hooks** via `@localmode/react`: `useGenerateText()`, `useStreamText()`, `useChat()`
 
-The provider is an implementation detail. The interface is the contract. Build against the interface, and your application stays portable across all three engines -- today and as new providers emerge.
+The provider is an implementation detail. The interface is the contract. Build against the interface, and your application stays portable across all four engines -- today and as new providers emerge.
 
 ---
 
 ## Methodology
 
-This comparison is based on direct analysis of the LocalMode codebase (model catalogs, provider implementations, and interface definitions) combined with published benchmarks and documentation from each upstream project.
+All model counts, model IDs, size figures, and API shapes were verified directly against the LocalMode codebase (`packages/webllm/src/models.ts`, `packages/wllama/src/models.ts`, `packages/transformers/src/models.ts`, `packages/litert/src/models.ts`, and `packages/core/src/generation/types.ts`). WebLLM performance figures (Phi 3.5 Mini at 71.1 tok/s, Llama 3.1 8B at 41.1 tok/s on M3 Max) were verified against Table 1 of the arxiv paper (2412.15803). The FOSDEM 2025 wllama talk URL was verified against the FOSDEM archive. No figures were sourced from unverified secondary summaries.
 
-- [MLC-AI WebLLM](https://github.com/mlc-ai/web-llm) -- WebGPU LLM inference engine (17.6K+ GitHub stars)
-- [WebLLM: A High-Performance In-Browser LLM Inference Engine](https://arxiv.org/abs/2412.15803) -- academic paper with performance benchmarks
+## Sources
+
+- [MLC-AI WebLLM](https://github.com/mlc-ai/web-llm) -- WebGPU LLM inference engine
+- [WebLLM: A High-Performance In-Browser LLM Inference Engine](https://arxiv.org/html/2412.15803) -- primary source for Phi 3.5 Mini (71.1 tok/s) and Llama 3.1 8B (41.1 tok/s) M3 Max benchmarks (Table 1)
 - [wllama](https://github.com/ngxson/wllama) -- llama.cpp WebAssembly binding for browser inference
 - [FOSDEM 2025: wllama -- bringing llama.cpp to the web](https://archive.fosdem.org/2025/schedule/event/fosdem-2025-5154-wllama-bringing-llama-cpp-to-the-web/)
 - [Transformers.js](https://github.com/huggingface/transformers.js) -- HuggingFace ML framework for the browser
@@ -237,6 +267,8 @@ This comparison is based on direct analysis of the LocalMode codebase (model cat
 - [LocalMode Transformers Text Generation Docs](/docs/transformers/text-generation) -- curated ONNX model catalog
 - [LocalMode WebLLM Docs](/docs/webllm) -- curated MLC model catalog
 - [LocalMode wllama Docs](/docs/wllama) -- curated GGUF model catalog and GGUF metadata parser
+- [Google LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) -- Google's on-device LLM inference engine
+- [LocalMode LiteRT Docs](/docs/litert) -- `.litertlm` model catalog and early-preview status
 
 ---
 

@@ -1,0 +1,99 @@
+---
+title: "Browser AI vs Edge AI"
+description: "Running ML in the browser tab versus edge functions and CDN workers - comparing the architectures for on-device AI."
+author: "LocalMode"
+date: "2026-03-30"
+---
+
+# Browser AI vs Edge AI
+
+Running ML in the browser tab versus edge functions and CDN workers - comparing the architectures for on-device AI.
+
+## Overview
+
+This comparison examines the key differences between **Browser AI (LocalMode)** ([https://localmode.dev](https://localmode.dev)) and **Edge AI (Cloudflare Workers AI, Vercel AI)** for building AI-powered applications. Both approaches have their strengths - the right choice depends on your specific requirements around privacy, cost, performance, and target platforms.
+
+Understanding these trade-offs is essential for architects and developers evaluating local-first AI versus alternative approaches. The comparison below covers 8 dimensions, from runtime characteristics to model quality and developer experience.
+
+## Feature-by-Feature Comparison
+
+| Dimension | Browser AI (LocalMode) | Edge AI (Cloudflare Workers AI, Vercel AI) |
+| --- | --- | --- |
+| **Execution Environment** | User's browser tab. JavaScript/WASM/WebGPU. | CDN edge nodes (Cloudflare Workers AI, AWS Lambda@Edge). Server-side V8/GPU. Vercel AI SDK is a provider-agnostic TypeScript toolkit that routes to these and other cloud backends. |
+| **Privacy** | Data never leaves the device. Zero network requests for inference. | Data leaves the device but stays in the nearest edge region. Better than centralized cloud. |
+| **Cost Model** | Free forever. Users pay for their own compute (CPU/GPU time). | Pay per inference. Cloudflare Workers AI: 10,000 Neurons/day free tier, then $0.011/1,000 Neurons. Vercel AI Gateway: $5/month free credit, then provider list price with no markup. |
+| **Latency** | 0ms network latency. Inference time only (50-500ms depending on model/task). | ~10-30ms network latency to nearest edge + inference time. |
+| **Model Size Limit** | Limited by device RAM. Practical ceiling ~5GB per model (browser memory constraints). | Edge workers have model size constraints but often access larger GPUs. |
+| **Offline Support** | Full offline after model download. Perfect for PWAs and field use. | No offline support. Requires network to reach edge node. |
+| **Scaling** | Infinitely scalable - each user brings their own compute. | Scales well but costs scale linearly with traffic. |
+| **Task Coverage** | Full: embeddings, LLMs, vision, audio, classification, NER, OCR, and more. | Varies by provider. Cloudflare Workers AI: LLMs, embeddings, text classification, image classification (ResNet-50), image generation, speech recognition, translation. |
+
+## Verdict
+
+Browser AI and edge AI solve overlapping but distinct problems. Use browser AI (LocalMode) when privacy is paramount (data must never leave the device), when offline support is needed, when you want zero infrastructure costs, or when you're building client-heavy applications (PWAs, browser extensions, offline-first apps). Use edge AI (e.g. Cloudflare Workers AI) when you need larger models than fit in browser memory, when you want consistent performance regardless of user device, when you need to process data before it reaches the client, or when your app is server-rendered. The hybrid approach works well: browser AI for real-time interactions, edge AI for background processing and fallback.
+
+### Summary
+
+When evaluating Browser AI (LocalMode) against Edge AI (e.g. Cloudflare Workers AI), consider your primary constraints:
+
+- **Privacy requirements** - If user data must never leave the device, solutions that process everything locally have an inherent architectural advantage.
+- **Cost at scale** - Per-request pricing models become expensive as user counts grow. Local inference shifts the cost to a one-time model download per user.
+- **Target platforms** - Browser-based solutions work on any device with a modern browser. Desktop and server-based solutions may require additional installation steps.
+- **Model quality needs** - For tasks where the absolute highest quality matters (complex multi-step reasoning, creative writing), larger server-side or cloud models still have an edge. For the majority of practical tasks (embeddings, classification, summarization, simple generation), the quality gap has narrowed significantly.
+- **Offline requirements** - Applications that must work without internet need local inference. Cloud-dependent solutions fail when connectivity drops.
+
+
+
+## Frequently Asked Questions
+
+### Can I use both browser AI and edge AI?
+
+Yes. A common pattern: use LocalMode for client-side tasks (embeddings, classification, chat) and edge functions for server-side tasks (initial data processing, complex reasoning, model fine-tuning). The Vercel AI SDK provider (@localmode/ai-sdk) makes it easy to swap between local and cloud providers.
+
+### Which is better for mobile users?
+
+Browser AI works on mobile browsers and avoids cellular data usage for inference (after initial model download). Edge AI uses data for every request but doesn't tax the mobile CPU/GPU. For resource-constrained mobile devices, smaller LocalMode models (SmolLM2-135M, ~78MB via WebLLM or ~70MB as GGUF) are often the best balance.
+
+### What about Cloudflare Workers AI specifically?
+
+Cloudflare Workers AI provides GPU inference at edge locations with a generous free tier. It supports Llama, BAAI BGE, and other models. It's a good server-side complement to LocalMode's client-side inference - use Cloudflare for initial document processing and LocalMode for interactive features.
+
+## Making the Decision
+
+For many teams, the answer is not either/or. A hybrid architecture uses local inference for high-volume, low-complexity tasks (embeddings, classification, NER, simple generation) at zero marginal cost, and routes the small percentage of requests that genuinely need frontier-quality reasoning to a cloud provider. A plain try/catch makes this pattern straightforward to implement:
+
+```typescript
+import { streamText } from '@localmode/core';
+
+// Try the local model first (free, private, fast)
+// Fall back to a cloud call only if local inference fails
+async function generate(prompt: string) {
+  try {
+    return await streamText({ model: localModel, prompt });
+  } catch (error) {
+    console.warn('Local inference failed, escalating to cloud:', error);
+    return await callCloudProvider(prompt);
+  }
+}
+```
+
+This approach gives you the best of both worlds: the privacy and cost benefits of local inference for the 90% of requests that don't need frontier quality, and the option to escalate to cloud APIs for the remaining 10%.
+
+## Related Pages
+
+- [Localmode Vs Openai](/blog/compare/localmode-vs-openai) - comparison guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+
+## Methodology
+
+LocalMode-specific claims (model sizes, supported tasks, API exports) were verified directly against the monorepo source (`packages/webllm/src/models.ts`, `packages/wllama/src/models.ts`, `packages/core/src/index.ts`). Cloudflare Workers AI pricing and model catalog were confirmed against the official Cloudflare developers documentation. Vercel AI Gateway pricing was verified against the official Vercel docs pricing page. The characterization of the Vercel AI SDK as a provider-agnostic TypeScript toolkit (not an inference provider) was verified against official Vercel documentation. Network latency figures for edge AI are approximate ranges drawn from Cloudflare's published architecture documentation. WebGPU buffer limits are from the MDN GPUSupportedLimits reference. Pricing is subject to change; verify current details with each vendor before making decisions.
+
+## Sources
+
+- [Cloudflare Workers AI Pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/)
+- [Cloudflare Workers AI Models catalog](https://developers.cloudflare.com/workers-ai/models/)
+- [Vercel AI Gateway Pricing](https://vercel.com/docs/ai-gateway/pricing)
+- [Vercel AI SDK documentation](https://vercel.com/docs/ai-sdk)
+- [MDN GPUSupportedLimits (maxBufferSize)](https://developer.mozilla.org/en-US/docs/Web/API/GPUSupportedLimits)
+- [LocalMode documentation](https://localmode.dev/docs)

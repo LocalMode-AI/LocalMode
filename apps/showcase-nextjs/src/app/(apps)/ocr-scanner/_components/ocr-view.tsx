@@ -1,20 +1,110 @@
 /**
  * @file ocr-view.tsx
  * @description Main view component for the OCR scanner application with
- * document-scanner aesthetic — paper card, scan-line animation, and code-editor text output
+ * model selection, OCR mode picker, document-scanner aesthetic, and code-editor text output
  */
 'use client';
 
 import { useRef, useState } from 'react';
-import { ScanText, Upload, Trash2, Copy, Check, ArrowLeft, FileText } from 'lucide-react';
-import { Button, IconBox, Spinner, Badge } from './ui';
+import { ScanText, Upload, Trash2, Copy, Check, ArrowLeft, FileText, ChevronDown, Sparkles } from 'lucide-react';
+import { Button, IconBox, Spinner } from './ui';
 import { ErrorBoundary, ErrorAlert } from './error-boundary';
 import { cn } from '../_lib/utils';
-import { MODEL_SIZE } from '../_lib/constants';
+import { OCR_MODELS, OCR_MODES } from '../_lib/constants';
 import { useOCR } from '../_hooks/use-ocr';
+import type { OCRModelEntry } from '../_lib/types';
+
+/** Model selector dropdown */
+function ModelSelector({
+  selected,
+  onSelect,
+}: {
+  selected: OCRModelEntry;
+  onSelect: (modelId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={cn(
+          'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
+          'bg-poster-surface-lighter/50 hover:bg-poster-surface-lighter/80',
+          'ring-1 ring-poster-border/20 hover:ring-poster-border/40',
+          'text-poster-text-main'
+        )}
+      >
+        {selected.generative && <Sparkles className="w-3 h-3 text-poster-accent-orange" />}
+        <span>{selected.name}</span>
+        <span className="text-poster-text-sub/60">{selected.size}</span>
+        <ChevronDown className={cn('w-3 h-3 text-poster-text-sub transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute top-full mt-1 left-0 z-50 min-w-[280px] rounded-xl bg-poster-surface border border-poster-border/30 shadow-xl overflow-hidden">
+            {OCR_MODELS.map((model) => (
+              <button
+                key={model.id}
+                onClick={() => { onSelect(model.id); setOpen(false); }}
+                className={cn(
+                  'w-full flex flex-col gap-0.5 px-4 py-3 text-left transition-colors',
+                  'hover:bg-poster-surface-lighter/50',
+                  model.id === selected.id && 'bg-poster-accent-orange/5'
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  {model.generative && <Sparkles className="w-3 h-3 text-poster-accent-orange" />}
+                  <span className="text-sm font-medium text-poster-text-main">{model.name}</span>
+                  <span className="text-xs text-poster-text-sub/60 ml-auto">{model.size}</span>
+                  {model.id === selected.id && <Check className="w-3.5 h-3.5 text-poster-accent-orange" />}
+                </div>
+                <p className="text-xs text-poster-text-sub/70 pl-5">{model.description}</p>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** OCR mode picker (shown only for generative models) */
+function ModePicker({
+  selectedModeId,
+  onSelect,
+}: {
+  selectedModeId: string;
+  onSelect: (modeId: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1 p-0.5 rounded-lg bg-poster-surface-lighter/30 ring-1 ring-poster-border/15">
+      {OCR_MODES.map((mode) => (
+        <button
+          key={mode.id}
+          onClick={() => onSelect(mode.id)}
+          className={cn(
+            'px-3 py-1 rounded-md text-xs font-medium transition-all',
+            mode.id === selectedModeId
+              ? 'bg-poster-accent-orange/15 text-poster-accent-orange ring-1 ring-poster-accent-orange/30'
+              : 'text-poster-text-sub hover:text-poster-text-main hover:bg-poster-surface-lighter/50'
+          )}
+        >
+          {mode.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function OCRView() {
-  const { imageDataUrl, extractedText, isProcessing, error, processFile, clearError, reset } = useOCR();
+  const {
+    imageDataUrl, extractedText, isProcessing, error,
+    selectedModel, selectedModeId,
+    processFile, cancel, clearError, reset, selectModel, setSelectedModeId,
+  } = useOCR();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
 
@@ -36,7 +126,6 @@ export function OCRView() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  /** Split extracted text into lines for line-numbered display */
   const textLines = extractedText ? extractedText.split('\n') : [];
   const wordCount = extractedText ? extractedText.trim().split(/\s+/).filter(Boolean).length : 0;
 
@@ -62,16 +151,26 @@ export function OCRView() {
               <h1 className="text-base font-semibold text-poster-text-main">OCR Scanner</h1>
               <p className="text-xs text-poster-text-sub">Extract text from images</p>
             </div>
-            <Badge variant="ghost" size="sm" className="ml-2 text-poster-accent-orange border-poster-accent-orange/30 bg-poster-accent-orange/5">
-              TrOCR &middot; {MODEL_SIZE}
-            </Badge>
+            <div className="ml-2 flex items-center gap-2">
+              <ModelSelector selected={selectedModel} onSelect={selectModel} />
+              {selectedModel.generative && (
+                <ModePicker selectedModeId={selectedModeId} onSelect={setSelectedModeId} />
+              )}
+            </div>
           </div>
-          {imageDataUrl && (
-            <Button variant="ghost" size="sm" onClick={reset}>
-              <Trash2 className="w-4 h-4 mr-1.5" />
-              Reset
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {isProcessing && (
+              <Button variant="ghost" size="sm" onClick={cancel}>
+                Cancel
+              </Button>
+            )}
+            {imageDataUrl && !isProcessing && (
+              <Button variant="ghost" size="sm" onClick={reset}>
+                <Trash2 className="w-4 h-4 mr-1.5" />
+                Reset
+              </Button>
+            )}
+          </div>
         </header>
 
         {/* Main content */}

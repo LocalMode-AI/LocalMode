@@ -75,3 +75,24 @@ export type {
   PrivacyBudgetConfig,
   PrivacyBudget,
 } from './dp-types.js';
+
+// Audit Log (append-only, hash-chained, signed)
+export {
+  createAuditLog,
+  verifyChain,
+  exportAuditLog,
+  deriveAuditKey,
+  generateEphemeralAuditKey,
+} from './audit-log.js';
+export type {
+  AuditLog,
+  AuditEntry,
+  AuditLogOptions,
+  AppendOptions,
+  ListOptions,
+  VerifyOptions,
+  VerifyResult,
+  ExportOptions,
+  DeriveAuditKeyOptions,
+  GenerateEphemeralAuditKeyOptions,
+} from './audit-log.js';

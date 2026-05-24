@@ -23,7 +23,7 @@ import {
   Square,
   HardDrive,
 } from 'lucide-react';
-import { Button, TextArea, IconBox, Spinner, Card } from './ui';
+import { Button, TextArea, IconBox } from './ui';
 import { ErrorBoundary, ErrorAlert } from './error-boundary';
 import { cn, formatScore } from '../_lib/utils';
 import {
@@ -204,8 +204,6 @@ export function RAGView() {
 
   const hasDocuments = documentCount > 0;
   const hasEntries = entries.length > 0;
-  const isWorking = isIngesting || isAnswering;
-
   // Auto-scroll to latest entry
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });

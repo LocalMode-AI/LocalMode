@@ -8,7 +8,6 @@ import { getDefaultThreshold } from '@localmode/core';
 import { getEmbeddingModel } from '../_services/evaluator.service';
 import { EMBEDDING_MODELS, SAMPLE_CORPORA, DEFAULT_PERCENTILE } from '../_lib/constants';
 import type { AppError } from '../_lib/types';
-import type { ThresholdCalibration } from '@localmode/core';
 
 /** Hook for embedding threshold calibration */
 export function useCalibrator() {

@@ -1,0 +1,144 @@
+---
+title: "Optical Character Recognition (OCR) in the Browser"
+description: "Extract text from images using TrOCR, GLM-OCR, and LightOnOCR-2 - process receipts, documents, tables, and formulas in the browser."
+author: "LocalMode"
+date: "2026-04-16"
+---
+
+# Optical Character Recognition (OCR) in the Browser
+
+Extract text from images using TrOCR, GLM-OCR, and LightOnOCR-2 - process receipts, documents, tables, and formulas in the browser.
+
+## What Is Optical Character Recognition (OCR)?
+
+OCR (Optical Character Recognition) extracts text from images of printed or handwritten content. LocalMode offers line-level models (TrOCR, ~120MB) for single-line extraction and document-level vision-language models (GLM-OCR ~652MB, LightOnOCR-2 ~700MB) for full-page OCR with table, formula, and structured data recognition.
+
+This capability is exposed through the `extractText()` function in `@localmode/core`. All processing runs entirely in the browser - no server, no API key, no data leaves the device. After the initial model download, optical character recognition (ocr) works completely offline.
+
+## Real-World Applications
+
+Receipt scanning for expense tracking. Business card digitization. Document scanning and archival. Screenshot text extraction. Table extraction from invoices. Formula recognition from academic papers. Form data extraction.
+
+These use cases all benefit from local, on-device processing: user data stays private, there are no per-request API costs, and the application works without internet after initial setup.
+
+## Getting Started
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Import the core function and provider:
+
+```typescript
+import { extractText } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+```
+
+The recommended starting model is **Xenova/trocr-small-printed** - it provides the best balance of quality, speed, and download size for most applications.
+
+## Code Example
+
+```typescript
+import { extractText } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.ocr('Xenova/trocr-small-printed');
+
+const { text } = await extractText({
+  model,
+  image: receiptImage, // File, Blob, or URL
+});
+
+console.log(text); // "Total: $42.50"
+```
+
+This example demonstrates the core workflow: create a model instance from the provider, call the `extractText()` function with your input, and receive structured results. The same pattern works identically across all 1 available provider: Transformers.js.
+
+## Available Models
+
+The following models support optical character recognition (ocr) through LocalMode. Choose based on your target device, acceptable download size, and quality requirements.
+
+| Model | Provider | Size | Type | Quality |
+| --- | --- | --- | --- | --- |
+| Xenova/trocr-small-printed | Transformers.js | ~120MB | Line-level | Good |
+| Xenova/trocr-small-handwritten | Transformers.js | ~120MB | Line-level | Good |
+| onnx-community/GLM-OCR-ONNX | Transformers.js | ~652MB | Document-level | Excellent |
+| onnx-community/LightOnOCR-2-1B-ONNX | Transformers.js | ~700MB | Document-level | Excellent |
+
+**Choosing a model:** For most applications, start with the recommended model (`Xenova/trocr-small-printed`). If download size is the primary constraint (e.g., mobile PWA, browser extension), pick the smallest model that meets your quality bar. For full-page documents, tables, or formulas, use `onnx-community/GLM-OCR-ONNX` (WebGPU recommended). `onnx-community/LightOnOCR-2-1B-ONNX` supports 11 languages and is optimized for speed.
+
+## Cloud vs Local: Cost and Privacy Comparison
+
+Running optical character recognition (ocr) locally eliminates per-request API costs and keeps all data on-device. Here is how the economics compare:
+
+| Service | Cost / Notes |
+| --- | --- |
+| Google Cloud Vision OCR | $1.50 per 1000 images |
+| AWS Textract | $1.50 per 1,000 pages for text detection |
+| Azure Document Intelligence | $1.50 per 1,000 pages for OCR |
+| LocalMode OCR | $0 after model download (~120MB–700MB depending on model), with documents never leaving the device |
+
+Google Cloud Vision OCR costs $1.50 per 1000 images. AWS Textract costs $1.50 per 1,000 pages for text detection. Azure Document Intelligence costs $1.50 per 1,000 pages for OCR. LocalMode OCR costs $0 after model download (~120MB–700MB depending on model), with documents never leaving the device.
+
+The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
+
+## Available Providers
+
+- **Transformers.js** - ONNX-optimized models via ONNX Runtime Web. Supports both WebGPU and WASM backends. Broadest model catalog for non-LLM tasks.
+
+## AbortSignal Support
+
+All `extractText()` calls support cancellation through the standard `AbortSignal` API:
+
+```typescript
+const controller = new AbortController();
+
+const promise = extractText({
+  model,
+  image: imageFile,
+  abortSignal: controller.signal,
+});
+
+// Cancel if needed (e.g., user navigates away)
+controller.abort();
+```
+
+This is essential for responsive UIs - cancel in-flight operations when the user navigates away, submits a new query, or closes a dialog. The underlying model inference stops immediately, freeing memory and compute resources.
+
+## React Integration
+
+If you are building a React application, `@localmode/react` provides hooks that manage loading states, error handling, and cancellation automatically:
+
+```bash
+npm install @localmode/react
+```
+
+```typescript
+import { useExtractText } from '@localmode/react';
+```
+
+The hook returns `{ data, error, isLoading, execute, cancel }` - providing everything a UI component needs to display progress, handle errors, and offer cancellation.
+
+## Related Pages
+
+- [Trocr Ocr](/blog/models/trocr-ocr) - model guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+This guide is based on LocalMode's source code and curated model catalog. Function signatures and API examples were verified against `packages/core/src/ocr/`, `packages/transformers/src/implementations/ocr.ts`, `packages/transformers/src/implementations/generative-ocr.ts`, and `packages/transformers/src/models.ts`. Cloud pricing figures were sourced from official provider pricing pages and are subject to change - verify current pricing with each provider before making cost decisions. Model sizes reflect the quantized variants documented in LocalMode's model catalog and README. Benchmark with your own data for production use.
+
+## Sources
+
+- [LocalMode Core OCR API](/docs/core/ocr)
+- [LocalMode Transformers OCR Guide](/docs/transformers/ocr)
+- [Xenova/trocr-small-printed - HuggingFace](https://huggingface.co/Xenova/trocr-small-printed)
+- [Xenova/trocr-small-handwritten - HuggingFace](https://huggingface.co/Xenova/trocr-small-handwritten)
+- [onnx-community/GLM-OCR-ONNX - HuggingFace](https://huggingface.co/onnx-community/GLM-OCR-ONNX)
+- [onnx-community/LightOnOCR-2-1B-ONNX - HuggingFace](https://huggingface.co/onnx-community/LightOnOCR-2-1B-ONNX)
+- [Google Cloud Vision API Pricing](https://cloud.google.com/vision/pricing)
+- [AWS Textract Pricing](https://aws.amazon.com/textract/pricing/)
+- [Azure Document Intelligence Pricing](https://azure.microsoft.com/en-us/pricing/details/document-intelligence/)

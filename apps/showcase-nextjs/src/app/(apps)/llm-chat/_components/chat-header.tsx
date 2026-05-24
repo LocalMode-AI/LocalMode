@@ -131,7 +131,7 @@ export function ChatHeader({
         <div className="flex items-center gap-2">
           {/* Tool badges (visible when agent mode is active) */}
           {agentEnabled && (
-            <div className="flex items-center gap-1">
+            <div className="hidden sm:flex items-center gap-1">
               {AGENT_TOOLS_INFO.map((tool) => (
                 <span
                   key={tool.name}
@@ -169,13 +169,13 @@ export function ChatHeader({
         </div>
 
         {/* Divider */}
-        <div className="h-4 w-px bg-poster-border/30" />
+        <div className="hidden sm:block h-4 w-px bg-poster-border/30" />
 
         {/* Cache toggle and stats */}
         <div className="flex items-center gap-2">
           {/* Cache stats (visible when cache is enabled and has stats) */}
           {cacheEnabled && cacheStats && !isCacheLoading && (
-            <div className="flex items-center gap-2 text-[10px] text-poster-text-sub/80">
+            <div className="hidden md:flex items-center gap-2 text-[10px] text-poster-text-sub/80">
               <Database className="w-3 h-3 text-poster-accent-teal" />
               <span>{cacheStats.entries} entries</span>
               <span className="text-poster-text-sub/40">|</span>

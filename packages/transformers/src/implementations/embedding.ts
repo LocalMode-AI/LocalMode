@@ -75,13 +75,48 @@ export class TransformersEmbeddingModel implements EmbeddingModel {
     this.loadPromise = (async () => {
       const { pipeline, env } = await import('@huggingface/transformers');
 
-      // Suppress ONNX runtime warnings about node execution providers
-      // These are informational and don't affect functionality
+      // Suppress ONNX runtime warnings — both the JS-side `logLevel` and
+      // the C++/WASM `logSeverityLevel` (3=ERROR) which silences the
+      // `[W:onnxruntime:, session_state.cc:1280 VerifyEachNodeIsAssignedToAnEp]`
+      // verbose mixed-EP warning that fires on every WebGPU/WASM split.
       env.backends.onnx.logLevel = 'error';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (env.backends.onnx as any).logSeverityLevel = 3;
+      if (env.backends.onnx.wasm) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (env.backends.onnx.wasm as any).logLevel = 'error';
+      }
 
+      // MV3 extension contexts forbid "remotely hosted code", so the
+      // default ONNX runtime fetch from jsdelivr CDN
+      // (`https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.x/dist/...`)
+      // fails silently with "Failed to fetch dynamically imported module".
+      // When `chrome.runtime.getURL` is available, redirect the loader
+      // to a locally-bundled `transformers-wasm/` path so the ONNX
+      // runtime resolves under `chrome-extension://<id>/transformers-wasm/`.
+      // No-op outside extension contexts.
+      try {
+        const cr = (
+          globalThis as { chrome?: { runtime?: { getURL?: (p: string) => string } } }
+        ).chrome?.runtime?.getURL;
+        if (typeof cr === 'function') {
+          const base = cr('transformers-wasm/');
+          const onnx = env.backends.onnx as {
+            wasm?: { wasmPaths?: string | Record<string, string> };
+          };
+          if (onnx.wasm) {
+            onnx.wasm.wasmPaths = base;
+          }
+        }
+      } catch {
+        /* fall through to default CDN behavior */
+      }
+
+      // Explicit dtype silences "dtype not specified for model" log noise.
+      const dtype: 'q8' | 'fp32' = this.settings.quantized === true ? 'q8' : 'fp32';
       const pipe = await pipeline('feature-extraction', this.baseModelId, {
         device: this.settings.device ?? 'auto',
-        dtype: this.settings.quantized === true ? 'q8' : undefined,
+        dtype,
         progress_callback: this.settings.onProgress,
       });
 

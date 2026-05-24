@@ -49,7 +49,6 @@ const TEMPLATE_COLORS: Record<TemplateName, string> = {
 export function ExtractorView() {
   const {
     result,
-    rawText,
     attempts,
     usage,
     isExtracting,

@@ -1,0 +1,266 @@
+---
+title: Live Transcribe
+description: Streaming microphone-driven speech-to-text with Voice Activity Detection.
+icon: Mic
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+Build voice-first interfaces — push-to-talk, open-mic, and full conversational loops — entirely in the browser. Layers on top of any `SpeechToTextModel` (`onnx-community/moonshine-tiny-ONNX`, Whisper, custom) with built-in VAD and barge-in.
+
+<Callout type="info">
+  Live transcription is **additive** — the existing `transcribe()` function and `SpeechToTextModel` interface are unchanged. `createLiveTranscriber()` calls `model.doTranscribe()` per chunk, so any existing custom model class works.
+</Callout>
+
+## Overview
+
+`createLiveTranscriber()` returns a controller that:
+
+- Acquires the microphone via `getUserMedia` (with `echoCancellation` and `noiseSuppression`).
+- Captures audio at 16 kHz `Float32Array` PCM through an `AudioWorkletNode` (or `ScriptProcessorNode` fallback).
+- Runs a Voice Activity Detector (energy or silero) to auto-segment utterances.
+- Calls `model.doTranscribe()` at a configurable cadence to emit partial chunks while the user is still speaking.
+- Detects barge-in (user speaks during external TTS playback) and aborts in-flight work.
+
+Two modes: `'push-to-talk'` (caller drives `start()` / `stop()`) and `'open-mic'` (VAD drives utterance boundaries).
+
+## createLiveTranscriber()
+
+<Tabs items={['Push-to-talk', 'Open-mic', 'Custom VAD']}>
+<Tab value="Push-to-talk">
+
+```ts
+import { createLiveTranscriber } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const transcriber = await createLiveTranscriber({
+  model: transformers.speechToText('onnx-community/moonshine-tiny-ONNX'),
+  mode: 'push-to-talk',
+  vad: 'energy',
+});
+
+transcriber.onChunk((chunk) => {
+  console.log(chunk.text, chunk.isFinal);
+});
+transcriber.onUtteranceEnd((u) => {
+  console.log('Final:', u.text);
+});
+
+button.addEventListener('mousedown', () => transcriber.start());
+button.addEventListener('mouseup', () => transcriber.stop());
+```
+
+</Tab>
+<Tab value="Open-mic">
+
+```ts
+import { createLiveTranscriber } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const transcriber = await createLiveTranscriber({
+  model: transformers.speechToText('onnx-community/moonshine-tiny-ONNX'),
+  mode: 'open-mic',
+  vad: transformers.vad('onnx-community/silero-vad-ONNX'),
+});
+
+transcriber.onUtteranceEnd((u) => {
+  // Triggered automatically when the user stops speaking.
+  console.log('User said:', u.text);
+});
+
+await transcriber.start();
+```
+
+</Tab>
+<Tab value="Custom VAD">
+
+```ts
+import type { VADProvider, VADStartOptions } from '@localmode/core';
+
+class MyVAD implements VADProvider {
+  readonly provider = 'custom';
+  readonly frameSize = 512;
+  readonly sampleRate = 16000;
+
+  async start(options: VADStartOptions) { /* ... */ }
+  processFrame(samples: Float32Array) { /* ... */ }
+  async stop() { /* ... */ }
+  async dispose() { /* ... */ }
+}
+
+const transcriber = await createLiveTranscriber({
+  model,
+  mode: 'open-mic',
+  vad: new MyVAD(),
+});
+```
+
+</Tab>
+</Tabs>
+
+### Options
+
+<TypeTable
+  type={{
+    model: { description: 'SpeechToTextModel that transcribes each chunk', type: 'SpeechToTextModel' },
+    mode: { description: "Operating mode", type: "'push-to-talk' | 'open-mic'", default: "'push-to-talk'" },
+    vad: { description: "VAD strategy", type: "'energy' | 'silero' | VADProvider", default: "'energy'" },
+    sampleRate: { description: 'Sample rate in Hz', type: 'number', default: '16000' },
+    chunkInterval: { description: 'Partial chunk cadence (ms). 0 disables partials.', type: 'number', default: '800' },
+    maxUtteranceSec: { description: 'Force-flush cap for a single utterance', type: 'number', default: '25' },
+    bargeInWhilePlaying: { description: 'Optional playback handle for barge-in detection', type: 'AudioPlaybackHandle' },
+    maxRetries: { description: 'Per-chunk retries for transient doTranscribe failures', type: 'number', default: '1' },
+    shouldStartUtterance: { description: 'Optional gate for open-mic mode. Return false to suppress a speech-start from beginning an utterance buffer.', type: '(event: LiveSpeechStartGateEvent) => boolean' },
+    abortSignal: { description: 'Abort the entire session', type: 'AbortSignal' },
+    workletUrl: { description: 'Override the energy VAD worklet URL (strict-CSP escape hatch)', type: 'string' },
+    onActivity: { description: 'Coarse activity callback for diagnostics and audio-level UI feedback.', type: '(activity: LiveAudioActivity) => void' },
+  }}
+/>
+
+### Events
+
+The controller exposes `.onChunk`, `.onUtteranceEnd`, `.onBargeIn`, `.onError`, and `.onStateChange`. Each returns an unsubscribe function.
+
+```ts
+const off = transcriber.onChunk((chunk) => { /* ... */ });
+// Later:
+off();
+```
+
+## VAD strategies
+
+| Strategy | Pros | Cons |
+| --- | --- | --- |
+| `'energy'` (built-in) | Zero downloads, ~150 lines, AudioWorklet-based | RMS thresholding can be fooled by background noise |
+| `transformers.vad(...)` (silero) | De-facto standard, works in noise | ~1.8 MB ONNX model download |
+
+The energy VAD is the default. For production-quality open-mic, prefer silero:
+
+```ts
+import { transformers } from '@localmode/transformers';
+import { warmUpModel } from '@localmode/core';
+
+const vad = transformers.vad('onnx-community/silero-vad-ONNX');
+await vad.warmUp(); // Pre-load before the user clicks "start"
+```
+
+## Barge-in
+
+When the agent is speaking (TTS playback) and the user starts speaking again, `bargeInWhilePlaying` lets the transcriber stop the audio and capture the new utterance immediately.
+
+```ts
+const audioElement = new Audio(ttsBlobUrl);
+const handle = {
+  isPlaying: () => !audioElement.paused && !audioElement.ended,
+  stop: () => audioElement.pause(),
+};
+
+const transcriber = await createLiveTranscriber({
+  model,
+  mode: 'open-mic',
+  bargeInWhilePlaying: handle,
+});
+
+transcriber.onBargeIn((event) => {
+  console.log('User interrupted at', event.audioLevelDb, 'dBFS');
+});
+```
+
+The end-to-end latency from VAD `speechStart` to `handle.stop()` is typically under 50 ms on the AudioWorklet path.
+
+## AbortSignal
+
+`createLiveTranscriber({ abortSignal })` honors the signal at construction and during the session. Aborting cancels in-flight `doTranscribe()` calls, releases the `MediaStream`, and closes the `AudioContext`.
+
+```ts
+const ac = new AbortController();
+const transcriber = await createLiveTranscriber({ model, abortSignal: ac.signal });
+await transcriber.start();
+// ...
+ac.abort(); // Releases everything.
+```
+
+## createTurnTaker()
+
+Higher-level orchestrator for full voice loops:
+
+```ts
+import { createLiveTranscriber, createTurnTaker } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const transcriber = await createLiveTranscriber({
+  model: transformers.speechToText('onnx-community/moonshine-tiny-ONNX'),
+  mode: 'open-mic',
+  vad: transformers.vad('onnx-community/silero-vad-ONNX'),
+});
+
+const turn = await createTurnTaker({
+  transcriber,
+  planner: transformers.languageModel('onnx-community/Qwen3-0.6B-ONNX'),
+  voice: transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX'),
+  systemPrompt: 'Be concise.',
+});
+
+turn.onUserUtterance((t) => console.log('user:', t));
+turn.onAgentResponse((t) => console.log('agent:', t));
+turn.onStateTransition((e) => console.log(e.from, '→', e.to));
+
+await turn.start();
+```
+
+State machine: `idle → listening → planning → speaking → listening`. Barge-in aborts the planner and TTS and returns to `'listening'`. `turn.interrupt()` is the programmatic equivalent.
+
+## React hooks
+
+```tsx
+import { useLiveTranscribe } from '@localmode/react';
+
+function VoiceInput() {
+  const { state, currentUtterance, lastUtterance, start, stop } = useLiveTranscribe({
+    model: transformers.speechToText('onnx-community/moonshine-tiny-ONNX'),
+    mode: 'push-to-talk',
+  });
+
+  return (
+    <>
+      <button onMouseDown={start} onMouseUp={stop} disabled={state === 'disposed'}>
+        {state === 'listening' ? 'Listening…' : 'Hold to talk'}
+      </button>
+      {currentUtterance && <p className="opacity-60">{currentUtterance}</p>}
+      {lastUtterance && <p>{lastUtterance.text}</p>}
+    </>
+  );
+}
+```
+
+`useTurnTaker` follows the same pattern. Both hooks lazy-construct on first `start()` call so the `getUserMedia` permission prompt happens during a user gesture.
+
+## Concurrency
+
+Browsers expose a single microphone per tab. Constructing two `LiveTranscriber` instances in the same tab will not throw, but both will share degraded audio quality as they compete for the same hardware. **Recommended: one transcriber per tab.** The library does not enforce this via Web Locks — keep it simple, document the constraint.
+
+## Browser compatibility
+
+| Path | Requirements |
+| --- | --- |
+| AudioWorklet (preferred) | Chrome 66+, Firefox 76+, Safari 14.1+ |
+| ScriptProcessorNode (fallback) | All modern browsers (deprecated; logs a warning) |
+| `getUserMedia` | Secure context (HTTPS or `localhost`) |
+
+`createLiveTranscriber()` automatically falls back to `ScriptProcessorNode` when `AudioWorklet` is unavailable. In strict-CSP environments (Chrome MV3 service workers, sites blocking `blob:` URLs), pass `workletUrl: '/path/to/energy-vad.worklet.js'` and serve the worklet source yourself.
+
+The energy VAD worklet ships as an inline string (registered via `URL.createObjectURL`) so no separate `.worklet.js` asset is required from your bundler. Source is available via the exported `ENERGY_VAD_WORKLET_SOURCE` constant if you need to inspect or self-host it.
+
+## Capability detection
+
+```ts
+import { isLiveTranscribeSupported, isAudioWorkletSupported, isMediaCaptureSupported } from '@localmode/core';
+
+if (!isLiveTranscribeSupported()) {
+  // Show a fallback UI.
+}
+```
+
+`createCapabilityReport()` includes a `liveTranscribe` section with `{ getUserMedia, audioWorklet, scriptProcessor, crossOriginIsolated }`.

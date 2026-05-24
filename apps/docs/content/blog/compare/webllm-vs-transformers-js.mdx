@@ -1,0 +1,116 @@
+---
+title: "WebLLM vs Transformers.js"
+description: "Comparing LocalMode's WebGPU LLM provider with the ONNX-based Transformers.js v4 provider for text generation."
+author: "LocalMode"
+date: "2026-05-03"
+---
+
+# WebLLM vs Transformers.js
+
+Comparing LocalMode's WebGPU LLM provider with the ONNX-based Transformers.js v4 provider for text generation.
+
+## Overview
+
+This comparison examines the key differences between **WebLLM** ([https://webllm.mlc.ai](https://webllm.mlc.ai)) and **Transformers.js v4** ([https://huggingface.co/docs/transformers.js](https://huggingface.co/docs/transformers.js)) for building AI-powered applications. Both approaches have their strengths - the right choice depends on your specific requirements around privacy, cost, performance, and target platforms.
+
+Understanding these trade-offs is essential for architects and developers evaluating local-first AI versus alternative approaches. The comparison below covers 8 dimensions, from runtime characteristics to model quality and developer experience.
+
+## Feature-by-Feature Comparison
+
+| Dimension | WebLLM | Transformers.js v4 |
+| --- | --- | --- |
+| **Engine** | MLC compiler → WebGPU compute shaders. Purpose-built for LLM inference. | ONNX Runtime Web. General-purpose ML runtime with LLM support via Transformers.js v4. |
+| **Maturity** | Production-ready. 32 curated and tested models. | Production-ready (TJS v4 stable). 16 curated ONNX models. |
+| **Speed** | ~40-70 tok/s on WebGPU (hardware-dependent; M3 Max benchmarks: Llama 3.1 8B ~41 tok/s, Phi 3.5 Mini ~71 tok/s). | 20-60 tok/s on WebGPU per HuggingFace v4 benchmarks. General ONNX runtime, not LLM-optimized. |
+| **Non-LLM Tasks** | LLM text generation only. No embeddings, classification, vision, audio. | Full task coverage: embeddings, classification, NER, vision, audio, OCR, and LLMs. |
+| **Bundle Impact** | Adds MLC runtime (separate package @localmode/webllm). | Already included if using @localmode/transformers for other tasks. Zero additional bundle cost. |
+| **Model Sizes** | Up to 9B parameters (Qwen3.5-9B ~5.06GB, Gemma-2-9B ~5GB). Larger model support. | Up to ~4.5B effective parameters (Gemma 4 E4B ~3GB, Qwen3.5-4B ~2.5GB). Smaller quantized models focused on efficiency. |
+| **Vision Support** | Phi-3.5-vision for multimodal inference. | Qwen3.5 (0.8B/2B/4B) and Gemma 4 (E2B/E4B) vision models for multimodal inference via TJS v4. |
+| **Browser Support** | WebGPU required (Chrome 113+, Edge 113+, Safari 26+). | WebGPU preferred, WASM fallback available. Broader support. |
+
+## Verdict
+
+Use WebLLM for dedicated LLM features where speed matters and you're targeting modern Chrome/Edge. Use Transformers.js v4 for LLMs if you're already importing @localmode/transformers for other tasks (embeddings, classification) and want to avoid adding another provider package - the ONNX models are smaller and the bundle overhead is zero. Both are production-ready. WebLLM offers faster inference on WebGPU; Transformers.js v4 offers broader browser support and zero additional bundle cost if you're already using the transformers package.
+
+### Summary
+
+When evaluating WebLLM against Transformers.js v4, consider your primary constraints:
+
+- **Privacy requirements** - If user data must never leave the device, solutions that process everything locally have an inherent architectural advantage.
+- **Cost at scale** - Per-request pricing models become expensive as user counts grow. Local inference shifts the cost to a one-time model download per user.
+- **Target platforms** - Browser-based solutions work on any device with a modern browser. Desktop and server-based solutions may require additional installation steps.
+- **Model quality needs** - For tasks where the absolute highest quality matters (complex multi-step reasoning, creative writing), larger server-side or cloud models still have an edge. For the majority of practical tasks (embeddings, classification, summarization, simple generation), the quality gap has narrowed significantly.
+- **Offline requirements** - Applications that must work without internet need local inference. Cloud-dependent solutions fail when connectivity drops.
+
+## Code Comparison
+
+### WebLLM
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+const model = webllm.languageModel('Llama-3.2-3B-Instruct-q4f16_1-MLC');
+```
+
+### Transformers.js v4
+
+```typescript
+import { streamText } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+const model = transformers.languageModel('onnx-community/Llama-3.2-1B-Instruct-ONNX');
+```
+
+## Frequently Asked Questions
+
+### Should I use both in the same app?
+
+If your app needs LLMs and other ML tasks, using @localmode/transformers for embeddings/classification and @localmode/webllm for LLM generation is the recommended pattern. This gives you the best engine for each task type.
+
+### How stable is Transformers.js v4 for LLMs?
+
+Transformers.js v4 is stable and production-ready (LocalMode uses @huggingface/transformers ^4.2.0). The 16 curated ONNX LLM models have been browser-tested. The same LanguageModel interface works across WebLLM, wllama, and Transformers.js - switching providers requires changing only the model ID.
+
+### What about wllama as a third option?
+
+wllama (llama.cpp WASM) is the universal fallback - works in every browser without WebGPU. If you need Firefox support or maximum browser compatibility, wllama is essential. See the WebLLM vs wllama comparison for details.
+
+## Making the Decision
+
+For many teams, the answer is not either/or. A hybrid architecture uses local inference for high-volume, low-complexity tasks (embeddings, classification, NER, simple generation) at zero marginal cost, and routes the small percentage of requests that genuinely need frontier-quality reasoning to a cloud provider. A plain try/catch makes this pattern straightforward to implement:
+
+```typescript
+import { streamText } from '@localmode/core';
+
+// Try the local model first (free, private, fast)
+// Fall back to a cloud call only if local inference fails
+async function generate(prompt: string) {
+  try {
+    return await streamText({ model: localModel, prompt });
+  } catch (error) {
+    console.warn('Local inference failed, escalating to cloud:', error);
+    return await callCloudProvider(prompt);
+  }
+}
+```
+
+This approach gives you the best of both worlds: the privacy and cost benefits of local inference for the 90% of requests that don't need frontier quality, and the option to escalate to cloud APIs for the remaining 10%.
+
+## Related Pages
+
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Webllm Vs Wllama](/blog/compare/webllm-vs-wllama) - comparison guide
+- [Llama](/blog/models/llama) - model guide
+
+## Methodology
+
+All LocalMode capability and model-count claims are sourced directly from `packages/webllm/src/models.ts` and `packages/transformers/src/models.ts` in the monorepo. WebLLM performance figures come from the WebLLM arxiv paper (arXiv:2412.15803v2), which benchmarked 4-bit quantized models on an Apple M3 Max. Transformers.js v4 speed figures come from the official HuggingFace v4 release blog. Where a number could not be confirmed against a primary source it is presented as an approximate range; verify current performance on your target hardware before making architectural decisions.
+
+## Sources
+
+- [LocalMode webllm package - packages/webllm/src/models.ts](https://github.com/LocalMode-AI/LocalMode)
+- [LocalMode transformers package - packages/transformers/src/models.ts](https://github.com/LocalMode-AI/LocalMode)
+- [WebLLM official documentation - webllm.mlc.ai/docs](https://webllm.mlc.ai/docs/)
+- [WebLLM GitHub repository - mlc-ai/web-llm](https://github.com/mlc-ai/web-llm)
+- [WebLLM arxiv paper - arXiv:2412.15803v2 (performance benchmarks on M3 Max)](https://arxiv.org/html/2412.15803v2)
+- [Transformers.js v4 release blog - huggingface.co/blog/transformersjs-v4](https://huggingface.co/blog/transformersjs-v4)
+- [Transformers.js documentation - huggingface.co/docs/transformers.js](https://huggingface.co/docs/transformers.js/en/index)

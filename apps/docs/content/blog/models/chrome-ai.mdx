@@ -1,0 +1,156 @@
+---
+title: "Chrome Built-in AI Models in the Browser"
+description: "Chrome's Gemini Nano - zero-download AI for summarization, translation, and text generation, built directly into the browser."
+author: "LocalMode"
+date: "2026-04-28"
+---
+
+# Chrome Built-in AI Models in the Browser
+
+Chrome's Gemini Nano - zero-download AI for summarization, translation, and text generation, built directly into the browser.
+
+## Overview
+
+The Chrome Built-in AI family is available through the `@localmode/chrome-ai` provider, with models that are 0 MB to download (they ship with or are downloaded by Chrome itself). The package supports three tasks: **summarization**, **translation**, and **text generation** (via the Prompt API), and all three use the same LocalMode interfaces as every other provider.
+
+Running Chrome Built-in AI locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After Gemini Nano is available on the device, inference is instant and works offline. Each API targets a different task - choose based on your application's requirements and verify Chrome version compatibility.
+
+## Architecture and History
+
+Chrome Built-in AI is a unique provider in LocalMode's ecosystem: it uses Google's Gemini Nano model that ships directly with Chrome, requiring zero model downloads from your application. The `@localmode/chrome-ai` package provides summarization, translation, and text generation (Prompt API) capabilities that work instantly - no waiting for model downloads, no storage quota consumed by your app, no user bandwidth used.
+
+The **Summarizer API** condenses long text into concise summaries with configurable output length, type, and format. The **Translator API** handles text translation between supported language pairs. The **Prompt API** (`window.LanguageModel`) exposes Gemini Nano as a full `LanguageModel`, enabling `generateText()`, `streamText()`, and `generateObject()` - the same functions that work with WebLLM or wllama. All three APIs use the same LocalMode interfaces as other providers.
+
+The Summarizer, Translator, and Language Detector APIs became stable in **Chrome 138**. The Prompt API (text generation via `window.LanguageModel`) became stable for web pages in **Chrome 148**; in Chrome 127–137 it was available only via origin trial for extensions.
+
+The key trade-off: Chrome Built-in AI only works in Chromium-based desktop browsers (Chrome 138+ or Edge 138+). It does not work in Firefox, Safari, or mobile Chrome. A simple try/catch pattern handles this gracefully - try Chrome AI first (instant, zero-cost), and on failure fall back to `@localmode/transformers` models (broader support, requires download). This hybrid approach gives users the best possible experience on their browser.
+
+## Variant Comparison
+
+The following table lists every Chrome Built-in AI variant available through `@localmode/chrome-ai`, with their real model IDs as used in the provider.
+
+| Model ID | Interface | Size | Speed | Quality | Chrome Version |
+| --- | --- | --- | --- | --- | --- |
+| `chrome-ai:gemini-nano-summarizer` | `SummarizationModel` | 0 MB (built-in) | Fast | Good | 138+ |
+| `chrome-ai:gemini-nano-translator` | `TranslationModel` | 0 MB (built-in) | Fast | Good | 138+ |
+| `chrome-ai:gemini-nano` | `LanguageModel` (Prompt API) | 0 MB (built-in) | Fast | Good | 148+ (web) |
+
+> **Note:** "0 MB" means your application downloads nothing - Gemini Nano is managed by Chrome itself. The initial Gemini Nano download (~1.5 GB) is handled by Chrome in the background, not by your application.
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| Under 200MB | 3 | variants |
+
+**How to choose a variant:** All three variants use the same underlying Gemini Nano model. Pick based on task: `gemini-nano-summarizer` for condensing text, `gemini-nano-translator` for language translation, and `gemini-nano` (Prompt API) for open-ended text generation. Check Chrome version requirements - the Prompt API requires Chrome 148+ for web pages, while Summarizer and Translator work from Chrome 138+.
+
+## Provider-Specific Code Examples
+
+All Chrome Built-in AI variants use the same LocalMode interfaces from `@localmode/core`. Switching between providers requires changing only the import and model factory - no application logic changes.
+
+### Summarization
+
+```typescript
+import { summarize } from '@localmode/core';
+import { chromeAI } from '@localmode/chrome-ai';
+
+const { summaries } = await summarize({
+  model: chromeAI.summarizer({ type: 'key-points', length: 'short' }),
+  texts: ['Long article text here...'],
+});
+console.log(summaries[0]);
+```
+
+### Translation
+
+```typescript
+import { translate } from '@localmode/core';
+import { chromeAI } from '@localmode/chrome-ai';
+
+const { translations } = await translate({
+  model: chromeAI.translator({ sourceLanguage: 'en', targetLanguage: 'de' }),
+  texts: ['Hello, world!'],
+});
+console.log(translations[0]);
+```
+
+### Text Generation (Prompt API - Chrome 148+)
+
+```typescript
+import { generateText } from '@localmode/core';
+import { chromeAI } from '@localmode/chrome-ai';
+
+const { text } = await generateText({
+  model: chromeAI.languageModel({ systemPrompt: 'You are concise.' }),
+  prompt: 'Explain quantum tunnelling in one sentence.',
+});
+console.log(text);
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, attempt Chrome AI first and fall back to `@localmode/transformers` for browsers that don't support it:
+
+```typescript
+import { summarize } from '@localmode/core';
+import { chromeAI } from '@localmode/chrome-ai';
+import { transformers } from '@localmode/transformers';
+
+// Try Chrome AI (instant, zero-download), fall back to Transformers.js
+let model;
+try {
+  model = chromeAI.summarizer();
+} catch (error) {
+  console.warn('Chrome AI not available, using Transformers.js fallback:', error);
+  model = transformers.summarizer('Xenova/distilbart-cnn-6-6');
+}
+```
+
+## When to Use Chrome Built-in AI
+
+Chrome Built-in AI models are a strong choice when:
+
+- **You need zero-download AI** - No model files are served or cached by your application; Gemini Nano is managed entirely by Chrome.
+- **Your users are on Chrome/Edge desktop** - All three APIs require Chrome 138+ (or Edge 138+) on desktop. Firefox, Safari, and mobile Chrome are not supported.
+- **Summarization or translation are your primary tasks** - The Summarizer and Translator APIs are stable from Chrome 138 and optimized for those tasks.
+- **Text generation on Chrome 148+** - The Prompt API (`LanguageModel`) became stable for web pages in Chrome 148 and provides full `generateText()` / `streamText()` support.
+
+## Hardware and OS Requirements
+
+Chrome Built-in AI has specific device requirements because Gemini Nano runs on-device:
+
+| Requirement | Detail |
+| --- | --- |
+| Browser | Chrome 138+ or Edge 138+ (desktop only) |
+| OS | Windows 10/11, macOS 13+ (Ventura), Linux, ChromeOS (Chromebook Plus) |
+| Disk space | At least 22 GB free on the volume containing your Chrome profile |
+| GPU | More than 4 GB VRAM, **or** |
+| CPU | 16 GB RAM + 4 or more cores (CPU-only path) |
+
+Mobile (Android, iOS) and Incognito mode are not supported.
+
+## HuggingFace Model Cards
+
+Chrome Built-in AI models are not hosted on HuggingFace - they are distributed and managed by Google via Chrome. See the [Chrome Built-in AI developer documentation](https://developer.chrome.com/docs/ai/built-in-apis) for model details.
+
+## Related Pages
+
+- [Chrome AI Overview](/docs/chrome-ai) - full provider guide including feature detection and fallback patterns
+- [Chrome AI Language Model](/docs/chrome-ai/language-model) - Prompt API usage, streaming, and structured output
+- [Chrome AI Summarization](/docs/chrome-ai/summarization) - Summarizer API with type/format/length options
+- [Chrome AI Translation](/docs/chrome-ai/translation) - Translator API
+
+## Methodology
+
+Facts on this page were verified against two primary sources: (1) the `@localmode/chrome-ai` package source code at `packages/chrome-ai/src/` (model IDs, interfaces, and Chrome version references in error messages and comments), and (2) the official Chrome for Developers documentation fetched directly (API availability by Chrome version, hardware/OS requirements, Prompt API stable release version). The Prompt API stable-for-web version (Chrome 148) was confirmed via the Chrome I/O 2026 announcement page. Hardware requirements (22 GB disk, >4 GB VRAM or 16 GB RAM + 4 cores) are sourced directly from the Chrome "Get started" guide as of May 2026.
+
+## Sources
+
+- [Chrome Built-in AI APIs - developer.chrome.com](https://developer.chrome.com/docs/ai/built-in-apis)
+- [Get started with built-in AI - developer.chrome.com](https://developer.chrome.com/docs/ai/get-started)
+- [The Prompt API - developer.chrome.com](https://developer.chrome.com/docs/ai/prompt-api)
+- [New in Chrome 138 (Summarizer, Translator, Language Detector stable) - developer.chrome.com](https://developer.chrome.com/blog/new-in-chrome-138)
+- [AI APIs in stable and origin trials, Google I/O 2025 - developer.chrome.com](https://developer.chrome.com/blog/ai-api-updates-io25)
+- [15 updates from Google I/O 2026: Prompt API stable in Chrome 148 - developer.chrome.com](https://developer.chrome.com/blog/chrome-at-io26)
+- [@localmode/chrome-ai source - packages/chrome-ai/src/](https://github.com/LocalMode-AI/LocalMode/tree/main/packages/chrome-ai/src)

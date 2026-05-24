@@ -105,6 +105,51 @@ describe('extractText()', () => {
     await expect(promise).rejects.toThrow();
   });
 
+  it('should pass prompt through to doOCR', async () => {
+    let receivedPrompt: string | undefined;
+    const model = {
+      modelId: 'mock:ocr',
+      provider: 'mock',
+      async doOCR(options: { images: unknown[]; prompt?: string }) {
+        receivedPrompt = options.prompt;
+        return {
+          texts: ['extracted'],
+          usage: { durationMs: 0 },
+        };
+      },
+    };
+
+    await extractText({
+      model: model as any,
+      image: 'test.png',
+      prompt: 'Table Recognition:',
+    });
+
+    expect(receivedPrompt).toBe('Table Recognition:');
+  });
+
+  it('should not pass prompt when not specified', async () => {
+    let receivedPrompt: string | undefined = 'UNSET';
+    const model = {
+      modelId: 'mock:ocr',
+      provider: 'mock',
+      async doOCR(options: { images: unknown[]; prompt?: string }) {
+        receivedPrompt = options.prompt;
+        return {
+          texts: ['extracted'],
+          usage: { durationMs: 0 },
+        };
+      },
+    };
+
+    await extractText({
+      model: model as any,
+      image: 'test.png',
+    });
+
+    expect(receivedPrompt).toBeUndefined();
+  });
+
   it('should use global provider with string model ID', async () => {
     setGlobalOCRProvider(() =>
       createMockOCRModel({ mockText: 'Global OCR text.' })

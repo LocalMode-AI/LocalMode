@@ -1,0 +1,324 @@
+---
+title: 'Overview'
+description: MediaPipe Tasks provider for LocalMode — hand, pose, and face landmark detection, gesture recognition, audio classification, language detection, and more via Google's on-device WASM runtime. Works in every browser.
+icon: Hand
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+# @localmode/mediapipe
+
+Run Google's [MediaPipe Tasks](https://ai.google.dev/edge/mediapipe/solutions/guide) directly in the browser. `@localmode/mediapipe` wraps `@mediapipe/tasks-vision`, `@mediapipe/tasks-audio`, and `@mediapipe/tasks-text` as a single unified LocalMode provider — hand, pose, and face landmarks, gesture recognition, image and audio classification, image embeddings, language detection, and text embeddings, plus real-time streaming trackers for video.
+
+<Callout type="info" title="Privacy-first by design">
+  Every task runs entirely on-device via WebAssembly. The camera, microphone, and text never leave the browser. The only network requests are the one-time model and WASM downloads.
+</Callout>
+
+## Features
+
+- **13 model catalog** — landmarks, gestures, classification, detection, segmentation, embeddings, and language detection, all curated and verified against Google's CDN
+- **Real-time streaming** — `createHandTracker` / `createPoseTracker` / `createFaceTracker` / `createGestureTracker` run over a `<video>` element at 30–60fps
+- **Universal browser support** — pure WebAssembly + WebGL; no WebGPU required
+- **Tiny models** — most are under 10MB; face detection and selfie segmentation are ~250KB
+- **Unified LocalMode interface** — landmark tasks call `detectHands()`, `detectPose()`, etc.; classification/detection/embedding tasks reuse the existing `classifyImage()`, `detectObjects()`, `embed()` functions
+- **AbortSignal cancellation** — every single-frame function supports cancellation
+- **GPU or CPU delegate** — choose the WebGL GPU delegate (default) or the CPU delegate per provider or per model
+
+<Callout type="info" title="What is not included">
+  Two MediaPipe capabilities are intentionally excluded: the `@mediapipe/tasks-audio` package ships only an `AudioClassifier` — there is no audio embedder in the JS SDK. The `@mediapipe/tasks-genai` (on-device LLM) is also not wrapped — use [`@localmode/litert`](/docs/litert) or [`@localmode/wllama`](/docs/wllama) for local language model inference instead.
+</Callout>
+
+## Installation
+
+<Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
+  <Tab value="pnpm">```bash pnpm install @localmode/mediapipe @localmode/core ```</Tab>
+  <Tab value="npm">```bash npm install @localmode/mediapipe @localmode/core ```</Tab>
+  <Tab value="yarn">```bash yarn add @localmode/mediapipe @localmode/core ```</Tab>
+  <Tab value="bun">```bash bun add @localmode/mediapipe @localmode/core ```</Tab>
+</Tabs>
+
+The package depends on `@mediapipe/tasks-vision`, `@mediapipe/tasks-audio`, and `@mediapipe/tasks-text` — all installed automatically. The WASM runtime loads from the jsDelivr CDN by default; see [WASM Runtime](#wasm-runtime) to self-host it.
+
+## Quick Start
+
+### Single-frame detection
+
+Detect hand landmarks in a still image:
+
+```typescript
+import { detectHands } from '@localmode/core';
+import { mediapipe } from '@localmode/mediapipe';
+
+const { hands } = await detectHands({
+  model: mediapipe.handLandmarker(),
+  image: imageBlob,
+  numHands: 2,
+});
+
+for (const hand of hands) {
+  console.log(`${hand.handedness} hand — ${hand.landmarks.length} landmarks`);
+}
+```
+
+### Real-time streaming
+
+Track hands live from a webcam `<video>` element:
+
+```typescript
+import { mediapipe } from '@localmode/mediapipe';
+
+const tracker = mediapipe.createHandTracker({
+  video: videoElement,
+  numHands: 2,
+  onResults: (hands, timestampMs) => {
+    // Called once per processed frame (up to ~60fps)
+    drawHands(hands);
+  },
+});
+
+await tracker.start();
+
+// later
+tracker.stop();
+await tracker.close();
+```
+
+## Tasks
+
+The provider exposes a factory method per task. Landmark and gesture tasks return MediaPipe-specific model interfaces used with new core functions; the remaining tasks return standard LocalMode interfaces and reuse existing core functions.
+
+### Landmarks & Gestures
+
+| Method                          | Interface                  | Core function           | Docs |
+| ------------------------------- | -------------------------- | ----------------------- | ---- |
+| `mediapipe.handLandmarker()`    | `HandLandmarkModel`        | `detectHands()`         | [Guide](/docs/mediapipe/hand-tracking) |
+| `mediapipe.poseLandmarker()`    | `PoseLandmarkModel`        | `detectPose()`          | [Guide](/docs/mediapipe/pose-estimation) |
+| `mediapipe.faceLandmarker()`    | `FaceLandmarkModel`        | `detectFaceLandmarks()` | [Guide](/docs/mediapipe/face-detection) |
+| `mediapipe.faceDetector()`      | `FaceDetectionModel`       | `detectFace()`          | [Guide](/docs/mediapipe/face-detection) |
+| `mediapipe.gestureRecognizer()` | `GestureRecognitionModel`  | `recognizeGesture()`    | [Guide](/docs/mediapipe/gesture-recognition) |
+
+### Vision (standard core interfaces)
+
+| Method                        | Interface                  | Core function            |
+| ----------------------------- | -------------------------- | ------------------------ |
+| `mediapipe.imageClassifier()` | `ImageClassificationModel` | `classifyImage()`        |
+| `mediapipe.objectDetector()`  | `ObjectDetectionModel`     | `detectObjects()`        |
+| `mediapipe.imageSegmenter()`  | `SegmentationModel`        | `segmentImage()`         |
+| `mediapipe.imageEmbedder()`   | `ImageFeatureModel`        | `extractImageFeatures()` |
+
+### Audio & Text
+
+| Method                          | Interface                   | Core function       | Docs |
+| ------------------------------- | --------------------------- | ------------------- | ---- |
+| `mediapipe.audioClassifier()`   | `AudioClassificationModel`  | `classifyAudio()`   | [Guide](/docs/mediapipe/audio) |
+| `mediapipe.textEmbedder()`      | `EmbeddingModel`            | `embed()` / `embedMany()` | [Guide](/docs/mediapipe/text) |
+| `mediapipe.languageDetector()`  | `LanguageDetectionModel`    | `detectLanguage()`  | [Guide](/docs/mediapipe/text) |
+| `mediapipe.textClassifier(modelPath)` | `ClassificationModel` | `classify()`        | [Guide](/docs/mediapipe/text) |
+
+<Callout type="warn" title="textClassifier requires a custom model">
+  MediaPipe ships no default text classifier — `mediapipe.textClassifier()` requires an explicit custom-trained `.tflite` model URL (built with [MediaPipe Model Maker](https://ai.google.dev/edge/mediapipe/solutions/customization/text_classifier)). Calling it without a path throws a `ValidationError`. See the [Text guide](/docs/mediapipe/text#text-classification).
+</Callout>
+
+### Streaming trackers
+
+| Factory                         | Per-frame callback                                       | Docs |
+| ------------------------------- | -------------------------------------------------------- | ---- |
+| `mediapipe.createHandTracker()` | `(hands: HandLandmarkResultItem[], timestampMs)`         | [Guide](/docs/mediapipe/streaming) |
+| `mediapipe.createPoseTracker()` | `(poses: PoseLandmarkResultItem[], timestampMs)`         | [Guide](/docs/mediapipe/streaming) |
+| `mediapipe.createFaceTracker()` | `(faces: FaceLandmarkResultItem[], timestampMs)`         | [Guide](/docs/mediapipe/streaming) |
+| `mediapipe.createGestureTracker()` | `(gestures: GestureResultItem[], timestampMs)`        | [Guide](/docs/mediapipe/streaming) |
+
+## Model Catalog
+
+`MEDIAPIPE_MODELS` ships 13 curated models. Every model is verified against Google's public CDN (`storage.googleapis.com`). Vision models use the `.task` bundle format; audio and text models are raw `.tflite` files.
+
+```typescript
+import { MEDIAPIPE_MODELS } from '@localmode/mediapipe';
+```
+
+| Catalog ID             | Model                              | Domain | Size   |
+| ---------------------- | ---------------------------------- | ------ | ------ |
+| `hand_landmarker`      | Hand Landmarker                    | vision | 7.8MB  |
+| `pose_landmarker`      | Pose Landmarker (Lite)             | vision | 5.8MB  |
+| `pose_landmarker_full` | Pose Landmarker (Full)             | vision | 9.4MB  |
+| `face_landmarker`      | Face Landmarker                    | vision | 3.8MB  |
+| `face_detector`        | Face Detector (BlazeFace)          | vision | 230KB  |
+| `gesture_recognizer`   | Gesture Recognizer                 | vision | 8.4MB  |
+| `image_classifier`     | Image Classifier (EfficientNet-Lite0) | vision | 18.6MB |
+| `object_detector`      | Object Detector (EfficientDet-Lite0)  | vision | 7.3MB  |
+| `image_segmenter`      | Image Segmenter (Selfie)           | vision | 250KB  |
+| `image_embedder`       | Image Embedder (MobileNet-V3 Small) | vision | 4.1MB  |
+| `audio_classifier`     | Audio Classifier (YAMNet)          | audio  | 4.1MB  |
+| `language_detector`    | Language Detector                  | text   | 315KB  |
+| `text_embedder`        | Text Embedder (Universal Sentence Encoder) | text | 6.1MB |
+
+Each factory method uses its catalog default. Pass a catalog ID or a direct model URL to override:
+
+```typescript
+// Catalog default
+const lite = mediapipe.poseLandmarker();
+
+// Catalog ID — higher-accuracy pose model
+const full = mediapipe.poseLandmarker('pose_landmarker_full');
+
+// Direct URL to any compatible MediaPipe model file
+const custom = mediapipe.handLandmarker('https://your-cdn.com/hand_landmarker.task');
+```
+
+You can also set an explicit `modelPath` in the per-model settings, which always takes precedence:
+
+```typescript
+const model = mediapipe.handLandmarker('hand_landmarker', {
+  modelPath: 'https://your-cdn.com/hand_landmarker.task',
+});
+```
+
+## Provider Configuration
+
+### Custom provider
+
+Use `createMediaPipe()` for a provider instance with custom settings, or import the default `mediapipe` singleton.
+
+```typescript
+import { createMediaPipe } from '@localmode/mediapipe';
+
+const myMediaPipe = createMediaPipe({
+  delegate: 'CPU',
+  wasmBasePath: '/wasm/mediapipe',
+});
+
+const model = myMediaPipe.handLandmarker();
+```
+
+<TypeTable
+  type={{
+    delegate: {
+      description: "Inference delegate. 'GPU' uses the WebGL delegate; 'CPU' uses the WASM CPU delegate. Applied to all models and trackers from this provider.",
+      type: "'GPU' | 'CPU'",
+      default: "'GPU'",
+    },
+    wasmBasePath: {
+      description: 'Base path for the MediaPipe WASM runtime. Pass a single string for all domains, or an object to set vision / audio / text paths individually. Defaults to the jsDelivr CDN.',
+      type: 'string | { vision?: string; audio?: string; text?: string }',
+    },
+  }}
+/>
+
+### Per-model settings
+
+Every factory method accepts a second settings argument that overrides the provider defaults for that model only:
+
+```typescript
+const model = mediapipe.handLandmarker('hand_landmarker', {
+  modelPath: 'https://your-cdn.com/hand_landmarker.task',
+  delegate: 'CPU',
+  wasmBasePath: '/wasm/mediapipe/vision',
+});
+```
+
+<TypeTable
+  type={{
+    modelPath: {
+      description: 'Custom model file URL, overriding the catalog default.',
+      type: 'string',
+    },
+    delegate: {
+      description: "Inference delegate for this model.",
+      type: "'GPU' | 'CPU'",
+    },
+    wasmBasePath: {
+      description: 'WASM runtime base path for this model.',
+      type: 'string',
+    },
+  }}
+/>
+
+## WASM Runtime
+
+MediaPipe Tasks ships a WebAssembly runtime — one binary set per domain (vision, audio, text). By default, `@localmode/mediapipe` loads it from the jsDelivr CDN, so no extra setup is needed.
+
+To run fully offline, self-host the runtime. Copy the `wasm` directory from each `@mediapipe/tasks-*` package into your public assets and point `wasmBasePath` at it:
+
+```typescript
+const myMediaPipe = createMediaPipe({
+  wasmBasePath: {
+    vision: '/wasm/tasks-vision',
+    audio: '/wasm/tasks-audio',
+    text: '/wasm/tasks-text',
+  },
+});
+```
+
+<Callout type="warn" title="Isolate concurrent audio and vision tasks">
+  The MediaPipe audio and vision WASM runtimes can conflict if run **concurrently in the same thread** ([mediapipe#4737](https://github.com/google-ai-edge/mediapipe/issues/4737)). If your app uses audio classification and a vision task at the same time, run one of them in a **Web Worker** so each runtime has its own thread. Sequential use (one finishing before the next starts) is unaffected.
+</Callout>
+
+## Browser Compatibility
+
+MediaPipe Tasks runs on pure WebAssembly with a WebGL GPU delegate — it does **not** require WebGPU.
+
+| Browser     | WASM | WebGL (GPU delegate) | Notes                              |
+| ----------- | ---- | -------------------- | ---------------------------------- |
+| Chrome 80+  | ✅   | ✅                   | Full support                       |
+| Edge 80+    | ✅   | ✅                   | Full support                       |
+| Firefox 75+ | ✅   | ✅                   | Full support                       |
+| Safari 14+  | ✅   | ✅                   | Full support; module workers 16.4+ |
+
+If the WebGL GPU delegate is unavailable, set `delegate: 'CPU'` to fall back to CPU inference.
+
+## Error Handling
+
+```typescript
+import { detectHands, ModelLoadError, VisionError, ValidationError } from '@localmode/core';
+
+try {
+  const { hands } = await detectHands({
+    model: mediapipe.handLandmarker(),
+    image: imageBlob,
+  });
+} catch (error) {
+  if (error instanceof ModelLoadError) {
+    console.error('Failed to load model:', error.hint);
+  } else if (error instanceof VisionError) {
+    console.error('Detection failed:', error.hint);
+  } else if (error instanceof ValidationError) {
+    console.error('Invalid input:', error.hint);
+  }
+}
+```
+
+Single-frame functions retry transient failures up to `maxRetries` (default `2`) before throwing. Streaming trackers report per-frame errors through the `onError` callback instead of throwing.
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Hand Tracking"
+    href="/docs/mediapipe/hand-tracking"
+    description="21-point hand landmark detection and the HAND_CONNECTIONS drawing helper."
+  />
+  <Card
+    title="Real-Time Streaming"
+    href="/docs/mediapipe/streaming"
+    description="Run hand, pose, face, and gesture tracking live over a video element."
+  />
+  <Card
+    title="Gesture Recognition"
+    href="/docs/mediapipe/gesture-recognition"
+    description="Recognize 8 built-in hand gestures with landmark output."
+  />
+  <Card
+    title="Core Vision"
+    href="/docs/core/vision"
+    description="API reference for the vision functions shared across providers."
+  />
+</Cards>
+
+## Showcase App
+
+| App              | Description                                                            | Links                                                                                                                                                  |
+| ---------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| MediaPipe Studio | Live hand, pose, face, and gesture tracking from your webcam            | [Demo](https://localmode.ai/mediapipe-studio) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/mediapipe-studio) |

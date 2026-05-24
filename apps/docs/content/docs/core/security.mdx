@@ -10,6 +10,12 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 LocalMode provides built-in security utilities for encryption, key management, and PII redaction.
 
+<Callout type="info" title="Need tamper-evident provenance?">
+  For append-only, hash-chained, signed audit logs (HIPAA / SOX / FedRAMP-aligned),
+  see [Audit Log](/docs/core/audit-log). It complements the encryption helpers
+  here: chain integrity is verifiable without the encryption key.
+</Callout>
+
 <Callout type="info" title="See it in action">
   Try [Encrypted Vault](https://localmode.ai/encrypted-vault) and [Document Redactor](https://localmode.ai/document-redactor) for working demos of these APIs.
 </Callout>

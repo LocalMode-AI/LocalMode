@@ -26,10 +26,12 @@ npm install @localmode/core
 | [`@localmode/transformers`](https://npmjs.com/package/@localmode/transformers) | HuggingFace Transformers.js provider |
 | [`@localmode/webllm`](https://npmjs.com/package/@localmode/webllm)             | WebLLM provider for local LLMs       |
 | [`@localmode/wllama`](https://npmjs.com/package/@localmode/wllama)             | GGUF model provider via llama.cpp WASM |
+| [`@localmode/litert`](https://npmjs.com/package/@localmode/litert)             | Google LiteRT-LM provider (`.litertlm`, WebGPU/WASM) |
 | [`@localmode/react`](https://npmjs.com/package/@localmode/react)               | React hooks for all core functions   |
 | [`@localmode/chrome-ai`](https://npmjs.com/package/@localmode/chrome-ai)       | Chrome Built-in AI provider          |
 | [`@localmode/langchain`](https://npmjs.com/package/@localmode/langchain)       | LangChain.js adapters                |
 | [`@localmode/devtools`](https://npmjs.com/package/@localmode/devtools)         | In-app DevTools widget               |
+| [`@localmode/mediapipe`](https://npmjs.com/package/@localmode/mediapipe)       | Google MediaPipe Tasks — hand/pose/face landmarks, gesture recognition, vision/audio/text |
 | [`@localmode/pdfjs`](https://npmjs.com/package/@localmode/pdfjs)               | PDF text extraction                  |
 | [`@localmode/dexie`](https://npmjs.com/package/@localmode/dexie)               | Dexie.js storage adapter             |
 | [`@localmode/idb`](https://npmjs.com/package/@localmode/idb)                   | Minimal idb storage adapter          |
@@ -132,7 +134,7 @@ npm install @localmode/core
 - `createToolRegistry()` - Type-safe tool registration with Zod schemas
 - `createAgentMemory()` - VectorDB-backed conversation memory with semantic retrieval
 - Max-step guards, loop detection, duration limits
-- Works with any `LanguageModel` provider (WebLLM, wllama, etc.)
+- Works with any `LanguageModel` provider (WebLLM, wllama, transformers, litert, chrome-ai)
 
 ### Vector Import/Export — [Docs](https://localmode.dev/docs/core/import-export)
 
@@ -150,11 +152,11 @@ npm install @localmode/core
 - `generateObject()` - Generate typed, validated JSON objects with schema
 - `streamObject()` - Stream partial JSON objects with final validation
 - `jsonSchema()` - Convert Zod schemas for structured output
-- **Vision/Multimodal** — `ContentPart` union type (`TextPart | ImagePart`) for sending images to vision-capable models
+- **Vision/Audio/Multimodal** — `ContentPart` union type (`TextPart | ImagePart | AudioPart`) for sending images and audio to multimodal models
 - `normalizeContent()`, `getTextContent()` - Multimodal content utilities
 - `supportsVision` flag on `LanguageModel` interface for feature detection
 - AbortSignal support for cancellation
-- Works with WebLLM (Phi 3.5 Vision), Transformers (Qwen3.5), and wllama for local LLM inference
+- Works with WebLLM (Phi 3.5 Vision), Transformers (Qwen3.5), wllama, and litert (Gemma 4 E2B/E4B + Qwen3 0.6B, text-only) for local LLM inference
 
 ### Classification & NLP — [Docs](https://localmode.dev/docs/core/classification)
 
@@ -164,11 +166,23 @@ npm install @localmode/core
 
 ### Audio — [Docs](https://localmode.dev/docs/core/audio)
 
-- `transcribe()` - Speech-to-text with Whisper models
-- `synthesizeSpeech()` - Text-to-speech synthesis
+- `transcribe()` - Speech-to-text with Whisper / Moonshine models
+- `synthesizeSpeech()` - Text-to-speech synthesis (one-shot)
+- `streamSynthesizeSpeech()` - Streaming text-to-speech: clause-by-clause `Float32Array` audio for low first-audio latency
+- `playStreamedSpeech()` - Gap-free Web Audio playback for the streaming iterable, with pause / resume / stop / abort
+- `splitIntoClauses()` - Pure clause splitter (sentence + comma/semicolon boundaries, abbreviation- and decimal-aware)
+- Kokoro TTS via `@localmode/transformers`: 29 voices, speed control, phonemizer-backed synthesis
 - `classifyAudio()` - Audio classification
 - `classifyAudioZeroShot()` - Zero-shot audio classification
 - Word and segment-level timestamps, multi-language support
+
+### Live Transcribe — [Docs](https://localmode.dev/docs/core/live-transcribe)
+
+- `createLiveTranscriber()` - Streaming microphone-driven STT with VAD
+- Push-to-talk and open-mic modes with auto-segmentation
+- Built-in `EnergyVADProvider` (zero-dependency, AudioWorklet-based) and `SileroVADProvider` adapter
+- Barge-in detection during external TTS playback
+- `createTurnTaker()` orchestrator for full voice loops (user → planner → agent → user)
 
 ### Vision — [Docs](https://localmode.dev/docs/core/vision)
 
@@ -178,8 +192,13 @@ npm install @localmode/core
 - `segmentImage()` - Image segmentation / background removal
 - `detectObjects()` - Object detection with bounding boxes
 - `extractImageFeatures()` - Image feature extraction for similarity
-- `upscaleImage()` / `imageToImage()` - Image super resolution
+- `imageToImage()` - Image super resolution / image-to-image transformation
 - `estimateDepth()` - Monocular depth estimation
+- `detectHands()` - 21-point hand landmark detection (MediaPipe)
+- `detectPose()` - 33-point body pose landmark detection (MediaPipe)
+- `detectFace()` - Face detection with bounding boxes and keypoints (MediaPipe)
+- `detectFaceLandmarks()` - 478-point face mesh detection (MediaPipe)
+- `recognizeGesture()` - Hand gesture recognition (MediaPipe)
 
 #### Text Generation (Complete)
 
@@ -195,6 +214,7 @@ npm install @localmode/core
 ### Translation — [Docs](https://localmode.dev/docs/core/translation)
 
 - `translate()` - Text translation between languages
+- `detectLanguage()` - Language detection (110 languages, ISO 639-1 codes)
 
 ### Summarization — [Docs](https://localmode.dev/docs/core/summarization)
 
@@ -222,6 +242,16 @@ npm install @localmode/core
 - `IndexedDBStorage` - Persistent browser storage
 - `MemoryStorage` - In-memory fallback
 - Automatic quota management and cleanup
+
+### Tamper-evident Audit Log — [Docs](https://localmode.dev/docs/core/audit-log)
+
+- `createAuditLog()` - Append-only, hash-chained, signed entries
+- HMAC-SHA-256 default; Ed25519 opt-in via injected `CryptoKey`
+- `verifyChain()` - Cancellable walker reports `hash_mismatch` / `prev_hash_mismatch` / `signature_mismatch`
+- Optional AES-GCM payload encryption — chain still verifies without the encryption key
+- `exportAuditLog()` - JSON Lines output for customer-controlled S3 / Azure Blob sync
+- `deriveAuditKey()` / `generateEphemeralAuditKey()` - PBKDF2 + ephemeral helpers
+- Zero-dep, no network calls — Web Crypto only
 
 ### Evaluation SDK — [Docs](https://localmode.dev/docs/core/evaluation)
 
@@ -419,6 +449,9 @@ import {
   detectCapabilities,
   isWebGPUSupported,
   isIndexedDBSupported,
+  isAudioWorkletSupported,
+  isMediaCaptureSupported,
+  isLiveTranscribeSupported,
   checkModelSupport,
   getRecommendedFallbacks,
   recommendModels,
@@ -443,7 +476,33 @@ import { extractEntities, extractEntitiesMany } from '@localmode/core';
 ### Audio
 
 ```typescript
-import { transcribe, synthesizeSpeech, classifyAudio, classifyAudioZeroShot } from '@localmode/core';
+import {
+  transcribe,
+  synthesizeSpeech,
+  streamSynthesizeSpeech,
+  playStreamedSpeech,
+  splitIntoClauses,
+  DEFAULT_ABBREVIATIONS,
+  classifyAudio,
+  classifyAudioZeroShot,
+} from '@localmode/core';
+```
+
+### Live Transcription & VAD
+
+```typescript
+import {
+  createLiveTranscriber,
+  createTurnTaker,
+  EnergyVADProvider,
+  SileroVADProvider,
+  registerEnergyVADWorklet,
+  createScriptProcessorVADNode,
+  isLiveTranscribeSupported,
+  isAudioWorkletSupported,
+  isMediaCaptureSupported,
+  MediaNotSupportedError,
+} from '@localmode/core';
 ```
 
 ### Vision
@@ -456,16 +515,29 @@ import {
   segmentImage,
   detectObjects,
   extractImageFeatures,
-  upscaleImage, // primary
-  imageToImage, // alias for upscaleImage
+  imageToImage,
   estimateDepth,
+  detectHands,
+  detectPose,
+  detectFace,
+  detectFaceLandmarks,
+  recognizeGesture,
+  HAND_CONNECTIONS,
+  POSE_CONNECTIONS,
+  FACE_CONNECTIONS,
+  GESTURE_CATEGORIES,
 } from '@localmode/core';
 ```
 
 ### Translation
 
 ```typescript
-import { translate } from '@localmode/core';
+import {
+  translate,
+  detectLanguage,
+  SUPPORTED_LANGUAGES,
+  getLanguageName,
+} from '@localmode/core';
 ```
 
 ### Summarization
@@ -487,6 +559,8 @@ import { answerQuestion } from '@localmode/core';
 ```
 
 ### OCR
+
+Supports an optional `prompt` parameter for generative OCR models (e.g., GLM-OCR, LightOnOCR-2) to control recognition mode — table structure, formula/LaTeX, or plain text extraction.
 
 ```typescript
 import { extractText } from '@localmode/core';
@@ -518,6 +592,19 @@ import {
 
 ```typescript
 import { encrypt, decrypt, deriveKey, isCryptoSupported, redactPII } from '@localmode/core';
+```
+
+### Audit Log
+
+```typescript
+import {
+  createAuditLog,
+  verifyChain,
+  exportAuditLog,
+  deriveAuditKey,
+  generateEphemeralAuditKey,
+  AuditLogError,
+} from '@localmode/core';
 ```
 
 ### Differential Privacy
@@ -573,6 +660,8 @@ import {
   StorageError,
   QuotaExceededError,
   ValidationError,
+  AuditLogError,
+  MediaNotSupportedError,
   formatErrorForUser,
 } from '@localmode/core';
 ```
@@ -586,6 +675,12 @@ import {
   createMockVectorDB,
   createTestVector,
   createSeededRandom,
+  createMockHandLandmarkModel,
+  createMockPoseLandmarkModel,
+  createMockFaceDetectionModel,
+  createMockFaceLandmarkModel,
+  createMockGestureRecognitionModel,
+  createMockLanguageDetectionModel,
 } from '@localmode/core';
 ```
 
@@ -731,7 +826,7 @@ const { embedding } = await embed({
 ### Platform Notes
 
 - **Safari/iOS**: Private browsing blocks IndexedDB → use `MemoryStorage`
-- **Firefox**: WebGPU Nightly only → use WASM backend
+- **Firefox**: WebGPU shipped in Firefox 141+ on Windows and 147+ on macOS Apple Silicon — falls back to WASM on Linux/older versions
 - **SharedArrayBuffer**: Requires cross-origin isolation
 
 ---

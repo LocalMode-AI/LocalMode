@@ -104,6 +104,34 @@ await execute(imageDataUrl);
 All vision hooks accept image data URLs (from `FileReader.readAsDataURL`). For model recommendations, see the [Transformers](/docs/transformers) guide.
 </Callout>
 
+## Landmark & Gesture Hooks
+
+`@localmode/react` provides hooks for MediaPipe landmark and gesture detection.
+Each takes `{ model }` (from `@localmode/mediapipe`) and returns the standard
+`{ data, error, isLoading, execute, cancel, reset }` shape.
+
+```tsx
+import { useDetectHands } from '@localmode/react';
+import { mediapipe } from '@localmode/mediapipe';
+
+const { data, execute } = useDetectHands({ model: mediapipe.handLandmarker() });
+await execute(imageBlob);
+// data.hands = [{ landmarks, worldLandmarks, handedness, score }, ...]
+```
+
+| Hook | Detects |
+|------|---------|
+| `useDetectHands` | 21-point hand landmarks |
+| `useDetectPose` | 33-point body pose landmarks |
+| `useDetectFace` | Face bounding boxes and keypoints |
+| `useDetectFaceLandmarks` | 478-point face mesh (+ optional blendshapes) |
+| `useRecognizeGesture` | Hand gestures (8 categories) |
+
+<Callout type="info">
+For real-time 30-60fps video tracking, use the streaming tracker API from
+[`@localmode/mediapipe`](/docs/mediapipe/streaming) instead of these single-frame hooks.
+</Callout>
+
 ## Showcase Apps
 
 | App | Description | Links |
@@ -112,4 +140,5 @@ All vision hooks accept image data URLs (from `FileReader.readAsDataURL`). For m
 | Background Remover | Segment images with useSegmentImage | [Demo](https://localmode.ai/background-remover) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/background-remover) |
 | Photo Enhancer | Enhance images with useImageToImage | [Demo](https://localmode.ai/photo-enhancer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/photo-enhancer) |
 | Image Captioner | Caption images with useOperationList | [Demo](https://localmode.ai/image-captioner) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/image-captioner) |
+| MediaPipe Studio | Real-time hand/pose/face/gesture tracking | [Demo](https://localmode.ai/mediapipe-studio) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/mediapipe-studio) |
 | Duplicate Finder | Compare image features with useSequentialBatch | [Demo](https://localmode.ai/duplicate-finder) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/duplicate-finder) |

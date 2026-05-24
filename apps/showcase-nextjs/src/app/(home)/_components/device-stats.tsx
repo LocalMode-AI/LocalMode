@@ -120,7 +120,7 @@ function FeatureIndicator({ supported, label }: { supported: boolean; label: str
         className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-mono font-bold cursor-help transition-all ${
           supported
             ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
-            : 'bg-red-500/10 text-red-400/60 border border-red-500/10 hover:bg-red-500/20'
+            : 'bg-red-500/10 text-red-300 border border-red-500/20 hover:bg-red-500/20'
         }`}
       >
         {supported ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
@@ -252,7 +252,7 @@ export function DeviceStats() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center gap-2 text-poster-text-sub/40">
+      <div className="flex items-center justify-center gap-2 text-poster-text-sub/80">
         <Loader2 className="w-4 h-4 animate-spin" />
         <span className="text-xs font-mono">Detecting capabilities...</span>
       </div>
@@ -271,7 +271,7 @@ export function DeviceStats() {
   return (
     <div className="space-y-4">
       <div className="text-center mb-1">
-        <span className="text-[10px] font-mono text-poster-text-sub/40 uppercase tracking-wider">
+        <span className="text-[10px] font-mono text-poster-text-sub/80 uppercase tracking-wider">
           Browser-Reported Capabilities
         </span>
       </div>
@@ -317,7 +317,7 @@ export function DeviceStats() {
       </div>
 
       <div className="text-center mb-1">
-        <span className="text-[10px] font-mono text-poster-text-sub/40 uppercase tracking-wider">
+        <span className="text-[10px] font-mono text-poster-text-sub/80 uppercase tracking-wider">
           Feature Support (hover for details)
         </span>
       </div>

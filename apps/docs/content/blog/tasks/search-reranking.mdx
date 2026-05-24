@@ -1,0 +1,145 @@
+---
+title: "Search Reranking in the Browser"
+description: "Re-score and reorder search results using a cross-encoder model for dramatically better retrieval precision."
+author: "LocalMode"
+date: "2026-05-04"
+---
+
+# Search Reranking in the Browser
+
+Re-score and reorder search results using a cross-encoder model for dramatically better retrieval precision.
+
+## What Is Search Reranking?
+
+Search reranking uses a cross-encoder model to score query-document pairs for relevance. Unlike embedding-based search (which computes vectors independently and compares them), a cross-encoder processes the query and document together in a single forward pass, enabling it to capture fine-grained relevance signals. This is typically used as a second stage: retrieve top-50 candidates with fast embedding search, then rerank to get the best top-5.
+
+This capability is exposed through the `rerank()` function in `@localmode/core`. All processing runs entirely in the browser - no server, no API key, no data leaves the device. After the initial model download, search reranking works completely offline.
+
+## Real-World Applications
+
+Improving RAG pipeline retrieval quality. E-commerce search result ordering. Document search with precision requirements. Question-answering systems that need the most relevant context. Knowledge base search where accuracy matters more than speed.
+
+These use cases all benefit from local, on-device processing: user data stays private, there are no per-request API costs, and the application works without internet after initial setup.
+
+## Getting Started
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Import the core function and provider:
+
+```typescript
+import { rerank } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+```
+
+The recommended starting model is **Xenova/ms-marco-MiniLM-L-6-v2** - it provides the best balance of quality, speed, and download size for most applications.
+
+## Code Example
+
+```typescript
+import { rerank } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+
+const { results } = await rerank({
+  model,
+  query: 'How to deploy a Next.js app?',
+  documents: [
+    'Next.js deployment guide for Vercel',
+    'React state management patterns',
+    'Deploying static sites to Netlify',
+    'Next.js API routes documentation',
+  ],
+});
+
+// Results sorted by relevance score, highest first
+```
+
+This example demonstrates the core workflow: create a model instance from the provider, call the `rerank()` function with your input, and receive structured results sorted by relevance score, highest first. The same pattern works identically across the available provider: Transformers.js.
+
+## Available Models
+
+The following models support search reranking through LocalMode. Choose based on your target device, acceptable download size, and quality requirements.
+
+| Model | Provider | Size | Speed | Quality |
+| --- | --- | --- | --- | --- |
+| Xenova/ms-marco-MiniLM-L-6-v2 | Transformers.js | ~23MB | Fast | Good |
+| Xenova/bge-reranker-base | Transformers.js | ~279MB | Medium | High |
+
+**Choosing a model:** For most applications, start with the recommended model (`Xenova/ms-marco-MiniLM-L-6-v2`) - a 22.7M-parameter MiniLM cross-encoder trained on MS MARCO (MRR@10: 39.01 on MS MARCO Dev). If quality is the priority (e.g., enterprise search, multilingual content), use `Xenova/bge-reranker-base`, a 278M-parameter XLM-RoBERTa-based cross-encoder with strong multilingual performance.
+
+## Cloud vs Local: Cost and Privacy Comparison
+
+Running search reranking locally eliminates per-request API costs and keeps all data on-device. Here is how the economics compare:
+
+| Service | Cost / Notes |
+| --- | --- |
+| Cohere Rerank 3.5 | $2.00 per 1,000 searches (up to 100 docs each) |
+| LocalMode (any model) | $0 - fully local, no per-request cost |
+
+Cohere Rerank 3.5 is priced at $2.00 per 1,000 searches, where a single search covers one query with up to 100 documents. Cloud reranking also adds latency from the network round trip. LocalMode reranking with MiniLM-L-6-v2 runs entirely in the browser (~23MB model) at zero per-request cost. The quality is comparable for common retrieval tasks.
+
+The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
+
+## Available Providers
+
+- **Transformers.js** - ONNX-optimized models via ONNX Runtime Web. Supports both WebGPU and WASM backends. Broadest model catalog for non-LLM tasks.
+
+## AbortSignal Support
+
+All `rerank()` calls support cancellation through the standard `AbortSignal` API:
+
+```typescript
+const controller = new AbortController();
+
+const promise = rerank({
+  model,
+  query: 'input text', documents: ['doc1', 'doc2'],
+  abortSignal: controller.signal,
+});
+
+// Cancel if needed (e.g., user navigates away)
+controller.abort();
+```
+
+This is essential for responsive UIs - cancel in-flight operations when the user navigates away, submits a new query, or closes a dialog. The underlying model inference stops immediately, freeing memory and compute resources.
+
+## React Integration
+
+If you are building a React application, `@localmode/react` provides hooks that manage loading states, error handling, and cancellation automatically:
+
+```bash
+npm install @localmode/react
+```
+
+```typescript
+import { rerank } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+```
+
+Use `rerank()` directly inside a React hook or component. There is no dedicated `useRerank` hook in `@localmode/react` - wrap `rerank()` with `useState` and `useEffect` (or a custom `useOperation` pattern) for loading states, error handling, and cancellation. The `rerankStep` export from `@localmode/react` is available for use inside a `usePipeline()` pipeline.
+
+## Related Pages
+
+- [Bert Ner Reranker](/blog/models/bert-ner-reranker) - model guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+This guide is based on LocalMode's source code and curated model catalog (`packages/transformers/src/models.ts`, `packages/core/src/classification/`). The reranker model table reflects the `RERANKER_MODELS` catalog in the codebase - only `Xenova/ms-marco-MiniLM-L-6-v2` and `Xenova/bge-reranker-base` are in the official catalog. Parameter counts and benchmark scores are sourced from the HuggingFace model cards for `cross-encoder/ms-marco-MiniLM-L-6-v2` and `BAAI/bge-reranker-base`. Cohere Rerank 3.5 pricing ($2.00/1,000 searches) is from Cohere's official pricing page and is subject to change - verify current pricing before making cost decisions.
+
+## Sources
+
+- [LocalMode Core Reranking API - `packages/core/src/classification/rerank.ts`](https://localmode.dev/docs/core/reranking)
+- [LocalMode Transformers Reranking Guide](https://localmode.dev/docs/transformers/reranking)
+- [cross-encoder/ms-marco-MiniLM-L-6-v2 - HuggingFace model card](https://huggingface.co/cross-encoder/ms-marco-MiniLM-L-6-v2) (22.7M params; MRR@10: 39.01 on MS MARCO Dev, NDCG@10: 74.30 on TREC DL 2019)
+- [BAAI/bge-reranker-base - HuggingFace model card](https://huggingface.co/BAAI/bge-reranker-base) (XLM-RoBERTa-based, ~300M params)
+- [Xenova/ms-marco-MiniLM-L-6-v2 - HuggingFace (ONNX)](https://huggingface.co/Xenova/ms-marco-MiniLM-L-6-v2)
+- [Xenova/bge-reranker-base - HuggingFace (ONNX)](https://huggingface.co/Xenova/bge-reranker-base)
+- [Cohere Rerank pricing - cohere.com/pricing](https://cohere.com/pricing) ($2.00/1,000 searches for Rerank 3.5)

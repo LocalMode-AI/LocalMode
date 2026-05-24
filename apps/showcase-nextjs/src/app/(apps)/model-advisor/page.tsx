@@ -4,7 +4,9 @@
  */
 'use client';
 
-import { AdvisorView } from './_components/advisor-view';
+import dynamic from 'next/dynamic';
+
+const AdvisorView = dynamic(() => import('./_components/advisor-view').then((m) => ({ default: m.AdvisorView })), { ssr: false });
 
 /** Model Advisor page component */
 export default function ModelAdvisorPage() {

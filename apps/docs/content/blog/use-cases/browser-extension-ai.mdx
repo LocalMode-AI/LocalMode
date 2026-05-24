@@ -1,0 +1,122 @@
+---
+title: "AI-Powered Browser Extensions"
+description: "Add AI features to browser extensions - classify pages, summarize content, extract entities - without calling localhost APIs."
+author: "LocalMode"
+date: "2026-05-02"
+---
+
+# AI-Powered Browser Extensions
+
+Add AI features to browser extensions - classify pages, summarize content, extract entities - without calling localhost APIs.
+
+*Category: Feature Guide*
+
+## The Problem
+
+Browser extensions can't call localhost APIs like Ollama (blocked by extension security policies). Cloud APIs require API key management in extension code (security risk) and ongoing costs that extension developers may not want to pass to users. Extensions need AI capabilities that work within the browser extension sandbox.
+
+This is a common challenge for teams building modern applications. Traditional approaches either compromise on privacy (by sending data to cloud APIs), require complex server infrastructure (adding cost and maintenance burden), or sacrifice functionality (by avoiding AI entirely). LocalMode provides a fourth option: run the AI locally in the browser.
+
+## The Solution
+
+LocalMode runs directly in browser extension contexts - content scripts, background scripts, offscreen documents, and side panels. Models are loaded once and cached in the extension's IndexedDB. Use offscreen documents for heavy inference tasks (LLM generation) to avoid blocking the main extension UI. Content scripts can run lightweight tasks (classification, NER) directly on page content.
+
+### Why Local-First?
+
+Building this feature with on-device inference provides three structural advantages over cloud-based alternatives:
+
+1. **Zero marginal cost** - After the initial model download, every inference operation is free. No per-token fees, no monthly API bills, no surprise invoices. This matters especially for features used frequently or by many users.
+2. **Architectural privacy** - User data never leaves the device. This is not a policy promise ("we won't look at your data") but an architectural guarantee: the data physically cannot reach any server because the processing happens in the browser tab.
+3. **Offline capability** - Once models are cached in IndexedDB, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
+
+## Technology Stack
+
+| Package | Purpose |
+| --- | --- |
+| `@localmode/core` | classify(), extractEntities(), embed() |
+| `@localmode/transformers` | All ML models for extension context |
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+## Implementation
+
+```typescript
+// offscreen.js - heavy inference in an offscreen document
+import { classify, summarize } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const classifier = transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english');
+const summarizer = transformers.summarizer('Xenova/distilbart-cnn-6-6');
+
+// Return the promise directly - Chrome 116+ resolves async listeners automatically.
+// For Chrome < 116 compatibility, add `return true;` and use the sendResponse callback instead.
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === 'classify') {
+    classify({ model: classifier, text: msg.text }).then(sendResponse);
+    return true; // Keep the message channel open for the async response
+  }
+  if (msg.type === 'summarize') {
+    summarize({ model: summarizer, text: msg.text }).then(sendResponse);
+    return true; // Keep the message channel open for the async response
+  }
+});
+```
+
+### How This Works
+
+The code above demonstrates the complete pipeline. Let us walk through the key decisions:
+
+- **Model selection** - The models referenced in this example are chosen for their balance of size, speed, and quality for this specific use case. Smaller models load faster and use less memory; larger models produce better results. Start with the recommended models and upgrade only if quality is insufficient for your users.
+- **Browser APIs** - LocalMode uses IndexedDB for persistent storage (vectors, model cache), Web Workers for background processing (keeping the UI responsive during inference), and the Web Crypto API for optional encryption.
+- **Error handling** - All LocalMode functions throw typed errors (`ModelLoadError`, `StorageError`, `ValidationError`) with actionable hints. Wrap calls in try/catch and use the error's `hint` property to display user-friendly messages.
+- **Cancellation** - Pass an `AbortSignal` to any long-running operation. This lets users cancel searches, embeddings, or generation without waiting for completion.
+
+## Production Considerations
+
+When deploying this solution to production, consider these factors:
+
+**Model preloading:** Download models during user onboarding or application setup, not on first use. Use `preloadModel()` (exported from `@localmode/transformers` and other provider packages) with an `onProgress` callback to show download progress. This avoids the poor experience of a loading spinner on the first AI interaction.
+
+**Storage management:** IndexedDB has browser-specific quotas (typically up to 60% of total disk space on Chrome, more restrictive on iOS Safari). Use `getStorageQuota()` to check available space and `navigator.storage.persist()` to request persistent storage that survives browser storage pressure.
+
+**Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
+
+**Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
+
+## Frequently Asked Questions
+
+### Which extension contexts support LocalMode?
+
+All of them. Content scripts, background/service workers, offscreen documents, side panels, popup pages, and options pages. For heavy tasks (LLM inference), use offscreen documents to avoid blocking the extension UI.
+
+### How do I handle model downloads in an extension?
+
+Use `preloadModel()` (from `@localmode/transformers` or your chosen provider package) during extension installation or first use. Models cache in the extension's IndexedDB storage (shared across all extension contexts). Subsequent loads are instant from cache.
+
+## Further Reading
+
+- [Chrome Extensions Offscreen Documents](https://developer.chrome.com/docs/extensions/reference/api/offscreen)
+
+## Related Pages
+
+- [Text Classification](/blog/tasks/text-classification) - task guide
+- [Summarization](/blog/tasks/summarization) - task guide
+- [Named Entity Recognition](/blog/tasks/named-entity-recognition) - task guide
+
+## Methodology
+
+All LocalMode API calls (`classify()`, `summarize()`, `extractEntities()`, `getStorageQuota()`, `detectCapabilities()`, `recommendModels()`, `transformers.classifier()`, `transformers.summarizer()`) were verified against the exported symbols in `packages/core/src/index.ts` and `packages/transformers/src/provider.ts`. The `preloadModel()` package attribution was corrected to `@localmode/transformers` (not `@localmode/core`). The IndexedDB quota figure and `onMessage` async pattern were verified against primary Chrome developer documentation fetched during fact-checking.
+
+## Sources
+
+- [chrome.offscreen API reference - Chrome for Developers](https://developer.chrome.com/docs/extensions/reference/api/offscreen) - confirms offscreen API available Chrome 109+, `WORKERS` reason available
+- [Extension service worker lifecycle - Chrome for Developers](https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle) - confirms 30-second idle timeout and 5-minute per-request cap
+- [Longer extension service worker lifetimes - Chrome Blog](https://developer.chrome.com/blog/longer-esw-lifetimes) - Chrome 110+ improvement: extension API calls reset the idle timer
+- [Manifest V3 Content Security Policy - Chrome for Developers](https://developer.chrome.com/docs/extensions/reference/manifest/content-security-policy) - confirms `wasm-unsafe-eval` required for WASM in MV3 (supported since Chrome 103)
+- [Chrome Side Panel API - Chrome for Developers](https://developer.chrome.com/docs/extensions/reference/api/sidePanel) - confirms Side Panel available Chrome 114+
+- [Storage for the web - web.dev](https://web.dev/articles/storage-for-the-web) - confirms Chrome IndexedDB quota is up to 60% of **total** disk space (not "free disk space")
+- [Message passing - Chrome for Developers](https://developer.chrome.com/docs/extensions/develop/concepts/messaging) - confirms async `onMessage` listeners must `return true` when using `sendResponse` callback

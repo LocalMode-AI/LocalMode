@@ -1,0 +1,123 @@
+---
+title: "Hermes 3 Models in the Browser"
+description: "NousResearch's Hermes 3 - fine-tuned Llama variants optimized for function calling, structured output, and agentic workflows."
+author: "LocalMode"
+date: "2026-04-12"
+---
+
+# Hermes 3 Models in the Browser
+
+NousResearch's Hermes 3 - fine-tuned Llama variants optimized for function calling, structured output, and agentic workflows.
+
+## Overview
+
+The Hermes 3 family is available through WebLLM (WebGPU) in LocalMode, with model sizes ranging from 1.76GB–4.9GB. The primary task for these models is **generation**, and they can be used with any application built on the LocalMode SDK.
+
+Running Hermes 3 models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+Hermes 3 by NousResearch is a fine-tune of Meta's Llama models specifically optimized for structured interactions: function calling, JSON output, tool use, and multi-turn agentic workflows. While the base Llama models are general-purpose, Hermes 3 adds training data focused on reliable instruction following and format adherence.
+
+This makes Hermes 3 the recommended choice for LocalMode's agent framework. When using createAgent() with tool definitions, Hermes 3 models produce more reliable tool calls and better-structured JSON outputs compared to base Llama models. The 3B variant (1.76GB) is practical for most devices, while the 8B variant (4.9GB) delivers near-frontier quality for complex multi-step agentic tasks.
+
+Both variants are available exclusively through WebLLM, requiring Chrome or Edge with WebGPU support. They share the Llama tokenizer and architecture, so switching between Hermes and standard Llama models requires no code changes - just a different model ID.
+
+## Variant Comparison
+
+The following table lists every Hermes 3 variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Hermes-3-Llama-3.2-3B-q4f16_1-MLC](https://huggingface.co/NousResearch/Hermes-3-Llama-3.2-3B) | WebLLM (WebGPU) | 1.76GB | Medium | High | 4,096 tokens | WEBGPU |
+| [Hermes-3-Llama-3.1-8B-q4f16_1-MLC](https://huggingface.co/NousResearch/Hermes-3-Llama-3.1-8B) | WebLLM (WebGPU) | 4.9GB | Slow | High | 4,096 tokens | WEBGPU |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| 1.5GB–3GB | 1 | variant |
+| Over 3GB | 1 | variant |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All Hermes 3 variants use the same `LanguageModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### WebLLM (WebGPU)
+
+WebLLM compiles models to WebGPU compute shaders for maximum inference speed. Requires Chrome 113+, Edge 113+, or Safari 26+.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+const model = webllm.languageModel('Hermes-3-Llama-3.2-3B-q4f16_1-MLC');
+
+const result = await streamText({
+  model,
+  prompt: 'Explain how Hermes 3 models work.',
+  maxTokens: 300,
+  temperature: 0.7,
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+### Fallback Pattern
+
+Hermes 3 models are WebGPU-only (via WebLLM). If WebGPU is unavailable, fall back to a different model family that supports WASM - for example, a wllama GGUF model or a transformers ONNX model.
+
+```typescript
+import { webllm } from '@localmode/webllm';
+import { isWebGPUSupported } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+// Hermes 3 requires WebGPU; fall back to wllama on unsupported browsers
+let model;
+if (isWebGPUSupported()) {
+  model = webllm.languageModel('Hermes-3-Llama-3.2-3B-q4f16_1-MLC');
+} else {
+  console.warn('WebGPU unavailable, using wllama fallback');
+  model = wllama.languageModel('Llama-3.2-3B-Instruct-Q4_K_M');
+}
+```
+
+## When to Use Hermes 3
+
+Hermes 3 models are a strong choice when:
+
+- **You need text generation** - Hermes 3 is optimized for generation tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through WebLLM (WebGPU), which supports Chrome 113+, Edge 113+, and Safari 26+. Firefox 141+ (Windows) / 147+ (macOS Apple Silicon) for WebGPU.
+- **Size flexibility is important** - The 1.76GB–4.9GB range means you can target everything from mobile devices to high-end desktops with the same model family.
+- **Offline functionality is required** - All variants work offline after the initial download, cached in IndexedDB via LocalMode's model caching system.
+
+## HuggingFace Model Cards
+
+- [Hermes-3-Llama-3.2-3B-q4f16_1-MLC](https://huggingface.co/NousResearch/Hermes-3-Llama-3.2-3B)
+- [Hermes-3-Llama-3.1-8B-q4f16_1-MLC](https://huggingface.co/NousResearch/Hermes-3-Llama-3.1-8B)
+
+## Related Pages
+
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Smollm2](/blog/models/smollm2) - model guide
+- [Qwen](/blog/models/qwen) - model guide
+
+## Methodology
+
+The model data on this page - sizes, context lengths, quantization formats, and provider availability - is extracted directly from LocalMode's source code: the curated model registry (`packages/core/src/capabilities/model-registry.ts`) and the provider catalogs (`packages/webllm/src/models.ts`, `packages/wllama/src/models.ts`, `packages/transformers/src/models.ts`). Download sizes reflect the quantized model files as published by their respective model authors. Performance characteristics (speed and quality tiers) are LocalMode's curated assessments based on parameter count, quantization, and architecture. Always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [NousResearch/Hermes-3-Llama-3.2-3B - HuggingFace model card](https://huggingface.co/NousResearch/Hermes-3-Llama-3.2-3B) - base model, benchmark scores, ChatML format
+- [NousResearch/Hermes-3-Llama-3.1-8B - HuggingFace model card](https://huggingface.co/NousResearch/Hermes-3-Llama-3.1-8B) - base model specs, confirmed 128K context
+- [NousResearch/Hermes-3-Llama-3.1-8B - context length discussion](https://huggingface.co/NousResearch/Hermes-3-Llama-3.1-8B/discussions/3) - teknium (NousResearch) confirms 128K context
+- [mlc-ai/Hermes-3-Llama-3.2-3B-q4f16_1-MLC - HuggingFace](https://huggingface.co/mlc-ai/Hermes-3-Llama-3.2-3B-q4f16_1-MLC) - MLC quantized variant
+- [mlc-ai/Hermes-3-Llama-3.1-8B-q4f16_1-MLC - HuggingFace](https://huggingface.co/mlc-ai/Hermes-3-Llama-3.1-8B-q4f16_1-MLC) - MLC quantized variant
+- [WebLLM config.ts - context_window_size for all models](https://github.com/mlc-ai/web-llm/blob/main/src/config.ts) - confirms 4,096 token context window for both Hermes MLC variants
+- [Hermes 3 Technical Report (arXiv 2408.11857)](https://arxiv.org/abs/2408.11857) - NousResearch, August 2024
+- [Nous Research Hermes 3 announcement](https://nousresearch.com/hermes3) - official release page
+- [LocalMode WebLLM model catalog](https://github.com/mlc-ai/web-llm) - `packages/webllm/src/models.ts` (source of truth for sizes and context lengths in LocalMode)

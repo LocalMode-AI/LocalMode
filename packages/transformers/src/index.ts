@@ -102,6 +102,7 @@ export {
   IMAGE_TO_IMAGE_MODELS,
   IMAGE_FEATURE_MODELS,
   TRANSFORMERS_LLM_MODELS,
+  VAD_MODELS,
   getLLMModelCategory,
 } from './models.js';
 
@@ -121,5 +122,22 @@ export {
   TransformersCaptionModel,
   TransformersCLIPEmbeddingModel,
   TransformersLanguageModel,
+  TransformersGenerativeOCRModel,
+  isGenerativeOCRModel,
+  TransformersSileroVAD,
+  createSileroVAD,
 } from './implementations/index.js';
 
+export type { SileroVADSettings } from './implementations/silero-vad.js';
+
+// ═══════════════════════════════════════════════════════════════
+// KOKORO VOICE CATALOG
+// ═══════════════════════════════════════════════════════════════
+
+export {
+  KOKORO_VOICES,
+  KOKORO_DEFAULT_VOICE,
+  KOKORO_LANG_MAP,
+} from './kokoro-voices.js';
+
+export type { KokoroVoice } from './kokoro-voices.js';

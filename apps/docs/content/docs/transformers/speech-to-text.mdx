@@ -21,8 +21,8 @@ Transcribe audio to text using Moonshine models running locally in the browser. 
 
 | Model | Size | Speed | Quality | Use Case |
 |-------|------|-------|---------|----------|
-| `onnx-community/moonshine-tiny-ONNX` | ~35MB | ⚡⚡⚡ | Good | Quick transcription, voice notes |
-| `onnx-community/moonshine-base-ONNX` | ~65MB | ⚡⚡ | Better | Higher accuracy |
+| `onnx-community/moonshine-tiny-ONNX` | ~50MB | ⚡⚡⚡ | Good | Quick transcription, voice notes |
+| `onnx-community/moonshine-base-ONNX` | ~237MB | ⚡⚡ | Better | Higher accuracy |
 
 ## Voice Notes Example
 
@@ -82,7 +82,7 @@ The `audio` parameter accepts:
 ## Best Practices
 
 <Callout type="tip" title="STT Tips">
-  1. **Start with moonshine-tiny** — Fast to download (~35MB) and good enough for most use cases
+  1. **Start with moonshine-tiny** — Fast to download (~50MB) and good enough for most use cases
   2. **Use WebM or OGG** — These formats work well with MediaRecorder
   3. **Support cancellation** — Transcription can take time; always pass `abortSignal`
   4. **Handle permissions** — Request microphone access gracefully with fallback UI
@@ -95,6 +95,36 @@ The `audio` parameter accepts:
 | Voice Notes | Record and transcribe audio with Moonshine models | [Demo](https://localmode.ai/voice-notes) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/voice-notes) |
 | Meeting Assistant | Transcribe meeting recordings for summarization | [Demo](https://localmode.ai/meeting-assistant) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/meeting-assistant) |
 
+## Live streaming
+
+For microphone-driven streaming transcription with Voice Activity Detection (push-to-talk and open-mic modes), see [`/docs/core/live-transcribe`](/docs/core/live-transcribe). It builds on top of any `SpeechToTextModel` returned by `transformers.speechToText()` — no model changes required.
+
+<Callout type="info" title="Recommended models for live mode">
+
+| Model | Size | Latency | Notes |
+| --- | --- | --- | --- |
+| `onnx-community/moonshine-tiny-ONNX` | ~50MB | Lowest | Best for live push-to-talk; 30s window |
+| `onnx-community/moonshine-base-ONNX` | ~237MB | Low | Higher quality, still fast on WebGPU |
+| `Xenova/whisper-tiny` | ~70MB | Medium | Multilingual; chunk via `maxUtteranceSec` |
+
+For VAD, use `transformers.vad('onnx-community/silero-vad')` (~1.8MB) for production-quality open-mic. The built-in energy VAD covers push-to-talk with no extra downloads.
+
+</Callout>
+
+```ts
+import { transformers } from '@localmode/transformers';
+import { createLiveTranscriber } from '@localmode/core';
+
+const transcriber = await createLiveTranscriber({
+  model: transformers.speechToText('onnx-community/moonshine-tiny-ONNX'),
+  mode: 'open-mic',
+  vad: transformers.vad('onnx-community/silero-vad'),
+});
+
+transcriber.onUtteranceEnd((u) => console.log(u.text));
+await transcriber.start();
+```
+
 ## Next Steps
 
 <Cards>
@@ -102,6 +132,11 @@ The `audio` parameter accepts:
     title="Core Audio API"
     href="/docs/core/audio"
     description="Full API reference, options, result types, and custom providers."
+  />
+  <Card
+    title="Live Transcribe"
+    href="/docs/core/live-transcribe"
+    description="Streaming microphone-driven STT with VAD, barge-in, and turn-taking."
   />
   <Card
     title="Text-to-Speech"

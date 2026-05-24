@@ -1,0 +1,109 @@
+---
+title: "DINOv2 Image Features Models in the Browser"
+description: "Meta's self-supervised image feature extraction models - powerful visual representations without task-specific training."
+author: "LocalMode"
+date: "2026-04-09"
+---
+
+# DINOv2 Image Features Models in the Browser
+
+Meta's self-supervised image feature extraction models - powerful visual representations without task-specific training.
+
+## Overview
+
+The DINOv2 Image Features family is available through Transformers.js in LocalMode, with FP32 model sizes ranging from ~86–347 MB (quantized variants are substantially smaller). The primary task for these models is **image-features**, and they can be used with any application built on the LocalMode SDK.
+
+Running DINOv2 Image Features models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+DINOv2 (Distillation with No Labels v2) is Meta's self-supervised vision model that learns powerful visual representations from images alone - no labeled training data required. The resulting feature vectors capture rich semantic information about image content, composition, texture, and structure. These features can be used for image similarity, visual search, clustering, and as inputs to downstream classifiers.
+
+The key advantage of DINOv2 over CLIP/SigLIP is that DINOv2 features are purely visual - they capture what an image looks like without anchoring to text descriptions. This makes them better for tasks like finding visually similar images regardless of semantic content: "show me photos with similar lighting," "find images with this texture pattern," or "cluster product photos by visual style."
+
+DINOv2-base (ViT-B/14, patch size 14) produces 768-dimensional feature vectors from 224×224 input images, with 86M parameters. The dinov3 variant uses the ViT-S/16 architecture from Meta's officially released DINOv3 model (arXiv 2508.10104), offering a lighter alternative at 384 dimensions and 21M parameters. Both models run through Transformers.js on WASM and work in all modern browsers.
+
+Practical applications include: visual duplicate detection (finding near-identical images in a collection), style-based recommendations (suggesting products with similar visual aesthetics), image clustering for photo organization, and quality assessment (comparing feature distributions between high and low quality images). Combined with LocalMode's VectorDB, you can build a complete visual search engine running entirely in the browser.
+
+## Variant Comparison
+
+The following table lists every DINOv2 Image Features variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [onnx-community/dinov2-base-ONNX](https://huggingface.co/onnx-community/dinov2-base-ONNX) | Transformers.js | 347MB | Medium | High | 768d | WASM |
+| [onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX](https://huggingface.co/onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX) | Transformers.js | 86MB | Fast | Good | 384d | WASM |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| 200MB–500MB | 1 | variant |
+| Under 200MB | 1 | variant |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All DINOv2 Image Features variants use the same `ImageFeatureModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### Transformers.js
+
+Transformers.js runs ONNX-optimized models via ONNX Runtime Web. WebGPU acceleration where available, WASM fallback otherwise.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.imageFeatures('onnx-community/dinov2-base-ONNX');
+// Use the model with the corresponding @localmode/core function
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred model first, and fall back to a smaller variant if it fails to load.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+// Try the preferred model, fall back to a smaller one on failure
+let model;
+try {
+  model = transformers.imageFeatures('onnx-community/dinov2-base-ONNX');
+} catch (error) {
+  console.warn('Primary model failed, using fallback:', error);
+  model = transformers.imageFeatures('onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX');
+}
+```
+
+## When to Use DINOv2 Image Features
+
+DINOv2 Image Features models are a strong choice when:
+
+- **You need image-features** - DINOv2 Image Features is optimized for image-features tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 1 provider (transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The ~86-347MB range (FP32) means you can target everything from mobile devices to high-end desktops with the same model family.
+
+
+## HuggingFace Model Cards
+
+- [dinov2-base-ONNX](https://huggingface.co/onnx-community/dinov2-base-ONNX)
+- [dinov3-vits16-pretrain-lvd1689m-ONNX](https://huggingface.co/onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX)
+
+
+
+## Methodology
+
+The model data on this page - sizes, embedding dimensions, and provider availability - was verified against LocalMode's source code (`packages/transformers/src/models.ts`, `packages/transformers/src/implementations/image-feature.ts`) and directly against the HuggingFace ONNX model repositories. Model sizes reflect the FP32 `model.onnx` / `model.onnx_data` files as published; quantized variants (int8, q4, fp16) are substantially smaller (21–91 MB for these models). DINOv2 architecture details (ViT-B/14, 86M parameters, 768d; ViT-S/16, 21M parameters, 384d) were verified against the DINOv2 paper (arXiv:2304.07193) and the facebookresearch/dinov2 MODEL_CARD. DINOv3 details were verified against the official Meta DINOv3 paper (arXiv:2508.10104) and the facebook/dinov3-vits16-pretrain-lvd1689m model card. Performance characteristics (speed and quality tiers) are LocalMode's curated assessments based on parameter count and architecture. Always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [onnx-community/dinov2-base-ONNX - HuggingFace model card](https://huggingface.co/onnx-community/dinov2-base-ONNX) (FP32 model size, task, Transformers.js support)
+- [facebook/dinov2-base - HuggingFace model card](https://huggingface.co/facebook/dinov2-base) (86.6M parameters, source model)
+- [facebookresearch/dinov2 MODEL_CARD.md - GitHub](https://github.com/facebookresearch/dinov2/blob/main/MODEL_CARD.md) (all variant specs: ViT-S/14 21M/384d, ViT-B/14 86M/768d, ViT-L/14 300M/1024d, ViT-g/14 1.1B/1536d)
+- [DINOv2: Learning Robust Visual Features without Supervision - arXiv:2304.07193](https://arxiv.org/abs/2304.07193) (architecture, patch size 14, embedding dimensions)
+- [onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX - HuggingFace model card](https://huggingface.co/onnx-community/dinov3-vits16-pretrain-lvd1689m-ONNX) (FP32 model size ~86 MB)
+- [facebook/dinov3-vits16-pretrain-lvd1689m - HuggingFace model card](https://huggingface.co/facebook/dinov3-vits16-pretrain-lvd1689m) (official Meta DINOv3 ViT-S/16, 21M parameters, 384d)
+- [DINOv3 - arXiv:2508.10104](https://arxiv.org/abs/2508.10104) (official Meta DINOv3 paper confirming ViT-S/16 variant)
+- [DINOv3 - Meta AI Research](https://ai.meta.com/research/publications/dinov3/) (official Meta publication page)
+- [LocalMode transformers provider source](https://localmode.dev/docs/transformers) (imageFeatures API, IMAGE_FEATURE_MODELS catalog)
+- [Transformers.js documentation](https://huggingface.co/docs/transformers.js)

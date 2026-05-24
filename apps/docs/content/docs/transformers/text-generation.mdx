@@ -1,5 +1,5 @@
 ---
-title: Text Generation (Experimental)
+title: Text Generation
 description: Run ONNX language models in the browser with WebGPU acceleration.
 icon: MessageSquare
 ---
@@ -7,11 +7,7 @@ icon: MessageSquare
 import { Callout } from 'fumadocs-ui/components/callout';
 import { Card, Cards } from 'fumadocs-ui/components/card';
 
-Run ONNX-format language models directly in the browser using Transformers.js v4 with WebGPU acceleration and automatic WASM fallback.
-
-<Callout type="warn">
-  **Experimental**: This feature uses Transformers.js v4 which is currently a preview release (`@next` tag). The API may change in future releases.
-</Callout>
+Run ONNX-format language models directly in the browser using Transformers.js with WebGPU acceleration and automatic WASM fallback.
 
 <Callout type="info">
   For full API reference (`generateText()`, `streamText()`, options, result types, and middleware), see the [Core Generation](/docs/core/generation) guide.
@@ -21,32 +17,40 @@ Run ONNX-format language models directly in the browser using Transformers.js v4
   Try [LLM Chat](https://localmode.ai/llm-chat) for a working demo.
 </Callout>
 
-## 3-Tier Fallback
+## 4-Tier Fallback
 
-LocalMode offers three LLM providers, each with different trade-offs:
+LocalMode offers four LLM providers, each with different trade-offs:
 
-| Provider | Format | Best For | Speed |
+| Provider | Format | Best For | Notes |
 |----------|--------|----------|-------|
-| `@localmode/webllm` | MLC-compiled | Fastest inference, limited models | 60-100 tok/s |
-| `@localmode/transformers` | ONNX (TJS v4) | Broad model selection, WebGPU | 40-60 tok/s |
-| `@localmode/wllama` | GGUF (llama.cpp) | Universal browser support | 5-15 tok/s |
+| `@localmode/litert` | `.litertlm` (Google) | Google's officially-supported Gemma 4 pipeline | 3 verified models; text-only; early preview |
+| `@localmode/webllm` | MLC-compiled | Fastest WebGPU inference | 32 curated models (incl. Phi 3.5 Vision); WebGPU required |
+| `@localmode/transformers` | ONNX | Broad model selection, WebGPU + WASM | 16 curated ONNX LLMs (5 vision); auto-fallback to WASM |
+| `@localmode/wllama` | GGUF (llama.cpp) | Universal browser support | 18 curated + 160K+ GGUF models; no GPU required |
 
-Use `createProviderWithFallback()` for automatic failover:
+Use a try/catch chain for automatic failover:
 
 ```typescript
-import { createProviderWithFallback } from '@localmode/core';
+import { litert } from '@localmode/litert';
 import { webllm } from '@localmode/webllm';
 import { transformers } from '@localmode/transformers';
 import { wllama } from '@localmode/wllama';
 
-const model = await createProviderWithFallback({
-  providers: [
-    () => webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
-    () => transformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX'),
-    () => wllama.languageModel('bartowski/Llama-3.2-1B-Instruct-GGUF:Q4_K_M'),
-  ],
-  onFallback: (error, idx) => console.warn(`Provider ${idx} failed:`, error),
-});
+let model;
+try {
+  // Google's optimized engine for supported devices
+  model = litert.languageModel('qwen3-0.6B');
+} catch {
+  try {
+    model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+  } catch {
+    try {
+      model = transformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX');
+    } catch {
+      model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+    }
+  }
+}
 ```
 
 ## Recommended ONNX Models
@@ -84,6 +88,12 @@ const model = await createProviderWithFallback({
 | Model | Size | Context | Use Case |
 |-------|------|---------|----------|
 | `onnx-community/Qwen3.5-4B-ONNX` | ~2.5GB | 32K | **Vision** — best Qwen3.5 for browser, multimodal, needs 8GB+ RAM |
+| `onnx-community/gemma-4-E2B-it-ONNX` | ~1.5GB | 128K | **Vision** — Google Gemma 4 E2B multimodal, 128K context, needs 6GB+ VRAM |
+| `onnx-community/gemma-4-E4B-it-ONNX` | ~3GB | 128K | **Vision** — Google Gemma 4 E4B multimodal, 128K context, needs 8GB+ VRAM |
+
+<Callout type="warn" title="Gemma 4 ONNX performance">
+  Gemma 4 via Transformers.js achieves ~2 tok/s on WebGPU — significantly slower than the LiteRT path (~14-16 tok/s). Use `@localmode/litert` for text-only performance. The ONNX path is valuable for **vision/multimodal** support and **WASM fallback** when WebGPU is unavailable. See [Gemma 4: LiteRT vs ONNX](/blog/compare/gemma4-litert-vs-onnx) for a detailed comparison.
+</Callout>
 
 ## Quick Start
 
@@ -159,7 +169,7 @@ const model = myTransformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX', {
 
 ## Vision (Image Input)
 
-Qwen3.5 models support image input via their built-in vision encoder. Check `model.supportsVision` for feature detection:
+Qwen3.5 and Gemma 4 models support image input via their built-in vision encoder. Check `model.supportsVision` for feature detection:
 
 ```typescript
 const model = transformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX');
@@ -193,12 +203,12 @@ const model = transformers.languageModel('your-org/custom-model-ONNX');
 ```
 
 <Callout type="warn">
-  Not all ONNX models work in the browser. The model must support the TJS v4 `text-generation` pipeline. Stick to the recommended models above for best results.
+  Not all ONNX models work in the browser. The model must support the Transformers.js `text-generation` pipeline. Stick to the recommended models above for best results.
 </Callout>
 
 ## Showcase Apps
 
-The [LLM Chat](https://localmode.ai/llm-chat) showcase app demonstrates ONNX models alongside WebLLM and wllama backends. Select a Qwen3.5 model to try vision input with image uploads.
+The [LLM Chat](https://localmode.ai/llm-chat) showcase app demonstrates ONNX models alongside the WebLLM, wllama, and LiteRT backends. Select a Qwen3.5 or Gemma 4 model to try vision input with image uploads.
 
 | App | Description | Links |
 |-----|-------------|-------|

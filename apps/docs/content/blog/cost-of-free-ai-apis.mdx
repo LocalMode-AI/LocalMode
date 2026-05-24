@@ -11,7 +11,7 @@ The pitch is seductive: sign up, grab an API key, call `fetch()`, get intelligen
 
 So teams build on cloud APIs. They embed millions of documents into 1536-dimensional OpenAI vectors. They route every classification through GPT-4o. They wire Cohere reranking into every search query. The architecture hardens. The dependency deepens.
 
-Then launch day arrives and the rate limiter fires. Or a December outage takes your product offline for six hours. Or your GDPR audit reveals you need data processing agreements with four AI sub-processors. Or a competitor ships the same feature at zero marginal cost because their inference runs on-device.
+Then launch day arrives and the rate limiter fires. Or a December outage takes your product offline for nine hours. Or your GDPR audit reveals you need data processing agreements with four AI sub-processors. Or a competitor ships the same feature at zero marginal cost because their inference runs on-device.
 
 This post is not anti-cloud. Cloud APIs are excellent for prototyping, for frontier reasoning tasks, and for workloads where local models genuinely cannot compete. But the industry's default advice -- "just use the API" -- systematically understates the total cost of that decision. Here are six hidden costs that never appear on the pricing page, and a concrete strategy for hedging against every one of them.
 
@@ -33,7 +33,7 @@ The result: your best days become your most fragile days. The architecture that 
 
 ## 2. Today's Price Cut Is Tomorrow's Leverage
 
-OpenAI's pricing has dropped dramatically since GPT-4's launch. The original GPT-4 cost $30 per million input tokens and $60 per million output tokens in May 2023. GPT-4o launched in May 2024 at $5/$15, then dropped to $2.50/$10 -- a cumulative reduction of over 90% on input tokens ([OpenAI Pricing](https://openai.com/api/pricing/), [Nebuly GPT-4 Pricing History](https://www.nebuly.com/blog/openai-gpt-4-api-pricing)).
+OpenAI's pricing has dropped dramatically since GPT-4's launch. The original GPT-4 cost $30 per million input tokens and $60 per million output tokens in May 2023. GPT-4o launched in May 2024 at $5/$15, then dropped to $2.50/$10 -- a cumulative reduction of over 90% on input tokens ([OpenAI Pricing](https://openai.com/api/pricing/), [Nebuly GPT-4 Pricing History](https://web.archive.org/web/20250119175245/https://www.nebuly.com/blog/openai-gpt-4-api-pricing)).
 
 That trend is real, and it benefits everyone using the API today. But it also reveals something important: **the vendor controls the price, and you do not.**
 
@@ -51,7 +51,7 @@ This is the most underappreciated form of vendor lock-in in the AI stack. When y
 
 If you need to switch providers, you must **re-embed your entire corpus from scratch**. For a 100-million-document corpus, that means re-processing every document through the new model's API. At OpenAI's embedding rate of $0.02 per million tokens, the API cost alone for re-embedding 100 million documents (averaging 500 tokens each) is approximately $1,000. But the real cost is the engineering time: rebuilding indexes, validating search quality against the new embedding space, updating dimension configurations across your vector database, and running A/B tests to ensure retrieval quality has not regressed. The total migration cost for a production system is measured in engineering-weeks, not dollars ([Zilliz: Embedding Model Cost Considerations](https://zilliz.com/ai-faq/what-are-the-cost-considerations-for-different-embedding-models)).
 
-HashiCorp's 2023 State of Cloud Strategy survey found that 48% of tech firms and 34% of non-tech firms cite avoiding vendor lock-in as a key reason for adopting multi-cloud architectures ([HashiCorp State of Cloud Strategy 2023](https://www.hashicorp.com/en/resources/state-of-cloud-strategy-survey)). The same logic applies to AI inference -- but the switching cost for embeddings is worse than for compute, because the data itself (the vectors) becomes provider-specific.
+HashiCorp's 2023 State of Cloud Strategy survey found that 48% of tech firms and 34% of non-tech firms cite avoiding vendor lock-in as a key reason for adopting multi-cloud architectures ([HashiCorp State of Cloud Strategy 2023](https://www.hashicorp.com/en/blog/hashicorp-state-of-cloud-strategy-survey-2023-the-tech-sector-perspective)). The same logic applies to AI inference -- but the switching cost for embeddings is worse than for compute, because the data itself (the vectors) becomes provider-specific.
 
 **Local embeddings use open-weight models with documented, reproducible embedding spaces.** `bge-small-en-v1.5` produces 384-dimensional vectors that you can generate on any device, with any framework, at any time. If a better model appears next year, you can re-embed at zero API cost -- the only cost is the compute time on your users' devices, which you can spread across the fleet using background processing.
 
@@ -87,9 +87,9 @@ As our [DocuSearch case study](/blog/cut-ai-api-bill-200k) documented, reducing 
 
 ## 5. Their Outage Is Your Outage
 
-On December 26, 2024, a power failure in a cloud provider data center took down ChatGPT, Sora, and multiple OpenAI APIs with error rates exceeding 90%. Recovery took approximately five hours of degraded service. One week later, on January 2, 2025, another major outage hit ChatGPT and API services, with full recovery not achieved until 8:16 PM PST -- over nine hours. On January 23, 2025, a Cosmos DB failure and pod crash-looping caused approximately 50 minutes of downtime ([OpenAI Status Page](https://status.openai.com/), [Search Engine Journal: Major Outage Hits OpenAI](https://www.searchenginejournal.com/major-outage-hits-openai-chatgpt/536299/)).
+On December 26, 2024, a power failure in a cloud provider data center took down ChatGPT, Sora, and multiple OpenAI APIs with error rates exceeding 90%. The incident began at 10:40 AM PST; ChatGPT did not fully recover until 8:16 PM PST -- approximately 9.5 hours of degraded service. On January 23, 2025, a Cosmos DB failure and pod crash-looping caused roughly 3.5 hours of elevated errors (3:30 AM – 7:08 AM PT) ([OpenAI Status Page](https://status.openai.com/incidents/01JMYB44RFAHDFT1HWDPD0M2N5), [Search Engine Journal: Major Outage Hits OpenAI](https://www.searchenginejournal.com/major-outage-hits-openai-chatgpt/536299/)).
 
-Multiple major outages within a single month. If your application depends on those APIs, your users experienced repeated disruptions -- and you had zero ability to mitigate any of them.
+Two major outages within a single month. If your application depends on those APIs, your users experienced repeated disruptions -- and you had zero ability to mitigate any of them.
 
 The broader trend is worsening. The Uptrends State of API Reliability 2025 report found that average API uptime fell from 99.66% to 99.46% between Q1 2024 and Q1 2025 -- a 60% increase in downtime year-over-year. Weekly API downtime rose from 34 minutes to 55 minutes ([Uptrends: State of API Reliability 2025](https://www.uptrends.com/state-of-api-reliability-2025)). Meanwhile, the cost of that downtime is rising: enterprise downtime averaged $14,056 per minute in 2024, with 41% of enterprises reporting hourly costs between $1 million and $5 million ([DemandSage: Internet Outage Statistics](https://www.demandsage.com/internet-outage-statistics/), [DataStackHub: Cloud Downtime Statistics](https://www.datastackhub.com/insights/cloud-downtime-statistics/)).
 
@@ -183,22 +183,25 @@ The cloud is not the enemy. Undiversified dependency on the cloud is.
 
 ## Methodology
 
-All pricing data collected from official vendor pricing pages in March 2026. Rate limit information from OpenAI's official documentation and third-party guides verified against platform settings. Outage data from official status pages and industry reporting. GDPR enforcement data from the CMS GDPR Enforcement Tracker. Vendor lock-in statistics from published industry surveys.
+Pricing data collected from official vendor pricing pages and verified via web research in May 2026; API pricing changes frequently and all figures should be re-verified against official pricing pages before making business decisions. Rate limit information from OpenAI's official documentation verified against platform settings. Outage timelines sourced directly from OpenAI's official status page incident reports. GDPR enforcement data from the CMS GDPR Enforcement Tracker (editorial deadline March 1, 2025). Downtime cost data from the 2024 EMA/BigPanda "IT outages: costs and containment" research report. Vendor lock-in statistics from published industry surveys.
 
 ### Sources
 
 **Pricing and Rate Limits:**
-- [OpenAI API Pricing](https://openai.com/api/pricing/) -- GPT-4o, embeddings, Whisper pricing as of March 2026
+- [OpenAI API Pricing](https://openai.com/api/pricing/) -- GPT-4o ($2.50/$10.00 per 1M input/output tokens), text-embedding-3-small ($0.02/1M tokens), Whisper ($0.006/min); verified May 2026. GPT-4o launched at $5/$15 in May 2024, reduced to $2.50/$10 in August 2024 with the gpt-4o-2024-08-06 model version.
 - [OpenAI Rate Limits Documentation](https://platform.openai.com/docs/guides/rate-limits) -- TPM, RPM, tier progression
 - [Inference.net: OpenAI Rate Limits Guide](https://inference.net/content/openai-rate-limits-guide/) -- Tier-specific limit breakdowns
-- [Nebuly: GPT-4 API Pricing History](https://www.nebuly.com/blog/openai-gpt-4-api-pricing) -- Original GPT-4 pricing ($30/$60 per 1M tokens)
-- [Cohere Pricing](https://cohere.com/pricing) -- Rerank pricing ($2/1K searches)
+- [Nebuly: GPT-4 API Pricing History](https://web.archive.org/web/20250119175245/https://www.nebuly.com/blog/openai-gpt-4-api-pricing) -- Original GPT-4 pricing ($30/$60 per 1M tokens)
+- [Cohere Pricing](https://cohere.com/pricing) -- Rerank 3.5 pricing ($2/1K searches, pay-as-you-go; verified via Cohere docs May 2026)
+- [Cohere: How Does Cohere Pricing Work?](https://docs.cohere.com/docs/how-does-cohere-pricing-work) -- Rerank billing definition (one query + up to 100 documents = one search unit)
 
 **Outages and Reliability:**
-- [OpenAI Status Page](https://status.openai.com/) -- December 26, 2024, January 2, 2025, and January 23, 2025 incidents
+- [OpenAI Status Page - Dec 26, 2024 incident](https://status.openai.com/incidents/01JMYB44RFAHDFT1HWDPD0M2N5) -- power failure, 10:40 AM – 8:16 PM PST (~9.5 hours)
+- [OpenAI Status Page - Jan 23, 2025 incident](https://status.openai.com/incidents/01JMYB40J9DVR9D13RJN1W5SWV) -- Cosmos DB failure and pod crash-looping, ~3.5 hours
 - [Search Engine Journal: Major Outage Hits OpenAI](https://www.searchenginejournal.com/major-outage-hits-openai-chatgpt/536299/) -- December 2024 outage reporting
 - [Uptrends: State of API Reliability 2025](https://www.uptrends.com/state-of-api-reliability-2025) -- API uptime decline from 99.66% to 99.46%
-- [DemandSage: Internet Outage Statistics 2026](https://www.demandsage.com/internet-outage-statistics/) -- $14,056/minute average downtime cost
+- [BigPanda/EMA: IT Outages 2024 Costs and Containment](https://www.bigpanda.io/ar-ema-outage-cost-2024/) -- $14,056/minute average enterprise downtime cost (primary source: EMA research commissioned by BigPanda, 2024)
+- [DemandSage: Internet Outage Statistics 2026](https://www.demandsage.com/internet-outage-statistics/) -- secondary citation for downtime cost figures
 - [DataStackHub: Cloud Downtime Statistics](https://www.datastackhub.com/insights/cloud-downtime-statistics/) -- 41% of enterprises report $1-5M/hour downtime cost
 - [DataStackHub: Cloud Outage Statistics](https://www.datastackhub.com/insights/cloud-outage-statistics/) -- 86% multi-cloud adoption for resilience
 
@@ -208,11 +211,8 @@ All pricing data collected from official vendor pricing pages in March 2026. Rat
 - [Termly: 61 Biggest GDPR Fines](https://termly.io/resources/articles/biggest-gdpr-fines/) -- Meta EUR 1.2B, LinkedIn EUR 310M, Uber EUR 290M, TikTok EUR 345M
 
 **Vendor Lock-In:**
-- [HashiCorp State of Cloud Strategy 2023](https://www.hashicorp.com/en/resources/state-of-cloud-strategy-survey) -- 48% of tech firms cite lock-in avoidance as multi-cloud driver
-- [Broadcom VMware pricing changes](https://arstechnica.com/information-technology/2024/01/vmware-by-broadcom-kills-perpetual-licenses-
-
-
-/) -- 2-12x price increases post-acquisition, widely reported in 2024
+- [HashiCorp State of Cloud Strategy 2023](https://www.hashicorp.com/en/blog/hashicorp-state-of-cloud-strategy-survey-2023-the-tech-sector-perspective) -- 48% of tech firms cite lock-in avoidance as multi-cloud driver
+- [Broadcom VMware pricing changes](https://www.techradar.com/pro/broadcom-is-cracking-down-on-some-vmware-users-hard-heres-why) -- 2-12x price increases post-acquisition, widely reported in 2024
 - [Zilliz: Embedding Model Cost Considerations](https://zilliz.com/ai-faq/what-are-the-cost-considerations-for-different-embedding-models) -- Re-embedding migration costs
 - [Wikipedia: Enshittification](https://en.wikipedia.org/wiki/Enshittification) -- Platform degradation lifecycle, Macquarie Dictionary 2024 Word of the Year
 

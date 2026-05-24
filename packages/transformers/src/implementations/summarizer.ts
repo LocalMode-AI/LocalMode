@@ -55,7 +55,7 @@ export class TransformersSummarizationModel implements SummarizationModel {
 
       const pipe = await pipeline('summarization', this.baseModelId, {
         device: this.settings.device ?? 'auto',
-        dtype: this.settings.quantized === true ? 'q8' : undefined,
+        dtype: this.settings.quantized === true ? 'q8' : 'fp32',
         progress_callback: this.settings.onProgress,
       });
 

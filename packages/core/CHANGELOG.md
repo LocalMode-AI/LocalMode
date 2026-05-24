@@ -1,5 +1,17 @@
 # @localmode/core
 
+## 2.2.0
+
+### Minor Changes
+
+- Audit log with append-only, hash-chained, signed entries (`createAuditLog`, `verifyChain`, `exportAuditLog`, `deriveAuditKey`, `generateEphemeralAuditKey`)
+- Live transcription with VAD integration (`createLiveTranscriber`, `createTurnTaker`, `EnergyVADProvider`, `SileroVADProvider`)
+- Streaming speech synthesis with clause splitting and playback (`streamSynthesizeSpeech`, `splitIntoClauses`, `playStreamedSpeech`)
+- Generative OCR prompt support for document-level OCR
+- `AudioPart` content type for multimodal generation
+- Capability detection helpers (`isLiveTranscribeSupported`)
+- `MediaNotSupportedError` error class
+
 ## 2.0.0
 
 ### Major Changes

@@ -1,0 +1,142 @@
+---
+title: "Multimodal Embeddings (CLIP/SigLIP) in the Browser"
+description: "Embed text and images into a shared vector space - search photos with words, find similar images, cross-modal retrieval."
+author: "LocalMode"
+date: "2026-04-18"
+---
+
+# Multimodal Embeddings (CLIP/SigLIP) in the Browser
+
+Embed text and images into a shared vector space - search photos with words, find similar images, cross-modal retrieval.
+
+## What Is Multimodal Embeddings (CLIP/SigLIP)?
+
+Multimodal embeddings map both text and images into the same vector space, enabling cross-modal similarity. CLIP (OpenAI) and SigLIP (Google) encode images and text descriptions such that matching pairs are close together. You can search an image collection using natural language ("sunset over mountains") or find images similar to a reference image.
+
+This capability is exposed through the `embedImage()` function in `@localmode/core`. All processing runs entirely in the browser - no server, no API key, no data leaves the device. After the initial model download, multimodal embeddings (clip/siglip) works completely offline.
+
+## Real-World Applications
+
+Photo search with natural language queries. E-commerce visual similarity ("find products that look like this"). Content recommendation across media types. Image-text matching for accessibility. Design inspiration tools. Reverse image search.
+
+These use cases all benefit from local, on-device processing: user data stays private, there are no per-request API costs, and the application works without internet after initial setup.
+
+## Getting Started
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Import the core function and provider:
+
+```typescript
+import { embedImage } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+```
+
+The recommended starting model is **Xenova/clip-vit-base-patch32** - it provides the best balance of quality, speed, and download size for most applications.
+
+## Code Example
+
+```typescript
+import { embed, embedImage, createVectorDB } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.multimodalEmbedding('Xenova/clip-vit-base-patch32');
+
+// Embed an image
+const { embedding: imageVec } = await embedImage({ model, image: photoFile });
+
+// Embed a text query (same model, same vector space)
+const { embedding: textVec } = await embed({ model, value: 'sunset over the ocean' });
+
+// Store image embeddings and search with text
+const db = await createVectorDB({ name: 'photos', dimensions: 512 });
+await db.add({ id: 'photo1', vector: imageVec, metadata: { file: 'sunset.jpg' } });
+const results = await db.search(textVec, { k: 5 });
+```
+
+This example demonstrates the core workflow: create a model instance from the provider, call the `embedImage()` function with your input, and receive structured results. The same pattern works identically across all 1 available provider: Transformers.js.
+
+## Available Models
+
+The following models support multimodal embeddings (clip/siglip) through LocalMode. Choose based on your target device, acceptable download size, and quality requirements.
+
+| Model | Provider | Dimensions | Size | Speed | Quality |
+| --- | --- | --- | --- | --- | --- |
+| Xenova/clip-vit-base-patch32 | Transformers.js | 512 | ~340MB | Fast | Good |
+| Xenova/clip-vit-base-patch16 | Transformers.js | 512 | ~340MB | Medium | Good |
+| Xenova/siglip-base-patch16-224 | Transformers.js | 768 | ~400MB | Medium | High |
+
+**Choosing a model:** For most applications, start with the recommended model (`Xenova/clip-vit-base-patch32`). If download size is the primary constraint (e.g., mobile PWA, browser extension), pick the smallest model that meets your quality bar. If quality is the priority (e.g., enterprise search, content analysis), use the largest model your target devices can handle. Note that SigLIP produces 768-dimensional embeddings - set your VectorDB `dimensions` accordingly.
+
+## Cloud vs Local: Cost and Privacy Comparison
+
+Running multimodal embeddings (clip/siglip) locally eliminates per-request API costs and keeps all data on-device. Here is how the economics compare:
+
+| Service | Cost / Notes |
+| --- | --- |
+| Google Multimodal Embedding | vary by usage |
+| Running CLIP/SigLIP locally via LocalMode | $0 after model download (340-400MB) |
+
+OpenAI CLIP API is not publicly available. Google Multimodal Embedding costs vary by usage. Running CLIP/SigLIP locally via LocalMode costs $0 after model download (340-400MB). All images are processed on-device - no cloud upload required.
+
+The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
+
+## Available Providers
+
+- **Transformers.js** - ONNX-optimized models via ONNX Runtime Web. Supports both WebGPU and WASM backends. Broadest model catalog for non-LLM tasks.
+
+## AbortSignal Support
+
+All `embedImage()` calls support cancellation through the standard `AbortSignal` API:
+
+```typescript
+const controller = new AbortController();
+
+const promise = embedImage({
+  model,
+  image: imageFile,
+  abortSignal: controller.signal,
+});
+
+// Cancel if needed (e.g., user navigates away)
+controller.abort();
+```
+
+This is essential for responsive UIs - cancel in-flight operations when the user navigates away, submits a new query, or closes a dialog. The underlying model inference stops immediately, freeing memory and compute resources.
+
+## React Integration
+
+If you are building a React application, `@localmode/react` provides hooks that manage loading states, error handling, and cancellation automatically:
+
+```bash
+npm install @localmode/react
+```
+
+```typescript
+import { useEmbedImage } from '@localmode/react';
+```
+
+The hook returns `{ data, error, isLoading, execute, cancel, reset }` - providing everything a UI component needs to display progress, handle errors, offer cancellation, and reset state.
+
+## Related Pages
+
+- [Clip Siglip](/blog/models/clip-siglip) - model guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+This guide is based on LocalMode's source code and curated model catalog (`packages/transformers/src/models.ts`, `MULTIMODAL_EMBEDDING_MODELS`), the CLIP implementation in `packages/transformers/src/implementations/clip-embedding.ts`, and the `useEmbedImage` hook in `packages/react/src/hooks/use-embed-image.ts`. Embedding dimensions were verified against HuggingFace model cards for each listed model. Cloud pricing figures are subject to change - verify current pricing with the provider before making cost decisions. Quality and performance comparisons are general guidance; benchmark with your own data for production use.
+
+## Sources
+
+- [LocalMode core multimodal embeddings API reference](/docs/core/multimodal-embeddings)
+- [LocalMode transformers multimodal embeddings guide](/docs/transformers/multimodal-embeddings)
+- [Xenova/clip-vit-base-patch32 - HuggingFace model card](https://huggingface.co/Xenova/clip-vit-base-patch32) - 512-dimensional ONNX CLIP model
+- [Xenova/clip-vit-base-patch16 - HuggingFace model card](https://huggingface.co/Xenova/clip-vit-base-patch16) - 512-dimensional ONNX CLIP model
+- [Xenova/siglip-base-patch16-224 - HuggingFace model card](https://huggingface.co/Xenova/siglip-base-patch16-224) - 768-dimensional ONNX SigLIP model
+- [Google Cloud Vertex AI Multimodal Embedding pricing](https://cloud.google.com/vertex-ai/pricing)

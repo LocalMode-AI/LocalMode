@@ -1,6 +1,6 @@
 {
   "name": "@localmode/webllm",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "WebLLM provider for @localmode - LLM inference with quantized models",
   "license": "MIT",
   "author": "LocalMode",
@@ -36,7 +36,7 @@
     "clean": "rm -rf dist node_modules"
   },
   "dependencies": {
-    "@mlc-ai/web-llm": "^0.2.82"
+    "@mlc-ai/web-llm": "^0.2.83"
   },
   "peerDependencies": {
     "@localmode/core": ">=2.0.0"

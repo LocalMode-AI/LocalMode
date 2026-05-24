@@ -1,0 +1,115 @@
+---
+title: "E-Commerce Product Search"
+description: "Build semantic product search with visual similarity - find products by description, by image, and by browsing pattern."
+author: "LocalMode"
+date: "2026-04-24"
+---
+
+# E-Commerce Product Search
+
+Build semantic product search with visual similarity - find products by description, by image, and by browsing pattern.
+
+*Category: Industry Solution*
+
+## The Problem
+
+Traditional e-commerce search relies on keyword matching and manual tagging. A user searching "comfortable work shoes" won't find products tagged "ergonomic office footwear." Visual similarity ("show me products that look like this") requires expensive cloud vision APIs. Algolia and Elasticsearch add $100-1000+/month in infrastructure costs.
+
+This is a common challenge for teams building modern applications. Traditional approaches either compromise on privacy (by sending data to cloud APIs), require complex server infrastructure (adding cost and maintenance burden), or sacrifice functionality (by avoiding AI entirely). LocalMode provides a fourth option: run the AI locally in the browser.
+
+## The Solution
+
+Build a multi-modal search system using LocalMode. Text queries are embedded with BGE-small and matched against product description embeddings. Image queries use CLIP to find visually similar products. Zero-shot classification with DeBERTa auto-categorizes new products without manual tagging. The entire system runs in the browser at $0/month - no backend, no API costs, no data leaving the device.
+
+### Why Local-First?
+
+Building this feature with on-device inference provides three structural advantages over cloud-based alternatives:
+
+1. **Zero marginal cost** - After the initial model download, every inference operation is free. No per-token fees, no monthly API bills, no surprise invoices. This matters especially for features used frequently or by many users.
+2. **Architectural privacy** - User data never leaves the device. This is not a policy promise ("we won't look at your data") but an architectural guarantee: the data physically cannot reach any server because the processing happens in the browser tab.
+3. **Offline capability** - Once models are cached in IndexedDB, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
+
+## Technology Stack
+
+| Package | Purpose |
+| --- | --- |
+| `@localmode/core` | VectorDB, embed(), embedImage(), classifyZeroShot() |
+| `@localmode/transformers` | BGE-small, CLIP, DeBERTa models |
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+## Implementation
+
+```typescript
+import { embed, embedImage, createVectorDB } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const textModel = transformers.embedding('Xenova/bge-small-en-v1.5');
+const clipModel = transformers.multimodalEmbedding('Xenova/clip-vit-base-patch32');
+
+// Text search: "comfortable work shoes"
+const { embedding: query } = await embed({ model: textModel, value: 'comfortable work shoes' });
+const textResults = await productDb.search(query, { k: 10 });
+
+// Visual search: "products that look like this"
+const { embedding: imageQuery } = await embedImage({ model: clipModel, image: referencePhoto });
+const visualResults = await imageDb.search(imageQuery, { k: 10 });
+```
+
+### How This Works
+
+The code above demonstrates the complete pipeline. Let us walk through the key decisions:
+
+- **Model selection** - The models referenced in this example are chosen for their balance of size, speed, and quality for this specific use case. Smaller models load faster and use less memory; larger models produce better results. Start with the recommended models and upgrade only if quality is insufficient for your users.
+- **Browser APIs** - LocalMode uses IndexedDB for persistent storage (vectors, model cache), Web Workers for background processing (keeping the UI responsive during inference), and the Web Crypto API for optional encryption.
+- **Error handling** - All LocalMode functions throw typed errors (`ModelLoadError`, `StorageError`, `ValidationError`) with actionable hints. Wrap calls in try/catch and use the error's `hint` property to display user-friendly messages.
+- **Cancellation** - Pass an `AbortSignal` to any long-running operation. This lets users cancel searches, embeddings, or generation without waiting for completion.
+
+## Production Considerations
+
+When deploying this solution to production, consider these factors:
+
+**Model preloading:** Download models during user onboarding or application setup, not on first use. Use `preloadModel()` with an `onProgress` callback to show download progress. This avoids the poor experience of a loading spinner on the first AI interaction.
+
+**Storage management:** IndexedDB has browser-specific quotas (Chrome allows up to 60% of total disk size per origin; iOS Safari (17+) allows up to ~60% of total disk for browser apps). Use `getStorageQuota()` to check available space and `navigator.storage.persist()` to request persistent storage that survives browser storage pressure.
+
+**Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
+
+**Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
+
+## Frequently Asked Questions
+
+### How many products can it handle?
+
+With SQ8 quantization, 100K products use ~37MB of IndexedDB storage for 384-dimensional vectors (compared to ~147MB unquantized). Most browsers allow significantly more than that - Chrome grants up to 60% of total disk size per origin. For larger catalogs, use Product Quantization (PQ) for 8-32× compression.
+
+### Does it replace Algolia entirely?
+
+For semantic search, yes. For faceted filtering (price ranges, categories, attributes), you'd still need client-side filtering logic alongside the vector search. LocalMode's VectorDB supports metadata filters, which cover most faceted search needs.
+
+## Further Reading
+
+- [Web Workers for background indexing](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API)
+
+## Related Pages
+
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+- [Multimodal Search](/blog/tasks/multimodal-search) - task guide
+- [Bge Embeddings](/blog/models/bge-embeddings) - model guide
+- [Clip Siglip](/blog/models/clip-siglip) - model guide
+
+## Methodology
+
+All API names, function signatures, option objects, model IDs, and quantization figures were verified directly against the LocalMode monorepo (`packages/core/src/`, `packages/transformers/src/`). Storage numbers derive from the official quantization table in `apps/docs/content/docs/core/vector-quantization.mdx` (100K × 384-dim × 1 byte SQ8 = ~37 MB). Browser quota figures were verified against the MDN Storage API reference and the WebKit storage policy blog post. Algolia pricing was verified against the Algolia pricing page; costs are usage-based and will vary.
+
+## Sources
+
+- [LocalMode Vector Quantization docs - quantization table (100K vectors, SQ8 ~37 MB)](https://localmode.dev/docs/core/vector-quantization)
+- [MDN: Storage quotas and eviction criteria - Chrome quota is 60% of total disk size](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria)
+- [WebKit: Updates to Storage Policy (Safari 17 - up to 60% of total disk for browser apps)](https://webkit.org/blog/14403/updates-to-storage-policy/)
+- [Algolia Pricing page](https://www.algolia.com/pricing/)
+- [MDN: Web Workers API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API)

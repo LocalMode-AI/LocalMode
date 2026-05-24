@@ -1,0 +1,133 @@
+---
+title: "Dexie vs idb vs localForage Storage"
+description: "Comparing three external storage adapters for LocalMode's VectorDB - features, bundle size, and browser compatibility."
+author: "LocalMode"
+date: "2026-04-10"
+---
+
+# Dexie vs idb vs localForage Storage
+
+LocalMode's built-in `IndexedDBStorage` covers most use cases with zero extra dependencies. When you need more - richer query APIs, a smaller footprint, or automatic storage fallback - LocalMode provides three optional adapter packages, each wrapping a different open-source library. This guide compares them so you can pick the right one.
+
+## The Three Adapters at a Glance
+
+| Adapter | Package | Underlying Library | Approx. Bundle Size (gzipped) | Transactions | Auto-Fallback |
+| --- | --- | --- | --- | --- | --- |
+| `DexieStorage` | `@localmode/dexie` | Dexie.js v4 | ~26 KB | Yes | No |
+| `IDBStorage` | `@localmode/idb` | idb v8 | ~1.2 KB | Basic | No |
+| `LocalForageStorage` | `@localmode/localforage` | localForage v1.10 | ~8.8 KB | No | Yes (IndexedDB → localStorage) |
+
+Bundle sizes are approximate, sourced from Bundlephobia and the idb GitHub README respectively, and will vary by bundler and tree-shaking. All three adapters implement the same `StorageAdapter` interface from `@localmode/core`, so switching between them requires only changing the storage constructor.
+
+## Feature-by-Feature Comparison
+
+| Dimension | `@localmode/dexie` | `@localmode/idb` | `@localmode/localforage` |
+| --- | --- | --- | --- |
+| **Underlying library** | Dexie.js 4.x | idb 8.x (Jake Archibald) | localForage 1.10.x (Mozilla) |
+| **Bundle size (gzipped, approx.)** | ~26 KB | ~1.2 KB | ~8.8 KB |
+| **Schema versioning** | Built-in - declarative `version().stores()` migrations | Manual (raw `onupgradeneeded`) | None |
+| **Transaction support** | Full read/write transactions across multiple stores | Basic - single-store transactions via `idb` helpers | None |
+| **Browser fallbacks** | IndexedDB only | IndexedDB only | IndexedDB → localStorage |
+| **TypeScript support** | Full - typed tables via `Dexie` class | Full - typed schemas via `DBSchema` interface | Partial - typed values, no typed schema |
+| **Maintenance status** | Actively maintained - v4.4.2 released March 2026 | Actively maintained - v8.0.3 released May 2025 | Last release v1.10.0 August 2021 - limited recent activity |
+| **Best for** | Complex apps needing schema migrations and atomic operations | Smallest possible bundle with clean promises API | Maximum browser compatibility with automatic driver fallback |
+
+## The Adapters in Detail
+
+### `@localmode/dexie` - Rich API, Schema Versioning
+
+[Dexie.js](https://dexie.org/) is a mature, actively maintained wrapper for IndexedDB. It adds declarative schema versioning, full read/write transactions across multiple stores, and a fluent query API on top of raw IndexedDB. `DexieStorage` uses these features internally - `clearCollection()` and `clear()` both run inside Dexie transactions, so a partial failure rolls back rather than leaving orphaned records.
+
+The trade-off is bundle size: Dexie's minified+gzipped footprint is approximately 26 KB, which is the largest of the three. For applications that already import Dexie for other purposes, this cost is zero.
+
+```typescript
+import { DexieStorage } from '@localmode/dexie';
+import { createVectorDB } from '@localmode/core';
+
+const storage = new DexieStorage({ name: 'my-app' });
+const db = await createVectorDB({ name: 'documents', dimensions: 384, storage });
+```
+
+### `@localmode/idb` - Minimal Footprint, Clean API
+
+[idb](https://github.com/jakearchibald/idb) by Jake Archibald is described as "tiny (~1.19 kB brotli'd)" - it adds almost nothing to your bundle while replacing IndexedDB's awkward event-based API with promises and async iterators. `IDBStorage` wraps `openDB()` with a typed `DBSchema` for compile-time safety on all store operations.
+
+idb does not provide schema versioning beyond the native `onupgradeneeded` callback or automatic driver fallback. It is IndexedDB only.
+
+```typescript
+import { IDBStorage } from '@localmode/idb';
+import { createVectorDB } from '@localmode/core';
+
+const storage = new IDBStorage({ name: 'my-app' });
+const db = await createVectorDB({ name: 'documents', dimensions: 384, storage });
+```
+
+### `@localmode/localforage` - Automatic Driver Fallback
+
+[localForage](https://github.com/localForage/localForage) (Mozilla) automatically selects the best available storage driver: IndexedDB first, then localStorage as a last resort. This makes it the safest choice when you cannot predict the browser environment. `LocalForageStorage` uses four separate localForage instances to avoid key collisions across documents, vectors, indexes, and collections.
+
+**Important caveats:**
+
+- **WebSQL**: localForage's API documentation lists WebSQL as a fallback driver, but WebSQL was removed from Chromium-based browsers (Chrome 124+, Edge 124+) as of April 2024, and was never supported in Firefox. In practice, the fallback chain in modern browsers is IndexedDB → localStorage, not IndexedDB → WebSQL → localStorage.
+- **Vector serialization**: The localStorage driver does not support binary types, so `LocalForageStorage` stores vectors as plain `number[]` arrays internally. This means storage size is roughly 4× larger than binary storage, and the localStorage ~5 MB quota limit may be reached with moderate-sized vector databases.
+- **No transactions**: localForage has no transaction API. Operations across multiple stores are not atomic.
+- **Maintenance**: The last release (v1.10.0) was August 2021. The library is stable and widely used, but receives limited updates.
+
+```typescript
+import { LocalForageStorage } from '@localmode/localforage';
+import { createVectorDB } from '@localmode/core';
+
+const storage = new LocalForageStorage({ name: 'my-app' });
+const db = await createVectorDB({ name: 'documents', dimensions: 384, storage });
+```
+
+## Verdict
+
+For new LocalMode projects, start with the built-in `IndexedDBStorage` - it's zero extra dependencies and covers the majority of VectorDB use cases. Add an external adapter only when you have a specific need:
+
+- **`@localmode/dexie`** - Use when you need schema versioning, Dexie's declarative migration API, or atomic transactions across stores. Expect ~26 KB added to your gzipped bundle.
+- **`@localmode/idb`** - Use when bundle size is the top constraint and you're fine with IndexedDB-only storage. Adds approximately 1.2 KB gzipped.
+- **`@localmode/localforage`** - Use when you must support browsers where IndexedDB may be unavailable and an automatic localStorage fallback is acceptable. Be aware of the vector serialization overhead and the ~5 MB localStorage quota. Note that WebSQL is no longer available in modern Chromium browsers.
+
+All three implement the same `StorageAdapter` interface, so the choice does not affect the rest of your application code.
+
+## Frequently Asked Questions
+
+### Which should I use for a new project?
+
+Start with the built-in `IndexedDBStorage` - it's zero dependencies and sufficient for most VectorDB use cases. Only add an external adapter when you hit a specific limitation: need schema versioning (Dexie), need minimal bundle (idb), or need automatic localStorage fallback for environments where IndexedDB may be blocked (localforage).
+
+### How do I handle Safari Private Browsing?
+
+Wrap storage creation in a try/catch: attempt to create an IndexedDB-backed store (DexieStorage, IDBStorage, or the built-in IndexedDBStorage), and if it throws - which happens in Safari Private Browsing - fall back to MemoryStorage. If you need transparent fallback without a try/catch, use LocalForageStorage, which falls back to localStorage automatically (subject to the ~5 MB quota).
+
+### Does localForage's localStorage fallback work with VectorDB?
+
+Yes, but with significant caveats. localStorage has a ~5 MB limit and does not support binary types, so `LocalForageStorage` serializes vectors as `number[]` arrays - roughly 4× larger than binary storage. This is enough for small vector collections (a few hundred short-dimension vectors) but will fail for larger datasets. The IndexedDB driver is strongly preferred whenever available.
+
+### Is localForage still actively maintained?
+
+The last release was v1.10.0 in August 2021. The library is stable and widely deployed, but receives limited updates. If active maintenance matters to your team, Dexie.js and idb are more actively maintained alternatives (both updated in 2025–2026).
+
+## Related Pages
+
+- [Indexeddb Vs Dexie](/blog/compare/indexeddb-vs-dexie) - comparison guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+Library bundle sizes are approximate minified+gzipped figures sourced from the idb GitHub README and Bundlephobia search results as of May 2026; actual sizes vary by bundler, version, and tree-shaking configuration. Library versions were verified against the npm registry. Feature claims about each library were verified against their official GitHub repositories and documentation. WebSQL removal dates were sourced from the Chromium intent-to-remove announcement and the localForage GitHub issue tracker. LocalMode adapter behavior was verified by reading the source code in `packages/dexie/src/`, `packages/idb/src/`, and `packages/localforage/src/`.
+
+## Sources
+
+- [idb GitHub README - ~1.19 kB brotli'd](https://github.com/jakearchibald/idb)
+- [idb on npm - version 8.0.3](https://registry.npmjs.org/idb/latest)
+- [localForage GitHub repository - v1.10.0, August 2021](https://github.com/localForage/localForage)
+- [localForage on npm - version 1.10.0](https://registry.npmjs.org/localforage/latest)
+- [Dexie.js GitHub repository - v4.4.2, March 2026](https://github.com/dexie/Dexie.js)
+- [Dexie.js on npm - version 4.4.2](https://registry.npmjs.org/dexie/latest)
+- [Bundlephobia - dexie bundle size (~26 KB gzipped)](https://bundlephobia.com/package/dexie)
+- [Bundlephobia - localforage bundle size (~8.8 KB gzipped)](https://bundlephobia.com/package/localforage)
+- [WebSQL removal from Chromium - intent to deprecate and remove](https://groups.google.com/a/chromium.org/g/blink-dev/c/fWYb6evVA-w/m/pziWcvboAgAJ)
+- [localForage issue: WebSQL deprecated in Chrome](https://github.com/localForage/localForage/issues/1067)
+- [Dexie.js bundle size discussion](https://github.com/dexie/Dexie.js/issues/1585)

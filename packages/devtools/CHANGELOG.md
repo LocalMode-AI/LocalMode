@@ -1,5 +1,13 @@
 # @localmode/devtools
 
+## 2.0.1
+
+### Patch Changes
+
+- Responsive panel width for smaller viewports
+- Scrollable tab bar when panels overflow
+- TypeScript type fix for event bridge collector
+
 ## 2.0.0
 
 ### Major Changes

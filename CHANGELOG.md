@@ -5,6 +5,176 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [@localmode/transformers@4.0.0] - 2026-05-24
+
+### Added
+
+- **Gemma 4 ONNX models** — Added Gemma 4 E2B and E4B to the LLM catalog (16 total, up from 14). New `isGemma4Model()` detection routes Gemma 4 through the VLM loading path with `Gemma4ForConditionalGeneration`.
+- **Gemma 4 vision support** — Gemma 4 models are vision-capable, bringing the total to 5 vision-capable ONNX models (up from 3).
+- **New blog post** — Comparison article: Gemma 4 LiteRT vs ONNX.
+- **`vad()` factory method** — `transformers.vad(modelId)` creates a `VADProvider` for use with `createLiveTranscriber()`. Backed by the Silero ONNX model.
+- **Generative OCR** — `transformers.ocr()` now auto-detects and routes GLM-OCR and LightOnOCR-2 models to a vision-language OCR path using `AutoModelForImageTextToText`. Two new catalog entries: `GLM_OCR` and `LIGHTONOCR_2_1B`.
+- **Kokoro TTS integration** — When a Kokoro model ID is requested via `transformers.textToSpeech()`, synthesis now routes to a dedicated phonemizer-backed path using `StyleTextToSpeech2Model` from transformers v4 + the `phonemizer` npm package (eSpeak-NG WASM). Dramatically better pronunciation compared to the generic pipeline.
+- **29 named English voices** — American English (21) and British English (8). Exposed via `TextToSpeechModel.voices` field and `DoSynthesizeOptions.voice` parameter.
+- **Voice catalog export** — `KOKORO_VOICES` constant with metadata (id, name, language, languageLabel, gender), `KOKORO_DEFAULT_VOICE`, `KOKORO_LANG_MAP`, and `KokoroVoice` type — all exported from `@localmode/transformers`.
+- **Speed control** — `speed` parameter (0.5–2.0) now forwarded to Kokoro synthesis.
+- **Provider options** — `providerOptions.kokoro.dtype` for quantization control (q8/fp16/fp32/q4/q4f16, default q8).
+- **New dependency** — `phonemizer` (^1.2.0) added (eSpeak-NG WASM for text→phoneme conversion). Note: `kokoro-js` was NOT used due to v3/v4 version conflict — Kokoro synthesis reimplemented directly using transformers v4.
+- **New showcase app** — `voice-studio` — browse all 29 English voices, streaming synthesis with speed control, side-by-side voice comparison.
+
+### Breaking Changes
+
+- **Unified Transformers.js dependency** — Migrated from `@huggingface/transformers@^3.8.1` to `@huggingface/transformers@^4.2.0`. The npm alias `@huggingface/transformers-v4` has been removed entirely. All 26 implementation files now import from a single `@huggingface/transformers` package.
+
+### Changed
+
+- **Audiobook Creator upgraded** — Switched from MMS-TTS (`Xenova/mms-tts-eng`, 30MB) to Kokoro TTS (86MB). Added voice selector dropdown (29 English voices), speed slider (0.5–2.0x), streaming playback via `useStreamSpeech`.
+- Kokoro model registry entry updated: 29 English voices, phonemizer-backed, speed control.
+- All pipeline-based implementations now pass explicit `dtype: 'fp32'` instead of `undefined` when quantization is disabled, eliminating "dtype not specified" log noise.
+- Removed `embedding-v4.ts` experimental benchmark file (no longer needed with unified v4).
+- Cleaned up `utils.ts` conditional v3/v4 import branching.
+- Removed "experimental" / "preview" labels from language model types, provider, and model catalog.
+
+### Backward Compatibility
+
+- Non-Kokoro TTS models (SpeechT5, MMS-TTS) continue using the generic pipeline unchanged.
+- All existing `synthesizeSpeech()` and `streamSynthesizeSpeech()` calls work as before.
+- The public API is unchanged for the v3→v4 migration. If you imported `TransformersV4EmbeddingModel` or `createV4EmbeddingModel`, use `TransformersEmbeddingModel` / `createEmbeddingModel` instead. Re-test model outputs — embedding cosine similarity is ≥0.9999 and classification labels/scores are identical in validation testing.
+
+### Fixed
+
+- **ImageTextToText tokenizer crash** — `loadImageTextToText` (GLM-OCR, LightOnOCR-2) now loads an `AutoTokenizer` alongside the processor, fixing a `TypeError` when calling `generateText()` or `streamText()` with a text-only prompt (no images).
+- **Kokoro TTS unrecoverable load failure** — If the Kokoro model fails to download (transient network error), the module-level promise is now cleared so subsequent calls can retry instead of permanently returning the cached rejection.
+
+## [@localmode/core@2.2.0] - 2026-05-24
+
+### Added
+
+- **Audit Log** (`core/src/security/`) — Append-only, hash-chained, cryptographically signed, and optionally encrypted audit log for local-first compliance use cases. New exports: `createAuditLog`, `verifyChain`, `exportAuditLog`, `deriveAuditKey`, `generateEphemeralAuditKey`, and `AuditLogError`. Supports key derivation (PBKDF2) via `deriveAuditKey` and ephemeral session keys via `generateEphemeralAuditKey`. Chain integrity verified with `verifyChain`; full log export via `exportAuditLog`. All operations are offline and use the Web Crypto API — no external dependencies. React hook `useAuditLog` added to `@localmode/react`.
+- **Live Transcription** (`core/src/audio/`) — Streaming speech-to-text with voice-activity detection (VAD) and a turn-taking orchestrator for real-time conversational AI. New factory exports: `createLiveTranscriber`, `createTurnTaker`. Built-in VAD providers: `EnergyVADProvider` (threshold-based, zero-latency) and `SileroVADProvider` (neural VAD via Silero ONNX model). AudioWorklet helpers: `registerEnergyVADWorklet`, `createScriptProcessorVADNode` (fallback for browsers without AudioWorklet). Capability detection: `isLiveTranscribeSupported`, `isAudioWorkletSupported`, `isMediaCaptureSupported`. Error: `MediaNotSupportedError` (thrown when `getUserMedia` or AudioContext is unavailable). React hooks `useLiveTranscribe` and `useTurnTaker` added to `@localmode/react`.
+- **Silero VAD implementation** in `@localmode/transformers` (`silero-vad.ts`) — `TransformersSileroVAD`, `createSileroVAD` factory, and `SileroVADSettings` type. Provides a neural VAD provider backed by the Silero ONNX model via `@huggingface/transformers` for high-accuracy speech boundary detection.
+- **Streaming Speech** (`core/src/audio/`) — `streamSynthesizeSpeech`, `playStreamedSpeech`, and `splitIntoClauses` (with `DEFAULT_ABBREVIATIONS`) for clause-by-clause streaming TTS playback. React hook `useStreamSpeech` in `@localmode/react`.
+- **Generative OCR `prompt` parameter** — `ExtractTextOptions` and `DoOCROptions` now accept an optional `prompt` for table/formula recognition with generative OCR models.
+- **Capability detection** — New `isAudioWorkletSupported()`, `isMediaCaptureSupported()`, and `isLiveTranscribeSupported()` functions. New `LiveTranscribeCapability` type added to `CapabilityReport`.
+- **`MediaNotSupportedError`** — New error class thrown when `getUserMedia` or AudioContext is unavailable.
+- **`useExtractText` prompt support** — React hook now accepts a `prompt` option for generative OCR models.
+- **`AudioPart` content type** — Added to `ContentPart` discriminated union in `packages/core/src/generation/types.ts` — `{ type: 'audio', data: string (base64), mimeType: string }`. Backward-compatible additive change; existing `TextPart | ImagePart` consumers continue to work unchanged via the `type` discriminator.
+
+## [@localmode/mediapipe@2.0.0] - 2026-05-24
+
+### Added
+
+- **New provider package**: `@localmode/mediapipe` wrapping Google's MediaPipe Tasks — `@mediapipe/tasks-vision`, `@mediapipe/tasks-audio`, and `@mediapipe/tasks-text` — as a single unified provider. WASM + WebGL runtime, works in all target browsers (no WebGPU required).
+- **New core interfaces** for landmark and gesture tasks: `HandLandmarkModel`, `PoseLandmarkModel`, `FaceDetectionModel`, `FaceLandmarkModel`, `GestureRecognitionModel` in `packages/core/src/vision/`, and `LanguageDetectionModel` in `packages/core/src/translation/` — all interface-only, zero new core dependencies.
+- **New core functions**: `detectHands()`, `detectPose()`, `detectFace()`, `detectFaceLandmarks()`, `recognizeGesture()` (vision) and `detectLanguage()` (text).
+- **New core constants**: `HAND_CONNECTIONS`, `POSE_CONNECTIONS`, `FACE_CONNECTIONS` (landmark topology for drawing overlays), `GESTURE_CATEGORIES` (8 standard gestures), `SUPPORTED_LANGUAGES` (ISO 639-1 code → name map).
+- **MediaPipe model implementations** for new interfaces (hand/pose/face landmarks, face detection, gesture recognition) and existing core interfaces — `ImageClassificationModel`, `ObjectDetectionModel`, `SegmentationModel`, `ImageFeatureModel` (vision), `AudioClassificationModel` (YAMNet, 521 categories), `ClassificationModel` and `EmbeddingModel` (text), `LanguageDetectionModel` (110 languages).
+- **Provider-specific streaming API** — `createHandTracker()`, `createPoseTracker()`, `createFaceTracker()`, `createGestureTracker()` run MediaPipe vision tasks in VIDEO mode over a `<video>` element at 30-60fps with a results callback and `start`/`stop`/`close` lifecycle.
+- **Curated model catalog** (`MEDIAPIPE_MODELS`) — 13 verified entries from Google's CDN, ranging from 230KB (face detector) to 18.6MB (image classifier).
+- **6 new React hooks** in `@localmode/react`: `useDetectHands`, `useDetectPose`, `useDetectFace`, `useDetectFaceLandmarks`, `useRecognizeGesture`, `useDetectLanguage`.
+- **New showcase app** — `mediapipe-studio` — a 7-tab studio demonstrating webcam hand/pose/face/gesture tracking, audio classification, and language/text tasks.
+- **Lazy task loading + concurrent-load deduplication** following the established provider pattern; each task domain (vision/audio/text) loads its WASM runtime independently from the jsDelivr CDN.
+
+### Status
+
+- `@mediapipe/tasks-*` is pinned to `^0.10.22`.
+- **Audio embeddings are not available** — the `@mediapipe/tasks-audio` JS package ships only `AudioClassifier`, not an `AudioEmbedder` class. Audio coverage is limited to classification.
+- `@mediapipe/tasks-genai` (LLM inference) is deliberately not wrapped — it duplicates `@localmode/litert`.
+- MediaPipe text classification requires a custom-trained model (MediaPipe Model Maker) — `textClassifier()` requires an explicit model path.
+- Audio and vision WASM runtimes can conflict if run concurrently in the same thread (MediaPipe GitHub #4737) — use Web Worker isolation for concurrent audio+vision usage.
+
+## [@localmode/litert@2.0.0] - 2026-05-24
+
+### Added
+
+- **New provider package**: `@localmode/litert` wrapping Google's `@litert-lm/core@^0.12.1` — first-party JS/WASM browser bindings for the LiteRT-LM inference engine.
+- **`LanguageModel` implementation** with `doGenerate()` and `doStream()`. Runs `.litertlm` models on a WebGPU backend; portable models also run on a CPU WASM backend. Text-in / text-out — the LiteRT-LM JS API does not currently expose vision or audio input.
+- **Curated catalog of three models**, all verified end-to-end in real Chrome (Chrome 145, 2026-05-20):
+  - `gemma-4-E2B` — Gemma 4 E2B (`gemma-4-E2B-it-web.litertlm`, 2.0 GB, 8K context) — **WebGPU only**
+  - `gemma-4-E4B` — Gemma 4 E4B (`gemma-4-E4B-it-web.litertlm`, 3.0 GB, 8K context) — **WebGPU only**
+  - `qwen3-0.6B` — Qwen3 0.6B (`Qwen3-0.6B.litertlm`, 614 MB, 4K context) — runs on WebGPU **or** CPU
+  The Gemma 4 entries use the web-optimized `*-it-web.litertlm` builds — the files Google publishes as the models officially supported by the LiteRT-LM JS API. These builds are GPU-compiled (their TFLite sections carry a `gpu_artisan` backend constraint) and cannot run on the CPU backend.
+- **`requiresWebGPU` catalog flag + WebGPU pre-check** — Gemma 4 entries are flagged `requiresWebGPU: true`. The provider checks WebGPU availability before downloading such a model and throws a clear `ModelLoadError` if WebGPU is unavailable or `backend: 'CPU'` is set, instead of failing deep inside the WASM loader.
+- **Flexible model loading** — load any `.litertlm` file via a curated catalog key, a HuggingFace `repo:file` shorthand, or a full URL. Gated Google models (Gemma 3n, Gemma 3 1B, FunctionGemma) load via a resolved `modelUrl` after accepting the Gemma license on HuggingFace.
+- **Automatic GPU→CPU fallback** — if `@litert-lm/core` cannot stream-load a portable `.litertlm` file on the GPU backend ("Streaming … is not supported yet"), the provider retries once on the CPU backend. (Skipped for WebGPU-only models, where a CPU retry cannot help.)
+- **Cache management** — `isModelCached()`, `preloadModel()`, `deleteModelCache()`, `resolveModelUrl()`.
+- **Browser compatibility checker** — `checkLiteRTBrowserCompat()` reports WebGPU support, device RAM, and the recommended backend.
+- **Lazy Engine loading + load deduplication** following the `@localmode/wllama` pattern; `unload()` releases WASM memory via `engine.delete()`.
+- **Showcase integration** — the `llm-chat` showcase app gains `litert` as a 4th backend alongside `webgpu`, `wasm`, and `onnx` (new "LiteRT" filter tab in the model sidebar).
+
+### Status
+
+- `@litert-lm/core` is at v0.12.1 (early JS release). API surface may change. Pinned to `^0.12.1`.
+- Text-only — the LiteRT-LM JS API is text-in / text-out in this preview.
+- Gemma 4 E2B/E4B are WebGPU-only (GPU-compiled `-web.litertlm` builds); only Qwen3 0.6B runs on the CPU backend.
+- `stopSequences` is not supported (LiteRT-LM uses token IDs, not strings).
+- Token usage counts are estimated from text length.
+
+## [@localmode/chrome-ai@2.1.0] - 2026-05-24
+
+### Added
+
+- **`LanguageModel` implementation** — `ChromeAILanguageModel` with `doGenerate()` and `doStream()` via Chrome's Prompt API (`window.LanguageModel` / Gemini Nano). Supports `generateText()`, `streamText()`, and `generateObject()` from `@localmode/core`. Zero-download inference — model ships with Chrome.
+- **`isPromptAPISupported()`** utility — checks Prompt API availability before model creation.
+- **`warmUp()` / `isReady()` lifecycle** — pre-initialize the language model for faster first inference.
+- **`destroy()` method** — release model resources explicitly.
+- **New exported types**: `AILanguageModel`, `AILanguageModelAvailability`, `AILanguageModelCreateOptions`, `AILanguageModelFactory`, `AILanguageModelPromptOptions`, `ChromeAILanguageModelSettings`.
+
+### Fixed
+
+- **Dead-code `finishReason` ternary** — Removed the no-op `stopped ? 'stop' : 'stop'` in both `doGenerate` and `doStream`. Chrome's Prompt API does not expose token-limit truncation, so `finishReason` is always `'stop'`. The dead ternary previously made the code appear as if it intended to report `'length'` but never could.
+
+## [@localmode/webllm@2.1.0] - 2026-05-24
+
+### Added
+
+- **Qwen 3.5 models** — Added `Qwen3.5-4B-q4f16_1-MLC` (2.39 GB, 32K context) and `Qwen3.5-9B-q4f16_1-MLC` (5.06 GB, 32K context), bringing catalog to 32 curated models.
+- **IndexedDB cache backend** — New `useIndexedDBCache` and `cacheBackend` settings for storing large model downloads in IndexedDB instead of Cache API (useful for Chrome extensions with MV3 restrictions).
+- **Custom app config** — New `appConfig` setting to pass a custom WebLLM `AppConfig` for advanced model configuration.
+- **Engine reload fallback** — Automatically retries via `engine.reload()` when initial load progress doesn't reach completion.
+
+### Fixed
+
+- **Unrecoverable load failure** — If `CreateMLCEngine` rejects (transient WebGPU context loss, network error), the cached `loadPromise` is now cleared so subsequent calls can retry instead of permanently returning the stale rejected promise.
+- **AudioPart treated as image** — `convertContentAsync` now explicitly checks `part.type === 'image'` before routing to the image preprocessor. `AudioPart` content (and other future content types) is silently skipped instead of being corrupted into a malformed `image_url`.
+
+### Changed
+
+- Bumped `@mlc-ai/web-llm` from `^0.2.82` to `^0.2.83`.
+
+## [@localmode/wllama@2.1.0] - 2026-05-24
+
+### Added
+
+- **Holo2 vision-language models** — Added `Holo2-4B-Q4_K_M` (2.8 GB, 256K context) and `Holo2-8B-Q4_K_M` (5.1 GB, 256K context) from the Qwen3-VL family with `vision: true`, bringing catalog to 18 curated models.
+- **`vision` field on `WllamaModelEntry`** — Marks models that support multimodal (image + text) input.
+- **Chrome MV3 extension support** — WASM binary resolution via `chrome.runtime.getURL()` for bundled extensions instead of CDN-only loading.
+- **Raw token ID output** — `outputTokenIds` exposed on generation results for cross-modal consumers (e.g., Orpheus TTS SNAC audio tokens).
+
+## [@localmode/devtools@2.0.1] - 2026-05-24
+
+### Fixed
+
+- **Responsive panel width** — Panel width adapts to viewport (`min(600px, calc(100vw - 32px))`) instead of fixed 600px.
+- **Scrollable tab bar** — Tabs now scroll horizontally on narrow viewports.
+- **TypeScript fix** — Corrected `eventBuffer` type annotation in events collector.
+
+
+## [Showcase & Docs] - 2026-05-24
+
+### Added
+
+- **PWA support** — Service Worker via Serwist for offline caching, web app manifest for installability, offline fallback page, and app icons (192x192, 512x512).
+- **OCR Scanner upgrade** — Now supports 3 models (TrOCR Small, GLM-OCR, LightOnOCR-2) with a model selector and OCR mode picker (text, table, formula).
+- **MediaPipe Studio** showcase app — 7-tab studio demonstrating webcam hand/pose/face/gesture tracking, audio classification, and language/text tasks. (Already mentioned in @localmode/mediapipe@2.0.0 entry.)
+- **Voice Studio** showcase app — Browse all 29 English Kokoro voices, streaming synthesis with speed control, side-by-side voice comparison. (Already mentioned in Kokoro TTS entry.)
+- **84 new blog posts** organized into 6 subcategories: comparisons (13), browser compatibility (10), model guides (19), task tutorials (18), use cases (14), plus additional root-level posts.
+- **New documentation pages** — Core: audit-log, live-transcribe, streaming-speech. Chrome AI: language-model. LiteRT: 3 pages. MediaPipe: 8 pages.
+
+### Changed
+
+- **28 showcase apps** received minor fixes, dependency updates, and UI consistency improvements.
+
 ## [2.0.0] - 2026-03-25
 
 Major release expanding LocalMode from an embeddings-and-search toolkit into a comprehensive local-first AI platform. Adds 6 new packages, 8 new core domains, 30 new showcase applications, and full documentation coverage.
@@ -14,7 +184,7 @@ Major release expanding LocalMode from an embeddings-and-search toolkit into a c
 #### New Packages
 
 - **`@localmode/react`** — Complete React integration with 34+ hooks (`useEmbed`, `useGenerateText`, `useClassify`, `useChat`, `useAgent`, `usePipeline`, `useSemanticCache`, `useCalibrateThreshold`, and more), operation utilities (`useOperation`, `useOperationList`, `useSequentialBatch`, `useStreaming`), and helpers (`toAppError`, `readFileAsDataUrl`, `validateFile`, `downloadBlob`)
-- **`@localmode/wllama`** — GGUF model provider via llama.cpp WASM with access to 135K+ HuggingFace models, GGUF metadata parser, and universal browser support (no WebGPU required)
+- **`@localmode/wllama`** — GGUF model provider via llama.cpp WASM with access to 160K+ HuggingFace models, GGUF metadata parser, and universal browser support (no WebGPU required)
 - **`@localmode/chrome-ai`** — Chrome Built-in AI provider for zero-download inference via Gemini Nano, with summarization and translation implementations and automatic fallback
 - **`@localmode/ai-sdk`** — Vercel AI SDK provider adapter with `LanguageModel` and `EmbeddingModel` adapters for seamless integration with the AI SDK ecosystem
 - **`@localmode/devtools`** — In-app DevTools widget for real-time observability of models, inference queue, pipeline execution, events, VectorDB state, and device capabilities across 6 panels
@@ -173,7 +343,7 @@ Initial public release of LocalMode — a local-first, privacy-first, offline-fi
   - **Capabilities** — `detectCapabilities()`, `isWebGPUSupported()`, `isIndexedDBSupported()`, `isCrossOriginIsolated()` feature detection
   - **Events** — `globalEventBus` for cross-component communication
   - **Sync** — `createBroadcaster()`, `createLockManager()` for cross-tab coordination
-  - **Providers** — `setGlobalProvider()`, `createProviderWithFallback()`, `createStorageWithFallback()` for provider management
+  - **Providers** — `setGlobalProvider()` for global provider configuration
   - **Testing** — `createMockEmbeddingModel()`, `createMockClassificationModel()`, `createMockStorage()`, `createMockVectorDB()`, `createSeededRandom()`, `createTestVector()` mock utilities
   - **Errors** — Structured error hierarchy (`LocalModeError`, `EmbeddingError`, `StorageError`, `ValidationError`, etc.) with actionable hints
 

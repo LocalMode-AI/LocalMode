@@ -28,7 +28,7 @@ export function Navbar() {
             <Menu className="w-5 h-5" />
           </Button>
         )}
-        <Link href="/" className="flex items-center gap-3 group">
+        <Link href="/" aria-label="LocalMode.AI" className="flex items-center gap-3 group">
           <div className="w-9 h-9 rounded-xl bg-linear-to-br from-poster-primary to-poster-primary-dark flex items-center justify-center text-white shadow-lg shadow-poster-primary/20 group-hover:scale-105 transition-transform duration-300 border border-white/10">
             <CloudOff className="w-5 h-5" />
           </div>
@@ -47,19 +47,21 @@ export function Navbar() {
           href="https://localmode.dev"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-2 px-4 py-2 rounded-full bg-poster-surface/50 border border-poster-border/30 hover:border-poster-primary/50 hover:bg-poster-primary/10 transition-all duration-300 group"
+          aria-label="Docs"
+          className="flex items-center gap-2 px-2.5 py-2 sm:px-4 rounded-full bg-poster-surface/50 border border-poster-border/30 hover:border-poster-primary/50 hover:bg-poster-primary/10 transition-all duration-300 group"
         >
           <BookOpen className="w-4 h-4 text-poster-text-sub/70 group-hover:text-poster-primary transition-colors" />
-          <span className="text-sm font-semibold text-poster-text-sub/80">Docs</span>
+          <span className="text-sm font-semibold text-poster-text-sub/80 hidden sm:inline">Docs</span>
         </Link>
         <Link
           href="https://github.com/LocalMode-AI/LocalMode"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-2 px-4 py-2 rounded-full bg-poster-surface/50 border border-poster-border/30 hover:border-poster-primary/50 hover:bg-poster-primary/10 transition-all duration-300 group"
+          aria-label="Star on GitHub"
+          className="flex items-center gap-2 px-2.5 py-2 sm:px-4 rounded-full bg-poster-surface/50 border border-poster-border/30 hover:border-poster-primary/50 hover:bg-poster-primary/10 transition-all duration-300 group"
         >
           <Github className="w-4 h-4 text-poster-text-sub/70 group-hover:text-poster-primary transition-colors" />
-          <span className="text-sm font-semibold text-poster-text-sub/80">Star on GitHub</span>
+          <span className="text-sm font-semibold text-poster-text-sub/80 hidden sm:inline">Star on GitHub</span>
         </Link>
       </div>
     </div>

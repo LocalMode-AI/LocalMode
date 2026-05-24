@@ -11,7 +11,7 @@ A user asks your chatbot "What is machine learning?" and waits four seconds for 
 
 The fix is caching. But traditional caching matches exact strings, and "What is machine learning?" is not the same string as "Explain machine learning to me." The cache misses, the model runs again, and the user waits.
 
-Semantic caching solves this. Instead of comparing strings character by character, it compares the *meaning* of prompts using embeddings. If two prompts are close enough in meaning, the cached response is returned instantly. No model inference, no GPU cycles, no waiting. Research shows this approach can reduce response latency by over 96% on cache hits - from seconds down to tens of milliseconds - while maintaining high accuracy.
+Semantic caching solves this. Instead of comparing strings character by character, it compares the *meaning* of prompts using embeddings. If two prompts are close enough in meaning, the cached response is returned instantly. No model inference, no GPU cycles, no waiting. Research shows this approach can reduce response latency by 80–90% or more on cache hits - from seconds down to hundreds of milliseconds or less - while maintaining high accuracy.
 
 This post walks through building a semantic cache with LocalMode that runs entirely in the browser. No server, no API keys, no data leaving the device.
 
@@ -35,7 +35,7 @@ The simplest cache is a `Map<string, string>` keyed by the raw prompt. It works 
 
 In practice, users almost never type the exact same prompt twice. They rephrase, capitalize differently, add filler words, or ask the same question from a different angle. An exact-match cache helps with programmatic retries but does almost nothing for real user traffic.
 
-The numbers bear this out. Production FAQ chatbots with exact-match caching typically see hit rates of 5-15%. The same workloads with semantic caching reach 40-85%, depending on how repetitive the domain is. Customer support, documentation assistants, and educational tools sit at the high end - precisely the use cases where caching matters most.
+Research bears this out. In controlled studies, semantic caching achieves cache hit ratios of 60–92% for semantically equivalent queries depending on the dataset and threshold used. Highly repetitive domains - customer support, documentation assistants, and educational tools - sit at the high end of that range, precisely where caching matters most.
 
 ---
 
@@ -335,17 +335,18 @@ With IndexedDB storage, cached responses survive page reloads, tab closes, and e
 
 ## Methodology
 
-This post references the following models, tools, and research:
+All code examples were verified against the LocalMode codebase (packages/core/src/cache/semantic-cache.ts, packages/core/src/generation/middleware.ts, packages/react/src/hooks/use-semantic-cache.ts) and reflect the actual exported API as of the post date. Latency figures in the timing table are from internal testing on Chrome 125 / macOS with an Apple M2 chip and WebGPU enabled; they are illustrative and will vary by device, browser, and model quantization. Performance claims about cache hit rates and latency reductions cite peer-reviewed research and are described as ranges or approximations where the underlying studies show workload-dependent variation. Similarity score examples are representative of BGE-small-en-v1.5 behavior and depend on model version and quantization.
+
+## Sources
 
 - [BAAI/bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5): 33.4M parameters, 384 dimensions, used for prompt embeddings via `@localmode/transformers`
 - [Xenova/bge-small-en-v1.5](https://huggingface.co/Xenova/bge-small-en-v1.5): Transformers.js-compatible ONNX quantized export (~33MB)
 - [Llama 3.2 1B](https://ai.meta.com/blog/llama-3-2-connect-2024-vision-edge-mobile-devices/): 1.24B parameters, used as the example LLM via `@localmode/webllm`
 - [Advancing Semantic Caching for LLMs with Domain-Specific Embeddings](https://arxiv.org/html/2504.02268v1): Research on embedding-based cache accuracy and hit rates
-- [From Exact Hits to Close Enough: Semantic Caching for LLM Embeddings](https://arxiv.org/html/2603.03301v1): Benchmarks showing 96.9% latency reduction on cache hits (1.67s to 0.052s)
-- [An Ensemble Embedding Approach for Semantic Caching](https://arxiv.org/html/2507.07061v1): 92% cache hit ratio for semantically equivalent queries with 85% rejection accuracy
-- Cache hit rate ranges (40-85%) and cost reduction figures are from [AWS semantic caching benchmarks](https://aws.amazon.com/blogs/database/optimize-llm-response-costs-and-latency-with-effective-caching/) and [production LLMOps data](https://redis.io/blog/large-language-model-operations-guide/)
-- Latency measurements in the timing table are from internal testing on Chrome 125 / macOS with an Apple M2 chip and WebGPU enabled. Results vary by device, browser, and model quantization
-- Similarity scores in the threshold examples are representative of BGE-small-en-v1.5 behavior; exact values depend on model version and quantization
+- [From Exact Hits to Close Enough: Semantic Caching for LLM Embeddings](https://arxiv.org/html/2603.03301v1): Analysis of cache management policies and hit rates across nine real-world LLM query workloads; shows workload-dependent hit rates and discusses the tradeoff between threshold, hit rate, and semantic accuracy
+- [An Ensemble Embedding Approach for Semantic Caching](https://arxiv.org/html/2507.07061v1): 92% cache hit ratio for semantically equivalent queries with 85% rejection accuracy on the Quora Question Pairs dataset; response time reduced from 2.7s to 0.3s (~89% reduction) on 1,000 duplicate question pairs
+- General caching context: [AWS blog on LLM caching](https://aws.amazon.com/blogs/database/optimize-llm-response-costs-and-latency-with-effective-caching/) and [Redis on semantic caching](https://redis.io/blog/what-is-semantic-caching/) discuss latency and cost reduction from caching strategies; the Redis post reports cached responses arriving "15x faster" in a chatbot example and recommends similarity thresholds of 0.85–0.95
+- [GPT Semantic Cache paper](https://arxiv.org/abs/2411.05276): cache hit rates of 61.6–68.8% across query categories in a production-style evaluation with 8,000 cached QA pairs
 
 ---
 

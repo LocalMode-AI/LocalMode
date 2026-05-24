@@ -1,0 +1,213 @@
+---
+title: 'Real-Time Streaming'
+description: Run MediaPipe hand, pose, face, and gesture tracking live over a video element at 30-60fps with the createHandTracker, createPoseTracker, createFaceTracker, and createGestureTracker factories.
+icon: Video
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+# Real-Time Streaming
+
+The single-frame functions (`detectHands()`, `detectPose()`, etc.) work on still images. For live video — a webcam feed, a recorded clip — `@localmode/mediapipe` provides **streaming trackers** that run MediaPipe vision tasks in VIDEO mode over a `<video>` element and invoke a callback once per processed frame, up to ~60fps.
+
+VIDEO mode keeps the model and inference context warm between frames, so a tracker is far faster than calling a single-frame function in a `requestAnimationFrame` loop.
+
+## The Four Trackers
+
+| Factory                            | Tracks                  | `onResults` payload                                |
+| ---------------------------------- | ----------------------- | -------------------------------------------------- |
+| `mediapipe.createHandTracker()`    | Hand landmarks          | `(hands: HandLandmarkResultItem[], timestampMs)`   |
+| `mediapipe.createPoseTracker()`    | Body pose landmarks     | `(poses: PoseLandmarkResultItem[], timestampMs)`   |
+| `mediapipe.createFaceTracker()`    | Face mesh landmarks     | `(faces: FaceLandmarkResultItem[], timestampMs)`   |
+| `mediapipe.createGestureTracker()` | Hand gestures           | `(gestures: GestureResultItem[], timestampMs)`     |
+
+All four return a `TrackerInstance` with the same lifecycle.
+
+## Quick Start
+
+```typescript
+import { mediapipe } from '@localmode/mediapipe';
+
+// 1. Get a webcam stream into a <video> element
+const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+videoElement.srcObject = stream;
+await videoElement.play();
+
+// 2. Create a tracker
+const tracker = mediapipe.createHandTracker({
+  video: videoElement,
+  numHands: 2,
+  onResults: (hands, timestampMs) => {
+    // Called once per processed frame
+    drawHands(hands);
+  },
+  onError: (error) => console.error('Frame error:', error),
+});
+
+// 3. Start the frame loop (loads the model on first start)
+await tracker.start();
+```
+
+## Tracker Lifecycle
+
+Every tracker is a `TrackerInstance`:
+
+```typescript
+interface TrackerInstance {
+  /** Load the model (if needed) and begin the frame-processing loop. */
+  start(): Promise<void>;
+  /** Pause the frame-processing loop. The model stays loaded. */
+  stop(): void;
+  /** Stop processing and dispose the underlying MediaPipe task. */
+  close(): Promise<void>;
+  /** Whether the frame-processing loop is currently running. */
+  readonly isRunning: boolean;
+}
+```
+
+- **`start()`** — loads the model on first call, then runs the per-frame loop. `await` it; the promise resolves once the loop is running.
+- **`stop()`** — pauses the loop. The model stays in memory, so a later `start()` resumes instantly. Synchronous.
+- **`close()`** — stops the loop and disposes the MediaPipe task, freeing GPU/WASM resources. Call this on unmount or page teardown.
+- **`isRunning`** — `true` between `start()` and `stop()`/`close()`.
+
+```typescript
+await tracker.start();   // running
+tracker.stop();          // paused, model retained
+await tracker.start();   // resumes instantly
+await tracker.close();   // disposed — create a new tracker to use again
+```
+
+## Tracker Options
+
+Each `createXTracker` factory takes a single options object. All trackers share these base options:
+
+| Option         | Type                  | Default     | Description                                  |
+| -------------- | --------------------- | ----------- | -------------------------------------------- |
+| `video`        | `HTMLVideoElement`    | —           | The video element to read frames from        |
+| `onResults`    | callback              | —           | Called once per processed frame              |
+| `onError`      | `(error: Error) => void` | —        | Called when a frame-processing error occurs  |
+| `modelPath`    | `string`              | catalog default | Custom model file URL                    |
+| `wasmBasePath` | `string`              | provider/CDN | Vision WASM runtime base path                |
+| `delegate`     | `'GPU' \| 'CPU'`      | provider/`'GPU'` | Inference delegate                       |
+
+Plus the per-tracker option:
+
+| Factory                 | Extra option        | Default | Description                          |
+| ----------------------- | ------------------- | ------- | ------------------------------------ |
+| `createHandTracker`     | `numHands`          | `2`     | Maximum hands to track               |
+| `createPoseTracker`     | `numPoses`          | `1`     | Maximum poses to track               |
+| `createFaceTracker`     | `numFaces`          | `1`     | Maximum faces to track               |
+| `createFaceTracker`     | `outputBlendshapes` | `false` | Also compute expression blendshapes  |
+| `createGestureTracker`  | `numHands`          | `2`     | Maximum hands to track               |
+
+<Callout type="info" title="Per-frame errors go to onError">
+  Streaming trackers do not throw on a bad frame — they keep running and report the error through `onError`. Always pass an `onError` callback so transient failures surface instead of being silently dropped.
+</Callout>
+
+## Pose, Face, and Gesture Trackers
+
+The other three trackers follow the identical pattern:
+
+```typescript
+// Pose
+const poseTracker = mediapipe.createPoseTracker({
+  video: videoElement,
+  numPoses: 1,
+  onResults: (poses, ts) => drawPoses(poses),
+});
+
+// Face mesh with blendshapes
+const faceTracker = mediapipe.createFaceTracker({
+  video: videoElement,
+  numFaces: 1,
+  outputBlendshapes: true,
+  onResults: (faces, ts) => {
+    const face = faces[0];
+    if (face?.blendshapes) updateAvatar(face.blendshapes);
+  },
+});
+
+// Gestures
+const gestureTracker = mediapipe.createGestureTracker({
+  video: videoElement,
+  numHands: 2,
+  onResults: (gestures, ts) => {
+    const top = gestures[0];
+    if (top && top.gesture !== 'None') handleGesture(top.gesture);
+  },
+});
+
+await Promise.all([poseTracker.start(), gestureTracker.start()]);
+```
+
+## Frame Rate
+
+Each tracker processes frames as fast as the device allows, throttled to the video's refresh rate. Throughput depends on the task and hardware:
+
+- **Tiny models** (face detection, gesture, hand) typically run at **30–60fps** on a modern laptop with the GPU delegate.
+- The `timestampMs` argument to `onResults` is the frame timestamp — use successive timestamps to compute the actual FPS.
+
+```typescript
+let lastTs = 0;
+const tracker = mediapipe.createHandTracker({
+  video: videoElement,
+  onResults: (hands, timestampMs) => {
+    const fps = 1000 / (timestampMs - lastTs);
+    lastTs = timestampMs;
+    console.log(`${fps.toFixed(0)} fps`);
+  },
+});
+```
+
+If frame rate is low, try `delegate: 'CPU'` vs `'GPU'` (one may be faster on a given device) or switch to a lighter model — e.g. `pose_landmarker` over `pose_landmarker_full`.
+
+## Cleanup
+
+Always `close()` a tracker when the component using it unmounts, to release the MediaPipe task:
+
+```tsx
+'use client';
+
+import { useEffect, useRef } from 'react';
+import { mediapipe } from '@localmode/mediapipe';
+
+export function HandTrackerView({ video }: { video: HTMLVideoElement }) {
+  const trackerRef = useRef<ReturnType<typeof mediapipe.createHandTracker>>(null);
+
+  useEffect(() => {
+    const tracker = mediapipe.createHandTracker({
+      video,
+      onResults: (hands) => drawHands(hands),
+    });
+    trackerRef.current = tracker;
+    tracker.start();
+
+    return () => {
+      tracker.close();
+    };
+  }, [video]);
+
+  return null;
+}
+```
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Hand Tracking"
+    href="/docs/mediapipe/hand-tracking"
+    description="Landmark topology and drawing the hand skeleton."
+  />
+  <Card
+    title="Face Detection"
+    href="/docs/mediapipe/face-detection"
+    description="The 478-point face mesh and blendshapes."
+  />
+  <Card
+    title="Gesture Recognition"
+    href="/docs/mediapipe/gesture-recognition"
+    description="The 8 built-in gesture categories."
+  />
+</Cards>

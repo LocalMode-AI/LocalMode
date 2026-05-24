@@ -1,0 +1,138 @@
+---
+title: "DeepSeek-R1 Distill Models in the Browser"
+description: "DeepSeek's reasoning-focused distilled models - 1.5B to 8B variants that bring chain-of-thought reasoning to the browser."
+author: "LocalMode"
+date: "2026-04-01"
+---
+
+# DeepSeek-R1 Distill Models in the Browser
+
+DeepSeek's reasoning-focused distilled models - 1.5B to 8B variants that bring chain-of-thought reasoning to the browser.
+
+## Overview
+
+The DeepSeek-R1 Distill family is available through WebLLM (WebGPU), Transformers.js in LocalMode, with model sizes ranging from 500MB–4.41GB. The primary task for these models is **generation**, and they can be used with any application built on the LocalMode SDK.
+
+Running DeepSeek-R1 Distill models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+DeepSeek-R1 made headlines upon its January 2025 release as an open model that rivals OpenAI's o1 on reasoning benchmarks. The distilled variants available in LocalMode inherit that reasoning capability at a fraction of the size. DeepSeek-R1-Distill-Qwen-7B (based on Qwen2.5-Math-7B) and DeepSeek-R1-Distill-Llama-8B (based on Llama-3.1-8B) both excel at multi-step reasoning, math problems, and logical deduction.
+
+These models are distinctly different from standard instruction-tuned LLMs. They naturally produce "thinking" traces - structured reasoning steps before arriving at an answer. This makes them ideal for applications where showing work matters: tutoring systems, code debugging assistants, and analytical tools. The trade-off is that they're slower to respond (the thinking process adds tokens) and larger than typical 3B models.
+
+Both WebLLM variants require WebGPU and substantial GPU memory (the models are 4.18GB and 4.41GB respectively), making them desktop-only in practice. They represent the highest reasoning capability available in browser inference today - suitable for tasks where you'd otherwise reach for GPT-4 or Claude.
+
+## Variant Comparison
+
+The following table lists every DeepSeek-R1 Distill variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B) | WebLLM (WebGPU) | 4.18GB | Slow | High | 4,096 tokens | WEBGPU |
+| [DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-8B) | WebLLM (WebGPU) | 4.41GB | Slow | High | 4,096 tokens | WEBGPU |
+| [onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX](https://huggingface.co/onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX) | Transformers.js | 500MB | Medium | Good | 4,096 tokens | WEBGPU |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| Over 3GB | 2 | variants |
+| 500MB–1.5GB | 1 | variant |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All DeepSeek-R1 Distill variants use the same `LanguageModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### WebLLM (WebGPU)
+
+WebLLM compiles models to WebGPU compute shaders for maximum inference speed. Requires Chrome 113+, Edge 113+, or Safari 26+.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+const model = webllm.languageModel('DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC');
+
+const result = await streamText({
+  model,
+  prompt: 'Explain how DeepSeek-R1 Distill models work.',
+  maxTokens: 300,
+  temperature: 0.7,
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+### Transformers.js
+
+Transformers.js runs ONNX-optimized models via ONNX Runtime Web. WebGPU acceleration where available, WASM fallback otherwise.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.languageModel('onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX');
+
+const result = await streamText({
+  model,
+  prompt: 'Hello, world!',
+  maxTokens: 200,
+});
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred model first, and fall back to a smaller variant if it fails to load.
+
+```typescript
+import { webllm } from '@localmode/webllm';
+import { transformers } from '@localmode/transformers';
+
+// Try the WebGPU model first, fall back to the smaller ONNX variant if it fails
+let model;
+try {
+  model = webllm.languageModel('DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC');
+} catch (error) {
+  console.warn('WebGPU model failed, using ONNX fallback:', error);
+  model = transformers.languageModel('onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX');
+}
+```
+
+## When to Use DeepSeek-R1 Distill
+
+DeepSeek-R1 Distill models are a strong choice when:
+
+- **You need text generation** - DeepSeek-R1 Distill is optimized for generation tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 2 providers (webllm, transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The 500MB–4.41GB range means you can target everything from mobile devices to high-end desktops with the same model family.
+- **Offline functionality is required** - All variants work offline after the initial download, cached in IndexedDB via LocalMode's model caching system.
+
+## HuggingFace Model Cards
+
+- [DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B)
+- [DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-8B)
+- [DeepSeek-R1-Distill-Qwen-1.5B-ONNX](https://huggingface.co/onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX)
+
+## Related Pages
+
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Smollm2](/blog/models/smollm2) - model guide
+- [Qwen](/blog/models/qwen) - model guide
+
+## Methodology
+
+Model sizes and context lengths for the WebLLM and Transformers.js variants were verified directly against LocalMode's provider catalogs (`packages/webllm/src/models.ts`, `packages/transformers/src/models.ts`). The context lengths listed (4,096 tokens) are the values registered in LocalMode's WebLLM catalog, which reflect MLC-compiled constraints rather than the base models' full 128K native context. External facts - base model lineage (Qwen2.5-Math-7B, Llama-3.1-8B), parameter counts, benchmark scores, and release date - were verified against the official DeepSeek HuggingFace model cards and the DeepSeek-R1 arXiv paper (2501.12948). Always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [DeepSeek-R1-Distill-Qwen-7B - official HuggingFace model card](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B)
+- [DeepSeek-R1-Distill-Llama-8B - official HuggingFace model card](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Llama-8B)
+- [onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX - HuggingFace model card](https://huggingface.co/onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX)
+- [DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning - arXiv 2501.12948](https://arxiv.org/abs/2501.12948)
+- [Transformers.js documentation](https://huggingface.co/docs/transformers.js)
+- [WebLLM project](https://webllm.mlc.ai)

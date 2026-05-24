@@ -55,9 +55,36 @@ export interface ImagePart {
 }
 
 /**
+ * An audio content part within a multimodal message.
+ *
+ * Audio is represented as base64-encoded data with a MIME type.
+ * This is the canonical browser representation — audio from
+ * MediaRecorder, FileReader, or Web Audio API produces base64.
+ *
+ * @example
+ * ```ts
+ * const part: AudioPart = {
+ *   type: 'audio',
+ *   data: 'UklGRiQA...', // base64 without data: prefix
+ *   mimeType: 'audio/wav',
+ * };
+ * ```
+ */
+export interface AudioPart {
+  /** Discriminator for audio content */
+  type: 'audio';
+
+  /** Base64-encoded audio data (without `data:` URI prefix) */
+  data: string;
+
+  /** MIME type (e.g., 'audio/wav', 'audio/webm', 'audio/mp3', 'audio/ogg', 'audio/flac', 'audio/mp4') */
+  mimeType: string;
+}
+
+/**
  * A single part of multimodal message content.
  *
- * Used when a message contains mixed content types (text + images).
+ * Used when a message contains mixed content types (text + images + audio).
  * Discriminated via the `type` field.
  *
  * @example
@@ -65,10 +92,11 @@ export interface ImagePart {
  * const parts: ContentPart[] = [
  *   { type: 'text', text: 'Describe this image' },
  *   { type: 'image', data: 'iVBOR...', mimeType: 'image/jpeg' },
+ *   { type: 'audio', data: 'UklGR...', mimeType: 'audio/wav' },
  * ];
  * ```
  */
-export type ContentPart = TextPart | ImagePart;
+export type ContentPart = TextPart | ImagePart | AudioPart;
 
 // ═══════════════════════════════════════════════════════════════
 // COMMON TYPES

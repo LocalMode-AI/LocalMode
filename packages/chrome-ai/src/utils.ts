@@ -34,6 +34,36 @@ export function isTranslatorAPISupported(): boolean {
 }
 
 /**
+ * Check if Chrome AI Prompt API (`window.LanguageModel`) is supported.
+ *
+ * Chrome 138+ stable exposes the Prompt API at the top-level `window.LanguageModel`.
+ * Chrome 127–137 origin-trial builds exposed it as `self.ai.languageModel`. This detector
+ * accepts either surface so apps written against current Chrome stable continue to work
+ * during future namespace migrations.
+ *
+ * In non-Chromium browsers (Firefox, Safari, etc.) and in Node-like environments where
+ * `self` is undefined, this returns `false` without throwing.
+ *
+ * @returns true if either `window.LanguageModel` or the legacy `self.ai.languageModel`
+ *   surface is present; `false` otherwise.
+ *
+ * @example
+ * ```ts
+ * import { isPromptAPISupported } from '@localmode/chrome-ai';
+ *
+ * if (isPromptAPISupported()) {
+ *   // Safe to call chromeAI.languageModel()
+ * }
+ * ```
+ */
+export function isPromptAPISupported(): boolean {
+  if (typeof self === 'undefined') return false;
+  if ('LanguageModel' in self) return true;
+  const ai = (self as any).ai;
+  return Boolean(ai && 'languageModel' in ai);
+}
+
+/**
  * Estimate token count from text.
  *
  * Uses a rough heuristic of ~0.75 words per token.

@@ -132,11 +132,35 @@ export class WllamaLanguageModel implements LanguageModel {
           text: `Loading GGUF model: ${this.baseModelId}`,
         });
 
-        // Instantiate wllama with CDN-hosted WASM binaries
-        const wllamaInstance = new Wllama({
-          'single-thread/wllama.wasm': 'https://cdn.jsdelivr.net/npm/@wllama/wllama@2/src/single-thread/wllama.wasm',
-          'multi-thread/wllama.wasm': 'https://cdn.jsdelivr.net/npm/@wllama/wllama@2/src/multi-thread/wllama.wasm',
-        });
+        // Resolve WASM URLs. In MV3 extension contexts, fetching code from
+        // a CDN (jsdelivr) is blocked by the "no remotely hosted code" rule
+        // and silently fails the wllama init. When the host has bundled the
+        // WASM under `/wllama-wasm/{single,multi}-thread/wllama.wasm` and
+        // exposes it via `chrome.runtime.getURL`, we prefer that path.
+        // Outside extension contexts (web apps, Node tests) we fall back to
+        // the jsdelivr CDN which is the official wllama distribution.
+        const wasmUrls = (() => {
+          if (
+            typeof globalThis !== 'undefined' &&
+            typeof (globalThis as { chrome?: { runtime?: { getURL?: (p: string) => string } } }).chrome
+              ?.runtime?.getURL === 'function'
+          ) {
+            const get = (globalThis as unknown as {
+              chrome: { runtime: { getURL: (p: string) => string } };
+            }).chrome.runtime.getURL;
+            return {
+              'single-thread/wllama.wasm': get('wllama-wasm/single-thread/wllama.wasm'),
+              'multi-thread/wllama.wasm': get('wllama-wasm/multi-thread/wllama.wasm'),
+            };
+          }
+          return {
+            'single-thread/wllama.wasm': 'https://cdn.jsdelivr.net/npm/@wllama/wllama@2/src/single-thread/wllama.wasm',
+            'multi-thread/wllama.wasm': 'https://cdn.jsdelivr.net/npm/@wllama/wllama@2/src/multi-thread/wllama.wasm',
+          };
+        })();
+
+        // Instantiate wllama with the resolved WASM URLs
+        const wllamaInstance = new Wllama(wasmUrls);
 
         // Load the GGUF model
         await wllamaInstance.loadModelFromUrl(modelUrl, {
@@ -340,15 +364,23 @@ export class WllamaLanguageModel implements LanguageModel {
       // Initialize sampling context
       await wllamaInstance.samplingInit(sampling);
 
-      // Generate completion
+      // Generate completion. We collect raw token IDs alongside the text
+      // so cross-modal consumers (e.g. Orpheus TTS, which extracts SNAC
+      // audio tokens from the LLM output stream) can post-process the
+      // sequence. The field is non-standard — it lives outside the
+      // `DoGenerateResult` interface in @localmode/core but is present at
+      // runtime under `outputTokenIds`. Typed callers ignore it; untyped
+      // callers can read it via `(result as any).outputTokenIds`.
+      const outputTokenIds: number[] = [];
       let outputTokens = 0;
       const text = await wllamaInstance.createCompletion(fullPrompt, {
         nPredict: maxTokens,
         sampling,
         stopTokens: stopTokens.length > 0 ? stopTokens : undefined,
         abortSignal,
-        onNewToken: () => {
+        onNewToken: (tokenId: number) => {
           outputTokens++;
+          outputTokenIds.push(tokenId);
         },
       });
 
@@ -365,7 +397,10 @@ export class WllamaLanguageModel implements LanguageModel {
           totalTokens: inputTokens + outputTokens,
           durationMs: Date.now() - startTime,
         },
-      };
+        // Provider extension: raw token-id stream from llama.cpp.
+        // Consumers should access via the wllama-specific name.
+        outputTokenIds,
+      } as never;
     } catch (error) {
       // Re-throw abort errors
       if (error instanceof DOMException && error.name === 'AbortError') {

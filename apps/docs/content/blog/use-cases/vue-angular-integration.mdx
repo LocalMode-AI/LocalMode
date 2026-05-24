@@ -1,0 +1,124 @@
+---
+title: "Vue, Svelte & Angular Integration"
+description: "Use LocalMode in any JavaScript framework - the core packages are framework-agnostic TypeScript."
+author: "LocalMode"
+date: "2026-05-18"
+---
+
+# Vue, Svelte & Angular Integration
+
+Use LocalMode in any JavaScript framework - the core packages are framework-agnostic TypeScript.
+
+*Category: Developer Guide*
+
+## The Problem
+
+LocalMode's @localmode/react package provides React hooks, but many applications use Vue, Svelte, Angular, or vanilla JavaScript. Developers in these ecosystems need to know that LocalMode works with their framework and see examples of the integration pattern.
+
+This is a common challenge for teams building modern applications. Traditional approaches either compromise on privacy (by sending data to cloud APIs), require complex server infrastructure (adding cost and maintenance burden), or sacrifice functionality (by avoiding AI entirely). LocalMode provides a fourth option: run the AI locally in the browser.
+
+## The Solution
+
+The core packages (@localmode/core, @localmode/transformers, @localmode/webllm, @localmode/wllama) are plain TypeScript with zero framework dependencies. They work in any JavaScript environment that supports ES modules. Only @localmode/react is framework-specific. For Vue, use composables wrapping core functions. For Svelte, use stores with core functions. For Angular, use services with core functions.
+
+### Why Local-First?
+
+Building this feature with on-device inference provides three structural advantages over cloud-based alternatives:
+
+1. **Zero marginal cost** - After the initial model download, every inference operation is free. No per-token fees, no monthly API bills, no surprise invoices. This matters especially for features used frequently or by many users.
+2. **Architectural privacy** - User data never leaves the device. This is not a policy promise ("we won't look at your data") but an architectural guarantee: the data physically cannot reach any server because the processing happens in the browser tab.
+3. **Offline capability** - Once models are cached in IndexedDB, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
+
+## Technology Stack
+
+| Package | Purpose |
+| --- | --- |
+| `@localmode/core` | Framework-agnostic core functions and VectorDB |
+| `@localmode/transformers` | ML model provider (works in any framework) |
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+## Implementation
+
+```typescript
+// Vue 3 Composable
+import { ref } from 'vue';
+import { embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+export function useSemanticSearch() {
+  const results = ref([]);
+  const isSearching = ref(false);
+  const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+  async function search(query: string) {
+    isSearching.value = true;
+    const { embedding } = await embed({ model, value: query });
+    results.value = await db.search(embedding, { k: 10 });
+    isSearching.value = false;
+  }
+
+  return { results, isSearching, search };
+}
+```
+
+### How This Works
+
+The code above demonstrates the complete pipeline. Let us walk through the key decisions:
+
+- **Model selection** - The models referenced in this example are chosen for their balance of size, speed, and quality for this specific use case. Smaller models load faster and use less memory; larger models produce better results. Start with the recommended models and upgrade only if quality is insufficient for your users.
+- **Browser APIs** - LocalMode uses IndexedDB for persistent storage (vectors, model cache), Web Workers for background processing (keeping the UI responsive during inference), and the Web Crypto API for optional encryption.
+- **Error handling** - All LocalMode functions throw typed errors (`ModelLoadError`, `StorageError`, `ValidationError`) with actionable hints. Wrap calls in try/catch and use the error's `hint` property to display user-friendly messages.
+- **Cancellation** - Pass an `AbortSignal` to any long-running operation. This lets users cancel searches, embeddings, or generation without waiting for completion.
+
+## Production Considerations
+
+When deploying this solution to production, consider these factors:
+
+**Model preloading:** Download models during user onboarding or application setup, not on first use. Use `preloadModel()` with an `onProgress` callback to show download progress. This avoids the poor experience of a loading spinner on the first AI interaction.
+
+**Storage management:** IndexedDB has browser-specific quotas (Chrome allows an origin up to 60% of total disk size; iOS Safari is more restrictive). Use `getStorageQuota()` to check available space and `navigator.storage.persist()` to request persistent storage that survives browser storage pressure.
+
+**Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
+
+**Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
+
+## Frequently Asked Questions
+
+### Is there a Vue-specific package?
+
+Not yet. The core packages work directly with Vue composables. A @localmode/vue package with pre-built composables may be released in the future. For now, wrapping core functions in composables (as shown above) is the recommended pattern.
+
+### Does it work with server-side rendering?
+
+LocalMode models run in the browser only. For SSR frameworks (Nuxt, SvelteKit, Angular Universal), ensure model loading and inference code runs only on the client side (e.g., use onMounted in Vue, browser check in Svelte, isPlatformBrowser in Angular).
+
+## Further Reading
+
+- [Vue 3 Composables](https://vuejs.org/guide/reusability/composables)
+
+## Related Pages
+
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [React Ai Search](/blog/use-cases/react-ai-search) - use-case guide
+
+## Methodology
+
+All LocalMode API names, function signatures, and code examples were verified against the `packages/core/src/` and `packages/transformers/src/` source in the LocalMode monorepo. Vue 3 composable patterns were verified against the official vuejs.org documentation. Angular SSR guidance (`isPlatformBrowser`) was verified against the official angular.dev API reference. The Chrome IndexedDB storage quota figure was verified against the web.dev "Storage for the web" article (primary Google source).
+
+## Sources
+
+- [LocalMode `@localmode/core` source - `embed()`](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/core/src/embeddings/embed.ts)
+- [LocalMode `@localmode/core` source - `recommendModels()`](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/core/src/capabilities/recommend.ts)
+- [LocalMode `@localmode/transformers` - `transformers.embedding()`](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/transformers/src/provider.ts)
+- [Vue 3 Composables guide - vuejs.org](https://vuejs.org/guide/reusability/composables)
+- [Vue 3 Reactivity Fundamentals (`ref`) - vuejs.org](https://vuejs.org/guide/essentials/reactivity-fundamentals.html)
+- [Vue 3 Composition API Lifecycle Hooks (`onMounted`) - vuejs.org](https://vuejs.org/api/composition-api-lifecycle)
+- [Angular `isPlatformBrowser` API reference - angular.dev](https://angular.dev/api/common/isPlatformBrowser)
+- [Angular Server-side rendering guide - angular.dev](https://angular.dev/guide/ssr)
+- [Storage for the web (Chrome IndexedDB quota) - web.dev](https://web.dev/articles/storage-for-the-web)

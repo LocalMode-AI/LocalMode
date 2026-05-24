@@ -1,0 +1,136 @@
+---
+title: "LangChain.js With Local Inference"
+description: "Drop LocalMode into your LangChain.js app as a local inference provider - same chains, same retrievers, zero API keys."
+author: "LocalMode"
+date: "2026-04-26"
+---
+
+# LangChain.js With Local Inference
+
+Drop LocalMode into your LangChain.js app as a local inference provider - same chains, same retrievers, zero API keys.
+
+*Category: Developer Guide*
+
+## The Problem
+
+Teams with existing LangChain.js applications using OpenAI and Pinecone want to add local inference capability - either to reduce costs, improve privacy, enable offline mode, or all three - without rewriting their chains and retrieval logic.
+
+This is a common challenge for teams building modern applications. Traditional approaches either compromise on privacy (by sending data to cloud APIs), require complex server infrastructure (adding cost and maintenance burden), or sacrifice functionality (by avoiding AI entirely). LocalMode provides a fourth option: run the AI locally in the browser.
+
+## The Solution
+
+The @localmode/langchain package provides drop-in adapters: LocalModeEmbeddings replaces OpenAIEmbeddings, ChatLocalMode replaces ChatOpenAI, and LocalModeVectorStore replaces PineconeStore. Change three imports and your entire LangChain application runs locally. Existing chains, retrievers, and agents work unchanged because the adapters implement standard LangChain interfaces.
+
+### Why Local-First?
+
+Building this feature with on-device inference provides three structural advantages over cloud-based alternatives:
+
+1. **Zero marginal cost** - After the initial model download, every inference operation is free. No per-token fees, no monthly API bills, no surprise invoices. This matters especially for features used frequently or by many users.
+2. **Architectural privacy** - User data never leaves the device. This is not a policy promise ("we won't look at your data") but an architectural guarantee: the data physically cannot reach any server because the processing happens in the browser tab.
+3. **Offline capability** - Once models are cached in IndexedDB, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
+
+## Technology Stack
+
+| Package | Purpose |
+| --- | --- |
+| `@localmode/langchain` | LocalModeEmbeddings, ChatLocalMode, LocalModeVectorStore |
+| `@localmode/transformers` | Embedding models for LocalModeEmbeddings |
+| `@localmode/webllm` | LLM for ChatLocalMode |
+
+Install the required packages:
+
+```bash
+npm install @localmode/langchain @localmode/transformers @localmode/webllm
+```
+
+## Implementation
+
+```typescript
+// Before: Cloud-based LangChain
+// import { OpenAIEmbeddings } from '@langchain/openai';
+// import { ChatOpenAI } from '@langchain/openai';
+
+// After: Local inference - change 3 imports, keep everything else
+import { LocalModeEmbeddings, ChatLocalMode, LocalModeVectorStore } from '@localmode/langchain';
+import { createRetrievalChain } from 'langchain/chains/retrieval';
+import { createStuffDocumentsChain } from 'langchain/chains/combine_documents';
+import { ChatPromptTemplate } from '@langchain/core/prompts';
+import { createVectorDB } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+import { webllm } from '@localmode/webllm';
+
+const embeddings = new LocalModeEmbeddings({
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'),
+});
+
+const chat = new ChatLocalMode({
+  model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+});
+
+// Create local vector store backed by IndexedDB
+const db = await createVectorDB({ name: 'docs', dimensions: 384 });
+const vectorStore = new LocalModeVectorStore(embeddings, { db });
+
+// Use the modern createRetrievalChain API (RetrievalQAChain is deprecated in LangChain.js v1)
+const prompt = ChatPromptTemplate.fromTemplate(
+  'Answer based on context:\n{context}\n\nQuestion: {input}'
+);
+const combineDocsChain = await createStuffDocumentsChain({ llm: chat, prompt });
+const chain = await createRetrievalChain({
+  retriever: vectorStore.asRetriever(),
+  combineDocsChain,
+});
+```
+
+### How This Works
+
+The code above demonstrates the complete pipeline. Let us walk through the key decisions:
+
+- **Model selection** - The models referenced in this example are chosen for their balance of size, speed, and quality for this specific use case. Smaller models load faster and use less memory; larger models produce better results. Start with the recommended models and upgrade only if quality is insufficient for your users.
+- **Browser APIs** - LocalMode uses IndexedDB for persistent storage (vectors, model cache), Web Workers for background processing (keeping the UI responsive during inference), and the Web Crypto API for optional encryption.
+- **Error handling** - All LocalMode functions throw typed errors (`ModelLoadError`, `StorageError`, `ValidationError`) with actionable hints. Wrap calls in try/catch and use the error's `hint` property to display user-friendly messages.
+- **Cancellation** - Pass an `AbortSignal` to any long-running operation. This lets users cancel searches, embeddings, or generation without waiting for completion.
+
+## Production Considerations
+
+When deploying this solution to production, consider these factors:
+
+**Model preloading:** Download models during user onboarding or application setup, not on first use. Use `preloadModel()` with an `onProgress` callback to show download progress. This avoids the poor experience of a loading spinner on the first AI interaction.
+
+**Storage management:** IndexedDB has browser-specific quotas (Chrome allows up to 60% of total disk size per origin; iOS Safari is more restrictive). Use `getStorageQuota()` to check available space and `navigator.storage.persist()` to request persistent storage that survives browser storage pressure.
+
+**Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
+
+**Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
+
+## Frequently Asked Questions
+
+### Does it support all LangChain chain types?
+
+The adapters implement standard LangChain interfaces (`Embeddings`, `BaseChatModel`, `VectorStore`) from `@langchain/core`, so they work with any chain or LCEL expression that uses these interfaces. Note that `RetrievalQAChain` and `ConversationalRetrievalQAChain` are deprecated in LangChain.js (to be removed in v1.0.0); prefer the modern `createRetrievalChain` API instead.
+
+### Can I import my Pinecone vectors?
+
+Yes. Use `@localmode/core`'s `importFrom({ db, format: 'pinecone', data })` to migrate vectors from Pinecone to a local VectorDB. Note that if your Pinecone vectors were created with OpenAI embeddings, you'll need to re-embed with a LocalMode model since the vector spaces differ.
+
+## Further Reading
+
+- [LangChain.js Documentation](https://js.langchain.com/docs/)
+
+## Related Pages
+
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Localmode Vs Openai](/blog/compare/localmode-vs-openai) - comparison guide
+
+## Methodology
+
+All LocalMode API names, class signatures, and constructor options were verified directly against `packages/langchain/src/` (index, embeddings, chat-model, vector-store, reranker, types). LangChain.js base classes (`Embeddings`, `BaseChatModel`, `VectorStore`) were verified against the `@langchain/core` reference docs and package source. The deprecation status of `RetrievalQAChain` and `ConversationalRetrievalQAChain` was confirmed via the LangChain.js v0.3 API reference. The IndexedDB quota figure was verified against the MDN Storage API documentation.
+
+## Sources
+
+- [LocalMode LangChain package source - `packages/langchain/src/`](https://github.com/LocalMode-AI/LocalMode/tree/main/packages/langchain/src)
+- [LangChain.js `@langchain/core` reference - BaseChatModel](https://reference.langchain.com/javascript/classes/_langchain_core.language_models_chat_models.BaseChatModel.html)
+- [LangChain.js `@langchain/core` reference - VectorStore](https://reference.langchain.com/javascript/langchain-core/vectorstores/VectorStore)
+- [LangChain.js `createRetrievalChain` (recommended replacement for RetrievalQAChain)](https://v03.api.js.langchain.com/functions/langchain.chains_retrieval.createRetrievalChain.html)
+- [MDN - Storage quotas and eviction criteria (IndexedDB quota: 60% of total disk size in Chrome)](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria)

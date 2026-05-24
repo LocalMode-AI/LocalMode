@@ -72,6 +72,7 @@ export const tabBar: CSSProperties = {
   borderBottom: `1px solid ${colors.border}`,
   background: colors.bgElevated,
   flexShrink: 0,
+  overflowX: 'auto',
 };
 
 export const tab = (active: boolean): CSSProperties => ({
@@ -84,6 +85,8 @@ export const tab = (active: boolean): CSSProperties => ({
   fontSize: fonts.size,
   fontFamily: fonts.family,
   outline: 'none',
+  whiteSpace: 'nowrap',
+  flexShrink: 0,
 });
 
 export const tabContent: CSSProperties = {
@@ -144,6 +147,7 @@ export const filterInput: CSSProperties = {
   fontSize: fonts.size,
   fontFamily: fonts.family,
   outline: 'none',
-  width: '200px',
+  width: '100%',
+  maxWidth: '200px',
   marginBottom: '8px',
 };

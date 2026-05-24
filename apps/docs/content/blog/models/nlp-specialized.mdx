@@ -1,0 +1,121 @@
+---
+title: "Specialized NLP Models Models in the Browser"
+description: "DistilBART summarization, ModernBERT fill-mask, and DistilBERT QA - single-task NLP models optimized for browser inference."
+author: "LocalMode"
+date: "2026-04-04"
+---
+
+# Specialized NLP Models Models in the Browser
+
+DistilBART summarization, ModernBERT fill-mask, and DistilBERT QA - single-task NLP models optimized for browser inference.
+
+## Overview
+
+The Specialized NLP Models family is available through Transformers.js in LocalMode, with model sizes ranging from 65MB–360MB. The primary task for these models is **summarization**, and they can be used with any application built on the LocalMode SDK.
+
+Running Specialized NLP Models models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+Not every NLP task needs a general-purpose LLM. LocalMode includes three specialized models that outperform larger models on their specific tasks while using a fraction of the memory.
+
+DistilBART-CNN-6-6 (284MB) is a 230M-parameter distilled version of BART-large (406M parameters) with 6 encoder and 6 decoder layers, fine-tuned on CNN/DailyMail. It generates abstractive summaries - rephrasing and condensing the source text rather than extracting sentences - at 2.09× the speed of BART-large-CNN. For document summarization, meeting notes, and article digests, it produces more natural results than prompting a 3B LLM to summarize.
+
+ModernBERT-base (140MB) is a December 2024 encoder-only model with 149M parameters trained on 2 trillion tokens. It replaces classic BERT's 512-token limit with an 8,192-token context window, using Rotary Positional Embeddings and local-global attention. Its fill-mask capability is useful for text completion, data augmentation, and understanding model predictions. Given a sentence with a [MASK] token, it predicts the most likely word - useful for building autocomplete features and testing text understanding.
+
+DistilBERT-SQuAD (65MB) is a 65.2M-parameter model fine-tuned on SQuAD v1.1 for extractive question answering: given a context passage and a question, it identifies the exact span of text that answers the question (F1 87.1 on the SQuAD v1.1 dev set). This is fundamentally different from generative QA (which LLMs do) - extractive QA is faster, more accurate for factual retrieval, and never hallucinates since it only returns text from the source.
+
+## Variant Comparison
+
+The following table lists every Specialized NLP Models variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Xenova/distilbart-cnn-6-6](https://huggingface.co/sshleifer/distilbart-cnn-6-6) | Transformers.js | 284MB | Medium | High | - | WASM |
+| [Xenova/distilbart-cnn-12-6](https://huggingface.co/sshleifer/distilbart-cnn-12-6) | Transformers.js | 360MB | Slow | High | - | WASM |
+| [onnx-community/ModernBERT-base-ONNX](https://huggingface.co/answerdotai/ModernBERT-base) | Transformers.js | 140MB | Medium | High | 8192 | WASM |
+| [Xenova/bert-base-uncased](https://huggingface.co/bert-base-uncased) | Transformers.js | 96MB | Fast | Good | 512 | WASM |
+| [Xenova/distilbert-base-cased-distilled-squad](https://huggingface.co/distilbert/distilbert-base-cased-distilled-squad) | Transformers.js | 65MB | Fast | Good | - | WASM |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| 300MB–400MB | 2 | variants |
+| Under 200MB | 3 | variants |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All Specialized NLP Models variants use the same `SummarizationModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### Transformers.js
+
+Transformers.js runs ONNX-optimized models via ONNX Runtime Web. WebGPU acceleration where available, WASM fallback otherwise.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.summarizer('Xenova/distilbart-cnn-6-6');
+// Use the model with the corresponding @localmode/core function
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred model first, and fall back to a smaller variant if it fails to load.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { summarize } from '@localmode/core';
+
+// Try the higher-quality model, fall back to the smaller one on failure
+let model;
+try {
+  model = transformers.summarizer('Xenova/distilbart-cnn-12-6');
+} catch (error) {
+  console.warn('Primary model failed, using fallback:', error);
+  model = transformers.summarizer('Xenova/distilbart-cnn-6-6');
+}
+```
+
+## When to Use Specialized NLP Models
+
+Specialized NLP Models models are a strong choice when:
+
+- **You need summarization** - Specialized NLP Models is optimized for summarization tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 1 provider (transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The 65MB–360MB range means you can target everything from mobile devices to high-end desktops with the same model family.
+
+
+## HuggingFace Model Cards
+
+- [distilbart-cnn-6-6](https://huggingface.co/sshleifer/distilbart-cnn-6-6)
+- [distilbart-cnn-12-6](https://huggingface.co/sshleifer/distilbart-cnn-12-6)
+- [ModernBERT-base-ONNX](https://huggingface.co/answerdotai/ModernBERT-base)
+- [bert-base-uncased](https://huggingface.co/bert-base-uncased)
+- [distilbert-base-cased-distilled-squad](https://huggingface.co/distilbert/distilbert-base-cased-distilled-squad)
+
+## Related Pages
+
+- [Summarization](/blog/tasks/summarization) - task guide
+
+## Methodology
+
+Model IDs and size figures were verified against `packages/transformers/src/models.ts` (the LocalMode source of truth) and confirmed against the ONNX file listings on each model's HuggingFace repository. For seq2seq models (DistilBART), the reported size is the combined quantized encoder + decoder footprint loaded at runtime. Parameter counts, benchmark scores (ROUGE, SQuAD F1), and context lengths were sourced from the official HuggingFace model cards linked above. Performance tiers (speed and quality) are LocalMode's curated assessments based on parameter count, quantization, and architecture - always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [sshleifer/distilbart-cnn-6-6 - HuggingFace model card (230M params, CNN/DailyMail, ROUGE-2 20.17)](https://huggingface.co/sshleifer/distilbart-cnn-6-6)
+- [Xenova/distilbart-cnn-6-6 - ONNX file listing (encoder_quantized 129MB + decoder_quantized 155MB = 284MB)](https://huggingface.co/Xenova/distilbart-cnn-6-6/tree/main/onnx)
+- [sshleifer/distilbart-cnn-12-6 - HuggingFace model card (306M params, ROUGE-2 21.26)](https://huggingface.co/sshleifer/distilbart-cnn-12-6)
+- [Xenova/distilbart-cnn-12-6 - ONNX file listing (encoder_quantized 205MB + decoder_quantized 155MB ≈ 360MB)](https://huggingface.co/Xenova/distilbart-cnn-12-6/tree/main/onnx)
+- [answerdotai/ModernBERT-base - HuggingFace model card (149M params, 8192 context, released December 18 2024)](https://huggingface.co/answerdotai/ModernBERT-base)
+- [onnx-community/ModernBERT-base-ONNX - ONNX file listing (model_q4f16.onnx = 140MB)](https://huggingface.co/onnx-community/ModernBERT-base-ONNX/tree/main/onnx)
+- [ModernBERT announcement - HuggingFace blog](https://huggingface.co/blog/modernbert)
+- [google-bert/bert-base-uncased - HuggingFace model card (110M params, 512 context)](https://huggingface.co/bert-base-uncased)
+- [Xenova/bert-base-uncased - ONNX file listing (model_q4f16.onnx = 96.4MB)](https://huggingface.co/Xenova/bert-base-uncased/tree/main/onnx)
+- [distilbert/distilbert-base-cased-distilled-squad - HuggingFace model card (65.2M params, SQuAD v1.1 F1 87.1)](https://huggingface.co/distilbert/distilbert-base-cased-distilled-squad)
+- [Xenova/distilbert-base-cased-distilled-squad - ONNX file listing (model_quantized.onnx = 65.8MB)](https://huggingface.co/Xenova/distilbert-base-cased-distilled-squad/tree/main/onnx)
+- [LocalMode transformers model catalog source of truth](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/transformers/src/models.ts)
+- [Transformers.js documentation](https://huggingface.co/docs/transformers.js)

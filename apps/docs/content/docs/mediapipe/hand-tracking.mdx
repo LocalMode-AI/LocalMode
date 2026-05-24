@@ -1,0 +1,203 @@
+---
+title: 'Hand Tracking'
+description: Detect 21-point hand landmarks in images and video with MediaPipe — handedness, world coordinates, and the HAND_CONNECTIONS helper for drawing the hand skeleton.
+icon: Hand
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+# Hand Tracking
+
+The hand landmarker detects up to `numHands` hands in an image and returns **21 landmarks per hand**, the handedness (`Left` / `Right`), and a confidence score. Each detected hand also carries 3D world-coordinate landmarks.
+
+## Landmark Topology
+
+MediaPipe returns the same 21-point topology used across the MediaPipe ecosystem — one point for the wrist, plus four joints per finger:
+
+| Index | Point        | Index | Point          |
+| ----- | ------------ | ----- | -------------- |
+| 0     | Wrist        | 9–12  | Middle finger  |
+| 1–4   | Thumb        | 13–16 | Ring finger    |
+| 5–8   | Index finger | 17–20 | Pinky finger   |
+
+Each landmark is a `{ x, y, z }` point. `x` and `y` are normalized to `0–1` (fractions of image width/height); `z` is depth relative to the wrist.
+
+## Detecting Hands
+
+Create a model with `mediapipe.handLandmarker()` and pass it to the core `detectHands()` function:
+
+```typescript
+import { detectHands } from '@localmode/core';
+import { mediapipe } from '@localmode/mediapipe';
+
+const { hands, usage } = await detectHands({
+  model: mediapipe.handLandmarker(),
+  image: imageBlob,
+  numHands: 2,
+});
+
+for (const hand of hands) {
+  console.log(`${hand.handedness} hand — score ${hand.score.toFixed(2)}`);
+  console.log(`  ${hand.landmarks.length} landmarks`);
+  console.log(`  wrist at (${hand.landmarks[0].x}, ${hand.landmarks[0].y})`);
+}
+
+console.log(`Detected in ${usage.durationMs.toFixed(0)}ms`);
+```
+
+### Options
+
+`detectHands()` accepts:
+
+| Option                   | Type                       | Default | Description                              |
+| ------------------------ | -------------------------- | ------- | ---------------------------------------- |
+| `model`                  | `HandLandmarkModel`        | —       | The model from `mediapipe.handLandmarker()` |
+| `image`                  | `ImageInput`               | —       | Blob, `ImageData`, `HTMLImageElement`, `HTMLCanvasElement`, or `HTMLVideoElement` |
+| `numHands`               | `number`                   | `2`     | Maximum hands to detect                  |
+| `minDetectionConfidence` | `number`                   | `0.5`   | Minimum confidence threshold (0–1)       |
+| `abortSignal`            | `AbortSignal`              | —       | Cancellation signal                      |
+| `maxRetries`             | `number`                   | `2`     | Retry attempts on transient failure      |
+
+### Result
+
+`DetectHandsResult` contains a `hands` array of `HandLandmarkResultItem`:
+
+```typescript
+interface HandLandmarkResultItem {
+  /** 21 hand landmarks in normalized image coordinates */
+  landmarks: Landmark[];
+  /** 21 hand landmarks in 3D world coordinates (meters, origin at hand center) */
+  worldLandmarks: Landmark[];
+  /** Detected handedness */
+  handedness: 'Left' | 'Right';
+  /** Detection confidence score (0-1) */
+  score: number;
+}
+```
+
+Use `worldLandmarks` for real-world measurements (e.g. finger distances in meters) and `landmarks` for overlaying the skeleton on a 2D image.
+
+## Drawing the Hand Skeleton
+
+`@localmode/core` exports `HAND_CONNECTIONS` — the list of landmark index pairs that form the hand skeleton. Use it to draw the connecting lines:
+
+```typescript
+import { detectHands, HAND_CONNECTIONS } from '@localmode/core';
+import { mediapipe } from '@localmode/mediapipe';
+
+const { hands } = await detectHands({
+  model: mediapipe.handLandmarker(),
+  image: canvas,
+});
+
+const ctx = canvas.getContext('2d')!;
+
+for (const hand of hands) {
+  // Draw the connecting bones
+  ctx.strokeStyle = '#00ff88';
+  ctx.lineWidth = 3;
+  for (const [start, end] of HAND_CONNECTIONS) {
+    const a = hand.landmarks[start];
+    const b = hand.landmarks[end];
+    ctx.beginPath();
+    ctx.moveTo(a.x * canvas.width, a.y * canvas.height);
+    ctx.lineTo(b.x * canvas.width, b.y * canvas.height);
+    ctx.stroke();
+  }
+
+  // Draw the landmark points
+  ctx.fillStyle = '#ffffff';
+  for (const point of hand.landmarks) {
+    ctx.beginPath();
+    ctx.arc(point.x * canvas.width, point.y * canvas.height, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+```
+
+## React Hook
+
+`@localmode/react` provides `useDetectHands` for component-friendly state:
+
+```tsx
+'use client';
+
+import { useDetectHands } from '@localmode/react';
+import { mediapipe } from '@localmode/mediapipe';
+
+const model = mediapipe.handLandmarker();
+
+export function HandDetector() {
+  const { data, error, isLoading, execute, cancel, reset } = useDetectHands({
+    model,
+    numHands: 2,
+  });
+
+  const onFile = async (file: File) => {
+    await execute(file);
+  };
+
+  return (
+    <div>
+      {isLoading && <button onClick={cancel}>Cancel</button>}
+      {error && <p>{error.message}</p>}
+      {data && <p>Detected {data.hands.length} hand(s)</p>}
+    </div>
+  );
+}
+```
+
+The hook returns `{ data, error, isLoading, execute, cancel, reset }`. Call `execute(image)` with any `ImageInput`.
+
+<Callout type="tip" title="Reuse the model instance">
+  Create the model once outside your component (or in a service module) and reuse it. The first call downloads the 7.8MB model; later calls hit the browser cache.
+</Callout>
+
+## Real-Time Hand Tracking
+
+For live webcam tracking, use the streaming `createHandTracker` factory instead of calling `detectHands()` per frame — it runs MediaPipe in VIDEO mode for much higher throughput. See the [Streaming guide](/docs/mediapipe/streaming).
+
+```typescript
+const tracker = mediapipe.createHandTracker({
+  video: videoElement,
+  numHands: 2,
+  onResults: (hands, timestampMs) => drawHands(hands),
+});
+
+await tracker.start();
+```
+
+## Cancellation
+
+```typescript
+const controller = new AbortController();
+
+const promise = detectHands({
+  model: mediapipe.handLandmarker(),
+  image: imageBlob,
+  abortSignal: controller.signal,
+});
+
+controller.abort(); // throws inside the promise
+```
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Gesture Recognition"
+    href="/docs/mediapipe/gesture-recognition"
+    description="Recognize 8 hand gestures, with the same 21-point landmarks included."
+  />
+  <Card
+    title="Real-Time Streaming"
+    href="/docs/mediapipe/streaming"
+    description="Live hand tracking over a video element at 30-60fps."
+  />
+  <Card
+    title="Pose Estimation"
+    href="/docs/mediapipe/pose-estimation"
+    description="33-point full-body landmark detection."
+  />
+</Cards>

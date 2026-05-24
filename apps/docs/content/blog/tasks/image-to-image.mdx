@@ -1,0 +1,139 @@
+---
+title: "Image-to-Image (Super Resolution) in the Browser"
+description: "Upscale and enhance images using transformer-based super resolution - 2x and 4x upscaling in the browser."
+author: "LocalMode"
+date: "2026-04-22"
+---
+
+# Image-to-Image (Super Resolution) in the Browser
+
+Upscale and enhance images using transformer-based super resolution - 2x and 4x upscaling in the browser.
+
+## What Is Image-to-Image (Super Resolution)?
+
+Image-to-image models transform input images into enhanced output images. Super resolution is the most common application: taking a low-resolution image and producing a higher-resolution version with reconstructed details. Swin2SR uses a Swin Transformer V2 architecture that processes image patches with shifted window attention, enabling it to capture both local textures and global structures for high-quality upscaling.
+
+This capability is exposed through the `imageToImage()` function in `@localmode/core`. All processing runs entirely in the browser - no server, no API key, no data leaves the device. After the initial model download, image-to-image (super resolution) works completely offline.
+
+## Real-World Applications
+
+Photo enhancement before sharing or printing. Thumbnail upscaling for image galleries. Product image zoom enhancement in e-commerce. Screenshot quality improvement. Old photo restoration. Preparing low-res images for high-DPI displays.
+
+These use cases all benefit from local, on-device processing: user data stays private, there are no per-request API costs, and the application works without internet after initial setup.
+
+## Getting Started
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Import the core function and provider:
+
+```typescript
+import { imageToImage } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+```
+
+The recommended starting model is **Xenova/swin2SR-classical-sr-x4-64** - it provides the best balance of quality, speed, and download size for most applications.
+
+## Code Example
+
+```typescript
+import { imageToImage } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// 4x super resolution
+const model = transformers.imageToImage('Xenova/swin2SR-classical-sr-x4-64');
+
+const { image } = await imageToImage({
+  model,
+  image: lowResPhoto, // File, Blob, or URL
+});
+
+// image is a Blob containing the upscaled result
+const url = URL.createObjectURL(image);
+document.getElementById('preview').src = url;
+```
+
+This example demonstrates the core workflow: create a model instance from the provider, call the `imageToImage()` function with your input, and receive structured results. The same pattern works identically across all 1 available provider: Transformers.js.
+
+## Available Models
+
+The following models support image-to-image (super resolution) through LocalMode. Choose based on your target device, acceptable download size, and quality requirements.
+
+| Model | Provider | Size | Speed | Quality |
+| --- | --- | --- | --- | --- |
+| Xenova/swin2SR-lightweight-x2-64 | Transformers.js | ~8MB (fp32) | Fast | Good |
+| Xenova/swin2SR-classical-sr-x4-64 | Transformers.js | ~55MB (fp32) | Moderate | High |
+
+**Choosing a model:** For most applications, start with the recommended model (`Xenova/swin2SR-classical-sr-x4-64`). If download size is the primary constraint (e.g., mobile PWA, browser extension), pick the smallest model that meets your quality bar. If quality is the priority (e.g., enterprise search, content analysis), use the largest model your target devices can handle.
+
+## Cloud vs Local: Cost and Privacy Comparison
+
+Running image-to-image (super resolution) locally eliminates per-request API costs and keeps all data on-device. Here is how the economics compare:
+
+| Service | Cost / Notes |
+| --- | --- |
+| LocalMode (Swin2SR) | $0 - one-time model download (~8-55MB fp32); no per-request cost |
+
+Cloud super resolution services charge $0.01-0.10 per image. At 1,000 images/month, that is $10-100/month. LocalMode runs Swin2SR at $0 cost with a small model download (~8-55MB fp32, or smaller with quantized variants). Images never leave the device.
+
+The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
+
+## Available Providers
+
+- **Transformers.js** - ONNX-optimized models via ONNX Runtime Web. Supports both WebGPU and WASM backends. Broadest model catalog for non-LLM tasks.
+
+## AbortSignal Support
+
+All `imageToImage()` calls support cancellation through the standard `AbortSignal` API:
+
+```typescript
+const controller = new AbortController();
+
+const promise = imageToImage({
+  model,
+  image: imageFile,
+  abortSignal: controller.signal,
+});
+
+// Cancel if needed (e.g., user navigates away)
+controller.abort();
+```
+
+This is essential for responsive UIs - cancel in-flight operations when the user navigates away, submits a new query, or closes a dialog. The underlying model inference stops immediately, freeing memory and compute resources.
+
+## React Integration
+
+If you are building a React application, `@localmode/react` provides hooks that manage loading states, error handling, and cancellation automatically:
+
+```bash
+npm install @localmode/react
+```
+
+```typescript
+import { useImageToImage } from '@localmode/react';
+```
+
+The hook returns `{ data, error, isLoading, execute, cancel }` - providing everything a UI component needs to display progress, handle errors, and offer cancellation.
+
+## Related Pages
+
+- [Swin2sr Super Resolution](/blog/models/swin2sr-super-resolution) - model guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+Function signatures, hook names, and model IDs were verified against the LocalMode source code (`packages/core/src/vision/image-to-image.ts`, `packages/react/src/hooks/use-image-to-image.ts`, `packages/transformers/src/implementations/image-to-image.ts`). Model file sizes were confirmed from the Xenova HuggingFace repository ONNX file listings. Architecture details were verified against the caidas/swin2SR-classical-sr-x4-64 model card and the original Swin2SR paper. Cloud pricing figures are general-market estimates and subject to change - verify current pricing with providers before making cost decisions.
+
+## Sources
+
+- [Xenova/swin2SR-lightweight-x2-64 ONNX files](https://huggingface.co/Xenova/swin2SR-lightweight-x2-64/tree/main/onnx) - model.onnx = 8.08 MB (fp32)
+- [Xenova/swin2SR-classical-sr-x4-64 ONNX files](https://huggingface.co/Xenova/swin2SR-classical-sr-x4-64/tree/main/onnx) - model.onnx = 55 MB (fp32)
+- [caidas/swin2SR-classical-sr-x4-64 model card](https://huggingface.co/caidas/swin2SR-classical-sr-x4-64) - architecture: SwinV2 Transformer, 12.2M parameters
+- [Swin2SR paper - arXiv:2209.11345](https://arxiv.org/abs/2209.11345) - Conde et al., 2022
+- [LocalMode Core Vision docs](https://localmode.dev/docs/core/vision)
+- [LocalMode Transformers Image-to-Image docs](https://localmode.dev/docs/transformers/image-to-image)

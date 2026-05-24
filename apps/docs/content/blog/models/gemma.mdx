@@ -1,0 +1,183 @@
+---
+title: "Gemma Models in the Browser"
+description: "Google's Gemma models - compact, high-quality models available in LocalMode via WebLLM, wllama, and LiteRT, spanning 1.3GB to 5GB."
+author: "LocalMode"
+date: "2026-03-29"
+---
+
+# Gemma Models in the Browser
+
+Google's Gemma models - compact, high-quality open-weight models available in LocalMode across multiple providers and size tiers.
+
+## Overview
+
+The Gemma family is available through WebLLM (WebGPU), wllama (WASM), and LiteRT in LocalMode, with model sizes ranging from 1.3GB–5GB. The primary task for these models is **generation**, and they can be used with any application built on the LocalMode SDK.
+
+Running Gemma models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+Google's Gemma 2 models (released June–July 2024) bring the research behind Gemini to an open-weight format. The family was released in 2B, 9B, and 27B parameter sizes; LocalMode ships the 2B and 9B variants. Both models are trained using knowledge distillation rather than next-token prediction from scratch. The 9B model was trained on approximately 8 trillion tokens of web data, code, and mathematics.
+
+Architecturally, Gemma 2 uses **grouped-query attention (GQA)** and an **interleaved local-global attention** pattern: local sliding-window layers with a 4,096-token window alternate with global attention layers spanning the full 8,192-token native context window. This hybrid design improves throughput compared to full multi-head attention at similar parameter counts. Both the 2B and 9B models have a native context length of 8,192 tokens; WebLLM's prebuilt MLC builds constrain the effective context window further to fit browser memory budgets (see table below for the values LocalMode exposes).
+
+Gemma 4 (released March–April 2026) introduced the E2B (~2B active parameters) and E4B (~4B active parameters) Mixture-of-Experts variants with a native 8,192-token context. LocalMode ships both via the LiteRT provider - they are WebGPU-only GPU-compiled `.litertlm` builds officially supported by the LiteRT-LM JS API.
+
+## Variant Comparison
+
+The following table lists every Gemma variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [gemma-2-2b-it-q4f16_1-MLC](https://huggingface.co/mlc-ai/gemma-2-2b-it-q4f16_1-MLC) | WebLLM (WebGPU) | 1.44GB | Medium | Good | 2,048 tokens | WEBGPU |
+| [gemma-2-9b-it-q4f16_1-MLC](https://huggingface.co/mlc-ai/gemma-2-9b-it-q4f16_1-MLC) | WebLLM (WebGPU) | 5.0GB | Slow | High | 1,024 tokens | WEBGPU |
+| [Gemma-2-2B-IT-Q4_K_M](https://huggingface.co/bartowski/gemma-2-2b-it-GGUF) | wllama (WASM) | 1.3GB | Medium | Good | 8,192 tokens | WASM |
+| [gemma-4-E2B](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm) | LiteRT | 2.0GB | Medium | Good | 8,192 tokens | WEBGPU |
+| [gemma-4-E4B](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm) | LiteRT | 3.0GB | Slow | High | 8,192 tokens | WEBGPU |
+
+**Context note:** Gemma 2's native context length is 8,192 tokens. LocalMode's WebLLM prebuilt MLC builds constrain this to 2,048 (2B) and 1,024 (9B) tokens to fit within browser VRAM budgets. The wllama (GGUF) and LiteRT builds expose the full 8,192-token context.
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| Under 1.5GB | 2 | variants |
+| 1.5GB–3GB | 2 | variants |
+| Over 3GB | 1 | variant |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All Gemma variants use the same `LanguageModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### WebLLM (WebGPU)
+
+WebLLM compiles models to WebGPU compute shaders for maximum inference speed. Requires Chrome 113+, Edge 113+, or Safari 26+.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+const model = webllm.languageModel('gemma-2-2b-it-q4f16_1-MLC');
+
+const result = await streamText({
+  model,
+  prompt: 'Explain how Gemma models work.',
+  maxTokens: 300,
+  temperature: 0.7,
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+### wllama (WASM)
+
+wllama runs GGUF models via llama.cpp compiled to WebAssembly. Works in every browser including Firefox.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+const model = wllama.languageModel('Gemma-2-2B-IT-Q4_K_M');
+
+const result = await streamText({
+  model,
+  prompt: 'Summarize the benefits of local AI inference.',
+  maxTokens: 300,
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+### LiteRT (Gemma 4, WebGPU-only)
+
+LiteRT runs `.litertlm` models via Google's on-device LiteRT-LM engine. Requires WebGPU.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { litert } from '@localmode/litert';
+
+const model = litert.languageModel('gemma-4-E2B');
+
+const result = await streamText({
+  model,
+  prompt: 'Explain the benefits of on-device AI.',
+  maxTokens: 300,
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred WebGPU model first, and fall back to a WASM variant that works in all browsers if it fails to load.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+import { wllama } from '@localmode/wllama';
+
+// Try the preferred WebGPU model, fall back to WASM on failure
+let model;
+try {
+  model = webllm.languageModel('gemma-2-2b-it-q4f16_1-MLC');
+} catch (error) {
+  console.warn('WebGPU model failed, using WASM fallback:', error);
+  model = wllama.languageModel('Gemma-2-2B-IT-Q4_K_M');
+}
+
+const result = await streamText({ model, prompt: 'Hello!', maxTokens: 100 });
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+## When to Use Gemma
+
+Gemma models are a strong choice when:
+
+- **You need text generation** - Gemma is optimized for generation tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 3 providers (webllm, wllama, litert), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The 1.3GB–5GB range means you can target everything from mid-range devices to high-end desktops with the same model family.
+- **Offline functionality is required** - All variants work offline after the initial download, cached in IndexedDB via LocalMode's model caching system.
+
+## HuggingFace Model Cards
+
+- [gemma-2-2b-it-q4f16_1-MLC (WebLLM MLC build)](https://huggingface.co/mlc-ai/gemma-2-2b-it-q4f16_1-MLC)
+- [gemma-2-9b-it-q4f16_1-MLC (WebLLM MLC build)](https://huggingface.co/mlc-ai/gemma-2-9b-it-q4f16_1-MLC)
+- [gemma-2-2b-it GGUF (wllama source)](https://huggingface.co/bartowski/gemma-2-2b-it-GGUF)
+- [gemma-4-E2B LiteRT build](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm)
+- [gemma-4-E4B LiteRT build](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm)
+
+## Related Pages
+
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Smollm2](/blog/models/smollm2) - model guide
+- [Qwen](/blog/models/qwen) - model guide
+
+## Methodology
+
+Model sizes, context lengths, quantization formats, and provider availability are extracted directly from LocalMode's source catalogs: `packages/webllm/src/models.ts`, `packages/wllama/src/models.ts`, and `packages/litert/src/models.ts`. These are the authoritative figures for what LocalMode exposes - they may differ from upstream defaults (e.g., WebLLM's MLC builds constrain Gemma 2's native 8,192-token context to fit browser VRAM budgets). Gemma 2 architecture details (GQA, interleaved local/global attention, 8,192-token native context, training on 8T tokens) are sourced from the Gemma 2 technical report (arXiv 2408.00118). Gemma 4 release dates are sourced from the official Google AI developer release log. WebLLM VRAM figures (gemma-2-9b: 6,422 MB) are sourced from the upstream `mlc-ai/web-llm` config.ts. Always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [Gemma 2 technical report - arXiv 2408.00118](https://arxiv.org/abs/2408.00118)
+- [WebLLM config.ts - mlc-ai/web-llm (gemma-2-2b and gemma-2-9b context/VRAM entries)](https://github.com/mlc-ai/web-llm/blob/main/src/config.ts)
+- [google/gemma-2-2b-it - HuggingFace model card](https://huggingface.co/google/gemma-2-2b-it)
+- [google/gemma-2-9b-it - HuggingFace model card](https://huggingface.co/google/gemma-2-9b-it)
+- [mlc-ai/gemma-2-2b-it-q4f16_1-MLC - HuggingFace](https://huggingface.co/mlc-ai/gemma-2-2b-it-q4f16_1-MLC)
+- [mlc-ai/gemma-2-9b-it-q4f16_1-MLC - HuggingFace](https://huggingface.co/mlc-ai/gemma-2-9b-it-q4f16_1-MLC)
+- [bartowski/gemma-2-2b-it-GGUF - HuggingFace (wllama source)](https://huggingface.co/bartowski/gemma-2-2b-it-GGUF)
+- [litert-community/gemma-4-E2B-it-litert-lm - HuggingFace](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm)
+- [litert-community/gemma-4-E4B-it-litert-lm - HuggingFace](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm)
+- [Gemma releases - Google AI for Developers](https://ai.google.dev/gemma/docs/releases)
+- [LocalMode webllm/src/models.ts](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/webllm/src/models.ts)
+- [LocalMode wllama/src/models.ts](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/wllama/src/models.ts)
+- [LocalMode litert/src/models.ts](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/litert/src/models.ts)

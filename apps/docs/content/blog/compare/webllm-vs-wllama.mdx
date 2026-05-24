@@ -1,0 +1,126 @@
+---
+title: "WebLLM vs wllama"
+description: "WebGPU vs WASM for browser LLM inference - comparing LocalMode's two primary LLM providers on speed, compatibility, and model selection."
+author: "LocalMode"
+date: "2026-03-28"
+---
+
+# WebLLM vs wllama
+
+WebGPU vs WASM for browser LLM inference - comparing LocalMode's two primary LLM providers on speed, compatibility, and model selection.
+
+## Overview
+
+This comparison examines the key differences between **WebLLM (WebGPU)** ([https://webllm.mlc.ai](https://webllm.mlc.ai)) and **wllama (WASM)** ([https://github.com/ngxson/wllama](https://github.com/ngxson/wllama)) for building AI-powered applications. Both approaches have their strengths - the right choice depends on your specific requirements around privacy, cost, performance, and target platforms.
+
+Understanding these trade-offs is essential for architects and developers evaluating local-first AI versus alternative approaches. The comparison below covers 10 dimensions, from runtime characteristics to model quality and developer experience.
+
+## Feature-by-Feature Comparison
+
+| Dimension | WebLLM (WebGPU) | wllama (WASM) |
+| --- | --- | --- |
+| **Inference Engine** | MLC-compiled models running as WebGPU compute shaders. GPU-native inference. | llama.cpp compiled to WebAssembly. CPU-based inference with SIMD optimizations. |
+| **Speed** | 30-90 tokens/second on modern GPUs. Best performance available in-browser. | 5-20 tokens/second on CPU. Slower but consistent across devices. |
+| **Browser Support** | Chrome 113+, Edge 113+, Safari 26+, Firefox 141+ (WebGPU required on all). | Chrome 80+, Firefox 75+, Safari 14+ (via WASM). No WebGPU required. |
+| **Model Format** | MLC-compiled models (custom WebGPU format). 32 curated models available. | GGUF format. 160,000+ models available on HuggingFace. Any GGUF model works. |
+| **Model Selection** | 32 curated models: Qwen, Llama, Phi, SmolLM2, Gemma, Mistral, DeepSeek, Hermes. | 18 curated + 160K+ HuggingFace GGUF models. Run any GGUF file from any source. |
+| **Memory Usage** | Uses GPU VRAM. Large models may compete with browser rendering for GPU memory. | Uses system RAM only. No GPU memory pressure. Better for devices with limited VRAM. |
+| **Context Length** | Typically 1024-4096 tokens. Limited by GPU VRAM allocation. | Up to 131,072 tokens for Llama models. Larger contexts possible with CPU RAM. |
+| **Vision Models** | Phi-3.5-vision for multimodal (image + text) inference. | Holo2-4B and Holo2-8B vision models for UI grounding and browser-agent tasks. |
+| **GGUF Metadata** | No GGUF support. Models must be in MLC format. | Built-in GGUF metadata parser. Inspect model details before downloading. |
+| **Package Size** | @localmode/webllm includes MLC runtime. Moderate bundle impact. | @localmode/wllama includes llama.cpp WASM. Moderate bundle impact. |
+
+## Verdict
+
+Use WebLLM when targeting Chrome, Edge, Safari 26+, or Firefox 141+ users who have GPU-capable hardware - you'll get 3-5× faster inference via WebGPU. Use wllama when you need guaranteed compatibility across all devices (including those without GPU access), when you want to run custom GGUF models from HuggingFace's 160K+ catalog, when you need long context windows up to 131,072 tokens, or when you want built-in vision models for UI grounding. For maximum compatibility, wrap model loading in a try/catch - try WebLLM first and fall back to wllama on failure: users with WebGPU get fast inference, everyone else still gets working AI. Both providers implement the same LanguageModel interface, so application code doesn't change.
+
+### Summary
+
+When evaluating WebLLM (WebGPU) against wllama (WASM), consider your primary constraints:
+
+- **Privacy requirements** - If user data must never leave the device, solutions that process everything locally have an inherent architectural advantage.
+- **Cost at scale** - Per-request pricing models become expensive as user counts grow. Local inference shifts the cost to a one-time model download per user.
+- **Target platforms** - Browser-based solutions work on any device with a modern browser. Desktop and server-based solutions may require additional installation steps.
+- **Model quality needs** - For tasks where the absolute highest quality matters (complex multi-step reasoning, creative writing), larger server-side or cloud models still have an edge. For the majority of practical tasks (embeddings, classification, summarization, simple generation), the quality gap has narrowed significantly.
+- **Offline requirements** - Applications that must work without internet need local inference. Cloud-dependent solutions fail when connectivity drops.
+
+## Code Comparison
+
+### WebLLM (WebGPU)
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+// WebGPU: Fast inference on Chrome/Edge with GPU
+const model = webllm.languageModel('Qwen2.5-3B-Instruct-q4f16_1-MLC');
+const result = await streamText({ model, prompt: 'Explain AI' });
+```
+
+### wllama (WASM)
+
+```typescript
+import { streamText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+// WASM: Works in every browser including Firefox
+const model = wllama.languageModel('Qwen2.5-3B-Instruct-Q4_K_M');
+const result = await streamText({ model, prompt: 'Explain AI' });
+```
+
+## Frequently Asked Questions
+
+### Can I use both providers in the same app?
+
+Yes, and it's the recommended approach. Wrap model loading in a try/catch - try WebLLM first (fast, WebGPU) and fall back to wllama (universal, WASM) on error. The same LanguageModel interface means your streamText() and generateText() calls work identically with either provider.
+
+### Which has better model quality?
+
+For the same model family (e.g., Qwen2.5-3B), quality is nearly identical. WebLLM uses 4-bit float16 quantization while wllama uses Q4_K_M GGUF quantization - both target similar compression ratios. Benchmark differences are within 1-2% for most tasks.
+
+### What about Transformers.js v4 for LLM inference?
+
+Transformers.js v4 is a third option offering ONNX-format LLM inference. It supports 16 curated models (Granite, Qwen, TinyLlama, Llama, Phi, DeepSeek-R1, Gemma) and is production-ready. It's a good choice if you're already using Transformers.js for other tasks and want to avoid adding another provider package.
+
+## Making the Decision
+
+For many teams, the answer is not either/or. A hybrid architecture uses local inference for high-volume, low-complexity tasks (embeddings, classification, NER, simple generation) at zero marginal cost, and routes the small percentage of requests that genuinely need frontier-quality reasoning to a cloud provider. A plain try/catch makes this pattern straightforward to implement:
+
+```typescript
+import { streamText } from '@localmode/core';
+
+// Try the local model first (free, private, fast)
+// Fall back to a cloud call only if local inference fails
+async function generate(prompt: string) {
+  try {
+    return await streamText({ model: localModel, prompt });
+  } catch (error) {
+    console.warn('Local inference failed, escalating to cloud:', error);
+    return await callCloudProvider(prompt);
+  }
+}
+```
+
+This approach gives you the best of both worlds: the privacy and cost benefits of local inference for the 90% of requests that don't need frontier quality, and the option to escalate to cloud APIs for the remaining 10%.
+
+## Related Pages
+
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Qwen](/blog/models/qwen) - model guide
+- [Llama](/blog/models/llama) - model guide
+- [Localmode Vs Ollama](/blog/compare/localmode-vs-ollama) - comparison guide
+
+## Methodology
+
+All model counts and API examples were verified directly against `packages/webllm/src/models.ts` (32 entries) and `packages/wllama/src/models.ts` (18 entries). Browser compatibility claims for WebLLM were confirmed via the mlc-ai/web-llm GitHub repository and the WebGPU Implementation Status wiki; Firefox desktop WebGPU support (Firefox 141+) was confirmed via the Mozilla shipping announcement. wllama browser support and vision capability were verified against the ngxson/wllama GitHub README. The HuggingFace GGUF model count (160,000+) reflects the figure cited in LocalMode's own documentation and is consistent with a live HuggingFace query showing 178,000+ models with the `gguf` library filter at time of writing.
+
+## Sources
+
+- [mlc-ai/web-llm GitHub repository](https://github.com/mlc-ai/web-llm) - WebLLM runtime, WebGPU requirement, model catalog
+- [ngxson/wllama GitHub repository](https://github.com/ngxson/wllama) - wllama runtime, browser support, vision/multimodal features
+- [wllama documentation](https://github.ngxson.com/wllama/docs/) - API reference and feature list
+- [WebGPU Implementation Status](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status) - browser WebGPU support matrix
+- [Shipping WebGPU on Windows in Firefox 141](https://simonwillison.net/2025/Jul/16/webgpu-firefox/) - Firefox desktop WebGPU availability
+- [HuggingFace GGUF model catalog](https://huggingface.co/models?library=gguf) - GGUF model count
+- [LocalMode source - packages/webllm/src/models.ts](https://github.com/LocalMode-AI/LocalMode) - 32 curated WebLLM model IDs
+- [LocalMode source - packages/wllama/src/models.ts](https://github.com/LocalMode-AI/LocalMode) - 18 curated wllama model IDs

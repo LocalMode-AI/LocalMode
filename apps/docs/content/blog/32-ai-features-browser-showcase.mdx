@@ -1,20 +1,20 @@
 ---
-title: "The 32 AI Features in Our Open-Source Showcase - All Running in Your Browser Right Now"
-description: "A visual tour of every demo app at localmode.ai: LLM chat with three inference backends, RAG pipelines, real-time object detection, voice transcription, GGUF model inspection, agentic reasoning, and 25 more - all running locally with zero API keys."
+title: "The 34 AI Features in Our Open-Source Showcase - All Running in Your Browser Right Now"
+description: "A visual tour of every demo app at localmode.ai: LLM chat with four inference backends, RAG pipelines, real-time object detection, voice transcription, GGUF model inspection, agentic reasoning, and 26 more - all running locally with zero API keys."
 author: LocalMode
 date: 2026-01-29
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-Open [localmode.ai](https://localmode.ai) in Chrome or Edge, and you will find 32 fully functional AI applications. Every one of them runs entirely in your browser tab. No backend server. No API key. No data leaves your device. Close the tab and the computation stops - there is nothing to shut down, no bill to reconcile, no logs on a server you do not control.
+Open [localmode.ai](https://localmode.ai) in Chrome or Edge, and you will find 34 fully functional AI applications. Every one of them runs entirely in your browser tab. No backend server. No API key. No data leaves your device. Close the tab and the computation stops - there is nothing to shut down, no bill to reconcile, no logs on a server you do not control.
 
 This is not a collection of toy demos. These are complete applications - with file upload, drag-and-drop, batch processing, export to CSV/JSON/SRT, real-time streaming, and persistent IndexedDB storage - built on the same [`@localmode`](https://localmode.dev) packages you would use in production. The showcase exists so you can see exactly what local-first AI looks like before you write a single line of code.
 
-This post is a guided tour through all 32 apps, organized by category. Each entry includes what the app does, which model powers it, how large the download is, and a direct link to try it.
+This post is a guided tour through all 34 apps, organized by category. Each entry includes what the app does, which model powers it, how large the download is, and a direct link to try it.
 
 <Callout type="info" title="By the numbers">
-  **32** demo apps. **25+** distinct ML models from HuggingFace. **160,000+** GGUF models accessible via the explorer. **13** `@localmode/*` packages. Three inference backends: WebLLM (WebGPU), Transformers.js (ONNX), and wllama (WASM). Total model sizes range from 0 MB (Chrome AI, device detection) to 4.9 GB (8B-parameter LLMs).
+  **34** demo apps. **25+** distinct ML models from HuggingFace. **178,000+** GGUF models accessible via the explorer. **15** `@localmode/*` packages. Four inference backends: WebLLM (WebGPU), Transformers.js (ONNX), wllama (WASM), and LiteRT. Total model sizes range from 0 MB (Chrome AI, device detection) to 4.9 GB (8B-parameter LLMs).
 </Callout>
 
 ---
@@ -23,15 +23,15 @@ This post is a guided tour through all 32 apps, organized by category. Each entr
 
 ### 1.1 LLM Chat
 
-The flagship demo. A full-featured chat interface with streaming responses, semantic caching, conversation persistence, and vision support (attach images and ask questions about them). What makes it unusual is the model selector: it surfaces models from three different inference backends - WebLLM (MLC WebGPU), Transformers.js v4 (ONNX WebGPU), and wllama (GGUF WASM) - all behind the same `LanguageModel` interface. Pick a tiny 78 MB model for quick answers or a 4.4 GB 8B-parameter model for deeper reasoning. Agent mode is available on models above 500 MB, enabling tool-calling with a built-in knowledge base, calculator, and summarizer.
+The flagship demo. A full-featured chat interface with streaming responses, semantic caching, conversation persistence, and vision support (attach images and ask questions about them). What makes it unusual is the model selector: it surfaces models from four different inference backends - WebLLM (MLC WebGPU), Transformers.js v4 (ONNX WebGPU), wllama (GGUF WASM), and LiteRT - all behind the same `LanguageModel` interface. Pick a tiny 78 MB model for quick answers or a 4.9 GB 8B-parameter model for deeper reasoning. Agent mode is available on models above 500 MB, enabling tool-calling with a built-in knowledge base, calculator, and summarizer.
 
-**Models:** 50+ models across three backends (Llama 3.2, Qwen 3, Phi 3.5, Mistral, DeepSeek R1, and more) | **Size:** 78 MB -- 4.4 GB | [Try LLM Chat](https://localmode.ai/llm-chat)
+**Models:** 60+ models across four backends (Llama 3.2, Qwen 3, Phi 3.5, Mistral, DeepSeek R1, and more) | **Size:** 78 MB -- 4.9 GB | [Try LLM Chat](https://localmode.ai/llm-chat)
 
 ### 1.2 GGUF Explorer
 
-Browse, inspect, and chat with any GGUF model from HuggingFace - over 135,000 of them. Paste a HuggingFace URL or shorthand like `bartowski/Llama-3.2-1B-Instruct-GGUF:Q4_K_M.gguf`, and the app parses the GGUF metadata header (architecture, quantization type, context length, vocabulary size), runs a browser compatibility check (RAM estimate, WebAssembly support, cross-origin isolation status), and lets you chat with the model via wllama's WASM inference engine. Think of it as a browser-native model playground for the entire GGUF ecosystem.
+Browse, inspect, and chat with any GGUF model from HuggingFace - over 178,000 of them. Paste a HuggingFace URL or shorthand like `bartowski/Llama-3.2-1B-Instruct-GGUF:Q4_K_M.gguf`, and the app parses the GGUF metadata header (architecture, quantization type, context length, vocabulary size), runs a browser compatibility check (RAM estimate, WebAssembly support, cross-origin isolation status), and lets you chat with the model via wllama's WASM inference engine. Think of it as a browser-native model playground for the entire GGUF ecosystem.
 
-**Models:** Any GGUF model on HuggingFace + 17 curated defaults | **Size:** 105 MB -- 4.9 GB | [Try GGUF Explorer](https://localmode.ai/gguf-explorer)
+**Models:** Any GGUF model on HuggingFace + 18 curated defaults | **Size:** 105 MB -- 4.9 GB | [Try GGUF Explorer](https://localmode.ai/gguf-explorer)
 
 ### 1.3 Research Agent
 
@@ -93,7 +93,7 @@ Zero-shot classification with custom labels. Define your own categories - "billi
 
 Summarize long documents into key points. Control output length with min/max parameters. Handles articles, meeting notes, and support threads. The DistilBART model provides abstractive summarization - it generates new sentences rather than extracting existing ones.
 
-**Model:** DistilBART CNN | **Size:** 200 MB | [Try Text Summarizer](https://localmode.ai/text-summarizer)
+**Model:** DistilBART CNN | **Size:** 300 MB | [Try Text Summarizer](https://localmode.ai/text-summarizer)
 
 ### 3.4 Document Q&A Bot
 
@@ -103,7 +103,7 @@ Extractive question answering: paste a context paragraph, ask a question, and th
 
 ### 3.5 Offline Translator
 
-Translate text between 20+ language pairs. Each language pair uses a dedicated Helsinki-NLP Opus MT model. Works completely offline after the initial model download. Supports batch translation and maintains a history of translations across sessions.
+Translate text between six language pairs (EN↔DE, EN↔FR, EN↔ES). Each language pair uses a dedicated Helsinki-NLP Opus MT model. Works completely offline after the initial model download. Supports batch translation and maintains a history of translations across sessions.
 
 **Models:** Opus MT (EN-DE, EN-FR, EN-ES, and more) | **Size:** 100 -- 300 MB per language pair | [Try Translator](https://localmode.ai/translator)
 
@@ -115,15 +115,15 @@ Intelligent text completion powered by fill-mask models. Type a sentence with a 
 
 ### 3.7 Smart Writer
 
-An AI writing assistant that combines summarization (TL;DR, key points, teaser, headline) and translation (seven languages) in one interface. It tries Chrome's built-in Gemini Nano first for zero-download, instant results, and automatically falls back to Transformers.js models if Chrome AI is not available. A practical demonstration of the `createProviderWithFallback()` pattern.
+An AI writing assistant that combines summarization (TL;DR, key points, teaser, headline) and translation (seven languages) in one interface. It tries Chrome's built-in Gemini Nano first for zero-download, instant results, and automatically falls back to Transformers.js models if Chrome AI is not available. A practical demonstration of the try/catch provider fallback pattern.
 
 **Models:** Chrome AI (0 MB) with DistilBART CNN fallback (300 MB) | [Try Smart Writer](https://localmode.ai/smart-writer)
 
 ### 3.8 Invoice Q&A Assistant
 
-Visual document understanding for invoices, receipts, and forms. Upload an image of a document, ask "What is the total amount?" or "Who is the vendor?", and the Florence-2 model answers based on the visual content. Supports table extraction and batch processing of multiple document images.
+Visual document understanding for invoices, receipts, and forms. Upload an image of a document, ask "What is the total amount?" or "Who is the vendor?", and the Donut model answers based on the visual content. Supports table extraction and batch processing of multiple document images.
 
-**Model:** Florence-2 Base | **Size:** 460 MB | [Try Invoice Q&A](https://localmode.ai/invoice-qa)
+**Model:** Donut Base (DocVQA) | **Size:** ~800 MB | [Try Invoice Q&A](https://localmode.ai/invoice-qa)
 
 ---
 
@@ -149,9 +149,9 @@ Search a product catalog by image. Upload a photo of a product, and the app find
 
 ### 4.4 Accessibility Alt-Text Generator
 
-Generate descriptive alt-text for images automatically. Upload an image and the Florence-2 model produces a natural-language caption suitable for screen readers. Also supports visual QA - ask questions about image content. Batch-process a folder of images and export captions as an HTML snippet.
+Generate descriptive alt-text for images automatically. Upload an image and the ViT-GPT2 model produces a natural-language caption suitable for screen readers. Also supports visual QA - ask questions about image content. Batch-process a folder of images and export captions as an HTML snippet.
 
-**Model:** Florence-2 Base | **Size:** 460 MB | [Try Image Captioner](https://localmode.ai/image-captioner)
+**Model:** ViT-GPT2 Image Captioning | **Size:** ~230 MB | [Try Image Captioner](https://localmode.ai/image-captioner)
 
 ### 4.5 OCR Document Scanner
 
@@ -161,9 +161,9 @@ Extract text from images and scanned documents. Uses the TrOCR model, which hand
 
 ### 4.6 Real-Time Object Detector
 
-Detect and locate objects in images with bounding boxes and confidence scores. Uses D-FINE Nano, a modern detection architecture optimized for speed. Upload an image or connect your webcam for real-time detection. The model identifies 80 COCO object categories including people, vehicles, animals, and household items.
+Detect and locate objects in images with bounding boxes and confidence scores. Uses DETR ResNet-50, a transformer-based detection architecture. Upload an image or connect your webcam for real-time detection. The model identifies 80 COCO object categories including people, vehicles, animals, and household items.
 
-**Model:** D-FINE Nano | **Size:** 130 MB | [Try Object Detector](https://localmode.ai/object-detector)
+**Model:** DETR ResNet-50 | **Size:** ~42 MB | [Try Object Detector](https://localmode.ai/object-detector)
 
 ### 4.7 Photo Enhancer
 
@@ -197,13 +197,13 @@ Record audio directly in the browser or upload audio files, and the Moonshine Ti
 
 A more full-featured audio app: transcribe meetings with Moonshine Base (higher accuracy than Tiny), then generate summaries and extract action items using DistilBART. Export transcripts in SRT or VTT subtitle formats. Designed for the workflow of recording a meeting, getting the transcript, and sharing the summary - all without the audio ever leaving the device.
 
-**Models:** Moonshine Base (387 MB) + DistilBART CNN (200 MB) | [Try Meeting Assistant](https://localmode.ai/meeting-assistant)
+**Models:** Moonshine Base (~237 MB) + DistilBART CNN (~200 MB) | [Try Meeting Assistant](https://localmode.ai/meeting-assistant)
 
 ### 5.3 Audiobook Creator
 
-Convert text to natural-sounding speech. Paste or type text, and the MMS TTS model generates audio you can play back or download. Designed for creating audiobooks, podcasts, or accessibility audio from written content. The model is remarkably small at 30 MB.
+Convert text to natural-sounding speech. Paste or type text, and the Kokoro model generates audio you can play back or download. Designed for creating audiobooks, podcasts, or accessibility audio from written content. The model is compact at around 86 MB.
 
-**Model:** MMS TTS English | **Size:** 30 MB | [Try Audiobook Creator](https://localmode.ai/audiobook-creator)
+**Model:** Kokoro-82M | **Size:** ~86 MB | [Try Audiobook Creator](https://localmode.ai/audiobook-creator)
 
 ---
 
@@ -239,50 +239,67 @@ Evaluate classification models with real metrics: accuracy, precision, recall, F
 
 ---
 
+## 8. Media and Real-Time
+
+### 8.1 MediaPipe Studio
+
+An interactive playground for all of MediaPipe's real-time vision, audio, and text tasks. Switch between tabs for hand landmarks (21 points), pose estimation (33 points), face mesh (478 points), gesture recognition (8 gestures), audio classification (YAMNet, 521 categories), language detection (110 languages), and text embeddings - all via `@localmode/mediapipe`'s streaming tracker APIs running at up to 60 fps through the webcam.
+
+**Models:** MediaPipe task bundles (2--10 MB each) | [Try MediaPipe Studio](https://localmode.ai/mediapipe-studio)
+
+### 8.2 Voice Studio
+
+A text-to-speech exploration tool powered by Kokoro-82M. Browse all 29 English voices (American & British English), synthesize custom text with any voice, and compare voices side by side. Demonstrates `@localmode/transformers`'s Kokoro TTS implementation with phonemizer-backed pronunciation and speed control.
+
+**Model:** Kokoro-82M | **Size:** ~86 MB | [Try Voice Studio](https://localmode.ai/voice-studio)
+
+---
+
 ## What Ties It All Together
 
-Every one of these 32 apps is built on the same stack:
+Every one of these 34 apps is built on the same stack:
 
 - **`@localmode/core`** provides the zero-dependency runtime: `embed()`, `classify()`, `generateText()`, `generateObject()`, `createVectorDB()`, `createAgent()`, `runAgent()`, `encrypt()`, `evaluateModel()`, `recommendModels()`, and dozens more functions. No external dependencies.
-- **`@localmode/transformers`** wraps HuggingFace Transformers.js for 24 model types (embeddings, classification, NER, translation, summarization, vision, audio, OCR, and more).
-- **`@localmode/webllm`** provides WebGPU-accelerated LLM inference with 30 curated chat models from Llama, Qwen, Phi, Mistral, and DeepSeek.
-- **`@localmode/wllama`** runs any GGUF model via llama.cpp compiled to WebAssembly - 160,000+ models, universal browser support, no WebGPU required.
-- **`@localmode/react`** provides 46 React hooks that manage loading states, cancellation, error handling, and streaming for every operation.
+- **`@localmode/transformers`** wraps HuggingFace Transformers.js for 27 model types (embeddings, classification, NER, translation, summarization, vision, audio, OCR, and more).
+- **`@localmode/webllm`** provides WebGPU-accelerated LLM inference with 32 curated chat models from Llama, Qwen, Phi, Mistral, and DeepSeek.
+- **`@localmode/wllama`** runs any GGUF model via llama.cpp compiled to WebAssembly - 178,000+ models, universal browser support, no WebGPU required.
+- **`@localmode/react`** provides 56 React hooks that manage loading states, cancellation, error handling, and streaming for every operation.
 - **`@localmode/langchain`** adapts local models to LangChain.js interfaces for drop-in RAG pipelines.
-- **`@localmode/pdfjs`**, **`@localmode/chrome-ai`**, **`@localmode/devtools`**, **`@localmode/dexie`**, **`@localmode/idb`**, and **`@localmode/localforage`** round out the ecosystem with PDF extraction, Chrome Built-in AI, observability, and storage adapters.
+- **`@localmode/pdfjs`**, **`@localmode/chrome-ai`**, **`@localmode/devtools`**, **`@localmode/litert`**, **`@localmode/mediapipe`**, **`@localmode/ai-sdk`**, **`@localmode/dexie`**, **`@localmode/idb`**, and **`@localmode/localforage`** round out the ecosystem with PDF extraction, Chrome Built-in AI, observability, on-device LiteRT inference, MediaPipe vision/audio tasks, Vercel AI SDK integration, and storage adapters.
 
-The showcase app itself is a Next.js 16 application with React 19, Tailwind CSS 4, and daisyUI 5. Each of the 32 demo apps is fully self-contained in its own directory - no shared state, no shared components between apps. You can read the source of any app as a standalone reference implementation.
+The showcase app itself is a Next.js 16 application with React 19, Tailwind CSS 4, and daisyUI 5. Each of the 34 demo apps is fully self-contained in its own directory - no shared state, no shared components between apps. You can read the source of any app as a standalone reference implementation.
 
 ---
 
 ## The Models Behind the Showcase
 
-Here is a quick reference of every model used across the 32 apps, sorted by download size:
+Here is a quick reference of every model used across the 34 apps, sorted by download size:
 
 | Model | Size | Used In |
 |-------|------|---------|
-| MMS TTS English | 30 MB | Audiobook Creator |
+| MobileBERT MNLI | ~25 MB | Email Classifier |
 | BGE Small EN v1.5 | 33 MB | Semantic Search, PDF Search, LangChain RAG, Data Migrator, Encrypted Vault, Voice Notes |
-| Moonshine Tiny | 50 MB | Voice Notes |
-| Photo Enhancer (Swin2SR) | 50 MB | Photo Enhancer |
+| DETR ResNet-50 | ~42 MB | Object Detector |
+| Moonshine Tiny | ~50 MB | Voice Notes |
+| Swin2SR Lightweight x2 | ~50 MB | Photo Enhancer |
 | DistilBERT SST-2 | 67 MB | Sentiment Analyzer, Model Evaluator |
-| DINOv3 Small | 86 MB | Duplicate Finder |
-| DistilBERT SQuAD | 100 MB | Q&A Bot |
-| BERT Base NER | 110 MB | Document Redactor |
-| D-FINE Nano | 130 MB | Object Detector |
-| ModernBERT Base | 150 MB | Smart Autocomplete |
-| RMBG-1.4 | 170 MB | Background Remover |
-| DistilBART CNN | 200 MB | Text Summarizer, Meeting Assistant, Smart Writer |
-| Opus MT (per language pair) | 100--300 MB | Translator, Smart Writer |
-| CLIP ViT Base | ~350 MB | Cross-Modal Search |
-| Moonshine Base | 387 MB | Meeting Assistant |
-| MobileBERT MNLI | 25 MB | Email Classifier |
-| SigLIP Base | 400 MB | Smart Gallery, Product Search |
-| Florence-2 Base | 460 MB | Image Captioner, Invoice Q&A |
-| TrOCR Small | 10--50 MB | OCR Scanner |
+| DINOv2-based Small (dinov3-vits16) | ~86 MB | Duplicate Finder |
+| Kokoro-82M | ~86 MB | Audiobook Creator, Voice Studio |
+| DistilBERT SQuAD | ~100 MB | Q&A Bot |
+| Opus MT (per language pair) | ~100 MB | Translator, Smart Writer |
+| BERT Base NER | ~110 MB | Document Redactor |
+| TrOCR Small Printed | ~120 MB | OCR Scanner |
+| ModernBERT Base | ~150 MB | Smart Autocomplete |
+| RMBG-1.4 | ~170 MB | Background Remover |
+| ViT-GPT2 Image Captioning | ~230 MB | Image Captioner |
+| Moonshine Base | ~237 MB | Meeting Assistant |
+| DistilBART CNN | ~300 MB | Text Summarizer, Meeting Assistant, Smart Writer |
+| CLIP ViT Base Patch32 | ~350 MB | Cross-Modal Search |
+| SigLIP Base Patch16-224 | ~400 MB | Smart Gallery, Product Search |
 | Qwen 3 1.7B | 1.1 GB | Research Agent, LangChain RAG, Data Extractor |
 | Llama 3.2 1B | 712 MB | LLM Chat |
 | Phi 3.5 Mini | 2.1 GB | LLM Chat |
+| Donut Base (DocVQA) | ~800 MB | Invoice Q&A |
 | Various 3B--8B models | 1.7--4.9 GB | LLM Chat, GGUF Explorer, Data Extractor |
 
 Every model is downloaded once from HuggingFace and cached in IndexedDB or the Cache API. Subsequent visits load from disk in seconds.
@@ -300,25 +317,30 @@ pnpm install
 pnpm dev --filter showcase-nextjs
 ```
 
-Open `http://localhost:3000` and all 32 apps are available locally. You can also read the source of any app at `apps/showcase-nextjs/src/app/(apps)/{app-name}/` - each one is a self-contained reference implementation with its own components, hooks, services, types, and constants.
+Open `http://localhost:3000` and all 34 apps are available locally. You can also read the source of any app at `apps/showcase-nextjs/src/app/(apps)/{app-name}/` - each one is a self-contained reference implementation with its own components, hooks, services, types, and constants.
 
 ---
 
 ## Methodology
-Sources and references for this post:
 
+All app names, counts, model IDs, and model sizes were verified against the `apps/showcase-nextjs/src/app/(apps)/` directory and each app's `_lib/constants.ts`. Package counts were verified against the `packages/` directory. React hook counts were verified against `packages/react/src/index.ts`. WebLLM and wllama model counts were verified against `packages/webllm/src/models.ts` and `packages/wllama/src/models.ts` respectively. The GGUF model count was verified against [huggingface.co/models?library=gguf](https://huggingface.co/models?library=gguf) (178,541 as of May 2026). Moonshine Base size was cross-referenced against the app's own constants (~237 MB).
+
+## Sources
+
+- [LocalMode showcase source - app directories](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/%28apps%29) -- ground truth for app names and count (34 apps)
 - [LocalMode documentation](https://localmode.dev/docs) -- full API reference for all packages
-- [LocalMode showcase source code](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs) -- the Next.js app containing all 32 demos
-- [HuggingFace Model Hub](https://huggingface.co/models) -- model cards and metadata for all referenced models
+- [HuggingFace GGUF models filter](https://huggingface.co/models?library=gguf) -- live count of GGUF models (178,541 as of May 2026)
+- [Xenova/detr-resnet-50 model card](https://huggingface.co/Xenova/detr-resnet-50) -- object detection model used in Object Detector app
+- [onnx-community/moonshine-base-ONNX file tree](https://huggingface.co/onnx-community/moonshine-base-ONNX/tree/main/onnx) -- ONNX file sizes for Moonshine Base
+- [Xenova/donut-base-finetuned-docvqa model card](https://huggingface.co/Xenova/donut-base-finetuned-docvqa) -- model used in Invoice Q&A app
 - [Transformers.js documentation](https://huggingface.co/docs/transformers.js) -- browser ML inference library
 - [WebLLM project](https://webllm.mlc.ai/) -- WebGPU LLM inference engine
-- [wllama project](https://github.com/LocalMode-AI/LocalMode/tree/main/packages/wllama) -- GGUF WASM inference via llama.cpp
 - [Chrome Built-in AI](https://developer.chrome.com/docs/ai/built-in) -- Gemini Nano APIs in Chrome
 
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit [localmode.ai](https://localmode.ai) to try 34 AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

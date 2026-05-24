@@ -1,0 +1,122 @@
+---
+title: "AI Tutoring & Education Apps"
+description: "Build private, offline-capable tutoring systems where student data never leaves the device."
+author: "LocalMode"
+date: "2026-04-30"
+---
+
+# AI Tutoring & Education Apps
+
+Build private, offline-capable tutoring systems where student data never leaves the device.
+
+*Category: Industry Solution*
+
+## The Problem
+
+Educational AI tools face unique privacy constraints: COPPA (children under 13), FERPA (student records), and parental consent requirements make cloud AI processing legally complex. Schools often lack reliable internet. Students' learning data and performance records are sensitive.
+
+This is a common challenge for teams building modern applications. Traditional approaches either compromise on privacy (by sending data to cloud APIs), require complex server infrastructure (adding cost and maintenance burden), or sacrifice functionality (by avoiding AI entirely). LocalMode provides a fourth option: run the AI locally in the browser.
+
+## The Solution
+
+Build tutoring features with LocalMode running entirely in the student's browser. The LLM provides explanations and answers questions. Classification categorizes student responses for adaptive learning. Speech-to-text enables voice interaction for accessibility. All student data stays on-device - on-device AI processing avoids transmitting student data to third-party services, reducing COPPA compliance burden, no FERPA records transmitted, works offline in schools with poor connectivity.
+
+### Why Local-First?
+
+Building this feature with on-device inference provides three structural advantages over cloud-based alternatives:
+
+1. **Zero marginal cost** - After the initial model download, every inference operation is free. No per-token fees, no monthly API bills, no surprise invoices. This matters especially for features used frequently or by many users.
+2. **Architectural privacy** - User data never leaves the device. This is not a policy promise ("we won't look at your data") but an architectural guarantee: the data physically cannot reach any server because the processing happens in the browser tab.
+3. **Offline capability** - Once models are cached in IndexedDB, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
+
+## Technology Stack
+
+| Package | Purpose |
+| --- | --- |
+| `@localmode/core` | streamText(), classify(), VectorDB for learning materials |
+| `@localmode/wllama` | LLM for explanations (works in all browsers) |
+| `@localmode/transformers` | Classification, embeddings for adaptive learning |
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/wllama @localmode/transformers
+```
+
+## Implementation
+
+```typescript
+import { streamText, classify } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+import { transformers } from '@localmode/transformers';
+
+const tutor = wllama.languageModel('Qwen2.5-1.5B-Instruct-Q4_K_M');
+
+// AI tutor that explains concepts
+const result = await streamText({
+  model: tutor,
+  systemPrompt: 'You are a patient math tutor for 5th graders.',
+  prompt: "I don't understand fractions.",
+  maxTokens: 500,
+});
+
+// Classify student understanding level for adaptive content
+const level = await classify({
+  model: transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english'),
+  text: studentResponse,
+});
+```
+
+### How This Works
+
+The code above demonstrates the complete pipeline. Let us walk through the key decisions:
+
+- **Model selection** - The models referenced in this example are chosen for their balance of size, speed, and quality for this specific use case. Smaller models load faster and use less memory; larger models produce better results. Start with the recommended models and upgrade only if quality is insufficient for your users.
+- **Browser APIs** - LocalMode uses IndexedDB for persistent storage (vectors, model cache), Web Workers for background processing (keeping the UI responsive during inference), and the Web Crypto API for optional encryption.
+- **Error handling** - All LocalMode functions throw typed errors (`ModelLoadError`, `StorageError`, `ValidationError`) with actionable hints. Wrap calls in try/catch and use the error's `hint` property to display user-friendly messages.
+- **Cancellation** - Pass an `AbortSignal` to any long-running operation. This lets users cancel searches, embeddings, or generation without waiting for completion.
+
+## Production Considerations
+
+When deploying this solution to production, consider these factors:
+
+**Model preloading:** Download models during user onboarding or application setup, not on first use. Use `preloadModel()` with an `onProgress` callback to show download progress. This avoids the poor experience of a loading spinner on the first AI interaction.
+
+**Storage management:** IndexedDB has browser-specific quotas (Chrome allows up to 60% of total disk size per origin; iOS Safari is more restrictive). Use `getStorageQuota()` to check available space and `navigator.storage.persist()` to request persistent storage that survives browser storage pressure.
+
+**Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
+
+**Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
+
+## Frequently Asked Questions
+
+### Is this COPPA-compliant?
+
+Browser-based processing where no student data is transmitted to servers avoids triggering COPPA's "collection" provisions. However, consult a compliance attorney for your specific use case - COPPA compliance involves more than just data processing (e.g., notice requirements, parental consent for account creation).
+
+### How well do small models tutor?
+
+For explaining established concepts (math rules, vocabulary, science facts), 1.5B-3B models perform well. For open-ended creative or complex reasoning tasks, quality drops compared to GPT-4. Focus the tutor on structured, known-answer interactions where local models excel.
+
+## Further Reading
+
+- [COPPA - Children's Online Privacy Protection Act](https://www.ftc.gov/legal-library/browse/rules/childrens-online-privacy-protection-rule-coppa)
+
+## Related Pages
+
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Qwen](/blog/models/qwen) - model guide
+- [Offline Chatbot](/blog/use-cases/offline-chatbot) - use-case guide
+- [Speech To Text](/blog/tasks/speech-to-text) - task guide
+
+## Methodology
+
+Code examples were verified against the LocalMode source tree (`packages/core/src/generation/types.ts`, `packages/wllama/src/`, `packages/core/src/classification/`). Regulatory descriptions (COPPA, FERPA) were checked against the FTC and U.S. Department of Education primary sources listed below and are provided as general information only - not legal advice. Storage quota figures come from the MDN Web Docs Storage API reference.
+
+## Sources
+
+- [FTC - Children's Online Privacy Protection Rule (COPPA)](https://www.ftc.gov/legal-library/browse/rules/childrens-online-privacy-protection-rule-coppa)
+- [FTC - COPPA Frequently Asked Questions](https://www.ftc.gov/business-guidance/resources/complying-coppa-frequently-asked-questions)
+- [U.S. Department of Education - FERPA overview](https://studentprivacy.ed.gov/ferpa)
+- [U.S. Department of Education - What is FERPA?](https://studentprivacy.ed.gov/faq/what-ferpa)
+- [MDN Web Docs - Storage quotas and eviction criteria](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria)

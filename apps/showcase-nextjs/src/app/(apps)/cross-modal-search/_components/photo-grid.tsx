@@ -5,7 +5,6 @@
 'use client';
 
 import { Trash2, ImageIcon } from 'lucide-react';
-import { Spinner } from './ui';
 import { cn, formatScore, getScoreColor } from '../_lib/utils';
 import type { Photo, SearchResult } from '../_lib/types';
 

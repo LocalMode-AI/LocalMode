@@ -128,6 +128,8 @@ for await (const chunk of result.stream) {
 | `Llama-3.1-8B-Instruct-q4f16_1-MLC`         | ~4.5GB  | 4K      | Strong general-purpose            |
 | `Qwen3-8B-q4f16_1-MLC`                      | ~4.5GB  | 4K      | Highest quality multilingual      |
 | `gemma-2-9b-it-q4f16_1-MLC`                 | ~5GB    | 1K      | Google Gemma 2 9B, highest quality |
+| `Qwen3.5-4B-q4f16_1-MLC`                    | ~2.39GB | 32K     | Qwen 3.5 4B, latest multilingual, 32K context |
+| `Qwen3.5-9B-q4f16_1-MLC`                    | ~5.06GB | 32K     | Qwen 3.5 9B, highest-quality preset (8GB+ RAM) |
 
 <Callout type="warn">
   Large models require significant GPU memory (4GB+ VRAM). Best for desktop browsers with dedicated
@@ -143,7 +145,8 @@ for await (const chunk of result.stream) {
   - **Production**: `Llama-3.2-3B-Instruct` or `Phi-3.5-mini` — best quality-to-size ratio
   - **Code**: `Qwen2.5-Coder-1.5B` (fast) or `Qwen2.5-Coder-7B` (best quality)
   - **Reasoning**: `Ministral-3-3B-Reasoning` (compact) or `DeepSeek-R1-Distill-Qwen-7B` (best)
-  - **Multilingual**: `Qwen3-1.7B` or `Qwen3-8B` — latest generation, 100+ languages
+  - **Multilingual**: `Qwen3-1.7B`, `Qwen3-8B`, or `Qwen3.5-4B` (32K context) — latest generation, 100+ languages
+  - **High-Quality 32K Context**: `Qwen3.5-4B` (~2.39GB) or `Qwen3.5-9B` (~5.06GB, 8GB+ RAM)
   - **Multimodal**: `Phi-3.5-vision` — text + image understanding
   - **General 7B+**: `Mistral-7B-v0.3`, `Llama-3.1-8B`, `Qwen2.5-7B`, or `gemma-2-9b` — desktop-class quality
   - **Low Memory**: `SmolLM2-135M-Instruct` — ~78MB, instant loading
@@ -448,8 +451,8 @@ Answer:`,
 | ----------- | ----------------- |
 | Chrome 113+ | ✅                |
 | Edge 113+   | ✅                |
-| Firefox     | ❌ (Nightly only) |
-| Safari 18+  | ✅                |
+| Firefox 141+ | ✅ (Win) / Firefox 147+ on macOS Apple Silicon |
+| Safari 26+  | ✅                |
 | iOS Safari  | ✅ (iOS 26+)      |
 
 ### Hardware Requirements

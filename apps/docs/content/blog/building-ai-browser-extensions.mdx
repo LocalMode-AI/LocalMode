@@ -33,7 +33,7 @@ The service worker replaced Manifest V2's persistent background page. It handles
 
 - **No DOM access.** Many ML libraries need `document` or `OffscreenCanvas` for tensor operations.
 - **Terminates when idle.** Chrome kills the service worker after 30 seconds of inactivity. A model that takes 45 seconds to load will be interrupted.
-- **No WebGPU.** Service workers cannot access the GPU adapter, ruling out WebGPU-accelerated inference.
+- **No WebGPU (pre-Chrome 124).** Service workers could not access the GPU adapter. Since Chrome 124, WebGPU is supported in extension service workers, but practical ML inference is still better placed in offscreen documents where you have a full DOM and can use Web Workers alongside GPU compute.
 
 Use the service worker for **orchestration**: receiving messages from content scripts, creating offscreen documents, and routing results back.
 
@@ -89,7 +89,7 @@ Here is the manifest skeleton for an AI-powered extension. The critical details 
 }
 ```
 
-The `wasm-unsafe-eval` directive is essential. Without it, any WebAssembly module -- including the ONNX runtime that powers `@localmode/transformers` -- will be blocked by Chrome's CSP. This directive has been supported since Chrome 103 and is the only approved way to enable WASM execution in Manifest V3 extensions.
+The `wasm-unsafe-eval` directive is essential. Without it, any WebAssembly module -- including the ONNX runtime that powers `@localmode/transformers` -- will be blocked by Chrome's CSP. Support for this directive in Manifest V3 extensions landed in Chrome 102, and Chrome 103 made it required for WASM to work at all.
 
 ---
 
@@ -285,7 +285,7 @@ summarizeBtn.addEventListener('click', async () => {
 });
 ```
 
-The side panel stays open as the user browses. They can click "Summarize" on any page and get a local, private summary in seconds. After the initial model download (~300MB for DistilBART), everything works offline.
+The side panel stays open as the user browses. They can click "Summarize" on any page and get a local, private summary in seconds. After the initial model download (~284MB for DistilBART CNN 6-6), everything works offline.
 
 ---
 
@@ -351,10 +351,10 @@ searchInput.addEventListener('input', async () => {
   // Embed the query and search the vector database
   const { embedding } = await embed({ model, value: query });
 
-  // semanticSearch returns results ranked by cosine similarity
+  // search returns results ranked by cosine similarity
   const results = await bookmarkDB.search(embedding, {
-    topK: 10,
-    minScore: 0.3,
+    k: 10,
+    threshold: 0.3,
   });
 
   resultsEl.innerHTML = results
@@ -392,7 +392,7 @@ The provider packages (`@localmode/transformers`, `@localmode/webllm`, `@localmo
 
 ## Production Considerations
 
-**Model size vs. capability.** For extensions, prefer smaller models. `bge-small-en-v1.5` (33MB) handles embeddings. `distilbart-cnn-6-6` (~300MB) handles summarization. `mobilebert-uncased-mnli` (~85MB) handles zero-shot classification. If you need LLM chat, `@localmode/wllama` can run quantized GGUF models (1-4GB) via WASM with universal browser support.
+**Model size vs. capability.** For extensions, prefer smaller models. `bge-small-en-v1.5` (33MB) handles embeddings. `distilbart-cnn-6-6` (~284MB) handles summarization. `mobilebert-uncased-mnli` (~21MB) handles zero-shot classification. If you need LLM chat, `@localmode/wllama` can run quantized GGUF models (1-4GB) via WASM with universal browser support.
 
 **First-run experience.** Show a progress bar during the initial model download. LocalMode's `onProgress` callback on all providers makes this straightforward. Consider downloading models proactively when the user installs the extension, rather than waiting for the first inference call.
 
@@ -422,16 +422,22 @@ Your users get AI features that work offline, respect their privacy, and never s
 
 ## Methodology
 
-This post draws on the official Chrome Extensions documentation and the LocalMode source code for API patterns and architecture guidance.
+All LocalMode API facts (function signatures, model IDs, model sizes, VectorDB `SearchOptions` parameters) were verified directly against `packages/core/src/` and `packages/transformers/src/` in the LocalMode monorepo. Chrome extension platform facts (offscreen document availability, Side Panel availability, service worker timeout behavior, WebGPU in service workers, `wasm-unsafe-eval` version, storage quotas, Chrome Web Store size limit) were verified against primary sources at developer.chrome.com and MDN. One caveat: model sizes reflect the LocalMode model-registry catalogue values and may differ slightly from the actual quantized ONNX weights on HuggingFace for non-default quantization settings.
 
-- [Chrome Offscreen Documents API](https://developer.chrome.com/docs/extensions/reference/api/offscreen)
-- [Chrome Side Panel API](https://developer.chrome.com/docs/extensions/reference/api/sidePanel)
-- [Manifest V3 Content Security Policy](https://developer.chrome.com/docs/extensions/reference/manifest/content-security-policy)
+## Sources
+
+- [Chrome Offscreen Documents API](https://developer.chrome.com/docs/extensions/reference/api/offscreen) - confirms Chrome 109+, valid reasons including `WORKERS`
+- [Chrome Side Panel API](https://developer.chrome.com/docs/extensions/reference/api/sidePanel) - confirms Chrome 114+
+- [Manifest V3 Content Security Policy](https://developer.chrome.com/docs/extensions/reference/manifest/content-security-policy) - `wasm-unsafe-eval` directive
+- [What's new in Chrome extensions](https://developer.chrome.com/docs/extensions/whats-new) - Chrome 102: `wasm-unsafe-eval` allowed in MV3 CSP; Chrome 103: required for WASM
+- [The extension service worker lifecycle](https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle) - 30-second idle timeout confirmed
+- [Longer extension service worker lifetimes (Chrome 110)](https://developer.chrome.com/blog/longer-esw-lifetimes) - idle timer no longer fires with pending events
+- [What's New in WebGPU (Chrome 124)](https://developer.chrome.com/blog/new-in-webgpu-124) - WebGPU added to service workers and shared workers
 - [Migrate to Service Workers (Manifest V3)](https://developer.chrome.com/docs/extensions/develop/migrate/to-service-workers)
-- [Chrome Extension Storage and Cookies](https://developer.chrome.com/docs/extensions/develop/concepts/storage-and-cookies)
-- [Chrome Web Store Publishing Requirements](https://developer.chrome.com/docs/webstore/publish)
-- [WASM in Manifest V3 Discussion](https://github.com/GoogleChrome/chrome-extensions-samples/issues/775)
-- [LocalMode Core Package Source](https://github.com/nicholasgriffintn/LocalMode/tree/main/packages/core) -- zero-dependency core with `embed()`, `classify()`, `summarize()`, `generateText()`, and `createVectorDB()`
+- [Storage quotas and eviction criteria (MDN)](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria) - Chrome: 60% per origin, 80% total; `navigator.storage.persist()` behavior
+- [Chrome Web Store Publishing Requirements](https://developer.chrome.com/docs/webstore/publish) - 2 GB maximum package size confirmed
+- [LocalMode model registry source](https://github.com/LocalMode-AI/LocalMode/tree/main/packages/core/src/capabilities/model-registry.ts) - model sizes: `bge-small-en-v1.5` 33 MB, `distilbart-cnn-6-6` 284 MB, `mobilebert-uncased-mnli` 21 MB
+- [LocalMode VectorDB SearchOptions source](https://github.com/LocalMode-AI/LocalMode/tree/main/packages/core/src/types.ts) - `k` and `threshold` parameters (not `topK`/`minScore`)
 
 ---
 

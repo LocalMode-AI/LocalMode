@@ -1,0 +1,122 @@
+---
+title: "Private Document Search"
+description: "Build semantic search over sensitive documents that runs entirely in the browser - no server, no API, no data leaving the device."
+author: "LocalMode"
+date: "2026-05-10"
+---
+
+# Private Document Search
+
+Build semantic search over sensitive documents that runs entirely in the browser - no server, no API, no data leaving the device.
+
+*Category: Feature Guide*
+
+## The Problem
+
+Organizations need to search internal documents using natural language but cannot send proprietary content to cloud APIs. Traditional keyword search misses semantic matches ("budget concerns" vs "financial projections"), while cloud-based semantic search creates unacceptable data exposure risks for legal, medical, and financial content.
+
+This is a common challenge for teams building modern applications. Traditional approaches either compromise on privacy (by sending data to cloud APIs), require complex server infrastructure (adding cost and maintenance burden), or sacrifice functionality (by avoiding AI entirely). LocalMode provides a fourth option: run the AI locally in the browser.
+
+## The Solution
+
+Build a complete semantic search pipeline in the browser using LocalMode. Documents are chunked with chunk(), embedded with embedMany() using BGE-small, and stored in a client-side VectorDB backed by IndexedDB. Search queries are embedded and compared using cosine similarity. Optional reranking with MiniLM improves precision. All processing happens in the browser tab - the original documents and their vector representations never leave the device. The pipeline handles PDFs via @localmode/pdfjs, supports metadata filtering, and works offline after initial model download.
+
+### Why Local-First?
+
+Building this feature with on-device inference provides three structural advantages over cloud-based alternatives:
+
+1. **Zero marginal cost** - After the initial model download, every inference operation is free. No per-token fees, no monthly API bills, no surprise invoices. This matters especially for features used frequently or by many users.
+2. **Architectural privacy** - User data never leaves the device. This is not a policy promise ("we won't look at your data") but an architectural guarantee: the data physically cannot reach any server because the processing happens in the browser tab.
+3. **Offline capability** - Once models are cached in IndexedDB, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
+
+## Technology Stack
+
+| Package | Purpose |
+| --- | --- |
+| `@localmode/core` | VectorDB, embed(), embedMany(), chunk(), rerank() |
+| `@localmode/transformers` | BGE-small embedding model, MiniLM reranker |
+| `@localmode/pdfjs` | PDF text extraction |
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers @localmode/pdfjs
+```
+
+## Implementation
+
+```typescript
+import { createVectorDB, embed, embedMany, chunk, semanticSearch } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+const db = await createVectorDB<{ text: string; source: string }>({
+  name: 'private-docs', dimensions: 384,
+});
+
+// Ingest documents (runs in browser)
+for (const doc of documents) {
+  const chunks = chunk(doc.text, { size: 512, overlap: 50 });
+  const { embeddings } = await embedMany({ model, values: chunks.map(c => c.text) });
+  await db.addMany(chunks.map((c, i) => ({
+    id: `${doc.id}-${i}`, vector: embeddings[i],
+    metadata: { text: c.text, source: doc.name },
+  })));
+}
+
+// Search (zero network requests)
+const results = await semanticSearch({ model, db, query: 'budget concerns', k: 10 });
+```
+
+### How This Works
+
+The code above demonstrates the complete pipeline. Let us walk through the key decisions:
+
+- **Model selection** - The models referenced in this example are chosen for their balance of size, speed, and quality for this specific use case. Smaller models load faster and use less memory; larger models produce better results. Start with the recommended models and upgrade only if quality is insufficient for your users.
+- **Browser APIs** - LocalMode uses IndexedDB for persistent storage (vectors, model cache), Web Workers for background processing (keeping the UI responsive during inference), and the Web Crypto API for optional encryption.
+- **Error handling** - All LocalMode functions throw typed errors (`ModelLoadError`, `StorageError`, `ValidationError`) with actionable hints. Wrap calls in try/catch and use the error's `hint` property to display user-friendly messages.
+- **Cancellation** - Pass an `AbortSignal` to any long-running operation. This lets users cancel searches, embeddings, or generation without waiting for completion.
+
+## Production Considerations
+
+When deploying this solution to production, consider these factors:
+
+**Model preloading:** Download models during user onboarding or application setup, not on first use. Use `preloadModel()` with an `onProgress` callback to show download progress. This avoids the poor experience of a loading spinner on the first AI interaction.
+
+**Storage management:** IndexedDB has browser-specific quotas (Chrome allows up to 60% of total disk size per origin; iOS Safari is more restrictive). Use `getStorageQuota()` to check available space and `navigator.storage.persist()` to request persistent storage that survives browser storage pressure.
+
+**Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
+
+**Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
+
+## Frequently Asked Questions
+
+### Does the search work offline?
+
+Yes. After the initial model download (33MB for BGE-small) and document ingestion, the entire search pipeline works without internet. Documents are stored in IndexedDB and persist across browser sessions.
+
+### How many documents can it handle?
+
+With SQ8 vector quantization, a typical device can store 500K-1M vectors in IndexedDB (roughly 100K-200K document chunks). For larger collections, use the PQ (Product Quantization) option for 8-32× compression.
+
+## Further Reading
+
+- [IndexedDB API on MDN](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API)
+
+## Related Pages
+
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+- [Search Reranking](/blog/tasks/search-reranking) - task guide
+- [Bge Embeddings](/blog/models/bge-embeddings) - model guide
+- [Gdpr Compliant Ai](/blog/use-cases/gdpr-compliant-ai) - use-case guide
+
+## Methodology
+
+Code examples were verified against the LocalMode monorepo source: `packages/core/src/rag/`, `packages/core/src/embeddings/`, `packages/transformers/src/models.ts`, and `packages/pdfjs/src/`. Every exported function (`chunk`, `embedMany`, `semanticSearch`, `createVectorDB`, `getStorageQuota`, `detectCapabilities`, `recommendModels`) was confirmed present in `packages/core/src/index.ts`. Storage quota figures come from the primary Google web.dev specification page. Model size figures for BGE-small-en-v1.5 were verified against the Hugging Face model repository (quantized `model_quantized.onnx` variant, ~34MB).
+
+## Sources
+
+- [Storage for the web - web.dev](https://web.dev/articles/storage-for-the-web) - primary source for Chrome IndexedDB quota (60% of total disk per origin)
+- [Xenova/bge-small-en-v1.5 ONNX files - Hugging Face](https://huggingface.co/Xenova/bge-small-en-v1.5/tree/main/onnx) - model file sizes (model_quantized.onnx ~34MB, model.onnx 133MB)
+- [IndexedDB API - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API) - browser storage API reference
+- [LocalMode core source - packages/core/src/](https://github.com/LocalMode-AI/LocalMode) - verified API exports and function signatures

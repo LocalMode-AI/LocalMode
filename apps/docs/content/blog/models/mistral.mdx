@@ -1,0 +1,149 @@
+---
+title: "Mistral & Ministral Models in the Browser"
+description: "Mistral AI's 7B instruction model and the Ministral 3B reasoning/instruction variants for browser inference."
+author: "LocalMode"
+date: "2026-05-19"
+---
+
+# Mistral & Ministral Models in the Browser
+
+Mistral AI's 7B instruction model and the Ministral 3B reasoning/instruction variants for browser inference.
+
+## Overview
+
+The Mistral & Ministral family is available through WebLLM (WebGPU), wllama (WASM) in LocalMode, with model sizes ranging from 1.8GB–4.37GB. The primary task for these models is **generation**, and they can be used with any application built on the LocalMode SDK.
+
+Running Mistral & Ministral models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+Mistral AI pioneered the idea that a 7B parameter model could compete with much larger ones through architectural innovations like sliding window attention and grouped-query attention. Mistral-7B-Instruct-v0.3 remains one of the most capable 7B models available, with strong performance on reasoning, code generation, and general knowledge tasks.
+
+The Ministral series targets the 3B parameter sweet spot with two specialized variants: Ministral-3-3B-Instruct for general conversation and Ministral-3-3B-Reasoning for chain-of-thought tasks requiring step-by-step logic. At 1.8GB via WebLLM, these are practical for most desktop browsers and high-end mobile devices.
+
+For browser use, Mistral-7B via wllama (4.37GB GGUF, Q4_K_M quantization) supports an impressive 32K token context window, making it excellent for document analysis and long-form content generation. The WebLLM variant uses a more aggressive quantization that reduces size to 4GB with a 4K context window, trading context length for slightly better inference speed on WebGPU.
+
+## Variant Comparison
+
+The following table lists every Mistral & Ministral variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Ministral-3-3B-Instruct-2512-BF16-q4f16_1-MLC](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512) | WebLLM (WebGPU) | 1.8GB | Medium | Good | 4,096 tokens | WEBGPU |
+| [Ministral-3-3B-Reasoning-2512-q4f16_1-MLC](https://huggingface.co/mistralai/Ministral-3-3B-Reasoning-2512) | WebLLM (WebGPU) | 1.8GB | Medium | Good | 4,096 tokens | WEBGPU |
+| [Mistral-7B-Instruct-v0.3-q4f16_1-MLC](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3) | WebLLM (WebGPU) | 4.0GB | Slow | High | 4,096 tokens | WEBGPU |
+| [Mistral-7B-Instruct-v0.3-Q4_K_M](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3) | wllama (WASM) | 4.37GB | Slow | High | 32,768 tokens | WASM |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| 1.5GB–3GB | 2 | variants |
+| Over 3GB | 2 | variants |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All Mistral & Ministral variants use the same `LanguageModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### WebLLM (WebGPU)
+
+WebLLM compiles models to WebGPU compute shaders for maximum inference speed. Requires Chrome 113+, Edge 113+, or Safari 26+.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+const model = webllm.languageModel('Ministral-3-3B-Instruct-2512-BF16-q4f16_1-MLC');
+
+const result = await streamText({
+  model,
+  prompt: 'Explain how Mistral & Ministral models work.',
+  maxTokens: 300,
+  temperature: 0.7,
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+### wllama (WASM)
+
+wllama runs GGUF models via llama.cpp compiled to WebAssembly. Works in every browser including Firefox.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+const model = wllama.languageModel('Mistral-7B-Instruct-v0.3-Q4_K_M');
+
+const result = await streamText({
+  model,
+  prompt: 'Summarize the benefits of local AI inference.',
+  maxTokens: 300,
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred model first, and fall back to a smaller variant if it fails to load.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+import { wllama } from '@localmode/wllama';
+
+// Try WebGPU first; fall back to WASM if WebGPU is unavailable
+let model;
+try {
+  model = webllm.languageModel('Ministral-3-3B-Instruct-2512-BF16-q4f16_1-MLC');
+} catch (error) {
+  console.warn('WebGPU model failed, falling back to wllama:', error);
+  model = wllama.languageModel('Mistral-7B-Instruct-v0.3-Q4_K_M');
+}
+```
+
+## When to Use Mistral & Ministral
+
+Mistral & Ministral models are a strong choice when:
+
+- **You need text generation** - Mistral & Ministral is optimized for generation tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 2 providers (webllm, wllama), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The 1.8GB–4.37GB range means you can target everything from mobile devices to high-end desktops with the same model family.
+- **Offline functionality is required** - All variants work offline after the initial download, cached in IndexedDB via LocalMode's model caching system.
+
+## HuggingFace Model Cards
+
+- [Ministral-3-3B-Instruct-2512-BF16-q4f16_1-MLC](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512)
+- [Ministral-3-3B-Reasoning-2512-q4f16_1-MLC](https://huggingface.co/mistralai/Ministral-3-3B-Reasoning-2512)
+- [Mistral-7B-Instruct-v0.3-q4f16_1-MLC](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3)
+
+## Related Pages
+
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Smollm2](/blog/models/smollm2) - model guide
+- [Qwen](/blog/models/qwen) - model guide
+
+## Methodology
+
+Model sizes, context lengths, quantization formats, and provider availability are taken directly from LocalMode's provider catalogs (`packages/webllm/src/models.ts` and `packages/wllama/src/models.ts`), which are the authoritative source of truth for all LocalMode claims on this page. Mistral architecture details (sliding window attention, grouped-query attention) are sourced from the official Mistral 7B paper (arXiv 2310.06825) and the HuggingFace Transformers documentation. Ministral 3 family details - including the 256K native context window and December 2025 release - are sourced from official Mistral AI documentation and HuggingFace model cards; note that WebLLM's MLC-compiled variants cap context at 4,096 tokens regardless of the base model's native limit. Performance tiers (speed and quality) are LocalMode's curated assessments based on parameter count, quantization, and architecture - always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [mistralai/Mistral-7B-Instruct-v0.3 - HuggingFace model card](https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3)
+- [mistralai/Ministral-3-3B-Instruct-2512 - HuggingFace model card](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512)
+- [mistralai/Ministral-3-3B-Reasoning-2512 - HuggingFace model card](https://huggingface.co/mistralai/Ministral-3-3B-Reasoning-2512)
+- [Mistral 7B architecture paper (arXiv 2310.06825)](https://arxiv.org/abs/2310.06825)
+- [Mistral model architecture - HuggingFace Transformers docs](https://huggingface.co/docs/transformers/en/model_doc/mistral)
+- [Ministral 3 3B - Mistral AI official docs](https://docs.mistral.ai/models/ministral-3-3b-25-12)
+- [Introducing Mistral 3 - Mistral AI announcement](https://mistral.ai/news/mistral-3)
+- [LocalMode WebLLM model catalog - packages/webllm/src/models.ts](https://github.com/LocalMode-AI/LocalMode)
+- [LocalMode wllama model catalog - packages/wllama/src/models.ts](https://github.com/LocalMode-AI/LocalMode)
+- [WebLLM project](https://webllm.mlc.ai)
+- [wllama (llama.cpp WASM)](https://github.com/ngxson/wllama)

@@ -2,7 +2,7 @@
  * @file ui.tsx
  * @description Reusable UI components for the data migrator application
  */
-import { ButtonHTMLAttributes, HTMLAttributes, forwardRef, ReactNode } from 'react';
+import { ButtonHTMLAttributes, forwardRef, ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '../_lib/utils';
 

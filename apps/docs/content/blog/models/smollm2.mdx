@@ -1,0 +1,156 @@
+---
+title: "SmolLM2 Models in the Browser"
+description: "HuggingFace's SmolLM2 family - ultra-compact models from 135M to 1.7B parameters, designed for instant loading and low-memory devices."
+author: "LocalMode"
+date: "2026-04-14"
+---
+
+# SmolLM2 Models in the Browser
+
+HuggingFace's SmolLM2 family - ultra-compact models from 135M to 1.7B parameters, designed for instant loading and low-memory devices.
+
+## Overview
+
+The SmolLM2 family is available through WebLLM (WebGPU), wllama (WASM) in LocalMode, with model sizes ranging from 70MB–1.06GB. The primary task for these models is **generation**, and they can be used with any application built on the LocalMode SDK.
+
+Running SmolLM2 models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+SmolLM2 is HuggingFace's answer to a simple question: how small can a useful language model be? The 135M variant at just 70-78MB loads almost instantly - faster than most web pages - and can handle basic text completion, simple Q&A, and template-based generation. The 360M and 1.7B variants scale up quality while remaining remarkably compact.
+
+These models are purpose-built for the use cases where speed and availability matter more than peak quality. A customer support widget that needs to generate canned response variations. A writing assistant that offers quick autocomplete suggestions. A form helper that validates and reformats user input. In these scenarios, waiting 30 seconds for a 4GB model to load is unacceptable - SmolLM2-135M loads in under 2 seconds.
+
+The models are available across both WebLLM (WebGPU) and wllama (WASM), ensuring they work on every device. On low-memory phones and tablets with just 2-4GB of RAM, SmolLM2 is often the only LLM family that can run without crashing the browser tab. The 1.7B variant hits a sweet spot - small enough for most devices, large enough to produce coherent multi-paragraph responses.
+
+## Variant Comparison
+
+The following table lists every SmolLM2 variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [SmolLM2-135M-Instruct-q0f16-MLC](https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct) | WebLLM (WebGPU) | 78MB | Fast | Basic | 2,048 tokens | WEBGPU |
+| [SmolLM2-360M-Instruct-q4f16_1-MLC](https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct) | WebLLM (WebGPU) | 210MB | Fast | Basic | 2,048 tokens | WEBGPU |
+| [SmolLM2-1.7B-Instruct-q4f16_1-MLC](https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct) | WebLLM (WebGPU) | 1.0GB | Medium | Good | 2,048 tokens | WEBGPU |
+| [SmolLM2-135M-Instruct-Q4_K_M](https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct) | wllama (WASM) | 70MB | Fast | Basic | 8,192 tokens | WASM |
+| [SmolLM2-360M-Instruct-Q4_K_M](https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct) | wllama (WASM) | 234MB | Fast | Basic | 8,192 tokens | WASM |
+| [SmolLM2-1.7B-Instruct-Q4_K_M](https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct) | wllama (WASM) | 1.06GB | Medium | Good | 8,192 tokens | WASM |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| Under 200MB | 2 | variants |
+| 200MB–500MB | 2 | variants |
+| 500MB–1.5GB | 2 | variants |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All SmolLM2 variants use the same `LanguageModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### WebLLM (WebGPU)
+
+WebLLM compiles models to WebGPU compute shaders for maximum inference speed. Requires Chrome 113+, Edge 113+, or Safari 26+.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+const model = webllm.languageModel('SmolLM2-135M-Instruct-q0f16-MLC');
+
+const result = await streamText({
+  model,
+  prompt: 'Explain how SmolLM2 models work.',
+  maxTokens: 300,
+  temperature: 0.7,
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+### wllama (WASM)
+
+wllama runs GGUF models via llama.cpp compiled to WebAssembly. Works in every browser including Firefox.
+
+```typescript
+import { streamText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+const model = wllama.languageModel('SmolLM2-135M-Instruct-Q4_K_M');
+
+const result = await streamText({
+  model,
+  prompt: 'Summarize the benefits of local AI inference.',
+  maxTokens: 300,
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred model first, and fall back to a smaller variant if it fails to load.
+
+```typescript
+import { webllm } from '@localmode/webllm';
+import { wllama } from '@localmode/wllama';
+
+// Try WebGPU first (faster), fall back to WASM (universal browser support)
+let model;
+try {
+  model = webllm.languageModel('SmolLM2-135M-Instruct-q0f16-MLC');
+} catch (error) {
+  console.warn('WebGPU unavailable, falling back to wllama:', error);
+  model = wllama.languageModel('SmolLM2-135M-Instruct-Q4_K_M');
+}
+```
+
+## When to Use SmolLM2
+
+SmolLM2 models are a strong choice when:
+
+- **You need text generation** - SmolLM2 is optimized for generation tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 2 providers (webllm, wllama), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The 70MB–1.06GB range means you can target everything from mobile devices to high-end desktops with the same model family.
+- **Offline functionality is required** - All variants work offline after the initial download, cached in IndexedDB via LocalMode's model caching system.
+
+## HuggingFace Model Cards
+
+**Base models (HuggingFaceTB):**
+- [SmolLM2-135M-Instruct](https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct) - used by WebLLM (q0f16-MLC) and wllama (Q4_K_M)
+- [SmolLM2-360M-Instruct](https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct) - used by WebLLM (q4f16_1-MLC) and wllama (Q4_K_M)
+- [SmolLM2-1.7B-Instruct](https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct) - used by WebLLM (q4f16_1-MLC) and wllama (Q4_K_M)
+
+**Quantized GGUF weights (bartowski - used by wllama):**
+- [SmolLM2-135M-Instruct-GGUF](https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF)
+- [SmolLM2-360M-Instruct-GGUF](https://huggingface.co/bartowski/SmolLM2-360M-Instruct-GGUF)
+- [SmolLM2-1.7B-Instruct-GGUF](https://huggingface.co/bartowski/SmolLM2-1.7B-Instruct-GGUF)
+
+## Related Pages
+
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Qwen](/blog/models/qwen) - model guide
+
+## Methodology
+
+The model data on this page - sizes, context lengths, quantization formats, and provider availability - is extracted directly from LocalMode's source code: the curated model registry (`packages/core/src/capabilities/model-registry.ts`) and the provider catalogs (`packages/webllm/src/models.ts`, `packages/wllama/src/models.ts`). SmolLM2 is available through WebLLM (WebGPU) and wllama (WASM) only - it is not in the transformers ONNX catalog. Download sizes reflect the quantized model files as published by their respective model authors. Performance characteristics (speed and quality tiers) are LocalMode's curated assessments based on parameter count, quantization, and architecture. Always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [SmolLM2-135M-Instruct - HuggingFace model card](https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct) - context length 8k, 2T training tokens, Apache 2.0
+- [SmolLM2-360M-Instruct - HuggingFace model card](https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct) - 4T training tokens, Apache 2.0
+- [SmolLM2-1.7B-Instruct - HuggingFace model card](https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct) - 11T training tokens, Apache 2.0; config.json confirms max_position_embeddings=8192
+- [SmolLM2 paper - arXiv 2502.02737](https://arxiv.org/abs/2502.02737) - training tokens per size, architecture details, context length
+- [bartowski/SmolLM2-135M-Instruct-GGUF](https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF) - source of wllama GGUF weights (Q4_K_M, 70MB)
+- [bartowski/SmolLM2-360M-Instruct-GGUF](https://huggingface.co/bartowski/SmolLM2-360M-Instruct-GGUF) - source of wllama GGUF weights (Q4_K_M, 234MB)
+- [bartowski/SmolLM2-1.7B-Instruct-GGUF](https://huggingface.co/bartowski/SmolLM2-1.7B-Instruct-GGUF) - source of wllama GGUF weights (Q4_K_M, 1.06GB)
+- [LocalMode WebLLM catalog](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/webllm/src/models.ts) - sizes, context lengths, and model IDs for WebGPU variants
+- [LocalMode wllama catalog](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/wllama/src/models.ts) - sizes, context lengths, and model IDs for WASM variants
+- [WebLLM project](https://webllm.mlc.ai)
+- [wllama (llama.cpp WASM)](https://github.com/ngxson/wllama)

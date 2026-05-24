@@ -4,6 +4,7 @@
  */
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { redactPII } from '@localmode/core';
 import type { DetectedEntity, PrivacyLevel } from './types';
 
 /** Merges Tailwind CSS classes with proper precedence */
@@ -11,7 +12,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/** Replace detected entities in text with redaction placeholders */
+/** Replace detected entities in text with redaction placeholders, then apply regex PII redaction */
 export function redactText(text: string, entities: DetectedEntity[]) {
   const sorted = [...entities].sort((a, b) => b.start - a.start);
   let redacted = text;
@@ -19,7 +20,7 @@ export function redactText(text: string, entities: DetectedEntity[]) {
     redacted =
       redacted.slice(0, entity.start) + `[${entity.label}]` + redacted.slice(entity.end);
   }
-  return redacted;
+  return redactPII(redacted, { emails: true, phones: true, ssn: true, creditCards: true });
 }
 
 /** Get privacy level label and color based on epsilon value */

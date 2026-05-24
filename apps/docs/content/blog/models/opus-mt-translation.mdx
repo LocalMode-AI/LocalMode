@@ -1,0 +1,114 @@
+---
+title: "OPUS-MT Translation Models in the Browser"
+description: "Helsinki-NLP's OPUS-MT models - specialized machine translation models for English↔German, English↔French, and English↔Spanish."
+author: "LocalMode"
+date: "2026-05-12"
+---
+
+# OPUS-MT Translation Models in the Browser
+
+Helsinki-NLP's OPUS-MT models - specialized machine translation models for English↔German, English↔French, and English↔Spanish.
+
+## Overview
+
+The OPUS-MT Translation family is available through Transformers.js in LocalMode, with model sizes ranging from 100MB. The primary task for these models is **translation**, and they can be used with any application built on the LocalMode SDK.
+
+Running OPUS-MT Translation models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+OPUS-MT models from Helsinki-NLP are the standard for browser-based machine translation. Each model handles a specific language pair - English↔German, English↔French, and English↔Spanish (in both directions) are available as curated models in LocalMode, with additional pairs accessible by specifying custom model IDs from the OPUS-MT collection on HuggingFace.
+
+These are sequence-to-sequence models based on the MarianMT architecture, specifically optimized for translation quality. Unlike general-purpose LLMs that can translate as a secondary capability, OPUS-MT models are trained exclusively on parallel translation corpora, resulting in more accurate and idiomatic translations - especially for domain-specific text.
+
+At 100MB each, the models are compact enough to bundle multiple language pairs in a single application. A multilingual documentation site could preload English↔German and English↔French, giving users instant translation without network requests. Combined with Chrome AI's built-in translation (zero download, limited languages), you can build a hybrid translation system that uses Chrome AI where available and falls back to OPUS-MT for guaranteed quality.
+
+The OPUS-MT collection on HuggingFace contains over 1,000 language pair models. While LocalMode curates English↔German, English↔French, and English↔Spanish (six directional models in total), any OPUS-MT model can be loaded by specifying its HuggingFace model ID directly. For applications needing Spanish, Portuguese, Japanese, Chinese, Korean, Arabic, or other language pairs, browse the Helsinki-NLP organization on HuggingFace and pass the model ID to transformers.translator(). Each model is independently optimized for its language pair, meaning translation quality is consistently high across languages - unlike multilingual models that sacrifice per-language quality for breadth.
+
+## Variant Comparison
+
+The following table lists every OPUS-MT Translation variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Context | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Xenova/opus-mt-en-de](https://huggingface.co/Helsinki-NLP/opus-mt-en-de) | Transformers.js | 100MB | Medium | Good | - | WASM |
+| [Xenova/opus-mt-en-fr](https://huggingface.co/Helsinki-NLP/opus-mt-en-fr) | Transformers.js | 100MB | Medium | Good | - | WASM |
+| [Xenova/opus-mt-en-es](https://huggingface.co/Helsinki-NLP/opus-mt-en-es) | Transformers.js | 100MB | Medium | Good | - | WASM |
+| [Xenova/opus-mt-de-en](https://huggingface.co/Helsinki-NLP/opus-mt-de-en) | Transformers.js | 100MB | Medium | Good | - | WASM |
+| [Xenova/opus-mt-fr-en](https://huggingface.co/Helsinki-NLP/opus-mt-fr-en) | Transformers.js | 100MB | Medium | Good | - | WASM |
+| [Xenova/opus-mt-es-en](https://huggingface.co/Helsinki-NLP/opus-mt-es-en) | Transformers.js | 100MB | Medium | Good | - | WASM |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| Under 200MB | 6 | variants |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All OPUS-MT Translation variants use the same `TranslationModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### Transformers.js
+
+Transformers.js runs ONNX-optimized models via ONNX Runtime Web. OPUS-MT models run on WASM in all browsers (WebGPU support for seq2seq translation models is not yet stable).
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.translator('Xenova/opus-mt-en-de');
+// Use the model with the corresponding @localmode/core function
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred model first, and fall back to a smaller variant if it fails to load.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+// Try the preferred model, fall back to the reverse-direction model on failure
+let model;
+try {
+  model = transformers.translator('Xenova/opus-mt-en-de');
+} catch (error) {
+  console.warn('Primary model failed, using fallback:', error);
+  model = transformers.translator('Xenova/opus-mt-en-fr');
+}
+```
+
+## When to Use OPUS-MT Translation
+
+OPUS-MT Translation models are a strong choice when:
+
+- **You need translation** - OPUS-MT Translation is optimized for translation tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 1 provider (transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The 100MB range means you can target everything from mobile devices to high-end desktops with the same model family.
+
+
+## HuggingFace Model Cards
+
+- [opus-mt-en-de](https://huggingface.co/Helsinki-NLP/opus-mt-en-de)
+- [opus-mt-en-fr](https://huggingface.co/Helsinki-NLP/opus-mt-en-fr)
+- [opus-mt-en-es](https://huggingface.co/Helsinki-NLP/opus-mt-en-es)
+- [opus-mt-de-en](https://huggingface.co/Helsinki-NLP/opus-mt-de-en)
+- [opus-mt-fr-en](https://huggingface.co/Helsinki-NLP/opus-mt-fr-en)
+- [opus-mt-es-en](https://huggingface.co/Helsinki-NLP/opus-mt-es-en)
+
+## Related Pages
+
+- [Translation](/blog/tasks/translation) - task guide
+
+## Methodology
+
+Model data on this page - curated model IDs, size estimates, and provider availability - is extracted directly from LocalMode's source code (`packages/transformers/src/models.ts`, `packages/transformers/src/implementations/translator.ts`). The ~100MB size estimate reflects the combined quantized ONNX encoder and decoder files (encoder_model_quantized + decoder_model_merged_quantized) as listed in the Xenova/opus-mt-en-de HuggingFace repository. Architecture, license, and BLEU score data is sourced from the Helsinki-NLP model cards on HuggingFace. The Helsinki-NLP organization model count (1,563+) was verified directly from the Helsinki-NLP organization page on HuggingFace. Always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [Helsinki-NLP/opus-mt-en-de model card - HuggingFace (architecture, license, BLEU scores)](https://huggingface.co/Helsinki-NLP/opus-mt-en-de)
+- [Helsinki-NLP organization on HuggingFace - 1,563 total models](https://huggingface.co/Helsinki-NLP)
+- [Xenova/opus-mt-en-de ONNX files - quantized runtime sizes](https://huggingface.co/Xenova/opus-mt-en-de/tree/main/onnx)
+- [Transformers.js quantization (dtype) guide - default q8 for WASM](https://huggingface.co/docs/transformers.js/guides/dtypes)
+- [OPUS-MT GitHub repository - Helsinki-NLP](https://github.com/Helsinki-NLP/Opus-MT)
+- [LocalMode transformers translation models source (`packages/transformers/src/models.ts`)](https://localmode.dev/docs/transformers/translation)

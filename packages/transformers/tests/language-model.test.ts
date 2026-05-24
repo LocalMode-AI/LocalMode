@@ -3,7 +3,7 @@
  *
  * Unit tests for the TransformersLanguageModel implementation.
  * These tests verify the class structure, factory function, and
- * interface compliance without requiring actual TJS v4 downloads.
+ * interface compliance without requiring actual model downloads.
  *
  * @packageDocumentation
  */
@@ -207,14 +207,71 @@ describe('getLLMModelCategory()', () => {
   });
 });
 
-describe('v3/v4 isolation', () => {
-  it('no existing implementation file imports from @huggingface/transformers-v4', () => {
+describe('Gemma 4 ONNX model support', () => {
+  describe('model detection (supportsVision)', () => {
+    it('Gemma 4 E2B is detected as vision model', () => {
+      const model = new TransformersLanguageModel('onnx-community/gemma-4-E2B-it-ONNX');
+
+      expect(model.supportsVision).toBe(true);
+    });
+
+    it('Gemma 4 E4B is detected as vision model', () => {
+      const model = new TransformersLanguageModel('onnx-community/gemma-4-E4B-it-ONNX');
+
+      expect(model.supportsVision).toBe(true);
+    });
+
+    it('matches case-insensitive Gemma4 variants', () => {
+      expect(new TransformersLanguageModel('GEMMA-4-E2B').supportsVision).toBe(true);
+      expect(new TransformersLanguageModel('Gemma4-test').supportsVision).toBe(true);
+      expect(new TransformersLanguageModel('some/gemma-4-model').supportsVision).toBe(true);
+    });
+
+    it('does not match non-Gemma models', () => {
+      expect(new TransformersLanguageModel('onnx-community/Qwen3-0.6B-ONNX').supportsVision).toBe(false);
+      expect(new TransformersLanguageModel('onnx-community/Llama-3.2-1B-Instruct-ONNX').supportsVision).toBe(false);
+      expect(new TransformersLanguageModel('onnx-community/Phi-4-mini-instruct-web-q4f16').supportsVision).toBe(false);
+    });
+  });
+
+  describe('catalog entries', () => {
+    it('E2B entry exists with correct metadata', () => {
+      const entry = TRANSFORMERS_LLM_MODELS['onnx-community/gemma-4-E2B-it-ONNX'];
+
+      expect(entry).toBeDefined();
+      expect(entry.vision).toBe(true);
+      expect(entry.contextLength).toBe(131072);
+      expect(entry.sizeBytes).toBeGreaterThanOrEqual(1000 * 1024 * 1024);
+      expect(entry.name).toContain('Gemma 4 E2B');
+    });
+
+    it('E4B entry exists with correct metadata', () => {
+      const entry = TRANSFORMERS_LLM_MODELS['onnx-community/gemma-4-E4B-it-ONNX'];
+
+      expect(entry).toBeDefined();
+      expect(entry.vision).toBe(true);
+      expect(entry.contextLength).toBe(131072);
+      expect(entry.sizeBytes).toBeGreaterThanOrEqual(2500 * 1024 * 1024);
+      expect(entry.name).toContain('Gemma 4 E4B');
+    });
+
+    it('E4B is larger than E2B', () => {
+      const e2b = TRANSFORMERS_LLM_MODELS['onnx-community/gemma-4-E2B-it-ONNX'];
+      const e4b = TRANSFORMERS_LLM_MODELS['onnx-community/gemma-4-E4B-it-ONNX'];
+
+      expect(e4b.sizeBytes).toBeGreaterThan(e2b.sizeBytes);
+    });
+  });
+});
+
+describe('unified TJS import', () => {
+  it('no implementation file imports from the removed @huggingface/transformers-v4 alias', () => {
     const implementationsDir = path.resolve(
       __dirname,
       '../src/implementations'
     );
     const files = fs.readdirSync(implementationsDir).filter(
-      (f) => f.endsWith('.ts') && f !== 'language-model.ts' && f !== 'index.ts'
+      (f) => f.endsWith('.ts') && f !== 'index.ts'
     );
 
     for (const file of files) {
@@ -223,24 +280,12 @@ describe('v3/v4 isolation', () => {
     }
   });
 
-  it('language-model.ts imports from @huggingface/transformers-v4', () => {
+  it('language-model.ts imports from @huggingface/transformers', () => {
     const filePath = path.resolve(
       __dirname,
       '../src/implementations/language-model.ts'
     );
     const content = fs.readFileSync(filePath, 'utf-8');
-    expect(content).toContain('@huggingface/transformers-v4');
-  });
-
-  it('language-model.ts does NOT import from @huggingface/transformers (v3)', () => {
-    const filePath = path.resolve(
-      __dirname,
-      '../src/implementations/language-model.ts'
-    );
-    const content = fs.readFileSync(filePath, 'utf-8');
-    // Should not have a bare import from @huggingface/transformers (without -v4)
-    // Use regex to match exactly the v3 import, not the v4 one
-    const v3Imports = content.match(/from\s+['"]@huggingface\/transformers['"]/g);
-    expect(v3Imports).toBeNull();
+    expect(content).toContain('@huggingface/transformers');
   });
 });

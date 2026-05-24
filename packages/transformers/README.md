@@ -21,6 +21,13 @@ HuggingFace Transformers.js provider for LocalMode — run ML models locally in 
 pnpm install @localmode/transformers @localmode/core
 ```
 
+### Dependencies
+
+| Package | Purpose |
+| ------- | ------- |
+| `@huggingface/transformers` (^4.2.0) | ML inference via ONNX Runtime (WebGPU/WASM) |
+| `phonemizer` | eSpeak-NG WASM for Kokoro TTS text-to-phoneme conversion |
+
 ## Overview
 
 `@localmode/transformers` provides model implementations for the interfaces defined in `@localmode/core`. It wraps HuggingFace Transformers.js to enable local ML inference in the browser.
@@ -148,6 +155,8 @@ const transcription = await transcribe({
 const { audio, sampleRate } = await synthesizeSpeech({
   model: transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX'),
   text: 'Hello, how are you?',
+  voice: 'af_heart', // 29 English voices (see KOKORO_VOICES)
+  speed: 1.0,        // 0.5 – 2.0
 });
 ```
 
@@ -157,6 +166,35 @@ const { audio, sampleRate } = await synthesizeSpeech({
 | `transformers.textToSpeech(modelId)` | `TextToSpeechModel` | Text-to-speech synthesis | [Docs](https://localmode.dev/docs/transformers/text-to-speech) |
 | `transformers.audioClassifier(modelId)` | `AudioClassificationModel` | Audio classification | |
 | `transformers.zeroShotAudioClassifier(modelId)` | `ZeroShotAudioClassificationModel` | Zero-shot audio classification | |
+| `transformers.vad(modelId)` | `VADProvider` | Voice Activity Detection (Silero) | |
+
+### Voice Activity Detection (VAD)
+
+Detect speech segments in real-time audio streams. Used with `createLiveTranscriber()` for open-mic and push-to-talk transcription.
+
+```typescript
+import { createLiveTranscriber } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const vad = transformers.vad('onnx-community/silero-vad');
+const transcriber = await createLiveTranscriber({
+  model: transformers.speechToText('onnx-community/moonshine-tiny-ONNX'),
+  mode: 'open-mic',
+  vad,
+});
+```
+
+| Method | Interface | Description |
+| ------ | --------- | ----------- |
+| `transformers.vad(modelId)` | `VADProvider` | Voice Activity Detection (Silero VAD) |
+
+**Recommended Models:**
+
+| Model | Description |
+| ----- | ----------- |
+| `onnx-community/silero-vad` | Silero VAD v5 — recommended browser VAD (~1.8MB, 512-sample frames at 16 kHz) |
+
+**Options:** `threshold` (speech probability, default `0.5`), `silenceTimeoutMs` (end-of-utterance timeout, default `700`).
 
 ### Vision
 
@@ -190,12 +228,10 @@ const caption = await captionImage({
 
 | Method | Interface | Description | Docs |
 | ------ | --------- | ----------- | ---- |
-| `transformers.ocr(modelId)` | `OCRModel` | OCR (TrOCR) | [Docs](https://localmode.dev/docs/transformers/ocr) |
+| `transformers.ocr(modelId)` | `OCRModel` | OCR (TrOCR, GLM-OCR, LightOnOCR-2) | [Docs](https://localmode.dev/docs/transformers/ocr) |
 | `transformers.documentQA(modelId)` | `DocumentQAModel` | Document/Table question answering | [Docs](https://localmode.dev/docs/transformers/document-qa) |
 
-### Text Generation (Experimental) — [Docs](https://localmode.dev/docs/transformers/text-generation)
-
-> **Experimental**: Uses Transformers.js v4 (preview release). The API may change.
+### Text Generation — [Docs](https://localmode.dev/docs/transformers/text-generation)
 
 Run ONNX-format language models in the browser with WebGPU acceleration:
 
@@ -219,17 +255,28 @@ for await (const chunk of result.stream) {
 | ------ | --------- | ----------- |
 | `transformers.languageModel(modelId)` | `LanguageModel` | Text generation (ONNX, WebGPU/WASM) |
 
-**Recommended ONNX LLMs:**
+**Recommended ONNX LLMs (16 curated models):**
 
 | Model | Size | Context | Vision |
 | ----- | ---- | ------- | ------ |
+| `onnx-community/granite-4.0-350m-ONNX-web` | ~120MB | 4K | No |
+| `onnx-community/Qwen3-0.6B-ONNX` | ~570MB | 4K | No |
 | `onnx-community/Qwen3.5-0.8B-ONNX` | ~500MB | 32K | Yes |
+| `onnx-community/granite-4.0-1b-ONNX-web` | ~350MB | 4K | No |
+| `onnx-community/Llama-3.2-1B-Instruct-ONNX` | ~380MB | 8K | No |
+| `onnx-community/TinyLlama-1.1B-Chat-v1.0-ONNX` | ~350MB | 2K | No |
+| `onnx-community/Qwen2.5-Coder-1.5B-Instruct` | ~450MB | 4K | No |
+| `onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX` | ~500MB | 4K | No |
+| `onnx-community/Llama-3.2-3B-Instruct-ONNX` | ~900MB | 8K | No |
+| `onnx-community/Qwen3-4B-ONNX` | ~1.2GB | 4K | No |
+| `microsoft/Phi-3-mini-4k-instruct-onnx-web` | ~1.2GB | 4K | No |
 | `onnx-community/Qwen3.5-2B-ONNX` | ~1.5GB | 32K | Yes |
+| `onnx-community/gemma-4-E2B-it-ONNX` | ~1.5GB | 128K | Yes |
+| `onnx-community/Phi-4-mini-instruct-web-q4f16` | ~2.3GB | 4K | No |
 | `onnx-community/Qwen3.5-4B-ONNX` | ~2.5GB | 32K | Yes |
-| `onnx-community/SmolLM2-360M-Instruct` | ~200MB | 2K | No |
-| `onnx-community/SmolLM2-135M-Instruct` | ~80MB | 2K | No |
+| `onnx-community/gemma-4-E4B-it-ONNX` | ~3GB | 128K | Yes |
 
-**Vision support**: Qwen3.5 models support image input via their built-in vision encoder. Check `model.supportsVision` for feature detection. See [Vision docs](https://localmode.dev/docs/transformers#vision-image-input--experimental) for usage.
+**Vision support**: Qwen3.5, Qwen2.5-VL, Qwen3-VL, and Gemma 4 models support image input via their built-in vision encoder. Check `model.supportsVision` for feature detection. See [Vision docs](https://localmode.dev/docs/transformers#vision-image-input) for usage.
 
 ---
 
@@ -323,7 +370,7 @@ const usage = await getModelStorageUsage();
 
 | Model | Description |
 | ----- | ----------- |
-| `onnx-community/Kokoro-82M-v1.0-ONNX` | Natural speech, 28 voices (~86MB) |
+| `onnx-community/Kokoro-82M-v1.0-ONNX` | Natural speech, 29 English voices (~86MB) |
 
 ### Image Classification
 
@@ -349,7 +396,7 @@ const usage = await getModelStorageUsage();
 | Model | Description |
 | ----- | ----------- |
 | `onnx-community/dfine_n_coco-ONNX` | State-of-the-art, tiny (~4.5MB) |
-| `Xenova/yolos-tiny` | Fast detection |
+| `Xenova/detr-resnet-50` | Classic transformer-based detection |
 
 ### Image Features
 
@@ -369,8 +416,10 @@ const usage = await getModelStorageUsage();
 
 | Model | Description |
 | ----- | ----------- |
-| `Xenova/trocr-small-printed` | Printed text (~120MB) |
-| `Xenova/trocr-small-handwritten` | Handwritten text (~120MB) |
+| `Xenova/trocr-small-printed` | Printed text, line-level (~120MB) |
+| `Xenova/trocr-small-handwritten` | Handwritten text, line-level (~120MB) |
+| `onnx-community/GLM-OCR-ONNX` | Document-level OCR with table/formula recognition (~652MB) |
+| `onnx-community/LightOnOCR-2-1B-ONNX` | Fast document OCR, 11 languages (~700MB) |
 
 ### Document QA
 
@@ -408,11 +457,32 @@ import {
   DOCUMENT_QA_MODELS,
   IMAGE_TO_IMAGE_MODELS,
   IMAGE_FEATURE_MODELS,
+  VAD_MODELS,
+  TRANSFORMERS_LLM_MODELS,
+  MULTIMODAL_EMBEDDING_MODELS,
+  KOKORO_LANG_MAP,
 } from '@localmode/transformers';
 
 // Use with provider
 const model = transformers.embedding(EMBEDDING_MODELS.BGE_SMALL_EN);
 ```
+
+### Kokoro Voice Catalog
+
+The `KOKORO_VOICES` export provides a catalog of 29 English voices with metadata for UI display:
+
+```typescript
+import { KOKORO_VOICES, KOKORO_DEFAULT_VOICE } from '@localmode/transformers';
+import type { KokoroVoice } from '@localmode/transformers';
+
+// Each voice has: id, name, language, languageLabel, gender
+const english = KOKORO_VOICES.filter((v) => v.language === 'en-US');
+const females = KOKORO_VOICES.filter((v) => v.gender === 'female');
+
+console.log(KOKORO_DEFAULT_VOICE); // 'af_heart'
+```
+
+Languages: American English, British English.
 
 ---
 
@@ -424,6 +494,23 @@ const model = transformers.embedding(EMBEDDING_MODELS.BGE_SMALL_EN);
 const model = transformers.embedding('Xenova/bge-small-en-v1.5', {
   quantized: true, // Use quantized model (smaller, faster)
   device: 'webgpu', // Use WebGPU for acceleration (falls back to WASM)
+});
+```
+
+### Language Model Options
+
+Language models accept additional settings via `LanguageModelSettings`:
+
+```typescript
+const model = transformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX', {
+  contextLength: 32768,
+  maxTokens: 1024,
+  temperature: 0.7,
+  device: 'webgpu',
+  // dtype accepts a string or a per-component config object
+  dtype: 'q4f16',
+  // For multimodal models, use per-component dtype:
+  // dtype: { embed_tokens: 'q4', vision_encoder: 'q4', decoder_model_merged: 'q4' },
 });
 ```
 
@@ -477,28 +564,13 @@ import {
   TransformersImageClassificationModel,
   TransformersZeroShotImageModel,
   TransformersCaptionModel,
+  TransformersCLIPEmbeddingModel,
+  TransformersLanguageModel,
+  TransformersGenerativeOCRModel,
+  isGenerativeOCRModel,
+  TransformersSileroVAD,
+  createSileroVAD,
 } from '@localmode/transformers';
-```
-
-Additional implementation classes can be imported from the implementations subpath:
-
-```typescript
-import {
-  TransformersSegmentationModel,
-  TransformersObjectDetectionModel,
-  TransformersImageFeatureModel,
-  TransformersImageToImageModel,
-  TransformersTextToSpeechModel,
-  TransformersAudioClassificationModel,
-  TransformersZeroShotAudioClassificationModel,
-  TransformersTranslationModel,
-  TransformersSummarizationModel,
-  TransformersFillMaskModel,
-  TransformersQuestionAnsweringModel,
-  TransformersOCRModel,
-  TransformersDocumentQAModel,
-  TransformersDepthEstimationModel,
-} from '@localmode/transformers/implementations';
 ```
 
 ## Browser Compatibility
@@ -508,7 +580,7 @@ import {
 | Chrome 113+ | ✅     | ✅   | Best performance with WebGPU |
 | Edge 113+   | ✅     | ✅   | Same as Chrome               |
 | Firefox     | ❌     | ✅   | WASM only                    |
-| Safari 18+  | ✅     | ✅   | WebGPU available             |
+| Safari 26+  | ✅     | ✅   | WebGPU available             |
 | iOS Safari  | ✅     | ✅   | WebGPU available (iOS 26+)   |
 
 ## Performance Tips

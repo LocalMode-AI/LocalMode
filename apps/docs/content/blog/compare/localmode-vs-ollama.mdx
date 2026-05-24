@@ -1,0 +1,126 @@
+---
+title: "LocalMode vs Ollama"
+description: "Browser AI vs Desktop AI - comparing LocalMode's in-browser inference with Ollama's native desktop approach for local model deployment."
+author: "LocalMode"
+date: "2026-04-27"
+---
+
+# LocalMode vs Ollama
+
+Browser AI vs Desktop AI - comparing LocalMode's in-browser inference with Ollama's native desktop approach for local model deployment.
+
+## Overview
+
+This comparison examines the key differences between **LocalMode** ([https://localmode.dev](https://localmode.dev)) and **Ollama** ([https://ollama.ai](https://ollama.ai)) for building AI-powered applications. Both approaches have their strengths - the right choice depends on your specific requirements around privacy, cost, performance, and target platforms.
+
+Understanding these trade-offs is essential for architects and developers evaluating local-first AI versus alternative approaches. The comparison below covers 10 dimensions, from runtime characteristics to model quality and developer experience.
+
+## Feature-by-Feature Comparison
+
+| Dimension | LocalMode | Ollama |
+| --- | --- | --- |
+| **Runtime** | Runs in the browser tab. No installation beyond npm packages. Works on any device with a modern browser. | Runs as a native desktop application. Requires separate installation. Exposes a localhost API. |
+| **Installation** | npm install @localmode/core @localmode/webllm - done. No binary downloads, no system permissions. | Download and install the Ollama binary. macOS, Linux, Windows (stable). Does not require administrator rights on Windows. |
+| **Model Types** | 21 task categories: embeddings, classification, NER, vision, audio, LLMs, and more. Not just text generation. | Primarily LLMs (text generation) plus a growing set of embedding models. Can import any GGUF model from HuggingFace, not only models in the Ollama library. |
+| **Browser Extensions** | Works directly in browser extension contexts (content scripts, service workers, offscreen documents). | Cannot run in browser extensions. Extensions must call localhost:11434 API (blocked in many extension contexts). |
+| **Web Deployment** | Ships as part of your web app. Users visit your URL and AI works. No separate software needed. | Requires users to install Ollama separately. Your web app calls localhost API (CORS, security concerns). |
+| **Model Quality (LLMs)** | Same models in many cases (Llama, Qwen, Phi, Mistral). 4-bit quantization via WebLLM or GGUF (Q4_K_M) via wllama. | Same models with more quantization options (q4_K_M, q4_K_S, q8_0, and community GGUF variants). Native GPU access for faster inference. |
+| **Performance** | WebGPU inference: 30-90 tok/s depending on model and GPU. WASM: 5-20 tok/s. Browser overhead ~10-20%. | Native GPU inference: 40-100 tok/s for 7-8B models on mid-to-high-end GPUs. Metal/CUDA acceleration. No browser overhead. |
+| **Privacy** | Data stays in browser tab. No local server. No open ports. No inter-process communication. | Data stays on device but passes through a local server (localhost:11434). Open port on machine. |
+| **Multi-user** | Each browser tab is independent. 100 users = 100 independent inference instances on their own devices. | Single instance per machine. Multi-user requires running multiple instances or queuing. |
+| **Mobile Support** | Works on mobile browsers (Chrome Android, Safari iOS for WASM models). No app installation needed. | No mobile support. Desktop only (macOS, Linux, Windows). |
+
+## Verdict
+
+LocalMode and Ollama solve different problems and complement each other well. Choose LocalMode when building web applications where AI features ship as part of the app (no separate installation), when you need non-LLM models (embeddings, classification, vision, audio), when targeting mobile or browser extension contexts, or when each user should run their own inference. Choose Ollama when you need maximum LLM inference speed (native GPU), when you need larger models (13B+) that don't fit in browser memory, when building desktop tools with a local API, or when you need advanced quantization formats. Many developers use both: Ollama for local development and testing, LocalMode for the production web deployment.
+
+### Summary
+
+When evaluating LocalMode against Ollama, consider your primary constraints:
+
+- **Privacy requirements** - If user data must never leave the device, solutions that process everything locally have an inherent architectural advantage.
+- **Cost at scale** - Per-request pricing models become expensive as user counts grow. Local inference shifts the cost to a one-time model download per user.
+- **Target platforms** - Browser-based solutions work on any device with a modern browser. Desktop and server-based solutions may require additional installation steps.
+- **Model quality needs** - For tasks where the absolute highest quality matters (complex multi-step reasoning, creative writing), larger server-side or cloud models still have an edge. For the majority of practical tasks (embeddings, classification, summarization, simple generation), the quality gap has narrowed significantly.
+- **Offline requirements** - Applications that must work without internet need local inference. Cloud-dependent solutions fail when connectivity drops.
+
+## Code Comparison
+
+### LocalMode
+
+```typescript
+// In your web app - users just visit the URL
+import { streamText } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+
+const model = webllm.languageModel('Llama-3.2-3B-Instruct-q4f16_1-MLC');
+const result = await streamText({ model, prompt: 'Hello!' });
+```
+
+### Ollama
+
+```typescript
+// Users must install Ollama first, then:
+// $ ollama pull llama3.2:3b
+// $ ollama serve
+const response = await fetch('http://localhost:11434/api/generate', {
+  method: 'POST',
+  body: JSON.stringify({ model: 'llama3.2:3b', prompt: 'Hello!' }),
+});
+```
+
+## Frequently Asked Questions
+
+### Can I use the same models in both?
+
+Many models overlap. Llama 3.2, Qwen2.5, Phi-3.5, Mistral-7B, and others are available in both LocalMode (via WebLLM or wllama) and Ollama. The GGUF format used by wllama is the same format Ollama uses internally, so model quality is identical for matching quantization levels (e.g., Q4_K_M).
+
+### Is Ollama faster than LocalMode?
+
+For LLM inference, yes - typically faster, with the gap varying by hardware and model size. Ollama uses native Metal (macOS) or CUDA (NVIDIA) acceleration without browser overhead, reaching 40-100 tok/s on mid-to-high-end GPUs for 7-8B models. LocalMode's WebGPU path reaches 30-90 tok/s on the same GPU class. For embeddings, classification, and other non-LLM tasks, LocalMode's Transformers.js is highly optimized and the speed difference is negligible.
+
+### Can my web app fall back from LocalMode to Ollama?
+
+Technically yes - if users have Ollama running, your web app could call localhost:11434. But this introduces CORS issues, requires users to install and run Ollama, and creates an inconsistent user experience. It's generally better to wrap model loading in a try/catch and chain LocalMode providers (WebLLM → wllama → a smaller model).
+
+## Making the Decision
+
+For many teams, the answer is not either/or. A hybrid architecture uses local inference for high-volume, low-complexity tasks (embeddings, classification, NER, simple generation) at zero marginal cost, and routes the small percentage of requests that genuinely need frontier-quality reasoning to a cloud provider. A plain try/catch makes this pattern straightforward to implement:
+
+```typescript
+import { streamText } from '@localmode/core';
+
+// Try the local model first (free, private, fast)
+// Fall back to a cloud call only if local inference fails
+async function generate(prompt: string) {
+  try {
+    return await streamText({ model: localModel, prompt });
+  } catch (error) {
+    console.warn('Local inference failed, escalating to cloud:', error);
+    return await callCloudProvider(prompt);
+  }
+}
+```
+
+This approach gives you the best of both worlds: the privacy and cost benefits of local inference for the 90% of requests that don't need frontier quality, and the option to escalate to cloud APIs for the remaining 10%.
+
+## Related Pages
+
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Localmode Vs Openai](/blog/compare/localmode-vs-openai) - comparison guide
+- [Webllm Vs Wllama](/blog/compare/webllm-vs-wllama) - comparison guide
+
+## Methodology
+
+LocalMode claims were verified directly against the package source code in `packages/webllm/src/models.ts`, `packages/wllama/src/models.ts`, and `packages/core/src/capabilities/types.ts`. Ollama claims were verified against Ollama's official documentation at docs.ollama.com, the Ollama GitHub repository (MIT license, platform support, API endpoints), and the Ollama model library at ollama.com/library. Performance figures for Ollama are sourced from published benchmarks (RTX 3060/4070 results for 7-8B models) and presented as ranges; actual throughput varies significantly by hardware, model size, and quantization. This comparison aims to be fair and factual; verify current details with each project before making decisions.
+
+## Sources
+
+- [LocalMode documentation](https://localmode.dev/docs)
+- [Ollama GitHub repository](https://github.com/ollama/ollama) - MIT license, platform support
+- [Ollama Windows documentation](https://docs.ollama.com/windows) - stable Windows support, GPU requirements
+- [Ollama API documentation](https://github.com/ollama/ollama/blob/main/docs/api.md) - endpoint reference, quantization formats
+- [Ollama model library](https://ollama.com/library) - available models including embedding models
+- [Ollama model import documentation](https://docs.ollama.com/import) - GGUF and Safetensors import, quantization options
+- [Ollama vs vLLM benchmark, Red Hat Developer (2025)](https://developers.redhat.com/articles/2025/08/08/ollama-vs-vllm-deep-dive-performance-benchmarking) - throughput benchmarks
+- [RTX 3060/4070 LLM speed benchmarks](https://singhajit.com/llm-inference-speed-comparison/) - tok/s figures for 8B models

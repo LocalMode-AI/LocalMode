@@ -33,21 +33,18 @@ export function DocumentSidebar() {
   const { uploadMultiplePDFs } = usePDFUpload();
 
   // Compression stats state
-  const [compressionStats, setCompressionStats] = useState<CompressionDisplayStats | null>(null);
+  const [fetchedStats, setFetchedStats] = useState<CompressionDisplayStats | null>(null);
+
+  // Derive compression stats: null when no documents
+  const compressionStats = documents.length === 0 ? null : fetchedStats;
 
   // Refresh compression stats when documents change or processing completes
   useEffect(() => {
-    if (documents.length === 0) {
-      setCompressionStats(null);
-      return;
-    }
+    if (documents.length === 0 || isProcessing) return;
 
-    // Only fetch stats when not currently processing (avoids mid-upload fetches)
-    if (!isProcessing) {
-      getCompressionStatsForDB()
-        .then(setCompressionStats)
-        .catch((err) => console.error('[Sidebar] Failed to get compression stats:', err));
-    }
+    getCompressionStatsForDB()
+      .then(setFetchedStats)
+      .catch((err) => console.error('[Sidebar] Failed to get compression stats:', err));
   }, [documents.length, isProcessing]);
 
   // Handle document deletion

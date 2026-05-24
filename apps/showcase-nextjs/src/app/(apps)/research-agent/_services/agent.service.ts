@@ -3,7 +3,6 @@
  * @description Model factory and tool definitions for the research agent
  */
 import { webllm } from '@localmode/webllm';
-import { jsonSchema } from '@localmode/core';
 import type { ToolDefinition } from '@localmode/core';
 import { MODEL_ID, KNOWLEDGE_BASE } from '../_lib/constants';
 import type { ResearchNote } from '../_lib/types';

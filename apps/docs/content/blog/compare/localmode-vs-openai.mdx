@@ -1,0 +1,133 @@
+---
+title: "LocalMode vs OpenAI API"
+description: "A detailed comparison of running AI in the browser with LocalMode versus calling OpenAI's cloud API - covering privacy, cost, latency, and model quality."
+author: "LocalMode"
+date: "2026-04-22"
+---
+
+# LocalMode vs OpenAI API
+
+A detailed comparison of running AI in the browser with LocalMode versus calling OpenAI's cloud API - covering privacy, cost, latency, and model quality.
+
+## Overview
+
+This comparison examines the key differences between **LocalMode** ([https://localmode.dev](https://localmode.dev)) and **OpenAI API** ([https://openai.com](https://openai.com)) for building AI-powered applications. Both approaches have their strengths - the right choice depends on your specific requirements around privacy, cost, performance, and target platforms.
+
+Understanding these trade-offs is essential for architects and developers evaluating local-first AI versus alternative approaches. The comparison below covers 10 dimensions, from runtime characteristics to model quality and developer experience.
+
+## Feature-by-Feature Comparison
+
+| Dimension | LocalMode | OpenAI API |
+| --- | --- | --- |
+| **Privacy** | All data stays on device. Zero telemetry. No data leaves the browser. | Data sent to OpenAI servers. Subject to OpenAI data usage policies. May be used for model improvement unless opted out. |
+| **Cost** | $0 per token. One-time model download (23MB-5GB). No API keys, no billing. | $0.02–$30 per million tokens depending on model (e.g., text-embedding-3-small at $0.02/M, GPT-4o-mini at $0.15/M input, GPT-4o at $2.50/M input, GPT-5.5 at $30/M output). Unpredictable bills at scale. |
+| **Latency** | Zero network latency. First-token time depends on model size (50-500ms). Cached models start instantly. | 200-2000ms network latency per request. Variable based on server load and region. |
+| **Model Quality** | Qwen3-4B scores 83.7% MMLU-Redux (thinking). Embeddings within 5% of text-embedding-3-small. Sufficient for most tasks. | GPT-4o scores ~88.7% MMLU. Best-in-class for complex reasoning. Frontier quality. |
+| **Offline Support** | Full offline support after initial model download. Works on planes, in the field, on unreliable networks. | No offline support. Every request requires internet connection. |
+| **Setup Complexity** | npm install + 3 lines of code. No API keys, no backend, no environment variables. | API key management. Backend proxy for security. Environment variable configuration. |
+| **Scalability** | Scales with user devices (each user runs their own inference). Zero server costs regardless of user count. | Scales with API costs. 100K users = 100K× the API bill. Rate limits may throttle. |
+| **Model Variety** | 88 curated models across 13+ task types. Embeddings, classification, vision, audio, LLMs. | Many models across the GPT-4o, GPT-4.1, and GPT-5 families plus text-embedding-3, Whisper, TTS-1, and gpt-image-2 (DALL-E was deprecated May 12, 2026). |
+| **Compliance** | GDPR-friendly by design (no third-party data processing). No DPA needed for the AI processing. No cross-border transfer issues. | Requires DPA. Data processed in US/EU. GDPR Article 28 compliance needed. |
+| **Reliability** | No server outages. No rate limits. Works independently per user. | Subject to OpenAI outages (3 major outages in Dec 2024-Jan 2025). Rate limits per tier. |
+
+## Verdict
+
+Choose LocalMode when privacy is non-negotiable, when you want predictable zero costs at scale, when offline support matters, or when your tasks (embeddings, classification, NER, summarization) don't require frontier reasoning. Choose OpenAI when you need the absolute best quality for complex reasoning tasks, when model size constraints make browser inference impractical, or when you're building a prototype and speed-to-market outweighs cost concerns. The sweet spot for many teams: use LocalMode for 90% of requests (embeddings, classification, simple generation) and reserve OpenAI for the 10% that genuinely need GPT-4o-class reasoning.
+
+### Summary
+
+When evaluating LocalMode against OpenAI API, consider your primary constraints:
+
+- **Privacy requirements** - If user data must never leave the device, solutions that process everything locally have an inherent architectural advantage.
+- **Cost at scale** - Per-request pricing models become expensive as user counts grow. Local inference shifts the cost to a one-time model download per user.
+- **Target platforms** - Browser-based solutions work on any device with a modern browser. Desktop and server-based solutions may require additional installation steps.
+- **Model quality needs** - For tasks where the absolute highest quality matters (complex multi-step reasoning, creative writing), larger server-side or cloud models still have an edge. For the majority of practical tasks (embeddings, classification, summarization, simple generation), the quality gap has narrowed significantly.
+- **Offline requirements** - Applications that must work without internet need local inference. Cloud-dependent solutions fail when connectivity drops.
+
+## Code Comparison
+
+### LocalMode
+
+```typescript
+import { embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+const { embedding } = await embed({ model, value: 'semantic search query' });
+// Cost: $0. Data: never leaves device.
+```
+
+### OpenAI API
+
+```typescript
+import OpenAI from 'openai';
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const response = await openai.embeddings.create({
+  model: 'text-embedding-3-small',
+  input: 'semantic search query',
+});
+// Cost: $0.02 per million tokens. Data: sent to OpenAI servers.
+```
+
+## Frequently Asked Questions
+
+### Can I migrate from OpenAI to LocalMode without rewriting my app?
+
+Yes. LocalMode's @localmode/ai-sdk package implements the Vercel AI SDK provider interface, so if you're using generateText(), streamText(), or embed() from the AI SDK, you can swap the provider with a one-line change. For direct OpenAI SDK usage, see the migration guide at /blog/openai-to-localmode-migration.
+
+### Is the quality really comparable for embeddings?
+
+For retrieval tasks, BGE-small-en-v1.5 (33MB, free) achieves within 5% of text-embedding-3-small on MTEB benchmarks. The gap narrows further with BGE-base (110MB, 768 dimensions). For most search and RAG applications, users cannot distinguish between cloud and local embedding quality.
+
+### What about the initial model download time?
+
+Models download once and are cached in IndexedDB. BGE-small (33MB) downloads in 2-5 seconds on a typical connection. LLMs (1-4GB) take 30-120 seconds. After caching, models load from local storage in under a second. Use preloadModel() to download during onboarding or idle time.
+
+### Can I use both LocalMode and OpenAI in the same app?
+
+Absolutely. The hybrid architecture pattern uses LocalMode for high-volume, low-complexity tasks (embeddings, classification, NER) at $0 cost, and routes complex reasoning tasks to OpenAI. A try/catch around the local call makes this automatic - attempt local inference first, and fall back to a cloud call if it fails or quality is insufficient.
+
+## Making the Decision
+
+For many teams, the answer is not either/or. A hybrid architecture uses local inference for high-volume, low-complexity tasks (embeddings, classification, NER, simple generation) at zero marginal cost, and routes the small percentage of requests that genuinely need frontier-quality reasoning to a cloud provider. A plain try/catch makes this pattern straightforward to implement:
+
+```typescript
+import { streamText } from '@localmode/core';
+
+// Try the local model first (free, private, fast)
+// Fall back to a cloud call only if local inference fails
+async function generate(prompt: string) {
+  try {
+    return await streamText({ model: localModel, prompt });
+  } catch (error) {
+    console.warn('Local inference failed, escalating to cloud:', error);
+    return await callCloudProvider(prompt);
+  }
+}
+```
+
+This approach gives you the best of both worlds: the privacy and cost benefits of local inference for the 90% of requests that don't need frontier quality, and the option to escalate to cloud APIs for the remaining 10%.
+
+## Related Pages
+
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Localmode Vs Ollama](/blog/compare/localmode-vs-ollama) - comparison guide
+
+## Methodology
+
+LocalMode model counts and API shapes were verified directly against the package catalogs in `packages/webllm/src/models.ts`, `packages/wllama/src/models.ts`, `packages/transformers/src/models.ts`, `packages/mediapipe/src/models.ts`, and `packages/litert/src/models.ts` (88 total curated models as of this writing). OpenAI pricing figures are sourced from the official OpenAI API pricing page and corroborated by pricepertoken.com and devtk.ai (verified May 22, 2026); pricing changes frequently - confirm current rates at openai.com/api/pricing before making decisions. Benchmark scores (Qwen3-4B MMLU-Redux 83.7, GPT-4o MMLU 88.7, BGE-small-en-v1.5 MTEB 62.17) are sourced from official technical reports and HuggingFace model cards. OpenAI outage history references incidents from status.openai.com in December 2024 and January 2025.
+
+## Sources
+
+- [LocalMode documentation](https://localmode.dev/docs)
+- [OpenAI API pricing page](https://openai.com/api/pricing/) (verified May 22, 2026)
+- [GPT-4o pricing - pricepertoken.com](https://pricepertoken.com/pricing-page/model/openai-gpt-4o) - $2.50/M input, $10/M output (May 2026)
+- [OpenAI GPT-4o-mini pricing](https://developers.openai.com/api/docs/models/gpt-4o-mini) - $0.15/M input, $0.60/M output
+- [OpenAI text-embedding-3-small pricing](https://openai.com/index/new-embedding-models-and-api-updates/) - $0.02/M tokens
+- [DALL-E deprecation notice - OpenAI Community](https://community.openai.com/t/deprecation-reminder-dall-e-will-be-shut-down-on-may-12-2026/1378754) (retired May 12, 2026)
+- [BAAI/bge-small-en-v1.5 - HuggingFace model card](https://huggingface.co/BAAI/bge-small-en-v1.5) - MTEB average 62.17
+- [Qwen3 Technical Report (arXiv 2505.09388)](https://arxiv.org/html/2505.09388v1) - Qwen3-4B MMLU-Redux 83.7 (thinking mode)
+- [GPT-4o Wikipedia article](https://en.wikipedia.org/wiki/GPT-4o) - MMLU 88.7, citing OpenAI's "Hello GPT-4o" announcement
+- [OpenAI status incidents - StatusGator](https://statusgator.com/blog/the-january-2025-chatgpt-outage-statusgators-early-warning-in-action/) - Jan 23 2025 outage; Dec 2024 outages corroborated via status.openai.com

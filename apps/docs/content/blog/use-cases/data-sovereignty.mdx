@@ -1,0 +1,119 @@
+---
+title: "Data Sovereignty & Jurisdictional Compliance"
+description: "Keep AI processing within jurisdictional boundaries by running inference on-device - no cross-border data transfers."
+author: "LocalMode"
+date: "2026-05-09"
+---
+
+# Data Sovereignty & Jurisdictional Compliance
+
+Keep AI processing within jurisdictional boundaries by running inference on-device - no cross-border data transfers.
+
+*Category: Compliance Guide*
+
+## The Problem
+
+Data sovereignty laws in the EU (GDPR), China (PIPL), Brazil (LGPD), India (DPDPA), and other jurisdictions restrict cross-border transfer of personal data. Cloud AI APIs often process data in US-based data centers, creating compliance violations. Even "EU region" cloud options may involve data routing through non-EU infrastructure.
+
+This is a common challenge for teams building modern applications. Traditional approaches either compromise on privacy (by sending data to cloud APIs), require complex server infrastructure (adding cost and maintenance burden), or sacrifice functionality (by avoiding AI entirely). LocalMode provides a fourth option: run the AI locally in the browser.
+
+## The Solution
+
+Browser-based inference with LocalMode keeps the AI inference step on the user's device, so that processing step does not cross a jurisdictional boundary. There is no cross-border transfer because there is no transfer at all. The AI model comes to the data (one-time download), not the data to the model. This avoids cross-border data transfer requirements (BCRs, SCCs, adequacy decisions) since no user data leaves the device.
+
+### Why Local-First?
+
+Building this feature with on-device inference provides three structural advantages over cloud-based alternatives:
+
+1. **Zero marginal cost** - After the initial model download, every inference operation is free. No per-token fees, no monthly API bills, no surprise invoices. This matters especially for features used frequently or by many users.
+2. **Architectural privacy** - User data never leaves the device. This is not a policy promise ("we won't look at your data") but an architectural guarantee: the data physically cannot reach any server because the processing happens in the browser tab.
+3. **Offline capability** - Once models are cached in IndexedDB, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
+
+## Technology Stack
+
+| Package | Purpose |
+| --- | --- |
+| `@localmode/core` | All inference functions run on-device |
+| `@localmode/transformers` | ML models downloaded once, cached locally |
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+## Implementation
+
+```typescript
+import { embed, classify, extractEntities } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// All processing happens on the user's device
+// Data NEVER crosses any border or network boundary
+const model = transformers.embedding('Xenova/bge-small-en-v1.5');
+
+// User in Germany? Processing in Germany.
+// User in Brazil? Processing in Brazil.
+// User in India? Processing in India.
+// No transfer, no jurisdiction concerns.
+const { embedding } = await embed({ model, value: sensitiveText });
+```
+
+### How This Works
+
+The code above demonstrates the complete pipeline. Let us walk through the key decisions:
+
+- **Model selection** - The models referenced in this example are chosen for their balance of size, speed, and quality for this specific use case. Smaller models load faster and use less memory; larger models produce better results. Start with the recommended models and upgrade only if quality is insufficient for your users.
+- **Browser APIs** - LocalMode uses IndexedDB for persistent storage (vectors, model cache), Web Workers for background processing (keeping the UI responsive during inference), and the Web Crypto API for optional encryption.
+- **Error handling** - All LocalMode functions throw typed errors (`ModelLoadError`, `StorageError`, `ValidationError`) with actionable hints. Wrap calls in try/catch and use the error's `hint` property to display user-friendly messages.
+- **Cancellation** - Pass an `AbortSignal` to any long-running operation. This lets users cancel searches, embeddings, or generation without waiting for completion.
+
+## Production Considerations
+
+When deploying this solution to production, consider these factors:
+
+**Model preloading:** Download models during user onboarding or application setup, not on first use. Use `preloadModel()` with an `onProgress` callback to show download progress. This avoids the poor experience of a loading spinner on the first AI interaction.
+
+**Storage management:** IndexedDB has browser-specific quotas (up to 60% of total disk size on Chrome; more restrictive on iOS Safari). Use `getStorageQuota()` to check available space and `navigator.storage.persist()` to request persistent storage that survives browser storage pressure.
+
+**Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
+
+**Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
+
+## Frequently Asked Questions
+
+### Does this satisfy Schrems II requirements?
+
+Schrems II concerns transfers of EU personal data to countries without adequate data protection. Since LocalMode processes data entirely on the user's device with no transfer to any server, the Schrems II analysis of cross-border transfers does not apply to the on-device inference step, since no transfer occurs for that step.
+
+### What about China's PIPL or India's DPDPA?
+
+The principle is the same: if data never leaves the user's device, it never crosses a jurisdictional boundary. On-device processing helps satisfy data localization expectations for the inference step, though you should confirm requirements for your specific regulation and jurisdiction.
+
+### Is this legal advice?
+
+No. This page provides general technical information about on-device AI processing and data residency. Data sovereignty laws vary by jurisdiction and change over time. You remain responsible for your overall compliance posture, including data flows beyond the AI inference step. Consult a qualified data protection attorney for guidance specific to your situation.
+
+## Further Reading
+
+- [GDPR Chapter V - Transfers](https://gdpr-info.eu/chapter-5/)
+- [Schrems II Decision - Case C-311/18 (EUR-Lex)](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:62018CJ0311)
+
+## Related Pages
+
+- [Gdpr Compliant Ai](/blog/use-cases/gdpr-compliant-ai) - use-case guide
+- [Private Document Search](/blog/use-cases/private-document-search) - use-case guide
+- [Legal Contract Analysis](/blog/use-cases/legal-contract-analysis) - use-case guide
+
+## Methodology
+
+Code examples were verified against the LocalMode monorepo source: exported functions (`embed`, `classify`, `extractEntities`, `detectCapabilities`, `recommendModels`, `getStorageQuota`) were confirmed present in `packages/core/src/index.ts`; error class names were confirmed in `packages/core/src/errors/index.ts`; the no-network-requests policy was verified against `packages/core/` (model downloads occur only in provider packages such as `@localmode/transformers`, not in core). Regulatory and browser-quota references were verified against primary sources listed below. All regulatory content on this page is general technical information only, not legal advice - consult a qualified data protection attorney for guidance specific to your situation.
+
+## Sources
+
+- [GDPR Chapter V - Transfers of personal data to third countries (gdpr-info.eu)](https://gdpr-info.eu/chapter-5/)
+- [CJEU Case C-311/18 - *Data Protection Commissioner v Facebook Ireland and Maximillian Schrems* ("Schrems II"), 16 July 2020 (EUR-Lex)](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:62018CJ0311)
+- [MDN - Storage quotas and eviction criteria (IndexedDB browser quotas)](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria)
+- [US CLOUD Act - Cross-Border Data Sharing (Congress.gov CRS Report R45173)](https://www.congress.gov/crs-product/R45173)
+- [India DPDPA cross-border transfer provisions (Vidhi Centre for Legal Policy)](https://vidhilegalpolicy.in/blog/cross-border-data-transfers-and-data-localization-mandate-under-the-data-protection-regime/)
+- [Brazil LGPD international data transfer regulation - ANPD Resolution CD/ANPD No. 19/2024 (IAPP)](https://iapp.org/news/a/brazil-s-new-regulation-on-international-data-transfers)

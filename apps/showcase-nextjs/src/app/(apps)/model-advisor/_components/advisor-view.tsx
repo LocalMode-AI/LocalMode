@@ -638,7 +638,7 @@ function RegisterModelModal({
           </FormField>
 
           {/* Size + Min Memory in a row */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <FormField label="Size (MB) *" error={errors.sizeMB}>
               <input
                 type="number"
@@ -674,7 +674,7 @@ function RegisterModelModal({
           </FormField>
 
           {/* Device + Speed + Quality in a row */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <FormField label="Device *" error={errors.recommendedDevice}>
               <select
                 value={formData.recommendedDevice ?? 'wasm'}

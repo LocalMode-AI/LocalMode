@@ -52,6 +52,13 @@ export { TransformersQuestionAnsweringModel, createQuestionAnsweringModel } from
 
 // OCR & Document QA
 export { TransformersOCRModel, createOCRModel } from './ocr.js';
+export {
+  TransformersGenerativeOCRModel,
+  createGenerativeOCRModel,
+  isGenerativeOCRModel,
+  isGlmOcrModel,
+  isLightOnOCRModel,
+} from './generative-ocr.js';
 export { TransformersDocumentQAModel, createDocumentQAModel } from './document-qa.js';
 
 // Multimodal Embeddings (CLIP/SigLIP)
@@ -61,7 +68,14 @@ export { TransformersCLIPEmbeddingModel, createCLIPEmbeddingModel } from './clip
 export { TransformersDepthEstimationModel, createDepthEstimationModel } from './depth-estimator.js';
 
 // ═══════════════════════════════════════════════════════════════
-// Language Model (Experimental — TJS v4)
+// Language Model
 // ═══════════════════════════════════════════════════════════════
 
 export { TransformersLanguageModel, createLanguageModel } from './language-model.js';
+
+// ═══════════════════════════════════════════════════════════════
+// Silero Voice Activity Detection
+// ═══════════════════════════════════════════════════════════════
+
+export { TransformersSileroVAD, createSileroVAD } from './silero-vad.js';
+export type { SileroVADSettings } from './silero-vad.js';

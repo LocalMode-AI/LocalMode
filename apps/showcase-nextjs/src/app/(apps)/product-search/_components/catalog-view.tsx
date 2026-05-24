@@ -4,6 +4,7 @@
  */
 'use client';
 
+import Link from 'next/link';
 import { useRef, useState } from 'react';
 import {
   ArrowLeft,
@@ -140,12 +141,12 @@ export function CatalogView() {
         {/* Header */}
         <div className="h-14 min-h-14 border-b border-poster-border/20 flex items-center justify-between px-5 bg-poster-surface/60 backdrop-blur-xl">
           <div className="flex items-center gap-3">
-            <a
+            <Link
               href="/"
               className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-poster-surface-lighter/50 text-poster-text-sub hover:text-poster-text-main transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
-            </a>
+            </Link>
             <div className="w-px h-5 bg-poster-border/20" />
             <div className="flex items-center gap-2.5">
               <IconBox size="sm">
@@ -181,7 +182,7 @@ export function CatalogView() {
                   Batch: {batchInfo.batchSize}
                 </button>
                 {showDeviceDetail && (
-                  <div className="absolute right-0 top-full mt-1.5 z-50 w-64 rounded-lg bg-poster-surface border border-poster-border/30 shadow-xl p-3 space-y-2 animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="absolute right-0 top-full mt-1.5 z-50 w-64 max-w-[calc(100vw-2rem)] rounded-lg bg-poster-surface border border-poster-border/30 shadow-xl p-3 space-y-2 animate-in fade-in slide-in-from-top-1 duration-150">
                     <div className="text-[11px] font-semibold text-poster-text-main">Device Profile</div>
                     <div className="space-y-1.5 text-[11px] text-poster-text-sub">
                       <div className="flex items-center justify-between">

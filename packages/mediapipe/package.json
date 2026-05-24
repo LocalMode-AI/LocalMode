@@ -1,0 +1,80 @@
+{
+  "name": "@localmode/mediapipe",
+  "version": "2.0.0",
+  "description": "MediaPipe Tasks provider for @localmode - hand/pose/face landmarks, gesture recognition, audio classification, language detection, and more via Google's on-device WASM runtime",
+  "license": "MIT",
+  "author": "LocalMode",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist node_modules"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^0.10.22",
+    "@mediapipe/tasks-audio": "^0.10.22",
+    "@mediapipe/tasks-text": "^0.10.22"
+  },
+  "peerDependencies": {
+    "@localmode/core": ">=2.0.0"
+  },
+  "devDependencies": {
+    "@localmode/core": "workspace:*",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "keywords": [
+    "mediapipe",
+    "google",
+    "hand-tracking",
+    "pose-estimation",
+    "face-detection",
+    "face-mesh",
+    "gesture-recognition",
+    "landmarks",
+    "language-detection",
+    "audio-classification",
+    "wasm",
+    "computer-vision",
+    "local-first",
+    "privacy",
+    "ai",
+    "offline"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LocalMode-AI/LocalMode.git",
+    "directory": "packages/mediapipe"
+  },
+  "homepage": "https://localmode.dev/docs/mediapipe",
+  "bugs": {
+    "url": "https://github.com/LocalMode-AI/LocalMode/issues"
+  }
+}

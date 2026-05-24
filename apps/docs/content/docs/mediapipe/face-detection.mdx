@@ -1,0 +1,236 @@
+---
+title: 'Face Detection'
+description: Detect faces with MediaPipe — fast BlazeFace bounding-box detection, the 478-point face mesh, and facial expression blendshapes.
+icon: ScanFace
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+# Face Detection
+
+MediaPipe offers two distinct face tasks:
+
+- **Face Detector** — fast bounding-box detection with 6 key facial points (BlazeFace, 230KB)
+- **Face Landmarker** — the full 478-point face mesh, optionally with facial expression blendshapes (3.8MB)
+
+Pick the detector for "where are the faces?" and the landmarker for fine-grained facial geometry.
+
+## Face Detector (Bounding Boxes)
+
+The face detector finds faces and returns a bounding box, a confidence score, and 6 keypoints per face. It is tiny and fast — ideal for face-presence checks, cropping, or counting.
+
+```typescript
+import { detectFace } from '@localmode/core';
+import { mediapipe } from '@localmode/mediapipe';
+
+const { faces, usage } = await detectFace({
+  model: mediapipe.faceDetector(),
+  image: imageBlob,
+});
+
+for (const face of faces) {
+  console.log(`Face score ${face.score.toFixed(2)}`);
+  console.log(`  box: ${face.box.x}, ${face.box.y}, ${face.box.width}x${face.box.height}`);
+  for (const kp of face.keypoints) {
+    console.log(`  ${kp.name}: (${kp.x}, ${kp.y})`);
+  }
+}
+
+console.log(`Detected in ${usage.durationMs.toFixed(0)}ms`);
+```
+
+### Options
+
+| Option                   | Type                 | Default | Description                         |
+| ------------------------ | -------------------- | ------- | ----------------------------------- |
+| `model`                  | `FaceDetectionModel` | —       | The model from `mediapipe.faceDetector()` |
+| `image`                  | `ImageInput`         | —       | Blob, `ImageData`, image/canvas/video element |
+| `minDetectionConfidence` | `number`             | `0.5`   | Minimum confidence threshold (0–1)  |
+| `abortSignal`            | `AbortSignal`        | —       | Cancellation signal                 |
+| `maxRetries`             | `number`             | `2`     | Retry attempts on transient failure |
+
+### Result
+
+`DetectFaceResult` contains a `faces` array of `FaceDetectionResultItem`:
+
+```typescript
+interface FaceDetectionResultItem {
+  /** Face bounding box */
+  box: BoundingBox;
+  /** Detection confidence score (0-1) */
+  score: number;
+  /** Key facial points (right eye, left eye, nose tip, mouth, ears) */
+  keypoints: FaceKeypoint[];
+}
+```
+
+## Face Landmarker (478-Point Mesh)
+
+The face landmarker returns a dense **478-point mesh** that captures detailed facial geometry — eyes, lips, eyebrows, jawline, and surface contours. It can also output facial expression **blendshapes**.
+
+```typescript
+import { detectFaceLandmarks } from '@localmode/core';
+import { mediapipe } from '@localmode/mediapipe';
+
+const { faces } = await detectFaceLandmarks({
+  model: mediapipe.faceLandmarker(),
+  image: imageBlob,
+  numFaces: 1,
+  outputBlendshapes: true,
+});
+
+for (const face of faces) {
+  console.log(`Face mesh — ${face.landmarks.length} landmarks`); // 478
+  console.log(`  score ${face.score.toFixed(2)}`);
+}
+```
+
+### Options
+
+| Option                   | Type                | Default | Description                               |
+| ------------------------ | ------------------- | ------- | ----------------------------------------- |
+| `model`                  | `FaceLandmarkModel` | —       | The model from `mediapipe.faceLandmarker()` |
+| `image`                  | `ImageInput`        | —       | Blob, `ImageData`, image/canvas/video element |
+| `numFaces`               | `number`            | `1`     | Maximum faces to detect                   |
+| `outputBlendshapes`      | `boolean`           | `false` | Also compute facial expression blendshapes |
+| `minDetectionConfidence` | `number`            | `0.5`   | Minimum confidence threshold (0–1)        |
+| `abortSignal`            | `AbortSignal`       | —       | Cancellation signal                       |
+| `maxRetries`             | `number`            | `2`     | Retry attempts on transient failure       |
+
+### Result
+
+`DetectFaceLandmarksResult` contains a `faces` array of `FaceLandmarkResultItem`:
+
+```typescript
+interface FaceLandmarkResultItem {
+  /** 478 face mesh landmarks in normalized image coordinates */
+  landmarks: Landmark[];
+  /** Detection confidence score (0-1) */
+  score: number;
+  /** Facial expression blendshapes (only when requested) */
+  blendshapes?: FaceBlendshape[];
+}
+```
+
+## Blendshapes
+
+When `outputBlendshapes: true`, each face carries a `blendshapes` array. Each entry estimates the activation of one facial expression component:
+
+```typescript
+const { faces } = await detectFaceLandmarks({
+  model: mediapipe.faceLandmarker(),
+  image: imageBlob,
+  outputBlendshapes: true,
+});
+
+const face = faces[0];
+for (const shape of face.blendshapes ?? []) {
+  if (shape.score > 0.3) {
+    console.log(`${shape.categoryName}: ${shape.score.toFixed(2)}`);
+  }
+}
+// e.g. jawOpen: 0.81, mouthSmileLeft: 0.64, eyeBlinkRight: 0.92
+```
+
+Blendshapes power expression-driven UIs — avatar puppeteering, blink/smile detection, and emotion-aware interfaces — without ever uploading a frame.
+
+<Callout type="info" title="478 vs 468 landmarks">
+  The MediaPipe face mesh returns 478 points: the classic 468-point mesh plus 10 extra iris-tracking landmarks. `landmarks.length` is always 478.
+</Callout>
+
+## Drawing the Face Mesh
+
+`@localmode/core` exports `FACE_CONNECTIONS` — landmark index pairs for the face mesh tesselation:
+
+```typescript
+import { detectFaceLandmarks, FACE_CONNECTIONS } from '@localmode/core';
+import { mediapipe } from '@localmode/mediapipe';
+
+const { faces } = await detectFaceLandmarks({
+  model: mediapipe.faceLandmarker(),
+  image: canvas,
+});
+
+const ctx = canvas.getContext('2d')!;
+ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+ctx.lineWidth = 1;
+
+for (const face of faces) {
+  for (const [start, end] of FACE_CONNECTIONS) {
+    const a = face.landmarks[start];
+    const b = face.landmarks[end];
+    ctx.beginPath();
+    ctx.moveTo(a.x * canvas.width, a.y * canvas.height);
+    ctx.lineTo(b.x * canvas.width, b.y * canvas.height);
+    ctx.stroke();
+  }
+}
+```
+
+## React Hooks
+
+`@localmode/react` provides two hooks:
+
+```tsx
+'use client';
+
+import { useDetectFace, useDetectFaceLandmarks } from '@localmode/react';
+import { mediapipe } from '@localmode/mediapipe';
+
+const detectorModel = mediapipe.faceDetector();
+const meshModel = mediapipe.faceLandmarker();
+
+export function FaceTools() {
+  // Bounding-box detection
+  const detector = useDetectFace({ model: detectorModel });
+  // 478-point mesh + blendshapes
+  const mesh = useDetectFaceLandmarks({ model: meshModel });
+
+  return (
+    <div>
+      <button onClick={() => detector.execute(imageBlob)}>Detect faces</button>
+      <button onClick={() => mesh.execute(imageBlob)}>Detect mesh</button>
+      {detector.data && <p>{detector.data.faces.length} face(s)</p>}
+      {mesh.data && <p>{mesh.data.faces[0]?.landmarks.length} mesh points</p>}
+    </div>
+  );
+}
+```
+
+Both hooks return `{ data, error, isLoading, execute, cancel, reset }`.
+
+## Real-Time Face Tracking
+
+For live webcam face mesh tracking, use `createFaceTracker` — it supports `outputBlendshapes` for real-time expression tracking. See the [Streaming guide](/docs/mediapipe/streaming).
+
+```typescript
+const tracker = mediapipe.createFaceTracker({
+  video: videoElement,
+  numFaces: 1,
+  outputBlendshapes: true,
+  onResults: (faces, timestampMs) => drawFaceMesh(faces),
+});
+
+await tracker.start();
+```
+
+## Next Steps
+
+<Cards>
+  <Card
+    title="Real-Time Streaming"
+    href="/docs/mediapipe/streaming"
+    description="Live face mesh and blendshape tracking over a video element."
+  />
+  <Card
+    title="Hand Tracking"
+    href="/docs/mediapipe/hand-tracking"
+    description="21-point hand landmark detection."
+  />
+  <Card
+    title="Pose Estimation"
+    href="/docs/mediapipe/pose-estimation"
+    description="33-point full-body landmark detection."
+  />
+</Cards>

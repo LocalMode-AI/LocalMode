@@ -1,0 +1,113 @@
+---
+title: "Sentence Transformers Models in the Browser"
+description: "Multilingual and English sentence embedding models - MiniLM for multilingual, MPNet for highest English quality."
+author: "LocalMode"
+date: "2026-05-06"
+---
+
+# Sentence Transformers Models in the Browser
+
+Multilingual and English sentence embedding models - MiniLM for multilingual, MPNet for highest English quality.
+
+## Overview
+
+The Sentence Transformers family is available through Transformers.js in LocalMode, with model sizes ranging from 23MB–420MB. The primary task for these models is **embedding**, and they can be used with any application built on the LocalMode SDK.
+
+Running Sentence Transformers models locally in the browser eliminates API costs, removes network latency, and keeps all user data on-device. After the initial model download, inference is instant and works offline. Each model variant targets a different trade-off between size, speed, and quality - choose based on your users' device capabilities and your application's requirements.
+
+## Architecture and History
+
+The Sentence Transformers ecosystem provides two of LocalMode's most versatile embedding models. Paraphrase-multilingual-MiniLM-L12-v2 is the go-to choice for multilingual applications - it supports 50 languages in a ~120MB model with 384 dimensions, making it ideal for apps serving international users. All-MPNet-base-v2 is the highest-quality English embedding model in the catalog at 768 dimensions, trained on over 1.17 billion sentence pairs.
+
+Snowflake Arctic Embed XS rounds out the lightweight options at just 23MB - the smallest embedding model in LocalMode's registry. It's designed for use cases where model download size is the primary constraint, such as browser extensions or PWAs that need to pre-cache models for offline use.
+
+These models all run through Transformers.js on WASM. For most applications, the decision comes down to: multilingual support needed? Use MiniLM. English-only and quality is critical? Use MPNet. Download size is the constraint? Use Arctic XS. All three produce Float32Array embeddings compatible with LocalMode's VectorDB, and all support the same embed() and embedMany() API.
+
+## Variant Comparison
+
+The following table lists every Sentence Transformers variant available through LocalMode, across all supported providers. Click a model ID to view its HuggingFace model card.
+
+| Model ID | Provider | Size | Speed | Quality | Dimensions | Device |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Snowflake/snowflake-arctic-embed-xs](https://huggingface.co/Snowflake/snowflake-arctic-embed-xs) | Transformers.js | 23MB | Fast | Good | 384 | WASM |
+| [Xenova/paraphrase-multilingual-MiniLM-L12-v2](https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2) | Transformers.js | 120MB | Medium | Good | 384 | WASM |
+| [Xenova/all-mpnet-base-v2](https://huggingface.co/sentence-transformers/all-mpnet-base-v2) | Transformers.js | 420MB | Slow | High | 768 | WASM |
+
+### Size Distribution
+
+| Size Range | Count |  |
+| --- | --- | --- |
+| Under 200MB | 2 | variants |
+| 200MB–500MB | 1 | variant |
+
+**How to choose a variant:** Start with the smallest model that meets your quality requirements. For prototyping and development, use the fastest variant (smallest size, "Fast" speed tier). For production, test your specific use case against 2–3 variants and measure the quality difference against user expectations. In many applications, users cannot distinguish between "Good" and "High" quality tiers - the smaller model saves download time and memory.
+
+## Provider-Specific Code Examples
+
+All Sentence Transformers variants use the same `EmbeddingModel` interface from `@localmode/core`. Switching between providers requires changing only the import and model ID - no application logic changes.
+
+### Transformers.js
+
+Transformers.js runs ONNX-optimized models via ONNX Runtime Web. WebGPU acceleration where available, WASM fallback otherwise.
+
+```typescript
+import { embed } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.embedding('Snowflake/snowflake-arctic-embed-xs');
+
+const { embedding } = await embed({
+  model,
+  value: 'Semantic search query',
+});
+
+console.log(embedding); // Float32Array(384)
+```
+
+### Fallback Pattern
+
+For maximum browser compatibility, wrap model loading in a try/catch: attempt the preferred model first, and fall back to a smaller variant if it fails to load.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+// Try the preferred model, fall back to a smaller one on failure
+let model;
+try {
+  model = transformers.embedding('Xenova/all-mpnet-base-v2');
+} catch (error) {
+  console.warn('Primary model failed, using fallback:', error);
+  model = transformers.embedding('Snowflake/snowflake-arctic-embed-xs');
+}
+```
+
+## When to Use Sentence Transformers
+
+Sentence Transformers models are a strong choice when:
+
+- **You need text embeddings** - Sentence Transformers is optimized for embedding tasks with models across multiple size tiers.
+- **Browser compatibility matters** - Available through 1 provider (transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
+- **Size flexibility is important** - The 23MB–420MB range means you can target everything from mobile devices to high-end desktops with the same model family.
+
+
+## HuggingFace Model Cards
+
+- [snowflake-arctic-embed-xs](https://huggingface.co/Snowflake/snowflake-arctic-embed-xs)
+- [paraphrase-multilingual-MiniLM-L12-v2](https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2)
+- [all-mpnet-base-v2](https://huggingface.co/sentence-transformers/all-mpnet-base-v2)
+
+## Related Pages
+
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+The model data on this page - sizes, embedding dimensions, and provider availability - is extracted directly from LocalMode's source code: the curated model registry (`packages/core/src/capabilities/model-registry.ts`) and the Transformers.js provider catalog (`packages/transformers/src/models.ts`). Download sizes reflect the quantized ONNX model files served via Transformers.js. External facts (language counts, training data, sequence lengths) were verified against the official HuggingFace model cards for each model. Performance characteristics (speed and quality tiers) are LocalMode's curated assessments based on parameter count, quantization, and architecture. Always benchmark on your target devices before production deployment.
+
+## Sources
+
+- [sentence-transformers/all-mpnet-base-v2 - HuggingFace model card](https://huggingface.co/sentence-transformers/all-mpnet-base-v2) - embedding dimensions (768), training data (1.17B sentence pairs), max sequence length
+- [sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 - HuggingFace model card](https://huggingface.co/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2) - embedding dimensions (384), language count (50), max sequence length (128 tokens)
+- [Snowflake/snowflake-arctic-embed-xs - HuggingFace model card](https://huggingface.co/Snowflake/snowflake-arctic-embed-xs) - embedding dimensions (384), parameters (22M), max sequence length (512 tokens)
+- [LocalMode model registry](https://github.com/LocalMode-AI/LocalMode) - size tiers (sizeMB), speed/quality tiers, provider assignments (`packages/core/src/capabilities/model-registry.ts`, `packages/transformers/src/models.ts`)
+- [Transformers.js documentation](https://huggingface.co/docs/transformers.js)

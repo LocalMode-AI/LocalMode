@@ -153,13 +153,28 @@ export class TransformersSpeechToTextModel implements SpeechToTextModel {
     this.loadPromise = (async () => {
       const { pipeline, env } = await import('@huggingface/transformers');
 
-      // Suppress ONNX runtime warnings about node execution providers
+      // Suppress ONNX runtime warnings — both the JS-side `logLevel`
+      // (used by the loader) AND the C++/WASM-side `logSeverityLevel`
+      // (3 = ERROR, 4 = FATAL) that emits the noisy
+      // `[W:onnxruntime:, session_state.cc:1280 VerifyEachNodeIsAssignedToAnEp]`
+      // verbose mixed-EP warnings on every WebGPU/WASM split inference.
       env.backends.onnx.logLevel = 'error';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (env.backends.onnx as any).logSeverityLevel = 3;
+      if (env.backends.onnx.wasm) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (env.backends.onnx.wasm as any).logLevel = 'error';
+      }
 
+      // Pass an explicit `dtype` even on the default path — Transformers.js
+      // logs "dtype not specified for ..." when it's undefined and falls
+      // back to fp32 anyway. Whisper-style encoder/decoder + Moonshine
+      // single-model both accept the string form; it's applied to every
+      // sub-model. Using fp32 by default preserves accuracy.
+      const dtype: 'q8' | 'fp32' = this.settings.quantized === true ? 'q8' : 'fp32';
       const pipe = await pipeline('automatic-speech-recognition', this.baseModelId, {
         device: this.settings.device ?? 'auto',
-        // Whisper models (especially tiny/small) produce hallucinations with q8 — default to fp32
-        dtype: this.settings.quantized === true ? 'q8' : undefined,
+        dtype,
         progress_callback: this.settings.onProgress,
       });
 

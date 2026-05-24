@@ -319,6 +319,138 @@ export interface SynthesizeSpeechResult {
   response: AudioResponse;
 }
 
+// ───────────────────────────────────────────────────────────────
+// streamSynthesizeSpeech() — streaming text-to-speech
+// ───────────────────────────────────────────────────────────────
+
+/**
+ * Per-clause usage emitted by {@link SynthesizedClause}.
+ */
+export interface SynthesizedClauseUsage {
+  /** Number of characters synthesized for this clause. */
+  characterCount: number;
+
+  /** Time spent on this clause's `doSynthesize()` call (ms). */
+  durationMs: number;
+}
+
+/**
+ * One yielded item from `streamSynthesizeSpeech()`.
+ *
+ * Each clause carries its decoded mono PCM samples plus the source clause
+ * text and provider sample rate. `clauseIndex` is the zero-based position
+ * of the clause within the parent stream.
+ */
+export interface SynthesizedClause {
+  /** Mono PCM samples in the range `[-1, 1]`. */
+  audio: Float32Array;
+
+  /** The source clause text (pre-synthesis). */
+  text: string;
+
+  /** Sample rate reported by the provider for this clause. */
+  sampleRate: number;
+
+  /** Zero-based index of this clause within the stream. */
+  clauseIndex: number;
+
+  /** Per-clause usage / timing. */
+  usage: SynthesizedClauseUsage;
+}
+
+/**
+ * Options for the {@link streamSynthesizeSpeech} async-iterable wrapper.
+ *
+ * @example
+ * ```ts
+ * for await (const clause of streamSynthesizeSpeech({
+ *   model: transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX'),
+ *   text: 'Hello there. How are you today?',
+ *   voice: 'af_heart',
+ * })) {
+ *   console.log(clause.clauseIndex, clause.text, clause.audio.length);
+ * }
+ * ```
+ */
+export interface StreamSynthesizeSpeechOptions {
+  /** The text-to-speech model (instance or string ID resolved via `setGlobalTTSProvider`). */
+  model: TextToSpeechModel | string;
+
+  /** Text to synthesize. Will be split into clauses by `splitIntoClauses()`. */
+  text: string;
+
+  /** Voice ID forwarded to every clause. */
+  voice?: string;
+
+  /** Speech rate forwarded to every clause (0.5–2.0, default: provider). */
+  speed?: number;
+
+  /** Pitch adjustment forwarded to every clause. */
+  pitch?: number;
+
+  /**
+   * Tuning options for the built-in clause splitter (`splitIntoClauses`).
+   * Pass `{ minWordsPerClause, maxWordsPerClause, abbreviations }` to
+   * override the defaults.
+   */
+  splitOptions?: import('./clause-splitter.js').ClauseSplitOptions;
+
+  /**
+   * AbortSignal honored between clauses and forwarded to each in-flight
+   * `doSynthesize()` call.
+   */
+  abortSignal?: AbortSignal;
+
+  /** Provider-specific options forwarded unchanged to every clause. */
+  providerOptions?: Record<string, Record<string, unknown>>;
+}
+
+// ───────────────────────────────────────────────────────────────
+// playStreamedSpeech() — Web Audio playback queue
+// ───────────────────────────────────────────────────────────────
+
+/**
+ * Options for the {@link playStreamedSpeech} playback helper.
+ */
+export interface PlayStreamedSpeechOptions {
+  /**
+   * AbortSignal that, when aborted, stops all scheduled sources, requests
+   * the upstream iterator's `return()`, and rejects `playing` with the
+   * abort reason.
+   */
+  abortSignal?: AbortSignal;
+
+  /** Fired synchronously when each clause's source node is started. */
+  onClause?: (clause: SynthesizedClause) => void;
+
+  /** Fired when each clause's source node fires `onended`. */
+  onClauseEnd?: (clause: SynthesizedClause) => void;
+}
+
+/**
+ * Handle returned by {@link playStreamedSpeech}.
+ *
+ * The caller owns the `AudioContext`; the helper never closes it.
+ */
+export interface PlayStreamedSpeechHandle {
+  /**
+   * Resolves when the iterable ends and the last source's `onended` fires.
+   * Rejects on iterable error, sample-rate mismatch, or abort.
+   *
+   * `stop()` resolves this promise (does not reject).
+   */
+  playing: Promise<void>;
+
+  /** Suspend the underlying `AudioContext`. */
+  pause(): void;
+
+  /** Resume the underlying `AudioContext`. */
+  resume(): void;
+
+  /** Stop all scheduled sources and halt upstream synthesis. Resolves `playing`. */
+  stop(): void;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // AUDIO CLASSIFICATION MODEL INTERFACE
 // ═══════════════════════════════════════════════════════════════

@@ -77,6 +77,16 @@ export const RERANKER_MODELS = {
 } as const;
 
 /**
+ * Popular Voice Activity Detection (VAD) models.
+ *
+ * Used with `transformers.vad(modelId)` for `createLiveTranscriber({ vad })`.
+ */
+export const VAD_MODELS = {
+  /** Silero VAD v5 - recommended browser VAD (~1.8MB, 512-sample frames at 16 kHz) */
+  SILERO_VAD: 'onnx-community/silero-vad',
+} as const;
+
+/**
  * Popular speech-to-text models.
  */
 export const SPEECH_TO_TEXT_MODELS = {
@@ -136,7 +146,7 @@ export const IMAGE_CAPTION_MODELS = {
  * Popular text-to-speech models.
  */
 export const TEXT_TO_SPEECH_MODELS = {
-  /** Kokoro 82M - natural speech, 28 voices, 24kHz (~86MB q8f16) */
+  /** Kokoro 82M — 29 English voices, phonemizer-backed, 24kHz, speed control (~86MB q8) */
   KOKORO_82M: 'onnx-community/Kokoro-82M-v1.0-ONNX',
 
   /** Legacy: SpeechT5 TTS, 16kHz, requires separate vocoder */
@@ -224,6 +234,12 @@ export const OCR_MODELS = {
 
   /** TrOCR small - handwritten text recognition */
   TROCR_SMALL_HANDWRITTEN: 'Xenova/trocr-small-handwritten',
+
+  /** GLM-OCR - document-level OCR with table/formula recognition (~652MB q4f16) */
+  GLM_OCR: 'onnx-community/GLM-OCR-ONNX',
+
+  /** LightOnOCR-2 1B - fast end-to-end document OCR, 11 languages (~700MB q4) */
+  LIGHTONOCR_2_1B: 'onnx-community/LightOnOCR-2-1B-ONNX',
 } as const;
 
 /**
@@ -287,17 +303,15 @@ export const MULTIMODAL_EMBEDDING_MODELS = {
 } as const;
 
 /**
- * Curated ONNX LLM models verified to work with Transformers.js v4 in the browser.
+ * Curated ONNX LLM models verified to work with Transformers.js in the browser.
  *
- * **Experimental**: These models use TJS v4 (preview release) and the
- * `text-generation` pipeline with WebGPU/WASM acceleration.
+ * Uses the `text-generation` pipeline with WebGPU/WASM acceleration.
  *
  * All models listed here are **public** (no HuggingFace login required).
  *
  * Users can pass any valid HuggingFace ONNX model ID to
  * `transformers.languageModel()` — this catalog provides curated,
  * browser-tested models as a starting point.
- *
  */
 export const TRANSFORMERS_LLM_MODELS: Record<
   string,
@@ -452,6 +466,28 @@ export const TRANSFORMERS_LLM_MODELS: Record<
       'Best quality Qwen3.5 ONNX for browser. 32K multimodal, needs 8GB+ RAM, WebGPU required.',
     vision: true,
   },
+
+  /** Gemma 4 E2B — Google's 2.3B edge multimodal model, 128K context, vision support */
+  'onnx-community/gemma-4-E2B-it-ONNX': {
+    name: 'Gemma 4 E2B (ONNX)',
+    contextLength: 131072,
+    size: '~1.5GB',
+    sizeBytes: 1500 * 1024 * 1024,
+    description:
+      'Google Gemma 4 E2B, q4f16 multimodal with vision. 128K context. ~2 tok/s via WebGPU (use LiteRT for faster text-only). Needs 6GB+ VRAM.',
+    vision: true,
+  },
+
+  /** Gemma 4 E4B — Google's 4.5B edge multimodal model, 128K context, vision support */
+  'onnx-community/gemma-4-E4B-it-ONNX': {
+    name: 'Gemma 4 E4B (ONNX)',
+    contextLength: 131072,
+    size: '~3GB',
+    sizeBytes: 3000 * 1024 * 1024,
+    description:
+      'Google Gemma 4 E4B, q4f16 multimodal with vision. 128K context. ~2 tok/s via WebGPU (use LiteRT for faster text-only). Needs 8GB+ VRAM.',
+    vision: true,
+  },
 } as const;
 
 /**
@@ -492,5 +528,6 @@ export const MODELS = {
   documentQA: DOCUMENT_QA_MODELS,
   imageToImage: IMAGE_TO_IMAGE_MODELS,
   imageFeature: IMAGE_FEATURE_MODELS,
+  vad: VAD_MODELS,
 } as const;
 

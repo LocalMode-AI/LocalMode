@@ -36,6 +36,7 @@ export type {
   // Multimodal content types
   TextPart,
   ImagePart,
+  AudioPart,
   ContentPart,
   // Common types
   GenerationUsage,

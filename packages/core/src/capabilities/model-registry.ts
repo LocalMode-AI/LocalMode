@@ -223,7 +223,7 @@ export const DEFAULT_MODEL_REGISTRY: readonly ModelRegistryEntry[] = [
     recommendedDevice: 'wasm',
     speedTier: 'medium',
     qualityTier: 'high',
-    description: 'Natural speech, 28 voices, 24kHz',
+    description: '29 voices, American & British English, phonemizer-backed, 24kHz, speed control',
   },
 
   // ==========================================================================
@@ -347,6 +347,28 @@ export const DEFAULT_MODEL_REGISTRY: readonly ModelRegistryEntry[] = [
     speedTier: 'medium',
     qualityTier: 'medium',
     description: 'Printed text recognition',
+  },
+  {
+    modelId: 'onnx-community/GLM-OCR-ONNX',
+    provider: 'transformers',
+    task: 'ocr',
+    name: 'GLM-OCR',
+    sizeMB: 652,
+    recommendedDevice: 'webgpu',
+    speedTier: 'medium',
+    qualityTier: 'high',
+    description: 'Document-level OCR with table and formula recognition',
+  },
+  {
+    modelId: 'onnx-community/LightOnOCR-2-1B-ONNX',
+    provider: 'transformers',
+    task: 'ocr',
+    name: 'LightOnOCR-2 1B',
+    sizeMB: 700,
+    recommendedDevice: 'webgpu',
+    speedTier: 'fast',
+    qualityTier: 'high',
+    description: 'Fast end-to-end document OCR, 11 languages',
   },
 
   // ==========================================================================

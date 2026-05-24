@@ -1,0 +1,148 @@
+---
+title: "Image Classification in the Browser"
+description: "Classify images into categories using ViT - identify objects, scenes, and content types in the browser."
+author: "LocalMode"
+date: "2026-05-11"
+---
+
+# Image Classification in the Browser
+
+Classify images into categories using ViT - identify objects, scenes, and content types in the browser.
+
+## What Is Image Classification?
+
+Image classification assigns one or more labels to an image from a predefined set of categories. ViT (Vision Transformer) processes images by dividing them into patches, encoding each patch as a token, and applying transformer attention to classify the entire image. The model recognizes 1,000 ImageNet categories covering animals, objects, scenes, and activities.
+
+This capability is exposed through the `classifyImage()` function in `@localmode/core`. All processing runs entirely in the browser - no server, no API key, no data leaves the device. After the initial model download, image classification works completely offline.
+
+## Real-World Applications
+
+Photo library auto-tagging and organization. Content moderation (NSFW detection). Product image categorization for e-commerce. Quality control in manufacturing (defect detection). Wildlife camera trap classification. Medical image screening.
+
+These use cases all benefit from local, on-device processing: user data stays private, there are no per-request API costs, and the application works without internet after initial setup.
+
+## Getting Started
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+Import the core function and provider:
+
+```typescript
+import { classifyImage } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+```
+
+The recommended starting model is **Xenova/vit-base-patch16-224** - it provides the best balance of quality, speed, and download size for most applications.
+
+## Code Example
+
+```typescript
+import { classifyImage } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.imageClassifier('Xenova/vit-base-patch16-224');
+
+const { predictions } = await classifyImage({
+  model,
+  image: imageFile, // File, Blob, or URL
+});
+
+// predictions: [
+//   { label: 'golden retriever', score: 0.92 },
+//   { label: 'Labrador retriever', score: 0.05 },
+//   { label: 'tennis ball', score: 0.01 },
+// ]
+```
+
+This example demonstrates the core workflow: create a model instance from the provider, call the `classifyImage()` function with your input, and receive structured results. The same pattern works identically across both available providers: Transformers.js and MediaPipe.
+
+## Available Models
+
+The following models support image classification through LocalMode. Choose based on your target device, acceptable download size, and quality requirements. Sizes shown are for the default quantized ONNX variant (`model_quantized.onnx`) or the provider's default file.
+
+| Model | Provider | Size (quantized) | Speed | Quality |
+| --- | --- | --- | --- | --- |
+| Xenova/vit-base-patch16-224 | Transformers.js | ~88MB | Medium | High |
+| Xenova/deit-small-distilled-patch16-224 | Transformers.js | ~24MB | Fast | Good |
+| Xenova/resnet-50 | Transformers.js | ~26MB | Fast | Good |
+| EfficientNet-Lite0 (image_classifier) | MediaPipe | ~19MB | Fast | Good |
+
+**Choosing a model:** For most applications, start with the recommended model (`Xenova/vit-base-patch16-224`). If download size is the primary constraint (e.g., mobile PWA, browser extension), consider the MediaPipe EfficientNet-Lite0 (~19MB) or ResNet-50 quantized (~26MB). If quality is the priority (e.g., enterprise search, content analysis), use the largest model your target devices can handle.
+
+## Cloud vs Local: Cost and Privacy Comparison
+
+Running image classification locally eliminates per-request API costs and keeps all data on-device. Here is how the economics compare:
+
+| Service | Cost / Notes |
+| --- | --- |
+| Google Cloud Vision | $1.50 per 1000 images |
+| AWS Rekognition | $1 per 1000 images |
+| LocalMode image classification | $0 after one-time model download (~19–88MB depending on model) |
+
+Google Cloud Vision costs $1.50 per 1,000 images (for units 1,001–5,000,000/month; first 1,000/month free). AWS Rekognition DetectLabels costs $1.00 per 1,000 images for the first million images/month, with volume discounts beyond that. LocalMode image classification costs $0 after the initial model download. Images never leave the device - critical for medical, personal, and sensitive content.
+
+The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
+
+## Available Providers
+
+- **Transformers.js** - ONNX-optimized models via ONNX Runtime Web. Supports both WebGPU and WASM backends. Broadest model catalog for non-LLM tasks, including ViT, DeiT, and ResNet.
+- **MediaPipe** - Google's on-device ML runtime using WASM + WebGL (no WebGPU required). Ships EfficientNet-Lite0 (~19MB) for general ImageNet classification with 1,000 classes. Use `mediapipe.imageClassifier()` in place of `transformers.imageClassifier()`.
+
+## AbortSignal Support
+
+All `classifyImage()` calls support cancellation through the standard `AbortSignal` API:
+
+```typescript
+const controller = new AbortController();
+
+const promise = classifyImage({
+  model,
+  image: imageFile,
+  abortSignal: controller.signal,
+});
+
+// Cancel if needed (e.g., user navigates away)
+controller.abort();
+```
+
+This is essential for responsive UIs - cancel in-flight operations when the user navigates away, submits a new query, or closes a dialog. The underlying model inference stops immediately, freeing memory and compute resources.
+
+## React Integration
+
+If you are building a React application, `@localmode/react` provides hooks that manage loading states, error handling, and cancellation automatically:
+
+```bash
+npm install @localmode/react
+```
+
+```typescript
+import { useClassifyImage } from '@localmode/react';
+```
+
+The hook returns `{ data, error, isLoading, execute, cancel }` - providing everything a UI component needs to display progress, handle errors, and offer cancellation.
+
+## Related Pages
+
+- [Vision Models](/blog/models/vision-models) - model guide
+- [Text Generation](/blog/tasks/text-generation) - task guide
+- [Text Embeddings](/blog/tasks/text-embeddings) - task guide
+
+## Methodology
+
+This guide is based on LocalMode's source code (`packages/core/src/vision/classify-image.ts`, `packages/transformers/src/implementations/image-classifier.ts`, `packages/mediapipe/src/implementations/image-classifier.ts`). Function names, hook names, and model IDs were verified directly against the codebase. Model sizes reflect the default quantized ONNX variant (`model_quantized.onnx`) as listed in each model's HuggingFace file tree; MediaPipe model sizes are from the verified catalog in `packages/mediapipe/src/models.ts`. Cloud pricing figures were taken directly from the Google Cloud Vision and AWS Rekognition pricing pages at the time of writing and are subject to change - verify current pricing with the provider before making cost decisions.
+
+## Sources
+
+- [LocalMode core - classifyImage source](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/core/src/vision/classify-image.ts)
+- [LocalMode transformers - image-classifier implementation](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/transformers/src/implementations/image-classifier.ts)
+- [Xenova/vit-base-patch16-224 on HuggingFace (ONNX files)](https://huggingface.co/Xenova/vit-base-patch16-224/tree/main/onnx)
+- [Xenova/deit-small-distilled-patch16-224 on HuggingFace](https://huggingface.co/Xenova/deit-small-distilled-patch16-224)
+- [Xenova/resnet-50 on HuggingFace (ONNX files)](https://huggingface.co/Xenova/resnet-50/tree/main/onnx)
+- [google/vit-base-patch16-224 model card (86.6M parameters, 1,000 ImageNet classes)](https://huggingface.co/google/vit-base-patch16-224)
+- [Google Cloud Vision API pricing](https://cloud.google.com/vision/pricing)
+- [AWS Rekognition pricing](https://aws.amazon.com/rekognition/pricing/)
+- [MediaPipe Image Classifier task (Google)](https://developers.google.com/mediapipe/solutions/vision/image_classifier)

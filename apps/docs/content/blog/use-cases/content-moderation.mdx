@@ -1,0 +1,119 @@
+---
+title: "Content Moderation"
+description: "Moderate user-generated content in real-time using local classification - no API costs, no data exposure, instant decisions."
+author: "LocalMode"
+date: "2026-04-20"
+---
+
+# Content Moderation
+
+Moderate user-generated content in real-time using local classification - no API costs, no data exposure, instant decisions.
+
+*Category: Feature Guide*
+
+## The Problem
+
+User-generated content platforms need real-time moderation to filter toxic, spam, and inappropriate content. Cloud moderation APIs (Perspective API, OpenAI Moderation, AWS Comprehend) add latency, cost per request, and send user content to third parties. For privacy-sensitive platforms (healthcare forums, children's apps, employee feedback tools), sending content externally is unacceptable.
+
+This is a common challenge for teams building modern applications. Traditional approaches either compromise on privacy (by sending data to cloud APIs), require complex server infrastructure (adding cost and maintenance burden), or sacrifice functionality (by avoiding AI entirely). LocalMode provides a fourth option: run the AI locally in the browser.
+
+## The Solution
+
+Run moderation classification directly in the user's browser using LocalMode. Zero-shot classification with DeBERTa categorizes content against custom labels (toxic, spam, inappropriate, safe) without any cloud API. Sentiment analysis with DistilBERT detects negative tone. The moderation decision is fast (typically under 200ms on warm inference after model load) and never sends user content to a server.
+
+### Why Local-First?
+
+Building this feature with on-device inference provides three structural advantages over cloud-based alternatives:
+
+1. **Zero marginal cost** - After the initial model download, every inference operation is free. No per-token fees, no monthly API bills, no surprise invoices. This matters especially for features used frequently or by many users.
+2. **Architectural privacy** - User data never leaves the device. This is not a policy promise ("we won't look at your data") but an architectural guarantee: the data physically cannot reach any server because the processing happens in the browser tab.
+3. **Offline capability** - Once models are cached in IndexedDB, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
+
+## Technology Stack
+
+| Package | Purpose |
+| --- | --- |
+| `@localmode/core` | classify(), classifyZeroShot() |
+| `@localmode/transformers` | DistilBERT, DeBERTa models |
+
+Install the required packages:
+
+```bash
+npm install @localmode/core @localmode/transformers
+```
+
+## Implementation
+
+```typescript
+import { classifyZeroShot } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const moderator = transformers.zeroShot('Xenova/nli-deberta-v3-xsmall');
+
+async function moderateContent(text: string) {
+  const { labels, scores } = await classifyZeroShot({
+    model: moderator,
+    text,
+    candidateLabels: ['safe', 'toxic', 'spam', 'harassment', 'self-harm'],
+  });
+
+  if (labels[0] !== 'safe' && scores[0] > 0.7) {
+    return { blocked: true, reason: labels[0], confidence: scores[0] };
+  }
+  return { blocked: false };
+}
+```
+
+### How This Works
+
+The code above demonstrates the complete pipeline. Let us walk through the key decisions:
+
+- **Model selection** - The models referenced in this example are chosen for their balance of size, speed, and quality for this specific use case. Smaller models load faster and use less memory; larger models produce better results. Start with the recommended models and upgrade only if quality is insufficient for your users.
+- **Browser APIs** - LocalMode uses IndexedDB for persistent storage (vectors, model cache), Web Workers for background processing (keeping the UI responsive during inference), and the Web Crypto API for optional encryption.
+- **Error handling** - All LocalMode functions throw typed errors (`ModelLoadError`, `StorageError`, `ValidationError`) with actionable hints. Wrap calls in try/catch and use the error's `hint` property to display user-friendly messages.
+- **Cancellation** - Pass an `AbortSignal` to any long-running operation. This lets users cancel searches, embeddings, or generation without waiting for completion.
+
+## Production Considerations
+
+When deploying this solution to production, consider these factors:
+
+**Model preloading:** Download models during user onboarding or application setup, not on first use. Use `preloadModel()` with an `onProgress` callback to show download progress. This avoids the poor experience of a loading spinner on the first AI interaction.
+
+**Storage management:** IndexedDB has browser-specific quotas (Chrome allows up to 60% of total disk size per origin; iOS Safari WebViews are more restrictive at roughly 15%). Use `getStorageQuota()` to check available space and `navigator.storage.persist()` to request persistent storage that survives browser storage pressure.
+
+**Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
+
+**Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
+
+## Frequently Asked Questions
+
+### How accurate is zero-shot moderation?
+
+For clear-cut cases (explicit toxicity, obvious spam), accuracy is typically high - the underlying `nli-deberta-v3-xsmall` model achieves ~87-92% on standard NLI benchmarks (SNLI test: 91.64%, MNLI mismatched: 87.77%). Applied accuracy on real-world moderation labels will vary by use case, label clarity, and community context. For subtle cases (sarcasm, coded language), accuracy drops noticeably. The zero-shot approach lets you customize categories for your specific community norms without training data.
+
+### Can this handle images too?
+
+Yes. Combine text classification with image classification (ViT) for multimodal moderation. Classify images for inappropriate content categories and combine scores with text moderation for a holistic decision.
+
+## Further Reading
+
+- [Perspective API (Google) - for comparison](https://perspectiveapi.com) *(Note: Perspective API is shutting down after December 31, 2026; quota increase requests closed February 2026)*
+
+## Related Pages
+
+- [Text Classification](/blog/tasks/text-classification) - task guide
+- [Classification Models](/blog/models/classification-models) - model guide
+- [Image Classification](/blog/tasks/image-classification) - task guide
+
+## Methodology
+
+This guide is based on LocalMode's documented APIs and curated model catalog. Code examples use the actual exported functions from `@localmode/core` and the provider packages, verified against the source at `packages/core/src/classification/classify.ts` and `packages/transformers/src/models.ts`. Accuracy figures cite the `cross-encoder/nli-deberta-v3-xsmall` HuggingFace model card (SNLI test / MNLI mismatched benchmarks). Storage quota figures cite the MDN Storage API reference (January 2026). Any regulatory or compliance references are general information, not legal advice - consult a qualified professional for your specific situation.
+
+## Sources
+
+- [Xenova/nli-deberta-v3-xsmall - HuggingFace model card (ONNX Transformers.js variant)](https://huggingface.co/Xenova/nli-deberta-v3-xsmall)
+- [cross-encoder/nli-deberta-v3-xsmall - HuggingFace model card (accuracy metrics: SNLI 91.64%, MNLI 87.77%)](https://huggingface.co/cross-encoder/nli-deberta-v3-xsmall)
+- [MDN - Storage quotas and eviction criteria (Chrome: 60% of total disk per origin; Safari WebView: ~15%)](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria)
+- [OpenAI Help Center - Is the Moderation endpoint free to use?](https://help.openai.com/en/articles/4936833-is-the-moderation-endpoint-free-to-use)
+- [Perspective API - perspectiveapi.com (shutting down December 31, 2026)](https://perspectiveapi.com)
+- [Lasso Moderation - Perspective API pricing and sunset details](https://www.lassomoderation.com/blog/Perspective-api-pricing/)

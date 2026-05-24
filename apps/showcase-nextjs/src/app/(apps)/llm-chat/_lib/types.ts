@@ -7,7 +7,7 @@
 export type MessageRole = 'user' | 'assistant' | 'system';
 
 /** Inference backend discriminator */
-export type ModelBackend = 'webgpu' | 'wasm' | 'onnx';
+export type ModelBackend = 'webgpu' | 'wasm' | 'onnx' | 'litert';
 
 /** Backend filter for the model sidebar tabs */
 export type BackendFilter = 'all' | ModelBackend;

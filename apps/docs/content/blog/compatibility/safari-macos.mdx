@@ -1,0 +1,152 @@
+---
+title: "Safari on macOS"
+description: "LocalMode support on Safari macOS - WebGPU behind a flag from Safari 17.4, enabled by default from Safari 26, WASM always, with IndexedDB caveats in Private Browsing."
+author: "LocalMode"
+date: "2026-04-06"
+---
+
+# Safari on macOS
+
+LocalMode support on Safari macOS - WebGPU behind a flag from Safari 17.4, enabled by default from Safari 26, WASM always, with IndexedDB caveats in Private Browsing.
+
+*Category: Browser Compatibility*
+
+## Feature Support Matrix
+
+The following table summarizes which web platform features are available on Safari on macOS and how they affect LocalMode's capabilities. Features marked as supported enable full functionality; partial or unsupported features trigger automatic fallbacks.
+
+| Feature | Supported | Notes |
+| --- | --- | --- |
+| **WebGPU** | Safari 18+ (behind flag), Safari 26+ (default) | WebGPU behind feature flag in Safari 18-25. Enabled by default from Safari 26 (macOS Tahoe). Metal backend. |
+| **WebAssembly** | Yes (Safari 11+) | Full WASM support. SIMD support from Safari 16.4. |
+| **IndexedDB** | Yes (normal mode) | Full support in normal browsing. BLOCKED in Private Browsing - use MemoryStorage fallback. |
+| **Web Workers** | Partial | Module workers supported from Safari 15. Older versions need classic workers. |
+| **SharedArrayBuffer** | Yes (with COOP/COEP) | Requires cross-origin isolation headers. |
+| **Web Locks** | Yes (Safari 15.4+) | Full support. Falls back to InMemoryLockManager on older versions. |
+| **BroadcastChannel** | Yes (Safari 15.4+) | Full support. Falls back to LocalStorageBroadcaster on older versions. |
+| **Chrome Built-in AI** | No | Chrome-only feature. Use @localmode/transformers as fallback. |
+
+## Understanding the Impact
+
+Each feature in the matrix above maps to specific LocalMode capabilities:
+
+- **WebGPU** - Required for `@localmode/webllm` (GPU-accelerated LLM inference at 30-90 tokens/second). When unavailable, use `@localmode/wllama` (WASM, 5-20 tokens/second) as a fallback. Non-LLM tasks (embeddings, classification, vision, audio) do not require WebGPU.
+- **WebAssembly** - The universal inference backend. Required for `@localmode/transformers` and `@localmode/wllama`. WASM is supported in 97%+ of web traffic. SIMD support (for optimized vector operations) requires newer browser versions.
+- **IndexedDB** - Used for persistent vector storage (`VectorDB`) and model caching (`createModelLoader`). When blocked (Safari Private Browsing), LocalMode falls back to `MemoryStorage` (data lost on tab close).
+- **Web Workers** - Enable background model loading and inference without blocking the main UI thread. Module workers (for ES module imports in workers) require newer browser versions.
+- **SharedArrayBuffer** - Enables multi-threaded WASM inference for improved performance. Requires Cross-Origin Isolation headers (COOP/COEP). Not required for basic functionality.
+- **Web Locks** - Used for cross-tab model loading coordination (prevents multiple tabs from downloading the same model simultaneously). Falls back to `InMemoryLockManager` when unavailable.
+- **BroadcastChannel** - Used for cross-tab VectorDB synchronization. Falls back to `LocalStorageBroadcaster` when unavailable.
+
+## Fallback Strategies
+
+The critical Safari issue is Private Browsing mode, which completely blocks IndexedDB. Wrap storage creation in a try/catch to detect this and fall back to MemoryStorage (vectors lost on tab close) or warn users. For Safari 17.3 and below (no WebGPU at all) and Safari 17.4–25 (WebGPU available only behind a developer flag, not suitable for production end-users), wllama and Transformers.js provide full WASM-based inference. Module workers require Safari 15+ - for older versions, use non-worker inference paths.
+
+LocalMode is designed with progressive enhancement in mind. The core principle: detect capabilities at runtime and use the best available path. The `@localmode/core` package exports detection utilities for this purpose:
+
+```typescript
+import {
+  isWebGPUSupported,
+  isIndexedDBSupported,
+  isCrossOriginIsolated,
+  detectCapabilities,
+  recommendModels,
+} from '@localmode/core';
+
+async function detectAndConfigure() {
+  const caps = await detectCapabilities();
+  console.log(caps);
+  // caps.features.webgpu, caps.hardware.memory (GB), caps.storage.availableBytes
+
+  // isWebGPUSupported() is async - it must be awaited
+  if (await isWebGPUSupported()) {
+    // Use @localmode/webllm for GPU-accelerated inference
+  }
+
+  // recommendModels() is synchronous: capabilities first, options second
+  const recommendations = recommendModels(caps, {
+    task: 'generation',
+    maxSizeMB: 1500,
+  });
+}
+```
+
+## Fallback Code Example
+
+```typescript
+import { IndexedDBStorage, MemoryStorage } from '@localmode/core';
+
+// Handle Safari Private Browsing - IndexedDB throws when blocked
+async function getStorage() {
+  try {
+    const storage = new IndexedDBStorage({ name: 'app' });
+    await storage.set('__probe', { id: '__probe', vector: new Float32Array(1), metadata: {} });
+    await storage.delete('__probe');
+    return storage;
+  } catch {
+    console.warn('IndexedDB unavailable (Private Browsing?) - using MemoryStorage');
+    return new MemoryStorage();
+  }
+}
+```
+
+## Recommended Providers
+
+For Safari on macOS, the recommended LocalMode providers are:
+
+- **wllama (WASM)** - Universal LLM inference via WASM. Works without WebGPU. The safe choice for broad compatibility.
+- **Transformers.js** - Broadest model catalog for non-LLM tasks (embeddings, classification, vision, audio). WASM-based, works everywhere.
+
+## Recommended Models
+
+The following models are tested and recommended for Safari on macOS:
+
+| Model | Provider |
+| --- | --- |
+| Qwen2.5-1.5B-Instruct-Q4_K_M | wllama (WASM) |
+| Xenova/bge-small-en-v1.5 | Transformers.js |
+
+These models are chosen for their compatibility with Safari on macOS's capabilities and constraints. They represent the best balance of quality, size, and performance for this platform.
+
+## Known Issues
+
+Private Browsing blocks IndexedDB entirely - models and vectors cannot be persisted. Safari 18 WebGPU has occasional shader compilation issues with certain model architectures. Safari's ITP (Intelligent Tracking Prevention) may affect cross-origin model CDN requests in some configurations.
+
+### Mitigation Strategies
+
+When building applications that target Safari on macOS, follow these practices:
+
+1. **Always detect before loading** - Use `await isWebGPUSupported()`, `isIndexedDBSupported()`, and `await detectCapabilities()` before attempting to load models or create storage. Never assume a feature is available.
+2. **Wrap model loading in try/catch** - Even when detection succeeds, model loading can fail due to memory pressure, network issues, or browser bugs. Always have a fallback path that attempts a smaller model.
+3. **Pick models with `recommendModels()`** - Pass the detected capabilities to `recommendModels(caps, { task })` to select a model appropriate for the current device. It is the recommended pattern for production deployments.
+4. **Test on real hardware** - Browser DevTools device emulation does not accurately simulate memory limits, GPU capabilities, or storage quotas. Test on actual target hardware.
+5. **Monitor storage quota** - Use `getStorageQuota()` to check available space before downloading large models. Inform users if storage is insufficient rather than failing silently.
+
+## Web Standards References
+
+- [Safari Web Extensions](https://developer.apple.com/documentation/safariservices/safari_web_extensions)
+- [WebGPU now available for testing in Safari Technology Preview (STP 185)](https://webkit.org/blog/14879/webgpu-now-available-for-testing-in-safari-technology-preview/)
+- [News from WWDC25: WebKit in Safari 26 beta - WebGPU shipping by default](https://webkit.org/blog/16993/news-from-wwdc25-web-technology-coming-this-fall-in-safari-26-beta/)
+
+## Related Pages
+
+- [Safari Ios](/blog/compatibility/safari-ios) - compatibility guide
+- [Private Browsing](/blog/compatibility/private-browsing) - compatibility guide
+- [Wasm Support](/blog/compatibility/wasm-support) - compatibility guide
+
+## Methodology
+
+Browser feature support data on this page is sourced from caniuse.com and official WebKit release notes, cross-referenced with LocalMode's runtime feature detection (`packages/core/src/capabilities/features.ts`). WebGPU version ranges were verified against the gpuweb/gpuweb Implementation Status wiki and the WebKit WWDC25 announcement. Feature version numbers reflect the point at which each feature shipped enabled by default in stable Safari releases; Safari 17.4–25 WebGPU is "disabled by default" (developer flag only) per caniuse data as of May 2026. Browser support evolves - verify current support with the linked references for production decisions.
+
+## Sources
+
+- [caniuse.com - WebGPU support table](https://caniuse.com/webgpu)
+- [caniuse.com - Web Locks API (Lock API)](https://caniuse.com/mdn-api_lock)
+- [caniuse.com - BroadcastChannel API](https://caniuse.com/broadcastchannel)
+- [caniuse.com - WebAssembly SIMD](https://caniuse.com/wasm-simd)
+- [caniuse.com - WebAssembly (core)](https://caniuse.com/wasm)
+- [caniuse.com - ES module Workers (`type: module`)](https://caniuse.com/mdn-api_worker_worker_ecmascript_modules)
+- [gpuweb/gpuweb - Implementation Status wiki](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status)
+- [WebKit Blog - WebGPU now available for testing in Safari Technology Preview (STP 185)](https://webkit.org/blog/14879/webgpu-now-available-for-testing-in-safari-technology-preview/)
+- [WebKit Blog - News from WWDC25: WebKit in Safari 26 beta (WebGPU ships by default)](https://webkit.org/blog/16993/news-from-wwdc25-web-technology-coming-this-fall-in-safari-26-beta/)
+- LocalMode capability detection source (`packages/core/src/capabilities/features.ts`)

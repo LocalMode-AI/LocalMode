@@ -1,0 +1,147 @@
+---
+title: "Gemma 4 in the Browser: LiteRT vs ONNX"
+description: "Comparing two ways to run Google's Gemma 4 edge models in the browser - LiteRT (.litertlm) for optimized text-only speed vs ONNX (Transformers.js) for multimodal vision support and WASM fallback."
+author: "LocalMode"
+date: "2026-05-22"
+---
+
+# Gemma 4 in the Browser: LiteRT vs ONNX
+
+Two ways to run Google's Gemma 4 edge models (E2B, E4B) in the browser - LiteRT for optimized text-only inference vs ONNX/Transformers.js for multimodal vision and broader compatibility.
+
+## Overview
+
+Google's Gemma 4 E2B (2.3B effective params) and E4B (4.5B effective params) are purpose-built edge models with 128K context and multimodal capabilities (text, vision, audio). LocalMode supports both via two provider packages:
+
+- **`@localmode/litert`** - Uses Google's `.litertlm` format with GPU-compiled WebGPU inference
+- **`@localmode/transformers`** - Uses ONNX format via Transformers.js v4 with WebGPU + WASM fallback
+
+Each path serves a different use case. This guide helps you choose.
+
+## Feature-by-Feature Comparison
+
+| Dimension | LiteRT (`@localmode/litert`) | ONNX (`@localmode/transformers`) |
+| --- | --- | --- |
+| **Inference Speed** | ~14-16 tok/s (E2B, mid-range GPU) | ~2-30 tok/s (E2B, varies by GPU - see notes) |
+| **Format** | `.litertlm` (GPU-compiled) | ONNX (q4f16 quantized) |
+| **Modalities** | Text only | Text + Vision (image input) |
+| **WebGPU Required** | Yes (no fallback) | No - auto-falls back to WASM |
+| **Download Size (E2B)** | ~2.0 GB | ~1.5 GB (q4f16, text+vision) |
+| **Download Size (E4B)** | ~3.0 GB | ~3.0 GB (q4f16, text+vision) |
+| **Context Length** | 8K | 128K |
+| **VRAM (E2B)** | 6GB+ recommended | 6GB+ recommended |
+| **VRAM (E4B)** | 8GB+ recommended | 8GB+ recommended |
+| **Browser Support** | Chrome/Edge 113+ (WebGPU only) | All modern browsers (WebGPU + WASM) |
+| **API Maturity** | Early preview (`@litert-lm/core ^0.12.1`) | Mature (Transformers.js v4) |
+| **Other Models** | Qwen3 0.6B (CPU+GPU) | 14 other ONNX LLMs, plus embeddings, classification, etc. |
+
+## When to Use LiteRT
+
+Choose `@localmode/litert` when:
+
+- **Text-only speed matters** - significantly faster inference on most hardware
+- **You know WebGPU is available** - target modern Chrome/Edge on desktop
+- **You're already using Google's Gemma pipeline** - LiteRT is Google's officially supported web path
+- **Context length ≤ 8K is sufficient** - most chat use cases fit within 8K
+
+```typescript
+import { litert } from '@localmode/litert';
+import { generateText } from '@localmode/core';
+
+const model = litert.languageModel('gemma-4-E2B');
+
+const { text } = await generateText({
+  model,
+  prompt: 'Explain quantum computing',
+  maxTokens: 200,
+});
+```
+
+## When to Use ONNX
+
+Choose `@localmode/transformers` when:
+
+- **You need vision/image input** - describe images, extract text from photos, visual QA
+- **You need WASM fallback** - support Firefox, older browsers, or devices without WebGPU
+- **You need 128K context** - long documents, multi-turn conversations, RAG with large context
+- **You want one provider for everything** - embeddings, classification, STT, TTS, and LLMs from a single package
+
+```typescript
+import { transformers } from '@localmode/transformers';
+import { streamText } from '@localmode/core';
+
+const model = transformers.languageModel('onnx-community/gemma-4-E2B-it-ONNX');
+
+// Vision: describe an image
+const result = await streamText({
+  model,
+  messages: [{
+    role: 'user',
+    content: [
+      { type: 'text', text: 'What is in this image?' },
+      { type: 'image', data: base64ImageData, mimeType: 'image/jpeg' },
+    ],
+  }],
+});
+
+for await (const chunk of result.stream) {
+  process.stdout.write(chunk.text);
+}
+```
+
+## Fallback Strategy
+
+Use both providers with automatic failover - try LiteRT for speed, fall back to ONNX for compatibility:
+
+```typescript
+import { litert } from '@localmode/litert';
+import { transformers } from '@localmode/transformers';
+import { generateText } from '@localmode/core';
+
+let model;
+try {
+  // Fast path: LiteRT with GPU-compiled Gemma 4
+  model = litert.languageModel('gemma-4-E2B');
+} catch {
+  // Fallback: ONNX with WASM support + vision capability
+  model = transformers.languageModel('onnx-community/gemma-4-E2B-it-ONNX');
+}
+
+const { text } = await generateText({
+  model,
+  prompt: 'Hello!',
+});
+```
+
+## Performance Notes
+
+Performance varies significantly by hardware. On mid-range GPUs (e.g., RTX 3050 with 6GB VRAM), community benchmarks report ~14-16 tok/s for LiteRT vs ~2 tok/s for ONNX/TJS - a large gap largely due to VRAM pressure causing memory spill to system RAM on the ONNX path. On higher-end hardware with sufficient VRAM (e.g., M3 MacBook Pro, RTX 3060+), the ONNX path can reach 20-30 tok/s, narrowing the gap considerably. Google's `.litertlm` builds are GPU-compiled specifically for WebGPU, which gives them a consistent performance advantage.
+
+Both paths use the same base Gemma 4 model weights but apply different quantization schemes (LiteRT uses Google's mixed 2/4/8-bit quantization, ONNX uses q4f16). Outputs may differ slightly between the two paths due to these quantization differences.
+
+**E4B memory requirements:** Both paths need 8GB+ dedicated VRAM for E4B. On GPUs with less VRAM, the model spills to system memory and performance drops significantly. E2B is the recommended choice for most browser deployments.
+
+## Verdict
+
+For text-only chat on modern Chrome/Edge, use **LiteRT** - it's faster (especially on VRAM-constrained hardware) and Google's recommended path. For vision/multimodal, WASM fallback, or 128K context, use **ONNX**. For maximum compatibility, use both with a try/catch fallback chain.
+
+### Summary
+
+- **Speed-first, text-only:** `@localmode/litert` with `gemma-4-E2B`
+- **Vision/multimodal:** `@localmode/transformers` with `onnx-community/gemma-4-E2B-it-ONNX`
+- **Broadest browser support:** `@localmode/transformers` (WASM fallback)
+- **Best of both:** Try LiteRT first, fall back to ONNX
+
+## Methodology
+
+Model catalog metadata (sizes, context lengths, model IDs) was verified directly against `packages/transformers/src/models.ts` and `packages/litert/src/models.ts` in the LocalMode codebase. Download sizes reflect q4f16 quantization for ONNX and `.litertlm` format for LiteRT. Performance figures are from community benchmarks on mid-range consumer hardware (RTX 3050 6GB VRAM) and may differ significantly on other hardware - higher-end GPUs with sufficient VRAM will see better ONNX performance. VRAM recommendations are based on model size plus runtime overhead and KV cache requirements.
+
+## Sources
+
+- [onnx-community/gemma-4-E2B-it-ONNX](https://huggingface.co/onnx-community/gemma-4-E2B-it-ONNX) - ONNX model repo and quantization variants
+- [onnx-community/gemma-4-E4B-it-ONNX](https://huggingface.co/onnx-community/gemma-4-E4B-it-ONNX) - ONNX model repo and quantization variants
+- [litert-community/gemma-4-E2B-it-litert-lm](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm) - LiteRT model repo
+- [google/gemma-4-E2B](https://huggingface.co/google/gemma-4-E2B) - Base model card with parameter counts and architecture details
+- [Google Gemma 4 announcement](https://blog.google/technology/developers/gemma-4/) - Official model specifications and capabilities
+- [5 Production Patterns for Gemma 4 in the Browser](https://dev.to/jpablortiz96/5-production-patterns-for-running-gemma-4-in-the-browser-what-the-docs-dont-tell-you-2ai1) - Community benchmarks comparing LiteRT and TJS performance on RTX 3050
+- [Gemma 4 WebGPU Demo](https://huggingface.co/spaces/webml-community/Gemma-4-WebGPU) - Working browser demo by HuggingFace community

@@ -35,5 +35,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "src/_wip"]
+  "exclude": ["node_modules", "src/_wip", "src/app/sw.ts"]
 }

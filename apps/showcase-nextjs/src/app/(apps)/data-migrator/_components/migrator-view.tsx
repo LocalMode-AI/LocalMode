@@ -5,7 +5,7 @@
  */
 'use client';
 
-import { useState, useRef } from 'react';
+import { useRef } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -18,7 +18,6 @@ import {
   Database,
   FileText,
   Zap,
-  Clock,
   ArrowRightLeft,
   ToggleLeft,
   ToggleRight,
@@ -26,7 +25,7 @@ import {
 } from 'lucide-react';
 import { Button, IconBox, FormatBadge, ProgressBar, StatsCard, Spinner } from './ui';
 import { ErrorBoundary, ErrorAlert } from './error-boundary';
-import { cn, formatFileSize, formatDuration, truncateText } from '../_lib/utils';
+import { formatDuration, truncateText } from '../_lib/utils';
 import {
   EMBEDDING_MODEL_SIZE,
   FORMAT_LABELS,
