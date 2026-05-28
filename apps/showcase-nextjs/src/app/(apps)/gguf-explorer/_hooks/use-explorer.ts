@@ -212,14 +212,13 @@ export function useExplorer() {
         temperature: CHAT_CONFIG.temperature,
         maxTokens: CHAT_CONFIG.maxTokens,
         systemPrompt: CHAT_CONFIG.systemPrompt,
+        ...(selectedModel.entry?.mmprojUrl ? { mmprojUrl: selectedModel.entry.mmprojUrl } : {}),
       });
       modelRef.current = model;
       setChatModel(model);
       modelUrlRef.current = selectedModel.url;
 
-      // Trigger actual model download + WASM init by calling doGenerate with a tiny prompt.
-      // This forces wllama to download the GGUF file and compile the WASM binary.
-      // The progress callback will fire during this process.
+      // Trigger model download + WASM init with a minimal warmup
       await model.doGenerate({ prompt: 'Hi', maxTokens: 1 });
 
       // Model is now fully loaded and ready for chat
@@ -242,13 +241,16 @@ export function useExplorer() {
     }
   };
 
-  /** Send a chat message */
-  const sendMessage = async (text: string) => {
+  /** Send a chat message with optional images and JSON mode */
+  const sendMessage = async (text: string, images?: Array<{ data: string; mimeType: string }>, jsonMode?: boolean) => {
     if (!chatModel || !isModelLoaded) return;
     setChatError(null);
 
     try {
-      await chat.send(text);
+      const sendOpts: { images?: Array<{ data: string; mimeType: string }>; providerOptions?: Record<string, Record<string, unknown>> } = {};
+      if (images) sendOpts.images = images;
+      if (jsonMode) sendOpts.providerOptions = { wllama: { response_format: { type: 'json_object' } } };
+      await chat.send(text, Object.keys(sendOpts).length > 0 ? sendOpts : undefined);
     } catch (error) {
       if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('aborted'))) {
         return;

@@ -92,7 +92,7 @@ export interface UseChatReturn {
   /** Error from the last failed operation */
   error: Error | null;
   /** Send a user message and stream the assistant response */
-  send: (text: string, options?: { images?: ImageAttachment[] }) => Promise<void>;
+  send: (text: string, options?: { images?: ImageAttachment[]; providerOptions?: Record<string, Record<string, unknown>> }) => Promise<void>;
   /** Cancel the current streaming response */
   cancel: () => void;
   /** Clear all messages (and persisted storage) */

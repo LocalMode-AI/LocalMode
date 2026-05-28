@@ -105,7 +105,7 @@ async function urlToOPFSFileName(url: string): Promise<string> {
 /**
  * Check if a GGUF model is cached in the browser.
  *
- * wllama v2 stores models in OPFS (Origin Private File System), not the Cache API.
+ * wllama stores models in OPFS (Origin Private File System), not the Cache API.
  *
  * @param modelId - The model ID to check
  * @returns Promise<boolean> indicating if the model is cached
@@ -161,13 +161,13 @@ export async function preloadModel(
     modelUrl?: string;
   }
 ): Promise<void> {
-  const { Wllama } = await import('@wllama/wllama');
+  const dynamicImport = new Function('u', 'return import(u)') as (url: string) => Promise<{ Wllama: new (config: { default: string }) => { loadModelFromUrl: (url: string, opts: Record<string, unknown>) => Promise<void>; exit: () => Promise<void> } }>;
+  const { Wllama } = await dynamicImport('https://cdn.jsdelivr.net/npm/@wllama/wllama@3.2.3/esm/index.js');
 
   const url = resolveModelUrl(modelId, options?.modelUrl);
 
   const wllamaInstance = new Wllama({
-    'single-thread/wllama.wasm': 'https://cdn.jsdelivr.net/npm/@wllama/wllama@2/src/single-thread/wllama.wasm',
-    'multi-thread/wllama.wasm': 'https://cdn.jsdelivr.net/npm/@wllama/wllama@2/src/multi-thread/wllama.wasm',
+    default: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.2.3/src/wasm/wllama.wasm',
   });
 
   const numThreads = isCrossOriginIsolated()
@@ -176,7 +176,7 @@ export async function preloadModel(
 
   await wllamaInstance.loadModelFromUrl(url, {
     n_threads: numThreads,
-    progressCallback: (opts) => {
+    progressCallback: (opts: { loaded: number; total: number }) => {
       if (options?.onProgress) {
         const pct = opts.total > 0 ? (opts.loaded / opts.total) * 100 : 0;
         const progress: WllamaLoadProgress = {
@@ -223,4 +223,89 @@ export async function deleteModelCache(modelId: string): Promise<void> {
   } catch (error) {
     console.warn(`Failed to delete cache for ${modelId}:`, error);
   }
+}
+
+/**
+ * List all cached GGUF models in the browser.
+ *
+ * @returns Array of cached model metadata (url, size)
+ *
+ * @example
+ * ```ts
+ * import { listCachedModels } from '@localmode/wllama';
+ *
+ * const models = await listCachedModels();
+ * console.log(`${models.length} models cached`);
+ * ```
+ */
+export async function listCachedModels(): Promise<Array<{ name: string; size: number }>> {
+  try {
+    if (typeof navigator === 'undefined' || !navigator.storage?.getDirectory) {
+      return [];
+    }
+    const opfsRoot = await navigator.storage.getDirectory();
+    const cacheDir = await opfsRoot.getDirectoryHandle('cache', { create: false });
+    const entries: Array<{ name: string; size: number }> = [];
+    for await (const [name, handle] of (cacheDir as unknown as AsyncIterable<[string, FileSystemFileHandle]>)) {
+      if (name.startsWith('__metadata__')) continue;
+      if (handle.kind === 'file') {
+        const file = await (handle as FileSystemFileHandle).getFile();
+        entries.push({ name, size: file.size });
+      }
+    }
+    return entries;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Clear all cached GGUF models from the browser.
+ *
+ * @returns Promise that resolves when all cache is cleared
+ *
+ * @example
+ * ```ts
+ * import { clearAllModelCache } from '@localmode/wllama';
+ *
+ * await clearAllModelCache();
+ * console.log('All model cache cleared!');
+ * ```
+ */
+export async function clearAllModelCache(): Promise<void> {
+  try {
+    if (typeof navigator === 'undefined' || !navigator.storage?.getDirectory) {
+      return;
+    }
+    const opfsRoot = await navigator.storage.getDirectory();
+    await opfsRoot.removeEntry('cache', { recursive: true });
+  } catch {
+    // Cache directory may not exist
+  }
+}
+
+/**
+ * Re-download a cached model, replacing any corrupted cache.
+ *
+ * @param modelId - The model ID to refresh
+ * @param options - Progress callback and optional URL override
+ *
+ * @example
+ * ```ts
+ * import { refreshModel } from '@localmode/wllama';
+ *
+ * await refreshModel('SmolLM2-135M-Instruct-Q4_K_M', {
+ *   onProgress: (p) => console.log(`${p.progress}%`),
+ * });
+ * ```
+ */
+export async function refreshModel(
+  modelId: string,
+  options?: {
+    onProgress?: (progress: WllamaLoadProgress) => void;
+    modelUrl?: string;
+  }
+): Promise<void> {
+  await deleteModelCache(modelId);
+  await preloadModel(modelId, options);
 }

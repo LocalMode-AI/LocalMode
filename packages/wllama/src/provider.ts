@@ -7,8 +7,10 @@
  * @packageDocumentation
  */
 
-import type { WllamaProvider, WllamaProviderSettings, WllamaModelSettings } from './types.js';
+import type { WllamaProvider, WllamaProviderSettings, WllamaModelSettings, WllamaEmbeddingSettings, WllamaRerankerSettings } from './types.js';
 import { createLanguageModel } from './model.js';
+import { WllamaEmbeddingModel } from './embedding.js';
+import { WllamaRerankerModel } from './reranker.js';
 
 /**
  * Create a wllama provider with custom settings.
@@ -32,11 +34,23 @@ export function createWllama(settings?: WllamaProviderSettings): WllamaProvider 
   return {
     languageModel(modelId: string, modelSettings?: WllamaModelSettings) {
       return createLanguageModel(modelId, {
-        // Provider-level defaults
         onProgress: modelSettings?.onProgress ?? settings?.onProgress,
         numThreads: modelSettings?.numThreads ?? settings?.numThreads,
         cacheDir: modelSettings?.cacheDir ?? settings?.cacheDir,
-        // Model-level overrides
+        ...modelSettings,
+      });
+    },
+    embedding(modelId: string, modelSettings?: WllamaEmbeddingSettings) {
+      return new WllamaEmbeddingModel(modelId, {
+        onProgress: modelSettings?.onProgress ?? settings?.onProgress,
+        numThreads: modelSettings?.numThreads ?? settings?.numThreads,
+        ...modelSettings,
+      });
+    },
+    reranker(modelId: string, modelSettings?: WllamaRerankerSettings) {
+      return new WllamaRerankerModel(modelId, {
+        onProgress: modelSettings?.onProgress ?? settings?.onProgress,
+        numThreads: modelSettings?.numThreads ?? settings?.numThreads,
         ...modelSettings,
       });
     },

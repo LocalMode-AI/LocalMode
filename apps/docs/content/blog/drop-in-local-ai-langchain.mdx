@@ -73,7 +73,7 @@ const queryVec = await embeddings.embedQuery('search term');
 
 The constructor takes a single options object with one required field: `model`, which accepts any `EmbeddingModel` instance. Internally, `embedDocuments()` calls `model.doEmbed({ values: texts })` and converts each `Float32Array` result to `number[]` via `Array.from()` - since LangChain's embedding interface expects `number[][]`, not typed arrays.
 
-The `Xenova/bge-small-en-v1.5` model is 33MB, produces 384-dimensional embeddings, and scores 99% of OpenAI's `text-embedding-3-small` quality on MTEB benchmarks. For multilingual workloads, swap in `Xenova/paraphrase-multilingual-MiniLM-L12-v2` (384 dimensions, 50+ languages).
+The `Xenova/bge-small-en-v1.5` model is 33MB and produces 384-dimensional embeddings with competitive retrieval quality for its size. For multilingual workloads, swap in `Xenova/paraphrase-multilingual-MiniLM-L12-v2` (384 dimensions, 50+ languages).
 
 ---
 
@@ -120,7 +120,7 @@ for await (const chunk of stream) {
 }
 ```
 
-You can use any of the 30 curated WebLLM models or 17 GGUF models via `@localmode/wllama`. The `Qwen3-1.7B-q4f16_1-MLC` model (~1.1GB) offers the best quality-to-size ratio for general tasks.
+You can use any of the 32 curated WebLLM models or 30 GGUF models (25 language + 3 embedding + 2 reranker) via `@localmode/wllama`. The `Qwen3-1.7B-q4f16_1-MLC` model (~1.1GB) offers the best quality-to-size ratio for general tasks.
 
 ---
 
@@ -249,7 +249,7 @@ Everything after the provider setup - `asRetriever()`, `invoke()`, prompt constr
 
 Switching from cloud to local is not without compromises. Here is what to expect:
 
-**Model quality.** A 1.7B-parameter local model will not match GPT-4o on complex reasoning or long-form generation. For RAG over your own documents - where the answer is in the retrieved context - the gap is much smaller than you might expect. Embeddings and reranking are where local models truly shine: `bge-small-en-v1.5` hits 99% of OpenAI embedding quality at 33MB.
+**Model quality.** A 1.7B-parameter local model will not match GPT-5 on complex reasoning or long-form generation. For RAG over your own documents - where the answer is in the retrieved context - the gap is much smaller than you might expect. Embeddings and reranking are where local models truly shine: `bge-small-en-v1.5` delivers competitive retrieval quality at just 33MB.
 
 **Context length.** Local models typically support 2K-8K token contexts versus 128K for frontier cloud models. For most RAG applications, where you retrieve 3-5 relevant passages, this is more than sufficient. For applications that need to process entire documents in a single prompt, cloud models remain the better choice.
 

@@ -20,19 +20,19 @@ Understanding these trade-offs is essential for architects and developers evalua
 | Dimension | LocalMode | OpenAI API |
 | --- | --- | --- |
 | **Privacy** | All data stays on device. Zero telemetry. No data leaves the browser. | Data sent to OpenAI servers. Subject to OpenAI data usage policies. May be used for model improvement unless opted out. |
-| **Cost** | $0 per token. One-time model download (23MB-5GB). No API keys, no billing. | $0.02–$30 per million tokens depending on model (e.g., text-embedding-3-small at $0.02/M, GPT-4o-mini at $0.15/M input, GPT-4o at $2.50/M input, GPT-5.5 at $30/M output). Unpredictable bills at scale. |
+| **Cost** | $0 per token. One-time model download (23MB-5GB). No API keys, no billing. | $0.02–$30 per million tokens depending on model (e.g., text-embedding-3-small at $0.02/M, GPT-4o-mini at $0.15/M input, GPT-5 at $1.25/M input, GPT-5.5 at $30/M output). Unpredictable bills at scale. |
 | **Latency** | Zero network latency. First-token time depends on model size (50-500ms). Cached models start instantly. | 200-2000ms network latency per request. Variable based on server load and region. |
-| **Model Quality** | Qwen3-4B scores 83.7% MMLU-Redux (thinking). Embeddings within 5% of text-embedding-3-small. Sufficient for most tasks. | GPT-4o scores ~88.7% MMLU. Best-in-class for complex reasoning. Frontier quality. |
+| **Model Quality** | Qwen3-4B scores 83.7% MMLU-Redux (thinking). Embeddings within 5% of text-embedding-3-small. Sufficient for most tasks. | GPT-5 scores ~92.5% MMLU. Best-in-class for complex reasoning. Frontier quality. |
 | **Offline Support** | Full offline support after initial model download. Works on planes, in the field, on unreliable networks. | No offline support. Every request requires internet connection. |
 | **Setup Complexity** | npm install + 3 lines of code. No API keys, no backend, no environment variables. | API key management. Backend proxy for security. Environment variable configuration. |
 | **Scalability** | Scales with user devices (each user runs their own inference). Zero server costs regardless of user count. | Scales with API costs. 100K users = 100K× the API bill. Rate limits may throttle. |
-| **Model Variety** | 88 curated models across 13+ task types. Embeddings, classification, vision, audio, LLMs. | Many models across the GPT-4o, GPT-4.1, and GPT-5 families plus text-embedding-3, Whisper, TTS-1, and gpt-image-2 (DALL-E was deprecated May 12, 2026). |
+| **Model Variety** | 88 curated models across 13+ task types. Embeddings, classification, vision, audio, LLMs. | Many models across the GPT-5 family plus text-embedding-3, Whisper, TTS-1, and gpt-image-2 (DALL-E was deprecated May 12, 2026). |
 | **Compliance** | GDPR-friendly by design (no third-party data processing). No DPA needed for the AI processing. No cross-border transfer issues. | Requires DPA. Data processed in US/EU. GDPR Article 28 compliance needed. |
 | **Reliability** | No server outages. No rate limits. Works independently per user. | Subject to OpenAI outages (3 major outages in Dec 2024-Jan 2025). Rate limits per tier. |
 
 ## Verdict
 
-Choose LocalMode when privacy is non-negotiable, when you want predictable zero costs at scale, when offline support matters, or when your tasks (embeddings, classification, NER, summarization) don't require frontier reasoning. Choose OpenAI when you need the absolute best quality for complex reasoning tasks, when model size constraints make browser inference impractical, or when you're building a prototype and speed-to-market outweighs cost concerns. The sweet spot for many teams: use LocalMode for 90% of requests (embeddings, classification, simple generation) and reserve OpenAI for the 10% that genuinely need GPT-4o-class reasoning.
+Choose LocalMode when privacy is non-negotiable, when you want predictable zero costs at scale, when offline support matters, or when your tasks (embeddings, classification, NER, summarization) don't require frontier reasoning. Choose OpenAI when you need the absolute best quality for complex reasoning tasks, when model size constraints make browser inference impractical, or when you're building a prototype and speed-to-market outweighs cost concerns. The sweet spot for many teams: use LocalMode for 90% of requests (embeddings, classification, simple generation) and reserve OpenAI for the 10% that genuinely need GPT-5-class reasoning.
 
 ### Summary
 
@@ -117,17 +117,17 @@ This approach gives you the best of both worlds: the privacy and cost benefits o
 
 ## Methodology
 
-LocalMode model counts and API shapes were verified directly against the package catalogs in `packages/webllm/src/models.ts`, `packages/wllama/src/models.ts`, `packages/transformers/src/models.ts`, `packages/mediapipe/src/models.ts`, and `packages/litert/src/models.ts` (88 total curated models as of this writing). OpenAI pricing figures are sourced from the official OpenAI API pricing page and corroborated by pricepertoken.com and devtk.ai (verified May 22, 2026); pricing changes frequently - confirm current rates at openai.com/api/pricing before making decisions. Benchmark scores (Qwen3-4B MMLU-Redux 83.7, GPT-4o MMLU 88.7, BGE-small-en-v1.5 MTEB 62.17) are sourced from official technical reports and HuggingFace model cards. OpenAI outage history references incidents from status.openai.com in December 2024 and January 2025.
+LocalMode model counts and API shapes were verified directly against the package catalogs in `packages/webllm/src/models.ts`, `packages/wllama/src/models.ts`, `packages/transformers/src/models.ts`, `packages/mediapipe/src/models.ts`, and `packages/litert/src/models.ts` (88 total curated models as of this writing). OpenAI pricing figures are sourced from the official OpenAI API pricing page and corroborated by pricepertoken.com and devtk.ai (verified May 22, 2026); pricing changes frequently - confirm current rates at openai.com/api/pricing before making decisions. Benchmark scores (Qwen3-4B MMLU-Redux 83.7, GPT-5 MMLU 92.5, BGE-small-en-v1.5 MTEB 62.17) are sourced from official technical reports and HuggingFace model cards. OpenAI outage history references incidents from status.openai.com in December 2024 and January 2025.
 
 ## Sources
 
 - [LocalMode documentation](https://localmode.dev/docs)
 - [OpenAI API pricing page](https://openai.com/api/pricing/) (verified May 22, 2026)
-- [GPT-4o pricing - pricepertoken.com](https://pricepertoken.com/pricing-page/model/openai-gpt-4o) - $2.50/M input, $10/M output (May 2026)
+- [GPT-5 pricing - pricepertoken.com](https://pricepertoken.com/pricing-page/model/openai-gpt-5) - $1.25/M input, $10/M output (May 2026)
 - [OpenAI GPT-4o-mini pricing](https://developers.openai.com/api/docs/models/gpt-4o-mini) - $0.15/M input, $0.60/M output
 - [OpenAI text-embedding-3-small pricing](https://openai.com/index/new-embedding-models-and-api-updates/) - $0.02/M tokens
 - [DALL-E deprecation notice - OpenAI Community](https://community.openai.com/t/deprecation-reminder-dall-e-will-be-shut-down-on-may-12-2026/1378754) (retired May 12, 2026)
 - [BAAI/bge-small-en-v1.5 - HuggingFace model card](https://huggingface.co/BAAI/bge-small-en-v1.5) - MTEB average 62.17
 - [Qwen3 Technical Report (arXiv 2505.09388)](https://arxiv.org/html/2505.09388v1) - Qwen3-4B MMLU-Redux 83.7 (thinking mode)
-- [GPT-4o Wikipedia article](https://en.wikipedia.org/wiki/GPT-4o) - MMLU 88.7, citing OpenAI's "Hello GPT-4o" announcement
+- [GPT-5 Wikipedia article](https://en.wikipedia.org/wiki/GPT-5) - MMLU 92.5, citing OpenAI's GPT-5 announcement
 - [OpenAI status incidents - StatusGator](https://statusgator.com/blog/the-january-2025-chatgpt-outage-statusgators-early-warning-in-action/) - Jan 23 2025 outage; Dec 2024 outages corroborated via status.openai.com

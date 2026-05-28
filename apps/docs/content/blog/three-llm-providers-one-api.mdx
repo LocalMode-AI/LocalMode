@@ -92,7 +92,7 @@ WebLLM compiles models through the MLC (Machine Learning Compilation) pipeline i
 
 **Best for**: Applications where inference speed matters most -- interactive chat, real-time code completion, streaming agents. If your users have Chrome 113+, Edge 113+, or Safari 26+ with a discrete or integrated GPU, WebLLM delivers the best experience.
 
-**Limitation**: Requires WebGPU. Firefox only supports WebGPU in Nightly builds. Older devices without GPU support cannot run WebLLM at all. The model catalog is fixed to MLC-compiled variants -- you cannot bring an arbitrary model file.
+**Limitation**: Requires WebGPU. Firefox ships WebGPU in stable releases: 141+ on Windows, 147+ on macOS Apple Silicon. Older devices without GPU support cannot run WebLLM at all. The model catalog is fixed to MLC-compiled variants -- you cannot bring an arbitrary model file.
 
 ---
 
@@ -114,17 +114,17 @@ Transformers.js v4 runs ONNX-format models using ONNX Runtime Web. It prefers We
 
 ## Provider 3: wllama (Universal Browser Support)
 
-**Package**: `@localmode/wllama` | **Engine**: [wllama](https://github.com/ngxson/wllama) (llama.cpp compiled to WASM) | **Runtime**: WASM (CPU)
+**Package**: `@localmode/wllama` | **Engine**: [wllama v3](https://github.com/ngxson/wllama) (llama.cpp compiled to WASM) | **Runtime**: WASM (CPU) with optional WebGPU acceleration
 
-wllama is llama.cpp compiled to WebAssembly. It runs any standard GGUF model file on the CPU without requiring WebGPU, WebNN, or any GPU API at all. This makes it the most universally compatible provider -- if the browser supports WASM (which is every modern browser since 2017), wllama works.
+wllama is llama.cpp compiled to WebAssembly. It runs any standard GGUF model file on the CPU without requiring WebGPU, WebNN, or any GPU API at all. With wllama v3, optional WebGPU acceleration is available via `useWebGPU` and `nGpuLayers` for faster inference on capable devices. This makes it the most universally compatible provider -- if the browser supports WASM (which is every modern browser since 2017), wllama works.
 
 **How it works**: The wllama library loads GGUF files directly from HuggingFace URLs, initializes a llama.cpp WASM instance, and runs inference token by token. Multi-threaded execution is available when the page has Cross-Origin Isolation headers (`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`), which enables `SharedArrayBuffer`. Without CORS headers, wllama falls back to single-threaded mode -- functional but 2-4x slower.
 
-**Curated catalog**: 18 curated models from SmolLM2 135M (70MB) to Holo2 8B (5.1GB), spanning Q4_K_M text models and two vision-language models (Holo2 4B and 8B for UI grounding). But the real story is the open ecosystem: wllama accepts any GGUF URL, which means access to the 160,000+ GGUF models on HuggingFace Hub. Any model that bartowski, TheBloke, or the original authors have quantized to GGUF is one URL away.
+**Curated catalog**: 30 curated models (25 language + 3 embedding + 2 reranker) from SmolLM2 135M (70MB) to Gemma 4 E4B (5.41GB), spanning Q4_K_M text models, four vision-language models (Holo2 4B/8B for UI grounding, Gemma 4 E2B/E4B for vision + tool calling), and three GGUF embedding models. wllama v3 adds embeddings via `wllama.embedding()`, optional WebGPU acceleration, OAI-compatible tool calling, vision input via `mmprojUrl`, and native Jinja chat templates. But the real story is the open ecosystem: wllama accepts any GGUF URL, which means access to the 160,000+ GGUF models on HuggingFace Hub. Any model that bartowski, TheBloke, or the original authors have quantized to GGUF is one URL away.
 
 **Best for**: Maximum compatibility, maximum model selection, and environments where WebGPU is unavailable (Firefox stable, older Safari, corporate locked-down browsers). Also the right choice when you need a specific fine-tuned or quantized model that only exists in GGUF format.
 
-**Limitation**: CPU-only inference is inherently slower (5-15 tok/s). The 2GB `ArrayBuffer` limit in browsers means large models must be split into chunks (wllama handles this automatically for catalog models). Single-threaded mode without CORS headers is noticeably slow.
+**Limitation**: CPU-only inference is inherently slower (5-15 tok/s), though WebGPU acceleration closes the gap on supported browsers. The 2GB `ArrayBuffer` limit in browsers means large models must be split into chunks (wllama handles this automatically for catalog models). Single-threaded mode without CORS headers is noticeably slow.
 
 ---
 
@@ -150,14 +150,14 @@ LiteRT-LM is the on-device inference engine Google uses to ship Gemini Nano-clas
 |---|---|---|---|---|
 | **Engine** | MLC-AI WebLLM | ONNX Runtime Web (TJS v4) | llama.cpp WASM | LiteRT-LM (`@litert-lm/core`) |
 | **Model format** | MLC-compiled (q4f16) | ONNX (q4/fp16) | GGUF (Q4_K_M, Q5, Q6, etc.) | `.litertlm` |
-| **Primary runtime** | WebGPU (GPU) | WebGPU + WASM fallback | WASM (CPU) | WebGPU (Gemma 4); WebGPU or CPU (Qwen3 0.6B) |
-| **Curated models** | 32 | 16 | 18 (+ 160K+ via any GGUF URL) | 3 (Gemma 4 E2B/E4B, Qwen3 0.6B) |
-| **Vision models** | 1 (Phi 3.5 Vision) | 5 (Qwen3.5 family, Gemma 4 E2B/E4B) | 2 (Holo2 4B/8B, UI grounding) | None (JS API is text-only) |
+| **Primary runtime** | WebGPU (GPU) | WebGPU + WASM fallback | WASM (CPU) + optional WebGPU | WebGPU (Gemma 4); WebGPU or CPU (Qwen3 0.6B) |
+| **Curated models** | 32 | 16 | 30 (25 language + 3 embedding + 2 reranker) + 160K+ GGUF | 3 (Gemma 4 E2B/E4B, Qwen3 0.6B) |
+| **Vision models** | 1 (Phi 3.5 Vision) | 5 (Qwen3.5 family, Gemma 4 E2B/E4B) | 4 (Holo2 4B/8B, Gemma 4 E2B/E4B) | None (JS API is text-only) |
 | **Custom models** | No (MLC-compiled only) | Yes (any ONNX on HF Hub) | Yes (any GGUF on HF Hub) | Yes (any `.litertlm` URL) |
-| **Size range** | 78MB -- 5.06GB | 120MB -- 3GB | 70MB -- 5.1GB | 614MB -- 3.0GB |
-| **Inference speed** | 60-100 tok/s | 40-60 tok/s (WebGPU) | 5-15 tok/s (multi-thread) | Not yet benchmarked |
+| **Size range** | 78MB -- 5.06GB | 120MB -- 3GB | 70MB -- 5.41GB | 614MB -- 3.0GB |
+| **Inference speed** | 60-100 tok/s | 40-60 tok/s (WebGPU) | 5-15 tok/s (CPU), faster with WebGPU | Not yet benchmarked |
 | **Min browser** | Chrome/Edge 113+, Safari 26+ | Chrome 80+, any modern browser | Any browser with WASM | Chrome/Edge 113+ with WebGPU (Gemma 4 is WebGPU-only) |
-| **WebGPU required** | Yes | No (preferred, not required) | No | Yes for Gemma 4; no for Qwen3 0.6B |
+| **WebGPU required** | Yes | No (preferred, not required) | No (optional via `useWebGPU`) | Yes for Gemma 4; no for Qwen3 0.6B |
 | **Multi-threading** | N/A (GPU) | N/A (GPU or single-thread WASM) | Yes (needs CORS headers) | N/A |
 | **Structured output** | `generateObject()` / `streamObject()` | `generateObject()` / `streamObject()` | `generateObject()` / `streamObject()` | `generateObject()` / `streamObject()` |
 | **AbortSignal** | Yes | Yes | Yes | Yes |
@@ -229,7 +229,7 @@ const model = hasGPU
 
 **Use Transformers.js v4 when** you need multimodal input (image + text), want to load custom ONNX models, or need the safety net of automatic WASM fallback without maintaining two separate code paths. The Qwen3.5 vision models are currently the best sub-4B multimodal option for the browser.
 
-**Use wllama when** you need to reach every user regardless of hardware, want access to a specific GGUF model from the 160K+ available on HuggingFace, or are targeting environments where WebGPU is blocked. Corporate intranets, kiosk browsers, and older devices are where wllama shines. It also carries the curated Holo2 4B and 8B vision-language models for UI grounding tasks.
+**Use wllama when** you need to reach every user regardless of hardware, want access to a specific GGUF model from the 160K+ available on HuggingFace, or are targeting environments where WebGPU is blocked. Corporate intranets, kiosk browsers, and older devices are where wllama shines. It also carries four curated vision-language models: Holo2 4B/8B for UI grounding and Gemma 4 E2B/E4B for vision + tool calling.
 
 **Use LiteRT-LM when** you want Gemma 4 in the browser via Google's first-party on-device engine, or want the provider wired into a fallback chain. Treat it as early preview -- the other three providers are longer-established if you need a wider catalog or vision input.
 
@@ -246,7 +246,7 @@ Regardless of which provider you choose, you get the same core capabilities thro
 - **`LanguageModelMiddleware`** for logging, caching, guardrails, and semantic cache
 - **AbortSignal** support for cancellation on every call
 - **Usage tracking** with input tokens, output tokens, and duration on every response
-- **React hooks** via `@localmode/react`: `useGenerateText()`, `useStreamText()`, `useChat()`
+- **React hooks** via `@localmode/react`: `useGenerateText()`, `useChat()`
 
 The provider is an implementation detail. The interface is the contract. Build against the interface, and your application stays portable across all four engines -- today and as new providers emerge.
 

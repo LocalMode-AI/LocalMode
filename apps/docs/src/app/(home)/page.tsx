@@ -837,20 +837,98 @@ export default async function HomePage() {
 
       {/* Blog */}
       <section className="px-6 py-20 bg-fd-muted/30">
-        <div className="max-w-4xl mx-auto text-center">
-          <Newspaper className="w-12 h-12 mx-auto mb-6 text-fd-primary" />
-          <h2 className="text-3xl font-bold mb-4">Blog</h2>
-          <p className="text-fd-muted-foreground mb-8 max-w-xl mx-auto">
-            Guides, tutorials, and deep dives on local-first AI, browser ML, RAG patterns,
-            privacy-preserving inference, and more.
-          </p>
-          <Link
-            href="/blog"
-            className="inline-flex items-center gap-2 px-6 py-3 text-base font-semibold rounded-lg border border-fd-border hover:bg-fd-accent transition-colors"
-          >
-            Read the Blog
-            <ArrowRight className="w-4 h-4" />
-          </Link>
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-12">
+            <Newspaper className="w-12 h-12 mx-auto mb-6 text-fd-primary" />
+            <h2 className="text-3xl font-bold mb-4">Blog</h2>
+            <p className="text-fd-muted-foreground max-w-xl mx-auto">
+              Guides, tutorials, and deep dives on local-first AI, browser ML, RAG patterns,
+              privacy-preserving inference, and more.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 mb-8">
+            <Link
+              href="/blog/32-ai-features-browser-showcase"
+              className="group block rounded-xl border border-fd-border bg-fd-card p-5 transition-colors hover:bg-fd-accent/50"
+            >
+              <p className="text-xs text-fd-muted-foreground mb-2">Featured</p>
+              <h3 className="font-semibold text-sm group-hover:text-fd-primary transition-colors mb-1">
+                The 34 AI Features in Our Open-Source Showcase
+              </h3>
+              <p className="text-xs text-fd-muted-foreground line-clamp-2">
+                Every feature running in your browser, from embeddings and vector search to LLM chat and real-time hand tracking.
+              </p>
+            </Link>
+            <Link
+              href="/blog/hybrid-ai-architecture"
+              className="group block rounded-xl border border-fd-border bg-fd-card p-5 transition-colors hover:bg-fd-accent/50"
+            >
+              <p className="text-xs text-fd-muted-foreground mb-2">Architecture</p>
+              <h3 className="font-semibold text-sm group-hover:text-fd-primary transition-colors mb-1">
+                The Hybrid AI Architecture: Local for 95%, Cloud for the Rest
+              </h3>
+              <p className="text-xs text-fd-muted-foreground line-clamp-2">
+                Route embeddings, classification, and summarization locally at $0 cost while reserving cloud APIs for frontier reasoning.
+              </p>
+            </Link>
+            <Link
+              href="/blog/20-ai-concerns-architecture-as-policy"
+              className="group block rounded-xl border border-fd-border bg-fd-card p-5 transition-colors hover:bg-fd-accent/50"
+            >
+              <p className="text-xs text-fd-muted-foreground mb-2">Analysis</p>
+              <h3 className="font-semibold text-sm group-hover:text-fd-primary transition-colors mb-1">
+                Architecture as Policy: Why Most AI Criticism Is Really About Where the Compute Happens
+              </h3>
+              <p className="text-xs text-fd-muted-foreground line-clamp-2">
+                15 of 20 common AI criticisms target the deployment model, not the technology. Move inference to the browser and they disappear.
+              </p>
+            </Link>
+            <Link
+              href="/blog/local-ai-vs-cloud"
+              className="group block rounded-xl border border-fd-border bg-fd-card p-5 transition-colors hover:bg-fd-accent/50"
+            >
+              <p className="text-xs text-fd-muted-foreground mb-2">Benchmark</p>
+              <h3 className="font-semibold text-sm group-hover:text-fd-primary transition-colors mb-1">
+                Near Cloud-Quality AI at $0 Cost
+              </h3>
+              <p className="text-xs text-fd-muted-foreground line-clamp-2">
+                18 local browser model categories benchmarked against OpenAI, Google, AWS, and Cohere.
+              </p>
+            </Link>
+            <Link
+              href="/blog/three-llm-providers-one-api"
+              className="group block rounded-xl border border-fd-border bg-fd-card p-5 transition-colors hover:bg-fd-accent/50"
+            >
+              <p className="text-xs text-fd-muted-foreground mb-2">Architecture</p>
+              <h3 className="font-semibold text-sm group-hover:text-fd-primary transition-colors mb-1">
+                Browser LLM Providers, One API
+              </h3>
+              <p className="text-xs text-fd-muted-foreground line-clamp-2">
+                WebLLM, Transformers.js v4, wllama, and LiteRT-LM behind a single LanguageModel interface.
+              </p>
+            </Link>
+            <Link
+              href="/blog/private-rag-chat-no-backend"
+              className="group block rounded-xl border border-fd-border bg-fd-card p-5 transition-colors hover:bg-fd-accent/50"
+            >
+              <p className="text-xs text-fd-muted-foreground mb-2">Tutorial</p>
+              <h3 className="font-semibold text-sm group-hover:text-fd-primary transition-colors mb-1">
+                Private RAG Chat With No Backend
+              </h3>
+              <p className="text-xs text-fd-muted-foreground line-clamp-2">
+                Build a fully private RAG chatbot that runs entirely in the browser.
+              </p>
+            </Link>
+          </div>
+          <div className="text-center">
+            <Link
+              href="/blog"
+              className="inline-flex items-center gap-2 px-6 py-3 text-base font-semibold rounded-lg border border-fd-border hover:bg-fd-accent transition-colors"
+            >
+              View All Articles
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
         </div>
       </section>
 

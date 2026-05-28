@@ -6,6 +6,7 @@
 import type { GGUFMetadata } from '@localmode/wllama';
 import type { GGUFBrowserCompat } from '@localmode/wllama';
 import type { WllamaModelEntry } from '@localmode/wllama';
+import type { ContentPart } from '@localmode/core';
 
 /** Active tab in the explorer */
 export type ExplorerTab = 'browse' | 'inspect' | 'chat';
@@ -61,8 +62,8 @@ export interface ChatMessage {
   id: string;
   /** Sender role */
   role: 'user' | 'assistant' | 'system';
-  /** Message content */
-  content: string;
+  /** Message content (string for text-only, ContentPart[] when images attached) */
+  content: string | ContentPart[];
   /** Timestamp */
   timestamp: Date;
 }

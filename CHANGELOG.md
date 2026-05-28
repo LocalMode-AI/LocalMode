@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [@localmode/wllama@3.0.0] - 2026-05-28
+
+### Added
+
+- **Upgraded to wllama v3** (`@wllama/wllama@^3.2.3`) — migrated from v2's custom API to v3's OAI-compatible API (`createChatCompletion`, `createCompletion`, `createEmbedding`). The public `@localmode/wllama` API remains backward-compatible for existing consumers.
+- **Embedding models** — New `WllamaEmbeddingModel` class implementing `EmbeddingModel`. Factory method `wllama.embedding(modelId)`. 3 curated GGUF embedding models: nomic-embed-text-v1.5 (768d, 78MB), mxbai-embed-large-v1 (1024d, 197MB), bge-small-en-v1.5 (384d, 35MB). Dimensions auto-detected from GGUF metadata. New exports: `WllamaEmbeddingModel`, `WllamaEmbeddingSettings`.
+- **WebGPU acceleration** — `useWebGPU: boolean | 'auto'` and `nGpuLayers: number` settings. GPU offload with automatic WASM fallback. `gpuAccelerated` property on model instances.
+- **Tool calling** — `providerOptions.wllama.tools` and `tool_choice` forwarded to v3's OAI-compatible chat completion. Results include `toolCalls` array. 8 models verified: Qwen 2.5 (0.5B, 1.5B, Coder 1.5B, 3B, Coder 7B), Llama 3.2 (1B, 3B), Phi-4 Mini.
+- **Vision / multimodal** — `mmprojUrl` setting loads vision projection GGUF. `supportsVision` auto-detected. Base64 images converted to ArrayBuffer. Holo2 4B/8B catalog entries now include `mmprojUrl`.
+- **Jinja chat templates** — Enabled by default. v3's template engine handles chat formatting. Graceful fallback on template errors. Opt-out with `useJinja: false`.
+- **Model catalog** expanded from 18 to 30 models (25 language + 3 embedding + 2 reranker). New `WllamaModelEntry` fields: `supportsToolCalling`, `isEmbeddingModel`, `isRerankerModel`, `dimensions`, `mmprojUrl`, `nGpuLayers`.
+- **Gemma 4 GGUF models** — `Gemma-4-E2B-IT-Q4_K_M` (3.46GB, 131K context, 5.1B params / 2.3B effective PLE) and `Gemma-4-E4B-IT-Q4_K_M` (5.41GB, 131K context, 8B params / ~4B effective PLE). Vision + tool calling. Uses bartowski for main GGUF, ggml-org Q8_0 for mmproj vision projector files.
+- **New catalog models** — Qwen3 (0.6B, 1.7B, 4B), DeepSeek R1 Distill (1.5B, 7B), 2 reranker models (jina-reranker-v2-base-multilingual, bge-reranker-v2-m3).
+- **True streaming** — `doStream()` now uses `stream: true` in `createChatCompletion()` for real token-by-token streaming instead of buffered output.
+- **Structured output / JSON mode** — `response_format: { type: 'json_object' }` support via `responseFormat` option. Grammar-based JSON constraint via `providerOptions.wllama.grammar` (GBNF).
+- **Reranking** — New `WllamaRerankerModel` class implementing `RerankerModel`. Factory method `wllama.reranker(modelId)`. 2 curated reranker models in catalog.
+- **Reasoning mode** — `reasoning: boolean`, `reasoningFormat`, and `reasoningBudgetTokens` settings for models with thinking/chain-of-thought capability (e.g., Qwen3, DeepSeek R1).
+- **Performance config** — `cacheTypeK`, `cacheTypeV` (KV cache quantization), `flashAttention`, and speculative decoding settings for advanced performance tuning.
+- **Grammar sampling** — GBNF grammar support via `providerOptions.wllama.grammar` for constrained output generation.
+- **Model management** — `listCachedModels()`, `clearAllModelCache()`, `refreshModel()` for managing downloaded GGUF models in browser storage.
+- **LoRA adapters** — Support for loading LoRA adapter files alongside base models.
+- **Extended sampling params** — `min_p`, `seed`, and additional sampling parameters via provider options.
+- **Audio input (experimental)** — `AudioPart` content support for models with audio capabilities.
+- **Showcase app updates** — llm-chat: "Tools" and "Vision" capability badges, embedding models filtered from chat list, WebGPU passthrough, `providerOptions` threading through `useChat` hook. gguf-explorer: "Capabilities" inspect section with badges, new embedding model cards, JSON mode toggle.
+
+### Changed
+
+- Single WASM binary (v3.2.3) replaces dual single-thread/multi-thread binaries. CDN URL: `@wllama/wllama@3.2.3/src/wasm/wllama.wasm`.
+- Streaming uses v3's `createChatCompletion({ stream: true })` AsyncIterable instead of the v2 `onNewToken` callback-to-queue bridge.
+- Token usage from OAI response `usage` field instead of `tokenize()`.
+- Stop sequences as strings via `stop` field instead of token ID lookup.
+
+### Removed
+
+- `outputTokenIds` runtime extension (v3 OAI API does not expose per-token IDs).
+- v2 internal APIs: `tokenize()`, `samplingInit()`, `lookupToken()`.
+
 ## [@localmode/transformers@4.0.0] - 2026-05-24
 
 ### Added

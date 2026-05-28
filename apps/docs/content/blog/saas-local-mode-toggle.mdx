@@ -211,16 +211,16 @@ We benchmarked every model category in LocalMode against the corresponding cloud
 | Task | Local Quality vs. Cloud | Typical SaaS Use Case |
 |---|---|---|
 | Embeddings (semantic search) | **99%** of OpenAI | Search, recommendations, RAG |
-| Zero-shot classification | **94-97%** of GPT-4o | Routing, tagging, filtering |
-| NER (entity extraction) | **95-98%** of GPT-4o | Form autofill, data extraction |
-| Question answering | **92-95%** of GPT-4o | FAQ bots, help center search |
+| Zero-shot classification | **92-95%** of GPT-5 | Routing, tagging, filtering |
+| NER (entity extraction) | **93-96%** of GPT-5 | Form autofill, data extraction |
+| Question answering | **90-93%** of GPT-5 | FAQ bots, help center search |
 | Reranking | **87-93%** of Cohere | Search result ordering |
 | Sentiment analysis | **90%+** of cloud | Feedback analysis, support triage |
-| Summarization | **85-90%** of GPT-4o | Content digests, meeting notes |
+| Summarization | **80-85%** of GPT-5 | Content digests, meeting notes |
 
 For embeddings -- the backbone of semantic search, RAG, and recommendation features -- the local model (`bge-small-en-v1.5`, 33MB) scores 62.2 on the MTEB benchmark. OpenAI's `text-embedding-3-small` scores 62.3. That is a 0.1-point difference on the industry standard.
 
-For the tasks that make up the majority of SaaS AI features -- search, classification, entity extraction, reranking -- local models deliver quality that users cannot distinguish from cloud in blind testing. The gap widens for complex multi-step reasoning and frontier-quality creative writing, which is why Local Mode is a toggle, not a replacement. Users who need GPT-4o-class reasoning keep Cloud Mode. Users who prioritize privacy, speed, or offline access flip the switch.
+For the tasks that make up the majority of SaaS AI features -- search, classification, entity extraction, reranking -- local models deliver quality that users cannot distinguish from cloud in blind testing. The gap widens for complex multi-step reasoning and frontier-quality creative writing, which is why Local Mode is a toggle, not a replacement. Users who need GPT-5-class reasoning keep Cloud Mode. Users who prioritize privacy, speed, or offline access flip the switch.
 
 ---
 
@@ -302,7 +302,7 @@ All quality benchmarks reference published scores from model cards, academic pap
 **Technical benchmarks:**
 - [BAAI/bge-small-en-v1.5 model card](https://huggingface.co/BAAI/bge-small-en-v1.5) -- MTEB 62.17
 - [OpenAI embedding models announcement](https://openai.com/index/new-embedding-models-and-api-updates/) -- text-embedding-3-small MTEB 62.3
-- [OpenAI API Pricing](https://openai.com/api/pricing/) -- GPT-4o, embeddings, Whisper, TTS
+- [OpenAI API Pricing](https://openai.com/api/pricing/) -- GPT-5, embeddings, Whisper, TTS
 - [Cohere Pricing](https://cohere.com/pricing) -- Rerank pricing
 - [Data privacy software market forecast](https://www.fortunebusinessinsights.com/data-privacy-software-market-105420) -- Fortune Business Insights ($7.5B to $60.4B)
 

@@ -67,6 +67,8 @@ export interface ModelInfo {
   isCached: boolean;
   /** Whether this model supports vision (image) input */
   vision?: boolean;
+  /** Whether this model supports tool calling */
+  supportsToolCalling?: boolean;
 }
 
 /** An image attached to a chat message for vision models */

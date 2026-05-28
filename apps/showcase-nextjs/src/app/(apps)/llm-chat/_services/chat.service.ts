@@ -10,6 +10,7 @@
  */
 import { webllm } from '@localmode/webllm';
 import { wllama, WLLAMA_MODELS } from '@localmode/wllama';
+import type { WllamaModelSettings } from '@localmode/wllama';
 import { transformers } from '@localmode/transformers';
 import { litert, LITERT_MODELS } from '@localmode/litert';
 import {
@@ -44,19 +45,34 @@ export function inferBackendFromModelId(modelId: string): ModelBackend {
   return 'webgpu';
 }
 
+/** Options for wllama-specific model creation settings */
+export interface WllamaChatModelOptions {
+  /** Enable WebGPU acceleration for wllama models */
+  useWebGPU?: boolean | 'auto';
+}
+
 /**
  * Create a LanguageModel instance for the given model ID and backend.
  *
  * @param modelId - The model ID to instantiate
  * @param backend - The inference backend ('webgpu' for WebLLM, 'wasm' for wllama, 'onnx' for TJS v4, 'litert' for Google LiteRT-LM)
+ * @param options - Optional provider-specific settings (e.g., wllama WebGPU)
  * @returns A LanguageModel compatible with `@localmode/react` `useChat`
  */
-export function createChatModel(modelId: string, backend: ModelBackend = 'webgpu'): LanguageModel {
+export function createChatModel(
+  modelId: string,
+  backend: ModelBackend = 'webgpu',
+  options?: WllamaChatModelOptions
+): LanguageModel {
   if (backend === 'onnx') {
     return transformers.languageModel(modelId);
   }
   if (backend === 'wasm') {
-    return wllama.languageModel(modelId);
+    const wllamaSettings: WllamaModelSettings = {};
+    if (options?.useWebGPU !== undefined) {
+      wllamaSettings.useWebGPU = options.useWebGPU;
+    }
+    return wllama.languageModel(modelId, wllamaSettings);
   }
   if (backend === 'litert') {
     return litert.languageModel(modelId);

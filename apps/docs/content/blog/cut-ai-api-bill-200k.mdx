@@ -1,6 +1,6 @@
 ---
 title: "How We Cut Our AI API Bill by $200K/Year by Moving Inference to the Browser"
-description: "A detailed case study of Binderbox, a 100K-user document management platform that replaced OpenAI embeddings, GPT-4o classification, and Cohere reranking with LocalMode browser inference - saving $212K annually with transparent math and real migration code."
+description: "A detailed case study of Binderbox, a 100K-user document management platform that replaced OpenAI embeddings, GPT-5 classification, and Cohere reranking with LocalMode browser inference - saving $200K annually with transparent math and real migration code."
 author: LocalMode
 date: 2026-01-25
 ---
@@ -9,7 +9,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 Last year, Binderbox - a 100,000-user document management SaaS - was spending over $18,000 per month on AI API calls. Embeddings for semantic search, classification for document routing, reranking for search quality, NER for metadata extraction, and speech-to-text for meeting notes. Every feature that made the product smart also made the AWS bill painful.
 
-By March 2026, that line item is $0. Every AI call now runs in users' browsers via LocalMode. The annual savings: **$212,000**.
+By March 2026, that line item is $0. Every AI call now runs in users' browsers via LocalMode. The annual savings: **$200,000**.
 
 This post walks through exactly how we got there - the before architecture, the after architecture, every cost calculation with its math, the migration code, and the hard questions we had to answer along the way.
 
@@ -26,7 +26,7 @@ Binderbox's AI features were built on a common stack:
 | Feature | Cloud API | What It Does |
 |---|---|---|
 | Semantic search | OpenAI `text-embedding-3-small` | Embed every document and query for vector search |
-| Document classification | OpenAI GPT-4o | Route uploads to the right folder/workflow |
+| Document classification | OpenAI GPT-5 | Route uploads to the right folder/workflow |
 | Search reranking | Cohere Rerank 3.5 | Re-score top-20 search results for precision |
 | Entity extraction | AWS Comprehend | Pull names, orgs, dates from documents |
 | Meeting transcription | OpenAI Whisper | Transcribe uploaded audio for searchability |
@@ -64,38 +64,38 @@ That seems impossibly cheap - and it is. Embeddings are OpenAI's loss leader. Bu
 
 **Realistic infrastructure-inclusive cost**: With a dedicated embedding microservice (compute, queue, monitoring), the fully loaded cost is closer to **$1,898/year** when you include a small EC2 instance running 24/7 to handle embedding requests ($150/month).
 
-### 2. Classification (GPT-4o) - $54,750/year
+### 2. Classification (GPT-5) - $43,801/year
 
 Each classification call sends ~200 tokens of input (document snippet + system prompt) and receives ~50 tokens of output.
 
 - **Input**: 7.3M calls x 200 tokens = 1.46B tokens/year
 - **Output**: 7.3M calls x 50 tokens = 365M tokens/year
 
-At GPT-4o rates of **$2.50/1M input tokens** and **$10.00/1M output tokens** ([OpenAI Pricing](https://openai.com/api/pricing/)):
+At GPT-5 rates of **$1.25/1M input tokens** and **$10.00/1M output tokens** ([OpenAI Pricing](https://openai.com/api/pricing/)):
 
-> Input: 1,460M / 1M x $2.50 = $3,650
+> Input: 1,460M / 1M x $1.25 = $1,825
 > Output: 365M / 1M x $10.00 = $3,650
-> **Total: $7,300/year**
+> **Total: $5,475/year**
 
-But wait - Binderbox also uses GPT-4o for zero-shot classification of support tickets (another 7.3M calls/year with longer prompts averaging 500 input / 100 output tokens):
+But wait - Binderbox also uses GPT-5 for zero-shot classification of support tickets (another 7.3M calls/year with longer prompts averaging 500 input / 100 output tokens):
 
-> Input: 3,650M / 1M x $2.50 = $9,125
+> Input: 3,650M / 1M x $1.25 = $4,563
 > Output: 730M / 1M x $10.00 = $7,300
-> **Subtotal: $16,425/year**
+> **Subtotal: $11,863/year**
 
 And for document summarization on upload (3.65M calls/year, 1000 input / 200 output tokens):
 
-> Input: 3,650M / 1M x $2.50 = $9,125
+> Input: 3,650M / 1M x $1.25 = $4,563
 > Output: 730M / 1M x $10.00 = $7,300
-> **Subtotal: $16,425/year**
+> **Subtotal: $11,863/year**
 
-Combined GPT-4o classification + summarization spend:
+Combined GPT-5 classification + summarization spend:
 
-> $7,300 + $16,425 + $16,425 = **$40,150/year**
+> $5,475 + $11,863 + $11,863 = **$29,201/year**
 
 Add the backend server costs for the classification service ($150/month x 12 + load balancer):
 
-> **Total: ~$54,750/year** (including $14,600 infrastructure)
+> **Total: ~$43,801/year** (including $14,600 infrastructure)
 
 ### 3. Reranking (Cohere) - $73,000/year
 
@@ -156,16 +156,16 @@ Beyond the per-API costs, Binderbox maintained:
 | Line Item | Annual Cost |
 |---|---|
 | Embeddings (OpenAI + infra) | $1,898 |
-| Classification & summarization (GPT-4o + infra) | $54,750 |
+| Classification & summarization (GPT-5 + infra) | $43,801 |
 | Reranking (Cohere) | $73,000 |
 | Entity extraction (AWS Comprehend + infra) | $6,225 |
 | Speech-to-text (Whisper + infra) | $3,600 |
 | Infrastructure overhead | $45,000 |
-| **Total** | **$184,473** |
+| **Total** | **$173,524** |
 
 Add 15% buffer for usage spikes, retries on failures, and pricing tier overages:
 
-> **Realistic annual spend: ~$212,000**
+> **Realistic annual spend: ~$200,000**
 
 ---
 
@@ -183,7 +183,7 @@ const { embedding } = await embed({
   value: searchQuery,
 });
 
-// Document classification - replaces GPT-4o
+// Document classification - replaces GPT-5
 const { label, score } = await classify({
   model: transformers.classifier(
     'Xenova/distilbert-base-uncased-finetuned-sst-2-english'
@@ -220,7 +220,7 @@ Reranking moved at the same time. The local cross-encoder (`ms-marco-MiniLM-L-6-
 
 ### Phase 2: Classification and NER (Week 4-6)
 
-Classification required more care. We replaced GPT-4o zero-shot classification with a fine-tuned DistilBERT classifier and a zero-shot NLI model for dynamic categories. Accuracy dropped from ~97% to ~94% on our internal test set - acceptable for document routing where misclassifications are correctable.
+Classification required more care. We replaced GPT-5 zero-shot classification with a fine-tuned DistilBERT classifier and a zero-shot NLI model for dynamic categories. Accuracy dropped from ~97% to ~94% on our internal test set - acceptable for document routing where misclassifications are correctable.
 
 NER was a direct swap. `bert-base-NER` achieves 91-93% F1 on CoNLL-2003, close to AWS Comprehend's comparable performance on standard entity types.
 
@@ -304,15 +304,15 @@ The hybrid approach captures roughly 85% of the cost savings while maintaining 1
 | Line Item | Before (Annual) | After (Annual) | Savings |
 |---|---|---|---|
 | Embeddings (query-time) | $1,898 | $0 (browser) | $1,898 |
-| Classification + summarization | $54,750 | $2,400 (self-hosted for long docs) | $52,350 |
+| Classification + summarization | $43,801 | $2,400 (self-hosted for long docs) | $41,401 |
 | Reranking | $73,000 | $0 (browser) | $73,000 |
 | Entity extraction | $6,475 | $0 (browser) | $6,475 |
 | Speech-to-text | $3,600 | $540 (15% cloud fallback) | $3,060 |
 | Infrastructure overhead | $45,000 | $8,400 (reduced to 1 vendor) | $36,600 |
-| Usage buffer (15%) | $27,708 | $1,701 | $26,007 |
-| **Total** | **$212,144** | **$13,041** | **$199,103** |
+| Usage buffer (15%) | $26,066 | $1,701 | $24,365 |
+| **Total** | **$199,840** | **$13,041** | **$186,799** |
 
-Conservative annual savings: **~$199,000**. With the usage spikes we actually experienced, the real number was closer to **$212,000** - because the cloud bill scaled with users while the local bill does not.
+Conservative annual savings: **~$187,000**. With the usage spikes we actually experienced, the real number was closer to **$200,000** - because the cloud bill scaled with users while the local bill does not.
 
 The key insight: **local inference has zero marginal cost**. Whether you have 10,000 users or 1,000,000 users making searches, the cost of browser-side embedding is the same: nothing. The cloud bill scales linearly with usage. The local bill stays flat.
 
@@ -345,7 +345,7 @@ All pricing data was collected from official pricing pages in March 2026. Cost c
 
 ### Pricing Sources
 
-- [OpenAI API Pricing](https://openai.com/api/pricing/) - text-embedding-3-small ($0.02/1M tokens), GPT-4o ($2.50/1M input, $10/1M output), Whisper ($0.006/min)
+- [OpenAI API Pricing](https://openai.com/api/pricing/) - text-embedding-3-small ($0.02/1M tokens), GPT-5 ($1.25/1M input, $10/1M output), Whisper ($0.006/min)
 - [Cohere Pricing](https://cohere.com/pricing) - Rerank 3.5 ($2.00/1K searches)
 - [AWS Comprehend Pricing](https://aws.amazon.com/comprehend/pricing/) - NER/Sentiment ($0.0001/unit for first 10M units, 1 unit = 100 chars)
 - [Google Cloud Translation Pricing](https://cloud.google.com/translate/pricing) - NMT ($20/1M characters, referenced for context)

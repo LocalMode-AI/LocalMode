@@ -104,7 +104,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
     };
   }, []);
 
-  const send = useCallback(async (text: string, sendOptions?: { images?: ImageAttachment[] }): Promise<void> => {
+  const send = useCallback(async (text: string, sendOptions?: { images?: ImageAttachment[]; providerOptions?: Record<string, Record<string, unknown>> }): Promise<void> => {
     if (IS_SERVER) return;
 
     abortControllerRef.current?.abort();
@@ -137,6 +137,7 @@ export function useChat(options: UseChatOptions): UseChatReturn {
         maxTokens,
         temperature,
         abortSignal: controller.signal,
+        ...(sendOptions?.providerOptions ? { providerOptions: sendOptions.providerOptions } : {}),
       });
 
       for await (const chunk of result.stream) {

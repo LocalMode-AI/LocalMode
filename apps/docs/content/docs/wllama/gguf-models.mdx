@@ -128,9 +128,9 @@ const model = wllama.languageModel(modelUrl, {
 const result = await streamText({ model, prompt: 'Hello!' });
 ```
 
-## Recommended Models
+## Recommended Models (30 Curated)
 
-These Q4_K_M quantized models are curated for browser use (compatible with wllama v2.3.7 / llama.cpp b7179):
+These quantized models are curated for browser use (compatible with wllama v3). The catalog includes 25 language models (including Qwen3 and DeepSeek R1 reasoning models), 3 embedding models, and 2 reranker models:
 
 ### Tiny (&lt; 500MB)
 
@@ -144,6 +144,7 @@ These Q4_K_M quantized models are curated for browser use (compatible with wllam
 
 | Model | Size | Context | Parameters | Best For |
 | ----- | ---- | ------- | ---------- | -------- |
+| Qwen3 0.6B Q4_K_M | 530MB | 40K | 600M | Fast multilingual reasoning, hybrid thinking |
 | TinyLlama 1.1B Chat Q4_K_M | 670MB | 2K | 1.1B | Classic, fast and reliable |
 | Llama 3.2 1B Q4_K_M | 750MB | 128K | 1.2B | General purpose, huge context |
 | Qwen 2.5 1.5B Q4_K_M | 986MB | 32K | 1.5B | Multilingual |
@@ -154,6 +155,8 @@ These Q4_K_M quantized models are curated for browser use (compatible with wllam
 | ----- | ---- | ------- | ---------- | -------- |
 | Qwen 2.5 Coder 1.5B Q4_K_M | 1.0GB | 32K | 1.5B | Code-specialized, programming |
 | SmolLM2 1.7B Q4_K_M | 1.06GB | 8K | 1.7B | Efficient, great per-param quality |
+| DeepSeek R1 1.5B Q4_K_M | 1.1GB | 128K | 1.5B | Reasoning/thinking, chain-of-thought |
+| Qwen3 1.7B Q4_K_M | 1.2GB | 40K | 1.7B | Multilingual reasoning, hybrid thinking |
 | Phi 3.5 Mini Q4_K_M | 1.24GB | 4K | 3.8B | Reasoning, coding |
 | Gemma 2 2B IT Q4_K_M | 1.3GB | 8K | 2B | Instruction following |
 | Llama 3.2 3B Q4_K_M | 1.93GB | 128K | 3.2B | High quality, huge context |
@@ -164,8 +167,10 @@ These Q4_K_M quantized models are curated for browser use (compatible with wllam
 | Model | Size | Context | Parameters | Best For |
 | ----- | ---- | ------- | ---------- | -------- |
 | Phi-4 Mini Q4_K_M | 2.3GB | 4K | 3.8B | Strong reasoning and coding |
+| Qwen3 4B Q4_K_M | 2.7GB | 40K | 4B | Excellent multilingual reasoning and code |
 | Qwen 2.5 Coder 7B Q4_K_M | 4.5GB | 32K | 7B | Best code generation quality |
 | Mistral 7B v0.3 Q4_K_M | 4.37GB | 32K | 7.2B | Strong general performance |
+| DeepSeek R1 7B Q4_K_M | 4.7GB | 128K | 7B | Strong reasoning/thinking, 8GB+ RAM |
 | Llama 3.1 8B Q4_K_M | 4.92GB | 128K | 8B | Best quality (8GB+ RAM) |
 
 ### Vision-Language (UI grounding)
@@ -174,6 +179,23 @@ These Q4_K_M quantized models are curated for browser use (compatible with wllam
 | ----- | ---- | ------- | ---------- | -------- |
 | Holo2 4B Q4_K_M | 2.8GB | 256K | 4B | UI grounding, browser-agent / GUI navigation |
 | Holo2 8B Q4_K_M | 5.1GB | 256K | 8B | Premium UI grounding, 8GB+ RAM required |
+| Gemma 4 E2B IT Q4_K_M | 3.46GB | 128K | 5.1B (2.3B eff.) | Google Gemma 4, vision + tool calling |
+| Gemma 4 E4B IT Q4_K_M | 5.41GB | 128K | 8B (~4B eff.) | Google Gemma 4, vision + tool calling, 8GB+ RAM |
+
+### Embedding Models
+
+| Model | Size | Dimensions | Parameters | Best For |
+| ----- | ---- | ---------- | ---------- | -------- |
+| Nomic Embed Text v1.5 Q4_K_M | 78MB | 768 | 137M | High-quality semantic search |
+| MxBai Embed Large v1 Q4_K_M | 197MB | 1024 | 335M | Top-quality English embeddings |
+| BGE Small EN v1.5 Q8_0 | 35MB | 384 | 33M | Lightweight on-device embeddings |
+
+### Reranker Models
+
+| Model | Size | Context | Parameters | Best For |
+| ----- | ---- | ------- | ---------- | -------- |
+| Jina Reranker v2 Q4_K_M | 163MB | 1K | 278M | Multilingual cross-encoder reranking |
+| BGE Reranker v2 M3 Q4_K_M | 218MB | 8K | 568M | Multilingual reranking, long context |
 
 Access them programmatically:
 
@@ -221,11 +243,15 @@ Search HuggingFace for GGUF models:
 <TypeTable
   type={{
     architecture: {
-      description: "Model family (e.g., 'llama', 'mistral', 'qwen2', 'phi', 'gemma')",
+      description: "Model family (e.g., 'llama', 'qwen2', 'qwen3', 'phi3', 'phi4', 'gemma', 'gemma4', 'bert', 'nomic-bert', 'xlm-roberta')",
       type: 'string',
     },
     contextLength: {
       description: 'Maximum context window from metadata',
+      type: 'number',
+    },
+    embeddingLength: {
+      description: 'Hidden size / embedding dimension',
       type: 'number',
     },
     quantization: {
@@ -256,6 +282,22 @@ Search HuggingFace for GGUF models:
       description: 'Human-readable name (if present in metadata)',
       type: 'string | undefined',
     },
+    author: {
+      description: 'Model author from metadata (if present)',
+      type: 'string | undefined',
+    },
+    license: {
+      description: 'License information from metadata (if present)',
+      type: 'string | undefined',
+    },
+    description: {
+      description: 'Model description from metadata (if present)',
+      type: 'string | undefined',
+    },
+    fileType: {
+      description: 'GGUF file type enum value (raw quantization identifier)',
+      type: 'number',
+    },
     rawMetadata: {
       description: 'All raw metadata key-value pairs for advanced inspection',
       type: 'Record<string, unknown>',
@@ -283,8 +325,24 @@ Search HuggingFace for GGUF models:
       description: 'Device RAM in bytes (null if unavailable)',
       type: 'number | null',
     },
+    deviceRAMHuman: {
+      description: "Human-readable device RAM (e.g., '8 GB', or 'unknown')",
+      type: 'string',
+    },
+    availableStorage: {
+      description: 'Available storage quota in bytes from navigator.storage.estimate() (null if unavailable)',
+      type: 'number | null',
+    },
+    availableStorageHuman: {
+      description: "Human-readable available storage (e.g., '4.2 GB', or 'unknown')",
+      type: 'string',
+    },
+    needsCORS: {
+      description: 'Whether multi-threading requires CORS headers (always true for wllama)',
+      type: 'boolean',
+    },
     hasCORS: {
-      description: 'Whether multi-threading is available',
+      description: 'Whether current page has CORS isolation',
       type: 'boolean',
     },
     estimatedSpeed: {

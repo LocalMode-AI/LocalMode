@@ -1,8 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <!-- CloudOff icon (centered, no background) -->
-  <g transform="translate(56, 56) scale(16.67)" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
-    <path d="m2 2 20 20"/>
-    <path d="M5.782 5.782A7 7 0 0 0 9 19h8.5a4.5 4.5 0 0 0 1.307-.193"/>
-    <path d="M21.532 16.5A4.5 4.5 0 0 0 17.5 10h-1.79A7.008 7.008 0 0 0 10 5.07"/>
+  <defs>
+    <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+  <!-- Isometric cube: edge=206, top height=side height -->
+  <polygon points="240,50 418,153 240,256 62,153" fill="#93c5fd"/>
+  <polygon points="62,153 240,256 240,462 62,359" fill="url(#cg)"/>
+  <polygon points="418,153 240,256 240,462 418,359" fill="#2563eb"/>
+  <line x1="240" y1="256" x2="240" y2="462" stroke="#1e40af" stroke-width="2" opacity="0.3"/>
+  <line x1="62" y1="153" x2="240" y2="256" stroke="#fff" stroke-width="2" opacity="0.2"/>
+  <!-- Sparkle -->
+  <g transform="translate(440, 60)">
+    <path d="M0,-40 C5,-14 14,-5 40,0 C14,5 5,14 0,40 C-5,14 -14,5 -40,0 C-14,-5 -5,-14 0,-40Z" fill="#fbbf24"/>
+  </g>
+  <g transform="translate(395, 115)">
+    <path d="M0,-16 C2,-6 6,-2 16,0 C6,2 2,6 0,16 C-2,6 -6,2 -16,0 C-6,-2 -2,-6 0,-16Z" fill="#fbbf24" opacity="0.7"/>
   </g>
 </svg>

@@ -2,7 +2,7 @@
  * @localmode/wllama Tests — Provider & Model
  *
  * Unit tests for the wllama provider package.
- * All tests mock @wllama/wllama since actual model inference requires browser + WASM.
+ * All tests mock @wllama/wllama v3 since actual model inference requires browser + WASM.
  *
  * @packageDocumentation
  */
@@ -12,35 +12,58 @@ import type { LanguageModel } from '@localmode/core';
 import { ModelLoadError, GenerationError } from '@localmode/core';
 
 // ═══════════════════════════════════════════════════════════════
-// MOCKS
+// MOCKS — v3 OAI-compatible API shape
 // ═══════════════════════════════════════════════════════════════
 
-// Shared mock state — tests modify this to customize behavior
 const mockState = {
   loadModelFromUrl: vi.fn().mockResolvedValue(undefined),
-  createCompletion: vi.fn().mockResolvedValue('Hello, world!'),
-  tokenize: vi.fn().mockResolvedValue([1, 2, 3, 4, 5]),
-  lookupToken: vi.fn().mockResolvedValue(-1),
-  samplingInit: vi.fn().mockResolvedValue(undefined),
+  createChatCompletion: vi.fn().mockResolvedValue({
+    id: 'chatcmpl-1',
+    object: 'chat.completion',
+    created: Date.now(),
+    model: 'test-model',
+    choices: [{
+      index: 0,
+      message: { role: 'assistant', content: 'Hello, world!' },
+      finish_reason: 'stop',
+      logprobs: null,
+    }],
+    usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
+  }),
+  createCompletion: vi.fn().mockResolvedValue({
+    id: 'cmpl-1',
+    object: 'text_completion',
+    created: Date.now(),
+    model: 'test-model',
+    choices: [{
+      text: 'Hello, world!',
+      index: 0,
+      finish_reason: 'stop',
+      logprobs: null,
+    }],
+    usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
+  }),
   exit: vi.fn().mockResolvedValue(undefined),
 };
 
-// Mock @wllama/wllama — Wllama constructor returns an object with our mock state
 vi.mock('@wllama/wllama', () => ({
   Wllama: function Wllama() {
     return {
       loadModelFromUrl: (...args: unknown[]) => mockState.loadModelFromUrl(...args),
+      createChatCompletion: (...args: unknown[]) => mockState.createChatCompletion(...args),
       createCompletion: (...args: unknown[]) => mockState.createCompletion(...args),
-      tokenize: (...args: unknown[]) => mockState.tokenize(...args),
-      lookupToken: (...args: unknown[]) => mockState.lookupToken(...args),
-      samplingInit: (...args: unknown[]) => mockState.samplingInit(...args),
+      createEmbedding: vi.fn().mockResolvedValue({
+        object: 'list',
+        data: [{ object: 'embedding', index: 0, embedding: [0.1, 0.2, 0.3, 0.4] }],
+        model: 'test-model',
+        usage: { prompt_tokens: 3, total_tokens: 3 },
+      }),
       exit: (...args: unknown[]) => mockState.exit(...args),
       cacheManager: { open: vi.fn().mockResolvedValue(null), list: vi.fn().mockResolvedValue([]) },
     };
   },
 }));
 
-// Mock @huggingface/gguf
 vi.mock('@huggingface/gguf', () => ({
   gguf: vi.fn().mockResolvedValue({
     metadata: {
@@ -69,6 +92,7 @@ vi.mock('@huggingface/gguf', () => ({
 // ═══════════════════════════════════════════════════════════════
 
 import { WllamaLanguageModel, createLanguageModel } from '../src/model.js';
+import { WllamaEmbeddingModel } from '../src/embedding.js';
 import { createWllama } from '../src/provider.js';
 import { isCrossOriginIsolated, resolveModelUrl } from '../src/utils.js';
 import { WLLAMA_MODELS } from '../src/models.js';
@@ -81,15 +105,37 @@ describe('@localmode/wllama', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockState.loadModelFromUrl.mockResolvedValue(undefined);
-    mockState.createCompletion.mockResolvedValue('Hello, world!');
-    mockState.tokenize.mockResolvedValue([1, 2, 3, 4, 5]);
-    mockState.lookupToken.mockResolvedValue(-1);
-    mockState.samplingInit.mockResolvedValue(undefined);
+    mockState.createChatCompletion.mockResolvedValue({
+      id: 'chatcmpl-1',
+      object: 'chat.completion',
+      created: Date.now(),
+      model: 'test-model',
+      choices: [{
+        index: 0,
+        message: { role: 'assistant', content: 'Hello, world!' },
+        finish_reason: 'stop',
+        logprobs: null,
+      }],
+      usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
+    });
+    mockState.createCompletion.mockResolvedValue({
+      id: 'cmpl-1',
+      object: 'text_completion',
+      created: Date.now(),
+      model: 'test-model',
+      choices: [{
+        text: 'Hello, world!',
+        index: 0,
+        finish_reason: 'stop',
+        logprobs: null,
+      }],
+      usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
+    });
     mockState.exit.mockResolvedValue(undefined);
   });
 
   // ─────────────────────────────────────────────────────────────
-  // 8.1: WllamaLanguageModel construction
+  // Construction
   // ─────────────────────────────────────────────────────────────
   describe('WllamaLanguageModel construction', () => {
     it('should have modelId formatted as wllama:{baseModelId}', () => {
@@ -122,84 +168,130 @@ describe('@localmode/wllama', () => {
   });
 
   // ─────────────────────────────────────────────────────────────
-  // 8.2: doGenerate()
+  // doGenerate() — with messages (always uses createCompletion with manual prompt)
   // ─────────────────────────────────────────────────────────────
-  describe('doGenerate()', () => {
-    it('should return { text, finishReason, usage } structure', async () => {
+  describe('doGenerate() with messages', () => {
+    it('should return { text, finishReason, usage } from OAI response', async () => {
       const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
-      const result = await model.doGenerate({ prompt: 'Hello' });
+      const result = await model.doGenerate({
+        prompt: 'Hello',
+        messages: [{ role: 'user', content: 'Hi there' }],
+      });
 
-      expect(result).toHaveProperty('text');
-      expect(result).toHaveProperty('finishReason');
-      expect(result).toHaveProperty('usage');
       expect(result.text).toBe('Hello, world!');
-      expect(typeof result.finishReason).toBe('string');
-      expect(result.usage).toHaveProperty('inputTokens');
-      expect(result.usage).toHaveProperty('outputTokens');
-      expect(result.usage).toHaveProperty('totalTokens');
-      expect(result.usage).toHaveProperty('durationMs');
+      expect(result.finishReason).toBe('stop');
+      expect(result.usage.inputTokens).toBe(5);
+      expect(result.usage.outputTokens).toBe(3);
+      expect(result.usage.totalTokens).toBe(8);
+      expect(result.usage.durationMs).toBeGreaterThanOrEqual(0);
     });
 
-    it('should pass temperature and topP to sampling config', async () => {
+    it('should call createChatCompletion with messages', async () => {
       const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
-      await model.doGenerate({ prompt: 'Hello', temperature: 0.5, topP: 0.9 });
+      await model.doGenerate({
+        prompt: 'What is AI?',
+        messages: [{ role: 'user', content: 'Explain AI' }],
+      });
 
-      expect(mockState.createCompletion).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          sampling: expect.objectContaining({
-            temp: 0.5,
-            top_p: 0.9,
-          }),
-        })
-      );
+      expect(mockState.createChatCompletion).toHaveBeenCalledTimes(1);
+      const callArgs = mockState.createChatCompletion.mock.calls[0][0] as Record<string, unknown>;
+      const msgs = callArgs.messages as Array<{ role: string; content: string }>;
+      expect(msgs.some(m => m.content === 'Explain AI')).toBe(true);
+      expect(msgs.some(m => m.content === 'What is AI?')).toBe(true);
     });
 
-    it('should construct prompt from systemPrompt + prompt', async () => {
-      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
-      await model.doGenerate({ prompt: 'Hi', systemPrompt: 'You are helpful.' });
-
-      const callArgs = mockState.createCompletion.mock.calls[0];
-      const fullPrompt = callArgs[0] as string;
-      expect(fullPrompt).toContain('You are helpful.');
-      expect(fullPrompt).toContain('Hi');
-    });
-
-    it('should pass maxTokens as nPredict', async () => {
-      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
-      await model.doGenerate({ prompt: 'Hello', maxTokens: 100 });
-
-      expect(mockState.createCompletion).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          nPredict: 100,
-        })
-      );
-    });
-
-    it('should pass wllama-specific providerOptions to sampling', async () => {
+    it('should include system prompt as system message', async () => {
       const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
       await model.doGenerate({
         prompt: 'Hello',
-        providerOptions: {
-          wllama: { top_k: 40, repeat_penalty: 1.1 },
-        },
+        systemPrompt: 'You are helpful.',
       });
 
-      expect(mockState.createCompletion).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          sampling: expect.objectContaining({
-            top_k: 40,
-            penalty_repeat: 1.1,
-          }),
-        })
-      );
+      expect(mockState.createChatCompletion).toHaveBeenCalledTimes(1);
+      const callArgs = mockState.createChatCompletion.mock.calls[0][0] as Record<string, unknown>;
+      const msgs = callArgs.messages as Array<{ role: string; content: string }>;
+      expect(msgs[0]).toEqual({ role: 'system', content: 'You are helpful.' });
+    });
+
+    it('should include sampling params in chat request', async () => {
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      await model.doGenerate({
+        prompt: 'Hello',
+        systemPrompt: 'Be concise',
+        temperature: 0.5,
+        topP: 0.9,
+        providerOptions: { wllama: { top_k: 40 } },
+      });
+
+      const callArgs = mockState.createChatCompletion.mock.calls[0][0] as Record<string, unknown>;
+      expect(callArgs.temp).toBe(0.5);
+      expect(callArgs.top_p).toBe(0.9);
+      expect(callArgs.top_k).toBe(40);
     });
   });
 
   // ─────────────────────────────────────────────────────────────
-  // 8.3: doGenerate() with AbortSignal
+  // doGenerate() — raw completion path (prompt only)
+  // ─────────────────────────────────────────────────────────────
+  describe('doGenerate() with prompt only (createCompletion)', () => {
+    it('should call createCompletion for prompt-only input', async () => {
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      await model.doGenerate({ prompt: 'Once upon a time' });
+
+      expect(mockState.createCompletion).toHaveBeenCalledTimes(1);
+      expect(mockState.createChatCompletion).not.toHaveBeenCalled();
+    });
+
+    it('should pass prompt string to createCompletion', async () => {
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      await model.doGenerate({ prompt: 'Once upon a time' });
+
+      const callArgs = mockState.createCompletion.mock.calls[0][0] as Record<string, unknown>;
+      expect(callArgs.prompt).toContain('Once upon a time');
+    });
+
+    it('should return text from choices[0].text', async () => {
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      const result = await model.doGenerate({ prompt: 'Once' });
+
+      expect(result.text).toBe('Hello, world!');
+      expect(result.usage.inputTokens).toBe(5);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // doGenerate() — finish reason mapping
+  // ─────────────────────────────────────────────────────────────
+  describe('Finish reason mapping', () => {
+    it('should map "stop" to "stop"', async () => {
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      const result = await model.doGenerate({ prompt: 'Hi', systemPrompt: 'test' });
+      expect(result.finishReason).toBe('stop');
+    });
+
+    it('should map "length" to "length"', async () => {
+      mockState.createChatCompletion.mockResolvedValue({
+        id: 'chatcmpl-2',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'test-model',
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: 'Long...' },
+          finish_reason: 'length',
+          logprobs: null,
+        }],
+        usage: { prompt_tokens: 5, completion_tokens: 100, total_tokens: 105 },
+      });
+
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      const result = await model.doGenerate({ prompt: 'Hi', systemPrompt: 'test' });
+      expect(result.finishReason).toBe('length');
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // doGenerate() with AbortSignal
   // ─────────────────────────────────────────────────────────────
   describe('doGenerate() with AbortSignal', () => {
     it('should throw immediately with already-aborted signal', async () => {
@@ -211,75 +303,66 @@ describe('@localmode/wllama', () => {
         model.doGenerate({ prompt: 'Hello', abortSignal: controller.signal })
       ).rejects.toThrow();
 
-      // wllama createCompletion should NOT have been called
+      expect(mockState.createChatCompletion).not.toHaveBeenCalled();
       expect(mockState.createCompletion).not.toHaveBeenCalled();
     });
   });
 
   // ─────────────────────────────────────────────────────────────
-  // 8.4: doStream()
+  // doStream() — v3 streaming with onData callback
   // ─────────────────────────────────────────────────────────────
   describe('doStream()', () => {
-    it('should yield StreamChunk objects with text and done', async () => {
-      mockState.createCompletion.mockImplementation(
-        async (_prompt: string, opts: Record<string, unknown>) => {
-          const onNewToken = opts.onNewToken as (token: number, piece: Uint8Array, text: string) => void;
-          onNewToken?.(1, new Uint8Array(), 'Hello');
-          onNewToken?.(2, new Uint8Array(), 'Hello world');
-          onNewToken?.(3, new Uint8Array(), 'Hello world!');
-          return 'Hello world!';
-        }
-      );
+    it('should yield StreamChunk objects with text deltas', async () => {
+      mockState.createChatCompletion.mockResolvedValue({
+        id: 'chatcmpl-stream',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'test-model',
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: 'Hello world!' },
+          finish_reason: 'stop',
+          logprobs: null,
+        }],
+        usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
+      });
 
       const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
       const chunks: Array<{ text: string; done: boolean }> = [];
 
-      for await (const chunk of model.doStream({ prompt: 'Hello' })) {
+      for await (const chunk of model.doStream({ prompt: 'Hello', systemPrompt: 'test' })) {
         chunks.push({ text: chunk.text, done: chunk.done });
       }
 
-      expect(chunks.length).toBeGreaterThan(1);
-
-      const lastChunk = chunks[chunks.length - 1];
-      expect(lastChunk.done).toBe(true);
+      expect(chunks.length).toBeGreaterThanOrEqual(2);
 
       const nonFinalChunks = chunks.filter(c => !c.done);
       expect(nonFinalChunks.length).toBeGreaterThan(0);
       for (const chunk of nonFinalChunks) {
-        expect(chunk.done).toBe(false);
         expect(chunk.text.length).toBeGreaterThan(0);
       }
     });
 
     it('should include finishReason and usage in final chunk', async () => {
-      mockState.createCompletion.mockImplementation(
-        async (_prompt: string, opts: Record<string, unknown>) => {
-          const onNewToken = opts.onNewToken as (token: number, piece: Uint8Array, text: string) => void;
-          onNewToken?.(1, new Uint8Array(), 'Hello');
-          return 'Hello';
-        }
-      );
 
       const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
       let finalChunk;
 
-      for await (const chunk of model.doStream({ prompt: 'Hello' })) {
-        if (chunk.done) {
-          finalChunk = chunk;
-        }
+      for await (const chunk of model.doStream({ prompt: 'Hello', systemPrompt: 'test' })) {
+        if (chunk.done) finalChunk = chunk;
       }
 
       expect(finalChunk).toBeDefined();
-      expect(finalChunk!.finishReason).toBeDefined();
+      expect(finalChunk!.finishReason).toBe('stop');
       expect(finalChunk!.usage).toBeDefined();
-      expect(finalChunk!.usage!.inputTokens).toBeGreaterThanOrEqual(0);
-      expect(finalChunk!.usage!.outputTokens).toBeGreaterThanOrEqual(0);
+      expect(finalChunk!.usage!.inputTokens).toBe(5);
+      expect(finalChunk!.usage!.outputTokens).toBe(3);
       expect(finalChunk!.usage!.durationMs).toBeGreaterThanOrEqual(0);
     });
   });
 
   // ─────────────────────────────────────────────────────────────
-  // 8.5: doStream() with AbortSignal
+  // doStream() with AbortSignal
   // ─────────────────────────────────────────────────────────────
   describe('doStream() with AbortSignal', () => {
     it('should throw with already-aborted signal', async () => {
@@ -298,7 +381,7 @@ describe('@localmode/wllama', () => {
   });
 
   // ─────────────────────────────────────────────────────────────
-  // 8.6: Model load deduplication
+  // Model load deduplication
   // ─────────────────────────────────────────────────────────────
   describe('Model load deduplication', () => {
     it('should load model only once for concurrent calls', async () => {
@@ -325,7 +408,7 @@ describe('@localmode/wllama', () => {
   });
 
   // ─────────────────────────────────────────────────────────────
-  // 8.7: unload()
+  // unload()
   // ─────────────────────────────────────────────────────────────
   describe('unload()', () => {
     it('should call exit() on wllama instance', async () => {
@@ -337,7 +420,7 @@ describe('@localmode/wllama', () => {
 
     it('should be a no-op when model is not loaded', async () => {
       const model = new WllamaLanguageModel('test-model');
-      await model.unload(); // Should not throw
+      await model.unload();
     });
 
     it('should trigger fresh load on next doGenerate() after unload', async () => {
@@ -353,91 +436,7 @@ describe('@localmode/wllama', () => {
   });
 
   // ─────────────────────────────────────────────────────────────
-  // 8.8: Finish reason mapping
-  // ─────────────────────────────────────────────────────────────
-  describe('Finish reason mapping', () => {
-    it('should return "stop" when tokens < maxTokens', async () => {
-      mockState.createCompletion.mockImplementation(
-        async (_prompt: string, opts: Record<string, unknown>) => {
-          const onNewToken = opts.onNewToken as (() => void) | undefined;
-          for (let i = 0; i < 3; i++) { onNewToken?.(); }
-          return 'Short response';
-        }
-      );
-
-      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
-      const result = await model.doGenerate({ prompt: 'Hello', maxTokens: 100 });
-      expect(result.finishReason).toBe('stop');
-    });
-
-    it('should return "length" when outputTokens >= maxTokens', async () => {
-      mockState.createCompletion.mockImplementation(
-        async (_prompt: string, opts: Record<string, unknown>) => {
-          const onNewToken = opts.onNewToken as (() => void) | undefined;
-          const nPredict = (opts.nPredict as number) ?? 10;
-          for (let i = 0; i < nPredict; i++) { onNewToken?.(); }
-          return 'Long response';
-        }
-      );
-
-      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
-      const result = await model.doGenerate({ prompt: 'Hello', maxTokens: 10 });
-      expect(result.finishReason).toBe('length');
-    });
-  });
-
-  // ─────────────────────────────────────────────────────────────
-  // 8.9: createWllama() factory
-  // ─────────────────────────────────────────────────────────────
-  describe('createWllama() factory', () => {
-    it('should return a provider with languageModel method', () => {
-      const provider = createWllama();
-      expect(provider).toHaveProperty('languageModel');
-      expect(typeof provider.languageModel).toBe('function');
-    });
-
-    it('should create models with merged settings', () => {
-      const onProgress = vi.fn();
-      const provider = createWllama({ onProgress, numThreads: 4 });
-      const model = provider.languageModel('test-model');
-      expect(model).toBeInstanceOf(WllamaLanguageModel);
-      expect(model.modelId).toBe('wllama:test-model');
-    });
-
-    it('should allow model settings to override provider settings', () => {
-      const providerCb = vi.fn();
-      const modelCb = vi.fn();
-      const provider = createWllama({ onProgress: providerCb });
-      const model = provider.languageModel('test-model', { onProgress: modelCb }) as WllamaLanguageModel;
-      expect(model).toBeInstanceOf(WllamaLanguageModel);
-    });
-  });
-
-  // ─────────────────────────────────────────────────────────────
-  // 8.10: isCrossOriginIsolated()
-  // ─────────────────────────────────────────────────────────────
-  describe('isCrossOriginIsolated()', () => {
-    const original = globalThis.crossOriginIsolated;
-
-    afterEach(() => {
-      Object.defineProperty(globalThis, 'crossOriginIsolated', {
-        value: original, writable: true, configurable: true,
-      });
-    });
-
-    it('should return true when crossOriginIsolated is true', () => {
-      Object.defineProperty(globalThis, 'crossOriginIsolated', { value: true, writable: true, configurable: true });
-      expect(isCrossOriginIsolated()).toBe(true);
-    });
-
-    it('should return false when crossOriginIsolated is false', () => {
-      Object.defineProperty(globalThis, 'crossOriginIsolated', { value: false, writable: true, configurable: true });
-      expect(isCrossOriginIsolated()).toBe(false);
-    });
-  });
-
-  // ─────────────────────────────────────────────────────────────
-  // 8.11: Error wrapping
+  // Error wrapping
   // ─────────────────────────────────────────────────────────────
   describe('Error wrapping', () => {
     it('should wrap model load errors as ModelLoadError', async () => {
@@ -467,6 +466,82 @@ describe('@localmode/wllama', () => {
         expect(error).toBeInstanceOf(GenerationError);
         expect((error as GenerationError).cause).toBe(originalError);
       }
+    });
+
+    it('should wrap chat completion errors as GenerationError when both paths fail', async () => {
+      mockState.createChatCompletion.mockRejectedValue(new Error('Template error'));
+      mockState.createCompletion.mockRejectedValue(new Error('Fallback also failed'));
+
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      await expect(
+        model.doGenerate({ prompt: 'Hello', systemPrompt: 'test' })
+      ).rejects.toThrow(GenerationError);
+    });
+
+    it('should use createChatCompletion when messages or systemPrompt present', async () => {
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      const result = await model.doGenerate({ prompt: 'Hello', systemPrompt: 'test' });
+      expect(result.text).toBe('Hello, world!');
+      expect(mockState.createChatCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    it('should wrap chat completion errors as GenerationError', async () => {
+      mockState.createChatCompletion.mockRejectedValue(new Error('Template error'));
+
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      await expect(
+        model.doGenerate({ prompt: 'Hello', systemPrompt: 'test' })
+      ).rejects.toThrow(GenerationError);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // createWllama() factory
+  // ─────────────────────────────────────────────────────────────
+  describe('createWllama() factory', () => {
+    it('should return a provider with languageModel method', () => {
+      const provider = createWllama();
+      expect(provider).toHaveProperty('languageModel');
+      expect(typeof provider.languageModel).toBe('function');
+    });
+
+    it('should create models with merged settings', () => {
+      const onProgress = vi.fn();
+      const provider = createWllama({ onProgress, numThreads: 4 });
+      const model = provider.languageModel('test-model');
+      expect(model).toBeInstanceOf(WllamaLanguageModel);
+      expect(model.modelId).toBe('wllama:test-model');
+    });
+
+    it('should allow model settings to override provider settings', () => {
+      const providerCb = vi.fn();
+      const modelCb = vi.fn();
+      const provider = createWllama({ onProgress: providerCb });
+      const model = provider.languageModel('test-model', { onProgress: modelCb }) as WllamaLanguageModel;
+      expect(model).toBeInstanceOf(WllamaLanguageModel);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // isCrossOriginIsolated()
+  // ─────────────────────────────────────────────────────────────
+  describe('isCrossOriginIsolated()', () => {
+    const original = globalThis.crossOriginIsolated;
+
+    afterEach(() => {
+      Object.defineProperty(globalThis, 'crossOriginIsolated', {
+        value: original, writable: true, configurable: true,
+      });
+    });
+
+    it('should return true when crossOriginIsolated is true', () => {
+      Object.defineProperty(globalThis, 'crossOriginIsolated', { value: true, writable: true, configurable: true });
+      expect(isCrossOriginIsolated()).toBe(true);
+    });
+
+    it('should return false when crossOriginIsolated is false', () => {
+      Object.defineProperty(globalThis, 'crossOriginIsolated', { value: false, writable: true, configurable: true });
+      expect(isCrossOriginIsolated()).toBe(false);
     });
   });
 
@@ -524,6 +599,108 @@ describe('@localmode/wllama', () => {
       const model = createLanguageModel('test-model', { temperature: 0.5 });
       expect(model).toBeInstanceOf(WllamaLanguageModel);
       expect(model.modelId).toBe('wllama:test-model');
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Vision support (supportsVision)
+  // ─────────────────────────────────────────────────────────────
+  describe('Vision support', () => {
+    it('should set supportsVision=true when mmprojUrl is provided', () => {
+      const model = new WllamaLanguageModel('test-model', {
+        mmprojUrl: 'https://example.com/mmproj.gguf',
+      });
+      expect(model.supportsVision).toBe(true);
+    });
+
+    it('should set supportsVision=false when no mmprojUrl', () => {
+      const model = new WllamaLanguageModel('test-model');
+      expect(model.supportsVision).toBe(false);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // WebGPU settings
+  // ─────────────────────────────────────────────────────────────
+  describe('WebGPU settings', () => {
+    it('should set gpuAccelerated=false by default', () => {
+      const model = new WllamaLanguageModel('test-model');
+      expect(model.gpuAccelerated).toBe(false);
+    });
+
+    it('should set gpuAccelerated=true when nGpuLayers is set', () => {
+      const model = new WllamaLanguageModel('test-model', { nGpuLayers: 16 });
+      expect(model.gpuAccelerated).toBe(true);
+    });
+
+    it('should set gpuAccelerated=false when nGpuLayers is 0', () => {
+      const model = new WllamaLanguageModel('test-model', { nGpuLayers: 0 });
+      expect(model.gpuAccelerated).toBe(false);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Tool calling (providerOptions accepted, forwarded via prompt)
+  // ─────────────────────────────────────────────────────────────
+  describe('Tool calling', () => {
+    it('should accept tool providerOptions without error', async () => {
+      const tools = [{
+        type: 'function' as const,
+        function: { name: 'get_weather', description: 'Get weather', parameters: { type: 'object' as const, properties: { city: { type: 'string' } } } },
+      }];
+
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      const result = await model.doGenerate({
+        prompt: 'What is the weather?',
+        systemPrompt: 'Use tools',
+        providerOptions: { wllama: { tools, tool_choice: 'auto' } },
+      });
+
+      expect(result.text).toBeDefined();
+      expect(mockState.createChatCompletion).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Catalog — new fields
+  // ─────────────────────────────────────────────────────────────
+  describe('WLLAMA_MODELS catalog — v3 fields', () => {
+    it('should have tool-calling models marked', () => {
+      const toolModels = Object.values(WLLAMA_MODELS).filter(
+        m => 'supportsToolCalling' in m && m.supportsToolCalling
+      );
+      expect(toolModels.length).toBeGreaterThan(0);
+    });
+
+    it('should have embedding models with dimensions', () => {
+      const embeddingModels = Object.values(WLLAMA_MODELS).filter(
+        m => 'isEmbeddingModel' in m && m.isEmbeddingModel
+      );
+      expect(embeddingModels.length).toBeGreaterThan(0);
+      for (const m of embeddingModels) {
+        expect('dimensions' in m && m.dimensions).toBeGreaterThan(0);
+      }
+    });
+
+    it('should have vision models with mmprojUrl', () => {
+      const visionModels = Object.values(WLLAMA_MODELS).filter(m => m.vision);
+      expect(visionModels.length).toBeGreaterThan(0);
+      for (const m of visionModels) {
+        expect('mmprojUrl' in m && m.mmprojUrl).toBeTruthy();
+      }
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Embedding model
+  // ─────────────────────────────────────────────────────────────
+  describe('WllamaEmbeddingModel', () => {
+    it('should be created via provider.embedding()', () => {
+      const provider = createWllama();
+      expect(provider).toHaveProperty('embedding');
+      const model = provider.embedding('test-embed');
+      expect(model.modelId).toBe('wllama:test-embed');
+      expect(model.provider).toBe('wllama');
     });
   });
 });

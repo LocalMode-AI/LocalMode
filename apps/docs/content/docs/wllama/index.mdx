@@ -22,10 +22,22 @@ Run any GGUF model in the browser using llama.cpp compiled to WebAssembly. Acces
 
 - **Universal Browser Support** -- Works in Chrome, Firefox, Safari, and Edge (WASM only, no WebGPU needed)
 - **160K+ Models** -- Run any GGUF model from HuggingFace
+- **Embedding Models** -- `wllama.embedding()` for GGUF embedding models (nomic-embed, mxbai-embed, bge-small)
+- **WebGPU Acceleration** -- Optional GPU offload via `useWebGPU` and `nGpuLayers` for faster inference
+- **Tool Calling** -- OAI-compatible tool calling via `providerOptions.wllama.tools`
+- **Vision / Multimodal** -- Image input for vision-language models (Holo2 4B/8B, Gemma 4 E2B/E4B) via `mmprojUrl`
+- **Jinja Chat Templates** -- Native template parsing for accurate prompt formatting (default on)
 - **GGUF Inspection** -- Read model metadata before downloading via ~4KB Range requests
 - **Compatibility Check** -- Estimate if a model will run on the current device
 - **Multi-Threading** -- Auto-detects CORS isolation for 2-4x faster inference
-- **Streaming** -- Real-time token generation
+- **True Streaming** -- Token-by-token streaming via `createChatCompletion({ stream: true })`
+- **Structured Output** -- JSON mode and JSON schema via `providerOptions.wllama.response_format`
+- **Reranking** -- Cross-encoder reranking via `wllama.reranker()` (Jina, BGE)
+- **Reasoning Mode** -- DeepSeek-R1 thinking models with configurable reasoning budgets
+- **Grammar Sampling** -- Constrained generation via GBNF grammars
+- **Performance Tuning** -- KV cache quantization, flash attention, speculative decoding
+- **LoRA Adapters** -- Load fine-tuned LoRA adapters alongside base models
+- **Safari Compatibility** -- Optional `@wllama/wllama-compat` for Safari/iOS support
 
 ## Installation
 
@@ -82,16 +94,18 @@ const model3 = wllama.languageModel(
 <Callout type="info" title="Recommended Picks">
   - **Testing / Prototyping**: SmolLM2-135M Q4_K_M -- 70MB, instant loading
   - **General Purpose**: Llama 3.2 1B Q4_K_M -- 750MB, good balance with 128K context
-  - **Multilingual**: Qwen 2.5 1.5B Q4_K_M -- 986MB, strong multilingual support
-  - **Reasoning / Coding**: Phi 3.5 Mini Q4_K_M -- 1.24GB, excellent reasoning
+  - **Multilingual**: Qwen3 1.7B Q4_K_M -- 1.2GB, hybrid thinking with strong multilingual
+  - **Reasoning / Coding**: Qwen3 4B Q4_K_M -- 2.7GB, excellent reasoning and code generation
+  - **Thinking / Chain-of-Thought**: DeepSeek R1 1.5B Q4_K_M -- 1.1GB, reasoning model with `<think>` tags
   - **Higher Quality**: Llama 3.2 3B Q4_K_M -- 1.93GB, excellent quality with 128K context
   - **Best Quality**: Llama 3.1 8B Q4_K_M -- 4.92GB, requires 8GB+ RAM
   - **UI Grounding / Vision**: Holo2 4B Q4_K_M -- 2.8GB, vision-language model for browser-agent / GUI navigation
+  - **Reranking**: Jina Reranker v2 Q4_K_M -- 163MB, multilingual cross-encoder reranking
 </Callout>
 
-### `WLLAMA_MODELS` Catalog (18 Models)
+### `WLLAMA_MODELS` Catalog (30 Models)
 
-The curated catalog ships 18 Q4_K_M quantized models across four size tiers (including two vision-language models):
+The curated catalog ships 30 quantized models across multiple categories: language models in four size tiers, vision-language models, Qwen3 models, DeepSeek R1 reasoning models, embedding models, and reranker models:
 
 #### Tiny (&lt; 500MB)
 
@@ -105,6 +119,7 @@ The curated catalog ships 18 Q4_K_M quantized models across four size tiers (inc
 
 | Catalog Key | Name | Size | Context | Params | Best For |
 | --- | --- | --- | --- | --- | --- |
+| `Qwen3-0.6B-Q4_K_M` | Qwen3 0.6B | 530MB | 40K | 600M | Fast multilingual reasoning, hybrid thinking |
 | `TinyLlama-1.1B-Chat-Q4_K_M` | TinyLlama 1.1B Chat | 670MB | 2K | 1.1B | Classic, fast and reliable |
 | `Llama-3.2-1B-Instruct-Q4_K_M` | Llama 3.2 1B | 750MB | 128K | 1.2B | General purpose, huge context |
 | `Qwen2.5-1.5B-Instruct-Q4_K_M` | Qwen 2.5 1.5B | 986MB | 32K | 1.5B | Multilingual |
@@ -115,6 +130,8 @@ The curated catalog ships 18 Q4_K_M quantized models across four size tiers (inc
 | --- | --- | --- | --- | --- | --- |
 | `Qwen2.5-Coder-1.5B-Instruct-Q4_K_M` | Qwen 2.5 Coder 1.5B | 1.0GB | 32K | 1.5B | Code-specialized, programming |
 | `SmolLM2-1.7B-Instruct-Q4_K_M` | SmolLM2 1.7B | 1.06GB | 8K | 1.7B | Efficient per-param quality |
+| `DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M` | DeepSeek R1 1.5B | 1.1GB | 128K | 1.5B | Reasoning/thinking, chain-of-thought |
+| `Qwen3-1.7B-Q4_K_M` | Qwen3 1.7B | 1.2GB | 40K | 1.7B | Multilingual reasoning, hybrid thinking |
 | `Phi-3.5-mini-instruct-Q4_K_M` | Phi 3.5 Mini | 1.24GB | 4K | 3.8B | Reasoning, coding |
 | `Gemma-2-2B-IT-Q4_K_M` | Gemma 2 2B IT | 1.3GB | 8K | 2B | Instruction following |
 | `Llama-3.2-3B-Instruct-Q4_K_M` | Llama 3.2 3B | 1.93GB | 128K | 3.2B | High quality, huge context |
@@ -125,8 +142,10 @@ The curated catalog ships 18 Q4_K_M quantized models across four size tiers (inc
 | Catalog Key | Name | Size | Context | Params | Best For |
 | --- | --- | --- | --- | --- | --- |
 | `Phi-4-mini-instruct-Q4_K_M` | Phi-4 Mini | 2.3GB | 4K | 3.8B | Strong reasoning and coding |
+| `Qwen3-4B-Q4_K_M` | Qwen3 4B | 2.7GB | 40K | 4B | Excellent multilingual reasoning and code |
 | `Qwen2.5-Coder-7B-Instruct-Q4_K_M` | Qwen 2.5 Coder 7B | 4.5GB | 32K | 7B | Best code generation quality |
 | `Mistral-7B-Instruct-v0.3-Q4_K_M` | Mistral 7B v0.3 | 4.37GB | 32K | 7.2B | Strong general performance |
+| `DeepSeek-R1-Distill-Qwen-7B-Q4_K_M` | DeepSeek R1 7B | 4.7GB | 128K | 7B | Strong reasoning/thinking, 8GB+ RAM |
 | `Llama-3.1-8B-Instruct-Q4_K_M` | Llama 3.1 8B | 4.92GB | 128K | 8B | Best quality (8GB+ RAM) |
 
 #### Vision-Language (UI grounding)
@@ -135,6 +154,23 @@ The curated catalog ships 18 Q4_K_M quantized models across four size tiers (inc
 | --- | --- | --- | --- | --- | --- |
 | `Holo2-4B-Q4_K_M` | Holo2 4B | 2.8GB | 256K | 4B | UI grounding (vision), browser-agent / GUI navigation |
 | `Holo2-8B-Q4_K_M` | Holo2 8B | 5.1GB | 256K | 8B | Premium UI grounding (vision), 8GB+ RAM required |
+| `Gemma-4-E2B-IT-Q4_K_M` | Gemma 4 E2B IT | 3.46GB | 128K | 5.1B (2.3B eff.) | Google Gemma 4, vision + tool calling |
+| `Gemma-4-E4B-IT-Q4_K_M` | Gemma 4 E4B IT | 5.41GB | 128K | 8B (~4B eff.) | Google Gemma 4, vision + tool calling, 8GB+ RAM |
+
+#### Embedding Models
+
+| Catalog Key | Name | Size | Dimensions | Best For |
+| --- | --- | --- | --- | --- |
+| `nomic-embed-text-v1.5-Q4_K_M` | Nomic Embed Text v1.5 | 78MB | 768 | High-quality semantic search |
+| `mxbai-embed-large-v1-Q4_K_M` | MxBai Embed Large v1 | 197MB | 1024 | Top-quality English embeddings |
+| `bge-small-en-v1.5-Q8_0` | BGE Small EN v1.5 | 35MB | 384 | Lightweight on-device embeddings |
+
+#### Reranker Models
+
+| Catalog Key | Name | Size | Context | Best For |
+| --- | --- | --- | --- | --- |
+| `jina-reranker-v2-base-multilingual-Q4_K_M` | Jina Reranker v2 | 163MB | 1K | Multilingual cross-encoder reranking |
+| `bge-reranker-v2-m3-Q4_K_M` | BGE Reranker v2 M3 | 218MB | 8K | Multilingual reranking with long context |
 
 Access the catalog programmatically:
 
@@ -142,7 +178,7 @@ Access the catalog programmatically:
 import { WLLAMA_MODELS, getModelCategory } from '@localmode/wllama';
 import type { WllamaModelId } from '@localmode/wllama';
 
-// Iterate all 18 curated models
+// Iterate all 30 curated models
 for (const [id, info] of Object.entries(WLLAMA_MODELS)) {
   const category = getModelCategory(info.sizeBytes);
   console.log(`[${category}] ${info.name}: ${info.size}, ${info.description}`);
@@ -156,19 +192,21 @@ console.log(entry.url); // HuggingFace download URL
 
 ## Text Generation
 
-### Streaming
+### True Streaming
+
+`doStream()` streams token-by-token via `createChatCompletion({ stream: true })`, delivering each token as it is generated rather than buffering the full response:
 
 ```typescript
 import { streamText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
 
 const result = await streamText({
-  model: wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M'),
-  prompt: 'Write a haiku about programming.',
+  model: wllama.languageModel('SmolLM2-135M-Instruct-Q4_K_M'),
+  prompt: 'Write a poem',
 });
 
-let fullText = '';
 for await (const chunk of result.stream) {
-  fullText += chunk.text;
+  process.stdout.write(chunk.text);
 }
 ```
 
@@ -184,6 +222,156 @@ const { text, usage } = await generateText({
 
 console.log(text);
 console.log('Tokens used:', usage.totalTokens);
+```
+
+## Embedding Models
+
+Generate text embeddings from GGUF embedding models using `wllama.embedding()`:
+
+```typescript
+import { embed, embedMany } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+const model = wllama.embedding('nomic-embed-text-v1.5-Q4_K_M');
+
+// Single embedding
+const { embedding } = await embed({ model, value: 'Hello world' });
+console.log(embedding.length); // 768
+
+// Batch embeddings
+const { embeddings } = await embedMany({
+  model,
+  values: ['First document', 'Second document'],
+});
+```
+
+Embedding dimensions are auto-detected from GGUF metadata. You can also use any GGUF embedding model from HuggingFace:
+
+```typescript
+const model = wllama.embedding(
+  'nomic-ai/nomic-embed-text-v1.5-GGUF:nomic-embed-text-v1.5.Q4_K_M.gguf'
+);
+```
+
+## Tool Calling
+
+Models that support tool calling can use OAI-compatible tools via `providerOptions.wllama`:
+
+```typescript
+import { generateText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+
+const result = await generateText({
+  model,
+  prompt: 'What is the weather in Tokyo?',
+  providerOptions: {
+    wllama: {
+      tools: [{
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          description: 'Get current weather for a city',
+          parameters: {
+            type: 'object',
+            properties: { city: { type: 'string' } },
+            required: ['city'],
+          },
+        },
+      }],
+      tool_choice: 'auto',
+    },
+  },
+});
+
+// result.toolCalls contains the tool invocations when the model calls a tool
+```
+
+<Callout type="info">
+  Models with `supportsToolCalling: true` in the catalog have been verified for tool calling. Check `WLLAMA_MODELS[modelId].supportsToolCalling` to confirm support.
+</Callout>
+
+## Vision / Multimodal
+
+Vision-language models accept image input alongside text. Catalog entries for vision models (Holo2 4B/8B, Gemma 4 E2B/E4B) include `mmprojUrl` automatically:
+
+```typescript
+import { generateText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+const model = wllama.languageModel('Holo2-4B-Q4_K_M');
+console.log(model.supportsVision); // true
+
+const { text } = await generateText({
+  model,
+  messages: [{
+    role: 'user',
+    content: [
+      { type: 'text', text: 'Describe this screenshot.' },
+      { type: 'image', data: base64ImageData, mimeType: 'image/png' },
+    ],
+  }],
+});
+```
+
+For custom vision models, pass `mmprojUrl` in the model settings:
+
+```typescript
+const model = wllama.languageModel('my-repo/my-vlm-GGUF:model.gguf', {
+  mmprojUrl: 'https://huggingface.co/my-repo/my-vlm-GGUF/resolve/main/mmproj-f16.gguf',
+});
+```
+
+<Callout type="info">
+  Images are passed as base64-encoded data in multimodal content parts. The provider converts them to ArrayBuffers internally for wllama v3's vision API.
+</Callout>
+
+## WebGPU Acceleration
+
+Enable WebGPU to offload transformer layers to the GPU for faster inference:
+
+```typescript
+import { wllama } from '@localmode/wllama';
+
+// Enable GPU offload (falls back to WASM if WebGPU unavailable)
+const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M', {
+  useWebGPU: true,
+});
+
+// Auto-detect WebGPU availability
+const model2 = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M', {
+  useWebGPU: 'auto',
+});
+
+// Fine-grained control: offload specific number of layers (-1 for all)
+const model3 = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M', {
+  nGpuLayers: 20,
+});
+
+console.log(model.gpuAccelerated); // true when WebGPU is active
+```
+
+WebGPU acceleration also works with embedding models:
+
+```typescript
+const embedModel = wllama.embedding('nomic-embed-text-v1.5-Q4_K_M', {
+  useWebGPU: 'auto',
+});
+```
+
+<Callout type="info">
+  `nGpuLayers` takes precedence over `useWebGPU`. Use `-1` to offload all layers to GPU.
+</Callout>
+
+## Jinja Chat Templates
+
+wllama v3 uses the model's built-in Jinja chat template for accurate prompt formatting. This is enabled by default. If a model's template causes errors, wllama automatically falls back to raw completion mode with a console warning.
+
+```typescript
+const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M', {
+  useJinja: false, // disable Jinja templates (use raw completion)
+});
 ```
 
 ## Configuration
@@ -202,6 +390,10 @@ const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M', {
 
 <TypeTable
   type={{
+    onProgress: {
+      description: 'Progress callback for model loading.',
+      type: '(progress: WllamaLoadProgress) => void',
+    },
     systemPrompt: {
       description: 'System message prepended to all conversations',
       type: 'string',
@@ -233,6 +425,81 @@ const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M', {
     modelUrl: {
       description: 'Full URL to the GGUF file (overrides ID-based URL construction).',
       type: 'string',
+    },
+    cacheDir: {
+      description: 'Custom cache directory name for model files.',
+      type: 'string',
+    },
+    useJinja: {
+      description: 'Enable native Jinja chat template parsing for createChatCompletion().',
+      type: 'boolean',
+      default: 'true',
+    },
+    useWebGPU: {
+      description: 'Enable WebGPU acceleration. `true` enables GPU offload (falls back to WASM), `"auto"` enables only when detected.',
+      type: "boolean | 'auto'",
+      default: 'false',
+    },
+    nGpuLayers: {
+      description: 'Number of transformer layers to offload to GPU. Takes precedence over useWebGPU. Use -1 for all layers.',
+      type: 'number',
+    },
+    mmprojUrl: {
+      description: 'URL to the vision projection model (mmproj GGUF). Enables multimodal vision input.',
+      type: 'string',
+    },
+    reasoning: {
+      description: 'Enable reasoning mode (DeepSeek-R1 style thinking).',
+      type: 'boolean',
+    },
+    reasoningFormat: {
+      description: "Reasoning format for thinking models.",
+      type: "'none' | 'deepseek-legacy' | 'deepseek'",
+      default: "'deepseek'",
+    },
+    reasoningBudgetTokens: {
+      description: 'Token budget for reasoning/thinking.',
+      type: 'number',
+    },
+    cacheTypeK: {
+      description: 'KV cache quantization type for keys. Reduces memory for long contexts.',
+      type: "'f32' | 'f16' | 'q8_0' | 'q5_1' | 'q5_0' | 'q4_1' | 'q4_0'",
+    },
+    cacheTypeV: {
+      description: 'KV cache quantization type for values. Reduces memory for long contexts.',
+      type: "'f32' | 'f16' | 'q8_0' | 'q5_1' | 'q5_0' | 'q4_1' | 'q4_0'",
+    },
+    flashAttention: {
+      description: 'Enable flash attention for faster inference.',
+      type: 'boolean',
+    },
+    specDraftModel: {
+      description: 'URL to a draft model for speculative decoding (2-3x speedup).',
+      type: 'string',
+    },
+    specDraftNgl: {
+      description: 'GPU layers for the draft model.',
+      type: 'number',
+    },
+    specDraftNMin: {
+      description: 'Minimum draft tokens for speculative decoding.',
+      type: 'number',
+    },
+    specDraftNMax: {
+      description: 'Maximum draft tokens for speculative decoding.',
+      type: 'number',
+    },
+    specDraftPMin: {
+      description: 'Minimum probability threshold for speculative decoding.',
+      type: 'number',
+    },
+    loraAdapters: {
+      description: 'LoRA adapters to load with the model.',
+      type: 'Array<{ path: string; scale?: number }>',
+    },
+    loraInitWithoutApply: {
+      description: 'Initialize LoRA without applying (for manual control).',
+      type: 'boolean',
     },
   }}
 />
@@ -273,6 +540,164 @@ const { text } = await generateText({
 });
 ```
 
+## Structured Output / JSON Mode
+
+Force the model to output valid JSON using `providerOptions.wllama.response_format`. Three format types are supported: `text` (default), `json_object`, and `json_schema`:
+
+```typescript
+import { generateText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+// JSON object mode — model outputs valid JSON
+const { text } = await generateText({
+  model: wllama.languageModel('Qwen3-1.7B-Q4_K_M'),
+  prompt: 'List 3 colors as JSON array',
+  providerOptions: { wllama: { response_format: { type: 'json_object' } } },
+});
+
+console.log(JSON.parse(text)); // ["red", "green", "blue"]
+
+// JSON schema mode — constrain output to a specific schema
+const { text: structured } = await generateText({
+  model: wllama.languageModel('Qwen3-1.7B-Q4_K_M'),
+  prompt: 'Describe a person',
+  providerOptions: {
+    wllama: {
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'person',
+          schema: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              age: { type: 'number' },
+            },
+            required: ['name', 'age'],
+          },
+          strict: true,
+        },
+      },
+    },
+  },
+});
+```
+
+## Reranking
+
+Use `wllama.reranker()` with cross-encoder models to rerank search results by relevance. The catalog ships two reranker models (Jina Reranker v2 and BGE Reranker v2 M3):
+
+```typescript
+import { rerank } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+const { results } = await rerank({
+  model: wllama.reranker('jina-reranker-v2-base-multilingual-Q4_K_M'),
+  query: 'machine learning',
+  documents: ['AI paper', 'cooking recipe', 'deep learning tutorial'],
+});
+
+// results sorted by relevance score
+console.log(results[0]); // { index: 2, score: 0.95, text: 'deep learning tutorial' }
+```
+
+## Reasoning Mode
+
+Enable reasoning mode for DeepSeek-R1 thinking models. The model produces a chain-of-thought in `<think>` tags before generating the final answer:
+
+```typescript
+import { generateText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+const model = wllama.languageModel('DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M', {
+  reasoning: true,
+  reasoningFormat: 'deepseek',
+  reasoningBudgetTokens: 1024,
+});
+
+const { text } = await generateText({
+  model,
+  prompt: 'What is 15% of 240?',
+});
+```
+
+<Callout type="info">
+  Models with `supportsReasoning: true` in the catalog have been verified for reasoning mode. Check `WLLAMA_MODELS[modelId].supportsReasoning` to confirm support.
+</Callout>
+
+## Performance Configuration
+
+Fine-tune inference performance with KV cache quantization, flash attention, and speculative decoding:
+
+```typescript
+import { wllama } from '@localmode/wllama';
+
+const model = wllama.languageModel('Qwen3-4B-Q4_K_M', {
+  cacheTypeK: 'q4_0',   // Quantize key cache (reduces VRAM usage)
+  cacheTypeV: 'q4_0',   // Quantize value cache
+  flashAttention: true,  // Enable flash attention for faster inference
+});
+```
+
+Valid cache type values (from least to most aggressive compression): `f32`, `f16`, `q8_0`, `q5_1`, `q5_0`, `q4_1`, `q4_0`.
+
+<Callout type="tip" title="When to use KV cache quantization">
+  KV cache quantization (`cacheTypeK` / `cacheTypeV`) reduces memory usage at a small quality cost. This is especially useful for large context windows or memory-constrained devices. `q4_0` is the most aggressive; `q8_0` is a good middle ground.
+</Callout>
+
+### Speculative Decoding
+
+Use a small draft model alongside the main model for 2-3x faster inference:
+
+```typescript
+const model = wllama.languageModel('Llama-3.1-8B-Instruct-Q4_K_M', {
+  specDraftModel: 'https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/main/SmolLM2-135M-Instruct-Q4_K_M.gguf',
+  specDraftNgl: -1,    // Offload draft model to GPU
+  specDraftNMin: 2,    // Minimum draft tokens
+  specDraftNMax: 8,    // Maximum draft tokens
+  specDraftPMin: 0.4,  // Minimum probability threshold
+});
+```
+
+## Grammar Sampling
+
+Constrain model output to match a GBNF grammar. This is useful for generating structured data like email addresses, dates, or domain-specific formats:
+
+```typescript
+import { generateText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+
+const { text } = await generateText({
+  model,
+  prompt: 'Generate a valid email address',
+  providerOptions: {
+    wllama: {
+      grammar: 'root ::= [a-z]+ "@" [a-z]+ "." [a-z]+',
+    },
+  },
+});
+
+console.log(text); // e.g., "user@example.com"
+```
+
+## LoRA Adapters
+
+Load LoRA adapters alongside a base model for fine-tuned behavior:
+
+```typescript
+import { wllama } from '@localmode/wllama';
+
+const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M', {
+  loraAdapters: [
+    { path: 'https://your-cdn.com/adapters/my-lora.gguf', scale: 1.0 },
+  ],
+});
+```
+
+Set `loraInitWithoutApply: true` to load adapters without applying them immediately (for manual control).
+
 ## Model Preloading
 
 Preload models during app initialization:
@@ -293,12 +718,37 @@ if (!(await isModelCached(modelId))) {
 
 ## Model Management
 
-### Delete Cached Models
+### List and Clear Cached Models
+
+```typescript
+import { listCachedModels, clearAllModelCache, deleteModelCache } from '@localmode/wllama';
+
+// List all cached models
+const models = await listCachedModels();
+console.log(`${models.length} models cached`);
+
+// Clear all cached models at once
+await clearAllModelCache();
+```
+
+### Delete a Single Cached Model
 
 ```typescript
 import { deleteModelCache } from '@localmode/wllama';
 
 await deleteModelCache('bartowski/Llama-3.2-1B-Instruct-GGUF:Llama-3.2-1B-Instruct-Q4_K_M.gguf');
+```
+
+### Re-download a Cached Model
+
+Use `refreshModel()` to delete a corrupted cache and re-download:
+
+```typescript
+import { refreshModel } from '@localmode/wllama';
+
+await refreshModel('SmolLM2-135M-Instruct-Q4_K_M', {
+  onProgress: (p) => console.log(`${p.progress}%`),
+});
 ```
 
 ## CORS Multi-Threading
@@ -368,15 +818,35 @@ try {
   wllama works in ALL modern browsers since it only requires WebAssembly support, unlike WebLLM which requires WebGPU.
 </Callout>
 
+## Safari Compatibility
+
+wllama v3 requires the WebAssembly Memory64 proposal, which is not yet supported in Safari or iOS browsers. To support Safari/iOS, install the optional `@wllama/wllama-compat` package, which provides a compatibility shim:
+
+<Tabs items={['pnpm', 'npm', 'yarn', 'bun']}>
+  <Tab value="pnpm">```bash pnpm install @wllama/wllama-compat ```</Tab>
+  <Tab value="npm">```bash npm install @wllama/wllama-compat ```</Tab>
+  <Tab value="yarn">```bash yarn add @wllama/wllama-compat ```</Tab>
+  <Tab value="bun">```bash bun add @wllama/wllama-compat ```</Tab>
+</Tabs>
+
+<Callout type="warn" title="Safari / iOS">
+  Without `@wllama/wllama-compat`, wllama will fail to load on Safari and iOS. The compat package is an optional dependency -- only needed if your app targets those browsers.
+</Callout>
+
 ## wllama vs WebLLM
 
 | Feature        | @localmode/wllama        | @localmode/webllm        |
 | -------------- | ------------------------ | ------------------------ |
-| Runtime        | llama.cpp WASM           | MLC WebGPU               |
+| Runtime        | llama.cpp WASM + optional WebGPU | MLC WebGPU         |
 | Browser Support| All modern browsers      | WebGPU-capable only      |
-| Models         | 160K+ GGUF models        | 32 curated MLC models    |
-| Performance    | ~40-50% of WebGPU speed  | Native GPU speed         |
-| GPU Required   | No                       | Yes                      |
+| Models         | 30 curated + 160K+ GGUF  | 32 curated MLC models    |
+| Embeddings     | 3 GGUF embedding models  | --                       |
+| Reranking      | 2 cross-encoder models   | --                       |
+| Reasoning      | DeepSeek R1 (1.5B, 7B)   | --                       |
+| Tool Calling   | Yes (via providerOptions) | Yes                     |
+| Vision         | Holo2 4B/8B, Gemma 4 E2B/E4B (mmprojUrl)  | Phi 3.5 Vision           |
+| Performance    | Good (CPU), faster with WebGPU | Native GPU speed    |
+| GPU Required   | No (optional WebGPU)     | Yes                      |
 | Model Format   | GGUF (standard)          | MLC (pre-compiled)       |
 
 ## Error Handling

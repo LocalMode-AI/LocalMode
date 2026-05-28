@@ -19,10 +19,10 @@ Understanding these trade-offs is essential for architects and developers evalua
 
 | Dimension | wllama (GGUF/WASM) | Transformers.js v4 (ONNX) |
 | --- | --- | --- |
-| **Engine** | llama.cpp compiled to WebAssembly. Battle-tested C++ inference engine. WebGPU layer-offloading added in v3.1. | ONNX Runtime Web. Microsoft's cross-platform ML runtime. |
-| **Model Format** | GGUF. 178,000+ models on HuggingFace. Industry standard for local LLMs. | ONNX. 16 curated models. Requires ONNX export (not all models available). |
-| **Browser Support** | Universal: Chrome, Firefox, Safari, Edge. WASM fallback for full compatibility; optional WebGPU acceleration. | WebGPU optional for acceleration. WASM is the default; opt in with `device: 'webgpu'`. |
-| **Model Selection** | Any GGUF model works. Bring your own from HuggingFace or fine-tune your own. | Limited to models with ONNX exports. 16 curated models currently. |
+| **Engine** | llama.cpp compiled to WebAssembly via wllama v3. Battle-tested C++ inference engine with optional WebGPU layer offloading. | ONNX Runtime Web. Microsoft's cross-platform ML runtime. |
+| **Model Format** | GGUF. 180,000+ models on HuggingFace. 30 curated (25 language + 3 embedding + 2 reranker). Industry standard for local LLMs. | ONNX. 16 curated models. Requires ONNX export (not all models available). |
+| **Browser Support** | Chrome, Firefox, Edge. WASM by default; optional WebGPU acceleration via `useWebGPU` and `nGpuLayers`. V3 requires Memory64 (not yet in Safari). | WebGPU optional for acceleration. WASM is the default; opt in with `device: 'webgpu'`. |
+| **Model Selection** | Any GGUF model works. 30 curated (25 language + 3 embedding + 2 reranker). Bring your own from HuggingFace or fine-tune your own. Also supports embeddings (`wllama.embedding()`), tool calling, and vision (`mmprojUrl`). | Limited to models with ONNX exports. 16 curated LLM models currently. |
 | **GGUF Inspection** | Built-in GGUF metadata parser. Check model details, architecture, and size before downloading. | No GGUF support. Models must be in ONNX format. |
 | **Context Length** | Up to 262,144 tokens (Holo2 VLMs) / 131,072 tokens (Llama 3.x). Limited by available RAM. | Depends on model. Typically 4096-32,768 tokens. |
 | **Speed** | 5-20 tok/s on CPU via WASM. Consistent across browsers. | 10-40 tok/s with WebGPU. 3-10 tok/s WASM fallback. |
@@ -30,7 +30,7 @@ Understanding these trade-offs is essential for architects and developers evalua
 
 ## Verdict
 
-Use wllama when you need Firefox support, when you want to run custom GGUF models, when you need very long context windows, or when universal browser compatibility is required. Use Transformers.js v4 when you're already importing @localmode/transformers and want lightweight LLM capability without another provider package. For production deployments prioritizing compatibility, wllama is the safer choice. For convenience in Transformers.js-heavy apps, TJS v4 adds LLMs at zero additional bundle cost.
+Use wllama when you need Firefox support, when you want to run custom GGUF models, when you need very long context windows, or when Chrome/Firefox/Edge compatibility is sufficient (note: Safari is not supported due to the Memory64 requirement). Use Transformers.js v4 when you're already importing @localmode/transformers and want lightweight LLM capability without another provider package. For production deployments prioritizing compatibility, wllama is the safer choice. For convenience in Transformers.js-heavy apps, TJS v4 adds LLMs at zero additional bundle cost.
 
 ### Summary
 
@@ -49,7 +49,7 @@ When evaluating wllama (GGUF/WASM) against Transformers.js v4 (ONNX), consider y
 ```typescript
 import { streamText } from '@localmode/core';
 import { wllama } from '@localmode/wllama';
-// Works in every browser, including Firefox
+// Works in Chrome, Firefox, and Edge (including Firefox WASM)
 const model = wllama.languageModel('Qwen2.5-1.5B-Instruct-Q4_K_M');
 ```
 
@@ -66,7 +66,7 @@ const model = transformers.languageModel('onnx-community/Qwen3-0.6B-ONNX');
 
 ### Which is better for Firefox users?
 
-wllama has the edge here. Firefox's WebGPU support (added in Firefox 141+ on Windows, 147+ on macOS Apple Silicon) is newer and more limited than Chrome/Edge, and is not yet available on Linux or Android. wllama was designed for WASM from the start and runs llama.cpp, one of the most optimized WASM inference engines available, so it performs consistently across all Firefox versions. wllama's optional WebGPU layer (added in v3.1) is a bonus for Chrome/Edge but never required.
+wllama has the edge here. Firefox's WebGPU support (added in Firefox 141+ on Windows, 147+ on macOS Apple Silicon) is newer and more limited than Chrome/Edge, and is not yet available on Linux or Android. wllama was designed for WASM from the start and runs llama.cpp, one of the most optimized WASM inference engines available, so it performs consistently across all Firefox versions. wllama v3's optional WebGPU acceleration (`useWebGPU`, `nGpuLayers`) is a bonus for Chrome/Edge but never required.
 
 ### Can I use a custom fine-tuned model?
 
@@ -105,14 +105,14 @@ This approach gives you the best of both worlds: the privacy and cost benefits o
 
 ## Methodology
 
-Feature claims about `@localmode/wllama` and `@localmode/transformers` were verified directly against `packages/wllama/src/models.ts` and `packages/transformers/src/models.ts` in the LocalMode monorepo. Claims about wllama were checked against the ngxson/wllama GitHub repository and release notes (v3.1.1, May 2026). Claims about Transformers.js were verified against the official HuggingFace docs and the v4 launch blog post. The GGUF model count on HuggingFace was checked at `huggingface.co/models?library=gguf` at time of writing (178,501 as of May 2026). Speed ranges and context length limits are sourced directly from the curated model catalog entries in the codebase. Where exact benchmark figures were unavailable, claims were softened to approximate ranges.
+Feature claims about `@localmode/wllama` and `@localmode/transformers` were verified directly against `packages/wllama/src/models.ts` and `packages/transformers/src/models.ts` in the LocalMode monorepo. Claims about wllama were checked against the ngxson/wllama GitHub repository and its release notes. Claims about Transformers.js were verified against the official HuggingFace docs and the v4 launch blog post. The GGUF model count on HuggingFace was checked at `huggingface.co/models?library=gguf` at time of writing (~180,170 as of May 2026). Speed ranges and context length limits are sourced directly from the curated model catalog entries in the codebase. Where exact benchmark figures were unavailable, claims were softened to approximate ranges.
 
 ## Sources
 
 - [LocalMode `@localmode/wllama` package - `packages/wllama/src/models.ts`](https://github.com/LocalMode-AI/LocalMode)
 - [LocalMode `@localmode/transformers` package - `packages/transformers/src/models.ts`](https://github.com/LocalMode-AI/LocalMode)
 - [wllama GitHub repository (ngxson/wllama)](https://github.com/ngxson/wllama)
-- [wllama v3.1.0 release notes - WebGPU support added](https://github.com/ngxson/wllama/releases/tag/3.1.0)
+- [wllama releases - ngxson/wllama](https://github.com/ngxson/wllama/releases)
 - [Transformers.js v4 launch blog post - HuggingFace](https://huggingface.co/blog/transformersjs-v4)
 - [Transformers.js official documentation](https://huggingface.co/docs/transformers.js/en/index)
-- [HuggingFace GGUF model library (178,501 models as of May 2026)](https://huggingface.co/models?library=gguf)
+- [HuggingFace GGUF model library (~180,170 models as of May 2026)](https://huggingface.co/models?library=gguf)

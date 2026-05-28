@@ -13,6 +13,11 @@ import {
   Sparkles,
   Zap,
   FileText,
+  Wrench,
+  Eye,
+  Box,
+  Brain,
+  ArrowUpDown,
 } from 'lucide-react';
 import { Button, Input } from './ui';
 import { cn, formatParams } from '../_lib/utils';
@@ -89,6 +94,36 @@ function ModelCatalogCard({
           <FileText className="w-3 h-3" />
           {entry.contextLength.toLocaleString()} ctx
         </span>
+        {entry.supportsToolCalling && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-poster-accent-teal/10 text-poster-accent-teal">
+            <Wrench className="w-2.5 h-2.5" />
+            Tools
+          </span>
+        )}
+        {entry.vision && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-poster-accent-pink/10 text-poster-accent-pink">
+            <Eye className="w-2.5 h-2.5" />
+            Vision
+          </span>
+        )}
+        {entry.isEmbeddingModel && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-poster-accent-purple/10 text-poster-accent-purple">
+            <Box className="w-2.5 h-2.5" />
+            Embedding
+          </span>
+        )}
+        {entry.isRerankerModel && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-poster-accent-orange/10 text-poster-accent-orange">
+            <ArrowUpDown className="w-2.5 h-2.5" />
+            Reranking
+          </span>
+        )}
+        {entry.supportsReasoning && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-yellow-500/10 text-yellow-500">
+            <Brain className="w-2.5 h-2.5" />
+            Reasoning
+          </span>
+        )}
       </div>
     </button>
   );

@@ -41,7 +41,7 @@ LocalMode ships four LLM providers. All implement the same `LanguageModel` inter
   const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
   const result = await streamText({ model, prompt: 'Hello!' });
   ```
-  Runs llama.cpp via WebAssembly. 18 curated default models plus 160K+ GGUF models from HuggingFace. Works in all modern browsers — no GPU required.
+  Runs llama.cpp via WebAssembly. 30 curated models (25 language + 3 embedding + 2 reranker) plus 160K+ GGUF models from HuggingFace. True streaming, structured output (JSON mode), reasoning mode, grammar sampling, optional WebGPU acceleration, tool calling, vision support, and LoRA adapters. Works in all modern browsers.
   </Tab>
   <Tab value="Transformers (ONNX)">
   ```typescript
@@ -69,13 +69,15 @@ LocalMode ships four LLM providers. All implement the same `LanguageModel` inter
 
 | | WebLLM | wllama | Transformers | LiteRT |
 |---|---|---|---|---|
-| **Runtime** | MLC WebGPU | llama.cpp WASM | Transformers.js v4 ONNX | LiteRT-LM (Google) |
-| **GPU Required** | Yes (WebGPU) | No | No (auto-fallback to WASM) | WebGPU for Gemma 4; Qwen3 0.6B runs on CPU WASM too |
+| **Runtime** | MLC WebGPU | llama.cpp WASM + optional WebGPU | Transformers.js v4 ONNX | LiteRT-LM (Google) |
+| **GPU Required** | Yes (WebGPU) | No (optional WebGPU acceleration) | No (auto-fallback to WASM) | WebGPU for Gemma 4; Qwen3 0.6B runs on CPU WASM too |
 | **Browser Support** | Chrome/Edge 113+, Safari 26+, Firefox 141+ | All modern browsers | Chrome/Edge 113+, Safari 26+ (WASM everywhere) | WebGPU-capable browsers (Chrome/Edge 113+, Safari 26+, Firefox 141+) |
-| **Model Catalog** | 32 curated MLC models | 18 curated + 160K+ GGUF | 16 curated ONNX models | 3 verified models |
+| **Model Catalog** | 32 curated MLC models | 30 curated (25 language + 3 embedding + 2 reranker) + 160K+ GGUF | 16 curated ONNX models | 3 verified models |
 | **Model Format** | MLC (pre-compiled) | GGUF (standard) | ONNX | `.litertlm` (Google) |
-| **Multimodal** | Phi 3.5 Vision | Holo2 4B/8B (vision) | 5 vision variants (Qwen3.5 + Gemma 4) | Text-only |
-| **Best For** | Maximum speed on GPU-capable devices | Universal compatibility, huge model selection | Broad ONNX ecosystem, WebGPU + WASM flexibility | Google's officially-supported on-device pipeline (Gemma 4) |
+| **Embeddings** | -- | 3 GGUF embedding models | Yes (many models) | -- |
+| **Tool Calling** | Yes | Yes (via providerOptions) | -- | -- |
+| **Multimodal** | Phi 3.5 Vision | Holo2 4B/8B, Gemma 4 E2B/E4B (vision via mmprojUrl) | 5 vision variants (Qwen3.5 + Gemma 4) | Text-only |
+| **Best For** | Maximum speed on GPU-capable devices | Universal compatibility, embeddings, huge model selection | Broad ONNX ecosystem, WebGPU + WASM flexibility | Google's officially-supported on-device pipeline (Gemma 4) |
 | **Status** | Stable | Stable | Stable | Early preview (`@litert-lm/core@^0.12.1`) |
 
 ### Automatic Fallback

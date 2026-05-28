@@ -34,7 +34,7 @@ LocalMode is a monorepo of packages for building AI-powered applications that ru
 | [`@localmode/ai-sdk`](./packages/ai-sdk/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/ai-sdk.svg)](https://www.npmjs.com/package/@localmode/ai-sdk) | Vercel AI SDK provider for local models |
 | [`@localmode/transformers`](./packages/transformers/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/transformers.svg)](https://www.npmjs.com/package/@localmode/transformers) | HuggingFace Transformers.js provider -- 26 model factories covering embeddings, classification, vision, audio, OCR, multimodal (CLIP), and LLM inference via ONNX (Qwen3.5 vision support) |
 | [`@localmode/webllm`](./packages/webllm/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/webllm.svg)](https://www.npmjs.com/package/@localmode/webllm) | WebLLM provider for LLM inference via WebGPU -- 32 curated models including DeepSeek-R1, Qwen3, Llama 3.2, Phi 3.5 Vision |
-| [`@localmode/wllama`](./packages/wllama/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/wllama.svg)](https://www.npmjs.com/package/@localmode/wllama) | GGUF model provider via llama.cpp WASM -- curated catalog + 160K+ HuggingFace models, GGUF metadata inspection, universal browser support |
+| [`@localmode/wllama`](./packages/wllama/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/wllama.svg)](https://www.npmjs.com/package/@localmode/wllama) | GGUF model provider via llama.cpp WASM -- 30 curated models (text, vision, embeddings, reranking), true streaming, structured output (JSON mode), reasoning mode, WebGPU acceleration, tool calling, grammar sampling (GBNF), LoRA adapters, model management, 160K+ HuggingFace models, universal browser support |
 | [`@localmode/litert`](./packages/litert/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/litert.svg)](https://www.npmjs.com/package/@localmode/litert) | Google LiteRT-LM provider (`.litertlm` models, WebGPU + CPU WASM fallback). Text-only, early preview. Catalog ships Gemma 4 E2B/E4B and Qwen3 0.6B, all verified end-to-end. Gated Gemma 3n / Gemma 3 1B loadable via custom URL. |
 | [`@localmode/mediapipe`](./packages/mediapipe/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/mediapipe.svg)](https://www.npmjs.com/package/@localmode/mediapipe) | Google MediaPipe Tasks provider -- real-time hand/pose/face landmark tracking, gesture recognition, image & audio classification, language detection. WASM + WebGL, all browsers. |
 | [`@localmode/chrome-ai`](./packages/chrome-ai/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/chrome-ai.svg)](https://www.npmjs.com/package/@localmode/chrome-ai) | Chrome Built-in AI provider -- zero-download inference via Gemini Nano with automatic fallback |
@@ -330,7 +330,8 @@ See LocalMode in action at [localmode.ai](https://localmode.ai) -- 34 apps showc
 │  @localmode/transformers         HuggingFace Transformers.js,            │
 │                                  26 model factories (ONNX)               │
 │  @localmode/webllm               WebGPU LLM inference, 32 models         │
-│  @localmode/wllama               GGUF via llama.cpp WASM, 160K+          │
+│  @localmode/wllama               GGUF via llama.cpp WASM, 30 curated     │
+│                                  + 160K+, streaming, JSON mode, rerank  │
 │  @localmode/litert               Google LiteRT-LM, .litertlm models      │
 │  @localmode/mediapipe            Google MediaPipe — landmarks, gestures  │
 │  @localmode/chrome-ai            Gemini Nano, zero-download              │
@@ -357,12 +358,17 @@ See LocalMode in action at [localmode.ai](https://localmode.ai) -- 34 apps showc
 
 | | WebLLM | Wllama | Transformers.js | LiteRT |
 |-|--------|--------|-----------------|--------|
-| **Runtime** | WebGPU | WASM (llama.cpp) | ONNX Runtime | LiteRT-LM (Google) |
-| **Models** | 32 curated (MLC) | 160K+ GGUF from HuggingFace | 16 ONNX (TJS v4) | 3 verified (.litertlm) |
-| **Speed** | Fastest (GPU) | Good (CPU) | Good (CPU/GPU) | Fast (WebGPU/CPU) |
-| **Vision** | Phi 3.5 Vision | Holo2 (Qwen3-VL) | Qwen3.5, Gemma 4 | -- |
+| **Runtime** | WebGPU | WASM (llama.cpp) + optional WebGPU | ONNX Runtime | LiteRT-LM (Google) |
+| **Models** | 32 curated (MLC) | 30 curated + 160K+ GGUF from HuggingFace | 16 ONNX (TJS v4) | 3 verified (.litertlm) |
+| **Speed** | Fastest (GPU) | Good (CPU), faster with WebGPU | Good (CPU/GPU) | Fast (WebGPU/CPU) |
+| **Embeddings** | -- | 3 GGUF embedding models | Yes (many models) | -- |
+| **Reranking** | -- | 2 reranker models | Yes (cross-encoder) | -- |
+| **Structured Output** | Yes | Yes (JSON mode / grammar) | -- | -- |
+| **Reasoning** | -- | Yes (thinking mode) | -- | -- |
+| **Vision** | Phi 3.5 Vision | Holo2 4B/8B, Gemma 4 E2B/E4B | Qwen3.5, Gemma 4 | -- |
+| **Tool Calling** | Yes | Yes (via providerOptions) | -- | -- |
 | **Browser Support** | Chrome/Edge 113+ | All modern browsers | All modern browsers | Chrome/Edge 113+ |
-| **Best For** | Maximum performance | Universal compatibility, model variety | Multi-task (embeddings + LLM in one package) | Google on-device models |
+| **Best For** | Maximum performance | Universal compatibility, model variety, reranking | Multi-task (embeddings + LLM in one package) | Google on-device models |
 
 ---
 
@@ -417,7 +423,7 @@ packages/
   ai-sdk/          # Vercel AI SDK provider
   transformers/    # HuggingFace Transformers.js provider (26 model factories)
   webllm/          # WebLLM provider (32 curated WebGPU models)
-  wllama/          # Wllama provider (GGUF via llama.cpp WASM, 160K+ models)
+  wllama/          # Wllama provider (GGUF via llama.cpp WASM, 30 curated + 160K+ models, streaming, JSON mode, reranking, reasoning, LoRA)
   litert/          # LiteRT-LM provider (Google's WebGPU/WASM, .litertlm models)
   mediapipe/       # MediaPipe Tasks provider (landmarks, gestures, vision/audio/text)
   chrome-ai/       # Chrome Built-in AI provider (Gemini Nano)

@@ -14,7 +14,7 @@ This is not a collection of toy demos. These are complete applications - with fi
 This post is a guided tour through all 34 apps, organized by category. Each entry includes what the app does, which model powers it, how large the download is, and a direct link to try it.
 
 <Callout type="info" title="By the numbers">
-  **34** demo apps. **25+** distinct ML models from HuggingFace. **178,000+** GGUF models accessible via the explorer. **15** `@localmode/*` packages. Four inference backends: WebLLM (WebGPU), Transformers.js (ONNX), wllama (WASM), and LiteRT. Total model sizes range from 0 MB (Chrome AI, device detection) to 4.9 GB (8B-parameter LLMs).
+  **34** demo apps. **25+** distinct ML models from HuggingFace. **180,000+** GGUF models accessible via the explorer. **15** `@localmode/*` packages. Four inference backends: WebLLM (WebGPU), Transformers.js (ONNX), wllama (WASM), and LiteRT. Total model sizes range from 0 MB (Chrome AI, device detection) to 5.41 GB (8B-parameter LLMs).
 </Callout>
 
 ---
@@ -23,15 +23,15 @@ This post is a guided tour through all 34 apps, organized by category. Each entr
 
 ### 1.1 LLM Chat
 
-The flagship demo. A full-featured chat interface with streaming responses, semantic caching, conversation persistence, and vision support (attach images and ask questions about them). What makes it unusual is the model selector: it surfaces models from four different inference backends - WebLLM (MLC WebGPU), Transformers.js v4 (ONNX WebGPU), wllama (GGUF WASM), and LiteRT - all behind the same `LanguageModel` interface. Pick a tiny 78 MB model for quick answers or a 4.9 GB 8B-parameter model for deeper reasoning. Agent mode is available on models above 500 MB, enabling tool-calling with a built-in knowledge base, calculator, and summarizer.
+The flagship demo. A full-featured chat interface with streaming responses, semantic caching, conversation persistence, and vision support (attach images and ask questions about them). What makes it unusual is the model selector: it surfaces models from four different inference backends - WebLLM (MLC WebGPU), Transformers.js v4 (ONNX WebGPU), wllama (GGUF WASM), and LiteRT - all behind the same `LanguageModel` interface. Pick a tiny 78 MB model for quick answers or a 5.41 GB 8B-parameter model for deeper reasoning. Agent mode is available on models above 500 MB, enabling tool-calling with a built-in knowledge base, calculator, and summarizer.
 
-**Models:** 60+ models across four backends (Llama 3.2, Qwen 3, Phi 3.5, Mistral, DeepSeek R1, and more) | **Size:** 78 MB -- 4.9 GB | [Try LLM Chat](https://localmode.ai/llm-chat)
+**Models:** 76 models across four backends (Llama 3.2, Qwen 3, Phi 3.5, Mistral, DeepSeek R1, Gemma 4, and more) | **Size:** 78 MB -- 5.41 GB | [Try LLM Chat](https://localmode.ai/llm-chat)
 
 ### 1.2 GGUF Explorer
 
-Browse, inspect, and chat with any GGUF model from HuggingFace - over 178,000 of them. Paste a HuggingFace URL or shorthand like `bartowski/Llama-3.2-1B-Instruct-GGUF:Q4_K_M.gguf`, and the app parses the GGUF metadata header (architecture, quantization type, context length, vocabulary size), runs a browser compatibility check (RAM estimate, WebAssembly support, cross-origin isolation status), and lets you chat with the model via wllama's WASM inference engine. Think of it as a browser-native model playground for the entire GGUF ecosystem.
+Browse, inspect, and chat with any GGUF model from HuggingFace - over 180,000 of them. Paste a HuggingFace URL or shorthand like `bartowski/Llama-3.2-1B-Instruct-GGUF:Q4_K_M.gguf`, and the app parses the GGUF metadata header (architecture, quantization type, context length, vocabulary size), runs a browser compatibility check (RAM estimate, WebAssembly support, cross-origin isolation status), and lets you chat with the model via wllama's WASM inference engine. Think of it as a browser-native model playground for the entire GGUF ecosystem.
 
-**Models:** Any GGUF model on HuggingFace + 18 curated defaults | **Size:** 105 MB -- 4.9 GB | [Try GGUF Explorer](https://localmode.ai/gguf-explorer)
+**Models:** Any GGUF model on HuggingFace + 30 curated defaults (25 language + 3 embedding + 2 reranker) | **Size:** 35 MB -- 5.41 GB | [Try GGUF Explorer](https://localmode.ai/gguf-explorer)
 
 ### 1.3 Research Agent
 
@@ -262,7 +262,7 @@ Every one of these 34 apps is built on the same stack:
 - **`@localmode/core`** provides the zero-dependency runtime: `embed()`, `classify()`, `generateText()`, `generateObject()`, `createVectorDB()`, `createAgent()`, `runAgent()`, `encrypt()`, `evaluateModel()`, `recommendModels()`, and dozens more functions. No external dependencies.
 - **`@localmode/transformers`** wraps HuggingFace Transformers.js for 27 model types (embeddings, classification, NER, translation, summarization, vision, audio, OCR, and more).
 - **`@localmode/webllm`** provides WebGPU-accelerated LLM inference with 32 curated chat models from Llama, Qwen, Phi, Mistral, and DeepSeek.
-- **`@localmode/wllama`** runs any GGUF model via llama.cpp compiled to WebAssembly - 178,000+ models, universal browser support, no WebGPU required.
+- **`@localmode/wllama`** runs any GGUF model via llama.cpp compiled to WebAssembly - 180,000+ models, universal browser support, no WebGPU required.
 - **`@localmode/react`** provides 56 React hooks that manage loading states, cancellation, error handling, and streaming for every operation.
 - **`@localmode/langchain`** adapts local models to LangChain.js interfaces for drop-in RAG pipelines.
 - **`@localmode/pdfjs`**, **`@localmode/chrome-ai`**, **`@localmode/devtools`**, **`@localmode/litert`**, **`@localmode/mediapipe`**, **`@localmode/ai-sdk`**, **`@localmode/dexie`**, **`@localmode/idb`**, and **`@localmode/localforage`** round out the ecosystem with PDF extraction, Chrome Built-in AI, observability, on-device LiteRT inference, MediaPipe vision/audio tasks, Vercel AI SDK integration, and storage adapters.
@@ -300,7 +300,7 @@ Here is a quick reference of every model used across the 34 apps, sorted by down
 | Llama 3.2 1B | 712 MB | LLM Chat |
 | Phi 3.5 Mini | 2.1 GB | LLM Chat |
 | Donut Base (DocVQA) | ~800 MB | Invoice Q&A |
-| Various 3B--8B models | 1.7--4.9 GB | LLM Chat, GGUF Explorer, Data Extractor |
+| Various 3B--8B models | 1.7--5.41 GB | LLM Chat, GGUF Explorer, Data Extractor |
 
 Every model is downloaded once from HuggingFace and cached in IndexedDB or the Cache API. Subsequent visits load from disk in seconds.
 
@@ -323,13 +323,13 @@ Open `http://localhost:3000` and all 34 apps are available locally. You can also
 
 ## Methodology
 
-All app names, counts, model IDs, and model sizes were verified against the `apps/showcase-nextjs/src/app/(apps)/` directory and each app's `_lib/constants.ts`. Package counts were verified against the `packages/` directory. React hook counts were verified against `packages/react/src/index.ts`. WebLLM and wllama model counts were verified against `packages/webllm/src/models.ts` and `packages/wllama/src/models.ts` respectively. The GGUF model count was verified against [huggingface.co/models?library=gguf](https://huggingface.co/models?library=gguf) (178,541 as of May 2026). Moonshine Base size was cross-referenced against the app's own constants (~237 MB).
+All app names, counts, model IDs, and model sizes were verified against the `apps/showcase-nextjs/src/app/(apps)/` directory and each app's `_lib/constants.ts`. Package counts were verified against the `packages/` directory. React hook counts were verified against `packages/react/src/index.ts`. WebLLM and wllama model counts were verified against `packages/webllm/src/models.ts` and `packages/wllama/src/models.ts` respectively. The GGUF model count was verified against [huggingface.co/models?library=gguf](https://huggingface.co/models?library=gguf) (180,000+ as of May 2026). Moonshine Base size was cross-referenced against the app's own constants (~237 MB).
 
 ## Sources
 
 - [LocalMode showcase source - app directories](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/%28apps%29) -- ground truth for app names and count (34 apps)
 - [LocalMode documentation](https://localmode.dev/docs) -- full API reference for all packages
-- [HuggingFace GGUF models filter](https://huggingface.co/models?library=gguf) -- live count of GGUF models (178,541 as of May 2026)
+- [HuggingFace GGUF models filter](https://huggingface.co/models?library=gguf) -- live count of GGUF models (180,000+ as of May 2026)
 - [Xenova/detr-resnet-50 model card](https://huggingface.co/Xenova/detr-resnet-50) -- object detection model used in Object Detector app
 - [onnx-community/moonshine-base-ONNX file tree](https://huggingface.co/onnx-community/moonshine-base-ONNX/tree/main/onnx) -- ONNX file sizes for Moonshine Base
 - [Xenova/donut-base-finetuned-docvqa model card](https://huggingface.co/Xenova/donut-base-finetuned-docvqa) -- model used in Invoice Q&A app

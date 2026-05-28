@@ -11,14 +11,19 @@
 // Provider
 export { createWllama, wllama } from './provider.js';
 
-// Model implementation
+// Model implementations
 export { WllamaLanguageModel, createLanguageModel } from './model.js';
+export { WllamaEmbeddingModel } from './embedding.js';
+export { WllamaRerankerModel, createRerankerModel } from './reranker.js';
 
 // Utilities
 export {
   isModelCached,
   preloadModel,
   deleteModelCache,
+  listCachedModels,
+  clearAllModelCache,
+  refreshModel,
   isCrossOriginIsolated,
   resolveModelUrl,
 } from './utils.js';
@@ -34,6 +39,9 @@ export type {
   WllamaProvider,
   WllamaProviderSettings,
   WllamaModelSettings,
+  WllamaEmbeddingSettings,
+  WllamaRerankerSettings,
+  WllamaResponseFormat,
   WllamaLoadProgress,
 } from './types.js';
 

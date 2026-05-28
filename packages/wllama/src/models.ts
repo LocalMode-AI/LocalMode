@@ -37,22 +37,36 @@ export interface WllamaModelEntry {
   /** Approximate parameter count */
   parameterCount: number;
 
-  /**
-   * Set to `true` for vision-language GGUFs (multimodal text+image).
-   *
-   * Mirrors the `vision: true` convention used by `WEBLLM_MODELS`. Optional —
-   * omitted (or `false`) for text-only models. Note: GGUF VLMs typically also
-   * require a separate `mmproj` projector file at runtime; this catalog entry
-   * advertises the capability but does not currently encode the projector URL.
-   */
+  /** Set to `true` for vision-language GGUFs (multimodal text+image). */
   vision?: boolean;
+
+  /** URL to the vision projection model (mmproj GGUF). Required for vision models. */
+  mmprojUrl?: string;
+
+  /** Whether this model supports tool calling via OAI-compatible tools API. */
+  supportsToolCalling?: boolean;
+
+  /** Set to `true` for embedding-only models (used with wllama.embedding()). */
+  isEmbeddingModel?: boolean;
+
+  /** Embedding vector dimensions (for embedding models). */
+  dimensions?: number;
+
+  /** Recommended number of GPU layers for this model. */
+  nGpuLayers?: number;
+
+  /** Set to `true` for reranker/cross-encoder models (used with wllama.reranker()). */
+  isRerankerModel?: boolean;
+
+  /** Set to `true` for reasoning/thinking models (e.g., DeepSeek-R1). */
+  supportsReasoning?: boolean;
 }
 
 /**
  * Popular GGUF models curated for browser use.
  *
  * These are Q4_K_M quantized models that balance quality and size for browser inference.
- * All URLs point to HuggingFace repositories. Compatible with wllama v2.3.7 / llama.cpp b7179.
+ * All URLs point to HuggingFace repositories. Compatible with wllama v3.
  *
  */
 export const WLLAMA_MODELS = {
@@ -89,6 +103,7 @@ export const WLLAMA_MODELS = {
     architecture: 'qwen2',
     quantization: 'Q4_K_M',
     parameterCount: 500_000_000,
+    supportsToolCalling: true,
   },
 
   // === SMALL MODELS (500MB - 1GB) - Good balance ===
@@ -113,6 +128,7 @@ export const WLLAMA_MODELS = {
     architecture: 'llama',
     quantization: 'Q4_K_M',
     parameterCount: 1_236_000_000,
+    supportsToolCalling: true,
   },
   'Qwen2.5-1.5B-Instruct-Q4_K_M': {
     name: 'Qwen 2.5 1.5B',
@@ -124,6 +140,7 @@ export const WLLAMA_MODELS = {
     architecture: 'qwen2',
     quantization: 'Q4_K_M',
     parameterCount: 1_500_000_000,
+    supportsToolCalling: true,
   },
 
   // === MEDIUM MODELS (1GB - 2GB) - Better quality ===
@@ -137,6 +154,7 @@ export const WLLAMA_MODELS = {
     architecture: 'qwen2',
     quantization: 'Q4_K_M',
     parameterCount: 1_500_000_000,
+    supportsToolCalling: true,
   },
   'SmolLM2-1.7B-Instruct-Q4_K_M': {
     name: 'SmolLM2 1.7B',
@@ -181,6 +199,7 @@ export const WLLAMA_MODELS = {
     architecture: 'llama',
     quantization: 'Q4_K_M',
     parameterCount: 3_213_000_000,
+    supportsToolCalling: true,
   },
   'Qwen2.5-3B-Instruct-Q4_K_M': {
     name: 'Qwen 2.5 3B',
@@ -192,6 +211,7 @@ export const WLLAMA_MODELS = {
     architecture: 'qwen2',
     quantization: 'Q4_K_M',
     parameterCount: 3_000_000_000,
+    supportsToolCalling: true,
   },
 
   // === LARGE MODELS (2GB+) - Best quality ===
@@ -205,6 +225,7 @@ export const WLLAMA_MODELS = {
     architecture: 'phi4',
     quantization: 'Q4_K_M',
     parameterCount: 3_800_000_000,
+    supportsToolCalling: true,
   },
   'Qwen2.5-Coder-7B-Instruct-Q4_K_M': {
     name: 'Qwen 2.5 Coder 7B',
@@ -216,6 +237,7 @@ export const WLLAMA_MODELS = {
     architecture: 'qwen2',
     quantization: 'Q4_K_M',
     parameterCount: 7_000_000_000,
+    supportsToolCalling: true,
   },
   'Mistral-7B-Instruct-v0.3-Q4_K_M': {
     name: 'Mistral 7B v0.3',
@@ -240,6 +262,100 @@ export const WLLAMA_MODELS = {
     parameterCount: 8_030_000_000,
   },
 
+  // === QWEN 3 ===
+  'Qwen3-0.6B-Q4_K_M': {
+    name: 'Qwen3 0.6B',
+    contextLength: 40960,
+    sizeBytes: 530 * 1024 * 1024,
+    size: '530MB',
+    description: 'Qwen3 0.6B, fast multilingual reasoning with hybrid thinking',
+    url: 'https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf',
+    architecture: 'qwen3',
+    quantization: 'Q4_K_M',
+    parameterCount: 600_000_000,
+    supportsToolCalling: true,
+  },
+  'Qwen3-1.7B-Q4_K_M': {
+    name: 'Qwen3 1.7B',
+    contextLength: 40960,
+    sizeBytes: 1.2 * 1024 * 1024 * 1024,
+    size: '1.2GB',
+    description: 'Qwen3 1.7B, strong multilingual reasoning with hybrid thinking',
+    url: 'https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/main/qwen3-1.7b-q4_k_m.gguf',
+    architecture: 'qwen3',
+    quantization: 'Q4_K_M',
+    parameterCount: 1_700_000_000,
+    supportsToolCalling: true,
+  },
+  'Qwen3-4B-Q4_K_M': {
+    name: 'Qwen3 4B',
+    contextLength: 40960,
+    sizeBytes: 2.7 * 1024 * 1024 * 1024,
+    size: '2.7GB',
+    description: 'Qwen3 4B, excellent multilingual reasoning and code generation',
+    url: 'https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf',
+    architecture: 'qwen3',
+    quantization: 'Q4_K_M',
+    parameterCount: 4_000_000_000,
+    supportsToolCalling: true,
+  },
+
+  // === DEEPSEEK R1 DISTILL (reasoning models) ===
+  'DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M': {
+    name: 'DeepSeek R1 1.5B',
+    contextLength: 131072,
+    sizeBytes: 1.1 * 1024 * 1024 * 1024,
+    size: '1.1GB',
+    description: 'DeepSeek R1 distilled to Qwen 1.5B, reasoning/thinking model',
+    url: 'https://huggingface.co/bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf',
+    architecture: 'qwen2',
+    quantization: 'Q4_K_M',
+    parameterCount: 1_500_000_000,
+    supportsReasoning: true,
+  },
+  'DeepSeek-R1-Distill-Qwen-7B-Q4_K_M': {
+    name: 'DeepSeek R1 7B',
+    contextLength: 131072,
+    sizeBytes: 4.7 * 1024 * 1024 * 1024,
+    size: '4.7GB',
+    description: 'DeepSeek R1 distilled to Qwen 7B, strong reasoning/thinking model',
+    url: 'https://huggingface.co/bartowski/DeepSeek-R1-Distill-Qwen-7B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf',
+    architecture: 'qwen2',
+    quantization: 'Q4_K_M',
+    parameterCount: 7_000_000_000,
+    supportsReasoning: true,
+  },
+
+  // === GEMMA 4 (PLE architecture — effective params < total params) ===
+  'Gemma-4-E2B-IT-Q4_K_M': {
+    name: 'Gemma 4 E2B IT',
+    contextLength: 131072,
+    sizeBytes: 3.46 * 1024 * 1024 * 1024,
+    size: '3.46GB',
+    description: 'Google Gemma 4 E2B, 2.3B effective params (PLE), strong multilingual + reasoning + vision',
+    url: 'https://huggingface.co/bartowski/google_gemma-4-E2B-it-GGUF/resolve/main/google_gemma-4-E2B-it-Q4_K_M.gguf',
+    architecture: 'gemma4',
+    quantization: 'Q4_K_M',
+    parameterCount: 5_100_000_000,
+    vision: true,
+    mmprojUrl: 'https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/mmproj-gemma-4-E2B-it-Q8_0.gguf',
+    supportsToolCalling: true,
+  },
+  'Gemma-4-E4B-IT-Q4_K_M': {
+    name: 'Gemma 4 E4B IT',
+    contextLength: 131072,
+    sizeBytes: 5.41 * 1024 * 1024 * 1024,
+    size: '5.41GB',
+    description: 'Google Gemma 4 E4B, ~4B effective params (PLE), top quality at its size class + vision',
+    url: 'https://huggingface.co/bartowski/google_gemma-4-E4B-it-GGUF/resolve/main/google_gemma-4-E4B-it-Q4_K_M.gguf',
+    architecture: 'gemma4',
+    quantization: 'Q4_K_M',
+    parameterCount: 8_000_000_000,
+    vision: true,
+    mmprojUrl: 'https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/mmproj-gemma-4-E4B-it-Q8_0.gguf',
+    supportsToolCalling: true,
+  },
+
   // === VISION-LANGUAGE MODELS (UI grounding) ===
   'Holo2-4B-Q4_K_M': {
     name: 'Holo2 4B',
@@ -253,11 +369,12 @@ export const WLLAMA_MODELS = {
     quantization: 'Q4_K_M',
     parameterCount: 4_000_000_000,
     vision: true,
+    mmprojUrl: 'https://huggingface.co/mradermacher/Holo2-4B-GGUF/resolve/main/Holo2-4B-mmproj-f16.gguf',
   },
   'Holo2-8B-Q4_K_M': {
     name: 'Holo2 8B',
-    contextLength: 262144, // 256K native (Qwen3-VL family)
-    sizeBytes: 5.1 * 1024 * 1024 * 1024, // ~5.1GB (upper bound of browser memory budget)
+    contextLength: 262144,
+    sizeBytes: 5.1 * 1024 * 1024 * 1024,
     size: '5.1GB',
     description:
       'Hcompany Holo2 8B premium UI-grounding VLM, vision + text. Highest-quality grounding for capable devices.',
@@ -266,6 +383,74 @@ export const WLLAMA_MODELS = {
     quantization: 'Q4_K_M',
     parameterCount: 8_000_000_000,
     vision: true,
+    mmprojUrl: 'https://huggingface.co/mradermacher/Holo2-8B-GGUF/resolve/main/Holo2-8B-mmproj-f16.gguf',
+  },
+
+  // === EMBEDDING MODELS ===
+  'nomic-embed-text-v1.5-Q4_K_M': {
+    name: 'Nomic Embed Text v1.5',
+    contextLength: 8192,
+    sizeBytes: 78 * 1024 * 1024,
+    size: '78MB',
+    description: 'Nomic Embed Text v1.5, high-quality text embeddings for semantic search',
+    url: 'https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.Q4_K_M.gguf',
+    architecture: 'nomic-bert',
+    quantization: 'Q4_K_M',
+    parameterCount: 137_000_000,
+    isEmbeddingModel: true,
+    dimensions: 768,
+  },
+  'mxbai-embed-large-v1-Q4_K_M': {
+    name: 'MxBai Embed Large v1',
+    contextLength: 512,
+    sizeBytes: 197 * 1024 * 1024,
+    size: '197MB',
+    description: 'MxBai Embed Large v1, top-quality English embeddings',
+    url: 'https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1-GGUF/resolve/main/mxbai-embed-large-v1.Q4_K_M.gguf',
+    architecture: 'bert',
+    quantization: 'Q4_K_M',
+    parameterCount: 335_000_000,
+    isEmbeddingModel: true,
+    dimensions: 1024,
+  },
+  'bge-small-en-v1.5-Q8_0': {
+    name: 'BGE Small EN v1.5',
+    contextLength: 512,
+    sizeBytes: 35 * 1024 * 1024,
+    size: '35MB',
+    description: 'BAAI BGE Small, lightweight English embeddings, great for on-device semantic search',
+    url: 'https://huggingface.co/CompendiumLabs/bge-small-en-v1.5-gguf/resolve/main/bge-small-en-v1.5-q8_0.gguf',
+    architecture: 'bert',
+    quantization: 'Q8_0',
+    parameterCount: 33_000_000,
+    isEmbeddingModel: true,
+    dimensions: 384,
+  },
+
+  // === RERANKER MODELS ===
+  'jina-reranker-v2-base-multilingual-Q4_K_M': {
+    name: 'Jina Reranker v2',
+    contextLength: 1024,
+    sizeBytes: 163 * 1024 * 1024,
+    size: '163MB',
+    description: 'Jina Reranker v2 multilingual, high-quality cross-encoder reranking for search',
+    url: 'https://huggingface.co/gpustack/jina-reranker-v2-base-multilingual-GGUF/resolve/main/jina-reranker-v2-base-multilingual-Q4_K_M.gguf',
+    architecture: 'xlm-roberta',
+    quantization: 'Q4_K_M',
+    parameterCount: 278_000_000,
+    isRerankerModel: true,
+  },
+  'bge-reranker-v2-m3-Q4_K_M': {
+    name: 'BGE Reranker v2 M3',
+    contextLength: 8192,
+    sizeBytes: 218 * 1024 * 1024,
+    size: '218MB',
+    description: 'BAAI BGE Reranker v2 M3, multilingual cross-encoder reranking with long context',
+    url: 'https://huggingface.co/gpustack/bge-reranker-v2-m3-GGUF/resolve/main/bge-reranker-v2-m3-Q4_K_M.gguf',
+    architecture: 'xlm-roberta',
+    quantization: 'Q4_K_M',
+    parameterCount: 568_000_000,
+    isRerankerModel: true,
   },
 } as const;
 

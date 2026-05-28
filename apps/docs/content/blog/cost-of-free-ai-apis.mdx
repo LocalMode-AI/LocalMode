@@ -7,9 +7,9 @@ date: 2026-01-30
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-The pitch is seductive: sign up, grab an API key, call `fetch()`, get intelligence back. OpenAI embeddings at $0.02 per million tokens. GPT-4o at $2.50 per million input tokens. Whisper at $0.006 per minute. The pricing pages are clean, the SDKs are polished, and the first invoice is pocket change.
+The pitch is seductive: sign up, grab an API key, call `fetch()`, get intelligence back. OpenAI embeddings at $0.02 per million tokens. GPT-5 at $1.25 per million input tokens. Whisper at $0.006 per minute. The pricing pages are clean, the SDKs are polished, and the first invoice is pocket change.
 
-So teams build on cloud APIs. They embed millions of documents into 1536-dimensional OpenAI vectors. They route every classification through GPT-4o. They wire Cohere reranking into every search query. The architecture hardens. The dependency deepens.
+So teams build on cloud APIs. They embed millions of documents into 1536-dimensional OpenAI vectors. They route every classification through GPT-5. They wire Cohere reranking into every search query. The architecture hardens. The dependency deepens.
 
 Then launch day arrives and the rate limiter fires. Or a December outage takes your product offline for nine hours. Or your GDPR audit reveals you need data processing agreements with four AI sub-processors. Or a competitor ships the same feature at zero marginal cost because their inference runs on-device.
 
@@ -21,9 +21,9 @@ This post is not anti-cloud. Cloud APIs are excellent for prototyping, for front
 
 Your launch day, your Product Hunt feature, your viral tweet -- these are the moments when your application gets the most traffic. They are also the moments when cloud API rate limits are most likely to throttle you.
 
-OpenAI enforces rate limits across four dimensions simultaneously: requests per minute (RPM), tokens per minute (TPM), requests per day (RPD), and tokens per day (TPD). Exceeding any single dimension triggers a `429 Too Many Requests` error. At Tier 1 -- where most startups begin -- GPT-4o allows roughly 30K TPM and 500 RPM. That sounds manageable until you realize 30,000 tokens per minute means your application can serve only a handful of concurrent users making sustained requests before hitting the ceiling ([OpenAI Rate Limits Guide](https://platform.openai.com/docs/guides/rate-limits)).
+OpenAI enforces rate limits across four dimensions simultaneously: requests per minute (RPM), tokens per minute (TPM), requests per day (RPD), and tokens per day (TPD). Exceeding any single dimension triggers a `429 Too Many Requests` error. At Tier 1 -- where most startups begin -- GPT-5 allows roughly 30K TPM and 500 RPM. That sounds manageable until you realize 30,000 tokens per minute means your application can serve only a handful of concurrent users making sustained requests before hitting the ceiling ([OpenAI Rate Limits Guide](https://platform.openai.com/docs/guides/rate-limits)).
 
-Tier progression is automatic but slow: it is gated by cumulative spend, not by need. You cannot prepay your way out of a traffic spike. And the limits vary wildly by model -- at Tier 1, GPT-4o mini allows roughly 10x the TPM of GPT-4o, meaning a model swap under pressure changes your application's behavior in ways you may not have tested ([Inference.net OpenAI Rate Limits Guide](https://inference.net/content/openai-rate-limits-guide/)).
+Tier progression is automatic but slow: it is gated by cumulative spend, not by need. You cannot prepay your way out of a traffic spike. And the limits vary wildly by model -- at Tier 1, smaller models allow roughly 10x the TPM of GPT-5, meaning a model swap under pressure changes your application's behavior in ways you may not have tested ([Inference.net OpenAI Rate Limits Guide](https://inference.net/content/openai-rate-limits-guide/)).
 
 The result: your best days become your most fragile days. The architecture that works perfectly at 100 requests per minute fails silently at 1,000.
 
@@ -33,7 +33,7 @@ The result: your best days become your most fragile days. The architecture that 
 
 ## 2. Today's Price Cut Is Tomorrow's Leverage
 
-OpenAI's pricing has dropped dramatically since GPT-4's launch. The original GPT-4 cost $30 per million input tokens and $60 per million output tokens in May 2023. GPT-4o launched in May 2024 at $5/$15, then dropped to $2.50/$10 -- a cumulative reduction of over 90% on input tokens ([OpenAI Pricing](https://openai.com/api/pricing/), [Nebuly GPT-4 Pricing History](https://web.archive.org/web/20250119175245/https://www.nebuly.com/blog/openai-gpt-4-api-pricing)).
+OpenAI's pricing has dropped dramatically since GPT-4's launch. The original GPT-4 cost $30 per million input tokens and $60 per million output tokens in May 2023. GPT-4o launched in May 2024 at $5/$15, then dropped to $2.50/$10. GPT-5 continued the trend at $1.25/$10 -- a cumulative reduction of over 95% on input tokens since GPT-4 ([OpenAI Pricing](https://openai.com/api/pricing/), [Nebuly GPT-4 Pricing History](https://web.archive.org/web/20250119175245/https://www.nebuly.com/blog/openai-gpt-4-api-pricing)).
 
 That trend is real, and it benefits everyone using the API today. But it also reveals something important: **the vendor controls the price, and you do not.**
 
@@ -103,7 +103,7 @@ The broader trend is worsening. The Uptrends State of API Reliability 2025 repor
 
 Cloud API pricing is linear: twice the users means twice the cost. Ten times the users means ten times the cost. This is the simplest hidden cost, and the most consequential at scale.
 
-As we documented in our [cost analysis](/blog/cut-ai-api-bill-200k), a 100,000-user application spending $212,000 per year on AI APIs would spend $2.12 million at 1 million users. The cost curve never bends. Every new user adds the same marginal cost as the first.
+As we documented in our [cost analysis](/blog/cut-ai-api-bill-200k), a 100,000-user application spending $200,000 per year on AI APIs would spend $2 million at 1 million users. The cost curve never bends. Every new user adds the same marginal cost as the first.
 
 Our [benchmark comparison](/blog/local-ai-vs-cloud) showed the math at moderate scale:
 
@@ -161,7 +161,7 @@ async function classifyDocument(text: string) {
 }
 ```
 
-This is not a hypothetical architecture. It is the same pattern described in our [migration case study](/blog/cut-ai-api-bill-200k), where a 100K-user application eliminated $199,000 in annual API costs while maintaining cloud fallbacks for the 5-15% of requests that genuinely need frontier capabilities.
+This is not a hypothetical architecture. It is the same pattern described in our [migration case study](/blog/cut-ai-api-bill-200k), where a 100K-user application eliminated $187,000 in annual API costs while maintaining cloud fallbacks for the 5-15% of requests that genuinely need frontier capabilities.
 
 <Callout type="info" title="The 95/5 rule">
   In most production applications, 95% of AI inference calls are routine tasks -- embeddings, classification, reranking, NER -- where local models deliver 87-99% of cloud quality at zero cost. Reserve cloud APIs for the 5% that require frontier reasoning, broad language coverage, or capabilities local models do not yet support.
@@ -188,7 +188,7 @@ Pricing data collected from official vendor pricing pages and verified via web r
 ### Sources
 
 **Pricing and Rate Limits:**
-- [OpenAI API Pricing](https://openai.com/api/pricing/) -- GPT-4o ($2.50/$10.00 per 1M input/output tokens), text-embedding-3-small ($0.02/1M tokens), Whisper ($0.006/min); verified May 2026. GPT-4o launched at $5/$15 in May 2024, reduced to $2.50/$10 in August 2024 with the gpt-4o-2024-08-06 model version.
+- [OpenAI API Pricing](https://openai.com/api/pricing/) -- GPT-5 ($1.25/$10.00 per 1M input/output tokens), text-embedding-3-small ($0.02/1M tokens), Whisper ($0.006/min); verified May 2026. GPT-4o launched at $5/$15 in May 2024, reduced to $2.50/$10; GPT-5 launched at $1.25/$10.
 - [OpenAI Rate Limits Documentation](https://platform.openai.com/docs/guides/rate-limits) -- TPM, RPM, tier progression
 - [Inference.net: OpenAI Rate Limits Guide](https://inference.net/content/openai-rate-limits-guide/) -- Tier-specific limit breakdowns
 - [Nebuly: GPT-4 API Pricing History](https://web.archive.org/web/20250119175245/https://www.nebuly.com/blog/openai-gpt-4-api-pricing) -- Original GPT-4 pricing ($30/$60 per 1M tokens)
@@ -218,7 +218,7 @@ Pricing data collected from official vendor pricing pages and verified via web r
 
 **Quality Benchmarks (referenced from prior LocalMode analyses):**
 - [Near Cloud-Quality AI at $0 Cost](/blog/local-ai-vs-cloud) -- 18-category local vs. cloud benchmark
-- [How We Cut Our AI API Bill by $200K/Year](/blog/cut-ai-api-bill-200k) -- Migration case study with cost breakdowns
+- [How We Cut Our AI API Bill by $200K/Year](/blog/cut-ai-api-bill-200k) -- Migration case study with cost breakdowns (GPT-5 pricing)
 
 ---
 

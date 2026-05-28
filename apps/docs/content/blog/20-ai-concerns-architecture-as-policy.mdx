@@ -95,7 +95,7 @@ Four more concerns cluster around money and dependency: API pricing that scales 
 
 ### The Math That Breaks at Scale
 
-Cloud AI pricing is designed to look cheap. OpenAI's GPT-4o at $2.50 per million input tokens. Embeddings at $0.02 per million tokens. At prototype scale, it is pocket change.
+Cloud AI pricing is designed to look cheap. OpenAI's GPT-5 at $1.25 per million input tokens. Embeddings at $0.02 per million tokens. At prototype scale, it is pocket change.
 
 Then you launch. At 100,000 users making 10 requests per day, the annual bill lands between <a href="/blog/hybrid-ai-architecture" target="_blank">$50,000 and $300,000+</a>. And unlike traditional infrastructure costs that decrease with scale (bandwidth gets cheaper per GB, storage gets cheaper per TB), AI API costs scale linearly. Your ten-thousandth user costs exactly as much as your first.
 
@@ -272,7 +272,7 @@ Everything above describes what local inference solves. Here is what it does not
 
 ### Model Size Ceiling
 
-Browser models practically cap at around 8 billion parameters (quantized to 4-bit) on devices with sufficient RAM. That means no GPT-4-class reasoning, no 128K-token context windows, no frontier-quality creative writing. For the 2026 state of the art, Qwen3.5-4B in thinking mode <a href="/blog/local-ai-vs-cloud" target="_blank">scores 88.8% on MMLU-Redux</a> -- competitive with GPT-4o on knowledge benchmarks -- but falls short on complex multi-step reasoning and nuanced generation.
+Browser models practically cap at around 8 billion parameters (quantized to 4-bit) on devices with sufficient RAM. That means no GPT-4-class reasoning, no 128K-token context windows, no frontier-quality creative writing. For the 2026 state of the art, Qwen3.5-4B in thinking mode <a href="/blog/local-ai-vs-cloud" target="_blank">scores 88.8% on MMLU-Redux</a> -- competitive with GPT-5 on knowledge benchmarks -- but falls short on complex multi-step reasoning and nuanced generation.
 
 For most task-specific operations (embeddings, classification, NER, reranking, summarization, translation), small purpose-built models deliver <a href="/blog/local-ai-vs-cloud" target="_blank">90-99% of cloud quality</a>. For open-ended reasoning, the gap is real. The pragmatic answer is a <a href="/blog/hybrid-ai-architecture" target="_blank">hybrid architecture</a>: local for the 95% of requests that do not need frontier reasoning, cloud for the 5% that do.
 
@@ -380,7 +380,7 @@ All LocalMode API claims, code examples, and feature descriptions were verified 
 [Engadget: Samsung data leak](https://www.engadget.com/three-samsung-employees-reportedly-leaked-sensitive-data-to-chatgpt-190221114.html), [NYT: Lawyer cited hallucinated cases](https://www.nytimes.com/2023/05/27/nyregion/avianca-airline-lawsuit-chatgpt.html), [OpenAI Status Page](https://status.openai.com/) (December 2024-January 2025 outages), [Medium: Dec 11 Kubernetes outage explained](https://ptuladhar3.medium.com/11th-dec-2024-openais-kubernetes-outage-explained-27c60e620bc3).
 
 **Pricing:**
-[OpenAI API Pricing](https://openai.com/api/pricing/) (GPT-4o $2.50/M input tokens, text-embedding-3-small $0.02/M tokens).
+[OpenAI API Pricing](https://openai.com/api/pricing/) (GPT-5 $1.25/M input tokens, text-embedding-3-small $0.02/M tokens).
 
 **Benchmarks:**
 [Qwen3.5-4B model card](https://huggingface.co/Qwen/Qwen3.5-4B) (88.8% MMLU-Redux).

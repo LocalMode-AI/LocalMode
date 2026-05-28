@@ -298,12 +298,17 @@ function ChatApp() {
 
 | | WebLLM | Wllama | Transformers.js | LiteRT |
 |-|--------|--------|--------------------|--------|
-| **Runtime** | WebGPU | WASM (llama.cpp) | ONNX Runtime | Google LiteRT-LM (WebGPU + WASM) |
-| **Models** | 32 curated (MLC) | 18 curated + 160K+ GGUF from HuggingFace | 16 ONNX (TJS v4) | 3 curated `.litertlm` — Gemma 4 E2B/E4B, Qwen3 0.6B |
-| **Speed** | Fastest (GPU) | Good (CPU) | Good (CPU/GPU) | Good (early preview) |
-| **Vision** | Phi 3.5 Vision | Holo2 4B/8B | 5 vision variants (Qwen3.5 + Gemma 4) | — (text-only) |
+| **Runtime** | WebGPU | WASM (llama.cpp) + optional WebGPU | ONNX Runtime | Google LiteRT-LM (WebGPU + WASM) |
+| **Models** | 32 curated (MLC) | 30 curated (25 language + 3 embedding + 2 reranker) + 160K+ GGUF | 16 ONNX (TJS v4) | 3 curated `.litertlm` — Gemma 4 E2B/E4B, Qwen3 0.6B |
+| **Speed** | Fastest (GPU) | Good (CPU), faster with WebGPU | Good (CPU/GPU) | Good (early preview) |
+| **Embeddings** | -- | 3 GGUF embedding models | Yes (many models) | -- |
+| **Reranking** | -- | 2 reranker models | Yes (cross-encoder) | -- |
+| **Structured Output** | Yes | Yes (JSON mode / grammar) | -- | -- |
+| **Reasoning** | -- | Yes (thinking mode) | -- | -- |
+| **Tool Calling** | Yes | Yes (via providerOptions) | -- | -- |
+| **Vision** | Phi 3.5 Vision | Holo2 4B/8B, Gemma 4 E2B/E4B (mmprojUrl) | 5 vision variants (Qwen3.5 + Gemma 4) | — (text-only) |
 | **Browser Support** | Chrome/Edge 113+, Safari 26+, Firefox 141+ | All modern browsers | All modern browsers (WebGPU optional) | Chrome/Edge 113+, Safari 26+, Firefox 141+ (WebGPU); Qwen3 0.6B also runs on CPU WASM |
-| **Best For** | Maximum performance | Universal compatibility, model variety | Multi-task (embeddings + LLM in one package) | First-party Google runtime for Gemma |
+| **Best For** | Maximum performance | Universal compatibility, model variety, reranking | Multi-task (embeddings + LLM in one package) | First-party Google runtime for Gemma |
 
 ## Architecture
 

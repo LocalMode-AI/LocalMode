@@ -361,18 +361,18 @@ const results = await db.search(queryVec, { k: 10 });
 |---|---------|----------|-------|------|-----------------|
 | 1 | Semantic Search | `embed()` | `Xenova/bge-small-en-v1.5` | 33 MB | ~99% of OpenAI |
 | 2 | Sentiment Analysis | `classify()` | `Xenova/distilbert-base-uncased-finetuned-sst-2-english` | 67 MB | strong for focused sentiment tasks |
-| 3 | Text Summarization | `summarize()` | `Xenova/distilbart-cnn-6-6` | ~284 MB | ~85% of GPT-4o (ROUGE-2: 20.17) |
+| 3 | Text Summarization | `summarize()` | `Xenova/distilbart-cnn-6-6` | ~284 MB | ~80% of GPT-5 (ROUGE-2: 20.17) |
 | 4 | Language Translation | `translate()` | `Xenova/opus-mt-en-*` | ~100 MB per pair | ~85% of Google Translate (BLEU) |
-| 5 | Image Captioning | `captionImage()` | `onnx-community/Florence-2-base-ft` | 223 MB | 60-70% of GPT-4o |
+| 5 | Image Captioning | `captionImage()` | `onnx-community/Florence-2-base-ft` | 223 MB | 55-65% of GPT-5 |
 | 6 | Object Detection | `detectObjects()` | `onnx-community/dfine_n_coco-ONNX` | 15 MB | 70-80% of cloud vision APIs |
 | 7 | OCR | `extractText()` | `Xenova/trocr-small-printed` | ~64 MB | strong for printed text |
 | 8 | Document Redaction | `redactPII()` | Pattern-based + NER | 0-108 MB | strong for structured PII |
 | 9 | Voice Transcription | `transcribe()` | `onnx-community/moonshine-tiny-ONNX` | 28 MB | ~80% of Whisper API (WER) |
 | 10 | Text-to-Speech | `synthesizeSpeech()` | `Xenova/mms-tts-eng` | ~38 MB | strong for TTS tasks |
 | 11 | Smart Autocomplete | `fillMask()` | `onnx-community/ModernBERT-base-ONNX` | 151 MB | strong for fill-mask tasks |
-| 12 | Email Classification | `classifyZeroShot()` | `Xenova/mobilebert-uncased-mnli` | 27 MB | 94-97% of GPT-4o (MNLI) |
-| 13 | Named Entity Recognition | `extractEntities()` | `Xenova/bert-base-NER` | 108 MB | 95-98% of GPT-4o |
-| 14 | Question Answering | `answerQuestion()` | `Xenova/distilbert-base-cased-distilled-squad` | ~66 MB | 92-95% of GPT-4o (SQuAD F1) |
+| 12 | Email Classification | `classifyZeroShot()` | `Xenova/mobilebert-uncased-mnli` | 27 MB | 92-95% of GPT-5 (MNLI) |
+| 13 | Named Entity Recognition | `extractEntities()` | `Xenova/bert-base-NER` | 108 MB | 93-96% of GPT-5 |
+| 14 | Question Answering | `answerQuestion()` | `Xenova/distilbert-base-cased-distilled-squad` | ~66 MB | 90-93% of GPT-5 (SQuAD F1) |
 | 15 | Background Removal | `segmentImage()` | `briaai/RMBG-1.4` | 176 MB | strong for foreground segmentation |
 | 16 | Photo Enhancement | `imageToImage()` | `Xenova/swin2SR-lightweight-x2-64` | ~8 MB | strong for structured upscaling |
 | 17 | Cross-Modal Search | `embedImage()` | `Xenova/clip-vit-base-patch32` | ~154 MB | strong for cross-modal retrieval |
@@ -392,7 +392,7 @@ Total size if you use every feature: under 2 GB quantized. In practice, most app
 **No latency penalty for simple tasks.** Embedding a sentence takes 5-15ms locally. A cloud round-trip to do the same thing takes 100-300ms including network overhead. For interactive features like search-as-you-type, local inference is not just cheaper - it is faster.
 
 <Callout type="warn" title="When to use cloud instead">
-  Local models are smaller than cloud models. For tasks requiring broad world knowledge (complex multi-step reasoning, creative writing, code generation), a 1-4 GB local LLM will not match GPT-4o or Claude. Use local AI for the focused, high-volume tasks in this list. Use cloud AI for the open-ended tasks where quality is paramount and latency is acceptable.
+  Local models are smaller than cloud models. For tasks requiring broad world knowledge (complex multi-step reasoning, creative writing, code generation), a 1-4 GB local LLM will not match GPT-5 or Claude. Use local AI for the focused, high-volume tasks in this list. Use cloud AI for the open-ended tasks where quality is paramount and latency is acceptable.
 </Callout>
 
 ---

@@ -1,8 +1,10 @@
 /**
  * wllama Language Model Implementation
  *
- * Implements LanguageModel interface using wllama (llama.cpp compiled to WASM).
- * Runs any standard GGUF model file in the browser without WebGPU.
+ * Implements LanguageModel interface using wllama v3 (llama.cpp compiled to WASM).
+ * Uses the OAI-compatible API (createChatCompletion / createCompletion).
+ * Supports WebGPU acceleration, multimodal vision input, tool calling,
+ * and native Jinja chat templates.
  *
  * @packageDocumentation
  */
@@ -21,17 +23,70 @@ import { WLLAMA_MODELS } from './models.js';
 import { isCrossOriginIsolated, resolveModelUrl } from './utils.js';
 import { parseGGUFMetadata } from './gguf.js';
 
-// Dynamic import type — Wllama class instance
 type WllamaInstance = InstanceType<Awaited<typeof import('@wllama/wllama')>['Wllama']>;
 
-/** Whether the single-thread CORS warning has been emitted */
 let corsWarningEmitted = false;
+
+const WLLAMA_CDN_WASM = 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.2.3/src/wasm/wllama.wasm';
+const WLLAMA_CDN_ESM = 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.2.3/esm/index.js';
+
+/**
+ * Resolve the WASM asset path for the current environment.
+ * @internal
+ */
+export function resolveWasmPath(): { default: string } {
+  if (
+    typeof globalThis !== 'undefined' &&
+    typeof (globalThis as { chrome?: { runtime?: { getURL?: (p: string) => string } } }).chrome
+      ?.runtime?.getURL === 'function'
+  ) {
+    const get = (globalThis as unknown as {
+      chrome: { runtime: { getURL: (p: string) => string } };
+    }).chrome.runtime.getURL;
+    return { default: get('wllama-wasm/wllama.wasm') };
+  }
+  return { default: WLLAMA_CDN_WASM };
+}
+
+/**
+ * Resolve n_gpu_layers from settings and WebGPU availability.
+ * @internal
+ */
+function resolveGpuLayers(settings: WllamaModelSettings): number | undefined {
+  if (settings.nGpuLayers !== undefined) {
+    return settings.nGpuLayers;
+  }
+  if (settings.useWebGPU === true) {
+    try {
+      const { isWebGPUSupported } = require('@localmode/core') as { isWebGPUSupported: () => boolean };
+      if (isWebGPUSupported()) return -1;
+    } catch { /* core not available */ }
+    console.warn('[wllama] WebGPU requested but not available, falling back to WASM');
+    return undefined;
+  }
+  if (settings.useWebGPU === 'auto') {
+    try {
+      const { isWebGPUSupported } = require('@localmode/core') as { isWebGPUSupported: () => boolean };
+      if (isWebGPUSupported()) return -1;
+    } catch { /* core not available */ }
+    return undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Import Wllama from CDN ESM. Uses `new Function` to bypass bundler
+ * module resolution — bundlers (Turbopack, Webpack) break wllama's
+ * Web Worker when they transpile the @wllama/wllama package.
+ * @internal
+ */
+async function importWllama(): Promise<{ Wllama: new (config: { default: string }) => WllamaInstance }> {
+  const dynamicImport = new Function('u', 'return import(u)') as (url: string) => Promise<{ Wllama: new (config: { default: string }) => WllamaInstance }>;
+  return dynamicImport(WLLAMA_CDN_ESM);
+}
 
 /**
  * wllama Language Model implementation.
- *
- * Uses wllama (llama.cpp WASM) for GGUF model inference in the browser.
- * Works in all modern browsers without WebGPU — only WASM is required.
  *
  * @example
  * ```ts
@@ -49,7 +104,9 @@ let corsWarningEmitted = false;
 export class WllamaLanguageModel implements LanguageModel {
   readonly modelId: string;
   readonly provider = 'wllama';
+  readonly supportsVision: boolean;
   contextLength: number;
+  readonly gpuAccelerated: boolean;
 
   private wllamaInstance: WllamaInstance | null = null;
   private loadPromise: Promise<WllamaInstance> | null = null;
@@ -60,55 +117,43 @@ export class WllamaLanguageModel implements LanguageModel {
     this.baseModelId = baseModelId;
     this.settings = settings;
     this.modelId = `wllama:${baseModelId}`;
-    // Initial context length from settings or default; may be updated from GGUF metadata
     this.contextLength = settings.contextLength ?? 4096;
+
+    const catalogEntry = (WLLAMA_MODELS as Record<string, { vision?: boolean; mmprojUrl?: string }>)[baseModelId];
+    this.supportsVision = !!(settings.mmprojUrl || (catalogEntry?.vision && catalogEntry?.mmprojUrl));
+
+    const gpuLayers = resolveGpuLayers(settings);
+    this.gpuAccelerated = gpuLayers !== undefined && gpuLayers !== 0;
   }
 
-  /**
-   * Load the wllama engine and GGUF model.
-   *
-   * Deduplicates concurrent calls — only one model load occurs.
-   * @internal
-   */
+  /** @internal */
   private async loadModel(): Promise<WllamaInstance> {
-    if (this.wllamaInstance) {
-      return this.wllamaInstance;
-    }
-
-    if (this.loadPromise) {
-      return this.loadPromise;
-    }
+    if (this.wllamaInstance) return this.wllamaInstance;
+    if (this.loadPromise) return this.loadPromise;
 
     this.loadPromise = (async () => {
       try {
-        const { Wllama } = await import('@wllama/wllama');
+        const { Wllama } = await importWllama();
 
-        // Determine model URL
-        const catalogEntry = (WLLAMA_MODELS as Record<string, { url: string; contextLength: number }>)[this.baseModelId];
+        const catalogEntry = (WLLAMA_MODELS as Record<string, { url: string; contextLength: number; mmprojUrl?: string }>)[this.baseModelId];
         const modelUrl = resolveModelUrl(
           catalogEntry ? catalogEntry.url : this.baseModelId,
           this.settings.modelUrl
         );
 
-        // Auto-detect context length from GGUF metadata if not explicitly set
         if (!this.settings.contextLength) {
           try {
             if (catalogEntry) {
-              // Use catalog context length
               this.contextLength = catalogEntry.contextLength;
             } else {
-              // Parse GGUF metadata for context length
               const metadata = await parseGGUFMetadata(modelUrl);
               if (metadata.contextLength > 0) {
                 this.contextLength = metadata.contextLength;
               }
             }
-          } catch {
-            // Silently fall back to default (4096), already set in constructor
-          }
+          } catch { /* fall back to 4096 */ }
         }
 
-        // Determine thread count
         let numThreads = this.settings.numThreads;
         if (numThreads === undefined) {
           if (isCrossOriginIsolated()) {
@@ -126,46 +171,37 @@ export class WllamaLanguageModel implements LanguageModel {
           }
         }
 
-        // Report initiation
         this.settings.onProgress?.({
           status: 'initiate',
           text: `Loading GGUF model: ${this.baseModelId}`,
         });
 
-        // Resolve WASM URLs. In MV3 extension contexts, fetching code from
-        // a CDN (jsdelivr) is blocked by the "no remotely hosted code" rule
-        // and silently fails the wllama init. When the host has bundled the
-        // WASM under `/wllama-wasm/{single,multi}-thread/wllama.wasm` and
-        // exposes it via `chrome.runtime.getURL`, we prefer that path.
-        // Outside extension contexts (web apps, Node tests) we fall back to
-        // the jsdelivr CDN which is the official wllama distribution.
-        const wasmUrls = (() => {
-          if (
-            typeof globalThis !== 'undefined' &&
-            typeof (globalThis as { chrome?: { runtime?: { getURL?: (p: string) => string } } }).chrome
-              ?.runtime?.getURL === 'function'
-          ) {
-            const get = (globalThis as unknown as {
-              chrome: { runtime: { getURL: (p: string) => string } };
-            }).chrome.runtime.getURL;
-            return {
-              'single-thread/wllama.wasm': get('wllama-wasm/single-thread/wllama.wasm'),
-              'multi-thread/wllama.wasm': get('wllama-wasm/multi-thread/wllama.wasm'),
-            };
-          }
-          return {
-            'single-thread/wllama.wasm': 'https://cdn.jsdelivr.net/npm/@wllama/wllama@2/src/single-thread/wllama.wasm',
-            'multi-thread/wllama.wasm': 'https://cdn.jsdelivr.net/npm/@wllama/wllama@2/src/multi-thread/wllama.wasm',
-          };
-        })();
+        const wllamaInstance = new Wllama(resolveWasmPath());
 
-        // Instantiate wllama with the resolved WASM URLs
-        const wllamaInstance = new Wllama(wasmUrls);
+        const mmprojUrl = this.settings.mmprojUrl ?? catalogEntry?.mmprojUrl;
+        const modelSource = mmprojUrl ? { url: modelUrl, mmprojUrl } : modelUrl;
+        const gpuLayers = resolveGpuLayers(this.settings);
 
-        // Load the GGUF model
-        await wllamaInstance.loadModelFromUrl(modelUrl, {
+        const hasMmproj = typeof modelSource === 'object' && 'mmprojUrl' in modelSource;
+        await wllamaInstance.loadModelFromUrl(modelSource, {
           n_threads: numThreads,
           n_ctx: this.contextLength,
+          jinja: this.settings.useJinja !== false,
+          ...(gpuLayers !== undefined ? { n_gpu_layers: gpuLayers } : {}),
+          ...(hasMmproj ? { useCache: false } : {}),
+          ...(this.settings.reasoning !== undefined ? { reasoning: this.settings.reasoning } : {}),
+          ...(this.settings.reasoningFormat ? { reasoning_format: this.settings.reasoningFormat } : {}),
+          ...(this.settings.reasoningBudgetTokens !== undefined ? { reasoning_budget_tokens: this.settings.reasoningBudgetTokens } : {}),
+          ...(this.settings.cacheTypeK ? { cache_type_k: this.settings.cacheTypeK } : {}),
+          ...(this.settings.cacheTypeV ? { cache_type_v: this.settings.cacheTypeV } : {}),
+          ...(this.settings.flashAttention !== undefined ? { flash_attn: this.settings.flashAttention } : {}),
+          ...(this.settings.specDraftModel ? { spec_draft_model: this.settings.specDraftModel } : {}),
+          ...(this.settings.specDraftNgl !== undefined ? { spec_draft_ngl: this.settings.specDraftNgl } : {}),
+          ...(this.settings.specDraftNMin !== undefined ? { spec_draft_n_min: this.settings.specDraftNMin } : {}),
+          ...(this.settings.specDraftNMax !== undefined ? { spec_draft_n_max: this.settings.specDraftNMax } : {}),
+          ...(this.settings.specDraftPMin !== undefined ? { spec_draft_p_min: this.settings.specDraftPMin } : {}),
+          ...(this.settings.loraAdapters ? { lora_adapters: this.settings.loraAdapters } : {}),
+          ...(this.settings.loraInitWithoutApply !== undefined ? { lora_init_without_apply: this.settings.loraInitWithoutApply } : {}),
           progressCallback: (opts: { loaded: number; total: number }) => {
             if (this.settings.onProgress) {
               const pct = opts.total > 0 ? (opts.loaded / opts.total) * 100 : 0;
@@ -184,7 +220,6 @@ export class WllamaLanguageModel implements LanguageModel {
           },
         });
 
-        // Report ready
         this.settings.onProgress?.({
           status: 'ready',
           progress: 100,
@@ -194,19 +229,9 @@ export class WllamaLanguageModel implements LanguageModel {
         this.wllamaInstance = wllamaInstance;
         return wllamaInstance;
       } catch (error) {
-        // Reset load promise so retry is possible
         this.loadPromise = null;
-
-        // Re-throw abort errors as-is
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          throw error;
-        }
-
-        // Re-throw ModelLoadError as-is (from GGUF metadata parsing)
-        if (error instanceof ModelLoadError) {
-          throw error;
-        }
-
+        if (error instanceof DOMException && error.name === 'AbortError') throw error;
+        if (error instanceof ModelLoadError) throw error;
         const cause = error instanceof Error ? error : undefined;
         throw new ModelLoadError(this.baseModelId, cause);
       }
@@ -215,102 +240,54 @@ export class WllamaLanguageModel implements LanguageModel {
     return this.loadPromise;
   }
 
-  /**
-   * Build a prompt string from the options.
-   *
-   * If a wllama instance with a chat template is available, we use
-   * `formatChat()`. Otherwise we build a simple concatenated prompt.
-   * @internal
-   */
-  private buildPrompt(options: {
-    prompt: string;
-    systemPrompt?: string;
-    messages?: Array<{ role: string; content: string }>;
-  }): string {
-    const parts: string[] = [];
-
-    // System prompt
-    const systemPrompt = options.systemPrompt ?? this.settings.systemPrompt;
-    if (systemPrompt) {
-      parts.push(systemPrompt);
-      parts.push('');
-    }
-
-    // Chat messages
-    if (options.messages && options.messages.length > 0) {
-      for (const msg of options.messages) {
-        parts.push(`${msg.role}: ${msg.content}`);
-      }
-    }
-
-    // User prompt
-    parts.push(options.prompt);
-
-    return parts.join('\n');
-  }
-
-  /**
-   * Build a sampling config from generation options.
-   * @internal
-   */
-  private buildSamplingConfig(
+  /** @internal */
+  private buildSamplingParams(
     temperature: number,
     topP: number,
-    providerOptions: Record<string, unknown>
+    wllamaOpts: Record<string, unknown>
   ): Record<string, unknown> {
-    return {
-      temp: temperature,
-      top_p: topP,
-      top_k: providerOptions.top_k as number | undefined,
-      penalty_repeat: providerOptions.repeat_penalty as number | undefined,
-      penalty_last_n: providerOptions.repeat_last_n as number | undefined,
-      mirostat: providerOptions.mirostat as number | undefined,
-      mirostat_tau: providerOptions.mirostat_tau as number | undefined,
-      mirostat_eta: providerOptions.mirostat_eta as number | undefined,
-    };
+    const params: Record<string, unknown> = { temp: temperature, top_p: topP };
+    if (wllamaOpts.top_k != null) params.top_k = wllamaOpts.top_k;
+    if (wllamaOpts.repeat_penalty != null) params.penalty_repeat = wllamaOpts.repeat_penalty;
+    if (wllamaOpts.repeat_last_n != null) params.penalty_last_n = wllamaOpts.repeat_last_n;
+    if (wllamaOpts.mirostat != null) params.mirostat = wllamaOpts.mirostat;
+    if (wllamaOpts.mirostat_tau != null) params.mirostat_tau = wllamaOpts.mirostat_tau;
+    if (wllamaOpts.mirostat_eta != null) params.mirostat_eta = wllamaOpts.mirostat_eta;
+    if (wllamaOpts.min_p != null) params.min_p = wllamaOpts.min_p;
+    if (wllamaOpts.seed != null) params.seed = wllamaOpts.seed;
+    if (wllamaOpts.penalty_freq != null) params.penalty_freq = wllamaOpts.penalty_freq;
+    if (wllamaOpts.penalty_present != null) params.penalty_present = wllamaOpts.penalty_present;
+    if (wllamaOpts.typ_p != null) params.typ_p = wllamaOpts.typ_p;
+    if (wllamaOpts.dynatemp_range != null) params.dynatemp_range = wllamaOpts.dynatemp_range;
+    if (wllamaOpts.dynatemp_exponent != null) params.dynatemp_exponent = wllamaOpts.dynatemp_exponent;
+    if (wllamaOpts.logit_bias != null) params.logit_bias = wllamaOpts.logit_bias;
+    if (wllamaOpts.samplers_sequence != null) params.samplers_sequence = wllamaOpts.samplers_sequence;
+    if (wllamaOpts.n_probs != null) params.n_probs = wllamaOpts.n_probs;
+    if (wllamaOpts.grammar != null) params.grammar = wllamaOpts.grammar;
+    return params;
   }
 
-  /**
-   * Map stop reasons to core FinishReason type.
-   * @internal
-   */
-  private mapFinishReason(reachedMaxTokens: boolean): FinishReason {
-    if (reachedMaxTokens) {
-      return 'length';
-    }
+  /** @internal */
+  private mapFinishReason(reason: string | null): FinishReason {
+    if (reason === 'length') return 'length';
     return 'stop';
   }
 
-  /**
-   * Convert stop sequences to token IDs via the wllama tokenizer.
-   * @internal
-   */
-  private async resolveStopTokens(
-    instance: WllamaInstance,
-    stopSequences?: string[]
-  ): Promise<number[]> {
-    if (!stopSequences || stopSequences.length === 0) {
-      return [];
-    }
-    const stopTokens: number[] = [];
-    for (const seq of stopSequences) {
-      try {
-        const tokenId = await instance.lookupToken(seq);
-        if (tokenId >= 0) {
-          stopTokens.push(tokenId);
-        }
-      } catch {
-        // Token not found in vocab — skip
-      }
-    }
-    return stopTokens;
+  /** @internal */
+  private handleGenerationError(error: unknown): never {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error;
+    if (error instanceof Error && error.name === 'AbortError') throw error;
+    if (error instanceof Error && error.constructor.name === 'WllamaAbortError') throw error;
+
+    const cause = error instanceof Error ? error : undefined;
+    throw new GenerationError(
+      `Text generation failed with model ${this.modelId}: ${cause?.message ?? String(error)}`,
+      { hint: 'Check that the model loaded correctly and the prompt is valid.', cause }
+    );
   }
 
   /**
    * Generate text from a prompt.
-   *
-   * @param options - Generation options
-   * @returns Promise with generation result
    */
   async doGenerate(options: DoGenerateOptions): Promise<DoGenerateResult> {
     const {
@@ -326,112 +303,124 @@ export class WllamaLanguageModel implements LanguageModel {
     } = options;
 
     abortSignal?.throwIfAborted();
-
     const wllamaInstance = await this.loadModel();
-
     abortSignal?.throwIfAborted();
 
     const startTime = Date.now();
-
-    // Normalize messages to plain string content for buildPrompt
-    const textMessages = messages?.map((m) => ({
-      role: m.role,
-      content: typeof m.content === 'string' ? m.content : m.content.filter((p) => p.type === 'text').map((p) => (p as { type: 'text'; text: string }).text).join('\n'),
-    }));
-
-    // Build the full prompt
-    const fullPrompt = this.buildPrompt({ prompt, systemPrompt, messages: textMessages });
-
-    // Extract wllama-specific options
     const wllamaOpts = (providerOptions?.wllama ?? {}) as Record<string, unknown>;
-
-    // Build sampling config
-    const sampling = this.buildSamplingConfig(temperature, topP, wllamaOpts);
+    const sampling = this.buildSamplingParams(temperature, topP, wllamaOpts);
 
     try {
-      // Count input tokens
-      let inputTokens = 0;
-      try {
-        const inputTokenArr = await wllamaInstance.tokenize(fullPrompt);
-        inputTokens = inputTokenArr.length;
-      } catch {
-        inputTokens = Math.ceil(fullPrompt.length / 4);
+      const hasMessages = (messages && messages.length > 0) || !!systemPrompt;
+
+      if (hasMessages) {
+        const oaiMessages = this.buildOAIMessages(messages, systemPrompt, prompt);
+        const responseFormat = wllamaOpts.response_format as Record<string, unknown> | undefined;
+
+        const response = await wllamaInstance.createChatCompletion({
+          messages: oaiMessages,
+          max_tokens: maxTokens,
+          ...(responseFormat ? { response_format: responseFormat } : {}),
+          ...sampling,
+        } as never);
+
+        const choice = response.choices?.[0];
+        const msg = choice?.message as unknown as Record<string, unknown> | undefined;
+        const text = (msg?.content as string) || (msg?.reasoning_content as string) || '';
+        const finishReason = this.mapFinishReason(choice?.finish_reason ?? null);
+        const usage = response.usage;
+
+        return {
+          text,
+          finishReason,
+          usage: {
+            inputTokens: usage?.prompt_tokens ?? Math.ceil(prompt.length / 4),
+            outputTokens: usage?.completion_tokens ?? Math.ceil(text.length / 4),
+            totalTokens: usage?.total_tokens ?? 0,
+            durationMs: Date.now() - startTime,
+          },
+        };
+      } else {
+        const response = await wllamaInstance.createCompletion({
+          prompt,
+          max_tokens: maxTokens,
+          ...(stopSequences && stopSequences.length > 0 ? { stop: stopSequences } : {}),
+          ...sampling,
+        } as never);
+
+        const choice = response.choices?.[0];
+        const text = choice?.text ?? '';
+        const finishReason = this.mapFinishReason(choice?.finish_reason ?? null);
+        const usage = response.usage;
+
+        return {
+          text,
+          finishReason,
+          usage: {
+            inputTokens: usage?.prompt_tokens ?? Math.ceil(prompt.length / 4),
+            outputTokens: usage?.completion_tokens ?? Math.ceil(text.length / 4),
+            totalTokens: usage?.total_tokens ?? 0,
+            durationMs: Date.now() - startTime,
+          },
+        };
       }
-
-      // Resolve stop sequences to token IDs
-      const stopTokens = await this.resolveStopTokens(wllamaInstance, stopSequences);
-
-      // Initialize sampling context
-      await wllamaInstance.samplingInit(sampling);
-
-      // Generate completion. We collect raw token IDs alongside the text
-      // so cross-modal consumers (e.g. Orpheus TTS, which extracts SNAC
-      // audio tokens from the LLM output stream) can post-process the
-      // sequence. The field is non-standard — it lives outside the
-      // `DoGenerateResult` interface in @localmode/core but is present at
-      // runtime under `outputTokenIds`. Typed callers ignore it; untyped
-      // callers can read it via `(result as any).outputTokenIds`.
-      const outputTokenIds: number[] = [];
-      let outputTokens = 0;
-      const text = await wllamaInstance.createCompletion(fullPrompt, {
-        nPredict: maxTokens,
-        sampling,
-        stopTokens: stopTokens.length > 0 ? stopTokens : undefined,
-        abortSignal,
-        onNewToken: (tokenId: number) => {
-          outputTokens++;
-          outputTokenIds.push(tokenId);
-        },
-      });
-
-      // Determine finish reason
-      const reachedMaxTokens = outputTokens >= maxTokens;
-      const finishReason = this.mapFinishReason(reachedMaxTokens);
-
-      return {
-        text,
-        finishReason,
-        usage: {
-          inputTokens,
-          outputTokens,
-          totalTokens: inputTokens + outputTokens,
-          durationMs: Date.now() - startTime,
-        },
-        // Provider extension: raw token-id stream from llama.cpp.
-        // Consumers should access via the wllama-specific name.
-        outputTokenIds,
-      } as never;
     } catch (error) {
-      // Re-throw abort errors
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        throw error;
-      }
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw error;
-      }
-      // wllama has its own WllamaAbortError
-      if (error instanceof Error && error.constructor.name === 'WllamaAbortError') {
-        throw error;
-      }
-
-      const cause = error instanceof Error ? error : undefined;
-      throw new GenerationError(
-        `Text generation failed with model ${this.modelId}: ${cause?.message ?? String(error)}`,
-        {
-          hint: 'Check that the model loaded correctly and the prompt is valid.',
-          cause,
-        }
-      );
+      this.handleGenerationError(error);
     }
   }
 
+  /** @internal Build OAI-format messages from core messages/systemPrompt/prompt */
+  private buildOAIMessages(
+    messages: DoGenerateOptions['messages'],
+    systemPrompt: string | undefined,
+    prompt: string
+  ) {
+    type WllamaContentPart = { type: 'text'; text: string } | { type: 'image'; data: ArrayBuffer } | { type: 'audio'; data: ArrayBuffer };
+    type WllamaContent = string | WllamaContentPart[];
+    const oaiMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: WllamaContent }> = [];
+    const sysPrompt = systemPrompt ?? this.settings.systemPrompt;
+    if (sysPrompt) oaiMessages.push({ role: 'system', content: sysPrompt });
+    if (messages) {
+      for (const m of messages) {
+        if (typeof m.content === 'string') {
+          if (m.content) oaiMessages.push({ role: m.role as 'user' | 'assistant', content: m.content });
+        } else if (Array.isArray(m.content)) {
+          const hasMedia = m.content.some((p) => (p.type === 'image' && this.supportsVision) || p.type === 'audio');
+          if (hasMedia) {
+            const parts: WllamaContentPart[] = [];
+            for (const p of m.content) {
+              if (p.type === 'text') {
+                parts.push({ type: 'text', text: (p as { text: string }).text });
+              } else if (p.type === 'image' && this.supportsVision) {
+                const img = p as { data: string; mimeType: string };
+                const binaryStr = atob(img.data);
+                const bytes = new Uint8Array(binaryStr.length);
+                for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+                parts.push({ type: 'image', data: bytes.buffer });
+              } else if (p.type === 'audio') {
+                const audio = p as { data: string; mimeType: string };
+                const binaryStr = atob(audio.data);
+                const bytes = new Uint8Array(binaryStr.length);
+                for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+                parts.push({ type: 'audio', data: bytes.buffer });
+              }
+            }
+            if (parts.length > 0) oaiMessages.push({ role: m.role as 'user' | 'assistant', content: parts });
+          } else {
+            const text = m.content.filter((p) => p.type === 'text').map((p) => (p as { text: string }).text).join('\n');
+            if (text) oaiMessages.push({ role: m.role as 'user' | 'assistant', content: text });
+          }
+        }
+      }
+    }
+    if (prompt) oaiMessages.push({ role: 'user', content: prompt });
+    return oaiMessages;
+  }
+
   /**
-   * Stream text generation token by token.
-   *
-   * Uses wllama's `onNewToken` callback wrapped in an AsyncGenerator.
-   *
-   * @param options - Stream options
-   * @returns AsyncIterable of stream chunks
+   * Stream text generation token-by-token via wllama v3's streaming API.
+   * Uses `createChatCompletion({ stream: true })` for real streaming when
+   * messages/systemPrompt are present. Falls back to non-streaming for raw prompts.
    */
   async *doStream(options: DoStreamOptions): AsyncIterable<StreamChunk> {
     const {
@@ -441,171 +430,91 @@ export class WllamaLanguageModel implements LanguageModel {
       maxTokens = this.settings.maxTokens ?? 512,
       temperature = this.settings.temperature ?? 0.7,
       topP = this.settings.topP ?? 0.95,
-      stopSequences,
       abortSignal,
       providerOptions,
     } = options;
 
     abortSignal?.throwIfAborted();
-
     const wllamaInstance = await this.loadModel();
-
     abortSignal?.throwIfAborted();
 
     const startTime = Date.now();
-
-    // Normalize messages to plain string content for buildPrompt
-    const textMessages = messages?.map((m) => ({
-      role: m.role,
-      content: typeof m.content === 'string' ? m.content : m.content.filter((p) => p.type === 'text').map((p) => (p as { type: 'text'; text: string }).text).join('\n'),
-    }));
-
-    // Build the full prompt
-    const fullPrompt = this.buildPrompt({ prompt, systemPrompt, messages: textMessages });
-
-    // Extract wllama-specific options
     const wllamaOpts = (providerOptions?.wllama ?? {}) as Record<string, unknown>;
+    const sampling = this.buildSamplingParams(temperature, topP, wllamaOpts);
+    const responseFormat = wllamaOpts.response_format as Record<string, unknown> | undefined;
 
-    // Build sampling config
-    const sampling = this.buildSamplingConfig(temperature, topP, wllamaOpts);
+    const hasMessages = (messages && messages.length > 0) || !!systemPrompt;
 
-    // Count input tokens
-    let inputTokens = 0;
-    try {
-      const inputTokenArr = await wllamaInstance.tokenize(fullPrompt);
-      inputTokens = inputTokenArr.length;
-    } catch {
-      inputTokens = Math.ceil(fullPrompt.length / 4);
+    if (!hasMessages) {
+      const result = await this.doGenerate(options);
+      if (result.text) yield { text: result.text, done: false };
+      yield { text: '', done: true, finishReason: result.finishReason, usage: result.usage };
+      return;
     }
 
-    // Resolve stop sequences to token IDs
-    const stopTokens = await this.resolveStopTokens(wllamaInstance, stopSequences);
-
-    // Initialize sampling context
-    await wllamaInstance.samplingInit(sampling);
-
-    // Promise-based queue for streaming tokens from callback to generator
-    type QueueItem = { token: string; done: boolean };
-    const queue: QueueItem[] = [];
-    let resolveWaiting: ((item: QueueItem) => void) | null = null;
-    let outputTokens = 0;
-    const state: { error: Error | null } = { error: null };
-
-    // Push a token to the queue or resolve a waiting consumer
-    const pushToken = (item: QueueItem) => {
-      if (resolveWaiting) {
-        const resolve = resolveWaiting;
-        resolveWaiting = null;
-        resolve(item);
-      } else {
-        queue.push(item);
-      }
-    };
-
-    // Pull a token from the queue, waiting if necessary
-    const pullToken = (): Promise<QueueItem> => {
-      if (queue.length > 0) {
-        return Promise.resolve(queue.shift()!);
-      }
-      return new Promise<QueueItem>((resolve) => {
-        resolveWaiting = resolve;
-      });
-    };
-
-    // Start generation in the background
-    const completionPromise = wllamaInstance
-      .createCompletion(fullPrompt, {
-        nPredict: maxTokens,
-        sampling,
-        stopTokens: stopTokens.length > 0 ? stopTokens : undefined,
-        abortSignal,
-        onNewToken: (_token: number, _piece: Uint8Array, currentText: string) => {
-          outputTokens++;
-          // wllama's onNewToken gives the full text so far
-          pushToken({ token: currentText, done: false });
-        },
-      })
-      .then(() => {
-        pushToken({ token: '', done: true });
-      })
-      .catch((error: unknown) => {
-        state.error = error instanceof Error ? error : new Error(String(error));
-        pushToken({ token: '', done: true });
-      });
-
-    // Track the previous text to extract deltas
-    let previousText = '';
-
     try {
-      while (true) {
-        abortSignal?.throwIfAborted();
+      const oaiMessages = this.buildOAIMessages(messages, systemPrompt, prompt);
 
-        const item = await pullToken();
+      const stream = await wllamaInstance.createChatCompletion({
+        messages: oaiMessages,
+        max_tokens: maxTokens,
+        stream: true,
+        ...(responseFormat ? { response_format: responseFormat } : {}),
+        ...sampling,
+      } as never) as unknown as AsyncIterable<Record<string, unknown>>;
 
-        if (item.done) {
-          // Check if an error occurred during generation
-          if (state.error) {
-            // Re-throw abort errors
-            if (state.error.name === 'AbortError' || state.error.constructor.name === 'WllamaAbortError') {
-              throw state.error;
-            }
-            throw new GenerationError(
-              `Streaming generation failed with model ${this.modelId}: ${state.error.message}`,
-              {
-                hint: 'Check that the model loaded correctly and the prompt is valid.',
-                cause: state.error,
-              }
-            );
-          }
+      let fullText = '';
+      let lastFinishReason: FinishReason = 'stop';
+      let lastUsage: Record<string, number> | undefined;
 
-          // Final chunk with usage
-          const reachedMaxTokens = outputTokens >= maxTokens;
-          const finishReason = this.mapFinishReason(reachedMaxTokens);
+      for await (const chunk of stream) {
+        if (abortSignal?.aborted) break;
 
-          yield {
-            text: '',
-            done: true,
-            finishReason,
-            usage: {
-              inputTokens,
-              outputTokens,
-              totalTokens: inputTokens + outputTokens,
-              durationMs: Date.now() - startTime,
-            },
-          };
-          break;
+        const choices = chunk.choices as Array<Record<string, unknown>> | undefined;
+        const choice = choices?.[0];
+        if (!choice) continue;
+
+        const delta = choice.delta as Record<string, unknown> | undefined;
+        const content = (delta?.content as string) || '';
+        const reasoningContent = (delta?.reasoning_content as string) || '';
+        const tokenText = content || reasoningContent;
+
+        if (tokenText) {
+          fullText += tokenText;
+          yield { text: tokenText, done: false };
         }
 
-        // Extract delta from cumulative text
-        const delta = item.token.slice(previousText.length);
-        previousText = item.token;
+        if (choice.finish_reason) {
+          lastFinishReason = this.mapFinishReason(choice.finish_reason as string);
+        }
 
-        if (delta.length > 0) {
-          yield {
-            text: delta,
-            done: false,
-          };
+        if (chunk.usage) {
+          lastUsage = chunk.usage as Record<string, number>;
         }
       }
-    } finally {
-      // Ensure the completion promise is awaited to avoid unhandled rejections
-      await completionPromise.catch(() => {});
+
+      yield {
+        text: '',
+        done: true,
+        finishReason: lastFinishReason,
+        usage: {
+          inputTokens: lastUsage?.prompt_tokens ?? Math.ceil(prompt.length / 4),
+          outputTokens: lastUsage?.completion_tokens ?? Math.ceil(fullText.length / 4),
+          totalTokens: lastUsage?.total_tokens ?? 0,
+          durationMs: Date.now() - startTime,
+        },
+      };
+    } catch (error) {
+      this.handleGenerationError(error);
     }
   }
 
   /**
    * Unload the model and free WASM memory.
-   *
-   * After unloading, the next `doGenerate()` or `doStream()` call
-   * will trigger a fresh model load.
    */
   async unload(): Promise<void> {
     if (this.wllamaInstance) {
-      try {
-        await this.wllamaInstance.exit();
-      } catch {
-        // Ignore errors during cleanup
-      }
+      try { await this.wllamaInstance.exit(); } catch { /* ignore */ }
       this.wllamaInstance = null;
       this.loadPromise = null;
     }
@@ -618,16 +527,6 @@ export class WllamaLanguageModel implements LanguageModel {
  * @param modelId - GGUF model identifier (catalog key, HuggingFace shorthand, or full URL)
  * @param settings - Model settings
  * @returns A WllamaLanguageModel instance
- *
- * @example
- * ```ts
- * import { createLanguageModel } from '@localmode/wllama';
- *
- * const model = createLanguageModel(
- *   'bartowski/Llama-3.2-1B-Instruct-GGUF:Llama-3.2-1B-Instruct-Q4_K_M.gguf',
- *   { temperature: 0.5 }
- * );
- * ```
  */
 export function createLanguageModel(
   modelId: string,

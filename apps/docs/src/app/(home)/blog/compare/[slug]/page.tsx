@@ -8,6 +8,13 @@ import type { Metadata } from 'next';
 const baseUrl =
   process.env.NEXT_PUBLIC_SITE_URL ?? 'https://localmode.dev';
 
+function getRelatedComparisons(currentSlug: string, limit = 3) {
+  const allPages = compare.getPages().sort((a, b) => {
+    return new Date(b.data.date as string).getTime() - new Date(a.data.date as string).getTime();
+  });
+  return allPages.filter((p) => p.slugs[0] !== currentSlug).slice(0, limit);
+}
+
 export default async function ComparePage(props: {
   params: Promise<{ slug: string }>;
 }) {
@@ -18,32 +25,51 @@ export default async function ComparePage(props: {
   const MDX = page.data.body;
 
   const dateISO = new Date(page.data.date as string).toISOString();
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'FAQPage',
-    name: page.data.title,
-    description: page.data.description,
-    datePublished: dateISO,
-    dateModified: dateISO,
-    publisher: {
-      '@type': 'Organization',
-      name: 'LocalMode',
-      url: baseUrl,
+  const related = getRelatedComparisons(params.slug);
+
+  const jsonLd = [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      name: page.data.title,
+      description: page.data.description,
+      datePublished: dateISO,
+      dateModified: dateISO,
+      publisher: {
+        '@type': 'Organization',
+        name: 'LocalMode',
+        url: baseUrl,
+      },
+      url: `${baseUrl}${page.url}`,
+      image: `${baseUrl}/og/blog/compare/${page.slugs[0]}`,
+      mainEntity: [],
     },
-    url: `${baseUrl}${page.url}`,
-    image: `${baseUrl}/og/blog/compare/${page.slugs[0]}`,
-    mainEntity: [],
-  };
+    {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: baseUrl },
+        { '@type': 'ListItem', position: 2, name: 'Blog', item: `${baseUrl}/blog` },
+        { '@type': 'ListItem', position: 3, name: 'Comparisons', item: `${baseUrl}/blog/compare` },
+        { '@type': 'ListItem', position: 4, name: page.data.title, item: `${baseUrl}${page.url}` },
+      ],
+    },
+  ];
 
   return (
     <article className="flex-1 w-full max-w-[900px] mx-auto px-6 py-16">
       <script type="application/ld+json">{JSON.stringify(jsonLd)}</script>
-      <Link
-        href="/blog/compare"
-        className="text-sm text-fd-muted-foreground hover:text-fd-primary mb-8 inline-block"
-      >
-        &larr; Back to Comparisons
-      </Link>
+      <nav aria-label="Breadcrumb" className="text-sm text-fd-muted-foreground mb-8">
+        <ol className="flex items-center gap-1.5">
+          <li><Link href="/" className="hover:text-fd-primary transition-colors">Home</Link></li>
+          <li aria-hidden="true">/</li>
+          <li><Link href="/blog" className="hover:text-fd-primary transition-colors">Blog</Link></li>
+          <li aria-hidden="true">/</li>
+          <li><Link href="/blog/compare" className="hover:text-fd-primary transition-colors">Comparisons</Link></li>
+          <li aria-hidden="true">/</li>
+          <li className="text-fd-foreground truncate max-w-[300px]" aria-current="page">{page.data.title}</li>
+        </ol>
+      </nav>
       <header className="mb-12">
         <h1 className="text-3xl font-bold mb-3">{page.data.title}</h1>
         <p className="text-fd-muted-foreground mb-4">{page.data.description}</p>
@@ -61,6 +87,18 @@ export default async function ComparePage(props: {
       <div className="prose prose-fd min-w-0 mt-8">
         <MDX components={getMDXComponents()} />
       </div>
+      {related.length > 0 && (
+        <aside className="mt-16 pt-8 border-t border-fd-border">
+          <h2 className="text-xl font-semibold mb-6">More Comparisons</h2>
+          <div className="grid gap-4 sm:grid-cols-3">
+            {related.map((post) => (
+              <Link key={post.url} href={post.url} className="group block rounded-lg border border-fd-border p-4 transition-colors hover:bg-fd-accent/50">
+                <h3 className="text-sm font-medium group-hover:text-fd-primary transition-colors line-clamp-2">{post.data.title}</h3>
+              </Link>
+            ))}
+          </div>
+        </aside>
+      )}
     </article>
   );
 }
@@ -91,6 +129,8 @@ export async function generateMetadata(props: {
       type: 'article',
       publishedTime: dateISO,
       modifiedTime: dateISO,
+      siteName: 'LocalMode',
+      locale: 'en_US',
       url: `${baseUrl}${page.url}`,
       images: [
         {

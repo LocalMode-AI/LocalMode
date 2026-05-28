@@ -47,6 +47,7 @@ export const metadata: Metadata = {
     description:
       'Privacy-first AI utilities. Run embeddings, vector search, RAG, classification, vision, and LLMs - all locally in the browser.',
     type: 'website',
+    siteName: 'LocalMode',
   },
   twitter: {
     card: 'summary_large_image',

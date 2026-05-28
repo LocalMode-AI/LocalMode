@@ -19,20 +19,20 @@ Understanding these trade-offs is essential for architects and developers evalua
 
 | Dimension | WebLLM (WebGPU) | wllama (WASM) |
 | --- | --- | --- |
-| **Inference Engine** | MLC-compiled models running as WebGPU compute shaders. GPU-native inference. | llama.cpp compiled to WebAssembly. CPU-based inference with SIMD optimizations. |
-| **Speed** | 30-90 tokens/second on modern GPUs. Best performance available in-browser. | 5-20 tokens/second on CPU. Slower but consistent across devices. |
-| **Browser Support** | Chrome 113+, Edge 113+, Safari 26+, Firefox 141+ (WebGPU required on all). | Chrome 80+, Firefox 75+, Safari 14+ (via WASM). No WebGPU required. |
+| **Inference Engine** | MLC-compiled models running as WebGPU compute shaders. GPU-native inference. | llama.cpp compiled to WebAssembly. CPU-based inference with optional WebGPU layer offloading (`useWebGPU`, `nGpuLayers`). |
+| **Speed** | 30-90 tokens/second on modern GPUs. Best performance available in-browser. | 5-20 tokens/second on CPU. Faster with WebGPU acceleration enabled. |
+| **Browser Support** | Chrome 113+, Edge 113+, Safari 26+, Firefox 141+ (Windows), 147+ (macOS Apple Silicon) (WebGPU required on all). | Chrome 80+, Firefox 75+, Safari 14+ (via WASM). No WebGPU required. |
 | **Model Format** | MLC-compiled models (custom WebGPU format). 32 curated models available. | GGUF format. 160,000+ models available on HuggingFace. Any GGUF model works. |
-| **Model Selection** | 32 curated models: Qwen, Llama, Phi, SmolLM2, Gemma, Mistral, DeepSeek, Hermes. | 18 curated + 160K+ HuggingFace GGUF models. Run any GGUF file from any source. |
-| **Memory Usage** | Uses GPU VRAM. Large models may compete with browser rendering for GPU memory. | Uses system RAM only. No GPU memory pressure. Better for devices with limited VRAM. |
-| **Context Length** | Typically 1024-4096 tokens. Limited by GPU VRAM allocation. | Up to 131,072 tokens for Llama models. Larger contexts possible with CPU RAM. |
-| **Vision Models** | Phi-3.5-vision for multimodal (image + text) inference. | Holo2-4B and Holo2-8B vision models for UI grounding and browser-agent tasks. |
+| **Model Selection** | 32 curated models: Qwen, Llama, Phi, SmolLM2, Gemma, Mistral, DeepSeek, Hermes. | 30 curated (25 language + 3 embedding + 2 reranker) + 160K+ HuggingFace GGUF models. Run any GGUF file from any source. |
+| **Memory Usage** | Uses GPU VRAM. Large models may compete with browser rendering for GPU memory. | Uses system RAM by default. Optional WebGPU offloads layers to VRAM. Better for devices with limited VRAM when GPU is disabled. |
+| **Context Length** | Typically 1024-4096 tokens, up to 32,768 for Qwen 3.5. Limited by GPU VRAM allocation. | Up to 262,144 tokens (Holo2 VLMs), 131,072 tokens (Llama 3.x). Larger contexts possible with CPU RAM. |
+| **Vision Models** | Phi-3.5-vision for multimodal (image + text) inference. | Holo2-4B/8B for UI grounding, Gemma 4 E2B/E4B for vision + tool calling. |
 | **GGUF Metadata** | No GGUF support. Models must be in MLC format. | Built-in GGUF metadata parser. Inspect model details before downloading. |
 | **Package Size** | @localmode/webllm includes MLC runtime. Moderate bundle impact. | @localmode/wllama includes llama.cpp WASM. Moderate bundle impact. |
 
 ## Verdict
 
-Use WebLLM when targeting Chrome, Edge, Safari 26+, or Firefox 141+ users who have GPU-capable hardware - you'll get 3-5× faster inference via WebGPU. Use wllama when you need guaranteed compatibility across all devices (including those without GPU access), when you want to run custom GGUF models from HuggingFace's 160K+ catalog, when you need long context windows up to 131,072 tokens, or when you want built-in vision models for UI grounding. For maximum compatibility, wrap model loading in a try/catch - try WebLLM first and fall back to wllama on failure: users with WebGPU get fast inference, everyone else still gets working AI. Both providers implement the same LanguageModel interface, so application code doesn't change.
+Use WebLLM when targeting Chrome, Edge, Safari 26+, or Firefox 141+ users who have GPU-capable hardware - you'll get 3-5x faster inference via WebGPU. Use wllama when you need guaranteed compatibility across all devices (including those without GPU access), when you want to run custom GGUF models from HuggingFace's 160K+ catalog, when you need long context windows up to 262,144 tokens, when you want GGUF embedding models via `wllama.embedding()`, when you need OAI-compatible tool calling, or when you want built-in vision models for UI grounding. wllama v3 also supports optional WebGPU acceleration via `useWebGPU` and `nGpuLayers` for faster inference on capable devices. For maximum compatibility, wrap model loading in a try/catch - try WebLLM first and fall back to wllama on failure: users with WebGPU get fast inference, everyone else still gets working AI. Both providers implement the same LanguageModel interface, so application code doesn't change.
 
 ### Summary
 
@@ -76,7 +76,7 @@ Yes, and it's the recommended approach. Wrap model loading in a try/catch - try 
 
 ### Which has better model quality?
 
-For the same model family (e.g., Qwen2.5-3B), quality is nearly identical. WebLLM uses 4-bit float16 quantization while wllama uses Q4_K_M GGUF quantization - both target similar compression ratios. Benchmark differences are within 1-2% for most tasks.
+For the same model family (e.g., Qwen2.5-3B), quality is nearly identical. WebLLM uses 4-bit float16 quantization while wllama uses Q4_K_M GGUF quantization - both target similar compression ratios. Benchmark differences are approximately within a few percent for most tasks, though no direct browser-to-browser comparison has been published.
 
 ### What about Transformers.js v4 for LLM inference?
 
@@ -112,7 +112,7 @@ This approach gives you the best of both worlds: the privacy and cost benefits o
 
 ## Methodology
 
-All model counts and API examples were verified directly against `packages/webllm/src/models.ts` (32 entries) and `packages/wllama/src/models.ts` (18 entries). Browser compatibility claims for WebLLM were confirmed via the mlc-ai/web-llm GitHub repository and the WebGPU Implementation Status wiki; Firefox desktop WebGPU support (Firefox 141+) was confirmed via the Mozilla shipping announcement. wllama browser support and vision capability were verified against the ngxson/wllama GitHub README. The HuggingFace GGUF model count (160,000+) reflects the figure cited in LocalMode's own documentation and is consistent with a live HuggingFace query showing 178,000+ models with the `gguf` library filter at time of writing.
+All model counts and API examples were verified directly against `packages/webllm/src/models.ts` (32 entries) and `packages/wllama/src/models.ts` (30 entries: 25 language + 3 embedding + 2 reranker). Browser compatibility claims for WebLLM were confirmed via the mlc-ai/web-llm GitHub repository and the WebGPU Implementation Status wiki; Firefox desktop WebGPU support (Firefox 141+) was confirmed via the Mozilla shipping announcement. wllama browser support and vision capability were verified against the ngxson/wllama GitHub README. The HuggingFace GGUF model count (160,000+) reflects the figure cited in LocalMode's own documentation and is consistent with a live HuggingFace query showing 178,000+ models with the `gguf` library filter at time of writing.
 
 ## Sources
 
@@ -123,4 +123,4 @@ All model counts and API examples were verified directly against `packages/webll
 - [Shipping WebGPU on Windows in Firefox 141](https://simonwillison.net/2025/Jul/16/webgpu-firefox/) - Firefox desktop WebGPU availability
 - [HuggingFace GGUF model catalog](https://huggingface.co/models?library=gguf) - GGUF model count
 - [LocalMode source - packages/webllm/src/models.ts](https://github.com/LocalMode-AI/LocalMode) - 32 curated WebLLM model IDs
-- [LocalMode source - packages/wllama/src/models.ts](https://github.com/LocalMode-AI/LocalMode) - 18 curated wllama model IDs
+- [LocalMode source - packages/wllama/src/models.ts](https://github.com/LocalMode-AI/LocalMode) - 30 curated wllama model IDs (25 language + 3 embedding + 2 reranker)

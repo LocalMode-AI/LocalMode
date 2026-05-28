@@ -55,16 +55,20 @@ export function getAvailableModels() {
     vision: 'vision' in info ? (info as Record<string, unknown>).vision === true : undefined,
   }));
 
-  const wllamaModels = (Object.entries(WLLAMA_MODELS) as [string, WllamaModelEntry][]).map(([id, info]) => ({
-    id,
-    name: info.name,
-    contextLength: info.contextLength,
-    size: info.size,
-    sizeBytes: info.sizeBytes,
-    description: info.description,
-    category: getWllamaCategory(info.sizeBytes),
-    backend: 'wasm' as ModelBackend,
-  }));
+  const wllamaModels = (Object.entries(WLLAMA_MODELS) as [string, WllamaModelEntry][])
+    .filter(([, info]) => !info.isEmbeddingModel)
+    .map(([id, info]) => ({
+      id,
+      name: info.name,
+      contextLength: info.contextLength,
+      size: info.size,
+      sizeBytes: info.sizeBytes,
+      description: info.description,
+      category: getWllamaCategory(info.sizeBytes),
+      backend: 'wasm' as ModelBackend,
+      vision: info.vision,
+      supportsToolCalling: info.supportsToolCalling,
+    }));
 
   const onnxModels = Object.entries(TRANSFORMERS_LLM_MODELS).map(([id, info]) => ({
     id,

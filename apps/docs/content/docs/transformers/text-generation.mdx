@@ -26,7 +26,7 @@ LocalMode offers four LLM providers, each with different trade-offs:
 | `@localmode/litert` | `.litertlm` (Google) | Google's officially-supported Gemma 4 pipeline | 3 verified models; text-only; early preview |
 | `@localmode/webllm` | MLC-compiled | Fastest WebGPU inference | 32 curated models (incl. Phi 3.5 Vision); WebGPU required |
 | `@localmode/transformers` | ONNX | Broad model selection, WebGPU + WASM | 16 curated ONNX LLMs (5 vision); auto-fallback to WASM |
-| `@localmode/wllama` | GGUF (llama.cpp) | Universal browser support | 18 curated + 160K+ GGUF models; no GPU required |
+| `@localmode/wllama` | GGUF (llama.cpp) | Universal browser support | 30 curated (25 language + 3 embedding + 2 reranker) + 160K+ GGUF; true streaming, structured output, reasoning, optional WebGPU, tool calling, vision |
 
 Use a try/catch chain for automatic failover:
 

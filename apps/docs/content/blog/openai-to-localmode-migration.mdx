@@ -21,7 +21,7 @@ Three reasons keep coming up in conversations with teams that have moved:
 2. **Privacy.** Regulated industries (healthcare, finance, legal) often cannot send user data to third-party APIs. Local inference means data never leaves the browser.
 3. **Latency.** No network round-trip. Once the model is loaded, inference is instant -- typically 5-50ms for embeddings, with no cold starts.
 
-The tradeoff is model size: cloud models like GPT-4o are far larger than anything a browser can run. For many tasks -- embeddings, classification, summarization, translation, small-model chat -- local models deliver 85-99% of cloud quality at zero marginal cost.
+The tradeoff is model size: cloud models like GPT-5 are far larger than anything a browser can run. For many tasks -- embeddings, classification, summarization, translation, small-model chat -- local models deliver 85-99% of cloud quality at zero marginal cost.
 
 ---
 
@@ -374,8 +374,8 @@ If you are comfortable with the OpenAI SDK, most of your intuition carries over:
 | Authentication | API key in env or constructor | None required |
 | Network dependency | Every call hits OpenAI servers | No network after model download |
 | First-load cost | None (cloud-hosted) | Model download (33 MB for embeddings, 712 MB+ for LLMs) |
-| Model range | GPT-4o, o1, DALL-E, Whisper, etc. | 60+ browser models across 18 categories |
-| Max model quality | State-of-the-art (GPT-4o, o1) | Good for tasks, limited for complex reasoning |
+| Model range | GPT-5, o1, DALL-E, Whisper, etc. | 60+ browser models across 18 categories |
+| Max model quality | State-of-the-art (GPT-5, o1) | Good for tasks, limited for complex reasoning |
 | Pricing model | Pay per token | Free after download |
 | Data residency | OpenAI servers (US) | User's browser (device-local) |
 | Offline support | No | Yes, after initial model cache |

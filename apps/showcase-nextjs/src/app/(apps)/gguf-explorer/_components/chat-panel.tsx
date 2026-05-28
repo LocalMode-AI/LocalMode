@@ -8,11 +8,13 @@ import { useState, useRef, useEffect } from 'react';
 import {
   Download,
   Send,
+  ImagePlus,
   Square,
   Bot,
   User,
   AlertTriangle,
   MessageSquare,
+  Braces,
 } from 'lucide-react';
 import { Button, Spinner, Progress } from './ui';
 import { ErrorAlert } from './error-boundary';
@@ -40,8 +42,8 @@ interface ChatPanelProps {
   onClearChatError: () => void;
   /** Start downloading the model */
   onDownload: () => void;
-  /** Send a chat message */
-  onSendMessage: (text: string) => void;
+  /** Send a chat message with optional image and JSON mode */
+  onSendMessage: (text: string, images?: Array<{ data: string; mimeType: string }>, jsonMode?: boolean) => void;
   /** Cancel streaming */
   onCancelStreaming: () => void;
   /** Chat messages */
@@ -160,9 +162,28 @@ function DownloadSection({
   );
 }
 
+/** Extract displayable text from message content (handles both string and ContentPart[]) */
+function getDisplayContent(content: ChatMessage['content']): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((p) => p.type === 'text')
+      .map((p) => (p as { type: 'text'; text: string }).text)
+      .join('\n');
+  }
+  return '';
+}
+
+/** Check if content includes an image part */
+function hasImageContent(content: ChatMessage['content']): boolean {
+  return Array.isArray(content) && content.some((p) => p.type === 'image');
+}
+
 /** Single chat message bubble */
 function ChatBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user';
+  const text = getDisplayContent(message.content);
+  const hasImage = hasImageContent(message.content);
 
   return (
     <div className={cn('chat', isUser ? 'chat-end' : 'chat-start')}>
@@ -186,7 +207,13 @@ function ChatBubble({ message }: { message: ChatMessage }) {
             : 'bg-poster-surface border border-poster-border/20 text-poster-text-main'
         )}
       >
-        {message.content || (
+        {hasImage && (
+          <span className="badge badge-sm badge-info gap-1 mb-1">
+            <ImagePlus className="w-3 h-3" />
+            Image
+          </span>
+        )}
+        {text || (
           <span className="inline-flex items-center gap-1">
             <Spinner size="xs" />
             <span className="text-poster-text-sub/50">Thinking...</span>
@@ -206,13 +233,15 @@ function ChatInterface({
 }: {
   messages: ChatMessage[];
   isStreaming: boolean;
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string, images?: Array<{ data: string; mimeType: string }>, jsonMode?: boolean) => void;
   onCancelStreaming: () => void;
 }) {
   const [input, setInput] = useState('');
+  const [pendingImage, setPendingImage] = useState<{ data: string; mimeType: string } | null>(null);
+  const [jsonMode, setJsonMode] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -222,8 +251,10 @@ function ChatInterface({
   const handleSend = () => {
     const trimmed = input.trim();
     if (!trimmed || isStreaming) return;
-    onSendMessage(trimmed);
+    const images = pendingImage ? [pendingImage] : undefined;
+    onSendMessage(trimmed, images, jsonMode);
     setInput('');
+    setPendingImage(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -231,6 +262,18 @@ function ChatInterface({
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(',')[1];
+      setPendingImage({ data: base64, mimeType: file.type });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   return (
@@ -248,9 +291,51 @@ function ChatInterface({
         ))}
       </div>
 
+      {/* Status badges */}
+      {(pendingImage || jsonMode) && (
+        <div className="px-4 pb-2 flex items-center gap-2">
+          {pendingImage && (
+            <>
+              <div className="badge badge-info gap-1 text-xs">
+                <ImagePlus className="w-3 h-3" />
+                Image attached
+              </div>
+              <button onClick={() => setPendingImage(null)} className="text-xs text-poster-text-sub hover:text-error cursor-pointer">Remove</button>
+            </>
+          )}
+          {jsonMode && (
+            <div className="badge badge-warning gap-1 text-xs">
+              <Braces className="w-3 h-3" />
+              JSON mode
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Input */}
       <div className="border-t border-poster-border/20 p-4 bg-poster-surface/50">
         <div className="flex items-center gap-2">
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
+          <Button
+            variant="ghost"
+            size="md"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isStreaming}
+            className="cursor-pointer"
+            title="Attach image"
+          >
+            <ImagePlus className="w-4 h-4" />
+          </Button>
+          <Button
+            variant={jsonMode ? 'primary' : 'ghost'}
+            size="md"
+            onClick={() => setJsonMode(!jsonMode)}
+            disabled={isStreaming}
+            className="cursor-pointer"
+            title={jsonMode ? 'JSON mode ON — responses constrained to valid JSON' : 'Enable JSON mode'}
+          >
+            <Braces className="w-4 h-4" />
+          </Button>
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}

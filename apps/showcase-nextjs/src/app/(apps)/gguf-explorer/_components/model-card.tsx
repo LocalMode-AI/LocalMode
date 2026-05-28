@@ -22,11 +22,15 @@ import {
   CheckCircle,
   XCircle,
   Server,
+  Wrench,
+  Eye,
+  Box,
+  ExternalLink,
 } from 'lucide-react';
 import { Spinner, Badge } from './ui';
 import { cn, formatParams, formatBytes, formatNumber } from '../_lib/utils';
 import type { InspectionResult } from '../_lib/types';
-import type { GGUFMetadata, GGUFBrowserCompat } from '../_services/gguf.service';
+import type { GGUFMetadata, GGUFBrowserCompat, WllamaModelEntry } from '../_services/gguf.service';
 
 /** Props for the ModelCard component */
 interface ModelCardProps {
@@ -34,6 +38,8 @@ interface ModelCardProps {
   result: InspectionResult | null;
   /** Whether inspection is in progress */
   isLoading: boolean;
+  /** Catalog entry for curated models (provides extra fields like supportsToolCalling, isEmbeddingModel, etc.) */
+  catalogEntry?: WllamaModelEntry;
 }
 
 /** Metadata field row */
@@ -234,8 +240,78 @@ function CompatSection({ compat }: { compat: GGUFBrowserCompat }) {
   );
 }
 
+/** Catalog capabilities section — shows extra fields from the curated model entry */
+function CatalogSection({ entry }: { entry: WllamaModelEntry }) {
+  const hasCapabilities = entry.supportsToolCalling || entry.vision || entry.isEmbeddingModel;
+  const hasExtraFields = entry.mmprojUrl || entry.dimensions || entry.nGpuLayers !== undefined;
+
+  if (!hasCapabilities && !hasExtraFields) return null;
+
+  return (
+    <div className="card bg-poster-surface/40 border border-poster-border/20">
+      <div className="card-body p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <Zap className="w-4 h-4 text-poster-primary" />
+          <h3 className="text-sm font-semibold text-poster-text-main">Capabilities</h3>
+        </div>
+
+        {/* Capability badges */}
+        {hasCapabilities && (
+          <div className="flex flex-wrap gap-2 mb-3">
+            {entry.supportsToolCalling && (
+              <Badge variant="info" size="sm" className="gap-1.5">
+                <Wrench className="w-3 h-3" />
+                Tool Calling
+              </Badge>
+            )}
+            {entry.vision && (
+              <Badge variant="info" size="sm" className="gap-1.5">
+                <Eye className="w-3 h-3" />
+                Vision
+              </Badge>
+            )}
+            {entry.isEmbeddingModel && (
+              <Badge variant="info" size="sm" className="gap-1.5">
+                <Box className="w-3 h-3" />
+                Embedding Model
+              </Badge>
+            )}
+          </div>
+        )}
+
+        {/* Extra metadata fields */}
+        {hasExtraFields && (
+          <div className="divide-y divide-poster-border/10">
+            {entry.dimensions && (
+              <MetaField icon={<Hash className="w-3.5 h-3.5" />} label="Dimensions" value={entry.dimensions} />
+            )}
+            {entry.nGpuLayers !== undefined && (
+              <MetaField icon={<Layers className="w-3.5 h-3.5" />} label="GPU Layers" value={entry.nGpuLayers} />
+            )}
+            {entry.mmprojUrl && (
+              <div className="flex items-center gap-3 py-2">
+                <span className="text-poster-text-sub/50 shrink-0"><ExternalLink className="w-3.5 h-3.5" /></span>
+                <span className="text-xs text-poster-text-sub w-28 shrink-0">mmproj URL</span>
+                <a
+                  href={entry.mmprojUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-poster-primary hover:text-poster-primary-dark truncate"
+                  title={entry.mmprojUrl}
+                >
+                  {entry.mmprojUrl.split('/').pop()}
+                </a>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Model card: metadata + compatibility for the Inspect tab */
-export function ModelCard({ result, isLoading }: ModelCardProps) {
+export function ModelCard({ result, isLoading, catalogEntry }: ModelCardProps) {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4 animate-fadeIn">
@@ -260,6 +336,7 @@ export function ModelCard({ result, isLoading }: ModelCardProps) {
   return (
     <div className="flex flex-col gap-4 animate-fadeIn">
       <MetadataSection metadata={result.metadata} />
+      {catalogEntry && <CatalogSection entry={catalogEntry} />}
       <CompatSection compat={result.compat} />
     </div>
   );

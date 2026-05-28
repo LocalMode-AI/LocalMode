@@ -22,24 +22,24 @@ This post walks through building a complete, private RAG chat - from PDF ingesti
 ## What You'll Build
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Browser Tab                              │
-│                                                                 │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌────────────┐  │
-│  │  PDF.js   │──▶│  Chunker  │──▶│ Embedding │──▶│  VectorDB   │  │
-│  │ (extract) │   │(recursive)│   │(BGE-small)│   │ (IndexedDB) │  │
-│  └──────────┘   └──────────┘   └──────────┘   └─────┬──────┘  │
-│                                                      │         │
-│                                     ┌────────────────┘         │
-│                                     ▼                          │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐                   │
-│  │ Streaming │◀──│  Prompt   │◀──│ Semantic  │                   │
-│  │   LLM    │   │ Assembly  │   │  Search   │                   │
-│  └──────────┘   └──────────┘   └──────────┘                   │
-│                                                                 │
-│  Models: BGE-small-en-v1.5 (33M params, ~33MB quantized)       │
-│          Llama 3.2 1B or Qwen 3 1.7B (712MB-1.1GB)             │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                        Browser Tab                               │
+│                                                                  │
+│  ┌──────────┐   ┌───────────┐   ┌─────────────┐   ┌────────────┐ │
+│  │  PDF.js  │──▶│ Chunker   │──▶ Embedding    │──▶ VectorDB    │ │
+│  │(extract) │   │(recursive)│   │(BGE-small)  │   │ (IndexedDB)│ │
+│  └──────────┘   └───────────┘   └─────────────┘   └────┬───────┘ │
+│                                                        │         │
+│                                   ┌────────────────────┘         │
+│                                   ▼                              │
+│  ┌───────────┐   ┌────────────┐   ┌─────────────┐                │
+│  │ Streaming │◀──│   Prompt   │◀──│ Semantic    │                │
+│  │   LLM     │   │  Assembly  │   │  Search     │                │
+│  └───────────┘   └────────────┘   └─────────────┘                │
+│                                                                  │
+│  Models: BGE-small-en-v1.5 (33.4M params, ~33MB quantized)       │
+│          Llama 3.2 1B or Qwen 3 1.7B (712MB–1.1GB)               │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 The pipeline has six stages:
@@ -225,7 +225,7 @@ const reranked = await rerank({
 
 ## Step 6: Generate an Answer with a Local LLM
 
-Now feed the retrieved context to a language model running entirely in the browser. LocalMode supports four LLM providers - all using the same `streamText` function:
+Now feed the retrieved context to a language model running entirely in the browser. LocalMode supports four downloadable LLM providers - all using the same `streamText` function:
 
 | Provider | Engine | Best For | Example Model |
 |----------|--------|----------|---------------|
@@ -364,7 +364,7 @@ All LocalMode API names, function signatures, option shapes, and model IDs in th
 - [BAAI/bge-small-en-v1.5 - HuggingFace model card](https://huggingface.co/BAAI/bge-small-en-v1.5): 33.4M parameters, 384 dimensions, 512-token sequence length, 62.17 MTEB average (56 tasks), 51.68 retrieval average (15 tasks)
 - [Xenova/bge-small-en-v1.5 - ONNX quantized](https://huggingface.co/Xenova/bge-small-en-v1.5): Transformers.js-compatible ONNX export used by `@localmode/transformers`
 - [Qwen3-1.7B - HuggingFace model card](https://huggingface.co/Qwen/Qwen3-1.7B): 1.7B parameters (1.4B non-embedding), dual thinking/non-thinking modes
-- [Llama 3.2 1B - Meta AI blog](https://ai.meta.com/blog/llama-3-2-connect-2024-vision-edge-mobile-devices/): 1.24B parameters, 128K context, pruned and distilled from larger Llama models
+- [Llama 3.2 1B - Meta AI blog](https://ai.meta.com/blog/llama-3-2-connect-2024-vision-edge-mobile-devices/): 1.23B parameters, 128K context, pruned and distilled from larger Llama models
 - [MTEB leaderboard](https://huggingface.co/spaces/mteb/leaderboard): Massive Text Embedding Benchmark across retrieval, classification, clustering, STS, and reranking tasks
 - [Qwen3 announcement - Qwen blog](https://qwenlm.github.io/blog/qwen3/): Architecture details and benchmark results for the Qwen 3 model family
 - [bartowski/Llama-3.2-1B-Instruct-GGUF - HuggingFace](https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF): Q4_K_M quantized GGUF used by `@localmode/wllama`

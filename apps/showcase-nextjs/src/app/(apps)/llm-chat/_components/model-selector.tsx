@@ -171,6 +171,11 @@ export function ModelSelector({ clearMessages }: ModelSelectorProps) {
                           )}>
                             {backendInfo.label}
                           </span>
+                          {model.supportsToolCalling && (
+                            <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-medium bg-poster-accent-teal/10 text-poster-accent-teal">
+                              Tools
+                            </span>
+                          )}
                           {model.vision && (
                             <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-medium bg-poster-accent-pink/10 text-poster-accent-pink">
                               Vision

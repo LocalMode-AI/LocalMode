@@ -124,15 +124,29 @@ The following models support text generation (llm chat) through LocalMode. Choos
 | Ministral-3-3B-Reasoning-2512-q4f16_1-MLC | WebLLM (WebGPU) | 1.8GB | Medium | Good |
 | Mistral-7B-Instruct-v0.3-q4f16_1-MLC | WebLLM (WebGPU) | 4.0GB | Slow | High |
 | Mistral-7B-Instruct-v0.3-Q4_K_M | wllama (WASM) | 4.37GB | Slow | High |
-| DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC | WebLLM (WebGPU) | 4.2GB | Slow | High |
-| DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC | WebLLM (WebGPU) | 4.4GB | Slow | High |
+| DeepSeek-R1-Distill-Qwen-7B-q4f16_1-MLC | WebLLM (WebGPU) | 4.18GB | Slow | High |
+| DeepSeek-R1-Distill-Llama-8B-q4f16_1-MLC | WebLLM (WebGPU) | 4.41GB | Slow | High |
 | onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX | Transformers.js | 500MB | Medium | Good |
 | Hermes-3-Llama-3.2-3B-q4f16_1-MLC | WebLLM (WebGPU) | 1.76GB | Medium | High |
 | Hermes-3-Llama-3.1-8B-q4f16_1-MLC | WebLLM (WebGPU) | 4.9GB | Slow | High |
 | onnx-community/granite-4.0-350m-ONNX-web | Transformers.js | 120MB | Fast | Basic |
 | onnx-community/granite-4.0-1b-ONNX-web | Transformers.js | 350MB | Fast | Basic |
+| Qwen3.5-4B-q4f16_1-MLC | WebLLM (WebGPU) | 2.39GB | Slow | High |
+| Qwen3.5-9B-q4f16_1-MLC | WebLLM (WebGPU) | 5.06GB | Slow | High |
+| Qwen3-0.6B-Q4_K_M | wllama (WASM) | 530MB | Fast | Good |
+| Qwen3-1.7B-Q4_K_M | wllama (WASM) | 1.2GB | Medium | Good |
+| Qwen3-4B-Q4_K_M | wllama (WASM) | 2.7GB | Medium | High |
+| DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M | wllama (WASM) | 1.1GB | Medium | Good |
+| DeepSeek-R1-Distill-Qwen-7B-Q4_K_M | wllama (WASM) | 4.7GB | Slow | High |
+| Gemma-4-E2B-IT-Q4_K_M | wllama (WASM) | 3.46GB | Slow | High |
+| Gemma-4-E4B-IT-Q4_K_M | wllama (WASM) | 5.41GB | Slow | High |
+| Holo2-4B-Q4_K_M | wllama (WASM) | 2.8GB | Medium | High |
+| Holo2-8B-Q4_K_M | wllama (WASM) | 5.1GB | Slow | High |
 | onnx-community/gemma-4-E2B-it-ONNX | Transformers.js | 1.5GB | Medium | High |
 | onnx-community/gemma-4-E4B-it-ONNX | Transformers.js | 3GB | Slow | High |
+| gemma-4-E2B | LiteRT | 2.0GB | Medium | High |
+| gemma-4-E4B | LiteRT | 3.0GB | Medium | High |
+| qwen3-0.6B | LiteRT | 614MB | Fast | Good |
 
 **Choosing a model:** For most applications, start with the recommended model (`Llama-3.2-1B-Instruct-q4f16_1-MLC`). If download size is the primary constraint (e.g., mobile PWA, browser extension), pick the smallest model that meets your quality bar. If quality is the priority (e.g., enterprise search, content analysis), use the largest model your target devices can handle.
 
@@ -142,11 +156,11 @@ Running text generation (llm chat) locally eliminates per-request API costs and 
 
 | Service | Cost / Notes |
 | --- | --- |
-| OpenAI GPT-4o | $2.50-10 per million tokens |
-| Claude 3.5 Sonnet | $3-15 per million tokens |
+| OpenAI GPT-5 | $1.25-10 per million tokens |
+| Claude Sonnet 4.6 | $3-15 per million tokens |
 | Local browser LLMs | $0 per token |
 
-OpenAI GPT-4o costs $2.50-10 per million tokens. Claude 3.5 Sonnet costs $3-15 per million tokens. Local browser LLMs cost $0 per token. The quality gap has narrowed significantly: Qwen3-4B scores 83.7% on MMLU-Redux (thinking mode), within 10% of GPT-4o. For many applications - chat, summarization, classification-via-LLM - local models are sufficient.
+OpenAI GPT-5 costs $1.25-10 per million tokens. Claude Sonnet 4.6 costs $3-15 per million tokens. Local browser LLMs cost $0 per token. The quality gap has narrowed significantly: Qwen3-4B scores 83.7% on MMLU-Redux (thinking mode), within 10% of GPT-5. For many applications - chat, summarization, classification-via-LLM - local models are sufficient.
 
 The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
 
@@ -199,7 +213,7 @@ The hook returns `{ data, error, isLoading, execute, cancel, reset }` - providin
 
 ## Methodology
 
-Model IDs, sizes, and descriptions were verified directly against the LocalMode source catalogs: `packages/webllm/src/models.ts` (32 WebLLM models), `packages/wllama/src/models.ts` (18 GGUF models), `packages/transformers/src/models.ts` (16 ONNX LLMs), and `packages/litert/src/models.ts` (3 LiteRT models). Hook return shapes were verified against `packages/react/src/hooks/use-generate-text.ts` and `packages/react/src/core/use-operation.ts`. Cloud pricing was fetched from official provider pricing pages at time of writing and is subject to change. The Qwen3-4B MMLU-Redux score of 83.7 is drawn from the Qwen3 technical report (arXiv 2505.09388); benchmark with your own data for production decisions.
+Model IDs, sizes, and descriptions were verified directly against the LocalMode source catalogs: `packages/webllm/src/models.ts` (32 WebLLM models), `packages/wllama/src/models.ts` (30 GGUF models: 25 language + 3 embedding + 2 reranker), `packages/transformers/src/models.ts` (16 ONNX LLMs), and `packages/litert/src/models.ts` (3 LiteRT models). Hook return shapes were verified against `packages/react/src/hooks/use-generate-text.ts` and `packages/react/src/core/use-operation.ts`. Cloud pricing was fetched from official provider pricing pages at time of writing and is subject to change. The Qwen3-4B MMLU-Redux score of 83.7 is drawn from the Qwen3 technical report (arXiv 2505.09388); benchmark with your own data for production decisions.
 
 ## Sources
 
@@ -208,5 +222,5 @@ Model IDs, sizes, and descriptions were verified directly against the LocalMode 
 - [LocalMode source - Transformers.js LLM catalog](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/transformers/src/models.ts)
 - [LocalMode source - LiteRT model catalog](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/litert/src/models.ts)
 - [Anthropic API pricing - Claude models](https://platform.claude.com/docs/en/about-claude/pricing)
-- [OpenAI API pricing - GPT-4o](https://openai.com/api/pricing/)
+- [OpenAI API pricing - GPT-5](https://openai.com/api/pricing/)
 - [Qwen3 Technical Report - MMLU-Redux benchmarks](https://arxiv.org/abs/2505.09388)

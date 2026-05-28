@@ -41,15 +41,19 @@ vi.mock('@huggingface/gguf', () => ({
   gguf: vi.fn().mockResolvedValue(mockGgufResult),
 }));
 
-// Mock @wllama/wllama for context length auto-detection tests
+// Mock @wllama/wllama v3 for context length auto-detection tests
 vi.mock('@wllama/wllama', () => ({
   Wllama: function Wllama() {
     return {
       loadModelFromUrl: vi.fn().mockResolvedValue(undefined),
-      createCompletion: vi.fn().mockResolvedValue('Hello'),
-      tokenize: vi.fn().mockResolvedValue([1, 2, 3]),
-      lookupToken: vi.fn().mockResolvedValue(-1),
-      samplingInit: vi.fn().mockResolvedValue(undefined),
+      createChatCompletion: vi.fn().mockResolvedValue({
+        choices: [{ message: { content: 'Hello' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+      }),
+      createCompletion: vi.fn().mockResolvedValue({
+        choices: [{ text: 'Hello', finish_reason: 'stop' }],
+        usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+      }),
       exit: vi.fn().mockResolvedValue(undefined),
       cacheManager: { open: vi.fn().mockResolvedValue(null), list: vi.fn().mockResolvedValue([]) },
     };

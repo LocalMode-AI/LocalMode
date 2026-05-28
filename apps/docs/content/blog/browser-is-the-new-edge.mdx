@@ -38,23 +38,21 @@ We published [detailed benchmarks](/blog/open-source-models-85-99-percent) compa
 | Task Category | Local Quality vs. Cloud | Source Benchmark |
 |---|---|---|
 | Embeddings | **99.8%** of OpenAI | MTEB 62.17 vs 62.3 |
-| LLM knowledge (Qwen3.5-4B, thinking) | **~100%** of GPT-4o | MMLU-Redux 88.8% vs MMLU 88.7%* |
-| Zero-shot classification | **95-97%** of GPT-4o | MNLI 87.77% vs ~90-92% |
-| Named entity recognition | **95-98%** of GPT-4o | CoNLL-2003 F1 92.6% vs ~94-97% |
-| Extractive QA | **92-96%** of GPT-4o | SQuAD F1 87.1 vs ~91-95 |
+| LLM knowledge (Qwen3.5-4B, thinking) | **~96%** of GPT-5 | MMLU-Redux 88.8% vs MMLU 92.5% |
+| Zero-shot classification | **92-95%** of GPT-5 | MNLI 87.77% vs ~90-92% |
+| Named entity recognition | **93-96%** of GPT-5 | CoNLL-2003 F1 92.6% vs ~94-97% |
+| Extractive QA | **90-94%** of GPT-5 | SQuAD F1 87.1 vs ~91-95 |
 | Reranking | **87-93%** of Cohere | MRR@10 39.01 vs ~42-45 |
 | Speech-to-text | **~84%** of Whisper API | WER 3.23% vs ~2.7% |
 | Translation | **~80-85%** of Google Translate | BLEU ~33.8 vs ~40-45 |
 
-*Note: MMLU and MMLU-Redux are related but distinct benchmarks. MMLU-Redux corrects labeling errors in the original MMLU. On MMLU-Redux specifically, GPT-4o scores approximately 88.0-88.3%, making Qwen3.5-4B's 88.8% a slight edge rather than exact parity. The comparison is directionally accurate either way.
+*Note: MMLU and MMLU-Redux are related but distinct benchmarks. MMLU-Redux corrects labeling errors in the original MMLU. GPT-5 scores 92.5% on MMLU, making Qwen3.5-4B's 88.8% MMLU-Redux a strong but not quite matching result. The comparison shows local models closing in on frontier quality.
 
-Sources: Model cards on HuggingFace ([bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5), [bert-base-NER](https://huggingface.co/dslim/bert-base-NER), [Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B)), [OpenAI benchmarks](https://openai.com/index/hello-gpt-4o/), [Moonshine paper (arXiv:2410.15608)](https://arxiv.org/abs/2410.15608).
+Sources: Model cards on HuggingFace ([bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5), [bert-base-NER](https://huggingface.co/dslim/bert-base-NER), [Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B)), [OpenAI benchmarks](https://openai.com/index/introducing-gpt-5/), [Moonshine paper (arXiv:2410.15608)](https://arxiv.org/abs/2410.15608).
 
 The convergence rate is historically unprecedented. [Epoch AI's analysis](https://epoch.ai/data-insights/open-weights-vs-closed-weights-models) shows that open-weight models now trail proprietary frontier models by roughly three months on average, down from 12-18 months in 2023. The [Stanford HAI AI Index 2025 Report](https://hai.stanford.edu/ai-index/2025-ai-index-report) documented the gap between leading US and Chinese models on MMLU narrowing from 17.5 points to 0.3 points in a single year.
 
-On mathematical reasoning, the story is even more dramatic: Qwen3-8B solves 76% of AIME 2024 competition problems in thinking mode. GPT-4o manages approximately 12%. Small open source models do not just match cloud APIs - on certain reasoning tasks, they [dramatically exceed them](https://arxiv.org/abs/2505.09388).
-
-The practical implication: for 7 out of 18 model categories we benchmarked, local models deliver 90%+ of cloud quality. For embeddings - the backbone of semantic search, RAG, and recommendation systems - the gap is 0.1 points on MTEB. That is functionally identical.
+The practical implication: for 7 out of 18 model categories we benchmarked, local models deliver 90%+ of cloud quality. For embeddings - the backbone of semantic search, RAG, and recommendation systems - the gap is 0.1 points on MTEB. That is functionally identical. Frontier cloud models still lead on competition math and complex reasoning, but the tasks that generate the highest API volume in production - embeddings, classification, NER, reranking - are where local models shine.
 
 ---
 
@@ -128,9 +126,9 @@ The distinction matters because inference accounts for the majority of AI comput
 
 ### "What about 100B+ parameter models?"
 
-They will stay in the cloud. A 100B parameter model at 4-bit quantization still requires approximately 50GB - far beyond browser memory limits. Frontier reasoning models like GPT-4o, Claude, and Gemini Ultra will continue to run on cloud infrastructure for the foreseeable future.
+They will stay in the cloud. A 100B parameter model at 4-bit quantization still requires approximately 50GB - far beyond browser memory limits. Frontier reasoning models like GPT-5, Claude, and Gemini Ultra will continue to run on cloud infrastructure for the foreseeable future.
 
-But the question is not whether the browser can replace every cloud model. The question is: what percentage of your inference calls actually need a 100B+ model? For most applications, the answer is surprisingly small. Embeddings, classification, NER, reranking, voice transcription, translation, and structured extraction - the workloads that generate the highest API volume - run well on models under 1GB. Even general-purpose chat, with Qwen3.5-4B, now matches GPT-4o on knowledge benchmarks at 2.5GB.
+But the question is not whether the browser can replace every cloud model. The question is: what percentage of your inference calls actually need a 100B+ model? For most applications, the answer is surprisingly small. Embeddings, classification, NER, reranking, voice transcription, translation, and structured extraction - the workloads that generate the highest API volume - run well on models under 1GB. Even general-purpose chat, with Qwen3.5-4B, now approaches GPT-5 on knowledge benchmarks at 2.5GB.
 
 The practical architecture is hybrid: run the 90% of calls that small models handle well on-device, and route the 10% that require frontier reasoning to the cloud. That hybrid pattern captures most of the cost savings, privacy benefits, and latency improvements while maintaining full capability coverage.
 
@@ -148,7 +146,7 @@ Based on the convergence of these five trends, here is where we expect browser-b
 
 **WebGPU coverage will exceed 90% of global browser sessions.** Firefox's remaining platform gaps (Linux, Android) will close. Older browser versions without WebGPU will age out of the install base. The Can I Use number will cross 90%.
 
-**Sub-2B parameter models will match today's 4B models on key benchmarks.** The same quantization and distillation trajectory that brought 4B models to GPT-4o-level knowledge scores will continue. Models that fit in 1GB of VRAM - comfortable even on phones - will handle most NLP tasks at 90%+ of cloud quality.
+**Sub-2B parameter models will match today's 4B models on key benchmarks.** The same quantization and distillation trajectory that brought 4B models to GPT-5-level knowledge scores will continue. Models that fit in 1GB of VRAM - comfortable even on phones - will handle most NLP tasks at 90%+ of cloud quality.
 
 **Browser-native model formats will emerge.** Today, we convert PyTorch models to ONNX or GGUF for browser consumption. By 2027, major model publishers will ship browser-optimized formats as first-class artifacts, not afterthoughts.
 

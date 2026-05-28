@@ -28,7 +28,7 @@ The single most important difference is where the AI runs:
 | **Runtime** | Native process (Go binary) | Browser tab (JavaScript) |
 | **Compute** | Direct GPU access (Metal, CUDA, ROCm) | WebGPU or WASM inside browser sandbox |
 | **API** | REST API on `localhost:11434` | JavaScript function calls, no network |
-| **Model format** | GGUF (primary), SafeTensors import | ONNX (Transformers.js), MLC (WebLLM), GGUF (wllama) |
+| **Model format** | GGUF (primary), SafeTensors import | ONNX (Transformers.js), MLC (WebLLM), GGUF (wllama), .litertlm (LiteRT) |
 | **Process model** | One server process, multiple clients | Each browser tab = isolated instance |
 
 Everything else flows from this distinction. Native GPU access means Ollama is faster. Browser sandboxing means LocalMode deploys to anyone with a URL.
@@ -83,7 +83,7 @@ This is where Ollama has a clear advantage in sheer breadth.
 
 | | Ollama | LocalMode |
 |---|---|---|
-| **LLM models** | 200+ in the registry, plus any custom GGUF | 30 WebLLM + 17 wllama GGUF (curated for browser) |
+| **LLM models** | 4,500+ in the registry, plus any custom GGUF | 32 WebLLM + 25 wllama language + 16 Transformers.js ONNX + 3 LiteRT (curated for browser); wllama also ships 3 embedding + 2 reranker models |
 | **Max model size** | Limited only by your hardware (70B+ with enough RAM) | Practical limit ~5-9 GB (browser memory constraints) |
 | **Quantization** | Q2 through Q8, FP16, FP32 | Q4 (WebLLM), Q4_K_M (wllama), ONNX quantized |
 | **Model families** | Llama, Qwen, Gemma, Mistral, Phi, DeepSeek, Command-R, Mixtral, CodeLlama, and dozens more | Llama, Qwen, Gemma, Mistral, Phi, DeepSeek, SmolLM, Ministral, TinyLlama |
@@ -101,11 +101,11 @@ This is where the comparison shifts significantly. Ollama is primarily an LLM ru
 
 | Capability | Ollama | LocalMode |
 |---|---|---|
-| LLM chat / text generation | Yes (core feature) | Yes (30 WebLLM + 17 wllama + 15 TJS v4 ONNX models) |
+| LLM chat / text generation | Yes (core feature) | Yes (32 WebLLM + 25 wllama language + 16 Transformers.js ONNX + 3 LiteRT models) |
 | Embeddings | Yes (`/api/embed`) | Yes (`embed()`, `embedMany()`) |
 | Vision / multimodal | Yes (LLaVA, Llama 4, Gemma 3) | Yes (image classification, captioning, object detection, segmentation, CLIP, depth estimation, image-to-image) |
-| Audio transcription | No (requires external Whisper) | Yes (Moonshine via Transformers.js) |
-| Text-to-speech | No | Yes (SpeechT5, MMS-TTS) |
+| Audio transcription | Yes (Whisper models available) | Yes (Moonshine via Transformers.js) |
+| Text-to-speech | No | Yes (Kokoro-82M with 29 English voices, phonemizer-backed) |
 | Translation | Via LLM prompting | Yes (dedicated translation models, Chrome AI) |
 | Summarization | Via LLM prompting | Yes (dedicated summarization models, Chrome AI) |
 | Classification | Via LLM prompting | Yes (dedicated classifiers, zero-shot) |
@@ -114,7 +114,7 @@ This is where the comparison shifts significantly. Ollama is primarily an LLM ru
 | Document QA | Via multimodal LLM | Yes (dedicated document QA models) |
 | Question answering | Via LLM prompting | Yes (dedicated extractive QA models) |
 | Fill-mask | No | Yes (BERT-style masked language models) |
-| Reranking | No (experimental, not in stable release) | Yes (cross-encoder reranking models) |
+| Reranking | Yes (reranking support added via llama.cpp backend) | Yes (cross-encoder reranking models) |
 | Audio classification | No | Yes (audio event detection, zero-shot audio) |
 | Multimodal embeddings | No | Yes (CLIP text+image embeddings) |
 | Vector database | No (requires external) | Yes (built-in HNSW with IndexedDB persistence) |
@@ -281,15 +281,15 @@ async function handleSearch(query: string) {
 |---|---|---|
 | **Best for** | Developers, local experimentation, large models | End-user products, broad ML capabilities, web deployment |
 | **Installation** | CLI install + model pull | `npm install` + browser auto-downloads |
-| **Model count** | 200+ (any GGUF) | 30 WebLLM + 17 wllama + 25 Transformers.js model types |
+| **Model count** | 4,500+ (any GGUF) | 32 WebLLM + 30 wllama (25 language + 3 embedding + 2 reranker) + 16 Transformers.js ONNX + 3 LiteRT |
 | **Max model size** | 70B+ (hardware-limited) | ~9B (browser memory-limited) |
 | **Speed** | Native GPU (fastest) | WebGPU/WASM (60-80% of native for LLMs) |
-| **Capabilities** | LLM, embeddings, vision, reranking, audio | LLM, embeddings, vision, audio, classification, NER, OCR, translation, summarization, TTS, QA, document QA, agents, vector DB, RAG |
+| **Capabilities** | LLM, embeddings, vision, reranking, audio transcription | LLM, embeddings, vision, audio, classification, NER, OCR, translation, summarization, TTS, QA, document QA, agents, vector DB, RAG |
 | **Deployment** | Per-machine installation | One URL, works everywhere |
 | **Platform** | macOS, Linux, Windows | Any modern browser (including mobile, Chromebooks) |
 | **Privacy** | Local, but localhost port open | Local, browser-sandboxed, built-in encryption and PII redaction |
 | **Cost at scale** | $0 compute, but IT support per machine | $0 compute, $0 deployment support |
-| **GitHub stars** | 166K+ | Growing |
+| **GitHub stars** | 172K+ | Growing |
 | **License** | MIT | MIT |
 
 Both Ollama and LocalMode are excellent tools solving different parts of the local AI problem. Ollama gives developers the fastest path to running large models locally. LocalMode gives developers the fastest path to shipping local AI to their users. The best projects will use the strengths of each.
@@ -298,7 +298,7 @@ Both Ollama and LocalMode are excellent tools solving different parts of the loc
 
 ## Methodology
 
-Model counts and capabilities were verified directly from source code and official registries. LocalMode model counts are from the curated catalogs in `packages/webllm/src/models.ts` (30 models), `packages/wllama/src/models.ts` (16 models), and `packages/transformers/src/provider.ts` (25 model type factories). Ollama model counts reference the official model library at [ollama.com/library](https://ollama.com/library). Performance estimates for Ollama are based on community benchmarks for Apple Silicon Metal inference. Performance estimates for LocalMode WebGPU are based on published WebLLM benchmarks for equivalent hardware. The "200+ models" figure for Ollama reflects the registry size as of March 2026.
+Model counts and capabilities were verified directly from source code and official registries. LocalMode model counts are from the curated catalogs in `packages/webllm/src/models.ts` (32 models), `packages/wllama/src/models.ts` (30 models: 25 language + 3 embedding + 2 reranker), `packages/transformers/src/models.ts` (16 ONNX LLMs), and `packages/litert/src/models.ts` (3 LiteRT models). Ollama model counts reference the official model library at [ollama.com/library](https://ollama.com/library). Performance estimates for Ollama are based on community benchmarks for Apple Silicon Metal inference. Performance estimates for LocalMode WebGPU are based on published WebLLM benchmarks for equivalent hardware. The "4,500+ models" figure for Ollama reflects the registry size as of May 2026. Ollama reranking and audio transcription capabilities were verified against the v0.22.x release notes and GitHub PR history.
 
 Sources:
 - [Ollama official website](https://ollama.com/)

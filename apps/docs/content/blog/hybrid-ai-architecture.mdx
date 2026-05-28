@@ -9,7 +9,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 The most common objection to local AI is also the most reasonable one: cloud models are better.
 
-That is true. GPT-4o, Claude, and Gemini are better at complex reasoning, nuanced creative writing, and multi-step problem solving than any model that fits in a browser tab. No serious person disputes this.
+That is true. GPT-5, Claude, and Gemini are better at complex reasoning, nuanced creative writing, and multi-step problem solving than any model that fits in a browser tab. No serious person disputes this.
 
 But here is the question that matters for production architecture: what percentage of your AI requests actually require frontier-quality reasoning?
 
@@ -30,18 +30,18 @@ Not all AI tasks are created equal. Some are well-defined, bounded operations wh
 | Task | Local Model | Quality vs Cloud | Cloud Fallback | When to Use Cloud |
 |---|---|---|---|---|
 | Embeddings | `bge-small-en-v1.5` (33MB) | **99%** of OpenAI | `text-embedding-3-small` | Never - local matches cloud |
-| Sentiment / Classification | `distilbert-sst-2` (67MB) | **95%+** of GPT-4o | GPT-4o | Multi-label with 50+ categories |
-| Zero-shot classification | `mobilebert-mnli` (100MB) | **94-97%** of GPT-4o | GPT-4o | Ambiguous or overlapping labels |
-| Named entity recognition | `bert-base-NER` (178MB) | **95-98%** of GPT-4o | GPT-4o | Rare entity types, nested entities |
-| Extractive QA | `distilbert-squad` (67MB) | **92-95%** of GPT-4o | GPT-4o | Multi-hop reasoning over long docs |
+| Sentiment / Classification | `distilbert-sst-2` (67MB) | **93%+** of GPT-5 | GPT-5 | Multi-label with 50+ categories |
+| Zero-shot classification | `mobilebert-mnli` (100MB) | **92-95%** of GPT-5 | GPT-5 | Ambiguous or overlapping labels |
+| Named entity recognition | `bert-base-NER` (178MB) | **93-96%** of GPT-5 | GPT-5 | Rare entity types, nested entities |
+| Extractive QA | `distilbert-squad` (67MB) | **90-93%** of GPT-5 | GPT-5 | Multi-hop reasoning over long docs |
 | Reranking | `ms-marco-MiniLM-L6-v2` (23MB) | **87-93%** of Cohere | Cohere Rerank | Multilingual or domain-specific |
-| Summarization | `distilbart-cnn-6-6` (305MB) | **85-90%** of GPT-4o | GPT-4o | Abstractive over 10K+ tokens |
+| Summarization | `distilbart-cnn-6-6` (305MB) | **80-85%** of GPT-5 | GPT-5 | Abstractive over 10K+ tokens |
 | Translation | `opus-mt-*` (~100MB each) | **85%** of Google Translate | Google Translate | Rare language pairs, literary text |
 | Speech-to-text | `moonshine-base` (63MB) | **~80%** of Whisper API | Whisper API | Heavy accents, noisy environments |
-| LLM chat | Qwen3-4B (2.2GB) | **84%** MMLU-Redux | GPT-4o | Complex reasoning, 128K context |
-| LLM chat (thinking) | Qwen3.5-4B (~2.5GB) | **~100%** MMLU-Redux | GPT-4o | Creative writing, nuanced tone |
+| LLM chat | Qwen3-4B (2.2GB) | **84%** MMLU-Redux | GPT-5 | Complex reasoning, 272K context |
+| LLM chat (thinking) | Qwen3.5-4B (~2.5GB) | **~96%** MMLU-Redux | GPT-5 | Creative writing, nuanced tone |
 
-The first seven rows - embeddings through translation - represent the vast majority of AI calls in typical production applications. Search boxes embed queries. Moderation pipelines classify content. Support systems extract entities and answer questions. Recommendation engines rerank results. None of these require GPT-4o.
+The first seven rows - embeddings through translation - represent the vast majority of AI calls in typical production applications. Search boxes embed queries. Moderation pipelines classify content. Support systems extract entities and answer questions. Recommendation engines rerank results. None of these require GPT-5.
 
 ---
 
@@ -142,7 +142,7 @@ const { embedding } = await embed({
   value: userQuery,
 });
 
-// Classification - 95%+ of GPT-4o, 10-50ms, $0
+// Classification - 93%+ of GPT-5, 10-50ms, $0
 const { label, score } = await classify({
   model: transformers.classifier(
     'Xenova/distilbert-base-uncased-finetuned-sst-2-english'
@@ -150,7 +150,7 @@ const { label, score } = await classify({
   text: userMessage,
 });
 
-// NER - 95-98% of GPT-4o, 30-100ms, $0
+// NER - 93-96% of GPT-5, 30-100ms, $0
 const { entities } = await extractEntities({
   model: transformers.ner('Xenova/bert-base-NER'),
   text: documentText,
@@ -374,7 +374,7 @@ The hybrid architecture explicitly acknowledges that cloud APIs are the better t
 
 **Complex multi-step reasoning.** "Analyze this contract, identify the three most unusual clauses, and explain how they interact with Section 7" requires a frontier LLM's reasoning depth. Local models handle single-step extraction; cloud models handle chains of inference.
 
-**Long-context generation.** GPT-4o processes 128K tokens in a single context window. Browser LLMs typically operate with 4-32K context. If your task requires synthesizing information across a 50-page document, use a cloud API.
+**Long-context generation.** GPT-5 processes 272K tokens in a single context window. Browser LLMs typically operate with 4-32K context. If your task requires synthesizing information across a 50-page document, use a cloud API.
 
 **Frontier-quality creative writing.** Generating marketing copy that matches a brand voice, writing fiction with consistent characters, or producing nuanced professional communications - cloud models produce meaningfully better output for these tasks.
 
@@ -454,7 +454,7 @@ Quality percentages are from our [benchmark analysis](/blog/local-ai-vs-cloud) c
 - [Qwen3 Technical Report (arXiv:2505.09388)](https://arxiv.org/abs/2505.09388) -- Qwen3-4B MMLU-Redux 83.7-84.2%
 - [Qwen3.5-4B model card](https://huggingface.co/Qwen/Qwen3.5-4B) -- MMLU-Redux 88.8% (thinking mode)
 - [OpenAI text-embedding-3-small](https://openai.com/index/new-embedding-models-and-api-updates/) -- MTEB 62.3
-- [OpenAI GPT-4o announcement](https://openai.com/index/hello-gpt-4o/) -- MMLU 88.7%
+- [OpenAI GPT-5 announcement](https://openai.com/index/introducing-gpt-5/) -- MMLU 92.5%
 
 **Cloud API Latency:**
 - [Embedding provider latency benchmarks (Nixie Search, 2025)](https://nixiesearch.substack.com/p/benchmarking-api-latency-of-embedding) -- OpenAI embedding P50 ~250ms-2s
@@ -462,7 +462,7 @@ Quality percentages are from our [benchmark analysis](/blog/local-ai-vs-cloud) c
 - [Azure OpenAI embedding latency reports](https://learn.microsoft.com/en-us/answers/questions/2153840/azure-openai-embedding-api-takes-1-2-sec-how-to-re) -- Azure OpenAI embedding ~1.2s typical
 
 **Pricing:**
-- [OpenAI API Pricing](https://openai.com/api/pricing/) -- GPT-4o $2.50/$10 per 1M tokens, embeddings $0.020/1M tokens
+- [OpenAI API Pricing](https://openai.com/api/pricing/) -- GPT-5 $1.25/$10 per 1M tokens, embeddings $0.020/1M tokens
 - [Cohere Pricing](https://cohere.com/pricing) -- Rerank $2/1K searches
 - [Google Cloud Translation Pricing](https://cloud.google.com/translate/pricing) -- $20/1M characters
 

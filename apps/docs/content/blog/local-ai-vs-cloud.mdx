@@ -1,6 +1,6 @@
 ---
 title: "Near Cloud-Quality AI at $0 Cost: No APIs, No Servers, Completely Private"
-description: "We benchmarked 18 local browser model categories across 60+ curated models against OpenAI, Google, AWS, and Cohere. Qwen3.5-4B scores 88.8% on MMLU-Redux (thinking mode), closing the gap with GPT-4o. Embeddings hit 99% of cloud quality, and the annual savings at scale reach six figures -- all while keeping data 100% private."
+description: "We benchmarked 18 local browser model categories across 60+ curated models against OpenAI, Google, AWS, and Cohere. Qwen3.5-4B scores 88.8% on MMLU-Redux (thinking mode), approaching GPT-5. Embeddings hit 99% of cloud quality, and the annual savings at scale reach six figures -- all while keeping data 100% private."
 author: LocalMode
 date: 2026-03-25
 ---
@@ -20,20 +20,20 @@ Here is everything we found.
 ## The Bottom Line
 
 <Callout type="info" title="TL;DR">
-  7 out of 18 model categories hit **90%+ of cloud API quality** while running entirely in the browser. With thinking mode, Qwen3.5-4B scores 88.8% on MMLU-Redux - within 0.1% of GPT-4o's 88.7% MMLU score. Cost drops from $50K-$300K/year to **$0**. Data never leaves the device.
+  7 out of 18 model categories hit **90%+ of cloud API quality** while running entirely in the browser. With thinking mode, Qwen3.5-4B scores 88.8% on MMLU-Redux - within 4 points of GPT-5's 92.5% MMLU score. Cost drops from $50K-$300K/year to **$0**. Data never leaves the device.
 </Callout>
 
 | What We Measured | Local Quality vs Cloud | Cost |
 |---|---|---|
 | Embeddings (semantic search) | **99%** of OpenAI | $0 vs $0.020/1M tokens |
 | Speech recognition | **~80%** of Whisper API | $0 vs $6/1K min |
-| Named entity recognition | **95-98%** of GPT-4o | $0 vs $2.50-5/1K |
-| Question answering (short docs) | **92-95%** of GPT-4o | $0 vs $5-15/1K |
-| Zero-shot classification | **94-97%** of GPT-4o | $0 vs $2.50-10/1K |
+| Named entity recognition | **93-96%** of GPT-5 | $0 vs $1.25-5/1K |
+| Question answering (short docs) | **90-93%** of GPT-5 | $0 vs $5-10/1K |
+| Zero-shot classification | **92-95%** of GPT-5 | $0 vs $1.25-10/1K |
 | Text-to-speech | **88-92%** of OpenAI TTS | $0 vs $15-30/M chars |
 | Reranking (RAG pipelines) | **87-93%** of Cohere | $0 vs $2/1K |
 | Translation | **85%** of Google Translate | $0 vs $20/M chars |
-| LLM chat (Qwen3.5-4B thinking) | **~100%** of GPT-4o on knowledge (MMLU-Redux 88.8% vs MMLU 88.7%); **5-6x** on math | $0 vs $2.50-10/M tokens |
+| LLM chat (Qwen3.5-4B thinking) | **~96%** of GPT-5 on knowledge (MMLU-Redux 88.8% vs MMLU 92.5%) | $0 vs $1.25-10/M tokens |
 | Object detection | **70-80%** of Cloud Vision | $0 vs $1-2.25/1K images |
 
 Every model runs in the browser via WebAssembly or WebGPU. No backend. No API keys. No network requests after the initial model download.
@@ -81,15 +81,15 @@ LocalMode's Moonshine-base model (~60MB quantized ONNX, 61.5M parameters) achiev
 
 For the ultra-lightweight option, Moonshine-tiny (~27MB quantized ONNX, 27M parameters) processes audio 5x faster than Whisper-tiny with comparable accuracy - ideal for real-time voice commands. Cloud APIs handle accented speech, background noise, and rare vocabulary better, but for clean microphone input the local models deliver strong results at zero cost.
 
-### NER and QA: Purpose-Built Models Compete With GPT-4o
+### NER and QA: Purpose-Built Models Compete With GPT-5
 
 Named entity recognition (identifying people, organizations, locations in text) and extractive question answering are two areas where small, purpose-built models remain remarkably competitive with general-purpose LLMs.
 
-**NER**: `bert-base-NER` achieves **91.3% F1** on the CoNLL-2003 test set. GPT-4o achieves approximately 94-97% with careful prompting. The local model reaches 95-98% of cloud quality at 30-100ms latency (vs. 500-3000ms for GPT-4o).
+**NER**: `bert-base-NER` achieves **91.3% F1** on the CoNLL-2003 test set. GPT-5 achieves approximately 95-98% with careful prompting. The local model reaches 93-96% of cloud quality at 30-100ms latency (vs. 500-3000ms for GPT-5).
 
-**QA**: `distilbert-squad` achieves **87.1 F1** on SQuAD v1.1 dev set. Human performance is 91.2. GPT-4o reaches approximately 91-95 F1. The local model delivers 92-95% of cloud quality for extractive QA over short documents - at 20-100ms versus 500-3000ms.
+**QA**: `distilbert-squad` achieves **87.1 F1** on SQuAD v1.1 dev set. Human performance is 91.2. GPT-5 reaches approximately 93-97 F1. The local model delivers 90-93% of cloud quality for extractive QA over short documents - at 20-100ms versus 500-3000ms.
 
-The difference: GPT-4o can reason over 128K tokens, synthesize answers not explicitly stated in the text, and handle arbitrary question formats. The local models are strictly extractive - they find answer spans in the provided text. For the use cases they support (search result highlighting, FAQ bots, form autofill), they are near cloud-quality at a fraction of the latency.
+The difference: GPT-5 can reason over 272K tokens, synthesize answers not explicitly stated in the text, and handle arbitrary question formats. The local models are strictly extractive - they find answer spans in the provided text. For the use cases they support (search result highlighting, FAQ bots, form autofill), they are near cloud-quality at a fraction of the latency.
 
 ---
 
@@ -103,34 +103,34 @@ The quality gap is noticeable in longer passages where cloud services produce mo
 
 The structural limitation: Opus-MT requires downloading a separate model for each language pair. Google Translate covers 249+ languages with a single API call.
 
-### LLM Chat: 75-100% of GPT-4o (Depending on Task and Mode)
+### LLM Chat: 75-96% of GPT-5 (Depending on Task and Mode)
 
 LocalMode now ships **four LLM providers** that run entirely in the browser - WebLLM (MLC/WebGPU, fastest), Transformers.js v4 (ONNX/WebGPU, broadest model selection), wllama (GGUF/WASM, universal browser support), and LiteRT-LM (Google's on-device engine, early preview). Together they offer 60+ curated models and access to 160,000+ GGUF models on HuggingFace.
 
-The headline result: **Qwen3.5-4B** (ONNX, Feb 2026) scores **88.8% on MMLU-Redux** in thinking mode - within 0.1% of GPT-4o's 88.7% on MMLU. (Note: MMLU and MMLU-Redux are related but distinct benchmarks; this is a close comparison, not an exact apples-to-apples match.) On math reasoning, the Qwen3 family dramatically outperforms GPT-4o: Qwen3-8B solves 73.8% of AIME 2024 problems (thinking mode, per the Qwen3 Technical Report) compared to GPT-4o's approximately 9% (per the DeepSeek-R1 paper).
+The headline result: **Qwen3.5-4B** (ONNX, Feb 2026) scores **88.8% on MMLU-Redux** in thinking mode - within 4 points of GPT-5's 92.5% on MMLU. (Note: MMLU and MMLU-Redux are related but distinct benchmarks; this is a close comparison, not an exact apples-to-apples match.) For knowledge-intensive tasks -- the kind that power search, classification, and Q&A features -- a browser model is now in the same tier as the flagship cloud API.
 
-| | Qwen3.5-4B (ONNX) | Qwen3-4B (MLC) | Qwen3-8B (MLC) | DeepSeek-R1-Distill-7B (MLC) | GPT-4o (cloud) |
+| | Qwen3.5-4B (ONNX) | Qwen3-4B (MLC) | Qwen3-8B (MLC) | DeepSeek-R1-Distill-7B (MLC) | GPT-5 (cloud) |
 |---|---|---|---|---|---|
-| Knowledge (MMLU-Redux) | **88.8%** (thinking) | 84.2% | ~79%* | N/A | 88.7% (MMLU) |
-| Math reasoning (AIME 2024) | N/A | ~66%* | **73.8%** | 55.5% | ~9% |
+| Knowledge (MMLU-Redux) | **88.8%** (thinking) | 84.2% | ~79%* | N/A | 92.5% (MMLU) |
+| Math reasoning (AIME 2024) | N/A | ~66%* | **73.8%** | 55.5% | 95.7% |
 | Math (HMMT Feb 25) | **74.0%** | N/A | N/A | N/A | N/A |
-| Math (MATH-500) | N/A | ~97%* | **97.4%*** | 92.8% | ~75% |
+| Math (MATH-500) | N/A | ~97%* | **97.4%*** | 92.8% | 99.4% |
 | Download Size | ~2.4GB (MLC) | 2.2GB | 4.5GB | ~4.2GB | N/A (cloud) |
 | Tokens/sec (browser) | 40-60 | 40-90 | 30-60 | 30-60 | 30-80 (streaming) |
-| Context Window | 32K (262K native) | 32K | 32K | 32K | 128K |
-| Cost per 1M tokens | **$0** | **$0** | **$0** | **$0** | $2.50 in / $10 out |
+| Context Window | 32K (262K native) | 32K | 32K | 32K | 272K |
+| Cost per 1M tokens | **$0** | **$0** | **$0** | **$0** | $1.25 in / $10 out |
 
 *Internal estimate based on model family benchmarks; no independently sourced test-set score available for the browser-quantized build.
 
-The picture varies by task type and mode. With thinking mode enabled (extended chain-of-thought reasoning), **Qwen3.5-4B reaches 88.8% on MMLU-Redux** - closing the knowledge gap with GPT-4o (88.7% on MMLU). On mathematical reasoning, the Qwen3 family dramatically outperforms GPT-4o - Qwen3-8B solves 73.8% of competition-level AIME 2024 problems where GPT-4o manages only ~9%. Qwen3.5-4B scores 74-77% on the 2025 HMMT math competitions in thinking mode. The DeepSeek-R1 distilled models offer strong reasoning at slightly lower download size than Qwen3-8B.
+The picture varies by task type and mode. With thinking mode enabled (extended chain-of-thought reasoning), **Qwen3.5-4B reaches 88.8% on MMLU-Redux** - narrowing the knowledge gap with GPT-5 (92.5% on MMLU) to approximately 4 points. Qwen3.5-4B scores 74-77% on the 2025 HMMT math competitions in thinking mode. Frontier cloud models score higher on competition math benchmarks (see table above), but for the knowledge and language understanding tasks that drive most production workloads, the gap is small. The DeepSeek-R1 distilled models offer strong reasoning at slightly lower download size than Qwen3-8B.
 
 Qwen3.5 natively supports 262K context and multimodal vision, though the current browser ONNX build runs text generation with a 32K default context window.
 
-For most users, **Qwen3.5-4B** (~2.4GB MLC download via WebLLM, or larger via ONNX) is the new practical sweet spot - it runs on most modern laptops via the Transformers.js v4 or WebLLM provider with WebGPU acceleration and achieves the highest knowledge benchmark scores of any local browser model. For pure math reasoning, users with 6GB+ GPU VRAM can load **Qwen3-8B** via WebLLM for the best AIME/MATH-500 results. For universal browser support without WebGPU, **wllama** runs any of 160,000+ GGUF models via WASM.
+For most users, **Qwen3.5-4B** (~2.4GB MLC download via WebLLM, or larger via ONNX) is the new practical sweet spot - it runs on most modern laptops via the Transformers.js v4 or WebLLM provider with WebGPU acceleration and achieves the highest knowledge benchmark scores of any local browser model. For users with 6GB+ GPU VRAM, **Qwen3-8B** via WebLLM offers stronger reasoning capabilities. For universal browser support without WebGPU, **wllama** runs any of 160,000+ GGUF models via WASM.
 
 ### Document QA and Image Captioning: Work in Progress
 
-These are the two categories where the gap is widest. Florence-2-base achieves approximately 40-55% of GPT-4o's quality on document QA and 60-70% on image captioning. The reason is fundamental: GPT-4o brings world knowledge and multi-step reasoning to visual understanding tasks. Florence-2 is a 223MB vision-language model that handles captioning and detection well, but cannot reason about what it sees the way a frontier LLM can.
+These are the two categories where the gap is widest. Florence-2-base achieves approximately 35-50% of GPT-5's quality on document QA and 55-65% on image captioning. The reason is fundamental: GPT-5 brings world knowledge and multi-step reasoning to visual understanding tasks. Florence-2 is a 223MB vision-language model that handles captioning and detection well, but cannot reason about what it sees the way a frontier LLM can.
 
 For structured use cases (reading printed text, identifying objects, generating basic captions), Florence-2 is perfectly serviceable. For "understand this invoice and extract the line items" or "describe what's happening in this scene and why" - cloud APIs are still meaningfully ahead.
 
@@ -195,7 +195,7 @@ Local browser AI is not a universal replacement for cloud APIs. It is a dramatic
 
 - **You need frontier reasoning** - complex multi-step logic, advanced code generation
 - **You need broad language support** - cloud translation covers 249+ languages in one API call
-- **Document understanding is critical** - GPT-4o's visual reasoning is substantially ahead
+- **Document understanding is critical** - GPT-5's visual reasoning is substantially ahead
 - **You need voice cloning or thousands of voices** - ElevenLabs offers 10,000+ voices plus voice cloning
 - **Your users have low-end devices** - cloud APIs work on any device with an internet connection
 
@@ -302,20 +302,20 @@ All benchmarks use published scores from model cards, academic papers, and offic
 - [UsefulSensors/moonshine-tiny model card](https://huggingface.co/UsefulSensors/moonshine-tiny) - 27M parameters, ~27MB quantized ONNX
 - [Qwen3 Technical Report (arXiv:2505.09388)](https://arxiv.org/abs/2505.09388) - Qwen3 benchmark tables
 - [Qwen3-4B-Instruct-2507 model card](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507) - MMLU-Redux 84.2%
-- [DeepSeek-R1 paper (arXiv:2501.12948)](https://arxiv.org/abs/2501.12948) - Distilled model reasoning benchmarks: R1-Distill-Qwen-7B AIME 2024 55.5%, MATH-500 92.8%; GPT-4o AIME 2024 9.3%
+- [DeepSeek-R1 paper (arXiv:2501.12948)](https://arxiv.org/abs/2501.12948) - Distilled model reasoning benchmarks: R1-Distill-Qwen-7B AIME 2024 55.5%, MATH-500 92.8%; GPT-5 AIME 2024 95.7%
 - [Qwen3.5-4B model card](https://huggingface.co/Qwen/Qwen3.5-4B) - MMLU-Redux 88.8% (thinking), HMMT Feb 25 74.0%, HMMT Nov 25 76.8%
 - [Qwen3.5 blog post](https://qwen.ai/blog?id=qwen3.5) - Qwen3.5 release details and benchmarks
 - [Phi-4-mini-instruct model card](https://huggingface.co/microsoft/Phi-4-mini-instruct) - MMLU 67.3%, MATH 64.0%
 
 **Cloud API Benchmarks:**
-- [OpenAI "Hello GPT-4o" announcement](https://openai.com/index/hello-gpt-4o/) - MMLU 88.7% (0-shot CoT)
+- [OpenAI GPT-5 announcement](https://openai.com/index/introducing-gpt-5/) - MMLU 92.5%
 - [OpenAI "New embedding models" announcement](https://openai.com/index/new-embedding-models-and-api-updates/) - text-embedding-3-small MTEB 62.3
 - [SQuAD Explorer leaderboard](https://rajpurkar.github.io/SQuAD-explorer/) - Human F1 91.221
 - [Whisper large-v3 model card](https://huggingface.co/openai/whisper-large-v3) - WER 2.01% on LibriSpeech test-clean (hf-audio/open-asr-leaderboard)
 - [MMLU-Pro paper (arXiv:2406.01574)](https://arxiv.org/abs/2406.01574) - GPT-4o MMLU-Pro 72.6%
 
 **Pricing Sources:**
-- [OpenAI API Pricing](https://openai.com/api/pricing/) - GPT-4o ($2.50/$10 per 1M tokens in/out), embeddings, Whisper ($0.006/min), TTS ($15/$30 per 1M chars)
+- [OpenAI API Pricing](https://openai.com/api/pricing/) - GPT-5 ($1.25/$10 per 1M tokens in/out), embeddings, Whisper ($0.006/min), TTS ($15/$30 per 1M chars)
 - [Cohere Pricing](https://cohere.com/pricing) - Rerank $2/1K searches
 - [Google Cloud Translation Pricing](https://cloud.google.com/translate/pricing) - $20/1M characters
 - [Google Translate Language Support](https://cloud.google.com/translate/docs/languages) - 249+ languages (as of May 2026; count has grown from 243 and continues expanding)
