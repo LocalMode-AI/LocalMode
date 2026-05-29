@@ -3,6 +3,18 @@ title: "LocalMode vs Ollama: Browser AI vs Desktop AI - Choosing the Right Local
 description: "A fair, detailed comparison of two great local AI tools: Ollama runs LLMs natively on your desktop with GPU acceleration, while LocalMode runs 25 model types entirely in the browser with zero installation. Learn when to use each - and how they complement each other."
 author: LocalMode
 date: 2026-02-03
+dateModified: "2026-05-29"
+faq:
+  - question: "What is the main difference between LocalMode and Ollama?"
+    answer: "Ollama is a native desktop runtime that installs a Go binary and exposes a local REST API on port 11434, offering direct GPU access for fast LLM inference. LocalMode is a browser SDK that runs ML models inside the browser tab using WebGPU and WebAssembly -- no installation, no background process, no server."
+  - question: "When should I use Ollama instead of LocalMode?"
+    answer: "Use Ollama when you need models larger than 9B parameters (70B+ models), maximum inference speed via native Metal/CUDA/ROCm GPU access, or an OpenAI-compatible REST API. Ollama supports 4,500+ models in its registry and is ideal for developer testing and technical audiences."
+  - question: "When should I use LocalMode instead of Ollama?"
+    answer: "Use LocalMode when building products for non-technical end users, when you need more than just LLMs (embeddings, classification, NER, OCR, TTS, vector search, RAG), or when deployment scale matters. Users open a web page and AI works -- no installation across 10,000+ users."
+  - question: "How does LocalMode's performance compare to Ollama?"
+    answer: "Ollama achieves 40-80 tokens/sec for 7B models via native Metal on Apple Silicon. LocalMode reaches 15-40 tokens/sec via WebGPU and 5-15 tokens/sec via WASM. For non-LLM tasks like embeddings and classification, the gap narrows to within 80-90% of native speed."
+  - question: "Can you use both Ollama and LocalMode together?"
+    answer: "Yes. A common pattern is using Ollama during development for fast iteration with large models, then deploying with LocalMode for browser-native delivery. Another pattern is Ollama on the server for heavy batch processing and LocalMode in the client for real-time features."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

@@ -3,6 +3,16 @@ title: "Why Every SaaS Should Have a 'Local Mode' Toggle"
 description: "The product pattern hiding in plain sight: a single toggle that offloads AI inference to user devices, eliminates GDPR data-processor obligations, works offline, cuts latency to near-zero, and turns privacy into a pricing-page feature. Here is the business case, the architectural pattern, and the code to build it."
 author: LocalMode
 date: 2026-01-27
+dateModified: "2026-05-29"
+faq:
+  - question: "What is a 'Local Mode' toggle in a SaaS application?"
+    answer: "A Local Mode toggle is a settings switch that routes AI inference to models running in the user's browser instead of cloud APIs. When enabled, features like semantic search, classification, and NER run on-device at zero cost, with no data leaving the browser."
+  - question: "How much can a Local Mode toggle save on cloud AI costs?"
+    answer: "For a B2B SaaS with 1,000 active users making 100 AI interactions per day (36.5 million calls/year), routing embeddings, classification, and reranking locally saves over $200,000 annually. Every inference call on the user's device costs exactly zero."
+  - question: "How does Local Mode simplify GDPR compliance?"
+    answer: "When data never leaves the browser, there is no data processor relationship. This eliminates GDPR Article 28 obligations including Data Processing Agreements, cross-border transfer assessments, sub-processor audits, and breach notification from third parties. The privacy guarantee is architectural, not contractual."
+  - question: "Can Local Mode work as a premium pricing tier feature?"
+    answer: "Yes. Local Mode enables a privacy-premium pricing strategy: the free tier uses cloud AI, while paid tiers unlock on-device processing. Enterprise customers in regulated industries (healthcare, legal, finance) will pay more for the verifiable guarantee that data never leaves the device."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

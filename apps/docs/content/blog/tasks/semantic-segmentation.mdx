@@ -3,6 +3,16 @@ title: "Image Segmentation in the Browser"
 description: "Classify every pixel in an image into semantic categories - roads, buildings, people, sky - using SegFormer."
 author: "LocalMode"
 date: "2026-04-24"
+dateModified: "2026-05-26"
+faq:
+  - question: "What is the best model for image segmentation in the browser?"
+    answer: "For full semantic segmentation across 150 ADE20K categories, use Xenova/segformer-b0-finetuned-ade-512-512 (15.3MB fp32). For real-time selfie and person background removal, MediaPipe's Selfie Segmenter is only 250KB and runs at 30+ fps."
+  - question: "How large is the model download for browser image segmentation?"
+    answer: "SegFormer B0 is 15.3MB (fp32), with a quantized variant at ~4.4MB. MediaPipe's Selfie Segmenter is only 250KB, making it one of the smallest ML models available for any task."
+  - question: "Does browser-based image segmentation work offline?"
+    answer: "Yes. After the initial model download (as small as 250KB for selfie segmentation), image segmentation works completely offline with no server or API key required."
+  - question: "What categories can browser semantic segmentation detect?"
+    answer: "SegFormer B0 classifies every pixel across 150 ADE20K categories including buildings, roads, sky, vegetation, furniture, and people. MediaPipe's Selfie Segmenter focuses specifically on person and background segmentation."
 ---
 
 # Image Segmentation in the Browser

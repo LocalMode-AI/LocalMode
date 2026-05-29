@@ -3,11 +3,21 @@ title: "Real-Time Voice Notes With Transcription - 100% Offline, Zero Cost"
 description: "Build a voice notes app with browser-based speech-to-text using Moonshine models. No servers, no API keys, no per-minute charges. The model downloads once, then transcription works forever - even on a plane."
 author: LocalMode
 date: 2026-02-04
+dateModified: "2026-05-29"
+faq:
+  - question: "Can speech-to-text run entirely in the browser without a server?"
+    answer: "Yes. Moonshine is a speech recognition model designed for edge devices that runs in the browser via ONNX Runtime and Transformers.js. The model downloads once (27-237MB depending on variant (Moonshine Tiny ~27-50MB, Moonshine Base ~237MB)), caches itself, and works offline from that point forward."
+  - question: "How does Moonshine compare to Whisper for voice transcription?"
+    answer: "Moonshine Tiny (27M params) achieves 4.52% word error rate on LibriSpeech clean, beating Whisper tiny.en's 5.66% with 28% fewer parameters. Moonshine Base (61.5M params) achieves 3.23% WER, close to the Whisper API's large-v3 at ~2.7%. Moonshine also uses 5x less compute than Whisper for a 10-second segment."
+  - question: "How much does browser-based speech-to-text cost compared to cloud APIs?"
+    answer: "Zero after the initial model download. OpenAI's Whisper API charges $0.006 per minute. For a voice notes app with 10,000 daily active users averaging 5 minutes of audio each, that totals $109,500 per year in cloud costs versus $0 with Moonshine running locally."
+  - question: "Why is Moonshine more efficient than Whisper in the browser?"
+    answer: "Moonshine uses Rotary Position Embeddings and processes audio proportional to its actual duration, unlike Whisper which pads all audio to fixed 30-second chunks. A 3-second voice note uses a fraction of the compute that a 30-second chunk would require."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-Every speech-to-text feature you ship today comes with the same trade-off: send your users' audio to a cloud API, pay per minute, and hope the network holds up. OpenAI's Whisper API charges $0.006 per minute. That sounds cheap until you do the math for a voice notes app with 10,000 daily active users averaging 5 minutes of audio each - $10,950 per year, and every recording hits someone else's servers.
+Every speech-to-text feature you ship today comes with the same trade-off: send your users' audio to a cloud API, pay per minute, and hope the network holds up. OpenAI's Whisper API charges $0.006 per minute. That sounds cheap until you do the math for a voice notes app with 10,000 daily active users averaging 5 minutes of audio each - $109,500 per year, and every recording hits someone else's servers.
 
 What if the transcription happened entirely inside the browser? No uploads. No API keys. No recurring bill. The model downloads once, caches itself, and works offline from that point forward - on a plane, in a tunnel, in airplane mode.
 

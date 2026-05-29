@@ -3,6 +3,16 @@ title: "Build a GDPR-Compliant AI Feature Without Touching User Data"
 description: "On-device browser inference eliminates the data processor relationship, cross-border transfers, and DPA negotiations that cloud AI demands. Four technical patterns -- PII redaction, encrypted vectors, differential privacy, and local classification -- show how to architect AI features that satisfy GDPR Articles 5, 25, 28, and 35 by design."
 author: LocalMode
 date: 2026-02-05
+dateModified: "2026-05-28"
+faq:
+  - question: "How does on-device AI inference change GDPR compliance requirements?"
+    answer: "When ML inference runs in a WebAssembly sandbox inside the browser, no personal data reaches any third party. This eliminates the data processor relationship (Article 28), removes cross-border transfer obligations (Chapter V), achieves data minimization by architecture (Article 5(1)(c)), and implements privacy by design (Article 25) at the infrastructure level."
+  - question: "What are the four technical patterns for GDPR-compliant AI in the browser?"
+    answer: "PII detection and redaction before processing (redactPII strips emails, phones, SSNs before embedding), encrypted vectors at rest (AES-GCM encryption via Web Crypto API), differential privacy noise injection on embeddings (dp-middleware adds calibrated noise), and local classification that never transmits user text to any server."
+  - question: "Does on-device AI completely eliminate GDPR obligations?"
+    answer: "No. On-device inference eliminates server-side data risks and the Article 28 processor relationship, but client-side threats remain: malicious browser extensions, XSS attacks, and compromised npm dependencies. A DPIA may still be recommended for certain processing activities, though its scope is significantly reduced. Consult qualified legal counsel for your specific situation."
+  - question: "How does local AI handle the GDPR Article 44 cross-border transfer requirement?"
+    answer: "When inference happens in the browser, data does not leave the device, so there is no transfer to assess. This eliminates the need for adequacy decisions, Standard Contractual Clauses, or Binding Corporate Rules that US-based AI API providers require. The model files themselves are public open-weight assets, not personal data."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

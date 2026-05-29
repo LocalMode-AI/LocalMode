@@ -3,6 +3,16 @@ title: "Machine Translation in the Browser"
 description: "Translate text between languages using dedicated translation models or Chrome Built-in AI - offline and private."
 author: "LocalMode"
 date: "2026-04-03"
+dateModified: "2026-05-27"
+faq:
+  - question: "What is the best model for machine translation in the browser?"
+    answer: "OPUS-MT models (~100MB per language pair) are recommended for guaranteed quality. Chrome Built-in AI (Gemini Nano in Chrome 138+) offers zero-download translation. Both use the same translate() function and TranslationModel interface."
+  - question: "What language pairs are supported for browser translation?"
+    answer: "LocalMode ships six OPUS-MT directional pairs: English to/from German, French, and Spanish. Chrome Built-in AI supports additional language pairs. Any HuggingFace OPUS-MT model can be used by passing its model ID directly."
+  - question: "Does browser-based translation work offline?"
+    answer: "Yes. After the initial model download (~100MB per OPUS-MT language pair), translation works completely offline. Chrome Built-in AI requires no separate download since the model is bundled with Chrome 138+."
+  - question: "How does local translation cost compare to cloud APIs?"
+    answer: "Google Translate API costs $80 per million characters and DeepL API costs $25 per million characters. LocalMode translation costs $0 using either OPUS-MT or Chrome AI, with quality comparable for common language pairs."
 ---
 
 # Machine Translation in the Browser
@@ -82,11 +92,11 @@ Running machine translation locally eliminates per-request API costs and keeps a
 
 | Service | Cost / Notes |
 | --- | --- |
-| Google Translate API | $20 per million characters |
+| Google Translate API | $80 per million characters |
 | DeepL API | $25 per million characters |
 | LocalMode translation | $0 using either OPUS-MT (100MB download per language pair) or Chrome AI (zero download) |
 
-Google Translate API costs $20 per million characters. DeepL API costs $25 per million characters. LocalMode translation costs $0 using either OPUS-MT (100MB download per language pair) or Chrome AI (zero download). Quality is comparable for common language pairs.
+Google Translate API costs $80 per million characters. DeepL API costs $25 per million characters. LocalMode translation costs $0 using either OPUS-MT (100MB download per language pair) or Chrome AI (zero download). Quality is comparable for common language pairs.
 
 The break-even point for most applications is low: if you process more than a few hundred requests per day, local inference costs less than any cloud API within the first week. For privacy-sensitive applications (medical records, legal documents, financial data), the cost comparison is secondary - the ability to process data without it ever leaving the device is the primary value.
 
@@ -137,7 +147,7 @@ The hook returns `{ data, error, isLoading, execute, cancel, reset }` - providin
 
 ## Methodology
 
-This guide is based on LocalMode's source code (`packages/transformers/src/models.ts`, `packages/core/src/translation/`, `packages/chrome-ai/src/`), the `TRANSLATION_MODELS` catalog (six Helsinki-NLP OPUS-MT directional pairs), and the `ChromeAITranslator` implementation (modelId `chrome-ai:gemini-nano-translator`). Cloud pricing figures were verified against the official Google Cloud Translation pricing page ($20/million characters for NMT after the 500K free-tier) and multiple 2025–2026 aggregator sources for DeepL API Pro ($25/million characters). ONNX model file sizes were verified from the Xenova/opus-mt-en-de repository on HuggingFace (encoder_quantized ~49 MB + decoder_merged_quantized ~57 MB ≈ ~106 MB total per pair). Pricing is subject to change - verify with each provider before making cost decisions.
+This guide is based on LocalMode's source code (`packages/transformers/src/models.ts`, `packages/core/src/translation/`, `packages/chrome-ai/src/`), the `TRANSLATION_MODELS` catalog (six Helsinki-NLP OPUS-MT directional pairs), and the `ChromeAITranslator` implementation (modelId `chrome-ai:gemini-nano-translator`). Cloud pricing figures were verified against the official Google Cloud Translation pricing page ($80/million characters for NMT after the 500K free-tier) and multiple 2025–2026 aggregator sources for DeepL API Pro ($25/million characters). ONNX model file sizes were verified from the Xenova/opus-mt-en-de repository on HuggingFace (encoder_quantized ~49 MB + decoder_merged_quantized ~57 MB ≈ ~106 MB total per pair). Pricing is subject to change - verify with each provider before making cost decisions.
 
 ## Sources
 

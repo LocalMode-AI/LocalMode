@@ -3,6 +3,18 @@ title: "Phi Models in the Browser"
 description: "Microsoft's compact yet powerful Phi models - from 3.8B parameters with vision support, optimized for reasoning tasks."
 author: "LocalMode"
 date: "2026-04-19"
+dateModified: "2026-05-26"
+faq:
+  - question: "What is the smallest Phi model available in LocalMode?"
+    answer: "Phi-3-mini-4k-instruct ONNX web at 1.2GB via Transformers.js is the smallest. The wllama GGUF variant of Phi-3.5-mini is 1.24GB. Both use the same LanguageModel interface."
+  - question: "Does Phi support vision/image input?"
+    answer: "Yes. The Phi-3.5-vision-instruct variant (2.4GB via WebLLM) can analyze images alongside text, making it the only vision-capable LLM available through WebLLM in LocalMode. It uses a 1,024-token context window."
+  - question: "How many providers support Phi models?"
+    answer: "Phi is available through three providers: WebLLM (WebGPU), wllama (WASM for universal browser support), and Transformers.js (ONNX). This ensures coverage across Chrome, Firefox, Safari, and Edge."
+  - question: "How does Phi compare to Llama for browser inference?"
+    answer: "At 3.8B parameters, Phi models punch above their weight in reasoning, math, and coding tasks. They tend to produce more concise, structured outputs compared to Llama or Qwen, making them excellent for applications needing focused, information-dense responses."
+  - question: "Can I run Phi models offline?"
+    answer: "Yes. All Phi variants work offline after the initial download (1.2-2.4GB depending on variant). Models are cached in IndexedDB and require no API keys or network connection for inference."
 ---
 
 # Phi Models in the Browser

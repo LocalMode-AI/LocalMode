@@ -3,6 +3,18 @@ title: "Text Generation (LLM Chat) in the Browser"
 description: "Generate text, answer questions, and have conversations using local LLMs running entirely in the browser."
 author: "LocalMode"
 date: "2026-04-28"
+dateModified: "2026-05-28"
+faq:
+  - question: "What is the best model for LLM chat in the browser?"
+    answer: "Llama-3.2-1B-Instruct-q4f16_1-MLC (712MB, WebGPU) is a good starting point. For the smallest option, SmolLM2-135M (78MB) is available. For highest quality, Qwen3-4B scores 83.7% on MMLU-Redux in thinking mode, within 10% of GPT-5."
+  - question: "Does browser-based text generation work offline?"
+    answer: "Yes. After the initial model download (70MB to 5GB depending on model), text generation works completely offline with no server, no API key, and no data leaving the device."
+  - question: "What browsers support LLM text generation?"
+    answer: "WebLLM requires WebGPU (Chrome 113+, Edge 113+, Safari 26+). Wllama uses WASM and works in every modern browser including Firefox. Transformers.js supports both WebGPU and WASM. LiteRT requires WebGPU for Gemma 4 models."
+  - question: "How does local LLM cost compare to cloud APIs?"
+    answer: "OpenAI GPT-5 costs $1.25-10 per million tokens and Claude Sonnet costs $3-15 per million tokens. Local browser LLMs cost $0 per token. The quality gap has narrowed significantly for tasks like chat, summarization, and classification."
+  - question: "How many LLM models are available for browser text generation?"
+    answer: "LocalMode offers models across four providers: WebLLM (WebGPU), wllama (WASM), Transformers.js (ONNX), and LiteRT. Models span multiple families including Qwen, Llama, Phi, SmolLM2, Gemma, Mistral, DeepSeek, and Granite, ranging from 70MB to 5GB."
 ---
 
 # Text Generation (LLM Chat) in the Browser

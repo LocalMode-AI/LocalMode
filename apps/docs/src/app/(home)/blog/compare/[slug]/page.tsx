@@ -25,16 +25,20 @@ export default async function ComparePage(props: {
   const MDX = page.data.body;
 
   const dateISO = new Date(page.data.date as string).toISOString();
+  const modifiedISO = page.data.dateModified
+    ? new Date(page.data.dateModified as string).toISOString()
+    : dateISO;
+  const faqItems = page.data.faq;
   const related = getRelatedComparisons(params.slug);
 
-  const jsonLd = [
+  const jsonLd: Record<string, unknown>[] = [
     {
       '@context': 'https://schema.org',
-      '@type': 'FAQPage',
-      name: page.data.title,
+      '@type': 'Article',
+      headline: page.data.title,
       description: page.data.description,
       datePublished: dateISO,
-      dateModified: dateISO,
+      dateModified: modifiedISO,
       publisher: {
         '@type': 'Organization',
         name: 'LocalMode',
@@ -42,7 +46,10 @@ export default async function ComparePage(props: {
       },
       url: `${baseUrl}${page.url}`,
       image: `${baseUrl}/og/blog/compare/${page.slugs[0]}`,
-      mainEntity: [],
+      mainEntityOfPage: {
+        '@type': 'WebPage',
+        '@id': `${baseUrl}${page.url}`,
+      },
     },
     {
       '@context': 'https://schema.org',
@@ -55,6 +62,30 @@ export default async function ComparePage(props: {
       ],
     },
   ];
+
+  jsonLd.push({
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    speakable: {
+      '@type': 'SpeakableSpecification',
+      cssSelector: ['article > header > h1', 'article > header > p'],
+    },
+  });
+
+  if (faqItems.length > 0) {
+    jsonLd.push({
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: faqItems.map((item) => ({
+        '@type': 'Question',
+        name: item.question,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: item.answer,
+        },
+      })),
+    });
+  }
 
   return (
     <article className="flex-1 w-full max-w-[900px] mx-auto px-6 py-16">
@@ -81,12 +112,35 @@ export default async function ComparePage(props: {
               day: 'numeric',
             })}
           </time>
+          {page.data.dateModified && (
+            <>
+              <span>·</span>
+              <span>Updated <time dateTime={modifiedISO}>
+                {new Date(page.data.dateModified as string).toLocaleDateString('en-US', {
+                  year: 'numeric', month: 'long', day: 'numeric',
+                })}
+              </time></span>
+            </>
+          )}
         </div>
       </header>
       <InlineTOC items={page.data.toc} />
       <div className="prose prose-fd min-w-0 mt-8">
         <MDX components={getMDXComponents()} />
       </div>
+      {faqItems.length > 0 && (
+        <section className="mt-12">
+          <h2 className="text-xl font-semibold mb-6">Frequently Asked Questions</h2>
+          <dl className="space-y-6">
+            {faqItems.map((item, i) => (
+              <div key={i}>
+                <dt className="font-medium text-fd-foreground">{item.question}</dt>
+                <dd className="mt-2 text-fd-muted-foreground">{item.answer}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
       {related.length > 0 && (
         <aside className="mt-16 pt-8 border-t border-fd-border">
           <h2 className="text-xl font-semibold mb-6">More Comparisons</h2>
@@ -113,6 +167,9 @@ export async function generateMetadata(props: {
 
   const ogImage = `${baseUrl}/og/blog/compare/${page.slugs[0]}`;
   const dateISO = new Date(page.data.date as string).toISOString();
+  const modifiedISO = page.data.dateModified
+    ? new Date(page.data.dateModified as string).toISOString()
+    : dateISO;
 
   return {
     title: `${page.data.title} | AI Comparison | LocalMode`,
@@ -128,7 +185,7 @@ export async function generateMetadata(props: {
       description: page.data.description,
       type: 'article',
       publishedTime: dateISO,
-      modifiedTime: dateISO,
+      modifiedTime: modifiedISO,
       siteName: 'LocalMode',
       locale: 'en_US',
       url: `${baseUrl}${page.url}`,

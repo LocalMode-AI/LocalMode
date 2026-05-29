@@ -3,6 +3,18 @@ title: "Gemma Models in the Browser"
 description: "Google's Gemma models - compact, high-quality models available in LocalMode via WebLLM, wllama, and LiteRT, spanning 1.3GB to 5GB."
 author: "LocalMode"
 date: "2026-03-29"
+dateModified: "2026-05-27"
+faq:
+  - question: "What is the smallest Gemma model available in LocalMode?"
+    answer: "The Gemma-2-2B GGUF variant via wllama is the smallest at 1.3GB. It runs on WASM in any browser and supports the full 8,192-token context window. The WebLLM version is 1.44GB but requires WebGPU."
+  - question: "Does Gemma require WebGPU to run in the browser?"
+    answer: "Not necessarily. The wllama GGUF variant runs on WASM in any browser including Firefox. The WebLLM variants and LiteRT Gemma 4 variants require WebGPU. You can use a try/catch fallback pattern to attempt WebGPU first and fall back to WASM."
+  - question: "What is the difference between Gemma 2 and Gemma 4 in LocalMode?"
+    answer: "Gemma 2 (2B and 9B) uses grouped-query attention with interleaved local-global attention. Gemma 4 (E2B and E4B) introduced Mixture-of-Experts architecture and is available exclusively through the LiteRT provider as WebGPU-only GPU-compiled builds."
+  - question: "Can I run Gemma offline after downloading?"
+    answer: "Yes. All Gemma variants work offline after the initial download. Models are cached in IndexedDB via LocalMode's model caching system, and subsequent uses require no network connection."
+  - question: "How many providers support Gemma models?"
+    answer: "Gemma is available through three providers: WebLLM (WebGPU), wllama (WASM via GGUF), and LiteRT (WebGPU-only for Gemma 4). This gives the widest browser coverage using the same LanguageModel interface."
 ---
 
 # Gemma Models in the Browser

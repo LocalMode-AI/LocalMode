@@ -3,6 +3,14 @@ title: "Add AI Search to Any React App in 10 Minutes"
 description: "Build semantic search that understands meaning, not just keywords - running entirely in the browser with zero API keys. Step-by-step guide using LocalMode with a complete, copy-pasteable React component."
 author: LocalMode
 date: 2026-02-12
+dateModified: "2026-05-27"
+faq:
+  - question: "How does semantic search differ from keyword search in a React app?"
+    answer: "Keyword search requires exact string matches, so a query like 'how to fix a broken deployment' misses a document titled 'Troubleshooting CI/CD Pipeline Failures.' Semantic search converts text into 384-dimensional vectors using an AI model and finds results by meaning via nearest-neighbor search, scoring that same document at 0.847 similarity."
+  - question: "What model is used for browser-based semantic search and how does it compare to OpenAI?"
+    answer: "The BGE-small-en-v1.5 model is a 33 MB, 384-dimension embedding model that scores 62.2 on the MTEB benchmark. OpenAI's text-embedding-3-small scores 62.3 -- a 0.1-point difference. The local model runs entirely in the browser at zero cost per query."
+  - question: "How long does it take to add semantic search to an existing React application?"
+    answer: "About 10 minutes. Install two packages (@localmode/core and @localmode/transformers), create an embedding model and vector database, index your content with embedMany(), and search with semanticSearch(). The complete React component is roughly 80 lines of code."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

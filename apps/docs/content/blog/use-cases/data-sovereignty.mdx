@@ -3,6 +3,14 @@ title: "Data Sovereignty & Jurisdictional Compliance"
 description: "Keep AI processing within jurisdictional boundaries by running inference on-device - no cross-border data transfers."
 author: "LocalMode"
 date: "2026-05-09"
+dateModified: "2026-05-27"
+faq:
+  - question: "Does on-device AI processing satisfy Schrems II requirements?"
+    answer: "Schrems II concerns transfers of EU personal data to countries without adequate data protection. Since LocalMode processes data entirely on the user's device with no transfer to any server, the cross-border transfer analysis does not apply to the on-device inference step."
+  - question: "Does local AI processing comply with China's PIPL or India's DPDPA?"
+    answer: "The principle is the same: if data never leaves the user's device, it never crosses a jurisdictional boundary. On-device processing helps satisfy data localization expectations for the inference step, though you should confirm requirements for your specific regulation."
+  - question: "Is the data sovereignty guidance on this page legal advice?"
+    answer: "No. This page provides general technical information about on-device AI processing and data residency. Data sovereignty laws vary by jurisdiction and change over time. Consult a qualified data protection attorney for guidance specific to your situation."
 ---
 
 # Data Sovereignty & Jurisdictional Compliance
@@ -79,20 +87,6 @@ When deploying this solution to production, consider these factors:
 **Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
 
 **Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
-
-## Frequently Asked Questions
-
-### Does this satisfy Schrems II requirements?
-
-Schrems II concerns transfers of EU personal data to countries without adequate data protection. Since LocalMode processes data entirely on the user's device with no transfer to any server, the Schrems II analysis of cross-border transfers does not apply to the on-device inference step, since no transfer occurs for that step.
-
-### What about China's PIPL or India's DPDPA?
-
-The principle is the same: if data never leaves the user's device, it never crosses a jurisdictional boundary. On-device processing helps satisfy data localization expectations for the inference step, though you should confirm requirements for your specific regulation and jurisdiction.
-
-### Is this legal advice?
-
-No. This page provides general technical information about on-device AI processing and data residency. Data sovereignty laws vary by jurisdiction and change over time. You remain responsible for your overall compliance posture, including data flows beyond the AI inference step. Consult a qualified data protection attorney for guidance specific to your situation.
 
 ## Further Reading
 

@@ -3,6 +3,16 @@ title: "LocalMode vs OpenAI API"
 description: "A detailed comparison of running AI in the browser with LocalMode versus calling OpenAI's cloud API - covering privacy, cost, latency, and model quality."
 author: "LocalMode"
 date: "2026-04-22"
+dateModified: "2026-05-28"
+faq:
+  - question: "Can I migrate from OpenAI to LocalMode without rewriting my app?"
+    answer: "Yes. LocalMode's @localmode/ai-sdk package implements the Vercel AI SDK provider interface, so if you use generateText(), streamText(), or embed() from the AI SDK, you can swap the provider with a one-line change."
+  - question: "Is embedding quality really comparable between LocalMode and OpenAI?"
+    answer: "For retrieval tasks, BGE-small-en-v1.5 (33MB, free) achieves within 5% of text-embedding-3-small on MTEB benchmarks. The gap narrows further with BGE-base (110MB, 768 dimensions). For most search and RAG applications, users cannot distinguish between the two."
+  - question: "What about the initial model download time?"
+    answer: "Models download once and are cached in IndexedDB. BGE-small (33MB) downloads in 2-5 seconds on a typical connection. LLMs (1-4GB) take 30-120 seconds. After caching, models load from local storage in under a second. Use preloadModel() to download during onboarding or idle time."
+  - question: "Can I use both LocalMode and OpenAI in the same app?"
+    answer: "Yes. The hybrid architecture pattern uses LocalMode for high-volume, low-complexity tasks (embeddings, classification, NER) at $0 cost, and routes complex reasoning tasks to OpenAI. A try/catch around the local call makes this automatic."
 ---
 
 # LocalMode vs OpenAI API
@@ -69,24 +79,6 @@ const response = await openai.embeddings.create({
 });
 // Cost: $0.02 per million tokens. Data: sent to OpenAI servers.
 ```
-
-## Frequently Asked Questions
-
-### Can I migrate from OpenAI to LocalMode without rewriting my app?
-
-Yes. LocalMode's @localmode/ai-sdk package implements the Vercel AI SDK provider interface, so if you're using generateText(), streamText(), or embed() from the AI SDK, you can swap the provider with a one-line change. For direct OpenAI SDK usage, see the migration guide at /blog/openai-to-localmode-migration.
-
-### Is the quality really comparable for embeddings?
-
-For retrieval tasks, BGE-small-en-v1.5 (33MB, free) achieves within 5% of text-embedding-3-small on MTEB benchmarks. The gap narrows further with BGE-base (110MB, 768 dimensions). For most search and RAG applications, users cannot distinguish between cloud and local embedding quality.
-
-### What about the initial model download time?
-
-Models download once and are cached in IndexedDB. BGE-small (33MB) downloads in 2-5 seconds on a typical connection. LLMs (1-4GB) take 30-120 seconds. After caching, models load from local storage in under a second. Use preloadModel() to download during onboarding or idle time.
-
-### Can I use both LocalMode and OpenAI in the same app?
-
-Absolutely. The hybrid architecture pattern uses LocalMode for high-volume, low-complexity tasks (embeddings, classification, NER) at $0 cost, and routes complex reasoning tasks to OpenAI. A try/catch around the local call makes this automatic - attempt local inference first, and fall back to a cloud call if it fails or quality is insufficient.
 
 ## Making the Decision
 

@@ -3,6 +3,16 @@ title: "BERT NER & Reranking Models in the Browser"
 description: "Specialized BERT models for named entity recognition (NER) and search result reranking in the browser."
 author: "LocalMode"
 date: "2026-04-14"
+dateModified: "2026-05-29"
+faq:
+  - question: "What is the smallest BERT NER or reranking model available in LocalMode?"
+    answer: "MiniLM-L-6-v2 for reranking is the smallest at just 23MB. It is a cross-encoder model that scores query-document pairs for relevance and is one of the smallest useful models in the entire LocalMode catalog."
+  - question: "Can I use BERT NER models for multilingual entity recognition?"
+    answer: "Yes. The bert-base-multilingual-cased-ner-hrl variant (178MB) supports 10 languages and detects person, organization, and location entities. It uses the same NERModel interface as the English-only BERT-base-NER."
+  - question: "What is the difference between NER and reranking models?"
+    answer: "NER models extract named entities (persons, organizations, locations) from text using BIO tagging. Reranking models score query-document pairs for relevance, attending to both simultaneously for more accurate results than embedding similarity alone."
+  - question: "Does BERT NER require WebGPU?"
+    answer: "No. All BERT NER and reranking variants run on WASM via Transformers.js, so they work in every modern browser including Firefox, Safari, Chrome, and Edge without requiring WebGPU support."
 ---
 
 # BERT NER & Reranking Models in the Browser

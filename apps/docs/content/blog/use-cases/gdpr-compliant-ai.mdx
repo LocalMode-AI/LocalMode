@@ -3,6 +3,14 @@ title: "GDPR-Friendly AI Features"
 description: "Add AI features to your European-market app - on-device inference reduces GDPR compliance burden by keeping user data on the device."
 author: "LocalMode"
 date: "2026-04-21"
+dateModified: "2026-05-25"
+faq:
+  - question: "Does on-device AI processing avoid GDPR data processor obligations?"
+    answer: "For the AI processing itself, yes — if user data never leaves the device, there is no processing by a third-party data processor. However, your app may still have other GDPR obligations like storing user accounts or analytics. You remain the data controller with usual obligations."
+  - question: "Does downloading a model involve GDPR data transfer?"
+    answer: "No. Model downloads are one-directional: the model comes to the device, no user data goes to the model server. This is similar to downloading a font or JavaScript file and is not considered data processing under GDPR."
+  - question: "Is the GDPR guidance on this page legal advice?"
+    answer: "No. This guide discusses general compliance considerations for on-device AI processing. The app developer remains a data controller under GDPR. Consult a qualified data protection attorney for guidance specific to your jurisdiction and use case."
 ---
 
 # GDPR-Friendly AI Features
@@ -82,25 +90,11 @@ When deploying this solution to production, consider these factors:
 
 **Model preloading:** Download models during user onboarding or application setup, not on first use. Use `preloadModel()` with an `onProgress` callback to show download progress. This avoids the poor experience of a loading spinner on the first AI interaction.
 
-**Storage management:** IndexedDB has browser-specific quotas (typically 50% of free disk space on Chrome, more restrictive on iOS Safari). Use `getStorageQuota()` to check available space and `navigator.storage.persist()` to request persistent storage that survives browser storage pressure.
+**Storage management:** IndexedDB has browser-specific quotas (up to 60% of total disk size on Chrome, more restrictive on iOS Safari). Use `getStorageQuota()` to check available space and `navigator.storage.persist()` to request persistent storage that survives browser storage pressure.
 
 **Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
 
 **Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
-
-## Frequently Asked Questions
-
-### Does on-device processing truly avoid GDPR obligations?
-
-For the AI processing itself, yes - if user data never leaves the device, there is no "processing" by a third-party data processor. However, your app may still have other GDPR obligations (storing user accounts, analytics, etc.). The AI processing specifically avoids the third-party data-transfer risk that cloud AI introduces. You remain the data controller with the usual obligations (lawful basis, transparency, data subject rights).
-
-### What about the model download - does that involve data transfer?
-
-Model downloads are one-directional: the model comes to the device, no user data goes to the model server. This is similar to downloading a font or JavaScript file - it's not data processing. The models are open-source and contain no user data.
-
-### Is this legal advice?
-
-No. This guide discusses general compliance considerations for on-device AI processing. The app developer remains a data controller under GDPR with obligations including lawful basis, transparency, and data subject rights. Consult a qualified data protection attorney for guidance specific to your jurisdiction and use case.
 
 ## Further Reading
 

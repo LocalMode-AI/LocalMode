@@ -3,6 +3,16 @@ title: "Swin2SR Super Resolution Models in the Browser"
 description: "Image upscaling models that enhance low-resolution images to 2x or 4x their original size - entirely in the browser."
 author: "LocalMode"
 date: "2026-05-01"
+dateModified: "2026-05-29"
+faq:
+  - question: "What is the smallest Swin2SR model available?"
+    answer: "The lightweight 2x upscaling model is approximately 8MB with only 1.01M parameters. It handles 2x upscaling (doubling width and height) and is compact enough for real-time image enhancement in the browser."
+  - question: "What is the difference between the 2x and 4x Swin2SR models?"
+    answer: "The lightweight variant (8MB) performs 2x upscaling, doubling image dimensions. The classical variant (55MB, 12.2M parameters) performs 4x upscaling with higher quality reconstruction using a Swin Transformer V2-based architecture."
+  - question: "Does Swin2SR require WebGPU?"
+    answer: "No. Both Swin2SR variants run on WASM via Transformers.js and work in all modern browsers without requiring WebGPU support."
+  - question: "How does browser-based super resolution compare to cloud services?"
+    answer: "Swin2SR processes images instantly at zero cost with full privacy since images never leave the device. Quality is competitive with cloud upscalers for 2-4x enhancement, though dedicated cloud services may produce better results at extreme upscaling ratios (8x+)."
 ---
 
 # Swin2SR Super Resolution Models in the Browser

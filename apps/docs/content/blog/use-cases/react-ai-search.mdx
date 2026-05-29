@@ -3,6 +3,14 @@ title: "AI Search in React Apps"
 description: "Add semantic search to any React app in 10 minutes with LocalMode hooks - search by meaning, not keywords."
 author: "LocalMode"
 date: "2026-05-11"
+dateModified: "2026-05-27"
+faq:
+  - question: "Does LocalMode semantic search work with Next.js?"
+    answer: "Yes. LocalMode models run client-side, so use 'use client' directives on components that call hooks. The model downloads happen in the browser, not during SSR. The LocalMode showcase app itself is built with Next.js 16."
+  - question: "How fast is browser-based semantic search?"
+    answer: "After model load, embedding a query takes 5-20ms and VectorDB search over 10K vectors takes under 5ms. Total search latency is under 30ms, faster than any network-based search solution."
+  - question: "Do I need a backend server for semantic search in React?"
+    answer: "No. The entire search system — embedding model, vector database, and search logic — runs in the browser with zero backend code. Just install @localmode/core, @localmode/transformers, and @localmode/react."
 ---
 
 # AI Search in React Apps
@@ -98,16 +106,6 @@ When deploying this solution to production, consider these factors:
 **Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
 
 **Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
-
-## Frequently Asked Questions
-
-### Does it work with Next.js?
-
-Yes. LocalMode models run client-side, so use 'use client' directives on components that call hooks. The model downloads happen in the browser, not during SSR. The LocalMode showcase app itself is built with Next.js 16.
-
-### How fast is the search?
-
-After model load, embedding a query takes 5-20ms. VectorDB search over 10K vectors takes < 5ms. Total search latency is under 30ms - faster than any network-based search solution.
 
 ## Further Reading
 

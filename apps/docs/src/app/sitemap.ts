@@ -14,42 +14,54 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   const posts = blog.getPages().map((page) => ({
     url: `${baseUrl}${page.url}`,
-    lastModified: new Date(page.data.date as string),
+    lastModified: page.data.dateModified
+      ? new Date(page.data.dateModified as string)
+      : new Date(page.data.date as string),
     changeFrequency: 'monthly' as const,
     priority: 0.6,
   }));
 
   const taskEntries = tasks.getPages().map((page) => ({
     url: `${baseUrl}${page.url}`,
-    lastModified: new Date(page.data.date as string),
+    lastModified: page.data.dateModified
+      ? new Date(page.data.dateModified as string)
+      : new Date(page.data.date as string),
     changeFrequency: 'monthly' as const,
     priority: 0.8,
   }));
 
   const modelEntries = models.getPages().map((page) => ({
     url: `${baseUrl}${page.url}`,
-    lastModified: new Date(page.data.date as string),
+    lastModified: page.data.dateModified
+      ? new Date(page.data.dateModified as string)
+      : new Date(page.data.date as string),
     changeFrequency: 'monthly' as const,
     priority: 0.7,
   }));
 
   const compareEntries = compare.getPages().map((page) => ({
     url: `${baseUrl}${page.url}`,
-    lastModified: new Date(page.data.date as string),
+    lastModified: page.data.dateModified
+      ? new Date(page.data.dateModified as string)
+      : new Date(page.data.date as string),
     changeFrequency: 'monthly' as const,
     priority: 0.7,
   }));
 
   const useCaseEntries = useCases.getPages().map((page) => ({
     url: `${baseUrl}${page.url}`,
-    lastModified: new Date(page.data.date as string),
+    lastModified: page.data.dateModified
+      ? new Date(page.data.dateModified as string)
+      : new Date(page.data.date as string),
     changeFrequency: 'monthly' as const,
     priority: 0.7,
   }));
 
   const compatibilityEntries = compatibility.getPages().map((page) => ({
     url: `${baseUrl}${page.url}`,
-    lastModified: new Date(page.data.date as string),
+    lastModified: page.data.dateModified
+      ? new Date(page.data.dateModified as string)
+      : new Date(page.data.date as string),
     changeFrequency: 'monthly' as const,
     priority: 0.6,
   }));
@@ -72,6 +84,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       lastModified: new Date(),
       changeFrequency: 'weekly',
       priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/about`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.5,
     },
     ...docs,
     ...posts,

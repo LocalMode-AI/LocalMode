@@ -3,6 +3,16 @@ title: "Cross-Modal Search: Find Photos by Describing Them in Words"
 description: "Build a photo search engine that understands natural language. Using CLIP multimodal embeddings, you can index images and find them with text queries like 'sunset over the ocean' - all running locally in the browser with zero cloud dependencies."
 author: LocalMode
 date: 2026-03-04
+dateModified: "2026-05-28"
+faq:
+  - question: "How does cross-modal search allow finding photos with text descriptions?"
+    answer: "CLIP maps both text and images into the same 512-dimensional vector space by training a text encoder and vision encoder jointly on 400 million image-text pairs. A photo of a beach sunset and the sentence 'sunset over the ocean' land near each other in that space, making search a nearest-neighbor lookup using cosine similarity."
+  - question: "What multimodal embedding models are available for browser-based cross-modal search?"
+    answer: "LocalMode ships three models via Transformers.js: CLIP ViT-Base/Patch32 (512 dimensions, ~340 MB, fastest), CLIP ViT-Base/Patch16 (512 dimensions, ~340 MB, higher accuracy), and SigLIP Base Patch16-224 (768 dimensions, ~400 MB, best quality). SigLIP uses sigmoid loss for better-calibrated similarity scores."
+  - question: "What are typical similarity score ranges for text-to-image search with CLIP?"
+    answer: "Cross-modal CLIP scores are lower than same-modality scores. A text-to-image score of 0.30-0.35 indicates strong relevance, and scores above 0.25 are generally good matches. Scores rarely exceed 0.5 for text-to-image queries due to the modality gap. For image-to-image search, scores are higher at 0.7+ for visually similar images."
+  - question: "Does the entire CLIP model need to download before cross-modal search works?"
+    answer: "No. The text encoder and vision encoder load independently. If a user only searches with text queries, only the text encoder loads. The vision encoder loads on the first embedImage() call during indexing. After the initial download (~340 MB for CLIP ViT-Base), the model caches in the browser."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

@@ -3,6 +3,16 @@ title: "The Cost of 'Free' AI APIs: Vendor Lock-In, Rate Limits, and the Hidden 
 description: "Cloud AI APIs look cheap on the pricing page. But rate limits during traffic spikes, proprietary embedding spaces you can't migrate, compliance overhead, outage exposure, and linear scaling costs add up to a far higher bill than per-token pricing suggests. We break down six hidden costs and show how to diversify your inference stack."
 author: LocalMode
 date: 2026-01-30
+dateModified: "2026-05-29"
+faq:
+  - question: "What are the six hidden costs of using cloud AI APIs beyond per-token pricing?"
+    answer: "Rate limits that throttle during traffic spikes, pricing leverage as vendors control your cost structure, proprietary embedding spaces that make migration prohibitively expensive, per-vendor GDPR compliance overhead (DPAs, sub-processor audits), outage exposure where provider downtime becomes your downtime, and linear scaling economics where every new user adds identical marginal cost."
+  - question: "How expensive is it to switch from one cloud embedding provider to another?"
+    answer: "Switching requires re-embedding the entire corpus because proprietary embedding spaces are geometrically incompatible. For a 100-million-document corpus, the API cost alone is roughly $1,000, but the real cost is engineering-weeks for rebuilding indexes, quality validation, and regression testing. HashiCorp found 48% of tech firms cite lock-in avoidance as a key multi-cloud driver."
+  - question: "What was the impact of OpenAI's December 2024 and January 2025 outages?"
+    answer: "A December 26 power failure caused approximately 9.5 hours of degraded service with error rates exceeding 90%. A January 23 Cosmos DB failure caused roughly 3.5 hours of elevated errors. Every application built on those APIs went dark. The Uptrends 2025 report found average API uptime fell from 99.66% to 99.46%, a 60% increase in downtime year-over-year."
+  - question: "What is the recommended strategy for reducing cloud AI dependency?"
+    answer: "Run the common path locally and fall back to cloud for edge cases. Embeddings (99% of OpenAI quality), classification (94-97%), reranking (87-93%), and NER (95-98%) are the highest-ROI migration targets. The 95/5 rule applies: 95% of calls are routine tasks where local models deliver near-cloud quality at zero cost. Reserve cloud APIs for the 5% requiring frontier reasoning."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

@@ -3,6 +3,16 @@ title: "Document QA in the Browser"
 description: "Ask questions about document images - forms, receipts, charts, and reports - using Florence-2 or Donut in the browser."
 author: "LocalMode"
 date: "2026-05-15"
+dateModified: "2026-05-25"
+faq:
+  - question: "What is the best model for document QA in the browser?"
+    answer: "The recommended model is onnx-community/Florence-2-base-ft (~223MB q4f16), which provides high quality visual document understanding. Xenova/donut-base-finetuned-docvqa (~218MB) is an alternative with good quality."
+  - question: "Does browser-based document QA work offline?"
+    answer: "Yes. After the initial model download (~223MB for Florence-2), document QA works completely offline with no server, no API key, and no data leaving the device."
+  - question: "What types of documents can browser document QA handle?"
+    answer: "It can process forms, receipts, charts, reports, and invoices. Florence-2 processes document images visually without OCR preprocessing, answering natural language questions about what it sees in the document."
+  - question: "How does browser document QA cost compare to cloud services?"
+    answer: "Cloud services like Azure Document Intelligence cost $10-30 per 1,000 pages, Google Document AI costs $1.50-30 per 1,000 pages, and AWS Textract costs $15 per 1,000 pages. LocalMode costs $0 after the one-time model download."
 ---
 
 # Document QA in the Browser

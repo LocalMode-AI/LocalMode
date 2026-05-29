@@ -3,6 +3,16 @@ title: "Mistral & Ministral Models in the Browser"
 description: "Mistral AI's 7B instruction model and the Ministral 3B reasoning/instruction variants for browser inference."
 author: "LocalMode"
 date: "2026-05-19"
+dateModified: "2026-05-27"
+faq:
+  - question: "What is the smallest Mistral or Ministral model in LocalMode?"
+    answer: "Both Ministral-3-3B-Instruct and Ministral-3-3B-Reasoning are 1.8GB via WebLLM. These target the 3B parameter sweet spot and are practical for most desktop browsers and high-end mobile devices."
+  - question: "What is the difference between Ministral Instruct and Ministral Reasoning?"
+    answer: "Ministral-3-3B-Instruct is optimized for general conversation and instruction following. Ministral-3-3B-Reasoning is specialized for chain-of-thought tasks requiring step-by-step logic and deduction."
+  - question: "Does Mistral 7B require WebGPU?"
+    answer: "The WebLLM variant (4.0GB) requires WebGPU. However, Mistral 7B is also available via wllama as a 4.37GB GGUF model that runs on WASM in any browser, including Firefox, with a 32K token context window."
+  - question: "What is the context window for Mistral models in the browser?"
+    answer: "The wllama GGUF variant of Mistral 7B supports 32,768 tokens, suitable for document analysis and long-form generation. The WebLLM variants use a 4,096-token context due to browser VRAM constraints."
 ---
 
 # Mistral & Ministral Models in the Browser

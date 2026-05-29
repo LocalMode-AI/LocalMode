@@ -3,6 +3,16 @@ title: "Image-to-Image (Super Resolution) in the Browser"
 description: "Upscale and enhance images using transformer-based super resolution - 2x and 4x upscaling in the browser."
 author: "LocalMode"
 date: "2026-04-22"
+dateModified: "2026-05-29"
+faq:
+  - question: "What is the best model for image super resolution in the browser?"
+    answer: "Xenova/swin2SR-classical-sr-x4-64 (~55MB fp32) provides high-quality 4x upscaling using a Swin Transformer V2 architecture. For a lighter option, Xenova/swin2SR-lightweight-x2-64 (~8MB) offers fast 2x upscaling."
+  - question: "Does browser-based image upscaling work offline?"
+    answer: "Yes. After the initial model download (8-55MB depending on the model), image super resolution works entirely offline with no server or API key required. Images never leave the device."
+  - question: "How large is the model download for image super resolution?"
+    answer: "The lightweight 2x model is only ~8MB (fp32) and the classical 4x model is ~55MB (fp32). Both are one-time downloads cached in the browser."
+  - question: "What can browser image super resolution be used for?"
+    answer: "Common uses include photo enhancement before sharing or printing, thumbnail upscaling for image galleries, product image zoom in e-commerce, screenshot quality improvement, old photo restoration, and preparing low-res images for high-DPI displays."
 ---
 
 # Image-to-Image (Super Resolution) in the Browser

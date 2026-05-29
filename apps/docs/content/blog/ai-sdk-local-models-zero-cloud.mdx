@@ -3,6 +3,16 @@ title: "Using LocalMode With the Vercel AI SDK: generateText() and streamText() 
 description: "Drop @localmode/ai-sdk into any Vercel AI SDK project and run generateText(), streamText(), and embed() entirely in the browser. Same API, same patterns, zero network requests. This guide shows you how to swap one line and go fully local."
 author: LocalMode
 date: 2026-02-05
+dateModified: "2026-05-26"
+faq:
+  - question: "Can I use LocalMode models with the Vercel AI SDK's generateText and streamText functions?"
+    answer: "Yes. The @localmode/ai-sdk package bridges LocalMode's in-browser models to the AI SDK's LanguageModelV3 and EmbeddingModelV3 interfaces. You change one line (the model parameter) and your generateText() or streamText() call runs locally via WebGPU instead of making a network round-trip."
+  - question: "What AI SDK features are not supported by the LocalMode adapter?"
+    answer: "Tool calling, structured output via AI SDK's JSON mode, and image generation are not wired through the adapter. For structured extraction, use generateObject() from @localmode/core directly. The adapter focuses on text generation, streaming, and embeddings."
+  - question: "How do I swap between cloud and local models in a Vercel AI SDK project?"
+    answer: "Create a LocalMode provider with createLocalMode(), then toggle models with a single variable. Both providers implement the same LanguageModelV3 interface, so the rest of your application code (prompt, messages, options) stays identical regardless of which provider is active."
+  - question: "What are the peer dependencies for @localmode/ai-sdk?"
+    answer: "The adapter requires ai (>=6.0.0), @ai-sdk/provider (>=1.0.0), @ai-sdk/provider-utils (>=3.0.0), and @localmode/core (>=1.0.0). You also need at least one LocalMode model provider such as @localmode/webllm for LLMs or @localmode/transformers for embeddings."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

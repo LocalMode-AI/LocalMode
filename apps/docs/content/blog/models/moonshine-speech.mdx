@@ -3,6 +3,18 @@ title: "Moonshine Speech-to-Text Models in the Browser"
 description: "Useful Sensors' Moonshine models - fast, accurate speech transcription designed specifically for edge and browser deployment."
 author: "LocalMode"
 date: "2026-04-03"
+dateModified: "2026-05-28"
+faq:
+  - question: "What is the smallest speech-to-text model in LocalMode?"
+    answer: "Moonshine-tiny at 50MB is the smallest. With 27.1M parameters, it achieves 4.52% WER on LibriSpeech Clean, beating Whisper-tiny.en's 5.21% while using fewer parameters (27.1M vs 37.8M)."
+  - question: "Does Moonshine support languages other than English?"
+    answer: "No. Both Moonshine-tiny and Moonshine-base are English-only. For multilingual speech-to-text, consider the Whisper models also available in LocalMode, which support multiple languages."
+  - question: "Can Moonshine do real-time streaming transcription?"
+    answer: "Yes. Moonshine processes audio in chunks, enabling streaming transcription as the user speaks. Paired with LocalMode's useVoiceRecorder() hook, you can build a complete voice-to-text interface in under 30 lines of code."
+  - question: "How does Moonshine quality compare to Whisper?"
+    answer: "Moonshine-tiny (50MB) beats Whisper-tiny.en on WER (4.52% vs 5.21%). Moonshine-base (237MB) reaches 3.23% WER, approaching Whisper-small territory with only 61.5M parameters. Moonshine was designed specifically for edge deployment, unlike Whisper which was adapted from server use."
+  - question: "Does Moonshine require WebGPU?"
+    answer: "No. Both Moonshine variants run through Transformers.js on WASM, so they work across all browsers including Firefox and Safari without requiring WebGPU."
 ---
 
 # Moonshine Speech-to-Text Models in the Browser
@@ -17,7 +29,7 @@ Running Moonshine Speech-to-Text models locally in the browser eliminates API co
 
 ## Architecture and History
 
-Moonshine is a speech-to-text model architecture designed from the ground up for edge deployment - unlike Whisper, which was designed for server use and adapted to the browser. Moonshine is **English-only**: both the tiny (27.1M parameters) and base (61.5M parameters) variants are trained exclusively on English speech. This architectural focus shows in the numbers: Moonshine-tiny at 50MB achieves 4.52% WER on LibriSpeech Clean, beating Whisper-tiny.en's 5.66%, while using fewer parameters (27.1M vs 37.8M). Moonshine-base at 237MB reaches 3.23% WER on LibriSpeech Clean - approaching Whisper-base.en (4.25%) and close to Whisper-small territory - with only 61.5M parameters versus Whisper-base.en's 72.6M.
+Moonshine is a speech-to-text model architecture designed from the ground up for edge deployment - unlike Whisper, which was designed for server use and adapted to the browser. Moonshine is **English-only**: both the tiny (27.1M parameters) and base (61.5M parameters) variants are trained exclusively on English speech. This architectural focus shows in the numbers: Moonshine-tiny at 50MB achieves 4.52% WER on LibriSpeech Clean, beating Whisper-tiny.en's 5.21%, while using fewer parameters (27.1M vs 37.8M). Moonshine-base at 237MB reaches 3.23% WER on LibriSpeech Clean - approaching Whisper-base.en (4.25%) and close to Whisper-small territory - with only 61.5M parameters versus Whisper-base.en's 72.6M.
 
 For browser applications, Moonshine models are the recommended choice for real-time English transcription. They process audio in chunks, enabling streaming transcription as the user speaks - perfect for voice note applications, meeting transcription tools, and accessibility features. The models accept audio as Float32Array samples and return timestamped transcript segments.
 

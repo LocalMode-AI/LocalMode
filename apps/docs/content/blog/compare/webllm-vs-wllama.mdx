@@ -3,6 +3,14 @@ title: "WebLLM vs wllama"
 description: "WebGPU vs WASM for browser LLM inference - comparing LocalMode's two primary LLM providers on speed, compatibility, and model selection."
 author: "LocalMode"
 date: "2026-03-28"
+dateModified: "2026-05-29"
+faq:
+  - question: "Can I use both WebLLM and wllama providers in the same app?"
+    answer: "Yes, and it is the recommended approach. Wrap model loading in a try/catch -- try WebLLM first (fast, WebGPU) and fall back to wllama (universal, WASM) on error. The same LanguageModel interface means your streamText() and generateText() calls work identically with either provider."
+  - question: "Which provider has better model quality for the same model family?"
+    answer: "For the same model family (e.g., Qwen2.5-3B), quality is nearly identical. WebLLM uses 4-bit float16 quantization while wllama uses Q4_K_M GGUF quantization, both targeting similar compression ratios with benchmark differences within a few percent."
+  - question: "What about Transformers.js v4 as a third LLM option?"
+    answer: "Transformers.js v4 is a third option offering ONNX-format LLM inference with 16 curated models. It is a good choice if you are already using Transformers.js for other tasks and want to avoid adding another provider package."
 ---
 
 # WebLLM vs wllama
@@ -67,20 +75,6 @@ import { wllama } from '@localmode/wllama';
 const model = wllama.languageModel('Qwen2.5-3B-Instruct-Q4_K_M');
 const result = await streamText({ model, prompt: 'Explain AI' });
 ```
-
-## Frequently Asked Questions
-
-### Can I use both providers in the same app?
-
-Yes, and it's the recommended approach. Wrap model loading in a try/catch - try WebLLM first (fast, WebGPU) and fall back to wllama (universal, WASM) on error. The same LanguageModel interface means your streamText() and generateText() calls work identically with either provider.
-
-### Which has better model quality?
-
-For the same model family (e.g., Qwen2.5-3B), quality is nearly identical. WebLLM uses 4-bit float16 quantization while wllama uses Q4_K_M GGUF quantization - both target similar compression ratios. Benchmark differences are approximately within a few percent for most tasks, though no direct browser-to-browser comparison has been published.
-
-### What about Transformers.js v4 for LLM inference?
-
-Transformers.js v4 is a third option offering ONNX-format LLM inference. It supports 16 curated models (Granite, Qwen, TinyLlama, Llama, Phi, DeepSeek-R1, Gemma) and is production-ready. It's a good choice if you're already using Transformers.js for other tasks and want to avoid adding another provider package.
 
 ## Making the Decision
 

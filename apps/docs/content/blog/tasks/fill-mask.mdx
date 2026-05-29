@@ -3,6 +3,16 @@ title: "Fill-Mask (Masked Language Modeling) in the Browser"
 description: "Predict missing words in text using ModernBERT - for autocomplete, data augmentation, and text understanding."
 author: "LocalMode"
 date: "2026-04-23"
+dateModified: "2026-05-26"
+faq:
+  - question: "What is fill-mask (masked language modeling) used for in the browser?"
+    answer: "Fill-mask predicts the most likely word to replace a [MASK] token in a sentence. It powers autocomplete suggestions, data augmentation for training datasets, cloze test generation for education, and probing language understanding."
+  - question: "What is the best model for fill-mask in the browser?"
+    answer: "The recommended model is onnx-community/ModernBERT-base-ONNX (140MB q4f16), which offers high quality. For a smaller download, Xenova/bert-base-uncased (96MB q4f16) is a lighter alternative. RoBERTa-based models use <mask> instead of [MASK]."
+  - question: "Does browser-based fill-mask work offline after model download?"
+    answer: "Yes. After the initial model download (96-140MB depending on the model), fill-mask works completely offline with no server or API key required. All processing runs entirely in the browser."
+  - question: "How large is the model download for fill-mask?"
+    answer: "ModernBERT-base is 140MB (q4f16 quantized) and BERT-base-uncased is 96MB (q4f16 quantized). These are one-time downloads that are cached in the browser for subsequent use."
 ---
 
 # Fill-Mask (Masked Language Modeling) in the Browser

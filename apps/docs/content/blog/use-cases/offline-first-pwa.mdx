@@ -3,6 +3,14 @@ title: "Offline-First AI PWA"
 description: "Build Progressive Web Apps with AI features that work on planes, in the field, and on unreliable networks."
 author: "LocalMode"
 date: "2026-04-18"
+dateModified: "2026-05-25"
+faq:
+  - question: "How much storage do AI models need in a PWA?"
+    answer: "BGE-small (33MB) for embeddings, DistilBERT (65MB) for classification, and Moonshine-tiny (50MB) for speech form a complete AI toolkit in ~150MB. LLMs add 70MB-5GB depending on model size. Use getStorageQuota() to check available space."
+  - question: "Do cached AI models survive PWA app updates?"
+    answer: "Yes. Models are cached in IndexedDB, which persists across app updates and browser restarts. The only exception is Safari Private Browsing, which clears IndexedDB on close — use MemoryStorage as a fallback."
+  - question: "Can a PWA download AI models during installation?"
+    answer: "Yes. Use preloadModel() with an onProgress callback during the PWA install flow. Combine with Service Workers to cache the LocalMode library and app code, so everything works offline after setup."
 ---
 
 # Offline-First AI PWA
@@ -86,16 +94,6 @@ When deploying this solution to production, consider these factors:
 **Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
 
 **Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
-
-## Frequently Asked Questions
-
-### How much storage do models need?
-
-BGE-small (33MB) for embeddings, DistilBERT (65MB) for classification, Moonshine-tiny (50MB) for speech - a complete AI toolkit in ~150MB. LLMs add 70MB-5GB depending on model size. Use getStorageQuota() to check available space before downloading.
-
-### Do models survive app updates?
-
-Yes. Models are cached in IndexedDB, which persists across app updates and browser restarts. The only exception is Safari Private Browsing, which clears IndexedDB on close - use MemoryStorage as fallback.
 
 ## Further Reading
 

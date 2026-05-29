@@ -3,6 +3,16 @@ title: "Choosing the Right Model: Device-Aware Recommendations With recommendMod
 description: "Stop guessing which model to use. LocalMode's recommendation engine detects your user's device capabilities - GPU, memory, storage, browser features - and ranks every model in its curated registry by suitability score. Three function calls replace hours of benchmarking across devices."
 author: LocalMode
 date: 2026-01-28
+dateModified: "2026-05-29"
+faq:
+  - question: "How does LocalMode's recommendModels() pick the best AI model for a user's device?"
+    answer: "It runs a three-step pipeline: detectCapabilities() probes the browser for hardware specs, features, and storage; recommendModels() scores every model in a 35+ entry registry using device fit (50% weight), quality tier (30%), and speed tier (20%); then computeOptimalBatchSize() calculates throughput. The entire flow is three synchronous-after-detection function calls."
+  - question: "What task categories does the LocalMode model registry cover?"
+    answer: "The curated registry spans 21 task categories: embedding, classification, zero-shot, NER, reranking, generation, translation, summarization, fill-mask, question-answering, speech-to-text, text-to-speech, image classification, image captioning, object detection, segmentation, OCR, document QA, image features, image-to-image, and multimodal embedding."
+  - question: "How do I add custom or fine-tuned models to the recommendation system?"
+    answer: "Call registerModel() with a ModelRegistryEntry specifying modelId, provider, task, sizeMB, speed/quality tiers, and recommended device. Registered entries persist for the page lifetime. If you use the same modelId as a built-in entry, your registration overrides the default. Use getModelRegistry() to inspect the full catalog."
+  - question: "How does computeOptimalBatchSize() work for browser-based AI inference?"
+    answer: "It uses the formula: batchSize = base * (cores/4) * (memoryGB/8) * gpuMultiplier, where the GPU multiplier is 1.5x when available. Results are clamped to task-specific bounds (embedding: 4-256, ingestion: 8-512). A 16-core workstation with 32 GB RAM and WebGPU gets batch size 256; a dual-core phone with 2 GB gets 4."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

@@ -3,6 +3,16 @@ title: "Browser LLM Providers, One API: WebLLM, Transformers.js v4, wllama, and 
 description: "LocalMode ships four browser LLM providers -- WebLLM (WebGPU), Transformers.js v4 (ONNX), wllama (llama.cpp WASM), and LiteRT-LM (Google's on-device engine, early preview). All four implement the same LanguageModel interface, so your application code stays identical regardless of the engine underneath. Here is how to choose."
 author: LocalMode
 date: 2026-02-11
+dateModified: "2026-05-29"
+faq:
+  - question: "What are the four browser LLM providers in LocalMode?"
+    answer: "LocalMode ships WebLLM (MLC-compiled, WebGPU, fastest inference), Transformers.js v4 (ONNX, broadest model selection including vision), wllama (llama.cpp WASM, runs in every browser without WebGPU, 160K+ GGUF models), and LiteRT-LM (Google's on-device engine, early preview with Gemma 4 models)."
+  - question: "Do I need to change my code when switching between LLM providers?"
+    answer: "No. All four providers implement the same LanguageModel interface from @localmode/core. Your generateText() and streamText() calls remain identical -- only the model import changes. Middleware, AbortSignal, and React hooks all work unchanged across providers."
+  - question: "Which browser LLM provider should I choose?"
+    answer: "Choose WebLLM for maximum speed with WebGPU (60-90+ tokens/sec). Choose Transformers.js v4 for the broadest model catalog and vision support. Choose wllama for universal browser compatibility without WebGPU via WASM. Choose LiteRT-LM specifically for Google's Gemma 4 models."
+  - question: "Can I set up automatic fallback between LLM providers?"
+    answer: "Yes. Because all providers share the same interface, you can wrap model creation in a try/catch chain that falls back from one provider to another. For example, try WebLLM first for WebGPU speed, then fall back to wllama for WASM compatibility if WebGPU is unavailable."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

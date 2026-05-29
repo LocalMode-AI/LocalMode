@@ -3,6 +3,18 @@ title: "The LocalMode Encryption Stack: PBKDF2 Key Derivation, AES-256-GCM, and 
 description: "A deep technical walkthrough of LocalMode's zero-knowledge encryption pipeline. From PBKDF2 key derivation with configurable iterations to AES-256-GCM authenticated encryption of vectors, metadata, and text -- all running entirely in the browser via the Web Crypto API. No server ever sees a plaintext byte."
 author: LocalMode
 date: 2026-02-03
+dateModified: "2026-05-26"
+faq:
+  - question: "How does LocalMode encrypt embedding vectors in the browser?"
+    answer: "LocalMode uses AES-256-GCM encryption via the Web Crypto API. Vectors are encrypted by passing the Float32Array buffer directly to AES-GCM with a fresh 12-byte IV per operation. The IV is prepended to the ciphertext and the result is stored as a padded Float32Array in IndexedDB."
+  - question: "What key derivation does LocalMode use for encryption?"
+    answer: "LocalMode uses PBKDF2 with HMAC-SHA-256 to derive a 256-bit AES-GCM CryptoKey from a user password. The default is 100,000 iterations with a 128-bit random salt. The CryptoKey is non-extractable -- raw key bytes never enter JavaScript memory."
+  - question: "Can you search encrypted vectors with similarity search?"
+    answer: "Not directly. Encrypted vectors are ciphertext with no mathematical relationship to the originals, so HNSW similarity search will not return meaningful results. The practical pattern is to decrypt vectors into memory during an active session, search against plaintext in memory, and encrypt only at rest."
+  - question: "What is the encryption overhead for embedding vectors?"
+    answer: "For a 384-dimensional embedding (1,536 bytes), the encrypted output adds roughly 44 bytes of overhead -- 16 bytes for the authentication tag, 12 bytes for the IV, and 16 bytes for the salt -- under 3% total overhead."
+  - question: "Does LocalMode's encryption work in all browsers?"
+    answer: "Yes, the Web Crypto API (crypto.subtle) with PBKDF2 and AES-GCM support is available in Chrome 37+, Firefox 34+, Safari 11+, and Edge 12+. The only requirement is a secure context (HTTPS or localhost)."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

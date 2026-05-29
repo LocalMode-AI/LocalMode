@@ -3,6 +3,16 @@ title: "Semantic Chunking: Split Documents by Topic, Not by Token Count"
 description: "Fixed-size chunking splits documents mid-thought, mid-paragraph, mid-argument. Semantic chunking uses embeddings to detect where topics actually change and splits at those boundaries - producing chunks that are topically coherent and dramatically better for retrieval. A deep dive into the algorithm, the API, and when to use each of LocalMode's four chunking strategies."
 author: LocalMode
 date: 2026-02-20
+dateModified: "2026-05-29"
+faq:
+  - question: "What is semantic chunking and how does it differ from fixed-size chunking?"
+    answer: "Semantic chunking uses embeddings to detect where topics actually change in a document and splits at those natural boundaries. Unlike fixed-size chunking, which splits by character or token count and often cuts mid-thought, semantic chunking produces topically coherent segments that dramatically improve retrieval quality."
+  - question: "Why does fixed-size chunking hurt RAG retrieval?"
+    answer: "Fixed-size chunking is unaware of content meaning. It splits documents mid-paragraph or mid-argument, mixing unrelated topics in the same chunk. When a user searches for a specific topic, the relevant information may be split across chunks or merged with irrelevant text, causing the LLM to miss context or hallucinate."
+  - question: "How does semantic chunking detect topic boundaries?"
+    answer: "The algorithm embeds successive text segments using an embedding model, then computes similarity between adjacent segments. When the similarity drops below a threshold -- indicating a topic shift -- it places a boundary. This produces chunks that align with the document's natural topic structure."
+  - question: "What chunking strategies does LocalMode support?"
+    answer: "LocalMode provides four strategies: recursive (fast, deterministic, splits by separators), markdown (structure-aware, uses headings), code (syntax-aware, respects function boundaries), and semantic (embedding-based, topic-coherent). Each fits different document types and quality requirements."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

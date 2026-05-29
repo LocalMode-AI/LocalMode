@@ -3,6 +3,14 @@ title: "LangChain.js With Local Inference"
 description: "Drop LocalMode into your LangChain.js app as a local inference provider - same chains, same retrievers, zero API keys."
 author: "LocalMode"
 date: "2026-04-26"
+dateModified: "2026-05-27"
+faq:
+  - question: "Does LocalMode's LangChain adapter support all LangChain chain types?"
+    answer: "The adapters implement standard LangChain interfaces (Embeddings, BaseChatModel, VectorStore) from @langchain/core, so they work with any chain or LCEL expression that uses these interfaces. Use the modern createRetrievalChain API instead of deprecated RetrievalQAChain."
+  - question: "Can I import my Pinecone vectors into LocalMode?"
+    answer: "Yes. Use @localmode/core's importFrom() to migrate vectors from Pinecone to a local VectorDB. Note that if your Pinecone vectors were created with OpenAI embeddings, you will need to re-embed with a LocalMode model since the vector spaces differ."
+  - question: "How many imports do I need to change to switch from cloud to local LangChain?"
+    answer: "Three imports: LocalModeEmbeddings replaces OpenAIEmbeddings, ChatLocalMode replaces ChatOpenAI, and LocalModeVectorStore replaces PineconeStore. Existing chains, retrievers, and agents work unchanged."
 ---
 
 # LangChain.js With Local Inference
@@ -102,16 +110,6 @@ When deploying this solution to production, consider these factors:
 **Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
 
 **Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
-
-## Frequently Asked Questions
-
-### Does it support all LangChain chain types?
-
-The adapters implement standard LangChain interfaces (`Embeddings`, `BaseChatModel`, `VectorStore`) from `@langchain/core`, so they work with any chain or LCEL expression that uses these interfaces. Note that `RetrievalQAChain` and `ConversationalRetrievalQAChain` are deprecated in LangChain.js (to be removed in v1.0.0); prefer the modern `createRetrievalChain` API instead.
-
-### Can I import my Pinecone vectors?
-
-Yes. Use `@localmode/core`'s `importFrom({ db, format: 'pinecone', data })` to migrate vectors from Pinecone to a local VectorDB. Note that if your Pinecone vectors were created with OpenAI embeddings, you'll need to re-embed with a LocalMode model since the vector spaces differ.
 
 ## Further Reading
 

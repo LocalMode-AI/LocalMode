@@ -3,6 +3,14 @@ title: "Local-First vs Cloud-First AI Architecture"
 description: "Comparing architectural approaches: processing AI locally on user devices versus centralized cloud inference - trade-offs for privacy, cost, and capability."
 author: "LocalMode"
 date: "2026-04-02"
+dateModified: "2026-05-28"
+faq:
+  - question: "How do I decide which AI tasks to run locally vs in the cloud?"
+    answer: "Run locally: embeddings, classification, NER, reranking, speech-to-text, image classification, and simple generation. Run in cloud: complex reasoning, creative writing requiring frontier quality, tasks needing 100K+ token context, and real-time translation for rare language pairs."
+  - question: "What is the SaaS local mode toggle pattern?"
+    answer: "It is a product pattern where your SaaS app offers a toggle between local and cloud processing. When set to local, all inference runs in the browser via LocalMode. When set to cloud, your backend handles inference. This gives privacy-conscious users control while maintaining cloud capability for others."
+  - question: "How much does local-first architecture save at scale?"
+    answer: "A case study at localmode.dev/blog/cut-ai-api-bill-200k shows a 100K-user app saving $212K/year by moving embeddings, classification, and reranking from OpenAI/Cohere to LocalMode. The savings come from eliminating per-token costs for high-volume, low-complexity tasks."
 ---
 
 # Local-First vs Cloud-First AI Architecture
@@ -45,20 +53,6 @@ When evaluating Local-First AI against Cloud-First AI, consider your primary con
 - **Offline requirements** - Applications that must work without internet need local inference. Cloud-dependent solutions fail when connectivity drops.
 
 
-
-## Frequently Asked Questions
-
-### How do I decide which tasks to run locally vs in the cloud?
-
-Run locally: embeddings, classification, NER, reranking, speech-to-text, image classification, simple generation. Run in cloud: complex reasoning, creative writing requiring frontier quality, tasks needing 100K+ token context, real-time translation for rare language pairs. When in doubt, benchmark locally first - you may be surprised by the quality.
-
-### What is the "SaaS local mode toggle" pattern?
-
-It's a product pattern where your SaaS app offers a toggle: "Process locally" vs "Process in cloud." When toggled to local, all inference runs in the browser via LocalMode. When toggled to cloud, your backend handles inference. This gives privacy-conscious users control while maintaining cloud capability for others.
-
-### How much does local-first architecture save at scale?
-
-A detailed case study at localmode.dev/blog/cut-ai-api-bill-200k shows a 100K-user app saving $212K/year by moving embeddings, classification, and reranking from OpenAI/Cohere to LocalMode. The savings come from eliminating per-token costs for high-volume, low-complexity tasks.
 
 ## Making the Decision
 

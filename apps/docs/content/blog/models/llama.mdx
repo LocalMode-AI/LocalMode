@@ -3,6 +3,18 @@ title: "Llama Models in the Browser"
 description: "Meta's Llama family from 1B to 8B parameters, the most widely adopted open-weight LLM series for browser inference."
 author: "LocalMode"
 date: "2026-03-30"
+dateModified: "2026-05-26"
+faq:
+  - question: "What is the smallest Llama model available in LocalMode?"
+    answer: "TinyLlama-1.1B-Chat via Transformers.js at 350MB is the smallest. Via WebLLM it is 400MB. TinyLlama loads quickly and handles basic text completion, simple Q&A, and template-based generation."
+  - question: "Does Llama work on mobile browsers?"
+    answer: "The smaller variants like TinyLlama (350-670MB) and Llama-3.2-1B (380-750MB) can run on higher-end mobile devices. The wllama WASM provider works in all browsers. Larger variants like the 8B models (4.5-4.92GB) are desktop-only in practice."
+  - question: "How many providers support Llama models in LocalMode?"
+    answer: "Llama is available through three providers: WebLLM (WebGPU for maximum speed), wllama (WASM for universal browser support including Firefox), and Transformers.js (ONNX-optimized). This ensures every user can run a Llama model regardless of browser."
+  - question: "What is the maximum context window for Llama models in the browser?"
+    answer: "The wllama GGUF variants of Llama 3.2 (1B and 3B) and Llama 3.1 8B support up to 131,072 tokens, enabling processing of entire documents without chunking. WebLLM variants use 4,096-token contexts due to browser VRAM constraints."
+  - question: "Can I run Llama models offline?"
+    answer: "Yes. All Llama variants work offline after the initial download, cached in IndexedDB via LocalMode's model caching system. No API keys or network connection is needed for inference."
 ---
 
 # Llama Models in the Browser

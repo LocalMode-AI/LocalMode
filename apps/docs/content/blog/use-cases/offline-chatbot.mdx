@@ -3,6 +3,14 @@ title: "Offline AI Chatbot"
 description: "Build a conversational AI chatbot that works without internet - perfect for field workers, kiosks, and areas with unreliable connectivity."
 author: "LocalMode"
 date: "2026-05-05"
+dateModified: "2026-05-29"
+faq:
+  - question: "How large is the model download for an offline chatbot?"
+    answer: "Qwen2.5-1.5B at Q4_K_M is 986MB. Smaller options include SmolLM2-135M (70MB) for basic responses and Qwen2.5-0.5B (386MB) for better quality. All models cache permanently in IndexedDB after download."
+  - question: "Can an offline chatbot access a local knowledge base?"
+    answer: "Yes. Embed your knowledge base documents into a VectorDB during setup. At query time, retrieve relevant context with db.search() and include it in the LLM prompt. This RAG pattern works entirely offline since both the VectorDB and LLM are local."
+  - question: "Which browsers support the offline chatbot?"
+    answer: "Chrome, Firefox, and Edge support wllama v3. Safari does not yet support the Memory64 WebAssembly proposal that wllama v3 requires. For Safari users, use @wllama/wllama-compat or Transformers.js as a fallback."
 ---
 
 # Offline AI Chatbot
@@ -85,16 +93,6 @@ When deploying this solution to production, consider these factors:
 **Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
 
 **Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
-
-## Frequently Asked Questions
-
-### How large is the model download?
-
-Qwen2.5-1.5B at Q4_K_M is 986MB. For a kiosk or tablet deployment, you can pre-cache this during setup. Smaller options: SmolLM2-135M (70MB) for basic responses, Qwen2.5-0.5B (386MB) for better quality. All cache in IndexedDB permanently.
-
-### Can the chatbot access a knowledge base offline?
-
-Yes. Embed your knowledge base documents into a VectorDB during setup. At query time, retrieve relevant context with db.search() and include it in the LLM prompt. This RAG pattern works entirely offline since both the VectorDB and LLM are local.
 
 ## Further Reading
 

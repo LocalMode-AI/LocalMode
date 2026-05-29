@@ -3,6 +3,16 @@ title: "AI Without Python: A JavaScript Developer's Guide to Machine Learning"
 description: "You don't need Python to build AI-powered features. Learn how ML models actually work in the browser, what ONNX and WebGPU do under the hood, and how to run embeddings, classification, and LLM chat in 5 lines of JavaScript."
 author: LocalMode
 date: 2026-03-14
+dateModified: "2026-05-28"
+faq:
+  - question: "Do I need Python to build AI features in a web application?"
+    answer: "No. ML models can run directly in the browser via WebAssembly and WebGPU using JavaScript or TypeScript. The same ONNX-format models produce identical outputs regardless of whether they are called from Python or JavaScript. LocalMode provides a function-first API across 18 ML domains."
+  - question: "Is JavaScript slower than Python for running AI models?"
+    answer: "For inference, the gap is small and narrowing. The actual computation happens in optimized C++ or GPU kernels regardless of the calling language. With WebGPU, browser inference can be faster than Python on CPU for embedding tasks -- roughly 5ms via WebGPU versus 15ms via Python PyTorch on an M-series MacBook."
+  - question: "How do ML models run inside a web browser?"
+    answer: "The stack has three layers: ONNX Runtime Web executes model operations, Transformers.js handles tokenization and pre/post-processing, and LocalMode provides a clean TypeScript API. Models are converted from PyTorch to the ONNX universal format and quantized to 25-50% of original size. WebGPU provides GPU acceleration while WASM serves as a universal fallback."
+  - question: "What are the practical limits of running AI in the browser instead of Python?"
+    answer: "Training models is not feasible in the browser -- use Python for that. Models above roughly 8 billion parameters exceed browser memory limits. Batch processing millions of documents is much slower than on a dedicated GPU server. First-load requires downloading the model (33 MB to 2 GB), though it caches in IndexedDB afterward."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

@@ -3,6 +3,16 @@ title: "Architecture as Policy: Why Most AI Criticism Is Really About Where the 
 description: "We mapped the 20 most common criticisms of AI from Reddit, Hacker News, and industry reports. A pattern emerged: 15 of 20 target the deployment model, not the technology. Privacy, cost, lock-in, censorship, surveillance - these are properties of the client-server architecture, not of neural networks. Move the inference to the browser and they disappear."
 author: LocalMode
 date: "2026-05-22"
+dateModified: "2026-05-29"
+faq:
+  - question: "How many common AI criticisms are actually about deployment architecture rather than the technology itself?"
+    answer: "Of the 20 most common AI criticisms mapped from Reddit, Hacker News, and industry reports, 15 are consequences of the client-server architecture rather than properties of neural networks. Privacy, cost, vendor lock-in, censorship, and surveillance all dissolve when inference moves from a cloud server to the user's browser."
+  - question: "What AI concerns does local browser inference not solve?"
+    answer: "Five concerns are properties of the models themselves and remain regardless of where inference runs: hallucinations, bias and fairness, misinformation generation, training data copyright, and job displacement. Local inference provides partial mitigations (private RAG for hallucinations, free bias auditing) but cannot solve the underlying problems."
+  - question: "What are the practical limits of running AI models in the browser?"
+    answer: "Browser models cap at roughly 8 billion parameters (4-bit quantized). First-load latency ranges from seconds to minutes depending on model size and connection speed. WebGPU covers about 82% of global browser sessions as of mid-2026, with WASM as a universal fallback. Batch processing of large corpora is significantly slower than server-side GPU processing."
+  - question: "How does on-device AI handle GDPR and data sovereignty concerns?"
+    answer: "When a model runs in a WebAssembly sandbox inside the browser, no data leaves the device. There is no data processor relationship, no cross-border transfer, and no server logs to subpoena. This eliminates the need for Data Processing Agreements and Standard Contractual Clauses that cloud AI providers require under GDPR Articles 28 and 44-49."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

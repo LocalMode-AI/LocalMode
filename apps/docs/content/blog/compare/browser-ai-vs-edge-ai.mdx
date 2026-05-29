@@ -3,6 +3,14 @@ title: "Browser AI vs Edge AI"
 description: "Running ML in the browser tab versus edge functions and CDN workers - comparing the architectures for on-device AI."
 author: "LocalMode"
 date: "2026-03-30"
+dateModified: "2026-05-25"
+faq:
+  - question: "Can I use both browser AI and edge AI in the same app?"
+    answer: "Yes. A common pattern is to use LocalMode for client-side tasks like embeddings, classification, and chat, and edge functions for server-side processing or complex reasoning. The Vercel AI SDK provider (@localmode/ai-sdk) makes swapping between local and cloud providers straightforward."
+  - question: "Which approach is better for mobile users?"
+    answer: "Browser AI works on mobile browsers and avoids cellular data usage for inference after the initial model download. Edge AI uses data for every request but avoids taxing the mobile CPU/GPU. For resource-constrained devices, smaller LocalMode models like SmolLM2-135M (~70MB) offer a good balance."
+  - question: "What about Cloudflare Workers AI specifically?"
+    answer: "Cloudflare Workers AI provides GPU inference at edge locations with a generous free tier, supporting Llama, BAAI BGE, and other models. It works well as a server-side complement to LocalMode's client-side inference -- use Cloudflare for initial document processing and LocalMode for interactive features."
 ---
 
 # Browser AI vs Edge AI
@@ -43,20 +51,6 @@ When evaluating Browser AI (LocalMode) against Edge AI (e.g. Cloudflare Workers 
 - **Offline requirements** - Applications that must work without internet need local inference. Cloud-dependent solutions fail when connectivity drops.
 
 
-
-## Frequently Asked Questions
-
-### Can I use both browser AI and edge AI?
-
-Yes. A common pattern: use LocalMode for client-side tasks (embeddings, classification, chat) and edge functions for server-side tasks (initial data processing, complex reasoning, model fine-tuning). The Vercel AI SDK provider (@localmode/ai-sdk) makes it easy to swap between local and cloud providers.
-
-### Which is better for mobile users?
-
-Browser AI works on mobile browsers and avoids cellular data usage for inference (after initial model download). Edge AI uses data for every request but doesn't tax the mobile CPU/GPU. For resource-constrained mobile devices, smaller LocalMode models (SmolLM2-135M, ~78MB via WebLLM or ~70MB as GGUF) are often the best balance.
-
-### What about Cloudflare Workers AI specifically?
-
-Cloudflare Workers AI provides GPU inference at edge locations with a generous free tier. It supports Llama, BAAI BGE, and other models. It's a good server-side complement to LocalMode's client-side inference - use Cloudflare for initial document processing and LocalMode for interactive features.
 
 ## Making the Decision
 

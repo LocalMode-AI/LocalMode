@@ -3,6 +3,18 @@ title: "Text Embeddings in the Browser"
 description: "Convert text into semantic vector representations for similarity search, clustering, and RAG pipelines."
 author: "LocalMode"
 date: "2026-04-25"
+dateModified: "2026-05-25"
+faq:
+  - question: "What is the best model for text embeddings in the browser?"
+    answer: "Xenova/bge-small-en-v1.5 (33MB, 384 dimensions) is recommended for most applications. For the smallest download, Snowflake/snowflake-arctic-embed-xs is only 23MB. For highest quality, Xenova/all-mpnet-base-v2 (420MB, 768 dimensions) is available."
+  - question: "Does browser-based text embedding work offline?"
+    answer: "Yes. After the initial model download (23-420MB depending on model), text embeddings work completely offline. All data stays on-device with no server or API key required."
+  - question: "How does local embedding quality compare to cloud APIs?"
+    answer: "Quality is within 5% of cloud models for most retrieval tasks. OpenAI text-embedding-3-small costs $0.02 per million tokens, Google costs $0.10 per million tokens, and Cohere costs $0.10 per million tokens. LocalMode runs at $0 after the model download."
+  - question: "What are text embeddings used for in the browser?"
+    answer: "Text embeddings are the foundation of semantic search, recommendation engines, and RAG pipelines. They convert text into vectors where similar meanings produce vectors close together, enabling search by meaning rather than just keywords."
+  - question: "What providers support text embeddings in LocalMode?"
+    answer: "Transformers.js provides ONNX-optimized models with the broadest catalog. MediaPipe offers text embeddings through the Universal Sentence Encoder using WASM + WebGL without requiring WebGPU."
 ---
 
 # Text Embeddings in the Browser

@@ -3,6 +3,16 @@ title: "BGE Embeddings Models in the Browser"
 description: "BAAI's BGE embedding models - the most popular text embedding models for browser-based semantic search and RAG."
 author: "LocalMode"
 date: "2026-05-08"
+dateModified: "2026-05-25"
+faq:
+  - question: "What is the recommended BGE embedding model for most browser applications?"
+    answer: "BGE-small-en-v1.5 at 33MB with 384 dimensions is LocalMode's default recommendation. It loads in seconds, works offline, and scores within 5% of much larger models on retrieval benchmarks."
+  - question: "How large is the BGE base embedding model download?"
+    answer: "BGE-base-en-v1.5 is 110MB and produces 768-dimensional embeddings. The larger dimension space captures finer semantic distinctions, which benefits use cases like legal document search and technical documentation retrieval."
+  - question: "Do BGE embedding models require WebGPU?"
+    answer: "No. Both BGE variants run through Transformers.js on WASM, meaning they work in every browser including Safari on iOS and Firefox without requiring WebGPU."
+  - question: "Can I run BGE embeddings offline?"
+    answer: "Yes. After the initial model download (33MB or 110MB), BGE models are cached in IndexedDB and work entirely offline. No network connection is needed for subsequent use."
 ---
 
 # BGE Embeddings Models in the Browser

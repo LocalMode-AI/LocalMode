@@ -3,6 +3,16 @@ title: "Text Classification in the Browser"
 description: "Classify text into categories - sentiment analysis, topic detection, intent recognition, and content moderation."
 author: "LocalMode"
 date: "2026-05-13"
+dateModified: "2026-05-29"
+faq:
+  - question: "What is the best model for text classification in the browser?"
+    answer: "For sentiment analysis, Xenova/distilbert-base-uncased-finetuned-sst-2-english (67MB) is recommended. For flexible classification with custom labels, Xenova/nli-deberta-v3-xsmall (~90MB) is a good zero-shot classifier. Xenova/mobilebert-uncased-mnli (~21MB) is the smallest option."
+  - question: "What is zero-shot text classification?"
+    answer: "Zero-shot classifiers accept any set of labels at runtime without requiring training data. You define categories like 'urgent', 'billing', 'technical' and the model classifies text into those categories using natural language inference, making them flexible for custom use cases."
+  - question: "Does browser-based text classification work offline?"
+    answer: "Yes. After the initial model download (21-297MB depending on the model), text classification works completely offline with no server, no API key, and no data leaving the device."
+  - question: "How does local text classification cost compare to cloud APIs?"
+    answer: "Cloud classification typically uses general-purpose LLMs at $0.50-5 per million tokens. Dedicated classification models in LocalMode are faster (single forward pass), cost $0, and are more accurate for their specific tasks like sentiment analysis."
 ---
 
 # Text Classification in the Browser

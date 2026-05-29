@@ -3,6 +3,16 @@ title: "Speech-to-Text in the Browser"
 description: "Transcribe spoken audio to text in real-time using Moonshine models - entirely offline, entirely private."
 author: "LocalMode"
 date: "2026-05-02"
+dateModified: "2026-05-27"
+faq:
+  - question: "What is the best model for speech-to-text in the browser?"
+    answer: "onnx-community/moonshine-base-ONNX (237MB) is recommended for the best quality-to-size balance. It is designed specifically for edge deployment. For a smaller download, moonshine-tiny-ONNX (50MB) offers good quality at faster speeds."
+  - question: "Does browser-based speech-to-text work offline?"
+    answer: "Yes. After the initial model download (50-237MB depending on model), speech-to-text works completely offline. No server, no API key, and audio data never leaves the device."
+  - question: "How does browser speech-to-text cost compare to cloud services?"
+    answer: "OpenAI Whisper API costs $0.006 per minute, Google Speech-to-Text costs $0.006-0.009 per 15 seconds, and AWS Transcribe costs $0.024 per minute. LocalMode costs $0 after the model download. For voice note apps processing 30+ minutes daily, this saves hundreds of dollars annually."
+  - question: "What audio format does browser speech-to-text require?"
+    answer: "Models accept Float32Array audio samples at 16kHz mono sample rate. The transcribe() function returns timestamped text segments with start and end times. The @localmode/react package includes a useVoiceRecorder() hook for microphone capture."
 ---
 
 # Speech-to-Text in the Browser

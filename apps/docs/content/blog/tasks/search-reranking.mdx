@@ -3,6 +3,16 @@ title: "Search Reranking in the Browser"
 description: "Re-score and reorder search results using a cross-encoder model for dramatically better retrieval precision."
 author: "LocalMode"
 date: "2026-05-04"
+dateModified: "2026-05-25"
+faq:
+  - question: "What is the best model for search reranking in the browser?"
+    answer: "Xenova/ms-marco-MiniLM-L-6-v2 (~23MB) is recommended for most applications. It is a 22.7M-parameter cross-encoder trained on MS MARCO with MRR@10 of 39.01. For higher quality and multilingual support, Xenova/bge-reranker-base (~279MB) is available."
+  - question: "How does search reranking improve retrieval results?"
+    answer: "A cross-encoder processes the query and document together in a single forward pass, capturing fine-grained relevance signals. It is typically used as a second stage: retrieve top-50 candidates with fast embedding search, then rerank to get the best top-5."
+  - question: "Does browser-based search reranking work offline?"
+    answer: "Yes. After the initial model download (23-279MB depending on the model), search reranking runs entirely in the browser with no server, no API key, and no data leaving the device."
+  - question: "How does local search reranking cost compare to cloud services?"
+    answer: "Cohere Rerank 3.5 costs $2.00 per 1,000 searches (up to 100 documents each). LocalMode reranking with MiniLM-L-6-v2 runs entirely in the browser at zero per-request cost with comparable quality for common retrieval tasks."
 ---
 
 # Search Reranking in the Browser

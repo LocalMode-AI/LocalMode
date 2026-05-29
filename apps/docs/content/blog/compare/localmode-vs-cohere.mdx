@@ -3,6 +3,14 @@ title: "LocalMode vs Cohere API"
 description: "Comparing LocalMode's free browser-based embeddings and reranking with Cohere's cloud API for search and retrieval."
 author: "LocalMode"
 date: "2026-04-05"
+dateModified: "2026-05-29"
+faq:
+  - question: "Can I import vectors from Cohere into LocalMode?"
+    answer: "Not directly, since Cohere's embedding dimensions differ from LocalMode's models. You need to re-embed your documents using a LocalMode model. The importFrom() function supports Pinecone and ChromaDB; for Cohere vectors, export to CSV and use the CSV importer."
+  - question: "How does the embedding cost compare at 100K documents?"
+    answer: "Assuming 500 tokens per document, Cohere embed-v3 costs about $5 for initial embedding (50M tokens at $0.10/M) plus ongoing search costs. LocalMode costs $0 total -- the BGE-small model download (~34MB) is a one-time operation per user."
+  - question: "Is Cohere Rerank worth paying for over LocalMode reranking?"
+    answer: "For most applications, no -- MiniLM reranking is free and fast. For applications where retrieval precision directly impacts revenue (enterprise search, legal discovery, medical research), Cohere Rerank 3.5's superior quality may justify the $2.00 per 1,000 searches cost."
 ---
 
 # LocalMode vs Cohere API
@@ -43,20 +51,6 @@ When evaluating LocalMode against Cohere API, consider your primary constraints:
 - **Offline requirements** - Applications that must work without internet need local inference. Cloud-dependent solutions fail when connectivity drops.
 
 
-
-## Frequently Asked Questions
-
-### Can I import vectors from Cohere into LocalMode?
-
-Not directly - Cohere's embedding dimensions differ from LocalMode's models. You'd need to re-embed your documents using a LocalMode model. The importFrom() function supports migrating from Pinecone and ChromaDB; for Cohere vectors, export to CSV and use the CSV importer.
-
-### How does the cost compare at 100K documents?
-
-Assuming 500 tokens per document: Cohere embed-v3 costs ~$5 for initial embedding (100K × 500 tokens = 50M tokens × $0.10/M) plus ongoing search costs. LocalMode costs $0 total - the model download (~34MB quantized for BGE-small) is a one-time operation per user. At scale, the savings compound rapidly.
-
-### Is Cohere Rerank worth paying for over LocalMode reranking?
-
-For most applications, no - MiniLM reranking is free and fast. For applications where retrieval precision directly impacts revenue (enterprise search, legal discovery, medical research), Cohere Rerank 3.5's superior quality may justify the $2.00 per 1,000 searches cost.
 
 ## Making the Decision
 

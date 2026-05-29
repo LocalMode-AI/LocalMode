@@ -3,6 +3,16 @@ title: "How Transformers.js Runs 200+ ML Models in Your Browser Tab"
 description: "A deep dive into the runtime stack that makes browser-native ML possible: HuggingFace model export, ONNX Runtime Web, WebGPU vs WASM backends, quantization tradeoffs, and how LocalMode wraps it all in 26 factory methods across 27 implementation files."
 author: LocalMode
 date: 2026-03-18
+dateModified: "2026-05-28"
+faq:
+  - question: "How does Transformers.js run ML models in the browser?"
+    answer: "Transformers.js converts HuggingFace models to ONNX format via Optimum, applies quantization (q4/int8/fp16), and executes them through ONNX Runtime Web using either a WebGPU or WebAssembly backend. Models download once from HuggingFace Hub and cache in the browser's Cache API."
+  - question: "What is the difference between WebGPU and WASM execution backends?"
+    answer: "WebGPU provides GPU-accelerated inference with significantly higher throughput (10-40x for large models), available in Chrome 113+, Edge 113+, Safari 26+, and Firefox 141+. WASM is the universal fallback that runs on any modern browser CPU, including older browsers and mobile devices."
+  - question: "How many model types does @localmode/transformers support?"
+    answer: "The package wraps Transformers.js v4 behind 26 factory methods spanning 27 implementation files. It covers embeddings, classification, zero-shot classification, NER, reranking, translation, summarization, speech-to-text, text-to-speech (Kokoro with 29 voices), image classification, captioning, OCR, object detection, segmentation, and LLM chat."
+  - question: "What is ONNX and why is it used for browser ML?"
+    answer: "ONNX (Open Neural Network Exchange) is a portable, framework-agnostic model representation. Browsers cannot execute PyTorch directly, so models are exported to ONNX format via HuggingFace's Optimum library. ONNX Runtime Web then executes these models efficiently on WebGPU or WASM backends."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

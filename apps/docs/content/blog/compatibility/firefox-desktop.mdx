@@ -3,6 +3,18 @@ title: "Firefox Desktop"
 description: "LocalMode on Firefox - full WASM support, WebGPU on Windows (141+) and macOS Apple Silicon (147+), all non-GPU models work perfectly."
 author: "LocalMode"
 date: "2026-04-05"
+dateModified: "2026-05-26"
+faq:
+  - question: "Does Firefox support WebGPU for AI inference?"
+    answer: "Yes, on specific platforms. WebGPU is enabled by default on Windows from Firefox 141 (July 2025) and on macOS Apple Silicon from Firefox 147 (January 2026). It is not available on Linux or macOS Intel in stable Firefox. Use isWebGPUSupported() to detect availability at runtime."
+  - question: "What happens if WebGPU is not available on Firefox?"
+    answer: "LocalMode falls back to WASM-based inference via wllama or Transformers.js. All non-LLM tasks (embeddings, classification, NER, vision, audio, VectorDB) work perfectly via WASM on Firefox. For LLM inference, wllama provides 5-20 tokens per second via WASM compared to 30-90 with WebGPU."
+  - question: "Does LocalMode work in Firefox Private Browsing?"
+    answer: "Yes. Unlike Safari, Firefox handles IndexedDB in Private Browsing without blocking it. Since Firefox 115, Private Browsing uses encrypted on-disk storage that is deleted when the session ends. Models and vectors work during the session but are not persisted between sessions."
+  - question: "What is the minimum Firefox version needed for LocalMode?"
+    answer: "WebAssembly works from Firefox 52+, which covers basic inference. WASM SIMD requires Firefox 89+. Web Locks require Firefox 96+. For WebGPU-accelerated LLM inference, Firefox 141+ on Windows or 147+ on macOS Apple Silicon is needed."
+  - question: "Can Firefox's Enhanced Tracking Protection block model downloads?"
+    answer: "Yes. In Strict mode, Firefox's Enhanced Tracking Protection may block model CDN requests if it classifies them as trackers. If users report model loading failures on Firefox, advise them to check their tracking protection settings or add an exception for the model CDN domain."
 ---
 
 # Firefox Desktop

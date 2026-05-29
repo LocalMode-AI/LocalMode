@@ -3,6 +3,16 @@ title: "Cross-Origin Isolation (COOP/COEP)"
 description: "Setting up COOP/COEP headers for SharedArrayBuffer - required for multi-threaded WASM inference in some configurations."
 author: "LocalMode"
 date: "2026-04-30"
+dateModified: "2026-05-25"
+faq:
+  - question: "Is Cross-Origin Isolation required for LocalMode to work?"
+    answer: "No. Cross-Origin Isolation (COOP/COEP headers) is only required for multi-threaded WASM inference using SharedArrayBuffer. Transformers.js, basic wllama inference, and all non-LLM tasks work without these headers. LocalMode detects isolation status with isCrossOriginIsolated() and falls back to single-threaded inference automatically."
+  - question: "What is the difference between COEP require-corp and credentialless?"
+    answer: "Both values enable cross-origin isolation for SharedArrayBuffer. require-corp demands that all subresources supply CORP/CORS headers, which can break third-party embeds. credentialless (Chrome 96+, Firefox 119+, not in Safari) is less restrictive and loads cross-origin resources by stripping credentials instead of requiring CORP headers."
+  - question: "Will setting COOP/COEP headers break my third-party iframes?"
+    answer: "COEP: require-corp can break third-party embeds (ads, analytics, social widgets) that don't supply CORP headers. Use COEP: credentialless as a less restrictive alternative on Chrome and Firefox. If you cannot set these headers at all, LocalMode falls back to single-threaded inference with no loss of functionality."
+  - question: "How do I configure Cross-Origin Isolation in Next.js?"
+    answer: "Add custom headers in next.config.mjs: set Cross-Origin-Opener-Policy to same-origin and Cross-Origin-Embedder-Policy to credentialless for all routes. This enables SharedArrayBuffer for multi-threaded WASM inference. Only add these if you specifically need multi-threaded performance."
 ---
 
 # Cross-Origin Isolation (COOP/COEP)

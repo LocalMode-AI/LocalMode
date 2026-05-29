@@ -3,6 +3,18 @@ title: "Qwen Models in the Browser"
 description: "Alibaba's Qwen family spans 0.5B to 9B parameters with general-purpose, coding, and vision-capable variants, available across all four browser LLM providers."
 author: "LocalMode"
 date: "2026-05-07"
+dateModified: "2026-05-28"
+faq:
+  - question: "What is the smallest Qwen model available in LocalMode?"
+    answer: "Qwen2.5-0.5B-Instruct via WebLLM at 278MB is the smallest. It is suitable for quick responses on mobile devices. The wllama GGUF variant is 386MB and works in any browser."
+  - question: "How many providers support Qwen models?"
+    answer: "Qwen has the widest provider coverage in LocalMode with four providers: WebLLM (WebGPU), wllama (WASM), Transformers.js (ONNX), and LiteRT. This means every user can run a Qwen model regardless of browser or hardware."
+  - question: "Does Qwen support vision/image input?"
+    answer: "Yes. The Qwen3.5 ONNX variants (0.8B, 2B, and 4B) via Transformers.js are multimodal and accept image input alongside text. These are the vision-capable options in the Qwen family."
+  - question: "What is the quality of Qwen3-4B compared to cloud APIs?"
+    answer: "Qwen3-4B scores 83.7% on MMLU-Redux in thinking mode, approaching GPT-5 territory from a model that fits in browser memory at 2.2GB via WebLLM."
+  - question: "Does Qwen have coding-specialized variants?"
+    answer: "Yes. Qwen2.5-Coder variants are available at 1.5B, 3B, and 7B sizes across WebLLM, wllama, and Transformers.js providers. They add specialized programming knowledge while using the same LanguageModel interface."
 ---
 
 # Qwen Models in the Browser

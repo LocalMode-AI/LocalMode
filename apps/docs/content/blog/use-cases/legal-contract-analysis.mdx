@@ -3,6 +3,14 @@ title: "Legal Contract Analysis"
 description: "Build contract analysis with entity extraction, clause classification, and semantic search - all without data leaving the firm."
 author: "LocalMode"
 date: "2026-03-28"
+dateModified: "2026-05-28"
+faq:
+  - question: "Is AI contract analysis admissible in legal proceedings?"
+    answer: "LocalMode provides information extraction tools, not legal advice. Extracted entities and classifications should be reviewed by qualified legal professionals. The tool accelerates review but does not replace human judgment."
+  - question: "Can LocalMode handle multilingual contracts?"
+    answer: "The NER model works best with English text. For multilingual contracts, use paraphrase-multilingual-MiniLM (50+ languages) for semantic search and embeddings. Classification accuracy may vary by language."
+  - question: "Does on-device processing protect attorney-client privilege?"
+    answer: "On-device processing means contract text never leaves the device, avoiding the risk of transmitting privileged content to third-party cloud services. This architectural guarantee helps maintain confidentiality obligations under ABA Model Rule 1.6."
 ---
 
 # Legal Contract Analysis
@@ -84,16 +92,6 @@ When deploying this solution to production, consider these factors:
 **Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
 
 **Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
-
-## Frequently Asked Questions
-
-### Is this admissible in legal proceedings?
-
-LocalMode provides information extraction tools, not legal advice. The extracted entities and classifications should be reviewed by qualified legal professionals. The tool accelerates review - it doesn't replace human judgment.
-
-### Can it handle multiple languages?
-
-The NER model works best with English text. For multilingual contracts, use paraphrase-multilingual-MiniLM (50+ languages) for semantic search and embeddings. Classification accuracy may vary by language.
 
 ## Further Reading
 

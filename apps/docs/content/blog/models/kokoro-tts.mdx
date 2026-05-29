@@ -3,6 +3,18 @@ title: "Kokoro Text-to-Speech Models in the Browser"
 description: "Kokoro 82M - a compact, high-quality text-to-speech model with 29 English voices (American & British), phonemizer-backed synthesis, and speed control - entirely in the browser."
 author: "LocalMode"
 date: "2026-04-12"
+dateModified: "2026-05-25"
+faq:
+  - question: "How many voices does Kokoro TTS support?"
+    answer: "Kokoro offers 29 English voices (American and British English) from a single 86MB model. Each voice has distinct pitch, cadence, and style characteristics. The phonemizer npm package only ships English eSpeak-NG dictionary data, so only English voices are available."
+  - question: "How large is the Kokoro TTS model download?"
+    answer: "The default q8 quantized Kokoro model is 86MB. The full fp32 version is 326MB. At 82M parameters, it is compact enough to cache in IndexedDB for instant offline use after the first download."
+  - question: "Can I control the speech speed with Kokoro?"
+    answer: "Yes. Kokoro supports speed control from 0.5x to 2.0x at synthesis time, without post-processing artifacts. This is useful for slow narration for accessibility or fast playback for productivity tools."
+  - question: "Does Kokoro TTS require WebGPU?"
+    answer: "No. Kokoro runs through Transformers.js on WASM and works in all supported browsers including Chrome, Firefox, Safari, and Edge without requiring WebGPU."
+  - question: "How does Kokoro quality compare to cloud TTS services?"
+    answer: "Kokoro produces remarkably natural-sounding 24kHz audio that competes with cloud TTS services costing $4-16 per million characters. The phonemizer-backed pipeline improves pronunciation accuracy, though it does not yet match premium neural voices from ElevenLabs or Google's Neural2 tier."
 ---
 
 # Kokoro Text-to-Speech Models in the Browser

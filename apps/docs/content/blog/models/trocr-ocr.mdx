@@ -3,6 +3,16 @@ title: "TrOCR Optical Character Recognition Models in the Browser"
 description: "Microsoft's TrOCR - transformer-based OCR models for extracting printed and handwritten text from images in the browser. For document-level OCR with table and formula support, see also GLM-OCR and LightOnOCR-2."
 author: "LocalMode"
 date: "2026-05-16"
+dateModified: "2026-05-25"
+faq:
+  - question: "What types of text can TrOCR recognize?"
+    answer: "TrOCR has two variants: trocr-small-printed for printed text (receipts, business cards, screenshots) and trocr-small-handwritten for handwritten text (notes, forms). Both are approximately 120MB."
+  - question: "Can TrOCR read full pages of text?"
+    answer: "No. TrOCR processes one line of text at a time. For best results, crop the input image to a single text line. For full document-level OCR with table and formula support, see GLM-OCR and LightOnOCR-2."
+  - question: "How large is the TrOCR model download?"
+    answer: "Both TrOCR variants (printed and handwritten) are approximately 120MB each. The model uses a DeiT-Small encoder with a MiniLM decoder totalling about 62M parameters."
+  - question: "Does TrOCR require WebGPU?"
+    answer: "No. TrOCR runs through Transformers.js on WASM and works in all modern browsers without requiring WebGPU. All image processing happens client-side, so sensitive documents never leave the device."
 ---
 
 # TrOCR Optical Character Recognition Models in the Browser

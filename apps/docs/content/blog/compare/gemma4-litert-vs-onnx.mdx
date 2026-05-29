@@ -3,6 +3,16 @@ title: "Gemma 4 in the Browser: LiteRT vs ONNX"
 description: "Comparing two ways to run Google's Gemma 4 edge models in the browser - LiteRT (.litertlm) for optimized text-only speed vs ONNX (Transformers.js) for multimodal vision support and WASM fallback."
 author: "LocalMode"
 date: "2026-05-22"
+dateModified: "2026-05-27"
+faq:
+  - question: "Does LiteRT support image/vision input for Gemma 4?"
+    answer: "No. The LiteRT path via @localmode/litert is text-only. If you need vision or image input capabilities, use the ONNX path via @localmode/transformers, which supports text + vision for Gemma 4 models."
+  - question: "Can I use both LiteRT and ONNX with automatic fallback?"
+    answer: "Yes. Wrap model loading in a try/catch -- try LiteRT first for speed, and fall back to ONNX if WebGPU is unavailable. Both providers implement the same LanguageModel interface, so your generateText() and streamText() calls work identically with either."
+  - question: "Which Gemma 4 variant should I use for browser deployment?"
+    answer: "E2B (2.3B effective params) is recommended for most browser deployments. It requires 6GB+ VRAM compared to E4B's 8GB+ requirement, and provides good quality for chat and general tasks. E4B offers higher quality but may cause performance issues on VRAM-constrained hardware."
+  - question: "Why is LiteRT faster than ONNX for Gemma 4?"
+    answer: "LiteRT uses Google's GPU-compiled .litertlm format specifically optimized for WebGPU, giving it a consistent performance advantage. On VRAM-constrained hardware the gap is especially large, because the ONNX path may spill memory to system RAM."
 ---
 
 # Gemma 4 in the Browser: LiteRT vs ONNX

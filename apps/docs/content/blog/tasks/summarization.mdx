@@ -3,6 +3,16 @@ title: "Text Summarization in the Browser"
 description: "Condense long documents into concise summaries using DistilBART or Chrome Built-in AI."
 author: "LocalMode"
 date: "2026-04-15"
+dateModified: "2026-05-28"
+faq:
+  - question: "What is the best model for text summarization in the browser?"
+    answer: "Xenova/distilbart-cnn-6-6 (~284MB) is recommended for most applications, offering high quality abstractive summarization. Chrome Built-in AI (Gemini Nano) provides instant summarization with zero model download in Chrome 138+."
+  - question: "Does browser-based text summarization work offline?"
+    answer: "Yes. After the initial model download (~284MB for DistilBART), summarization works completely offline. Chrome Built-in AI also works offline with no separate download since the model is bundled with the browser."
+  - question: "What browsers support text summarization with LocalMode?"
+    answer: "Transformers.js models work in all modern browsers via WebGPU or WASM backends. Chrome Built-in AI (Gemini Nano) is available in Chrome 138+ with a flag. LocalMode provides a fallback pattern to try Chrome AI first and fall back to DistilBART."
+  - question: "How does local summarization compare to cloud LLM summarization?"
+    answer: "Cloud summarization uses general-purpose LLMs at $2-10 per million tokens. Dedicated models like DistilBART are faster for this specific task and run at $0 cost. Chrome AI summarization is also free and instant in supported browsers."
 ---
 
 # Text Summarization in the Browser
@@ -74,7 +84,7 @@ The following models support text summarization through LocalMode. Choose based 
 | Model | Provider | Size | Speed | Quality |
 | --- | --- | --- | --- | --- |
 | Xenova/distilbart-cnn-6-6 | Transformers.js | ~284MB | Medium | High |
-| Xenova/distilbart-cnn-12-6 | Transformers.js | ~422MB | Slow | Higher |
+| Xenova/distilbart-cnn-12-6 | Transformers.js | ~360MB | Slow | Higher |
 | chrome-ai:gemini-nano-summarizer | Chrome Built-in AI | 0MB | Fast | Good |
 
 **Choosing a model:** For most applications, start with the recommended model (`Xenova/distilbart-cnn-6-6`). If download size is the primary constraint (e.g., mobile PWA, browser extension), pick the smallest model that meets your quality bar. If quality is the priority (e.g., enterprise search, content analysis), use the largest model your target devices can handle.

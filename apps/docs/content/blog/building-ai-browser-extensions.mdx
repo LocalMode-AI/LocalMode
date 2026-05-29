@@ -3,6 +3,16 @@ title: "Building AI-Powered Browser Extensions With LocalMode"
 description: "Browser extensions can't call localhost APIs like Ollama. LocalMode solves this by running ML models directly in the browser -- embeddings, classification, summarization, and LLM chat all work inside extension contexts. Learn the architecture patterns for content scripts, offscreen documents, and side panels."
 author: LocalMode
 date: 2026-03-03
+dateModified: "2026-05-28"
+faq:
+  - question: "Why can't browser extensions use Ollama or localhost APIs for AI inference?"
+    answer: "Chrome extensions under Manifest V3 have strict Content Security Policies that block arbitrary HTTP calls. Content scripts run in web page contexts with restricted network access, and service workers have a 30-second idle timeout. LocalMode sidesteps this by running models in-process via WebAssembly and WebGPU, using only standard Web APIs that Chrome already trusts."
+  - question: "Where should AI inference run inside a Chrome extension's architecture?"
+    answer: "In offscreen documents or side panels. Offscreen documents (Chrome 109+) provide a full browsing context with DOM, Canvas, WASM, and IndexedDB without a visible window. Side panels (Chrome 114+) offer the same capabilities plus a persistent UI. Service workers should only orchestrate messages, and content scripts should only extract text and inject UI."
+  - question: "What CSP directive is required for WebAssembly in Manifest V3 extensions?"
+    answer: "The wasm-unsafe-eval directive must be added to the extension_pages Content-Security-Policy in manifest.json. Without it, Chrome blocks all WebAssembly compilation including the ONNX runtime that powers @localmode/transformers. This directive was allowed in Chrome 102 and became required for WASM in Chrome 103."
+  - question: "What are practical AI use cases for browser extensions using LocalMode?"
+    answer: "Three proven patterns: an email assistant that classifies and summarizes emails using zero-shot classification (~26 MB model) and summarization (284 MB); a page summarizer in a side panel; and smart bookmarks with semantic search where every bookmarked page is embedded into a local vector database for meaning-based retrieval."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

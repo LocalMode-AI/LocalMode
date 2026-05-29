@@ -3,6 +3,14 @@ title: "E-Commerce Product Search"
 description: "Build semantic product search with visual similarity - find products by description, by image, and by browsing pattern."
 author: "LocalMode"
 date: "2026-04-24"
+dateModified: "2026-05-28"
+faq:
+  - question: "How many products can browser-based semantic search handle?"
+    answer: "With SQ8 quantization, 100K products use ~37MB of IndexedDB storage for 384-dimensional vectors. Most browsers allow significantly more. For larger catalogs, use Product Quantization (PQ) for 8-32x compression."
+  - question: "Does LocalMode semantic search replace Algolia entirely?"
+    answer: "For semantic search, yes. For faceted filtering like price ranges and categories, you still need client-side filtering logic alongside vector search. LocalMode's VectorDB supports metadata filters, which cover most faceted search needs."
+  - question: "Can users search products by image with LocalMode?"
+    answer: "Yes. Use CLIP multimodal embeddings to embed product images and query images into the same vector space. Users can upload a reference photo and find visually similar products without any cloud API."
 ---
 
 # E-Commerce Product Search
@@ -80,16 +88,6 @@ When deploying this solution to production, consider these factors:
 **Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
 
 **Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
-
-## Frequently Asked Questions
-
-### How many products can it handle?
-
-With SQ8 quantization, 100K products use ~37MB of IndexedDB storage for 384-dimensional vectors (compared to ~147MB unquantized). Most browsers allow significantly more than that - Chrome grants up to 60% of total disk size per origin. For larger catalogs, use Product Quantization (PQ) for 8-32× compression.
-
-### Does it replace Algolia entirely?
-
-For semantic search, yes. For faceted filtering (price ranges, categories, attributes), you'd still need client-side filtering logic alongside the vector search. LocalMode's VectorDB supports metadata filters, which cover most faceted search needs.
 
 ## Further Reading
 

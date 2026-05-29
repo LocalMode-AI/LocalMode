@@ -3,6 +3,16 @@ title: "Granite Models in the Browser"
 description: "IBM's Granite 4.0 - ultra-compact 350M and 1B ONNX models for fast browser inference via Transformers.js v4."
 author: "LocalMode"
 date: "2026-04-09"
+dateModified: "2026-05-28"
+faq:
+  - question: "What is the smallest Granite model available for browser inference?"
+    answer: "Granite 4.0 350M at approximately 350MB (q4f16 quantization) is the smallest ONNX-format LLM available through LocalMode's Transformers.js provider. It supports a 32K token context window and 12 languages."
+  - question: "How many languages does Granite 4.0 support?"
+    answer: "Both Granite 4.0 variants support 12 languages: English, German, Spanish, French, Japanese, Portuguese, Arabic, Czech, Italian, Korean, Dutch, and Chinese. Both are released under the Apache 2.0 license."
+  - question: "What is the context window for Granite models?"
+    answer: "Granite 4.0 350M supports 32,768 tokens and Granite 4.0 1B supports 128,000 tokens. The 1B variant's large context window makes it suitable for long-document tasks."
+  - question: "Does Granite require WebGPU?"
+    answer: "Granite models run through Transformers.js with WebGPU acceleration where available. They can also fall back to WASM, though WebGPU is preferred for best performance with these ONNX models."
 ---
 
 # Granite Models in the Browser

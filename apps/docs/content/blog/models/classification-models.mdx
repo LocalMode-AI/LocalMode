@@ -3,6 +3,16 @@ title: "Text Classification & Sentiment Models in the Browser"
 description: "DistilBERT and RoBERTa models for sentiment analysis, text classification, and zero-shot categorization in the browser."
 author: "LocalMode"
 date: "2026-03-31"
+dateModified: "2026-05-27"
+faq:
+  - question: "What is the smallest text classification model in LocalMode?"
+    answer: "MobileBERT-MNLI at 21MB is the smallest classification model. It supports zero-shot classification where you define your own categories at runtime, without requiring any fine-tuning or labeled training data."
+  - question: "What is the difference between supervised and zero-shot classification?"
+    answer: "Supervised models like DistilBERT-SST2 are trained on specific tasks (e.g., sentiment). Zero-shot models like MobileBERT-MNLI and DeBERTa accept any candidate labels at runtime, enabling flexible content moderation, topic categorization, and intent detection without fine-tuning."
+  - question: "How does classification model speed compare to using an LLM for classification?"
+    answer: "Classification models process text in a single encoder forward pass, which is substantially faster than an LLM's autoregressive token-by-token generation. They also return calibrated probability scores that can be thresholded for automated decisions."
+  - question: "Can I run sentiment analysis in the browser offline?"
+    answer: "Yes. After the initial model download (67MB for DistilBERT-SST2 or 125MB for Twitter-RoBERTa), all classification models work entirely offline with no API costs or network latency."
 ---
 
 # Text Classification & Sentiment Models in the Browser

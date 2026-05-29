@@ -3,6 +3,16 @@ title: "17 AI Features You Can Add to Your App Without an API Key"
 description: "A practical guide to 17 production-ready AI features that run entirely in the browser - no API keys, no servers, no recurring costs. Each includes working code, model recommendations, and a live demo you can try right now."
 author: LocalMode
 date: 2026-02-28
+dateModified: "2026-05-28"
+faq:
+  - question: "What AI features can run in the browser without an API key?"
+    answer: "At least 17 production-ready features including semantic search, sentiment analysis, text summarization, language translation, image captioning, object detection, OCR, voice transcription, text-to-speech, and cross-modal image search. Each uses an open-weight model that downloads once and runs via WebAssembly or WebGPU."
+  - question: "How large are the AI models needed for browser-based inference?"
+    answer: "Individual models range from 8 MB (photo enhancement) to 284 MB (text summarization). Most apps use 2-4 models totaling 100-500 MB. Models are quantized ONNX weights cached in IndexedDB after the first download, so subsequent loads are instant and work offline."
+  - question: "How does local AI quality compare to cloud APIs like OpenAI?"
+    answer: "For embeddings, local models score within 0.1 points of OpenAI on the MTEB benchmark (62.2 vs 62.3). Named entity recognition reaches 93-96% of GPT-5, and zero-shot classification hits 92-95%. Summarization and translation show larger gaps at roughly 80-85% of cloud quality."
+  - question: "What packages do I need to add AI features to a JavaScript app?"
+    answer: "Two packages: @localmode/core provides the functions (embed, classify, transcribe, etc.) with zero dependencies, and @localmode/transformers provides the HuggingFace Transformers.js model implementations. For React apps, add @localmode/react for hooks that handle loading states and cancellation."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

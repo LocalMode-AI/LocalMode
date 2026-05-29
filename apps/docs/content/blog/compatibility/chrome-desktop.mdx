@@ -3,6 +3,18 @@ title: "Chrome Desktop"
 description: "Full LocalMode support on Chrome Desktop - WebGPU, WASM, IndexedDB, Web Workers, and all 136 curated models."
 author: "LocalMode"
 date: "2026-04-11"
+dateModified: "2026-05-29"
+faq:
+  - question: "Does Chrome Desktop support WebGPU for AI inference?"
+    answer: "Yes. Chrome Desktop has full WebGPU support since Chrome 113 (stable since 2023). This enables GPU-accelerated LLM inference at 30-90 tokens per second via @localmode/webllm. Chrome Desktop is the recommended development target for LocalMode."
+  - question: "How much storage does model caching require on Chrome Desktop?"
+    answer: "Chrome grants up to 60% of total disk size per origin for IndexedDB storage. Model sizes vary from about 33MB for embeddings (BGE-small) to several gigabytes for larger LLMs. Use navigator.storage.persist() to prevent Chrome from evicting cached models under storage pressure."
+  - question: "Can I use SharedArrayBuffer on Chrome Desktop?"
+    answer: "Yes, but it requires Cross-Origin Isolation headers (Cross-Origin-Opener-Policy: same-origin and Cross-Origin-Embedder-Policy). SharedArrayBuffer enables multi-threaded WASM inference for improved performance but is not required for basic LocalMode functionality."
+  - question: "What is the minimum Chrome Desktop version needed for LocalMode?"
+    answer: "WebAssembly works from Chrome 57+, which covers basic inference. WebGPU requires Chrome 113+. For the full feature set including Web Locks (69+) and BroadcastChannel (54+), Chrome 113+ is recommended."
+  - question: "Does Chrome Desktop support Chrome Built-in AI with LocalMode?"
+    answer: "Yes. Chrome 138+ provides stable Summarizer and Translator APIs via Gemini Nano with zero model download required. LocalMode's @localmode/chrome-ai provider wraps these APIs. Prompt API is stable for extensions since Chrome 138 and for web pages since Chrome 148."
 ---
 
 # Chrome Desktop
@@ -24,7 +36,7 @@ The following table summarizes which web platform features are available on Chro
 | **SharedArrayBuffer** | Yes (with COOP/COEP headers) | Requires Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy headers. |
 | **Web Locks** | Yes (Chrome 69+) | Full support. Used for cross-tab model loading coordination. |
 | **BroadcastChannel** | Yes (Chrome 54+) | Full support. Used for cross-tab VectorDB sync. |
-| **Chrome Built-in AI** | Chrome 138+ (Summarizer/Translator stable, Prompt API origin trial) | @localmode/chrome-ai for zero-download summarization and translation via Gemini Nano. |
+| **Chrome Built-in AI** | Chrome 138+ (Summarizer/Translator stable, Prompt API stable for extensions since 138, web pages since 148) | @localmode/chrome-ai for zero-download summarization and translation via Gemini Nano. |
 
 ## Understanding the Impact
 

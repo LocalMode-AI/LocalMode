@@ -3,6 +3,18 @@ title: "Safari on macOS"
 description: "LocalMode support on Safari macOS - WebGPU behind a flag from Safari 17.4, enabled by default from Safari 26, WASM always, with IndexedDB caveats in Private Browsing."
 author: "LocalMode"
 date: "2026-04-06"
+dateModified: "2026-05-25"
+faq:
+  - question: "Does Safari on macOS support WebGPU for AI inference?"
+    answer: "WebGPU is enabled by default from Safari 26 (macOS Tahoe) using the Metal backend. In Safari 17.4-25, WebGPU was available only behind a developer feature flag, which is not suitable for production end-users. For older Safari versions, LocalMode uses WASM-based inference via wllama or Transformers.js."
+  - question: "Does LocalMode work in Safari Private Browsing on macOS?"
+    answer: "AI inference works normally, but IndexedDB is ephemeral in Safari Private Browsing — IndexedDB works but uses in-memory storage that is cleared when the session ends. This means models and vectors are not persisted between sessions. LocalMode detects this with a probe write and falls back to MemoryStorage. Users should use normal browsing mode for the best experience."
+  - question: "What is the minimum Safari version needed for LocalMode?"
+    answer: "WebAssembly works from Safari 11+. WASM SIMD requires Safari 16.4+. Module workers require Safari 15+. Web Locks and BroadcastChannel require Safari 15.4+. WebGPU enabled by default requires Safari 26+."
+  - question: "Can Safari's Intelligent Tracking Prevention block model downloads?"
+    answer: "Safari's ITP may affect cross-origin model CDN requests in some configurations. If model downloads fail, verify that the CDN domain is not being blocked. Setting appropriate CORS headers on the model CDN and using the crossorigin attribute on requests can help mitigate this."
+  - question: "What happens if WebGPU is not available on Safari?"
+    answer: "LocalMode falls back to WASM-based providers. Use wllama for LLM inference (5-20 tokens per second) and Transformers.js for non-LLM tasks like embeddings, classification, vision, and audio. All features work without WebGPU, only LLM inference speed is reduced."
 ---
 
 # Safari on macOS
@@ -17,9 +29,9 @@ The following table summarizes which web platform features are available on Safa
 
 | Feature | Supported | Notes |
 | --- | --- | --- |
-| **WebGPU** | Safari 18+ (behind flag), Safari 26+ (default) | WebGPU behind feature flag in Safari 18-25. Enabled by default from Safari 26 (macOS Tahoe). Metal backend. |
+| **WebGPU** | Safari 17.4+ (behind flag), Safari 26+ (default) | WebGPU behind feature flag in Safari 17.4-25. Enabled by default from Safari 26 (macOS Tahoe). Metal backend. |
 | **WebAssembly** | Yes (Safari 11+) | Full WASM support. SIMD support from Safari 16.4. |
-| **IndexedDB** | Yes (normal mode) | Full support in normal browsing. BLOCKED in Private Browsing - use MemoryStorage fallback. |
+| **IndexedDB** | Yes (normal mode) | Full support in normal browsing. Ephemeral in Private Browsing (in-memory, cleared when session ends) - use MemoryStorage fallback. |
 | **Web Workers** | Partial | Module workers supported from Safari 15. Older versions need classic workers. |
 | **SharedArrayBuffer** | Yes (with COOP/COEP) | Requires cross-origin isolation headers. |
 | **Web Locks** | Yes (Safari 15.4+) | Full support. Falls back to InMemoryLockManager on older versions. |
@@ -40,7 +52,7 @@ Each feature in the matrix above maps to specific LocalMode capabilities:
 
 ## Fallback Strategies
 
-The critical Safari issue is Private Browsing mode, which completely blocks IndexedDB. Wrap storage creation in a try/catch to detect this and fall back to MemoryStorage (vectors lost on tab close) or warn users. For Safari 17.3 and below (no WebGPU at all) and Safari 17.4–25 (WebGPU available only behind a developer flag, not suitable for production end-users), wllama and Transformers.js provide full WASM-based inference. Module workers require Safari 15+ - for older versions, use non-worker inference paths.
+The critical Safari issue is Private Browsing mode, which completely blocks IndexedDB. Wrap storage creation in a try/catch to detect this and fall back to MemoryStorage (vectors lost on tab close) or warn users. For Safari 17.3 and below (no WebGPU at all) and Safari 17.4-25 (WebGPU available only behind a developer flag, not suitable for production end-users), wllama and Transformers.js provide full WASM-based inference. Module workers require Safari 15+ - for older versions, use non-worker inference paths.
 
 LocalMode is designed with progressive enhancement in mind. The core principle: detect capabilities at runtime and use the best available path. The `@localmode/core` package exports detection utilities for this purpose:
 
@@ -76,7 +88,7 @@ async function detectAndConfigure() {
 ```typescript
 import { IndexedDBStorage, MemoryStorage } from '@localmode/core';
 
-// Handle Safari Private Browsing - IndexedDB throws when blocked
+// Handle Safari Private Browsing - IndexedDB is ephemeral (in-memory, cleared on session end)
 async function getStorage() {
   try {
     const storage = new IndexedDBStorage({ name: 'app' });
@@ -110,7 +122,7 @@ These models are chosen for their compatibility with Safari on macOS's capabilit
 
 ## Known Issues
 
-Private Browsing blocks IndexedDB entirely - models and vectors cannot be persisted. Safari 18 WebGPU has occasional shader compilation issues with certain model architectures. Safari's ITP (Intelligent Tracking Prevention) may affect cross-origin model CDN requests in some configurations.
+Private Browsing makes IndexedDB ephemeral - it works but uses in-memory storage cleared when the session ends, so models and vectors are not persisted. Safari 18 WebGPU has occasional shader compilation issues with certain model architectures. Safari's ITP (Intelligent Tracking Prevention) may affect cross-origin model CDN requests in some configurations.
 
 ### Mitigation Strategies
 

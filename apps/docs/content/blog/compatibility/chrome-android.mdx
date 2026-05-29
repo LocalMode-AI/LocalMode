@@ -3,6 +3,18 @@ title: "Chrome on Android"
 description: "Mobile browser AI with Chrome Android - WebGPU on some devices, WASM everywhere, with memory constraints."
 author: "LocalMode"
 date: "2026-04-26"
+dateModified: "2026-05-28"
+faq:
+  - question: "Does Chrome on Android support WebGPU for AI inference?"
+    answer: "WebGPU is enabled by default in Chrome 121+ on Android 12+ devices with Qualcomm or ARM GPUs that support Vulkan 1.1+. On devices without WebGPU, LocalMode automatically falls back to WASM-based inference via wllama or Transformers.js."
+  - question: "What happens if a model is too large for an Android phone?"
+    answer: "High-end phones with 8GB+ RAM can run models up to about 1.5GB. Mid-range phones (4-6GB) should use models under 500MB, and low-end phones (2-3GB) are limited to tiny models like SmolLM2-135M at 70MB. Use detectCapabilities() and recommendModels() to select appropriate models automatically."
+  - question: "Can background tab killing interrupt model downloads on Android?"
+    answer: "Yes. Android's OOM killer aggressively terminates background tabs, which can interrupt model downloads. LocalMode's createModelLoader uses chunked downloads with automatic resume to handle this, so interrupted downloads can continue where they left off."
+  - question: "How much storage does model caching require on Chrome Android?"
+    answer: "Storage depends on the models you download. Chrome grants up to 60% of total disk size per origin for IndexedDB. Recommended Android models range from about 33MB (BGE-small embeddings) to 360MB (SmolLM2-360M). Use getStorageQuota() to check available space before downloading."
+  - question: "What is the minimum Chrome version needed for LocalMode on Android?"
+    answer: "Basic WASM-based inference works on Chrome 57+. For WebGPU-accelerated LLM inference, Chrome 121+ on Android 12+ with a compatible GPU is required. Module workers require Chrome 80+."
 ---
 
 # Chrome on Android

@@ -3,6 +3,16 @@ title: "Semantic Caching: Instant LLM Responses for Similar Questions at Zero Co
 description: "Stop waiting seconds for answers your app has already generated. Semantic caching uses embedding similarity to return cached LLM responses for rephrased questions in under 50ms - entirely in the browser, with no server and no API costs."
 author: LocalMode
 date: 2026-03-04
+dateModified: "2026-05-28"
+faq:
+  - question: "What is semantic caching for LLM responses?"
+    answer: "Semantic caching uses embedding similarity to match rephrased questions to previously generated answers. Instead of exact string matching, it embeds the new prompt and searches a vector database for semantically similar cached prompts. If similarity exceeds a threshold, the cached response is returned in under 50ms."
+  - question: "How much does semantic caching reduce LLM response latency?"
+    answer: "Research shows semantic caching can reduce response latency by 80-90% on cache hits, from seconds down to hundreds of milliseconds or less. Cache hit ratios of 60-92% are typical, with highly repetitive domains like customer support and documentation assistants at the high end."
+  - question: "Why is exact-match caching insufficient for LLM prompts?"
+    answer: "Users rarely type the exact same prompt twice. They rephrase, capitalize differently, add filler words, or ask from a different angle. Exact-match caching misses all of these variations. Semantic caching recognizes that 'What is machine learning?' and 'Explain machine learning to me' are the same question."
+  - question: "Can semantic caching run entirely in the browser?"
+    answer: "Yes. LocalMode's semantic cache uses a local embedding model (e.g., BGE-small at 33MB) and a browser-based VectorDB backed by IndexedDB. Prompts are embedded, stored, and matched entirely on-device with no server, no API costs, and no data leaving the device."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

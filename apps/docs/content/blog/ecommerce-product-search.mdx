@@ -3,6 +3,14 @@ title: "E-Commerce Product Search That Understands Intent - No Algolia Required"
 description: "Build semantic product search with text-to-product matching, visual similarity via CLIP, and auto-categorization - all running in the browser at $0/month. Complete code walkthrough with LocalMode's VectorDB, embedImage, and classifyImageZeroShot APIs."
 author: LocalMode
 date: 2026-03-23
+dateModified: "2026-05-26"
+faq:
+  - question: "How does semantic product search solve the vocabulary mismatch problem in e-commerce?"
+    answer: "Customers search with their own words ('warm winter jacket under $100') while merchants describe products differently ('Insulated Puffer Coat'). CLIP/SigLIP models map both text and images into the same 768-dimensional vector space, so similarity is computed by meaning rather than keyword overlap. This eliminates the vocabulary gap."
+  - question: "What three search modes does a browser-based e-commerce search support?"
+    answer: "Text-to-product (customer types a description, CLIP text encoder finds matching product images), image-to-product (customer uploads a photo, CLIP vision encoder finds visually similar items), and auto-categorization (zero-shot classification assigns products to a taxonomy on upload). All three share one model and one VectorDB."
+  - question: "How much does Algolia cost versus a browser-based semantic search?"
+    answer: "Algolia's AI-powered Grow Plus tier charges $1.75 per 1,000 searches. A mid-size Shopify store with 500,000 monthly searches pays $250-875/month, plus record storage fees. Enterprise tiers start at $50K+ annually. Browser-based search with LocalMode costs $0/month after the one-time model download (~400 MB for SigLIP)."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

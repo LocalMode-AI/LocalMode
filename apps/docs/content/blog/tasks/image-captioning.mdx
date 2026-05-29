@@ -3,6 +3,16 @@ title: "Image Captioning in the Browser"
 description: "Generate natural language descriptions of images using Florence 2 - entirely in the browser."
 author: "LocalMode"
 date: "2026-05-15"
+dateModified: "2026-05-27"
+faq:
+  - question: "What is the best model for image captioning in the browser?"
+    answer: "The recommended model is onnx-community/Florence-2-base-ft (~460MB), which uses a vision-language architecture for high-quality captions. Xenova/vit-gpt2-image-captioning (~250MB) is a smaller alternative with good quality."
+  - question: "Does browser-based image captioning work offline?"
+    answer: "Yes. After the initial model download (~460MB for Florence-2 or ~250MB for ViT-GPT2), image captioning works completely offline. No server, no API key, and images never leave the device."
+  - question: "What are practical uses for browser image captioning?"
+    answer: "Common applications include automatic alt-text generation for accessibility, auto-generated social media captions, e-commerce product image descriptions, photo organization with searchable descriptions, and assistive technology for visually impaired users."
+  - question: "How does browser image captioning cost compare to cloud APIs?"
+    answer: "Google Cloud Vision Label Detection costs $1.50 per 1,000 images. LocalMode captioning costs $0 after the one-time model download, and images stay entirely on the device for full privacy."
 ---
 
 # Image Captioning in the Browser

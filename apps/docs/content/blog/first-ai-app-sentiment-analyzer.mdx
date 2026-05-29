@@ -3,6 +3,14 @@ title: "Your First AI App: Build a Sentiment Analyzer in 15 Minutes (No Python, 
 description: "A step-by-step tutorial for JavaScript developers who have never built an AI feature. Install two packages, write five lines of classification code, and ship a working sentiment analyzer that runs entirely in the browser."
 author: LocalMode
 date: 2026-03-12
+dateModified: "2026-05-27"
+faq:
+  - question: "How do I build a sentiment analyzer in JavaScript without Python or a server?"
+    answer: "Install two packages (@localmode/core and @localmode/transformers), create a classifier model with transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english'), and call classify({ model, text }). The 67 MB model downloads once, caches in the browser, and returns a label (POSITIVE/NEGATIVE) with a confidence score."
+  - question: "What model powers the browser-based sentiment analyzer and how accurate is it?"
+    answer: "DistilBERT fine-tuned on the Stanford Sentiment Treebank (SST-2) is the default model. It is approximately 67 MB quantized and returns confidence scores between 0 and 1. For clear sentiment like 'I love this product!' it returns POSITIVE with 0.9998 confidence."
+  - question: "How long does it take to build a sentiment analyzer with LocalMode?"
+    answer: "About 15 minutes from start to finish. The AI portion is five lines of code: import classify and transformers, create the model, and call classify(). The rest is standard React UI (textarea, button, result display). The first analysis takes a few seconds while the model downloads; subsequent analyses are near-instant."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

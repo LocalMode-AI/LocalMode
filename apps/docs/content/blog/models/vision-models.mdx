@@ -3,6 +3,18 @@ title: "Image Classification, Detection & Segmentation Models in the Browser"
 description: "ViT for image classification, D-FINE for object detection, and SegFormer for semantic segmentation - all in the browser."
 author: "LocalMode"
 date: "2026-04-13"
+dateModified: "2026-05-26"
+faq:
+  - question: "What is the smallest object detection model in LocalMode?"
+    answer: "D-FINE-N-COCO at approximately 4.5MB is the smallest model in the entire LocalMode catalog. It detects 80 COCO object categories with 42.8 AP using just 4M parameters, making it viable for real-time detection in video frames."
+  - question: "What tasks do these vision models cover?"
+    answer: "This family covers three tasks: image classification (ViT, DeiT, ResNet for categorizing images into 1,000 ImageNet classes), object detection (D-FINE-N, DETR for locating objects with bounding boxes), and semantic segmentation (SegFormer for classifying every pixel)."
+  - question: "Do these vision models require WebGPU?"
+    answer: "No. All six variants run on WASM via Transformers.js and work in all modern browsers including Firefox and Safari without requiring WebGPU."
+  - question: "How large is the SegFormer segmentation model?"
+    answer: "SegFormer-B0 is just 14MB with 3.8M parameters, achieving 37.4 mIoU on ADE20K. It classifies every pixel into categories like road, building, sky, and person, enabling background removal and scene understanding entirely in the browser."
+  - question: "Can I use these models for real-time video processing?"
+    answer: "Yes. The smallest models like D-FINE-N (5MB) and SegFormer-B0 (14MB) are compact and fast enough for processing video frames or camera feeds in real-time browser applications."
 ---
 
 # Image Classification, Detection & Segmentation Models in the Browser
@@ -23,7 +35,7 @@ ViT-Base-Patch16-224 (87MB) classifies images into 1,000 ImageNet categories. It
 
 D-FINE-N-COCO (quantized to ~4.5MB - the smallest model in the entire catalog) performs object detection, identifying and locating multiple objects within an image with bounding boxes. Trained on the COCO dataset (80 object categories including people, vehicles, animals, and household objects), it achieves 42.8 AP on COCO with just 4M parameters. The tiny model size makes it viable for real-time detection in video frames or camera feeds.
 
-SegFormer-B0 (3.7M parameters, 37.4 mIoU on ADE20K) performs semantic segmentation - classifying every pixel in an image into categories like road, building, sky, person, and vegetation. This enables applications like background removal, scene understanding, and augmented reality overlays. All three models process images entirely client-side through Transformers.js.
+SegFormer-B0 (3.8M parameters, 37.4 mIoU on ADE20K) performs semantic segmentation - classifying every pixel in an image into categories like road, building, sky, person, and vegetation. This enables applications like background removal, scene understanding, and augmented reality overlays. All three models process images entirely client-side through Transformers.js.
 
 ## Variant Comparison
 
@@ -124,6 +136,6 @@ Model availability and provider assignments were verified against LocalMode's so
 - [facebook/detr-resnet-50 - DETR model card (41.6M params, 42.0 COCO AP)](https://huggingface.co/facebook/detr-resnet-50)
 - [Xenova/segformer-b0-finetuned-ade-512-512 - HuggingFace model files](https://huggingface.co/Xenova/segformer-b0-finetuned-ade-512-512/tree/main/onnx)
 - [nvidia/segformer-b0-finetuned-ade-512-512 - SegFormer model card (3.75M params)](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
-- [SegFormer paper - arXiv:2105.15203 (B0: 3.7M params, 37.4 mIoU on ADE20K)](https://arxiv.org/abs/2105.15203)
+- [SegFormer paper - arXiv:2105.15203 (B0: 3.8M params, 37.4 mIoU on ADE20K)](https://arxiv.org/abs/2105.15203)
 - [Transformers.js dtypes/quantization guide](https://huggingface.co/docs/transformers.js/guides/dtypes)
 - [LocalMode transformers provider catalog - packages/transformers/src/models.ts](https://localmode.dev/docs)

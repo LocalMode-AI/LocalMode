@@ -3,6 +3,16 @@ title: "CLIP & SigLIP Multimodal Models in the Browser"
 description: "OpenAI's CLIP and Google's SigLIP - multimodal embedding models that connect text and images in a shared vector space."
 author: "LocalMode"
 date: "2026-04-29"
+dateModified: "2026-05-28"
+faq:
+  - question: "What is the difference between CLIP and SigLIP models?"
+    answer: "CLIP by OpenAI (340MB, 512 dimensions) processes images in 32x32 patches and is faster for real-time applications. SigLIP by Google (400MB, 768 dimensions) uses finer 16x16 patches for better retrieval quality at the cost of more storage per vector."
+  - question: "What tasks can CLIP and SigLIP models perform in the browser?"
+    answer: "They enable cross-modal search by mapping text and images into a shared vector space. You can index photos with visual embeddings, then search them with natural language queries like 'sunset over the ocean' or build visual similarity features."
+  - question: "How large is the smallest CLIP model download?"
+    answer: "CLIP-ViT-Base-Patch32 is 340MB for the vision encoder. Transformers.js loads encoders lazily, so text-only users download only the text encoder. The largest variant (CLIP-ViT-Large-Patch14) is approximately 1.2GB."
+  - question: "Do CLIP and SigLIP models require WebGPU?"
+    answer: "No. All CLIP and SigLIP variants run on WASM via Transformers.js, so they work in every modern browser without requiring WebGPU support."
 ---
 
 # CLIP & SigLIP Multimodal Models in the Browser

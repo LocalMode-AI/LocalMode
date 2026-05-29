@@ -3,6 +3,14 @@ title: "Private Document Search"
 description: "Build semantic search over sensitive documents that runs entirely in the browser - no server, no API, no data leaving the device."
 author: "LocalMode"
 date: "2026-05-10"
+dateModified: "2026-05-26"
+faq:
+  - question: "Does private document search work offline?"
+    answer: "Yes. After the initial model download (33MB for BGE-small) and document ingestion, the entire search pipeline works without internet. Documents are stored in IndexedDB and persist across browser sessions."
+  - question: "How many documents can browser-based semantic search handle?"
+    answer: "With SQ8 vector quantization, a typical device can store 500K-1M vectors in IndexedDB, roughly 100K-200K document chunks. For larger collections, use Product Quantization (PQ) for 8-32x compression."
+  - question: "Is semantic search more accurate than keyword search for documents?"
+    answer: "Yes, for natural language queries. Semantic search matches meaning rather than exact keywords, so a query like 'budget concerns' will find documents about 'financial projections' that keyword search would miss."
 ---
 
 # Private Document Search
@@ -88,16 +96,6 @@ When deploying this solution to production, consider these factors:
 **Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
 
 **Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
-
-## Frequently Asked Questions
-
-### Does the search work offline?
-
-Yes. After the initial model download (33MB for BGE-small) and document ingestion, the entire search pipeline works without internet. Documents are stored in IndexedDB and persist across browser sessions.
-
-### How many documents can it handle?
-
-With SQ8 vector quantization, a typical device can store 500K-1M vectors in IndexedDB (roughly 100K-200K document chunks). For larger collections, use the PQ (Product Quantization) option for 8-32× compression.
 
 ## Further Reading
 

@@ -3,6 +3,16 @@ title: "Named Entity Recognition (NER) in the Browser"
 description: "Extract named entities - people, organizations, locations, and more - from text automatically in the browser."
 author: "LocalMode"
 date: "2026-05-17"
+dateModified: "2026-05-26"
+faq:
+  - question: "What is the best model for named entity recognition in the browser?"
+    answer: "Xenova/bert-base-NER (~109MB quantized) is recommended for English NER, supporting PER, ORG, LOC, and MISC entity types. For multilingual NER across 10 languages, use Xenova/bert-base-multilingual-cased-ner-hrl (~178MB)."
+  - question: "Does browser-based NER work offline after model download?"
+    answer: "Yes. After the initial model download (109-178MB), named entity recognition runs entirely in the browser with no server, no API key, and no data leaving the device."
+  - question: "What entity types does browser NER detect?"
+    answer: "The English model (bert-base-NER) detects PER (person), ORG (organization), LOC (location), and MISC (miscellaneous). The multilingual model supports PER, ORG, and LOC across 10 languages including Arabic, German, English, Spanish, French, and Chinese."
+  - question: "How does local NER cost compare to cloud NER services?"
+    answer: "AWS Comprehend charges $0.0001 per 100-character unit and Google Cloud Natural Language charges $0.001 per 1,000-character unit. LocalMode runs BERT-NER entirely in the browser at $0 cost, which is especially valuable for sensitive legal, medical, and financial documents."
 ---
 
 # Named Entity Recognition (NER) in the Browser

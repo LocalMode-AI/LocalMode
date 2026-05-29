@@ -3,6 +3,18 @@ title: "WebGPU + WebLLM: Running a 4B Parameter LLM in Chrome at 90 Tokens/Secon
 description: "A deep dive into how MLC compilation transforms HuggingFace models into WebGPU shaders, enabling 32 curated LLMs to run entirely in the browser. We cover the full model catalog, Qwen3-4B's 97% on MATH-500, VRAM management, and real performance numbers across GPU tiers."
 author: LocalMode
 date: 2026-03-05
+dateModified: "2026-05-28"
+faq:
+  - question: "How fast can WebLLM run an LLM in the browser?"
+    answer: "A 4-bit quantized Qwen3-4B model generates text at 60-90+ tokens per second on modern hardware via WebGPU. The model loads in under 30 seconds, occupies roughly 2.2GB of GPU memory, and runs entirely inside a Chrome tab with zero network requests after the initial download."
+  - question: "How does MLC compile models for WebGPU?"
+    answer: "MLC compiles the entire computation graph ahead of time into optimized WebGPU Shading Language (WGSL) compute shaders. Each transformer layer becomes a pre-compiled GPU kernel. The shader-f16 feature enables native FP16 operations, nearly doubling throughput since GPU inference is memory-bandwidth limited."
+  - question: "How many LLM models does WebLLM's catalog include?"
+    answer: "LocalMode's WebLLM catalog ships 32 curated MLC-compiled models including Llama 3.2, Qwen3, Gemma, Mistral, Phi-4, DeepSeek-R1, and SmolLM families. Models range from 135M to 8B+ parameters, with 4-bit quantization reducing sizes to approximately 78MB-5GB."
+  - question: "What hardware do you need to run an LLM in the browser?"
+    answer: "WebGPU is required for WebLLM, available in Chrome 113+, Edge 113+, Safari 26+, and Firefox 141+. A 1B model needs about 712MB of GPU memory, a 4B model needs ~2.2GB, and an 8B model needs ~4.5GB. Modern laptops with integrated GPUs can run 1-4B models comfortably."
+  - question: "Do browser LLMs work offline after the first load?"
+    answer: "Yes. WebLLM stores compiled WASM modules and quantized weights in the browser's Cache API. Subsequent loads skip the download entirely, going straight from cache to GPU. Once cached, inference works with no internet connection."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

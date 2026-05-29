@@ -3,6 +3,16 @@ title: "How We Cut Our AI API Bill by $200K/Year by Moving Inference to the Brow
 description: "A detailed case study of Binderbox, a 100K-user document management platform that replaced OpenAI embeddings, GPT-5 classification, and Cohere reranking with LocalMode browser inference - saving $200K annually with transparent math and real migration code."
 author: LocalMode
 date: 2026-01-25
+dateModified: "2026-05-28"
+faq:
+  - question: "How much did the Binderbox case study save by moving AI inference to the browser?"
+    answer: "The composite case study shows a 100,000-user document management SaaS reducing annual AI costs from approximately $200,000 to $13,000 -- a savings of roughly $187,000 per year. The largest single savings came from eliminating Cohere reranking at $73,000/year, followed by GPT-5 classification at $43,800/year."
+  - question: "What quality trade-offs occurred when migrating from cloud to local AI models?"
+    answer: "Embeddings maintained 99% of cloud quality. Reranking dropped to 87-93% of Cohere. Classification accuracy fell from ~97% to ~94%. NER retained 91-93% F1 score. Speech-to-text WER went from ~2.7% to 3.23%. Search satisfaction scores dropped 2% initially then recovered after tuning reranking thresholds."
+  - question: "What parts of the AI stack were kept in the cloud after the migration?"
+    answer: "Three things remained server-side: bulk document ingestion embedding (to avoid making users wait for their browser to embed hundreds of pages), complex multi-page summarization requiring more than browser model capacity, and a cloud fallback for noisy audio transcription used by about 15% of requests."
+  - question: "At what user count does migrating from cloud AI APIs to local inference become cost-effective?"
+    answer: "The breakeven point was around 5,000 monthly active users. Below that, the engineering effort of migration was not justified by the savings. Above that, every additional user improved the ROI because local inference has zero marginal cost per user while cloud API costs scale linearly."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

@@ -3,6 +3,18 @@ title: "Hand, Pose & Face Tracking in the Browser with MediaPipe + LocalMode"
 description: "LocalMode now ships @localmode/mediapipe -- a provider wrapping Google's MediaPipe Tasks. Detect 21-point hand landmarks, 33-point body poses, the 478-point face mesh, and 8 hand gestures, plus real-time video trackers built for live inference. The camera never leaves the device, and it works in every browser without WebGPU."
 author: LocalMode
 date: "2026-05-21"
+dateModified: "2026-05-28"
+faq:
+  - question: "What tracking capabilities does @localmode/mediapipe provide?"
+    answer: "The provider wraps Google's MediaPipe Tasks for 21-point hand landmarks, 33-point body pose estimation, the 478-point face mesh with optional blendshapes, BlazeFace face detection (230KB), and 8 built-in hand gesture recognition. It also covers image/audio classification, segmentation, and language detection."
+  - question: "Does MediaPipe hand and face tracking require WebGPU?"
+    answer: "No. MediaPipe Tasks runs on pure WebAssembly with a WebGL delegate, not WebGPU. This means Chrome, Edge, Firefox, and Safari all run the full task set without any flags or Nightly builds. Most models are tiny -- face detection is 230KB, selfie segmentation is 250KB."
+  - question: "How does real-time video tracking work with LocalMode's MediaPipe provider?"
+    answer: "The provider ships dedicated streaming trackers -- createHandTracker, createPoseTracker, createFaceTracker, and createGestureTracker -- that run MediaPipe in VIDEO mode. Each takes a video element and an onResults callback invoked per frame, keeping the model warm between frames for continuous inference."
+  - question: "What hand gestures can be recognized out of the box?"
+    answer: "The gesture recognizer classifies 8 hand gestures without custom training: None, Closed_Fist, Open_Palm, Pointing_Up, Thumb_Down, Thumb_Up, Victory, and ILoveYou. Each result also includes the 21-point hand landmarks for rendering."
+  - question: "Does the camera feed leave the device during MediaPipe tracking?"
+    answer: "No. Camera frames go from the video element straight into a WebAssembly model and back out as landmarks. Nothing is uploaded. The models download once, cache in the browser, and then run offline."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

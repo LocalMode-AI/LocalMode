@@ -3,6 +3,14 @@ title: "LocalMode vs HuggingFace (Python)"
 description: "Browser-native TypeScript vs Python-based local inference - comparing developer experience, deployment, and model coverage."
 author: "LocalMode"
 date: "2026-04-08"
+dateModified: "2026-05-29"
+faq:
+  - question: "Can I use models I trained in HuggingFace with LocalMode?"
+    answer: "Yes, if you export them to GGUF format (for wllama) or ONNX format (for Transformers.js). The ONNX export pipeline is well-documented on HuggingFace, and for GGUF, use llama.cpp's conversion tools. LocalMode can then load your custom model with the same API."
+  - question: "Do I need Python for any part of a LocalMode app?"
+    answer: "No. LocalMode is 100% TypeScript/JavaScript. You do not need Python, pip, conda, CUDA, or any ML infrastructure. Everything from model loading to inference runs in the browser or Node.js."
+  - question: "Is LocalMode just a wrapper around Transformers.js?"
+    answer: "No. LocalMode wraps four inference engines (Transformers.js, WebLLM, wllama, LiteRT) behind unified interfaces, plus provides a complete application toolkit including VectorDB, RAG pipelines, middleware, an agent framework, React hooks, and DevTools."
 ---
 
 # LocalMode vs HuggingFace (Python)
@@ -22,7 +30,7 @@ Understanding these trade-offs is essential for architects and developers evalua
 | **Language** | TypeScript/JavaScript. Runs in browser or Node.js. | Python. Runs on server or desktop. |
 | **Deployment** | Ship as part of any web app. No backend needed. Static hosting works. | Requires Python server. Docker, FastAPI, or similar infrastructure. |
 | **Installation** | npm install - done. Works on any machine with Node.js. | pip install + CUDA/cuDNN setup + model downloads. Environment management with conda/venv. |
-| **Model Coverage** | 120+ curated models across 21 task types. Focused on browser-viable sizes. | 1M+ Transformers model checkpoints on HuggingFace Hub (2.2M+ models total). Any size, any architecture. |
+| **Model Coverage** | 136 curated models across 21 task types. Focused on browser-viable sizes. | 1M+ Transformers model checkpoints on HuggingFace Hub (2.2M+ models total). Any size, any architecture. |
 | **Custom Models** | GGUF models via wllama. ONNX models via Transformers.js. Limited to browser-compatible formats. | Any model format. Full fine-tuning, training, and custom architecture support. |
 | **Performance** | WebGPU: 30-90 tok/s. WASM: 5-15 tok/s. Browser overhead present. | CUDA: 50-150+ tok/s single-request (consumer GPU); much higher throughput with batching on server GPUs. Native GPU without browser overhead. |
 | **Privacy (Deployment)** | Client-side: zero server data. Each user runs their own inference. | Server-side: data passes through your server. You manage data privacy. |
@@ -43,20 +51,6 @@ When evaluating LocalMode (TypeScript/Browser) against HuggingFace Transformers 
 - **Offline requirements** - Applications that must work without internet need local inference. Cloud-dependent solutions fail when connectivity drops.
 
 
-
-## Frequently Asked Questions
-
-### Can I use models I trained in HuggingFace with LocalMode?
-
-Yes, if you export them to GGUF format (for wllama) or ONNX format (for Transformers.js). The ONNX export pipeline is well-documented on HuggingFace. For GGUF, use llama.cpp's conversion tools. LocalMode can then load your custom model with the same API.
-
-### Do I still need Python for any part of a LocalMode app?
-
-No. LocalMode is 100% TypeScript/JavaScript. You don't need Python, pip, conda, CUDA, or any ML infrastructure. Everything from model loading to inference runs in the browser or Node.js.
-
-### Is LocalMode just a wrapper around Transformers.js?
-
-No. LocalMode wraps four inference engines (Transformers.js, WebLLM, wllama, LiteRT) behind unified interfaces, plus provides a complete application toolkit: VectorDB, RAG pipelines, middleware, agent framework, React hooks, DevTools, and more. Transformers.js is one of several providers.
 
 ## Making the Decision
 
@@ -87,7 +81,7 @@ This approach gives you the best of both worlds: the privacy and cost benefits o
 
 ## Methodology
 
-LocalMode feature claims were verified against the codebase (`packages/transformers/src/models.ts`, `packages/webllm/src/models.ts`, `packages/wllama/src/models.ts`, `packages/litert/src/models.ts`) as of February 2026. The model count (120+) is the sum of curated entries across all provider catalogs: 70 unique Transformers models, 32 WebLLM models, 30 wllama GGUF models (25 language + 3 embedding + 2 reranker), and 3 LiteRT models. HuggingFace Hub model counts and Python Transformers capabilities were verified against the official HuggingFace documentation. Performance figures are approximate ranges drawn from published browser benchmarks (Transformers.js v4 release blog) and community GPU benchmarks; actual results vary by hardware, model size, and quantization. Verify current details with each project before making decisions.
+LocalMode feature claims were verified against the codebase (`packages/transformers/src/models.ts`, `packages/webllm/src/models.ts`, `packages/wllama/src/models.ts`, `packages/litert/src/models.ts`) as of February 2026. The model count (136) is the sum of curated entries across all provider catalogs: 70 unique Transformers models, 32 WebLLM models, 30 wllama GGUF models (25 language + 3 embedding + 2 reranker), and 3 LiteRT models. HuggingFace Hub model counts and Python Transformers capabilities were verified against the official HuggingFace documentation. Performance figures are approximate ranges drawn from published browser benchmarks (Transformers.js v4 release blog) and community GPU benchmarks; actual results vary by hardware, model size, and quantization. Verify current details with each project before making decisions.
 
 ## Sources
 

@@ -483,6 +483,18 @@ const jsonLd = [
   },
   {
     '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: 'LocalMode',
+    url: 'https://localmode.dev',
+    logo: 'https://localmode.dev/icon.svg',
+    sameAs: [
+      'https://github.com/LocalMode-AI/LocalMode',
+      'https://www.npmjs.com/org/localmode',
+      'https://localmode.ai',
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
     name: 'LocalMode',
     applicationCategory: 'DeveloperApplication',
@@ -496,6 +508,68 @@ const jsonLd = [
       price: '0',
       priceCurrency: 'USD',
     },
+    publisher: {
+      '@type': 'Organization',
+      name: 'LocalMode',
+      url: 'https://localmode.dev',
+    },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'DefinedTermSet',
+    name: 'LocalMode Glossary',
+    '@id': 'https://localmode.dev/#glossary',
+    hasDefinedTerm: [
+      {
+        '@type': 'DefinedTerm',
+        name: 'VectorDB',
+        description:
+          'A browser-native vector database using HNSW indexing for approximate nearest neighbor search, stored in IndexedDB.',
+        inDefinedTermSet: 'https://localmode.dev/#glossary',
+      },
+      {
+        '@type': 'DefinedTerm',
+        name: 'GGUF',
+        description:
+          'A binary format for storing quantized large language models, used by llama.cpp and wllama for efficient browser-based inference via WebAssembly.',
+        inDefinedTermSet: 'https://localmode.dev/#glossary',
+      },
+      {
+        '@type': 'DefinedTerm',
+        name: 'HNSW',
+        description:
+          'Hierarchical Navigable Small World — a graph-based algorithm for approximate nearest neighbor search that powers LocalMode\'s VectorDB.',
+        inDefinedTermSet: 'https://localmode.dev/#glossary',
+      },
+      {
+        '@type': 'DefinedTerm',
+        name: 'Embeddings',
+        description:
+          'Dense vector representations of text, images, or audio that capture semantic meaning, enabling similarity search and classification in the browser.',
+        inDefinedTermSet: 'https://localmode.dev/#glossary',
+      },
+      {
+        '@type': 'DefinedTerm',
+        name: 'RAG',
+        description:
+          'Retrieval-Augmented Generation — a pattern that retrieves relevant documents from a vector database and includes them in an LLM prompt for grounded answers.',
+        inDefinedTermSet: 'https://localmode.dev/#glossary',
+      },
+      {
+        '@type': 'DefinedTerm',
+        name: 'WebGPU',
+        description:
+          'A modern browser API for GPU-accelerated compute, used by WebLLM and LiteRT providers for fast LLM inference at 40-90+ tokens per second.',
+        inDefinedTermSet: 'https://localmode.dev/#glossary',
+      },
+      {
+        '@type': 'DefinedTerm',
+        name: 'Local-first AI',
+        description:
+          'An architecture where ML inference runs entirely on the user\'s device (browser, phone, laptop) with no server round-trips, ensuring privacy and offline capability.',
+        inDefinedTermSet: 'https://localmode.dev/#glossary',
+      },
+    ],
   },
 ];
 
@@ -993,6 +1067,12 @@ export default async function HomePage() {
               className="text-fd-muted-foreground hover:text-fd-foreground transition-colors"
             >
               Documentation
+            </Link>
+            <Link
+              href="/about"
+              className="text-fd-muted-foreground hover:text-fd-foreground transition-colors"
+            >
+              About
             </Link>
             <Link
               href="mailto:info@localmode.ai"

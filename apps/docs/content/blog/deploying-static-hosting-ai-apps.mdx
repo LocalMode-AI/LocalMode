@@ -3,6 +3,16 @@ title: "Deploying LocalMode to Cloudflare Pages / Vercel / Netlify: Static Hosti
 description: "A complete deployment guide for shipping LocalMode AI apps to Vercel, Cloudflare Pages, and Netlify. Covers COOP/COEP headers for multi-threaded WASM, Cache-Control for model files, Content-Security-Policy for WebAssembly, large file handling, and CDN strategy -- with full configuration examples for each platform."
 author: LocalMode
 date: 2026-03-16
+dateModified: "2026-05-25"
+faq:
+  - question: "What HTTP headers are required to deploy a LocalMode AI app to static hosting?"
+    answer: "Three critical headers: Cross-Origin-Opener-Policy (same-origin) and Cross-Origin-Embedder-Policy (credentialless) enable SharedArrayBuffer for multi-threaded WASM inference, and Content-Security-Policy with wasm-unsafe-eval allows WebAssembly compilation. Without COOP/COEP, wllama falls back to single-threaded mode at 2-4x slower inference."
+  - question: "Can I self-host AI model files on Cloudflare Pages?"
+    answer: "No. Cloudflare Pages has a 25 MiB per-file limit, and even the smallest embedding model (33 MB) exceeds it. Use Cloudflare R2 for self-hosted models or let models load from HuggingFace CDN by default. Vercel and Netlify have higher limits but the HuggingFace CDN approach is recommended for all platforms."
+  - question: "Should I use a static export or server mode for deploying a LocalMode Next.js app?"
+    answer: "Static export (output: 'export') is usually the right choice since LocalMode apps have no server-side inference. It works on any static host. Use server mode (output: 'standalone') only if you need SSR for landing pages, metadata generation, or dynamic OG images alongside your client-side AI features."
+  - question: "Why use COEP credentialless instead of require-corp for browser AI apps?"
+    answer: "The require-corp value blocks all cross-origin resources unless they include a Cross-Origin-Resource-Policy header. Since you do not control HuggingFace CDN response headers, credentialless is the practical choice -- it enables cross-origin isolation while allowing cross-origin model file fetches. Note that credentialless is not supported in Safari as of mid-2026."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

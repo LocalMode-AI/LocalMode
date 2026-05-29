@@ -3,6 +3,14 @@ title: "From CSV to Semantic Search in 60 Seconds: Loading Any Document Into a L
 description: "Load CSV, JSON, HTML, or PDF files into a fully local semantic search pipeline with just a few lines of code. LocalMode's built-in document loaders, the ingest() shortcut, and semanticSearch() get you from raw data to AI-powered search in under a minute - no server, no API key, no data leaving the device."
 author: LocalMode
 date: 2026-02-16
+dateModified: "2026-05-29"
+faq:
+  - question: "What file formats can be loaded into a local semantic search pipeline with LocalMode?"
+    answer: "Four formats are supported with built-in loaders: CSV (via CSVLoader with auto-detection of text columns), JSON (via JSONLoader with nested path navigation), HTML (via HTMLLoader with CSS selector targeting and tag stripping), and PDF (via @localmode/pdfjs wrapping PDF.js). The loadDocument() function auto-detects format from file name and content."
+  - question: "How does the ingest() function work for building a local RAG pipeline?"
+    answer: "ingest() runs three phases: it chunks documents using a chosen strategy (recursive, markdown, code, sentence, or paragraph), embeds chunks in batches via your embedder function, and stores vectors with metadata in the VectorDB. It supports adaptive batching, progress callbacks, and optional BM25 index building in a single call."
+  - question: "What is the shortest path from a CSV file to working semantic search?"
+    answer: "Twelve lines of code: create a VectorDB with 384 dimensions, create a BGE-small embedding model (33 MB), load the CSV with CSVLoader specifying the text column, call ingest() with recursive chunking and the embedder function, then search with semanticSearch(). The entire pipeline runs in the browser with no server."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

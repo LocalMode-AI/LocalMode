@@ -3,6 +3,16 @@ title: "Drop-In Local AI for Your LangChain.js App - No Cloud Provider Needed"
 description: "Migrate your LangChain.js application from OpenAI and Pinecone to 100% local inference by changing three imports. LocalModeEmbeddings, ChatLocalMode, and LocalModeVectorStore are thin adapters that wrap browser-based models behind standard LangChain interfaces - same chains, same retrievers, zero API keys."
 author: LocalMode
 date: 2026-02-03
+dateModified: "2026-05-29"
+faq:
+  - question: "How do I migrate a LangChain.js app from OpenAI to local models?"
+    answer: "Replace three provider constructors: OpenAIEmbeddings becomes LocalModeEmbeddings (wrapping any @localmode/core EmbeddingModel), ChatOpenAI becomes ChatLocalMode (wrapping any LanguageModel), and PineconeStore becomes LocalModeVectorStore (backed by IndexedDB). All downstream chain logic, retrievers, and output parsers stay identical."
+  - question: "What LangChain.js features are supported by the LocalMode adapters?"
+    answer: "Fully supported: embedDocuments/embedQuery, invoke/generate, real token-by-token streaming, addDocuments/similaritySearch, fromDocuments/fromExistingIndex factories, asRetriever(), cross-encoder reranking via LocalModeReranker, metadata filters, and LangChain callbacks. Not supported: tool calling and structured output via LangChain schemas."
+  - question: "Can I use local models for retrieval and cloud models for generation in the same LangChain pipeline?"
+    answer: "Yes. Use LocalModeEmbeddings and LocalModeVectorStore for the retrieval pipeline (runs locally at zero cost, keeps documents private) and keep ChatOpenAI for the generation step when frontier model quality is needed. This hybrid approach gives roughly 90% cost savings while maintaining answer quality."
+  - question: "What models are recommended for a local LangChain.js RAG pipeline?"
+    answer: "BGE-small-en-v1.5 (33 MB, 384 dimensions) for embeddings via @localmode/transformers, and Qwen3 1.7B (~1.1 GB) for chat via @localmode/webllm. The LangChain RAG showcase app at localmode.ai/langchain-rag demonstrates this exact combination with document ingestion and source-cited answers."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

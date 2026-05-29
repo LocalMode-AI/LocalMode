@@ -3,6 +3,16 @@ title: "What Are Embeddings? A Visual, Hands-On Guide With Code You Can Run"
 description: "Embeddings turn text into numbers that capture meaning. This hands-on guide walks you through your first embedding, similarity scoring, and semantic search - with runnable code, ASCII visualizations, and zero math prerequisites."
 author: LocalMode
 date: 2026-01-25
+dateModified: "2026-05-25"
+faq:
+  - question: "What are embeddings in AI and machine learning?"
+    answer: "Embeddings are lists of numbers (typically 384 floating-point values) that represent the meaning of text. Texts with similar meaning get similar numbers, enabling computers to understand conceptual similarity. Think of them as GPS coordinates for meaning -- nearby coordinates mean similar topics."
+  - question: "How do embeddings solve the keyword search problem?"
+    answer: "Keyword search fails when users and documents use different words for the same concept (e.g., 'budget concerns' vs. 'Q3 Financial Projections'). Embeddings capture meaning rather than exact words, so semantically related texts produce similar vectors that can be matched via cosine similarity."
+  - question: "Can embeddings run in the browser without a server?"
+    answer: "Yes. LocalMode's embed() function runs a 33MB embedding model (bge-small-en-v1.5) entirely in the browser via WebAssembly. It produces 384-dimensional vectors in 8-30ms after model warm-up, matching OpenAI's cloud embedding quality at 99.8% with zero API cost."
+  - question: "What is cosine similarity and how is it used with embeddings?"
+    answer: "Cosine similarity measures the angle between two embedding vectors, returning a score from -1 to 1. A score near 1 means the texts have very similar meaning, near 0 means unrelated, and near -1 means opposite. It is the standard method for finding semantically similar content in vector search."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

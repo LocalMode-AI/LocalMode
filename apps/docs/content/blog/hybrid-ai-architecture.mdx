@@ -3,6 +3,18 @@ title: "The Hybrid AI Architecture: Local Models for 95% of Requests, Cloud for 
 description: "Most AI requests in production apps are embeddings, classification, NER, reranking, and summarization - tasks where local browser models hit 90-99% of cloud quality. A hybrid architecture routes these locally at $0 cost while reserving cloud APIs for the 5% that genuinely need frontier reasoning. Here is how to build it."
 author: LocalMode
 date: 2026-03-16
+dateModified: "2026-05-29"
+faq:
+  - question: "What is a hybrid AI architecture combining local and cloud models?"
+    answer: "A hybrid AI architecture routes roughly 95% of AI requests -- embeddings, classification, NER, reranking, and summarization -- to local browser models at zero cost, while reserving cloud APIs for the 5% of tasks that genuinely require frontier reasoning, such as complex multi-step logic or long-context generation."
+  - question: "What percentage of AI requests can local browser models handle?"
+    answer: "Analysis of 20+ showcase applications shows approximately 95% of AI calls fall into categories where local models deliver 90-99% of cloud quality. These include embeddings (99% of OpenAI), classification (93%+), NER (93-96%), and reranking (87-93%)."
+  - question: "How much faster is local AI inference compared to cloud APIs?"
+    answer: "Local inference eliminates network round-trips entirely. Embeddings run in 8-30ms locally versus 250-2,000ms via cloud APIs (8-66x faster). Classification takes 10-50ms locally versus 300-1,500ms in the cloud (6-30x faster)."
+  - question: "How much money can hybrid AI architecture save at scale?"
+    answer: "For an application with 10,000 daily active users making 50 AI calls per day, a 95/5 hybrid approach reduces annual cloud API costs from $50K-$300K+ down to $2.5K-$15K, capturing 95% of savings while maintaining full quality coverage."
+  - question: "How does capability detection work in a hybrid AI system?"
+    answer: "LocalMode's detectCapabilities() function checks hardware specs including WebGPU support, WASM SIMD, device memory, CPU cores, and available storage. The checkModelSupport() function then determines if a specific model can run on the device, suggesting fallback models if not."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

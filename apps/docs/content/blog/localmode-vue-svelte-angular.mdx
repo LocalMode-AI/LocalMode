@@ -3,11 +3,21 @@ title: "Add Local AI to Your Vue/Svelte/Angular App - LocalMode Works Everywhere
 description: "LocalMode is not a React library. The core packages are plain TypeScript with zero dependencies - they work in Vue 3, Svelte 5, Angular, vanilla JS, and any framework that can import an npm package. Here is the same semantic search feature built four ways to prove it."
 author: LocalMode
 date: 2026-02-09
+dateModified: "2026-05-27"
+faq:
+  - question: "Does LocalMode work with Vue, Svelte, and Angular?"
+    answer: "Yes. The core packages (@localmode/core and provider packages like @localmode/transformers) are plain TypeScript with zero framework dependencies. They export async functions that work in Vue 3, Svelte 5, Angular, Solid, Qwik, Lit, or vanilla JavaScript -- 14 out of 15 LocalMode packages are framework-agnostic."
+  - question: "Is LocalMode a React-only library?"
+    answer: "No. @localmode/react is the only package with a React dependency, and it is a convenience layer that wraps the same core functions in React hooks. The core package has zero runtime dependencies. All AI features work identically in any framework."
+  - question: "How do I integrate LocalMode with a Vite-based framework?"
+    answer: "For Vite-based frameworks (Vue, Svelte, SvelteKit), you may need to exclude the transformers dependency from pre-bundling by adding '@huggingface/transformers' to the optimizeDeps.exclude array in vite.config.ts."
+  - question: "What LocalMode features are available in non-React frameworks?"
+    answer: "Everything: embeddings, vector search, LLM chat with streaming, classification, NER, vision tasks, audio transcription, TTS, translation, summarization, document QA, RAG pipelines, encryption, PII redaction, and agents. All are accessible through async functions and options objects."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-Most of the LocalMode examples you see online are written in React. That is because the showcase app at [localmode.ai](https://localmode.ai) is a Next.js application, and because `@localmode/react` ships 46 purpose-built hooks that make React integration especially smooth.
+Most of the LocalMode examples you see online are written in React. That is because the showcase app at [localmode.ai](https://localmode.ai) is a Next.js application, and because `@localmode/react` ships 56 purpose-built hooks that make React integration especially smooth.
 
 But here is the thing most people miss: **React is optional.** The two packages that do all the actual work - `@localmode/core` and provider packages like `@localmode/transformers` - are plain TypeScript with zero framework dependencies. They export async functions. They return promises. They work anywhere JavaScript runs in a browser.
 

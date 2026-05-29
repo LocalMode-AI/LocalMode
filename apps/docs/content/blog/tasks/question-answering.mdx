@@ -3,6 +3,16 @@ title: "Extractive Question Answering in the Browser"
 description: "Answer questions by finding the exact answer span in a given context passage - fast, accurate, hallucination-free."
 author: "LocalMode"
 date: "2026-05-13"
+dateModified: "2026-05-29"
+faq:
+  - question: "What is the best model for question answering in the browser?"
+    answer: "Xenova/distilbert-base-cased-distilled-squad (~65MB quantized) is recommended. It achieves F1 87.1 on SQuAD v1.1 and handles proper nouns well. The uncased variant is useful when input text is lowercased or mixed case."
+  - question: "How is extractive QA different from LLM-based question answering?"
+    answer: "Extractive QA finds the exact substring in a context passage that answers a question, making it hallucination-free by design. LLMs generate new text which may include information not in the source. Extractive QA is also faster since it requires only a single forward pass."
+  - question: "Does browser-based question answering work offline?"
+    answer: "Yes. After the initial ~65MB model download, extractive question answering runs entirely in the browser with no server or API key required. All data stays on-device."
+  - question: "How large is the model download for extractive QA?"
+    answer: "Both the cased and uncased DistilBERT variants are approximately 65MB (quantized ONNX). This is a one-time download that is cached for subsequent use."
 ---
 
 # Extractive Question Answering in the Browser

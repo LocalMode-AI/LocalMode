@@ -3,6 +3,18 @@ title: "Image Classification in the Browser"
 description: "Classify images into categories using ViT - identify objects, scenes, and content types in the browser."
 author: "LocalMode"
 date: "2026-05-11"
+dateModified: "2026-05-28"
+faq:
+  - question: "What is the best model for image classification in the browser?"
+    answer: "Xenova/vit-base-patch16-224 (~88MB) offers the best quality with 1,000 ImageNet categories. For the smallest download, MediaPipe EfficientNet-Lite0 (~19MB) provides good accuracy at a fraction of the size."
+  - question: "How large is the model download for browser image classification?"
+    answer: "Models range from ~19MB (MediaPipe EfficientNet-Lite0) to ~88MB (ViT-base). DeiT-small (~88MB) and ResNet-50 (~98MB) offer a middle ground between size and quality."
+  - question: "What browsers support image classification with LocalMode?"
+    answer: "Transformers.js models work in all modern browsers via WebGPU or WASM backends (Chrome 80+, Edge 80+, Firefox 75+, Safari 14+). MediaPipe uses WASM + WebGL and does not require WebGPU."
+  - question: "Does browser image classification work offline?"
+    answer: "Yes. After the initial one-time model download, image classification runs entirely in the browser with no internet connection required. Images never leave the device."
+  - question: "How does local image classification cost compare to cloud APIs?"
+    answer: "Google Cloud Vision costs $1.50 per 1,000 images and AWS Rekognition costs $1.00 per 1,000 images. LocalMode costs $0 after the initial model download of 19-88MB depending on model choice."
 ---
 
 # Image Classification in the Browser
@@ -62,16 +74,16 @@ This example demonstrates the core workflow: create a model instance from the pr
 
 ## Available Models
 
-The following models support image classification through LocalMode. Choose based on your target device, acceptable download size, and quality requirements. Sizes shown are for the default quantized ONNX variant (`model_quantized.onnx`) or the provider's default file.
+The following models support image classification through LocalMode. Choose based on your target device, acceptable download size, and quality requirements. Sizes shown are for the default ONNX variant or the provider's default file.
 
-| Model | Provider | Size (quantized) | Speed | Quality |
+| Model | Provider | Size | Speed | Quality |
 | --- | --- | --- | --- | --- |
 | Xenova/vit-base-patch16-224 | Transformers.js | ~88MB | Medium | High |
-| Xenova/deit-small-distilled-patch16-224 | Transformers.js | ~24MB | Fast | Good |
-| Xenova/resnet-50 | Transformers.js | ~26MB | Fast | Good |
+| Xenova/deit-small-distilled-patch16-224 | Transformers.js | ~88MB | Fast | Good |
+| Xenova/resnet-50 | Transformers.js | ~98MB | Fast | Good |
 | EfficientNet-Lite0 (image_classifier) | MediaPipe | ~19MB | Fast | Good |
 
-**Choosing a model:** For most applications, start with the recommended model (`Xenova/vit-base-patch16-224`). If download size is the primary constraint (e.g., mobile PWA, browser extension), consider the MediaPipe EfficientNet-Lite0 (~19MB) or ResNet-50 quantized (~26MB). If quality is the priority (e.g., enterprise search, content analysis), use the largest model your target devices can handle.
+**Choosing a model:** For most applications, start with the recommended model (`Xenova/vit-base-patch16-224`). If download size is the primary constraint (e.g., mobile PWA, browser extension), consider the MediaPipe EfficientNet-Lite0 (~19MB) or ResNet-50 (~98MB). If quality is the priority (e.g., enterprise search, content analysis), use the largest model your target devices can handle.
 
 ## Cloud vs Local: Cost and Privacy Comparison
 

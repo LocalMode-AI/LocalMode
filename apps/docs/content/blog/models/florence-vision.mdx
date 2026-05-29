@@ -3,6 +3,16 @@ title: "Florence 2 Vision Models in the Browser"
 description: "Microsoft's Florence 2 - a unified vision model for image captioning, document QA, and visual understanding in the browser."
 author: "LocalMode"
 date: "2026-04-17"
+dateModified: "2026-05-26"
+faq:
+  - question: "What tasks can Florence 2 perform in the browser?"
+    answer: "Florence 2 handles both image captioning via captionImage() and document question answering via askDocument() from a single 223MB model. It generates descriptive captions and answers natural language questions about images of forms, receipts, charts, and reports."
+  - question: "How large is the Florence 2 model download?"
+    answer: "Florence-2-base-ft is 223MB. Alternative captioning models include vit-gpt2-image-captioning at 250MB and donut-base-finetuned-docvqa at 218MB. All run via Transformers.js on WASM."
+  - question: "Does Florence 2 require WebGPU?"
+    answer: "No. Florence 2 runs through Transformers.js on WASM, so it works in all modern browsers including Firefox and Safari without requiring WebGPU support."
+  - question: "Is Florence 2 suitable for processing sensitive documents?"
+    answer: "Yes. All processing happens client-side via Transformers.js, so the original image never leaves the device. This is particularly valuable for document processing in healthcare, legal, and finance where image content may be sensitive."
 ---
 
 # Florence 2 Vision Models in the Browser

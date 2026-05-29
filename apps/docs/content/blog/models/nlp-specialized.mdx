@@ -3,6 +3,16 @@ title: "Specialized NLP Models Models in the Browser"
 description: "DistilBART summarization, ModernBERT fill-mask, and DistilBERT QA - single-task NLP models optimized for browser inference."
 author: "LocalMode"
 date: "2026-04-04"
+dateModified: "2026-05-29"
+faq:
+  - question: "What is the smallest specialized NLP model in LocalMode?"
+    answer: "DistilBERT-SQuAD at 65MB is the smallest. It is a 65.2M-parameter model fine-tuned on SQuAD v1.1 for extractive question answering, achieving F1 87.1 on the dev set."
+  - question: "What is the difference between extractive QA and generative QA?"
+    answer: "Extractive QA (DistilBERT-SQuAD) identifies the exact span of text from a source passage that answers a question. It is faster, more accurate for factual retrieval, and never hallucinates since it only returns text from the source. Generative QA uses LLMs to compose new answers."
+  - question: "What is ModernBERT and how does it differ from classic BERT?"
+    answer: "ModernBERT-base (140MB, 149M parameters) was released in December 2024 and replaces classic BERT's 512-token limit with an 8,192-token context window. It uses Rotary Positional Embeddings and local-global attention, making it suitable for longer text processing."
+  - question: "How does DistilBART summarization compare to LLM-based summarization?"
+    answer: "DistilBART-CNN-6-6 (284MB) generates abstractive summaries at 2.09x the speed of BART-large-CNN. For document summarization and article digests, it produces more natural results than prompting a 3B LLM, while using a fraction of the memory."
 ---
 
 # Specialized NLP Models Models in the Browser

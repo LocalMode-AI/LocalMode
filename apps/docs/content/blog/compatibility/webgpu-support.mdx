@@ -3,6 +3,18 @@ title: "WebGPU Browser Support"
 description: "Which browsers support WebGPU, which models require it, and how to detect and fall back gracefully."
 author: "LocalMode"
 date: "2026-05-06"
+dateModified: "2026-05-27"
+faq:
+  - question: "Which browsers support WebGPU for AI inference?"
+    answer: "Chrome 113+ and Edge 113+ have full WebGPU support on desktop. Safari 26+ enables WebGPU by default (17.4-25 require a flag). Firefox supports WebGPU on Windows (141+) and macOS Apple Silicon (147+). Chrome Android 121+ supports WebGPU on Android 12+ with Qualcomm or ARM GPUs."
+  - question: "What happens if WebGPU is not available in the user's browser?"
+    answer: "LocalMode falls back to WASM-based inference. Use wllama for LLM inference (5-20 tokens per second via WASM) or Transformers.js for non-LLM tasks. All LocalMode features except GPU-accelerated LLM inference work without WebGPU. Use isWebGPUSupported() to detect and select the right provider."
+  - question: "Can WebGPU detection report false positives?"
+    answer: "Yes. On some Android devices, Vulkan is present but WebGPU initialization still fails. Always wrap WebLLM model loading in a try/catch block and fall back to wllama on failure, even when isWebGPUSupported() returns true."
+  - question: "Is WebGPU required for embeddings, classification, or vision tasks?"
+    answer: "No. WebGPU is only required for @localmode/webllm (GPU-accelerated LLM inference). All other LocalMode models for embeddings, classification, NER, vision, audio, and OCR run via WASM without WebGPU through Transformers.js or wllama."
+  - question: "Does Firefox support WebGPU on Linux?"
+    answer: "Not yet in stable releases. Firefox WebGPU is available on Windows (Firefox 141+) and macOS Apple Silicon (Firefox 147+). Linux and macOS Intel support is available only in Firefox Nightly. On unsupported platforms, use wllama for WASM-based LLM inference as a fallback."
 ---
 
 # WebGPU Browser Support
@@ -19,8 +31,8 @@ The following table summarizes which web platform features are available on WebG
 | --- | --- | --- |
 | **Chrome Desktop** | Yes (113+) | Full support. Stable since 2023. |
 | **Edge Desktop** | Yes (113+) | Same Chromium engine as Chrome. Full support. |
-| **Safari macOS** | Yes (18+ behind flag, 26+ default) | Safari 18-25 behind feature flag. Enabled by default from Safari 26 (macOS Tahoe). Metal backend. |
-| **Safari iOS** | Partial (18.2+ behind flag, 26+ default) | iOS 18.2+ enabled WebGPU as a feature flag (WebKit Feature Flags in Settings). Enabled by default from iOS 26 / Safari 26. No specific chip requirement has been documented by Apple. |
+| **Safari macOS** | Yes (17.4+ behind flag, 26+ default) | Safari 17.4-25 behind feature flag. Enabled by default from Safari 26 (macOS Tahoe). Metal backend. |
+| **Safari iOS** | Partial (17.4+ behind flag, 26+ default) | iOS 17.4+ enabled WebGPU as a feature flag (WebKit Feature Flags in Settings). Enabled by default from iOS 26 / Safari 26. No specific chip requirement has been documented by Apple. |
 | **Firefox** | Firefox 141+ (Windows), 147+ (macOS AS) | WebGPU enabled by default on Windows (Firefox 141, July 2025). macOS Apple Silicon: Firefox 145 covered macOS 26 (Tahoe) only; Firefox 147 (January 2026) expanded to all macOS versions on Apple Silicon. Not available on macOS Intel, Linux, or Android (planned 2026). |
 | **Chrome Android** | Yes (121+, Android 12+) | Enabled by default in Chrome 121 (January 2024) on Android 12+ devices with Qualcomm or ARM GPUs. Devices with other GPU vendors have limited or no support. |
 | **Opera/Brave/Arc** | Yes (Chromium-based) | Follows Chrome's WebGPU support. Chrome 113+ equivalent. |

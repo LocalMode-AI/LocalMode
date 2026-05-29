@@ -3,6 +3,14 @@ title: "SaaS \"Local Mode\" Toggle"
 description: "Add a \"Process Locally\" toggle to your SaaS - give privacy-conscious users control over where AI runs."
 author: "LocalMode"
 date: "2026-05-09"
+dateModified: "2026-05-29"
+faq:
+  - question: "How should I market a local processing toggle to customers?"
+    answer: "Position it as a competitive advantage: 'Your data, your device.' Enterprise buyers actively look for this capability. Some SaaS companies charge a premium for the local processing tier, while others use it as a differentiator in their standard plan."
+  - question: "Do users notice quality differences between local and cloud AI?"
+    answer: "For embeddings and classification, quality is nearly indistinguishable. For LLM generation, local models (1-4B parameters) are noticeably less capable than GPT-5 on complex tasks but adequate for most chat and summarization use cases."
+  - question: "How much code changes are needed to add a local mode toggle?"
+    answer: "Minimal. LocalMode's function-first API means embed(), streamText(), and classify() all accept a model parameter that can be either local or cloud. A simple getModel(isLocal) function switches the inference backend without changing application logic."
 ---
 
 # SaaS "Local Mode" Toggle
@@ -82,18 +90,6 @@ When deploying this solution to production, consider these factors:
 **Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
 
 **Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
-
-## Frequently Asked Questions
-
-### How do I market this feature?
-
-Position it as a competitive advantage: "Your data, your device." Enterprise buyers actively look for this capability. Some SaaS companies charge a premium for the "local processing" tier, while others use it as a differentiator in their standard plan.
-
-### Do users see quality differences?
-
-For embeddings and classification, quality is nearly indistinguishable. For LLM generation, local models (1-4B parameters) are noticeably less capable than GPT-5 on complex tasks but adequate for most chat and summarization use cases. Be transparent about the trade-off.
-
-
 
 ## Related Pages
 

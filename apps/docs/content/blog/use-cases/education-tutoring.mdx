@@ -3,6 +3,14 @@ title: "AI Tutoring & Education Apps"
 description: "Build private, offline-capable tutoring systems where student data never leaves the device."
 author: "LocalMode"
 date: "2026-04-30"
+dateModified: "2026-05-29"
+faq:
+  - question: "Is on-device AI tutoring COPPA-compliant?"
+    answer: "Browser-based processing where no student data is transmitted to servers avoids triggering COPPA's collection provisions. However, consult a compliance attorney for your specific use case, as COPPA compliance involves more than just data processing."
+  - question: "How well do small local models perform as tutors?"
+    answer: "For explaining established concepts like math rules, vocabulary, and science facts, 1.5B-3B models perform well. For open-ended creative or complex reasoning tasks, quality drops compared to GPT-4. Focus the tutor on structured, known-answer interactions."
+  - question: "Can a local AI tutor work offline in schools with poor internet?"
+    answer: "Yes. Once the model is downloaded and cached in IndexedDB, the entire tutoring system works without internet. This is ideal for schools with unreliable connectivity or restricted networks."
 ---
 
 # AI Tutoring & Education Apps
@@ -87,16 +95,6 @@ When deploying this solution to production, consider these factors:
 **Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
 
 **Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
-
-## Frequently Asked Questions
-
-### Is this COPPA-compliant?
-
-Browser-based processing where no student data is transmitted to servers avoids triggering COPPA's "collection" provisions. However, consult a compliance attorney for your specific use case - COPPA compliance involves more than just data processing (e.g., notice requirements, parental consent for account creation).
-
-### How well do small models tutor?
-
-For explaining established concepts (math rules, vocabulary, science facts), 1.5B-3B models perform well. For open-ended creative or complex reasoning tasks, quality drops compared to GPT-4. Focus the tutor on structured, known-answer interactions where local models excel.
 
 ## Further Reading
 

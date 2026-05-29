@@ -3,6 +3,16 @@ title: "Build a Private RAG Chat Over Your Documents - No Backend Required"
 description: "A complete tutorial for building a retrieval-augmented generation pipeline that runs entirely in the browser. Load PDFs, chunk text, generate embeddings with BGE-small, store vectors in IndexedDB, and answer questions with a local LLM - all without a server, API key, or any data leaving the device."
 author: LocalMode
 date: 2026-03-13
+dateModified: "2026-05-28"
+faq:
+  - question: "Can you build a RAG pipeline entirely in the browser without a backend?"
+    answer: "Yes. LocalMode provides the complete pipeline in the browser: PDF text extraction via PDF.js, recursive text chunking, 384-dimensional embeddings with BGE-small (33MB), vector storage in IndexedDB with HNSW indexing, semantic search, and streaming LLM answers -- all without a server or API key."
+  - question: "What models are needed for a private browser-based RAG chat?"
+    answer: "The pipeline uses BGE-small-en-v1.5 (33MB) for embeddings and a local LLM like Llama 3.2 1B (712MB) or Qwen3 1.7B (~1.1GB) for answer generation. Total model footprint is under 1.2GB, downloaded once and cached in the browser."
+  - question: "How does browser-based RAG keep documents private?"
+    answer: "Every step runs in the browser tab. PDFs are parsed locally, text is chunked and embedded on-device, vectors are stored in IndexedDB, and the LLM generates answers from the browser's WebGPU or WASM runtime. No document text ever leaves the user's device."
+  - question: "Does browser-based semantic search work offline?"
+    answer: "Yes. After the initial model download, the entire RAG pipeline -- embedding, vector storage, search, and LLM generation -- works offline. Vectors persist in IndexedDB across browser sessions, so the user's document corpus remains searchable without a network connection."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

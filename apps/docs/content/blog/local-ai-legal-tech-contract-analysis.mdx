@@ -3,6 +3,18 @@ title: "Local AI for Legal Tech: Contract Analysis Without Data Leaving Your Fir
 description: "Build contract analysis, clause classification, entity extraction, semantic search, PII redaction, and encrypted storage that runs entirely in the browser. No cloud APIs, no data processor agreements, no privilege risk."
 author: LocalMode
 date: 2026-02-22
+dateModified: "2026-05-25"
+faq:
+  - question: "Can AI analyze legal contracts without sending data to the cloud?"
+    answer: "Yes. LocalMode runs all contract analysis workflows entirely in the browser via WebAssembly -- clause classification, entity extraction, semantic search, PII redaction, and encrypted storage -- with no data transmitted to external servers. The total model footprint is approximately 158MB."
+  - question: "How does local AI address attorney-client privilege concerns?"
+    answer: "When AI processing happens entirely on the client device, privileged documents never leave the firm's control. This eliminates the risk of inadvertent disclosure to third-party service providers, which courts have found can waive privilege. No vendor investigation or Data Processing Agreement is needed."
+  - question: "What does ABA Formal Opinion 512 say about AI and confidentiality?"
+    answer: "Issued in July 2024, ABA Formal Opinion 512 requires lawyers to investigate any AI tool's reliability and security, configure it to protect confidentiality, and ensure obligations are enforceable. With local-only processing, there is no third-party vendor involved, simplifying these requirements."
+  - question: "What models are used for legal contract analysis in the browser?"
+    answer: "The pipeline uses mobilebert-uncased-mnli (~25MB) for zero-shot clause classification, bert-base-NER (~110MB) for entity extraction, bge-small-en-v1.5 (~23MB) for semantic search embeddings, plus built-in PII redaction and AES-256-GCM encryption from @localmode/core."
+  - question: "Does local AI eliminate all GDPR compliance requirements?"
+    answer: "It eliminates the data-processor category of obligations. When processing happens on-device, there is no data processor, no cross-border transfer, no sub-processor chain to audit, and no breach notification from third parties. Device-level security and data governance policies still apply."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
@@ -23,7 +35,7 @@ This post walks through five contract analysis workflows built entirely with Loc
 
 ## Why Local Execution Matters for Legal Work
 
-The legal technology market is projected to reach approximately $32.5 billion in 2026 and $67.5 billion by 2034, with contract automation among the fastest-growing segments. Yet adoption of AI tools in legal practice consistently runs into the same barrier: confidentiality obligations.
+The legal technology market is projected to reach approximately $32.5 billion in 2026 and ~$65.5 billion by 2034, with contract automation among the fastest-growing segments. Yet adoption of AI tools in legal practice consistently runs into the same barrier: confidentiality obligations.
 
 Three forces converge to make local AI particularly relevant for legal tech:
 
@@ -311,7 +323,7 @@ Research and technical claims in this post are based on the following sources:
 
 - **ABA Formal Opinion 512** (July 2024): [ABA ethics guidance on generative AI](https://www.americanbar.org/news/abanews/aba-news-archives/2024/07/aba-issues-first-ethics-guidance-ai-tools/)
 - **GDPR Article 28** (Data processor obligations): [Art. 28 GDPR full text](https://gdpr-info.eu/art-28-gdpr/)
-- **Legal technology market data**: [Precedence Research legal tech market report](https://www.precedenceresearch.com/legal-technology-market) -- $29.81B (2025) to $67.53B (2034), 9.51% CAGR
+- **Legal technology market data**: [Precedence Research legal tech market report](https://www.precedenceresearch.com/legal-technology-market) -- $29.81B (2025) to ~$65.5B (2034), 9.51% CAGR
 - **bert-base-NER model card**: [dslim/bert-base-NER on Hugging Face](https://huggingface.co/dslim/bert-base-NER) -- CoNLL-2003 fine-tuned, PER/ORG/LOC/MISC entities
 - **MobileBERT MNLI model card**: [typeform/mobilebert-uncased-mnli on Hugging Face](https://huggingface.co/typeform/mobilebert-uncased-mnli) -- NLI-based zero-shot classification
 - **Model quality benchmarks**: See [Near Cloud-Quality AI at $0 Cost](/blog/local-ai-vs-cloud) for detailed accuracy comparisons against cloud APIs

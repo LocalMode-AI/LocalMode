@@ -3,6 +3,16 @@ title: "Hermes 3 Models in the Browser"
 description: "NousResearch's Hermes 3 - fine-tuned Llama variants optimized for function calling, structured output, and agentic workflows."
 author: "LocalMode"
 date: "2026-04-12"
+dateModified: "2026-05-29"
+faq:
+  - question: "What makes Hermes 3 different from standard Llama models?"
+    answer: "Hermes 3 is a fine-tune of Meta's Llama optimized for structured interactions: function calling, JSON output, tool use, and multi-turn agentic workflows. It produces more reliable tool calls and better-structured JSON compared to base Llama models."
+  - question: "What is the smallest Hermes 3 model?"
+    answer: "The Hermes-3-Llama-3.2-3B variant at 1.76GB is the smaller option. It is practical for most devices and shares the Llama tokenizer and architecture, so switching between Hermes and standard Llama requires only a different model ID."
+  - question: "Does Hermes 3 require WebGPU?"
+    answer: "Yes. Both Hermes 3 variants are available exclusively through WebLLM, which requires WebGPU support (Chrome 113+, Edge 113+, or Safari 26+). For browsers without WebGPU, you can fall back to a wllama GGUF model."
+  - question: "Is Hermes 3 suitable for building AI agents in the browser?"
+    answer: "Yes. Hermes 3 is the recommended model for LocalMode's agent framework when using createAgent() with tool definitions. Its training data focuses on reliable instruction following and format adherence for multi-step agentic tasks."
 ---
 
 # Hermes 3 Models in the Browser

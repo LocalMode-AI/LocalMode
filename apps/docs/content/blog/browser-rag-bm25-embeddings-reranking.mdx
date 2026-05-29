@@ -3,6 +3,16 @@ title: "The Complete Browser RAG Stack: BM25 + Embeddings + Reranking in One Pip
 description: "Pure vector search misses exact terms. Pure keyword search misses meaning. This guide builds a production-grade hybrid retrieval pipeline - BM25 keyword search, vector semantic search, Reciprocal Rank Fusion, and cross-encoder reranking - all running in the browser with LocalMode. No servers, no API keys, dramatically better recall."
 author: LocalMode
 date: 2026-02-01
+dateModified: "2026-05-26"
+faq:
+  - question: "Why is vector-only search insufficient for production RAG systems?"
+    answer: "Vector search struggles with exact identifiers, acronyms, error codes, and IP addresses because these tokens get mapped to generic regions of embedding space. A query for 'error code XJ-4021' returns general error-handling documents instead of the specific match. BM25 keyword search catches these exact-match cases that embeddings miss."
+  - question: "What is Reciprocal Rank Fusion and when should you use it over weighted combination?"
+    answer: "RRF ignores raw scores and works only with rankings, scoring each document as 1/(k + rank) summed across result lists. It requires no weight tuning and is robust to score distribution differences between BM25 and vector search. Use it as the default; switch to weighted combination only after validating optimal weights on your specific corpus."
+  - question: "How much does cross-encoder reranking improve retrieval quality?"
+    answer: "Research shows reranking improves retrieval quality by 10-48% compared to single-method approaches. The reranker scores each query-document pair through a transformer that attends to both texts jointly. Reranking 20 documents takes 100-300ms in the browser -- fast enough for interactive search."
+  - question: "What is the total latency for a hybrid RAG pipeline running in the browser?"
+    answer: "For a 10,000-chunk knowledge base: query embedding takes 8-30ms, VectorDB search 5-15ms, BM25 search 1-5ms, hybrid fusion under 1ms, and cross-encoder reranking 100-300ms. Total is roughly 120-350ms -- well within interactive speed. Skipping the reranker drops the total under 50ms for real-time search."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

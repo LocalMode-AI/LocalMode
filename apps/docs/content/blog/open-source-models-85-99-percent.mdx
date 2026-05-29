@@ -3,6 +3,16 @@ title: "Open Source AI Models Are Now 85-99% as Good as Cloud APIs - Here's the 
 description: "We tracked every major benchmark across 18 model categories from 2023 to 2026. Open source models went from 50-70% of cloud quality to 85-99%. A 4-billion parameter model now approaches GPT-5 on knowledge benchmarks. Here is every number, every source, and what it means for your architecture."
 author: LocalMode
 date: 2026-03-20
+dateModified: "2026-05-29"
+faq:
+  - question: "How close are open source AI models to cloud APIs like GPT-5?"
+    answer: "As of 2026, open source models reach 85-99% of cloud API quality across 18 model categories. Embeddings match OpenAI at 99.8%. Qwen3.5-4B scores 88.8% on MMLU-Redux in thinking mode, within 4 points of GPT-5's 92.5% on MMLU -- a model small enough to run in a browser tab."
+  - question: "How fast have open source models closed the gap with proprietary AI?"
+    answer: "In July 2023, the best open source 7B model scored 45.3% on MMLU versus GPT-4's 86.4% (52% quality ratio). By 2026, a 4B parameter model scores 88.8% on MMLU-Redux versus GPT-5's 92.5% (~96% ratio). Epoch AI research confirms open-weight models now trail frontier models by about three months on average."
+  - question: "Which open source models match cloud quality for embeddings?"
+    answer: "BGE-small-en-v1.5 (33MB, 384 dimensions) scores 62.17 on the MTEB benchmark, while OpenAI's text-embedding-3-small scores 62.3 -- a 0.1-point difference. This 99.8% quality match means local embeddings are functionally identical to the cloud API at zero cost."
+  - question: "Where do open source models still lag behind cloud APIs?"
+    answer: "The widest gaps remain in document QA (35-50% of GPT-5), image captioning (55-65%), translation (85% of Google Translate), and competition-level math reasoning. GPT-5 scores 95.7% on AIME 2024 while local models score 66-76%. Frontier cloud models still lead on tasks requiring deep reasoning and world knowledge."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

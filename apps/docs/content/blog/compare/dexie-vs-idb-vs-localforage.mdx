@@ -3,6 +3,16 @@ title: "Dexie vs idb vs localForage Storage"
 description: "Comparing three external storage adapters for LocalMode's VectorDB - features, bundle size, and browser compatibility."
 author: "LocalMode"
 date: "2026-04-10"
+dateModified: "2026-05-26"
+faq:
+  - question: "Which storage adapter should I use for a new LocalMode project?"
+    answer: "Start with the built-in IndexedDBStorage, which has zero dependencies and is sufficient for most VectorDB use cases. Only add an external adapter when you hit a specific limitation: Dexie for schema versioning, idb for minimal bundle size, or localForage for automatic localStorage fallback."
+  - question: "How do I handle Safari Private Browsing with LocalMode storage?"
+    answer: "Wrap storage creation in a try/catch: attempt to create an IndexedDB-backed store and fall back to MemoryStorage if it throws. Alternatively, use LocalForageStorage, which falls back to localStorage automatically, though subject to the ~5 MB quota."
+  - question: "Does localForage's localStorage fallback work with VectorDB?"
+    answer: "Yes, but with significant caveats. localStorage has a ~5 MB limit and does not support binary types, so vectors are serialized as number[] arrays -- roughly 4x larger than binary storage. This works for small collections but will fail for larger datasets."
+  - question: "Is localForage still actively maintained?"
+    answer: "The last release was v1.10.0 in August 2021. The library is stable and widely deployed but receives limited updates. If active maintenance matters, Dexie.js and idb are more actively maintained alternatives, both updated in 2025-2026."
 ---
 
 # Dexie vs idb vs localForage Storage
@@ -90,24 +100,6 @@ For new LocalMode projects, start with the built-in `IndexedDBStorage` - it's ze
 - **`@localmode/localforage`** - Use when you must support browsers where IndexedDB may be unavailable and an automatic localStorage fallback is acceptable. Be aware of the vector serialization overhead and the ~5 MB localStorage quota. Note that WebSQL is no longer available in modern Chromium browsers.
 
 All three implement the same `StorageAdapter` interface, so the choice does not affect the rest of your application code.
-
-## Frequently Asked Questions
-
-### Which should I use for a new project?
-
-Start with the built-in `IndexedDBStorage` - it's zero dependencies and sufficient for most VectorDB use cases. Only add an external adapter when you hit a specific limitation: need schema versioning (Dexie), need minimal bundle (idb), or need automatic localStorage fallback for environments where IndexedDB may be blocked (localforage).
-
-### How do I handle Safari Private Browsing?
-
-Wrap storage creation in a try/catch: attempt to create an IndexedDB-backed store (DexieStorage, IDBStorage, or the built-in IndexedDBStorage), and if it throws - which happens in Safari Private Browsing - fall back to MemoryStorage. If you need transparent fallback without a try/catch, use LocalForageStorage, which falls back to localStorage automatically (subject to the ~5 MB quota).
-
-### Does localForage's localStorage fallback work with VectorDB?
-
-Yes, but with significant caveats. localStorage has a ~5 MB limit and does not support binary types, so `LocalForageStorage` serializes vectors as `number[]` arrays - roughly 4× larger than binary storage. This is enough for small vector collections (a few hundred short-dimension vectors) but will fail for larger datasets. The IndexedDB driver is strongly preferred whenever available.
-
-### Is localForage still actively maintained?
-
-The last release was v1.10.0 in August 2021. The library is stable and widely deployed, but receives limited updates. If active maintenance matters to your team, Dexie.js and idb are more actively maintained alternatives (both updated in 2025–2026).
 
 ## Related Pages
 

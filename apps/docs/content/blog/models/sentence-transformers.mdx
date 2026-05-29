@@ -3,6 +3,16 @@ title: "Sentence Transformers Models in the Browser"
 description: "Multilingual and English sentence embedding models - MiniLM for multilingual, MPNet for highest English quality."
 author: "LocalMode"
 date: "2026-05-06"
+dateModified: "2026-05-27"
+faq:
+  - question: "What is the smallest embedding model in LocalMode?"
+    answer: "Snowflake Arctic Embed XS at just 23MB is the smallest embedding model in LocalMode's registry. It produces 384-dimensional embeddings and is designed for use cases where download size is the primary constraint, such as browser extensions or PWAs."
+  - question: "Which embedding model should I use for multilingual content?"
+    answer: "Paraphrase-multilingual-MiniLM-L12-v2 at 120MB supports 50 languages with 384-dimensional embeddings. It is the recommended choice for applications serving international users."
+  - question: "What is the highest-quality English embedding model?"
+    answer: "All-MPNet-base-v2 at 420MB with 768-dimensional embeddings is the highest-quality English model, trained on over 1.17 billion sentence pairs. Use it when English retrieval quality is the top priority."
+  - question: "Do Sentence Transformer models require WebGPU?"
+    answer: "No. All three variants run through Transformers.js on WASM, so they work in every browser including Firefox and Safari without requiring WebGPU."
 ---
 
 # Sentence Transformers Models in the Browser

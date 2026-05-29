@@ -3,6 +3,16 @@ title: "From OpenAI SDK to LocalMode: A Migration Guide"
 description: "A practical, side-by-side migration guide for developers moving from the OpenAI Node.js SDK to LocalMode. Covers embeddings, chat completions, streaming, structured output, and batch operations -- with code comparisons, quality benchmarks, and a step-by-step checklist."
 author: LocalMode
 date: 2026-02-21
+dateModified: "2026-05-29"
+faq:
+  - question: "How does LocalMode's API compare to the OpenAI SDK?"
+    answer: "Both follow the same pattern: construct an options object, await the result, destructure fields. LocalMode's embed() maps to openai.embeddings.create(), streamText() maps to chat.completions.create() with streaming, and generateObject() maps to structured output. The mental model is remarkably similar."
+  - question: "What are the main benefits of migrating from OpenAI to LocalMode?"
+    answer: "Three primary benefits: cost drops to $0 after initial model download (vs. per-token pricing), data privacy is guaranteed since inference runs entirely in the browser, and latency improves to 5-50ms for embeddings with no network round-trips or cold starts."
+  - question: "What are the quality tradeoffs when moving from OpenAI to local models?"
+    answer: "Local models deliver 85-99% of cloud quality depending on the task. Embeddings match at 99%, classification at 93%+, and NER at 93-96%. The widest gap is in complex reasoning and long-context generation, where cloud models like GPT-5 remain significantly ahead."
+  - question: "Do I need to change my application architecture to use LocalMode?"
+    answer: "The migration is mostly a provider swap. Replace openai.embeddings.create() with embed() from @localmode/core, and openai.chat.completions.create() with streamText(). No API keys are needed, and models auto-download and cache in the browser on first use."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

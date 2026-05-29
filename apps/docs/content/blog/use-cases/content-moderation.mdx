@@ -3,6 +3,14 @@ title: "Content Moderation"
 description: "Moderate user-generated content in real-time using local classification - no API costs, no data exposure, instant decisions."
 author: "LocalMode"
 date: "2026-04-20"
+dateModified: "2026-05-26"
+faq:
+  - question: "How accurate is zero-shot moderation with LocalMode?"
+    answer: "For clear-cut cases like explicit toxicity and obvious spam, accuracy is typically high — the nli-deberta-v3-xsmall model achieves ~87-92% on standard NLI benchmarks. For subtle cases like sarcasm or coded language, accuracy drops. Zero-shot lets you customize categories without training data."
+  - question: "Can LocalMode moderate images in addition to text?"
+    answer: "Yes. Combine text classification with image classification (ViT) for multimodal moderation. Classify images for inappropriate content categories and combine scores with text moderation for a holistic decision."
+  - question: "Does local content moderation have any per-request costs?"
+    answer: "No. After the initial model download, every inference operation is free with zero per-request fees. This makes it ideal for high-volume moderation where cloud APIs would be cost-prohibitive."
 ---
 
 # Content Moderation
@@ -84,16 +92,6 @@ When deploying this solution to production, consider these factors:
 **Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
 
 **Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
-
-## Frequently Asked Questions
-
-### How accurate is zero-shot moderation?
-
-For clear-cut cases (explicit toxicity, obvious spam), accuracy is typically high - the underlying `nli-deberta-v3-xsmall` model achieves ~87-92% on standard NLI benchmarks (SNLI test: 91.64%, MNLI mismatched: 87.77%). Applied accuracy on real-world moderation labels will vary by use case, label clarity, and community context. For subtle cases (sarcasm, coded language), accuracy drops noticeably. The zero-shot approach lets you customize categories for your specific community norms without training data.
-
-### Can this handle images too?
-
-Yes. Combine text classification with image classification (ViT) for multimodal moderation. Classify images for inappropriate content categories and combine scores with text moderation for a holistic decision.
 
 ## Further Reading
 

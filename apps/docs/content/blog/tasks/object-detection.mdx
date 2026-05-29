@@ -3,6 +3,18 @@ title: "Object Detection in the Browser"
 description: "Detect and locate objects in images with bounding boxes using D-FINE - just ~4.5MB for 80 object categories."
 author: "LocalMode"
 date: "2026-05-04"
+dateModified: "2026-05-27"
+faq:
+  - question: "What is the best model for object detection in the browser?"
+    answer: "onnx-community/dfine_n_coco-ONNX (~4.5MB quantized) is recommended for most applications. It detects 80 COCO object categories and is one of the smallest models in the entire catalog. For higher accuracy, Xenova/detr-resnet-50 (167MB) is available."
+  - question: "How large is the model download for browser object detection?"
+    answer: "The quantized D-FINE nano model is only ~4.5MB, making it one of the smallest models available. MediaPipe EfficientDet-Lite0 is 7.3MB, and DETR-ResNet-50 is 167MB for higher accuracy."
+  - question: "Does browser-based object detection work offline?"
+    answer: "Yes. After the initial model download (as small as ~4.5MB), object detection runs entirely in the browser with no internet connection, no API key, and no data leaving the device."
+  - question: "How does local object detection cost compare to cloud services?"
+    answer: "Google Cloud Vision object detection costs $2.25 per 1,000 images and AWS Rekognition costs $1.00 per 1,000 images. LocalMode detection costs $0 with a one-time ~4.5MB model download."
+  - question: "What objects can browser object detection recognize?"
+    answer: "D-FINE and DETR models recognize 80 COCO categories including people, vehicles, animals, furniture, food, and electronics. MediaPipe EfficientDet-Lite0 also covers the same 80 COCO classes."
 ---
 
 # Object Detection in the Browser

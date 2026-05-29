@@ -3,6 +3,18 @@ title: "Private/Incognito Browsing"
 description: "How LocalMode handles Private Browsing mode - IndexedDB blocked in Safari, workarounds and fallbacks."
 author: "LocalMode"
 date: "2026-05-14"
+dateModified: "2026-05-28"
+faq:
+  - question: "Does LocalMode work in private/incognito mode?"
+    answer: "Yes, but with limitations. AI inference (embeddings, classification, LLM chat) works normally in all private browsing modes. The main limitation is that data cannot persist between sessions. Models must be re-downloaded each time a new private window is opened, and VectorDB data is lost when the window closes."
+  - question: "Does Safari Private Browsing block IndexedDB for LocalMode?"
+    answer: "Safari Private Browsing provides IndexedDB but uses ephemeral in-memory storage. Data is never written to disk and is cleared when the private window closes. LocalMode detects this by performing a probe write and can fall back to MemoryStorage if needed."
+  - question: "How does Chrome Incognito handle LocalMode model caching?"
+    answer: "In Chrome Incognito, IndexedDB works but is stored in-memory only with a storage quota capped at roughly 5% of total disk space. Models can be cached and used during the session, but all cached data is cleared when all incognito windows close."
+  - question: "Is there any way to persist data in private browsing mode?"
+    answer: "No. There is no workaround for persistent storage in any private browsing mode. In Chrome and Edge, data is in-memory only. In Safari, storage is ephemeral. In Firefox, encrypted on-disk storage is wiped at session end. For the best experience with LocalMode, use normal browsing mode."
+  - question: "How should I handle private browsing detection in my app?"
+    answer: "Wrap IndexedDB storage creation in a try/catch and fall back to MemoryStorage. Detect the situation early and inform users that AI features will work but data will not persist between sessions. Use isIndexedDBSupported() and a probe write to test storage availability."
 ---
 
 # Private/Incognito Browsing

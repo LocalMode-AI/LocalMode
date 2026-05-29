@@ -3,6 +3,16 @@ title: "Build an AI Agent That Runs Entirely in Your Browser Tab"
 description: "A hands-on guide to building a tool-using AI agent with the ReAct pattern - reasoning, acting, and observing in a loop - using local LLMs via WebGPU. No servers, no API keys, no data leaves the device. Includes complete code with createAgent(), tool definitions, VectorDB-backed memory, and a React hook for real-time step visualization."
 author: LocalMode
 date: 2026-02-23
+dateModified: "2026-05-29"
+faq:
+  - question: "How does a browser-based AI agent work using the ReAct pattern?"
+    answer: "The agent alternates between reasoning about a task and acting by calling tools in a loop. At each step, generateObject() outputs structured JSON -- either a tool call with validated arguments or a final answer. The tool result becomes an observation fed back to the model for the next step. Everything runs locally via WebGPU."
+  - question: "What safety guards does LocalMode's agent framework provide?"
+    answer: "Four guards: maxSteps (default 10) caps the number of iterations, maxDurationMs sets a wall-clock timeout, loop detection terminates if the model repeats identical tool calls three times, and AbortSignal support allows cancellation at any point. Each produces a specific finishReason for diagnostics."
+  - question: "Which model is recommended for building browser-based AI agents?"
+    answer: "Qwen3 1.7B (1.1 GB download) is the recommended starting point. It supports 32K token context and dual-mode capability for both step-by-step reasoning and fast responses. For complex multi-tool research tasks requiring 6+ steps, Qwen3 8B (4.5 GB) significantly improves reliability."
+  - question: "Can a browser AI agent remember previous conversations?"
+    answer: "Yes, via createAgentMemory() which creates a VectorDB-backed semantic memory. Before each run, the agent retrieves relevant context from past interactions using embedding similarity. After each run, the prompt and answer are stored. A 'recall' tool can also give the agent active control over when it searches its memory."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

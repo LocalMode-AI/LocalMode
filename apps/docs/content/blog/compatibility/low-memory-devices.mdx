@@ -3,6 +3,16 @@ title: "Low-Memory Devices (2-4GB RAM)"
 description: "Running LocalMode on phones, tablets, and Chromebooks with limited RAM - model selection and memory management."
 author: "LocalMode"
 date: "2026-05-19"
+dateModified: "2026-05-27"
+faq:
+  - question: "Can LocalMode run on devices with only 2GB of RAM?"
+    answer: "Yes, with appropriate model selection. Devices with 2GB RAM can run embedding models like BGE-small (34MB), classification models like MobileBERT (21MB), vision models like D-FINE nano (4.5MB), and the tiny LLM SmolLM2-135M (70MB). Models above 500MB will likely cause out-of-memory crashes."
+  - question: "How do I select the right model for a low-memory device?"
+    answer: "Use detectCapabilities() to detect device hardware and recommendModels() to get model suggestions that fit the device. These functions consider available RAM and select models within safe size limits. Always have a fallback to the smallest model in each category."
+  - question: "What happens if a model exceeds the device memory limit?"
+    answer: "The operating system's OOM killer will terminate the browser tab, causing the user to lose their session. iOS Safari is especially aggressive with tab memory limits. Always wrap model loading in try/catch and fall back to a smaller model on failure."
+  - question: "Does LocalMode work on Chromebooks with limited RAM?"
+    answer: "Yes. Chromebooks with 2-4GB RAM behave like mobile devices for memory constraints. Use the same small model recommendations: SmolLM2-135M for LLM tasks, BGE-small for embeddings, and D-FINE nano for object detection. Test on actual Chromebook hardware rather than emulators."
 ---
 
 # Low-Memory Devices (2-4GB RAM)

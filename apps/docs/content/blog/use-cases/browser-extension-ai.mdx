@@ -3,6 +3,16 @@ title: "AI-Powered Browser Extensions"
 description: "Add AI features to browser extensions - classify pages, summarize content, extract entities - without calling localhost APIs."
 author: "LocalMode"
 date: "2026-05-02"
+dateModified: "2026-05-25"
+faq:
+  - question: "Which browser extension contexts support LocalMode?"
+    answer: "All of them — content scripts, background/service workers, offscreen documents, side panels, popup pages, and options pages. For heavy tasks like LLM inference, use offscreen documents to avoid blocking the extension UI."
+  - question: "How do I handle model downloads in a browser extension?"
+    answer: "Use preloadModel() from @localmode/transformers during extension installation or first use. Models cache in the extension's IndexedDB storage, shared across all extension contexts. Subsequent loads are instant from cache."
+  - question: "Do browser extension security policies block LocalMode?"
+    answer: "No. LocalMode runs via WASM and standard Web APIs, which are allowed in Manifest V3 extensions. You need wasm-unsafe-eval in your content security policy (supported since Chrome 103)."
+  - question: "Can I run LLM inference in a browser extension background script?"
+    answer: "Yes, but background service workers have idle timeouts (30 seconds). For heavy LLM inference, use an offscreen document with the WORKERS reason, which avoids the service worker lifecycle limitations."
 ---
 
 # AI-Powered Browser Extensions
@@ -86,16 +96,6 @@ When deploying this solution to production, consider these factors:
 **Device adaptation:** Not all users have the same hardware. Use `detectCapabilities()` and `recommendModels()` to select models appropriate for each user's device - call `recommendModels(caps, { task })` with the detected capabilities. A desktop with a discrete GPU can handle 3GB models; a mobile phone with 3GB RAM should use models under 300MB.
 
 **Error boundaries:** Wrap AI-powered components in error boundaries. If model loading fails (network error, storage quota exceeded, incompatible browser), fall back gracefully - show the non-AI version of the feature rather than crashing the page.
-
-## Frequently Asked Questions
-
-### Which extension contexts support LocalMode?
-
-All of them. Content scripts, background/service workers, offscreen documents, side panels, popup pages, and options pages. For heavy tasks (LLM inference), use offscreen documents to avoid blocking the extension UI.
-
-### How do I handle model downloads in an extension?
-
-Use `preloadModel()` (from `@localmode/transformers` or your chosen provider package) during extension installation or first use. Models cache in the extension's IndexedDB storage (shared across all extension contexts). Subsequent loads are instant from cache.
 
 ## Further Reading
 

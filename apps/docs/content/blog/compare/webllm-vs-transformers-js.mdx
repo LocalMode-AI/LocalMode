@@ -3,6 +3,14 @@ title: "WebLLM vs Transformers.js"
 description: "Comparing LocalMode's WebGPU LLM provider with the ONNX-based Transformers.js v4 provider for text generation."
 author: "LocalMode"
 date: "2026-05-03"
+dateModified: "2026-05-27"
+faq:
+  - question: "Should I use both WebLLM and Transformers.js in the same app?"
+    answer: "If your app needs LLMs and other ML tasks, using @localmode/transformers for embeddings and classification and @localmode/webllm for LLM generation is the recommended pattern. This gives you the best engine for each task type."
+  - question: "How stable is Transformers.js v4 for LLM inference?"
+    answer: "Transformers.js v4 is stable and production-ready. LocalMode uses @huggingface/transformers ^4.2.0, and the 16 curated ONNX LLM models have been browser-tested. The same LanguageModel interface works across WebLLM, wllama, and Transformers.js."
+  - question: "What about wllama as a third LLM option?"
+    answer: "wllama (llama.cpp WASM) is the universal fallback that works in every browser without WebGPU. If you need Firefox support or maximum browser compatibility, wllama is essential. See the WebLLM vs wllama comparison for details."
 ---
 
 # WebLLM vs Transformers.js
@@ -59,20 +67,6 @@ import { streamText } from '@localmode/core';
 import { transformers } from '@localmode/transformers';
 const model = transformers.languageModel('onnx-community/Llama-3.2-1B-Instruct-ONNX');
 ```
-
-## Frequently Asked Questions
-
-### Should I use both in the same app?
-
-If your app needs LLMs and other ML tasks, using @localmode/transformers for embeddings/classification and @localmode/webllm for LLM generation is the recommended pattern. This gives you the best engine for each task type.
-
-### How stable is Transformers.js v4 for LLMs?
-
-Transformers.js v4 is stable and production-ready (LocalMode uses @huggingface/transformers ^4.2.0). The 16 curated ONNX LLM models have been browser-tested. The same LanguageModel interface works across WebLLM, wllama, and Transformers.js - switching providers requires changing only the model ID.
-
-### What about wllama as a third option?
-
-wllama (llama.cpp WASM) is the universal fallback - works in every browser without WebGPU. If you need Firefox support or maximum browser compatibility, wllama is essential. See the WebLLM vs wllama comparison for details.
 
 ## Making the Decision
 

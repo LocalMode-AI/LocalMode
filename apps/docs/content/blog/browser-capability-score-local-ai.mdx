@@ -3,6 +3,16 @@ title: "Is Your User's Browser Ready for Local AI? Building a Capability Score a
 description: "Not every browser has WebGPU, 16GB of RAM, and a discrete GPU. Learn how to detect device capabilities at runtime, compute an ML Readiness score from 0-100, check whether a specific model can run, get adaptive model recommendations, and build a 'Can I Run It?' UI -- all with @localmode/core's zero-dependency capability detection pipeline."
 author: LocalMode
 date: 2026-01-31
+dateModified: "2026-05-25"
+faq:
+  - question: "How does LocalMode detect whether a browser can run local AI models?"
+    answer: "The detectCapabilities() function probes 16 browser features including WebGPU adapter availability, WASM SIMD support, device memory, CPU core count, GPU renderer, and storage quota. It returns a DeviceCapabilities object in under 50ms that feeds into scoring, model recommendation, and batch size computation."
+  - question: "What is the ML Readiness score and how is it calculated?"
+    answer: "The ML Readiness score ranges 0-100 and is a weighted sum: WebAssembly (+20 points), WASM SIMD (+15), WASM threads (+10), WebGPU (+30), WebNN (+10), 4+ CPU cores (+10), and 4+ GB memory (+5). A modern Chrome desktop scores 90-100; a budget Android phone without WebGPU scores 35-45."
+  - question: "How does recommendModels() choose the best AI model for a specific device?"
+    answer: "It scores every model in a curated 35+ entry registry using three weighted factors: device fit (50%) checks storage/memory headroom and GPU match, quality tier (30%) reflects benchmark rankings, and speed tier (20%) gets a bonus on mobile devices. Models that exceed available storage or memory are automatically excluded."
+  - question: "What happens when a user's device cannot run the target AI model?"
+    answer: "checkModelSupport() returns the specific failure reason (insufficient memory, no WebGPU, storage full) along with fallback model suggestions. The UI can show a targeted message like 'This model requires more memory -- we recommend this smaller alternative' instead of a generic error."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

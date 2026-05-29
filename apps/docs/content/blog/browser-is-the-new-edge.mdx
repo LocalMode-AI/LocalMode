@@ -3,6 +3,16 @@ title: "The Browser Is the New Edge: Why On-Device AI Is Eating Cloud APIs"
 description: "Five converging trends - WebGPU reaching critical mass, model quality hitting 85-99% of cloud, quantization shrinking 4B-parameter models to 2.5GB, Transformers.js growing to 200+ architectures, and privacy regulation accelerating - are making the browser the default inference environment. Here is the data behind the shift."
 author: LocalMode
 date: 2026-01-28
+dateModified: "2026-05-29"
+faq:
+  - question: "What percentage of browsers support WebGPU for AI inference as of 2026?"
+    answer: "WebGPU reaches over 82% of global browser sessions as of mid-2026. Chrome (113+), Edge, and Safari (26+) all ship WebGPU enabled by default. Firefox brought WebGPU to Windows in Firefox 141 and macOS Apple Silicon in Firefox 145. The remaining browsers fall back to WebAssembly."
+  - question: "How close are local AI models to cloud API quality?"
+    answer: "For embeddings, local models achieve 99.8% of OpenAI quality (MTEB 62.17 vs 62.3). Zero-shot classification reaches 92-95% of GPT-5. For LLM knowledge tasks, Qwen3.5-4B in thinking mode scores 83.7% on MMLU-Redux compared to GPT-5's 92.5% on MMLU. Seven of 18 benchmarked categories show 90%+ of cloud quality."
+  - question: "How does quantization make large language models fit in browser memory?"
+    answer: "4-bit quantization (Q4_K_M) compresses a 4-billion parameter model from approximately 8 GB (FP16) to roughly 2.5 GB -- a 75% size reduction with about 92% quality retention. HuggingFace hosts over 165,000 GGUF-compatible models using this approach, up from about 200 three years ago."
+  - question: "What is the predicted trajectory for browser-based AI by 2027?"
+    answer: "WebGPU coverage is expected to exceed 90% of browser sessions. Sub-2B parameter models should match today's 4B models on key benchmarks. Browser-native model formats will likely emerge as first-class artifacts. The hybrid cloud-local pattern -- local for 90% of calls, cloud for frontier reasoning -- is expected to become the default architecture."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
@@ -38,7 +48,7 @@ We published [detailed benchmarks](/blog/open-source-models-85-99-percent) compa
 | Task Category | Local Quality vs. Cloud | Source Benchmark |
 |---|---|---|
 | Embeddings | **99.8%** of OpenAI | MTEB 62.17 vs 62.3 |
-| LLM knowledge (Qwen3.5-4B, thinking) | **~96%** of GPT-5 | MMLU-Redux 88.8% vs MMLU 92.5% |
+| LLM knowledge (Qwen3.5-4B, thinking) | **~90%** of GPT-5 | MMLU-Redux 83.7% vs MMLU 92.5% |
 | Zero-shot classification | **92-95%** of GPT-5 | MNLI 87.77% vs ~90-92% |
 | Named entity recognition | **93-96%** of GPT-5 | CoNLL-2003 F1 92.6% vs ~94-97% |
 | Extractive QA | **90-94%** of GPT-5 | SQuAD F1 87.1 vs ~91-95 |
@@ -46,7 +56,7 @@ We published [detailed benchmarks](/blog/open-source-models-85-99-percent) compa
 | Speech-to-text | **~84%** of Whisper API | WER 3.23% vs ~2.7% |
 | Translation | **~80-85%** of Google Translate | BLEU ~33.8 vs ~40-45 |
 
-*Note: MMLU and MMLU-Redux are related but distinct benchmarks. MMLU-Redux corrects labeling errors in the original MMLU. GPT-5 scores 92.5% on MMLU, making Qwen3.5-4B's 88.8% MMLU-Redux a strong but not quite matching result. The comparison shows local models closing in on frontier quality.
+*Note: MMLU and MMLU-Redux are related but distinct benchmarks. MMLU-Redux corrects labeling errors in the original MMLU. GPT-5 scores 92.5% on MMLU, making Qwen3.5-4B's 83.7% MMLU-Redux a solid but not yet matching result. The comparison shows local models closing in on frontier quality.
 
 Sources: Model cards on HuggingFace ([bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5), [bert-base-NER](https://huggingface.co/dslim/bert-base-NER), [Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B)), [OpenAI benchmarks](https://openai.com/index/introducing-gpt-5/), [Moonshine paper (arXiv:2410.15608)](https://arxiv.org/abs/2410.15608).
 
@@ -60,7 +70,7 @@ The practical implication: for 7 out of 18 model categories we benchmarked, loca
 
 A 4-billion parameter model at full FP16 precision requires approximately 8GB of memory. That rules out most consumer devices. At 4-bit quantization (Q4_K_M), the same model compresses to roughly 2.5GB - a [75% reduction in size](https://localaimaster.com/blog/quantization-explained) with [approximately 92% quality retention](https://local-ai-zone.github.io/guides/what-is-ai-quantization-q4-k-m-q8-gguf-guide-2025.html).
 
-This is not a niche optimization. It is the enabling technology for browser-based LLMs. Qwen3.5-4B - the model that scores 88.8% on MMLU-Redux - downloads as a ~2.5GB ONNX package and runs in a browser tab with WebGPU acceleration. A year ago, achieving that benchmark score required a 70B+ parameter model and a rack of A100s.
+This is not a niche optimization. It is the enabling technology for browser-based LLMs. Qwen3.5-4B - the model that scores 83.7% on MMLU-Redux - downloads as a ~2.5GB ONNX package and runs in a browser tab with WebGPU acceleration. A year ago, achieving that benchmark score required a 70B+ parameter model and a rack of A100s.
 
 The GGUF format has become the de facto standard for local model distribution, supporting 40+ architectures. The ecosystem has responded: HuggingFace now hosts over [165,000 GGUF-compatible models](https://huggingface.co/models?library=gguf), up from approximately 200 three years ago. That is an 800x increase in the model catalog available for local inference.
 

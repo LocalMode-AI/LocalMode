@@ -3,6 +3,14 @@ title: "IndexedDB Storage vs Dexie.js"
 description: "Comparing LocalMode's built-in IndexedDB storage with the Dexie.js adapter for VectorDB persistence."
 author: "LocalMode"
 date: "2026-04-07"
+dateModified: "2026-05-28"
+faq:
+  - question: "Can I switch between IndexedDBStorage and DexieStorage without losing data?"
+    answer: "No, they use different IndexedDB database structures, so switching requires re-indexing your vectors. However, since vector data is generated from source documents, re-indexing is typically straightforward using the ingest() function."
+  - question: "What about the idb and localForage storage adapters?"
+    answer: "LocalMode also offers @localmode/idb (~3KB, minimal wrapper) and @localmode/localforage (~10KB, auto-fallback to localStorage). Use idb for minimal overhead, or localForage for maximum browser compatibility including environments where IndexedDB may be blocked."
+  - question: "Does storage choice affect VectorDB performance?"
+    answer: "Minimally. The HNSW index and vector operations are the performance bottleneck, not the storage layer. Storage read/write latency is negligible compared to HNSW graph traversal and model inference, so choose based on features rather than performance."
 ---
 
 # IndexedDB Storage vs Dexie.js
@@ -43,20 +51,6 @@ When evaluating IndexedDBStorage (built-in) against DexieStorage (@localmode/dex
 - **Offline requirements** - Applications that must work without internet need local inference. Cloud-dependent solutions fail when connectivity drops.
 
 
-
-## Frequently Asked Questions
-
-### Can I switch between them without losing data?
-
-No - they use different IndexedDB database structures. Switching requires re-indexing your vectors. However, the vector data itself is generated from your source documents, so re-indexing is typically straightforward with the ingest() function.
-
-### What about idb and localForage adapters?
-
-LocalMode also offers @localmode/idb (~3KB, minimal wrapper) and @localmode/localforage (~10KB, auto-fallback to WebSQL/localStorage). Use idb for minimal overhead, localforage for maximum browser compatibility including very old browsers.
-
-### Does storage choice affect VectorDB performance?
-
-Minimally. The HNSW index and vector operations are the bottleneck, not the storage layer. Storage read/write latency is negligible compared to HNSW graph traversal and model inference. Choose based on features, not performance.
 
 ## Making the Decision
 

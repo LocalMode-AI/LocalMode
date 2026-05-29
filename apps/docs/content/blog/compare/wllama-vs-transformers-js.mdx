@@ -3,6 +3,14 @@ title: "wllama vs Transformers.js for LLMs"
 description: "Comparing GGUF/WASM inference via wllama with ONNX inference via Transformers.js v4 for browser text generation."
 author: "LocalMode"
 date: "2026-04-16"
+dateModified: "2026-05-28"
+faq:
+  - question: "Which provider is better for Firefox users?"
+    answer: "wllama has the edge. It was designed for WASM from the start and runs llama.cpp, one of the most optimized WASM inference engines. It performs consistently across all Firefox versions, while Firefox's WebGPU support is newer and more limited."
+  - question: "Can I use a custom fine-tuned model with wllama or Transformers.js?"
+    answer: "With wllama, yes -- convert your model to GGUF format and provide the URL. With Transformers.js v4, you need to export to ONNX format, which is more complex and not supported for all architectures."
+  - question: "Do both wllama and Transformers.js support streaming?"
+    answer: "Yes. Both implement the same LanguageModel interface with streamText() support. Token-by-token streaming works identically with either provider."
 ---
 
 # wllama vs Transformers.js for LLMs
@@ -61,20 +69,6 @@ import { transformers } from '@localmode/transformers';
 // Zero extra bundle if already using transformers
 const model = transformers.languageModel('onnx-community/Qwen3-0.6B-ONNX');
 ```
-
-## Frequently Asked Questions
-
-### Which is better for Firefox users?
-
-wllama has the edge here. Firefox's WebGPU support (added in Firefox 141+ on Windows, 147+ on macOS Apple Silicon) is newer and more limited than Chrome/Edge, and is not yet available on Linux or Android. wllama was designed for WASM from the start and runs llama.cpp, one of the most optimized WASM inference engines available, so it performs consistently across all Firefox versions. wllama v3's optional WebGPU acceleration (`useWebGPU`, `nGpuLayers`) is a bonus for Chrome/Edge but never required.
-
-### Can I use a custom fine-tuned model?
-
-With wllama, yes - convert your model to GGUF format and provide the URL. With Transformers.js v4, you'd need to export to ONNX format, which is more complex and not supported for all architectures.
-
-### Do both support streaming?
-
-Yes. Both implement the same LanguageModel interface with streamText() support. Token-by-token streaming works identically with either provider.
 
 ## Making the Decision
 

@@ -3,6 +3,16 @@ title: "The 34 AI Features in Our Open-Source Showcase - All Running in Your Bro
 description: "A visual tour of every demo app at localmode.ai: LLM chat with four inference backends, RAG pipelines, real-time object detection, voice transcription, GGUF model inspection, agentic reasoning, and 26 more - all running locally with zero API keys."
 author: LocalMode
 date: 2026-01-29
+dateModified: "2026-05-28"
+faq:
+  - question: "How many AI demo apps are available at localmode.ai and what do they cover?"
+    answer: "There are 34 fully functional AI applications covering LLM chat with four inference backends, RAG pipelines, real-time object detection, voice transcription, GGUF model inspection, agentic reasoning, privacy tools, and more. All run entirely in the browser with zero API keys."
+  - question: "What inference backends does the LocalMode showcase support?"
+    answer: "Four backends are available: WebLLM (WebGPU-accelerated via MLC), Transformers.js (ONNX via WebGPU/WASM), wllama (GGUF models via llama.cpp WASM with access to 180,000+ models), and LiteRT (Google's on-device engine). The LLM chat app surfaces 76 models across all four backends."
+  - question: "What is the range of model sizes used in the showcase apps?"
+    answer: "Models range from 0 MB (Chrome AI, device detection tools) to 5.41 GB (8B-parameter LLMs). The smallest ML model is MobileBERT MNLI at 25 MB for email classification. Every model downloads once from HuggingFace, caches in IndexedDB, and loads from disk on subsequent visits."
+  - question: "Can I run the LocalMode showcase locally on my own machine?"
+    answer: "Yes. Clone the open-source repo, run pnpm install, then pnpm dev --filter showcase-nextjs. All 34 apps are available at localhost:3000. Each app is a self-contained reference implementation in its own directory under apps/showcase-nextjs/src/app/(apps)/."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

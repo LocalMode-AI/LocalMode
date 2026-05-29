@@ -3,6 +3,14 @@ title: "LocalMode vs Google Cloud AI"
 description: "Browser inference vs Google Cloud AI Platform - comparing cost, privacy, and capability for vision, NLP, and speech tasks."
 author: "LocalMode"
 date: "2026-03-27"
+dateModified: "2026-05-25"
+faq:
+  - question: "Is LocalMode accuracy good enough to replace Google Cloud Vision?"
+    answer: "For the 80 COCO object categories and 1000 ImageNet classes, quality is comparable. For specialized domains like medical imaging, satellite imagery, or handwriting, Google Cloud has significantly more training data and higher accuracy."
+  - question: "What about Google Gemini Nano in Chrome?"
+    answer: "LocalMode's @localmode/chrome-ai package wraps Chrome's built-in Gemini Nano for summarization, translation, and text generation with zero download. It requires Chrome 138+ (Prompt API stable since Chrome 148), 22 GB free disk space, and 4 GB+ GPU VRAM or 16 GB+ RAM."
+  - question: "How much does Google Cloud AI cost for a typical document processing app?"
+    answer: "A document processing app handling 10,000 pages/month costs roughly $29/month with Google Cloud (OCR + Vision + Translation). The same app with LocalMode costs $0/month, since model downloads are one-time and free."
 ---
 
 # LocalMode vs Google Cloud AI
@@ -45,20 +53,6 @@ When evaluating LocalMode against Google Cloud AI, consider your primary constra
 - **Offline requirements** - Applications that must work without internet need local inference. Cloud-dependent solutions fail when connectivity drops.
 
 
-
-## Frequently Asked Questions
-
-### Is LocalMode accuracy good enough to replace Google Cloud Vision?
-
-For the 80 COCO object categories and 1000 ImageNet classes - yes, quality is comparable. For specialized domains (medical imaging, satellite imagery, handwriting) Google Cloud has significantly more training data and higher accuracy.
-
-### What about Google Gemini Nano in Chrome?
-
-LocalMode's @localmode/chrome-ai package wraps Chrome's built-in Gemini Nano for summarization, translation, and text generation. This gives you zero-download Google AI quality in Chrome 128+ (Prompt API stable since Chrome 148), with automatic fallback to Transformers.js models in other browsers. Note: requires 22 GB free disk space and 4 GB+ GPU VRAM or 16 GB+ RAM; not yet supported on Chrome for Android or iOS.
-
-### How much does Google Cloud AI cost for a typical app?
-
-A document processing app handling 10,000 pages/month: Document AI OCR ($13.50 for 9,000 billable pages after 1,000 free) + Cloud Vision Label Detection ($13.50 for 9,000 billable images) + Translation API (~$2 for typical character volume) = ~$29/month. The same app with LocalMode: $0/month. The breakeven is immediate - model downloads are one-time and cost nothing. (Pricing based on Google Cloud public rates as of May 2026.)
 
 ## Making the Decision
 

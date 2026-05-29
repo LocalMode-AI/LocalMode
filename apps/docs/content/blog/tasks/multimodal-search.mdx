@@ -3,6 +3,16 @@ title: "Multimodal Embeddings (CLIP/SigLIP) in the Browser"
 description: "Embed text and images into a shared vector space - search photos with words, find similar images, cross-modal retrieval."
 author: "LocalMode"
 date: "2026-04-18"
+dateModified: "2026-05-25"
+faq:
+  - question: "What is the best model for multimodal search in the browser?"
+    answer: "Xenova/clip-vit-base-patch32 (~340MB, 512 dimensions) is recommended for most applications. For higher quality, Xenova/siglip-base-patch16-224 (~400MB, 768 dimensions) offers improved accuracy at a slightly larger download."
+  - question: "How do CLIP and SigLIP multimodal embeddings work?"
+    answer: "They map both text and images into the same vector space so matching pairs are close together. You can search an image collection using natural language queries like 'sunset over mountains' or find images visually similar to a reference image."
+  - question: "Does browser-based multimodal search work offline?"
+    answer: "Yes. After the initial model download (340-400MB depending on the model), multimodal embedding and search works completely offline. All images are processed on-device with no cloud upload required."
+  - question: "What are practical applications of multimodal embeddings in the browser?"
+    answer: "Common uses include photo search with natural language queries, e-commerce visual similarity search, content recommendation across media types, image-text matching for accessibility, and reverse image search."
 ---
 
 # Multimodal Embeddings (CLIP/SigLIP) in the Browser

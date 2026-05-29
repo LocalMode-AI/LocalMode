@@ -3,6 +3,16 @@ title: "Google's LiteRT-LM in the Browser: The New @localmode/litert Provider"
 description: "LocalMode now ships @localmode/litert -- a provider for Google's LiteRT-LM on-device inference engine. It runs .litertlm models on a WebGPU backend with an automatic CPU WASM fallback, behind the same LanguageModel interface as every other provider. Here is how it works and what is in the catalog."
 author: LocalMode
 date: "2026-05-21"
+dateModified: "2026-05-29"
+faq:
+  - question: "What is LiteRT-LM and how does it run in the browser?"
+    answer: "LiteRT-LM is Google's on-device LLM inference engine, the same technology behind Gemini Nano in Chrome and Pixel devices. It compiles to WebAssembly and runs .litertlm model files on a WebGPU backend with a CPU fallback, accessible in the browser via the @litert-lm/core npm package."
+  - question: "What models are available in the @localmode/litert catalog?"
+    answer: "The catalog ships three models: Gemma 4 E2B (2.0 GB, WebGPU only), Gemma 4 E4B (3.0 GB, WebGPU only), and Qwen3 0.6B (614 MB, WebGPU or CPU). All three were verified end-to-end in a real Chrome session."
+  - question: "Does @localmode/litert support multimodal input like images or audio?"
+    answer: "Not yet. While the Gemma 4 .litertlm files include vision and audio encoders, the LiteRT-LM JavaScript API (v0.12.1) does not expose those modalities. The provider is text-only for now. For image input in the browser, @localmode/transformers with Qwen3.5 vision models is the current option."
+  - question: "Can I switch between LiteRT-LM and other LocalMode LLM providers?"
+    answer: "Yes. All four providers -- WebLLM, Transformers.js, wllama, and LiteRT-LM -- implement the same LanguageModel interface. Swapping providers requires changing only the model import; your streamText() and generateText() calls remain identical."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

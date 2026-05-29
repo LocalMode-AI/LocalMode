@@ -3,6 +3,16 @@ title: "OPUS-MT Translation Models in the Browser"
 description: "Helsinki-NLP's OPUS-MT models - specialized machine translation models for English↔German, English↔French, and English↔Spanish."
 author: "LocalMode"
 date: "2026-05-12"
+dateModified: "2026-05-25"
+faq:
+  - question: "What language pairs does OPUS-MT support in LocalMode?"
+    answer: "LocalMode curates six directional models: English to/from German, French, and Spanish. Additional pairs from the OPUS-MT collection (1,000+ language pair models) can be loaded by specifying their HuggingFace model ID directly."
+  - question: "How large is an OPUS-MT translation model?"
+    answer: "Each OPUS-MT model is approximately 100MB (combined quantized ONNX encoder and decoder). They are compact enough to bundle multiple language pairs in a single application for instant offline translation."
+  - question: "How does OPUS-MT compare to Chrome AI for translation?"
+    answer: "OPUS-MT models are trained exclusively on parallel translation corpora, producing more accurate and idiomatic translations for domain-specific text. Chrome AI translation requires no download but is limited to Chrome 138+ desktop. You can combine both in a hybrid system."
+  - question: "Does OPUS-MT require WebGPU?"
+    answer: "No. OPUS-MT models run on WASM via Transformers.js and work in all modern browsers. WebGPU support for seq2seq translation models is not yet stable, so WASM is the standard runtime."
 ---
 
 # OPUS-MT Translation Models in the Browser

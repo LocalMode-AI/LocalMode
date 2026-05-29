@@ -3,6 +3,14 @@ title: "LocalMode vs Ollama"
 description: "Browser AI vs Desktop AI - comparing LocalMode's in-browser inference with Ollama's native desktop approach for local model deployment."
 author: "LocalMode"
 date: "2026-04-27"
+dateModified: "2026-05-26"
+faq:
+  - question: "Can I use the same models in both LocalMode and Ollama?"
+    answer: "Many models overlap. Llama 3.2, Qwen2.5, Phi-3.5, Mistral-7B, and others are available in both LocalMode (via WebLLM or wllama) and Ollama. The GGUF format used by wllama is the same format Ollama uses internally, so model quality is identical for matching quantization levels."
+  - question: "Is Ollama faster than LocalMode for LLM inference?"
+    answer: "Generally yes, with the gap varying by hardware. Ollama uses native Metal or CUDA acceleration without browser overhead, reaching 40-100 tok/s on mid-to-high-end GPUs. LocalMode's WebGPU path reaches 30-90 tok/s. For non-LLM tasks like embeddings and classification, the speed difference is negligible."
+  - question: "Can my web app fall back from LocalMode to Ollama?"
+    answer: "Technically yes, but it introduces CORS issues and requires users to install and run Ollama. It is generally better to wrap model loading in a try/catch and chain LocalMode providers (WebLLM then wllama then a smaller model) for a consistent user experience."
 ---
 
 # LocalMode vs Ollama
@@ -68,20 +76,6 @@ const response = await fetch('http://localhost:11434/api/generate', {
   body: JSON.stringify({ model: 'llama3.2:3b', prompt: 'Hello!' }),
 });
 ```
-
-## Frequently Asked Questions
-
-### Can I use the same models in both?
-
-Many models overlap. Llama 3.2, Qwen2.5, Phi-3.5, Mistral-7B, and others are available in both LocalMode (via WebLLM or wllama) and Ollama. The GGUF format used by wllama is the same format Ollama uses internally, so model quality is identical for matching quantization levels (e.g., Q4_K_M).
-
-### Is Ollama faster than LocalMode?
-
-For LLM inference, yes - typically faster, with the gap varying by hardware and model size. Ollama uses native Metal (macOS) or CUDA (NVIDIA) acceleration without browser overhead, reaching 40-100 tok/s on mid-to-high-end GPUs for 7-8B models. LocalMode's WebGPU path reaches 30-90 tok/s on the same GPU class. For embeddings, classification, and other non-LLM tasks, LocalMode's Transformers.js is highly optimized and the speed difference is negligible.
-
-### Can my web app fall back from LocalMode to Ollama?
-
-Technically yes - if users have Ollama running, your web app could call localhost:11434. But this introduces CORS issues, requires users to install and run Ollama, and creates an inconsistent user experience. It's generally better to wrap model loading in a try/catch and chain LocalMode providers (WebLLM → wllama → a smaller model).
 
 ## Making the Decision
 

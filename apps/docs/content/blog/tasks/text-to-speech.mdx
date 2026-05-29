@@ -3,6 +3,16 @@ title: "Text-to-Speech in the Browser"
 description: "Generate natural-sounding speech from text using Kokoro - phonemizer-backed synthesis with 29 English voices, speed control, and streaming playback in the browser."
 author: "LocalMode"
 date: "2026-04-20"
+dateModified: "2026-05-26"
+faq:
+  - question: "What is the best model for text-to-speech in the browser?"
+    answer: "onnx-community/Kokoro-82M-v1.0-ONNX (86MB) is recommended. It offers phonemizer-backed synthesis for accurate pronunciation, 29 English voices (American and British), speed control from 0.5x to 2.0x, and streaming playback support."
+  - question: "Does browser-based text-to-speech work offline?"
+    answer: "Yes. After the initial 86MB model download, text-to-speech works completely offline. No server, no API key, and text data never leaves the device. Audio is generated at 24kHz sample rate."
+  - question: "How many voices are available for browser text-to-speech?"
+    answer: "Kokoro provides 29 English voices covering both American English and British English accents. Speed can be adjusted from 0.5x to 2.0x, and streaming playback allows audio to begin playing before the full utterance is synthesized."
+  - question: "How does browser TTS cost compare to cloud services?"
+    answer: "Google Cloud TTS costs $4-160 per million characters, Amazon Polly costs $4-100 per million characters, and ElevenLabs plans range from $6-990 per month. LocalMode with Kokoro costs $0 after the 86MB download with unlimited characters."
 ---
 
 # Text-to-Speech in the Browser

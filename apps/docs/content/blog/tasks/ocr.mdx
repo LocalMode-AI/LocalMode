@@ -3,6 +3,16 @@ title: "Optical Character Recognition (OCR) in the Browser"
 description: "Extract text from images using TrOCR, GLM-OCR, and LightOnOCR-2 - process receipts, documents, tables, and formulas in the browser."
 author: "LocalMode"
 date: "2026-04-16"
+dateModified: "2026-05-28"
+faq:
+  - question: "What is the best model for OCR in the browser?"
+    answer: "For single-line text, Xenova/trocr-small-printed (~120MB) is recommended. For full-page documents with tables and formulas, use onnx-community/GLM-OCR-ONNX (~652MB) or onnx-community/LightOnOCR-2-1B-ONNX (~700MB, supports 11 languages)."
+  - question: "Does browser-based OCR work offline?"
+    answer: "Yes. After the initial model download (120-700MB depending on model), OCR works completely offline. No server, no API key, and documents never leave the device."
+  - question: "How does browser OCR cost compare to cloud OCR services?"
+    answer: "Google Cloud Vision OCR, AWS Textract, and Azure Document Intelligence each cost around $1.50 per 1,000 pages. LocalMode OCR costs $0 after the one-time model download, with documents never leaving the device."
+  - question: "Can browser OCR handle handwritten text and tables?"
+    answer: "Yes. Xenova/trocr-small-handwritten handles handwritten text at the line level. For tables, formulas, and structured documents, the document-level models GLM-OCR and LightOnOCR-2 can recognize complex layouts."
 ---
 
 # Optical Character Recognition (OCR) in the Browser

@@ -3,6 +3,16 @@ title: "DINOv2 Image Features Models in the Browser"
 description: "Meta's self-supervised image feature extraction models - powerful visual representations without task-specific training."
 author: "LocalMode"
 date: "2026-04-09"
+dateModified: "2026-05-25"
+faq:
+  - question: "What is the difference between DINOv2 and CLIP for image search?"
+    answer: "DINOv2 features are purely visual, capturing what an image looks like without anchoring to text descriptions. This makes them better for finding visually similar images regardless of semantic content, such as matching lighting, texture patterns, or visual style. CLIP maps images and text into a shared space for cross-modal search."
+  - question: "What is the smallest DINOv2 model available?"
+    answer: "The DINOv3 ViT-S/16 variant is approximately 86MB (FP32) with 21M parameters and produces 384-dimensional feature vectors. Quantized versions are substantially smaller, ranging from 21-91MB."
+  - question: "Does DINOv2 require WebGPU to run in the browser?"
+    answer: "No. Both DINOv2 variants run through Transformers.js on WASM and work in all modern browsers, including Firefox and Safari, without requiring WebGPU."
+  - question: "What practical applications can I build with DINOv2 in the browser?"
+    answer: "DINOv2 enables visual duplicate detection, style-based product recommendations, image clustering for photo organization, and quality assessment. Combined with LocalMode's VectorDB, you can build a complete visual search engine running entirely in the browser."
 ---
 
 # DINOv2 Image Features Models in the Browser

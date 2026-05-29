@@ -3,6 +3,18 @@ title: "Building Offline-First AI Apps With Progressive Web Apps"
 description: "A complete architecture guide for shipping AI-powered PWAs that work on planes, in the field, and on unreliable networks. Covers model pre-caching, network monitoring, IndexedDB persistence, service worker configuration, and storage quota management -- all with LocalMode."
 author: LocalMode
 date: 2026-02-28
+dateModified: "2026-05-27"
+faq:
+  - question: "Can AI-powered web apps work completely offline?"
+    answer: "Yes. With Progressive Web Apps and LocalMode, AI models run in WebAssembly or WebGPU, vectors persist in IndexedDB, and a service worker serves the app shell from cache. After the initial model download, the entire application works identically with no network connection."
+  - question: "How much storage do offline AI models need in the browser?"
+    answer: "A full-featured offline AI app with embeddings (33MB), speech-to-text (63MB), summarization (~300MB), and sentiment analysis (~67MB) totals about 463MB. Chrome allows a single origin to use up to 60% of total disk space. Adding an LLM requires 1-4GB more."
+  - question: "How do you prevent browsers from evicting cached AI models?"
+    answer: "Call requestPersistence() from the Storage API early in the app lifecycle. Without it, browsers may evict IndexedDB data under storage pressure. Safari is particularly aggressive, deleting script-created data for origins without user interaction in the last seven days."
+  - question: "Should the service worker cache AI model downloads?"
+    answer: "No. Transformers.js manages its own model cache via the Cache API, and createModelLoader() uses IndexedDB with 16MB chunks. The service worker should explicitly skip requests to HuggingFace CDN and model URLs, as intercepting them would break progress tracking and resume behavior."
+  - question: "How does network-aware model selection work in offline-first AI apps?"
+    answer: "LocalMode's getConnectionRecommendation() returns structured advice based on connection quality. On 4G or better, the app can download full-size models. On slow connections, it falls back to smaller alternatives. The onNetworkChange() callback enables opportunistic downloading when connectivity improves."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

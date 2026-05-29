@@ -3,6 +3,16 @@ title: "Safari on iOS / iPadOS"
 description: "Running LocalMode on iPhones and iPads - WASM works, WebGPU enabled by default from iOS 26, tight memory limits, and Private Browsing caveats."
 author: "LocalMode"
 date: "2026-05-17"
+dateModified: "2026-05-29"
+faq:
+  - question: "Does Safari on iOS support WebGPU for AI inference?"
+    answer: "WebGPU is enabled by default from iOS 26 onward with no documented chip restriction. On iOS 17.4 through 18.7, WebGPU was present but disabled by default. For earlier iOS versions or when WebGPU is unavailable, LocalMode falls back to WASM-based inference via wllama or Transformers.js."
+  - question: "What is the maximum model size that works on iPhone?"
+    answer: "iOS Safari typically limits tab memory to 1-1.5GB. Models larger than about 800MB frequently cause tab crashes. Recommended models for iOS include SmolLM2-135M (70MB) and Qwen2.5-0.5B (386MB for 4GB+ devices). Use detectCapabilities() to select an appropriate model for the device."
+  - question: "Does LocalMode work in Safari Private Browsing on iOS?"
+    answer: "AI inference works, but IndexedDB is ephemeral in Safari Private Browsing on iOS — IndexedDB works but uses in-memory storage that is cleared when the session ends. Models must be re-downloaded each session. LocalMode detects this with a probe write and falls back to MemoryStorage. For offline use, pre-cache models in a normal browsing session."
+  - question: "What is the minimum iOS version needed for LocalMode?"
+    answer: "WebAssembly works from iOS 11+, which covers basic inference. WASM SIMD requires iOS 16.4+. Module workers require iOS Safari 15+. Web Locks and BroadcastChannel require iOS 15.4+. WebGPU is only available by default from iOS 26+."
 ---
 
 # Safari on iOS / iPadOS
@@ -19,7 +29,7 @@ The following table summarizes which web platform features are available on Safa
 | --- | --- | --- |
 | **WebGPU** | iOS 26+ (enabled by default) | WebGPU present but disabled by default in iOS 17.4–18.7. Enabled by default from iOS 26. No chip restriction documented. |
 | **WebAssembly** | Yes (iOS 11+) | Full WASM support. SIMD from iOS 16.4. Primary inference backend on iOS. |
-| **IndexedDB** | Yes (normal mode) | Works in normal Safari. BLOCKED in Private Browsing. iOS has stricter storage quotas (~1GB). |
+| **IndexedDB** | Yes (normal mode) | Works in normal Safari. Ephemeral in Private Browsing (in-memory, cleared when session ends). iOS has stricter storage quotas (~1GB). |
 | **Web Workers** | Partial | Module workers (ES modules in workers) from iOS Safari 15. Classic workers supported earlier. |
 | **Memory Limit** | Constrained | iOS Safari typically limits tab memory to 1-1.5GB. Models larger than ~800MB may cause tab crashes. |
 | **Web Locks** | Yes (iOS 15.4+) | Full support on modern iOS. |

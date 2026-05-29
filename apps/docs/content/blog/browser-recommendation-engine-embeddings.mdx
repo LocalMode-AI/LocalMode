@@ -3,6 +3,16 @@ title: "Building a Recommendation Engine in the Browser With Embeddings and Cosi
 description: "Build a privacy-first recommendation engine that runs entirely in the browser. Embed your item catalog, compute user preference vectors, and serve personalized 'More Like This,' 'For You,' and 'Trending in Your Taste' recommendations - no servers, no tracking pixels, no data leaving the device."
 author: LocalMode
 date: 2026-02-02
+dateModified: "2026-05-27"
+faq:
+  - question: "How does a browser-based recommendation engine work without a server?"
+    answer: "Items are embedded into 384-dimensional vectors using a 33 MB model (BGE-small-en-v1.5). User preferences are computed by averaging the vectors of liked items into a preference centroid. Recommendations are found via nearest-neighbor search against the catalog using cosine similarity, with all data staying in IndexedDB on the user's device."
+  - question: "What recommendation modes are supported with browser-based embeddings?"
+    answer: "Three modes: 'More Like This' finds items similar to a specific product using its stored vector, 'For You' builds a user preference vector by averaging liked item embeddings, and 'Trending in Your Taste' combines the preference vector with metadata filters like category, price range, and minimum rating."
+  - question: "How does a browser recommendation engine handle the cold start problem?"
+    answer: "Three strategies work locally: search-query seeding embeds the user's first search as a temporary preference vector, category-based defaults use a hand-written seed description for the landing context, and popularity fallback sorts by stored metadata like view count or rating when no personalization signal exists."
+  - question: "What are the trade-offs of browser-based recommendations versus cloud services?"
+    answer: "You lose collaborative filtering ('users who bought X also bought Y') since that requires cross-user data on a server. You gain complete privacy (no behavioral data collection), zero operational cost, offline capability, and 1-5ms latency versus 50-200ms for cloud services. For content platforms and e-commerce catalogs, the trade-off is generally favorable."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

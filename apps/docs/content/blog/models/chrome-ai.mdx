@@ -3,6 +3,18 @@ title: "Chrome Built-in AI Models in the Browser"
 description: "Chrome's Gemini Nano - zero-download AI for summarization, translation, and text generation, built directly into the browser."
 author: "LocalMode"
 date: "2026-04-28"
+dateModified: "2026-05-26"
+faq:
+  - question: "Does Chrome Built-in AI require any model download from my application?"
+    answer: "No. Chrome Built-in AI uses Gemini Nano which ships with Chrome itself. Your application downloads 0 MB. The initial Gemini Nano download (~1.5 GB) is handled by Chrome in the background, not by your app."
+  - question: "Which browsers support Chrome Built-in AI?"
+    answer: "Chrome Built-in AI requires Chrome 138+ or Edge 138+ on desktop only. It does not work in Firefox, Safari, or mobile Chrome. The Prompt API for text generation requires Chrome 148+ for web pages."
+  - question: "What tasks does Chrome Built-in AI support?"
+    answer: "Chrome Built-in AI supports three tasks: summarization (Chrome 138+), translation (Chrome 138+), and text generation via the Prompt API (Chrome 148+ for web pages). All three use the same LocalMode interfaces as other providers."
+  - question: "What are the hardware requirements for Chrome Built-in AI?"
+    answer: "You need at least 22 GB free disk space, plus either more than 4 GB GPU VRAM or 16 GB RAM with 4+ CPU cores. Mobile devices and Incognito mode are not supported."
+  - question: "Can I fall back to another provider if Chrome AI is unavailable?"
+    answer: "Yes. A simple try/catch pattern lets you attempt Chrome AI first for instant zero-download inference, then fall back to @localmode/transformers models for broader browser support if Chrome AI is not available."
 ---
 
 # Chrome Built-in AI Models in the Browser

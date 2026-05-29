@@ -3,6 +3,18 @@ title: "WebAssembly Browser Support"
 description: "Universal WASM support across all modern browsers - the foundation for Transformers.js and wllama inference."
 author: "LocalMode"
 date: "2026-04-07"
+dateModified: "2026-05-26"
+faq:
+  - question: "Which browsers support WebAssembly for LocalMode?"
+    answer: "All modern browsers support WebAssembly, covering about 95.5% of web traffic. Chrome 57+, Firefox 52+, Safari 11+, and Edge 16+ all have full WASM support. WASM is the universal inference backend for LocalMode's Transformers.js and wllama providers."
+  - question: "What is WASM SIMD and do I need it?"
+    answer: "WASM SIMD enables optimized vector operations that improve inference performance. It is supported in Chrome 91+, Firefox 89+, and Safari 16.4+. Without SIMD, inference still works but runs roughly 2-4x slower for vector-heavy operations. Most modern browsers already support it."
+  - question: "What is the memory limit for WebAssembly models?"
+    answer: "Standard 32-bit WebAssembly has a maximum addressable memory of 4 GiB (65,536 pages of 64 KiB each). The Memory64 proposal lifts this cap and is supported in Chrome 133+, Firefox 134+, and Edge 133+, but not yet in Safari. Most LocalMode models fit well within the 4 GiB limit."
+  - question: "Can ad blockers interfere with WASM model loading?"
+    answer: "Yes. Some ad blockers may interfere with WASM module loading from CDNs by blocking the requests. If users report model loading failures, check whether an ad blocker is active and advise adding an exception for the model CDN domain."
+  - question: "Does WebAssembly work without WebGPU?"
+    answer: "Yes. WebAssembly and WebGPU are independent features. WASM is the universal fallback for all LocalMode inference. Transformers.js and wllama both use WASM and work on any browser that supports it. WebGPU is only needed for GPU-accelerated LLM inference via @localmode/webllm."
 ---
 
 # WebAssembly Browser Support

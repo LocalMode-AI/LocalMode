@@ -3,6 +3,16 @@ title: "GGUF Models in the Browser: 160,000+ Models Via llama.cpp WASM"
 description: "Run any of 160,000+ GGUF models from HuggingFace directly in the browser using llama.cpp compiled to WebAssembly. No WebGPU required. Inspect model metadata before downloading, check device compatibility, and stream text generation -- all with the same LanguageModel interface you already know."
 author: LocalMode
 date: 2026-03-17
+dateModified: "2026-05-28"
+faq:
+  - question: "What is GGUF and how many GGUF models are available for browser inference?"
+    answer: "GGUF (GGML Universal File) is a self-contained format for quantized LLMs created by the developer of llama.cpp. A single GGUF file bundles model weights, architecture metadata, and tokenizer configuration. As of May 2026, HuggingFace hosts over 178,000 GGUF models, all runnable in the browser via @localmode/wllama."
+  - question: "Why does @localmode/wllama use WebAssembly instead of WebGPU?"
+    answer: "WebAssembly has been supported in every major browser since 2017 (Chrome 57+, Firefox 52+, Safari 11+), while WebGPU is still not universally available (82% coverage in mid-2026). WASM runs at roughly 40-50% of WebGPU speed on CPU but works everywhere. Optional WebGPU acceleration is available when the browser supports it."
+  - question: "Can I inspect a GGUF model's metadata without downloading the full file?"
+    answer: "Yes. The parseGGUFMetadata() function reads just the file header (roughly 4 KB) via an HTTP Range request. It returns architecture, context length, quantization type, parameter count, vocabulary size, layer count, and model name -- letting you check device compatibility before committing to a multi-gigabyte download."
+  - question: "How does @localmode/wllama compare to @localmode/webllm?"
+    answer: "Wllama supports 30 curated plus 160,000+ GGUF models with universal browser support, 3 embedding models, tool calling, and vision via mmprojUrl. WebLLM offers 32 curated MLC-compiled models requiring WebGPU with native GPU speed. Wllama trades some speed for vastly broader model selection and compatibility."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

@@ -3,6 +3,18 @@ title: "Understanding Vector Databases: Build One From Scratch, Then Use LocalMo
 description: "Vector databases power every semantic search and RAG pipeline, but how do they actually work? This post walks you through building brute-force vector search in 20 lines of JavaScript, explains why it breaks at scale, introduces the HNSW algorithm that fixes it, and then shows how LocalMode's createVectorDB() gives you all of it for free - with persistence, metadata filters, and quantization."
 author: LocalMode
 date: 2026-02-26
+dateModified: "2026-05-29"
+faq:
+  - question: "What is a vector database and why do you need one?"
+    answer: "A vector database stores high-dimensional embedding vectors and supports nearest-neighbor search by meaning rather than keywords. Traditional databases cannot answer 'find the 10 most conceptually similar items' because SQL has no ORDER BY meaning. Vector databases use algorithms like HNSW to find similar vectors efficiently."
+  - question: "How does cosine similarity work for comparing embeddings?"
+    answer: "Cosine similarity measures the angle between two vectors, returning 1 for identical direction, 0 for orthogonal (unrelated), and -1 for opposite. Texts with similar meaning produce high scores. It is the standard distance metric for semantic search and recommendation systems."
+  - question: "Why does brute-force vector search fail at scale?"
+    answer: "Brute-force search compares a query vector against every vector in the collection. For 50,000 documents with 384-dimensional embeddings, that is 19.2 million floating-point multiplications per query. At 100,000+ documents, latency becomes unacceptable for real-time applications."
+  - question: "What is HNSW and how does LocalMode use it?"
+    answer: "HNSW (Hierarchical Navigable Small World) is a graph-based approximate nearest-neighbor algorithm that achieves sub-millisecond search at 95-99% recall. LocalMode's createVectorDB() uses HNSW with IndexedDB persistence, metadata filters, and optional SQ8 quantization for 4x storage compression."
+  - question: "Can LocalMode's vector database run entirely in the browser?"
+    answer: "Yes. createVectorDB() creates a complete vector database in the browser with HNSW indexing, IndexedDB persistence across sessions, metadata filtering, and SQ8 compression. No external database service is needed -- vectors persist locally and search works offline."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';

@@ -3,6 +3,16 @@ title: "SmolLM2 Models in the Browser"
 description: "HuggingFace's SmolLM2 family - ultra-compact models from 135M to 1.7B parameters, designed for instant loading and low-memory devices."
 author: "LocalMode"
 date: "2026-04-14"
+dateModified: "2026-05-28"
+faq:
+  - question: "What is the smallest LLM available in LocalMode?"
+    answer: "SmolLM2-135M at 70MB (wllama) or 78MB (WebLLM) is the smallest LLM. It loads in under 2 seconds and handles basic text completion, simple Q&A, and template-based generation."
+  - question: "Does SmolLM2 work on mobile browsers?"
+    answer: "Yes. SmolLM2 is often the only LLM family that can run on low-memory phones and tablets with 2-4GB of RAM without crashing the browser tab. The 135M and 360M variants are particularly well-suited for mobile."
+  - question: "How does SmolLM2 quality compare to larger models?"
+    answer: "SmolLM2 prioritizes speed and availability over peak quality. The 135M variant handles basic tasks; the 1.7B variant (about 1GB) hits a sweet spot producing coherent multi-paragraph responses. For complex reasoning, larger models like Llama 3B or Phi 3.8B perform better."
+  - question: "What providers support SmolLM2?"
+    answer: "SmolLM2 is available through WebLLM (WebGPU for faster inference) and wllama (WASM for universal browser support). It is not available through Transformers.js ONNX."
 ---
 
 # SmolLM2 Models in the Browser

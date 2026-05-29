@@ -3,6 +3,16 @@ title: "AI for Content Creators: Batch Process Images, Generate Captions, and Cr
 description: "Three complete workflows for content creators using free, private AI tools that run in your browser. Auto-caption product photos, summarize and translate blog posts, and turn text into audiobooks - no sign-up, no uploads, no monthly fees."
 author: LocalMode
 date: 2026-03-14
+dateModified: "2026-05-25"
+faq:
+  - question: "How much can content creators save by using local AI tools instead of paid subscriptions?"
+    answer: "A solo content creator using Canva Pro, Adobe Firefly, ElevenLabs, and DeepL Pro typically spends $69-76 per month ($830-910 annually). The equivalent local AI tools at localmode.ai perform the same tasks -- image captioning, background removal, summarization, translation, and text-to-speech -- at zero cost after a one-time model download."
+  - question: "What are the three content creator workflows covered and how long do they take?"
+    answer: "The three workflows are: a product photo pipeline (captioning, background removal, upscaling) taking 10-15 minutes for 20 photos; a blog repurposing pipeline (summarization plus three-language translation) taking under 2 minutes per article; and audiobook creation from a 3,000-word document taking about 2 minutes."
+  - question: "What models power the content creator workflows and how large are they?"
+    answer: "ViT-GPT2 (230 MB) generates image captions, RMBG-1.4 (170 MB) removes backgrounds, Swin2SR (50 MB) upscales images, DistilBART (300 MB) summarizes text, OPUS-MT (100 MB per language pair) translates, and MMS-TTS (~38 MB) generates speech. All download once and cache in the browser."
+  - question: "What are the trade-offs of using local AI tools compared to cloud services for content creation?"
+    answer: "Local tools offer one voice for TTS versus dozens from ElevenLabs, slightly lower translation quality on idiomatic expressions, one-at-a-time browser processing versus bulk API queues, and slower performance on older devices. For mainstream content creation workflows with clear prose, these trade-offs are generally acceptable."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
@@ -126,7 +136,7 @@ For a single blog post repurposed into a summary and three translations, you are
 
 Open the [Audiobook Creator](https://localmode.ai/audiobook-creator) tool.
 
-The text-to-speech model is MMS-TTS (~30MB) - by far the smallest download in any of these workflows. MMS-TTS (Massively Multilingual Speech) is a VITS-based model developed by Meta AI, trained to produce natural-sounding English speech from text input.
+The text-to-speech model is MMS-TTS (~38MB) - by far the smallest download in any of these workflows. MMS-TTS (Massively Multilingual Speech) is a VITS-based model developed by Meta AI, trained to produce natural-sounding English speech from text input.
 
 Paste your text into the input area (up to 5,000 characters per generation). Click "Generate." The model converts the text to speech, producing a WAV audio file you can play back directly in the browser.
 
@@ -147,7 +157,7 @@ Once generation finishes, click the download button. The tool exports a standard
 
 | Step | Tool | Model | Download (one-time) | Time | Output |
 |------|------|-------|---------------------|------|--------|
-| Generate speech | [Audiobook Creator](https://localmode.ai/audiobook-creator) | MMS-TTS | ~30MB | 5–15 sec per 5K chars | WAV audio |
+| Generate speech | [Audiobook Creator](https://localmode.ai/audiobook-creator) | MMS-TTS | ~38MB | 5–15 sec per 5K chars | WAV audio |
 | Export | Same tool | - | - | Instant | Downloadable WAV file |
 
 For a full whitepaper, budget about 2 minutes from paste to finished audio file.
@@ -236,7 +246,7 @@ All model sizes, names, and processing descriptions in this post are based on th
 - **Swin2SR** (`Xenova/swin2SR-lightweight-x2-64`): ~50MB ONNX model. Lightweight 2x super-resolution model based on Swin Transformer V2.
 - **DistilBART** (`Xenova/distilbart-cnn-6-6`): ~300MB ONNX model. Distilled BART model fine-tuned on CNN/DailyMail for summarization.
 - **OPUS-MT** (`Xenova/opus-mt-en-{de,fr,es}`): ~100MB per language pair. Helsinki-NLP translation models trained on the OPUS parallel corpus.
-- **MMS-TTS** (`Xenova/mms-tts-eng`): ~30MB ONNX model. Meta AI's Massively Multilingual Speech text-to-speech model (VITS architecture).
+- **MMS-TTS** (`Xenova/mms-tts-eng`): ~38MB ONNX model. Meta AI's Massively Multilingual Speech text-to-speech model (VITS architecture).
 - **Pricing data**: Canva Pro ($15/mo, [canva.com/pricing](https://www.canva.com/pricing/)), Adobe Firefly Premium ($9.99/mo for 2,000 credits, [firefly.adobe.com](https://www.adobe.com/products/firefly/plans.html)), ElevenLabs Starter ($5/mo for 30K chars, [elevenlabs.io/pricing](https://elevenlabs.io/pricing)), DeepL Pro Starter ($10.49/mo, [deepl.com/pro](https://www.deepl.com/pro)), ChatGPT Plus ($20/mo, [openai.com/chatgpt/pricing](https://openai.com/chatgpt/pricing)), Let's Enhance ($9/mo annual, [letsenhance.io/pricing](https://letsenhance.io)).
 - **Processing times**: Estimated from testing on a 2023 MacBook Pro (M3, 18GB RAM) using Chrome 125. Times will vary by device.
 
