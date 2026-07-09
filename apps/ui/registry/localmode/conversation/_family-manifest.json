@@ -36,7 +36,9 @@
       "title": "Conversation",
       "description": "Scrollable message-display surface with first-class scroll-anchoring: auto-pins to the newest content while tokens stream, releases on scroll-up with a scroll-to-bottom control, and re-pins on return. Presentational; renders useChat().messages.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
         "button"
@@ -57,7 +59,9 @@
       "title": "Message",
       "description": "Role-aware chat message (data-role) rendering string or ContentPart[] — markdown text, image thumbnails with a fullscreen dialog, and file download chips from local bytes — with contained/flat variants and an inter-message Checkpoint savepoint marker. Matches @localmode/react's message model.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
         "@localmode/ui/conversation/lib-markdown",
@@ -111,7 +115,9 @@
       "title": "Loader",
       "description": "A small family of busy indicators (dots / pulse / typing / spinner) plus a Shimmer skeleton-text variant, shown while a local model warms up or streams its first token.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils"
       ],
@@ -131,7 +137,9 @@
       "title": "Prompt Input",
       "description": "Form-based, auto-resizing chat composer: Enter submits, Shift+Enter inserts a newline, the submit control swaps to a stop control while streaming, with optional controlled value/onValueChange, a PromptInputProvider, a voice/dictation mic toggle (wire to local Whisper), and a slash-command / + picker.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
         "@localmode/ui/input-controls/char-limit-indicator",
@@ -153,7 +161,9 @@
       "title": "Prompt Input Attachments",
       "description": "Attachment surface for the composer: image/file attach via picker, paste, and drag-and-drop with preview thumbnails, per-item removal, a hovercard preview, media-category auto-detection, and upload-state chips. Produces attachments via a bundled readFileAsDataUrl helper (copy-owned); the shape matches common chat image-content models.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
         "@localmode/ui/conversation/prompt-input",
@@ -198,7 +208,9 @@
       "title": "Actions",
       "description": "Message-level controls — copy (with copied state), regenerate, read-aloud (wire to local Kokoro TTS), an overflow more-menu, and an on-device FeedbackBar (thumbs up/down, no telemetry).",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
         "button",
@@ -221,7 +233,9 @@
       "title": "Reasoning",
       "description": "The model's own thinking tokens (DeepSeek-R1 style) in a collapsible region: auto-expands while streaming with an elapsed timer and auto-collapses on the final answer, plus a compact ThinkingBar one-line status strip. Tier of the thinking taxonomy: ThinkingBar -> Reasoning -> ChainOfThought.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
         "collapsible"
@@ -242,7 +256,9 @@
       "title": "Sources",
       "description": "Retrieval citations from local RAG results: a collapsible container with favicon/title/excerpt chips, a 0-1 relevance score, and an optional Web/Images/News tabbed layout. All metadata is local — no remote unfurl.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
         "collapsible",
@@ -264,7 +280,9 @@
       "title": "Tool",
       "description": "A single tool invocation card with a status taxonomy (pending/running/streaming/completed/error), expandable ToolInput/ToolOutput, a per-tool renderer registry with a Fallback for unregistered tools, and a ToolGroup that collapses consecutive calls behind a stacked-icon summary. Data source: useAgent / wllama/transformers tool calling.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
         "badge",
@@ -286,7 +304,9 @@
       "title": "Task",
       "description": "A multi-step agent process as an ordered list of steps (index, tool, status, args, observation) with the final-answer step distinguished. Its data shape aligns with @localmode/react useAgent steps so agent UIs wire up without adapters.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils"
       ],
@@ -307,7 +327,8 @@
       "description": "Syntax-highlighted code (lazy Shiki, plain-pre fallback) with a language label and a copy-to-clipboard control.",
       "author": "LocalMode",
       "dependencies": [
-        "shiki"
+        "shiki",
+        "lucide-react"
       ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
@@ -329,7 +350,9 @@
       "title": "Agent Step Timeline",
       "description": "A vertical timeline of ReAct agent steps: collapsible per-step cards (color-coded tool badge, args, observation show-more, index, elapsed-ms), a finish final-answer card, auto-scroll, a Thinking row while running, a finish-reason badge (max_steps/timeout/loop_detected/error), and nested sub-agent/handoff rendering. Data source: useAgent.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
         "badge"
@@ -350,7 +373,9 @@
       "title": "Source Citation List",
       "description": "In-message attributed-sources list extending Sources: numbered items, a similarity score with a radial confidence ring, and clamped body text with staggered fade-in, behind a collapsible Show N sources toggle. Data source: useSemanticSearch / useAnswerQuestion / useAskDocument.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
         "collapsible"
@@ -392,7 +417,9 @@
       "title": "Multi-Step Pipeline Tracker",
       "description": "Progress surfaces for local workflows: a horizontal numbered-step indicator (active/completed/pending), a stage+percentage variant for ingest, a Steps/Plan vertical outline with expandable detail, and an inference-queue surface grouped by priority. Maps to usePipeline onProgress and useInferenceQueue.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
         "collapsible",
@@ -414,7 +441,9 @@
       "title": "Branch",
       "description": "A message-versioning navigator that pages between regenerated/edited assistant variants for one turn, with prev/next controls and an X of N indicator (hidden at N=1). Wraps an existing Message non-intrusively; pure client state. Data source: useChat.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
         "button"
@@ -435,7 +464,9 @@
       "title": "Inline Citation",
       "description": "Inline superscript citation markers in prose that open a hovercard with the cited local chunk (title, excerpt, quoted snippet), with a carousel paging multiple sources for one claim. References locally-stored chunks only — no remote unfurl. Data source: useSemanticSearch.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
         "hover-card"
@@ -456,7 +487,9 @@
       "title": "Tool Approval",
       "description": "A human-in-the-loop confirmation card that gates a tool call before execution (pending tool + args with approve/reject), then re-renders read-only as an immutable receipt. Pairs with Tool and feeds the choice back into the agent loop. Data source: useAgent.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
         "button"
@@ -477,7 +510,9 @@
       "title": "Chain of Thought",
       "description": "A structured step-by-step reasoning timeline (distinct from free-text Reasoning): labeled steps with per-step status and icons, and nested slots for embedded retrieved sources and images, collapsing to one line on completion. Data source: useGenerateText reasoning-mode + local RAG.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
         "collapsible"
@@ -498,7 +533,9 @@
       "title": "Scroll To Bottom Button",
       "description": "A floating scroll-to-bottom affordance tied to a chat container's scroll state — appears when the user scrolls up, scrolls to and pins the latest content. Pairs with a ScrollAnchor pin element. Data source: useChat.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
         "button"
@@ -519,7 +556,9 @@
       "title": "System Notice Banner",
       "description": "An in-conversation info/warning banner (not a message bubble) for local-first state changes: offline/online, model switch, capability-unavailable, WebGPU->WASM fallback, cache eviction, or download-required. Data source: useNetworkStatus / useCapabilities.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
         "button"
@@ -540,7 +579,9 @@
       "title": "In-Message Error",
       "description": "An accessible per-message error/retry block rendered inline on a failed assistant message (not a global toast), with auto-extracted error text, a classified hint (OOM / WebGPU lost / model load), and a retry action. Data source: useChat error state.",
       "author": "LocalMode",
-      "dependencies": [],
+      "dependencies": [
+        "lucide-react"
+      ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
         "button"
