@@ -14,7 +14,8 @@ Extract named entities — people, organizations, locations, and miscellaneous e
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [Document Redactor](https://localmode.ai/document-redactor) for a working demo.
+  Try the [PII Redactor block](https://localmode.ai/blocks/privacy/pii-redactor) — it extracts named
+  entities to redact PII from documents, on-device.
 </Callout>
 
 ## Recommended Models
@@ -34,7 +35,7 @@ Extract named entities — people, organizations, locations, and miscellaneous e
 
 ## Document Redaction Example
 
-Based on the [Document Redactor](https://localmode.ai/document-redactor) showcase app:
+Based on the [PII Redactor block](https://localmode.ai/blocks/privacy/pii-redactor):
 
 ```typescript
 import { transformers } from '@localmode/transformers';
@@ -73,11 +74,11 @@ for (const entity of cleaned.reverse()) {
   4. **Filter by score** — Low-confidence entities may be false positives
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| Document Redactor | Extract and redact named entities from documents | [Demo](https://localmode.ai/document-redactor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/document-redactor) |
+| PII Redactor | On-device NER PII detection and redaction | [Live](https://localmode.ai/blocks/privacy/pii-redactor) · Install: `npx shadcn add @localmode/ui/blocks/privacy/pii-redactor` |
 
 ## Next Steps
 

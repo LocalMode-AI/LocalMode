@@ -1,0 +1,67 @@
+---
+title: "Message"
+description: "A role-aware chat message rendering string or ContentPart[] — markdown, image thumbnails with fullscreen, and file download chips — with a Checkpoint savepoint marker."
+icon: MessageCircle
+---
+
+# Message
+
+The **Message** primitive is the role-aware chat row. It exposes `data-role` for theming, renders content as a markdown string or `ContentPart[]` (matching `@localmode/react`'s message model), and supports contained vs. flat variants. Image parts render as thumbnails with a fullscreen dialog; file parts render a download chip — both from local bytes. `MessageAvatar` renders the role avatar, and `Checkpoint` is an inter-message savepoint marker enabling rollback/restore.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/message" />
+
+<OpenInV0 name="ui/conversation/message" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/message" />
+
+### Data source & dependencies
+
+**Data source:** renders a markdown `string` or `ContentPart[]` you pass — works with any backend. Recommended producer: `useChat` from `@localmode/react` (on-device). See [Use with the Vercel AI SDK](/docs/use-with-ai-sdk) for a cloud mapping.
+- `@localmode/ui/lib/browser-utils` — `formatBytes` for file-size chips (installed automatically as a registry dependency)
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `message.tsx` — `Message`, `MessageContent`, `MessageAvatar`, `Checkpoint`
+- `lib/markdown.tsx` — the streaming-safe markdown renderer
+- `lib/browser-utils.ts` — generic browser helpers (`formatBytes` for file-size chips)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/message/message.tsx" name="MessageContentProps" />
+
+## Examples
+
+### Render a message from `useChat`
+
+```tsx
+import { Message, MessageAvatar, MessageContent } from '@/components/message';
+
+export function Bubble({ message }) {
+  return (
+    <Message role={message.role}>
+      <MessageAvatar role={message.role} />
+      <MessageContent role={message.role} content={message.content} />
+    </Message>
+  );
+}
+```
+
+### Checkpoint / restore
+
+```tsx
+import { Checkpoint } from '@/components/message';
+
+<Checkpoint label="Saved" onRestore={() => rollbackThreadTo(checkpointId)} />
+```
+
+## Customization
+
+Swap the `contained`/`flat` bubble classes, change the avatar fallbacks, or extend `MessagePart` to add new part types (the component already handles `text`, `image`, and `file`). The markdown renderer in `lib/markdown.tsx` is dependency-free; replace it with `streamdown` or `react-markdown` + `remark-gfm` if you want richer rendering.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useChat`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

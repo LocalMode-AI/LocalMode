@@ -1,0 +1,70 @@
+---
+title: "Char Limit Indicator"
+description: "A radial progress ring + n/MAX counter that turns error-colored over the limit. Self-contained — takes only charCount and maxLength."
+icon: Gauge
+---
+
+# Char Limit Indicator
+
+The **Char Limit Indicator** is a compact character-count display: a radial progress ring (percentage of the limit consumed) paired with an `n/MAX` monospace counter. When `charCount` exceeds `maxLength`, the counter and ring switch to the error color and the ring shows a full circle.
+
+The ring is a pure SVG implementation driven by shadcn/ui CSS variables (`text-primary`, `text-destructive`, `text-muted`) — no daisyUI, no canvas. It is self-contained: pass only `charCount` and `maxLength` and it derives the percentage internally, so it drops in beside any length-bounded textarea or [`PromptInput`](/docs/conversation/prompt-input).
+
+**When to use it:** show how close a user is to a length limit (tweet box, prompt field, comment form) with an at-a-glance ring plus an exact count.
+
+## Preview
+
+<ComponentPreview name="ui/input-controls/char-limit-indicator" note="Type into the bound textarea — runs locally, no model download." />
+
+<OpenInV0 name="ui/input-controls/char-limit-indicator" />
+
+## Installation
+
+<InstallTabs name="ui/input-controls/char-limit-indicator" />
+
+### Dependencies
+
+- **Data source:** renders the `charCount` / `maxLength` props you pass — works with any backend (a plain `value.length`, a tokenizer, or a token-usage hook). Recommended LocalMode producer: `useChat` usage / token counting (optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `char-limit-indicator.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/input-controls/char-limit-indicator/char-limit-indicator.tsx" name="CharLimitIndicatorProps" />
+
+## Examples
+
+### Beside a textarea
+
+```tsx
+import { useState } from 'react';
+import { CharLimitIndicator } from '@/components/char-limit-indicator';
+
+export function Composer() {
+  const [value, setValue] = useState('');
+  const maxLength = 280;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <textarea value={value} onChange={(e) => setValue(e.target.value)} />
+      <div className="flex justify-end">
+        <CharLimitIndicator charCount={value.length} maxLength={maxLength} />
+      </div>
+    </div>
+  );
+}
+```
+
+### Ring only
+
+```tsx
+<CharLimitIndicator charCount={value.length} maxLength={280} ringOnly />
+```
+
+## Customization
+
+The ring colors come straight from shadcn/ui CSS variables — `text-primary` under the limit, `text-destructive` over it, `text-muted` for the track — so the indicator inherits your theme automatically. Tune `size` and `strokeWidth` for the ring geometry; because you own the file, you can swap the over-limit color or add a near-limit warning band by editing the `overLimit` branch in `char-limit-indicator.tsx`.

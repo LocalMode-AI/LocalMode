@@ -14,7 +14,7 @@ Reranking uses cross-encoder models to improve the relevance of search results. 
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [Semantic Search](https://localmode.ai/semantic-search) for a working demo.
+  Try the [Knowledge Base block](https://localmode.ai/blocks/knowledge/semantic-search) — its Search tab has a toggleable rerank stage with selectable cross-encoders, including the transformers ONNX models below.
 </Callout>
 
 ## Why Reranking?
@@ -52,7 +52,7 @@ import { semanticSearch, rerank } from '@localmode/core';
 
 async function searchWithReranking(query: string) {
   // Step 1: Fast semantic search (retrieve many candidates)
-  const candidates = await semanticSearch({
+  const { results: candidates } = await semanticSearch({
     db,
     model: embeddingModel,
     query,
@@ -63,7 +63,7 @@ async function searchWithReranking(query: string) {
   const { results } = await rerank({
     model: rerankerModel,
     query,
-    documents: candidates.map((c) => c.metadata.text as string),
+    documents: candidates.map((c) => c.text ?? ''),
     topK: 5,
   });
 
@@ -98,7 +98,7 @@ const db = await createVectorDB({ name: 'docs', dimensions: 384 });
 // RAG query function
 async function ragQuery(question: string) {
   // 1. Retrieve (fast, approximate)
-  const candidates = await semanticSearch({
+  const { results: candidates } = await semanticSearch({
     db,
     model: embeddingModel,
     query: question,
@@ -109,7 +109,7 @@ async function ragQuery(question: string) {
   const { results: reranked } = await rerank({
     model: rerankerModel,
     query: question,
-    documents: candidates.map((c) => c.metadata.text as string),
+    documents: candidates.map((c) => c.text ?? ''),
     topK: 3,
   });
 
@@ -196,11 +196,11 @@ async function rerankLargeResultSet(query: string, documents: string[], topK: nu
   5. **Test with/without** — Measure accuracy improvement for your use case
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| Semantic Search | Rerank search results for improved relevance | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
+| Semantic Search | Text/PDF/OCR ingest with chunking, then reranked vector search with category facets and calibrated thresholds | [Live](https://localmode.ai/blocks/knowledge/semantic-search) · Install: `npx shadcn add @localmode/ui/blocks/knowledge/semantic-search` |
 
 ## Next Steps
 
@@ -209,6 +209,11 @@ async function rerankLargeResultSet(query: string, documents: string[], topK: nu
     title="Core Reranking API"
     href="/docs/core/reranking"
     description="Full API reference, options, result types, and custom providers."
+  />
+  <Card
+    title="React Hook"
+    href="/docs/react/classification#usererank"
+    description="useRerank — rerank documents with built-in loading, error, and cancellation state."
   />
   <Card
     title="RAG"

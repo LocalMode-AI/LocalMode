@@ -1,0 +1,54 @@
+---
+title: "Browser Compat Card"
+description: "A per-model runnability report: a pass/fail RAM-headroom bar, storage, threading, estimated speed, warnings, and a canRun gate. RAMUsageBar is independently usable."
+icon: CircleCheck
+---
+
+# Browser Compat Card
+
+The **Browser Compat Card** is a per-model runnability report — the feasibility check you want *before* a multi-GB download. It combines a `RAMUsageBar` (model RAM vs device RAM), available storage, threading (cross-origin-isolation) status, estimated speed, and a warnings list. A `canRun` boolean gates a success vs error header. It extends the spirit of the Capability Gate. The `RAMUsageBar` is independently usable.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/browser-compat-card" note="Uses your device's real RAM and cross-origin-isolation; the large model's canRun flips to false when it exceeds device RAM." />
+
+<OpenInV0 name="ui/local-first/browser-compat-card" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/browser-compat-card" />
+
+### Data source & dependencies
+
+**Data source:** renders the device/model feasibility props you pass — works with any backend. Recommended producer: `useCapabilities` from `@localmode/react` (on-device, optional).
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `browser-compat-card.tsx` — `BrowserCompatCard` + `RAMUsageBar`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/browser-compat-card/browser-compat-card.tsx" name="BrowserCompatCardProps" />
+
+<AutoTypeTable path="registry/localmode/local-first/browser-compat-card/browser-compat-card.tsx" name="RAMUsageBarProps" />
+
+## Examples
+
+### Feasibility before download
+
+```tsx
+<BrowserCompatCard modelName="Llama 3 8B" requiredGB={6} deviceGB={8} />
+```
+
+### Standalone RAM bar
+
+```tsx
+<RAMUsageBar requiredGB={4} deviceGB={8} />
+```
+
+## Customization
+
+When `canRun` is omitted it is derived as `deviceGB >= requiredGB`. The header and RAM bar turn destructive on a fail; pass a `warnings` array to explain why. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

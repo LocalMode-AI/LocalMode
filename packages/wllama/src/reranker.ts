@@ -13,15 +13,9 @@ import type { WllamaRerankerSettings, WllamaLoadProgress } from './types.js';
 import { WLLAMA_MODELS } from './models.js';
 import { isCrossOriginIsolated, resolveModelUrl } from './utils.js';
 
-type WllamaInstance = InstanceType<Awaited<typeof import('@wllama/wllama')>['Wllama']>;
+import { importWllama, WLLAMA_CDN_WASM, type WllamaInstance } from './wllama-loader.js';
 
-const WLLAMA_CDN_WASM = 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.2.3/src/wasm/wllama.wasm';
-const WLLAMA_CDN_ESM = 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.2.3/esm/index.js';
 
-async function importWllama(): Promise<{ Wllama: new (config: { default: string }) => WllamaInstance }> {
-  const dynamicImport = new Function('u', 'return import(u)') as (url: string) => Promise<{ Wllama: new (config: { default: string }) => WllamaInstance }>;
-  return dynamicImport(WLLAMA_CDN_ESM);
-}
 
 /**
  * wllama Reranker Model implementation using GGUF cross-encoder models.
@@ -81,6 +75,10 @@ export class WllamaRerankerModel implements RerankerModel {
         await wllamaInstance.loadModelFromUrl(modelUrl, {
           n_threads: numThreads,
           n_ctx: this.settings.contextLength ?? 1024,
+          // createRerank requires the context to be created in reranking mode:
+          // embeddings enabled with llama.cpp's 'rank' pooling (per wllama docs).
+          embeddings: true,
+          pooling_type: 'rank',
           progressCallback: (opts: { loaded: number; total: number }) => {
             if (this.settings.onProgress) {
               const pct = opts.total > 0 ? (opts.loaded / opts.total) * 100 : 0;

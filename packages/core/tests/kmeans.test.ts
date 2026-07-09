@@ -7,6 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { kMeansCluster } from '../src/quantization/kmeans.js';
+import { createSeededRandom } from '../src/testing/index.js';
 
 // ============================================================================
 // Helper utilities
@@ -66,7 +67,9 @@ describe('kMeansCluster()', () => {
   it('clusters well-separated 2D data into 3 groups', () => {
     const { data } = generateClusteredData(3, 30, 2, 50.0);
 
-    const result = kMeansCluster(data, 3, { maxIterations: 50 });
+    // Seeded rng: unseeded k-means init occasionally converges to a bad local
+    // optimum on this data, making the strict cluster-purity assertions flaky.
+    const result = kMeansCluster(data, 3, { maxIterations: 50, random: createSeededRandom(42) });
 
     expect(result.centroids.length).toBe(3);
     expect(result.assignments.length).toBe(90);

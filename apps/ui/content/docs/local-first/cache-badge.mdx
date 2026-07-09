@@ -1,0 +1,46 @@
+---
+title: "Cache Badge"
+description: "Annotates a result as served from the semantic cache, optionally with the hit latency (e.g. \"cached · 12ms\")."
+icon: Zap
+---
+
+# Cache Badge
+
+The **Cache Badge** annotates a result as served from the semantic cache, optionally with the hit latency (e.g. "cached · 12ms"). Local apps cache responses on-device; surfacing a cache hit makes that invisible speedup legible. Drive `cached`/`latencyMs` from your `useSemanticCache` lookup result. It renders nothing when `cached` is false, so it is safe to drop next to any result.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/cache-badge" note="A presentational annotation — pass a real cache-hit latency from useSemanticCache." />
+
+<OpenInV0 name="ui/local-first/cache-badge" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/cache-badge" />
+
+### Dependencies
+
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `cache-badge.tsx` — the `CacheBadge` component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/cache-badge/cache-badge.tsx" name="CacheBadgeProps" />
+
+## Examples
+
+### Annotate a cached reply
+
+```tsx
+const result = await cache.lookup({ prompt, modelId });
+<CacheBadge cached={result.hit} latencyMs={result.durationMs} />
+```
+
+## Customization
+
+Uses the `emerald` palette to read as a positive signal. Because it returns `null` when `cached` is false, you can render it unconditionally next to every result. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

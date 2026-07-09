@@ -3,12 +3,12 @@ title: "The Hybrid AI Architecture: Local Models for 95% of Requests, Cloud for 
 description: "Most AI requests in production apps are embeddings, classification, NER, reranking, and summarization - tasks where local browser models hit 90-99% of cloud quality. A hybrid architecture routes these locally at $0 cost while reserving cloud APIs for the 5% that genuinely need frontier reasoning. Here is how to build it."
 author: LocalMode
 date: 2026-03-16
-dateModified: "2026-05-29"
+dateModified: "2026-07-04"
 faq:
   - question: "What is a hybrid AI architecture combining local and cloud models?"
     answer: "A hybrid AI architecture routes roughly 95% of AI requests -- embeddings, classification, NER, reranking, and summarization -- to local browser models at zero cost, while reserving cloud APIs for the 5% of tasks that genuinely require frontier reasoning, such as complex multi-step logic or long-context generation."
   - question: "What percentage of AI requests can local browser models handle?"
-    answer: "Analysis of 20+ showcase applications shows approximately 95% of AI calls fall into categories where local models deliver 90-99% of cloud quality. These include embeddings (99% of OpenAI), classification (93%+), NER (93-96%), and reranking (87-93%)."
+    answer: "Analysis of 20+ LocalMode browser AI apps shows approximately 95% of AI calls fall into categories where local models deliver 90-99% of cloud quality. These include embeddings (99% of OpenAI), classification (93%+), NER (93-96%), and reranking (87-93%)."
   - question: "How much faster is local AI inference compared to cloud APIs?"
     answer: "Local inference eliminates network round-trips entirely. Embeddings run in 8-30ms locally versus 250-2,000ms via cloud APIs (8-66x faster). Classification takes 10-50ms locally versus 300-1,500ms in the cloud (6-30x faster)."
   - question: "How much money can hybrid AI architecture save at scale?"
@@ -25,7 +25,7 @@ That is true. GPT-5, Claude, and Gemini are better at complex reasoning, nuanced
 
 But here is the question that matters for production architecture: what percentage of your AI requests actually require frontier-quality reasoning?
 
-We analyzed the request patterns across the 20+ showcase applications at [localmode.ai](https://localmode.ai) and found a consistent distribution. Roughly 95% of AI calls fall into categories where local models deliver 90-99% of cloud quality: embeddings, classification, NER, reranking, extractive QA, summarization, and translation. The remaining 5% - open-ended generation, complex multi-step reasoning, long-context synthesis - genuinely benefit from cloud APIs.
+We analyzed the request patterns across the 20+ LocalMode browser AI apps at [localmode.ai](https://localmode.ai) and found a consistent distribution. Roughly 95% of AI calls fall into categories where local models deliver 90-99% of cloud quality: embeddings, classification, NER, reranking, extractive QA, summarization, and translation. The remaining 5% - open-ended generation, complex multi-step reasoning, long-context synthesis - genuinely benefit from cloud APIs.
 
 The pragmatic architecture is not local OR cloud. It is local for the 95%, cloud for the 5%. This post shows you exactly how to build it.
 
@@ -176,7 +176,7 @@ const { results } = await rerank({
 });
 ```
 
-Every function supports `abortSignal` for cancellation, `maxRetries` for resilience, and returns structured results with `usage` metadata. Latencies are after model warm-up - first inference includes a one-time model download (cached in IndexedDB for subsequent visits).
+Every function supports `abortSignal` for cancellation, `maxRetries` for resilience, and returns structured results with `usage` metadata. Latencies are after model warm-up - first inference includes a one-time model download (cached by the browser for subsequent visits).
 
 ---
 
@@ -376,7 +376,7 @@ The hybrid architecture is not just cheaper - it is faster for the local path. C
 
 Local latencies are after model warm-up. Cloud latencies include network round-trip from a typical broadband connection and are based on published benchmarks and community reports. For embeddings and classification - the two highest-volume AI operations in most apps - the local path is an order of magnitude faster.
 
-The first-load penalty (model download) is a one-time cost. Models cache in IndexedDB and load from local storage on subsequent visits, typically in under a second.
+The first-load penalty (model download) is a one-time cost. Models cache in the browser and load from local storage on subsequent visits, typically in under a second.
 
 ---
 
@@ -483,7 +483,7 @@ All code examples use real LocalMode APIs verified against the `packages/core/sr
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

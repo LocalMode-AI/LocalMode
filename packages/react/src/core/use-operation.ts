@@ -74,13 +74,21 @@ export function useOperation<TInput extends unknown[], TOutput>(
     } catch (err) {
       if (!mountedRef.current) return null;
 
-      // Abort errors are silent
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        setIsLoading(false);
-        return null;
-      }
-      if (err instanceof Error && err.name === 'AbortError') {
-        setIsLoading(false);
+      // Aborts are silent. Rejections from an operation whose own controller
+      // was aborted are cancellation outcomes even when a core function wraps
+      // the abort in a plain Error (e.g. rerank()'s "Reranking was cancelled")
+      // — symmetric with the success path discarding results after abort.
+      // Loading state is only reset when this operation is still the current
+      // one: a superseded call's late rejection (its controller was aborted
+      // by re-execute) must not flip the in-flight replacement back to idle.
+      const isAbortOutcome =
+        controller.signal.aborted ||
+        (err instanceof DOMException && err.name === 'AbortError') ||
+        (err instanceof Error && err.name === 'AbortError');
+      if (isAbortOutcome) {
+        if (abortControllerRef.current === controller) {
+          setIsLoading(false);
+        }
         return null;
       }
 
@@ -92,6 +100,14 @@ export function useOperation<TInput extends unknown[], TOutput>(
 
   const cancel = useCallback(() => {
     abortControllerRef.current?.abort();
+    // Return to idle immediately: the cancelled operation's outcome is
+    // discarded by both settle paths above, and some providers cannot observe
+    // the abort mid-compute (e.g. a single non-interruptible in-worker call
+    // that RESOLVES long after cancellation) — the UI must not stay "loading"
+    // until (or worse, after) the abandoned work drains.
+    if (mountedRef.current) {
+      setIsLoading(false);
+    }
   }, []);
 
   const reset = useCallback(() => {

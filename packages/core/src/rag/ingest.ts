@@ -11,15 +11,26 @@ import type { VectorDB, Document } from '../types.js';
 import type {
   SourceDocument,
   IngestOptions,
+  IngestObjectOptions,
   IngestProgress,
   IngestResult,
   ChunkOptions,
   BM25Index,
 } from './types.js';
-import { DEFAULT_INGEST_OPTIONS } from './types.js';
+import { DEFAULT_INGEST_OPTIONS, TEXT_METADATA_FIELD } from './types.js';
 import { chunk } from './chunkers/index.js';
 import { BM25 } from './bm25.js';
 import { computeOptimalBatchSize } from '../capabilities/batch-size.js';
+import { embedMany } from '../embeddings/embed.js';
+
+/**
+ * Distinguish a VectorDB first argument (positional form) from an
+ * IngestObjectOptions first argument (object form).
+ */
+function isVectorDBArg(value: VectorDB | IngestObjectOptions): value is VectorDB {
+  const candidate = value as Partial<VectorDB>;
+  return typeof candidate.search === 'function' && typeof candidate.addMany === 'function';
+}
 
 /**
  * Generate a unique ID for a chunk.
@@ -39,36 +50,111 @@ function generateDocId(): string {
  * Ingest documents into a vector database with chunking and optional embedding.
  *
  * This is the main high-level function for RAG ingestion pipelines.
+ * Callable in two equivalent forms:
+ * - Positional: `ingest(db, documents, options?)`
+ * - Object: `ingest({ db, documents, model?, ...options })` — when `model`
+ *   is provided, embeddings are generated via `embedMany()` and
+ *   `generateEmbeddings` defaults to `true`.
  *
- * @param db - Vector database instance
- * @param documents - Source documents to ingest
+ * Chunk text is stored on each document's metadata under
+ * {@link TEXT_METADATA_FIELD} (`_text`), which `semanticSearch()` resolves
+ * onto `results[].text`.
+ *
+ * Supports cancellation via `abortSignal` (checked before chunking and
+ * between embedding/indexing batches). Documents already added before an
+ * abort are not rolled back.
+ *
+ * @param db - Vector database instance (positional form)
+ * @param documents - Source documents to ingest (positional form)
  * @param options - Ingestion configuration
  * @returns Ingestion result with statistics
+ * @throws Error when `db` is missing/not a VectorDB, when `documents` is not an
+ *   array, when both `model` and `embedder` are provided, or when
+ *   `generateEmbeddings` is true without a `model`/`embedder`
  *
  * @example
  * ```typescript
  * import { createVectorDB, ingest } from '@localmode/core';
+ * import { transformers } from '@localmode/transformers';
  *
  * const db = await createVectorDB({ name: 'docs', dimensions: 384 });
+ * const model = transformers.embedding('Xenova/bge-small-en-v1.5');
  *
- * // Simple ingestion with vectors already computed
- * const result = await ingest(db, documents, {
- *   chunking: { strategy: 'recursive', size: 500 },
- *   onProgress: (p) => console.log(`${p.phase}: ${p.chunksProcessed}/${p.totalChunks}`),
- * });
+ * // Object form with an embedding model
+ * await ingest({ db, model, documents });
  *
- * // With embedding generation
- * const result = await ingest(db, documents, {
+ * // Positional form with a custom embedder
+ * await ingest(db, documents, {
  *   generateEmbeddings: true,
  *   embedder: async (texts) => embedModel.embed(texts),
  * });
  * ```
+ *
+ * @see {@link semanticSearch} for querying ingested content
  */
 export async function ingest(
   db: VectorDB,
   documents: SourceDocument[],
-  options: IngestOptions = {}
+  options?: IngestOptions
+): Promise<IngestResult>;
+export async function ingest(options: IngestObjectOptions): Promise<IngestResult>;
+export async function ingest(
+  dbOrOptions: VectorDB | IngestObjectOptions,
+  positionalDocuments?: SourceDocument[],
+  positionalOptions: IngestOptions = {}
 ): Promise<IngestResult> {
+  let db: VectorDB;
+  let documents: SourceDocument[];
+  let options: IngestOptions;
+
+  if (isVectorDBArg(dbOrOptions)) {
+    db = dbOrOptions;
+    documents = positionalDocuments as SourceDocument[];
+    options = positionalOptions;
+  } else {
+    const { db: objectDb, documents: objectDocuments, model, ...rest } = dbOrOptions;
+    db = objectDb;
+    documents = objectDocuments;
+    options = rest;
+
+    if (model) {
+      if (rest.embedder) {
+        throw new Error(
+          'ingest() received both `model` and `embedder`. ' +
+            'They are mutually exclusive ways to generate embeddings — pass exactly one.'
+        );
+      }
+      options = {
+        ...rest,
+        // A model implies embedding generation unless explicitly disabled.
+        generateEmbeddings: rest.generateEmbeddings ?? true,
+        embedder: async (texts: string[]) => {
+          const { embeddings } = await embedMany({
+            model,
+            values: texts,
+            ...(rest.abortSignal ? { abortSignal: rest.abortSignal } : {}),
+          });
+          return embeddings;
+        },
+      };
+    }
+  }
+
+  // Fail loudly on a missing db/documents rather than silently ingesting
+  // nothing (JavaScript callers get no compile-time overload checking).
+  if (!db || typeof db.addMany !== 'function') {
+    throw new Error(
+      'ingest() requires a VectorDB. ' +
+        'Pass it positionally — ingest(db, documents, options) — or as `db` in the object form: ingest({ db, documents, model }).'
+    );
+  }
+  if (!Array.isArray(documents)) {
+    throw new Error(
+      'ingest() requires a `documents` array. ' +
+        'Pass it positionally — ingest(db, documents, options) — or as `documents` in the object form: ingest({ db, documents, model }).'
+    );
+  }
+
   const startTime = Date.now();
   const {
     chunking = { strategy: 'recursive' },
@@ -80,7 +166,10 @@ export async function ingest(
     embedder,
     buildBM25Index = DEFAULT_INGEST_OPTIONS.buildBM25Index,
     bm25Options,
+    abortSignal,
   } = options;
+
+  abortSignal?.throwIfAborted();
 
   // Determine batch size: explicit > adaptive > default (100)
   let batchSize: number;
@@ -157,7 +246,7 @@ export async function ingest(
   progress.totalBatches = Math.ceil(allChunks.length / batchSize);
 
   // Phase 2: Embedding (if requested)
-  let vectors: Float32Array[] = [];
+  const vectors: Float32Array[] = [];
 
   if (generateEmbeddings && embedder) {
     progress.phase = 'embedding';
@@ -165,6 +254,8 @@ export async function ingest(
 
     // Process in batches
     for (let i = 0; i < allChunks.length; i += batchSize) {
+      abortSignal?.throwIfAborted();
+
       const batch = allChunks.slice(i, i + batchSize);
       const texts = batch.map((c) => c.text);
 
@@ -199,11 +290,13 @@ export async function ingest(
     const docsToAdd: Document[] = allChunks.map((c, i) => ({
       id: c.id,
       vector: vectors[i],
-      metadata: { ...c.metadata, _text: c.text },
+      metadata: { ...c.metadata, [TEXT_METADATA_FIELD]: c.text },
     }));
 
     // Add in batches
     for (let i = 0; i < docsToAdd.length; i += batchSize) {
+      abortSignal?.throwIfAborted();
+
       const batch = docsToAdd.slice(i, i + batchSize);
       await db.addMany(batch);
 
@@ -370,7 +463,7 @@ export async function ingestChunks(
   const docsToAdd: Document[] = chunks.map((c) => ({
     id: c.id,
     vector: c.vector,
-    metadata: { ...c.metadata, _text: c.text },
+    metadata: { ...c.metadata, [TEXT_METADATA_FIELD]: c.text },
   }));
 
   for (let i = 0; i < docsToAdd.length; i += batchSize) {

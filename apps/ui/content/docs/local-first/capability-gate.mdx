@@ -1,0 +1,69 @@
+---
+title: "Capability Gate"
+description: "A true gate: renders children only when the device meets a stated requirement (e.g. WebGPU), otherwise a themed fallback with guidance."
+icon: ShieldCheck
+---
+
+# Capability Gate
+
+The **Capability Gate** renders its children only when the device meets a stated requirement (e.g. `requires="webgpu"`), and otherwise renders a `fallback` slot with guidance. Local models have hard device requirements — LiteRT Gemma is WebGPU-only — so gating prevents a broken experience and gives a clear, themeable explanation instead. The capability check uses `useCapabilities`.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/capability-gate" note="Gates a panel behind your real WebGPU support — children on a WebGPU device, fallback otherwise." />
+
+<OpenInV0 name="ui/local-first/capability-gate" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/capability-gate" />
+
+### Data source & dependencies
+
+**Data source:** detects device capabilities via the bundled `useCapabilities` navigator hook — self-contained, works in any React app, no backend required. (It mirrors the detection `useCapabilities` from `@localmode/react` performs, plus copy-owned `camera`/`microphone` media-input availability entries via `enumerateDevices()` — never prompting.)
+- `@localmode/ui/lib/use-environment` — the bundled `useCapabilities` navigator hook (installed automatically as a registry dependency)
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `capability-gate.tsx` — the `CapabilityGate` component
+- `lib/use-environment.ts` — the bundled `useCapabilities` navigator hook
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/capability-gate/capability-gate.tsx" name="CapabilityGateProps" />
+
+## Examples
+
+### Gate a WebGPU-only model
+
+```tsx
+<CapabilityGate
+  requires="webgpu"
+  fallback={<p>This model needs WebGPU. Try Chrome 113+.</p>}
+>
+  <FastWebGPUModel />
+</CapabilityGate>
+```
+
+### Gate a media surface (camera / microphone)
+
+The `camera` and `microphone` capabilities gate on media-input **availability** — a secure context, `navigator.mediaDevices.getUserMedia` present, and `enumerateDevices()` reporting at least one device of that kind. The detection never prompts the user. Runtime **permission denial** is deliberately not gated: request permission from your own start action and surface a `getUserMedia` rejection as a recoverable error with retry.
+
+```tsx
+<CapabilityGate
+  requires="camera"
+  fallback={<p>No camera detected on this device.</p>}
+>
+  <WebcamHandTracking /> {/* calls getUserMedia on its own Start action */}
+</CapabilityGate>
+
+<CapabilityGate requires="microphone">
+  <RecordAndClassify />
+</CapabilityGate>
+```
+
+## Customization
+
+The default fallback and pending slots are themed amber/muted notices — pass your own `fallback`/`pending` nodes for full control. The `requires` union covers `webgpu`, `wasm`, `webnn`, `simd`, `threads`, `indexeddb`, `webworkers`, `sharedarraybuffer`, and the media-availability entries `camera` and `microphone`; add more by extending the `LABELS` map. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

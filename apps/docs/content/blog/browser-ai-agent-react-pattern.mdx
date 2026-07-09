@@ -3,7 +3,7 @@ title: "Build an AI Agent That Runs Entirely in Your Browser Tab"
 description: "A hands-on guide to building a tool-using AI agent with the ReAct pattern - reasoning, acting, and observing in a loop - using local LLMs via WebGPU. No servers, no API keys, no data leaves the device. Includes complete code with createAgent(), tool definitions, VectorDB-backed memory, and a React hook for real-time step visualization."
 author: LocalMode
 date: 2026-02-23
-dateModified: "2026-05-29"
+dateModified: "2026-07-04"
 faq:
   - question: "How does a browser-based AI agent work using the ReAct pattern?"
     answer: "The agent alternates between reasoning about a task and acting by calling tools in a loop. At each step, generateObject() outputs structured JSON -- either a tool call with validated arguments or a final answer. The tool result becomes an observation fed back to the model for the next step. Everything runs locally via WebGPU."
@@ -24,7 +24,7 @@ What if the agent ran entirely inside a browser tab?
 This post walks through building a complete, tool-using AI agent that reasons step by step, calls tools, remembers past conversations, and produces a final answer - all running locally via WebGPU. No server, no API key, no data exfiltration. Every code example uses real LocalMode APIs pulled directly from the codebase.
 
 <Callout type="info" title="Working demo">
-  The [Research Agent](https://localmode.ai/research-agent) showcase app implements everything in this tutorial. Open it, type a question, and watch the agent search, take notes, and synthesize an answer - entirely offline after the initial model download.
+  The [Agent & Structured Data block](https://localmode.ai/blocks/agents/research-agent) implements everything in this tutorial. Open it, type a question, and watch the agent search, take notes, and synthesize an answer - entirely offline after the initial model download.
 </Callout>
 
 ---
@@ -421,9 +421,9 @@ Qwen3 1.7B hits a practical sweet spot for browser agents. At 1.1 GB quantized, 
 
 ---
 
-## The Complete Picture: Research Agent Showcase
+## The Complete Picture: Research Agent Walkthrough
 
-The [Research Agent](https://localmode.ai/research-agent) showcase app puts all of these pieces together. It ships with three tools - `search` (keyword search over a built-in knowledge base), `note` (accumulate findings), and `calculate` (evaluate math expressions) - wired up to Qwen3 1.7B via WebLLM. The `useAgent()` hook drives a React UI that renders each step as a card with the tool name, arguments, observation, and duration.
+The [Agent & Structured Data block](https://localmode.ai/blocks/agents/research-agent) puts all of these pieces together. It ships with three tools - `search` (keyword search over a built-in knowledge base), `note` (accumulate findings), and `calculate` (evaluate math expressions) - wired up to Qwen3 1.7B via WebLLM. The `useAgent()` hook drives a React UI that renders each step as a card with the tool name, arguments, observation, and duration.
 
 The architecture follows LocalMode's self-contained app pattern:
 
@@ -465,7 +465,7 @@ The tradeoff is model size. Browser-friendly quantized models top out at around 
 
 ## Methodology
 
-This post is based on the LocalMode agent framework implementation in `packages/core/src/agents/` and the Research Agent showcase app in `apps/showcase-nextjs/src/app/(apps)/research-agent/`. All API signatures, type definitions, and code examples were verified against the codebase.
+This post is based on the LocalMode agent framework implementation in `packages/core/src/agents/` and the [Research Agent block](https://localmode.ai/blocks/agents/research-agent) (source under `apps/ui/src/app/blocks/agents/research-agent/`). All API signatures, type definitions, and code examples were verified against the codebase.
 
 - [ReAct: Synergizing Reasoning and Acting in Language Models (Yao et al., ICLR 2023)](https://arxiv.org/abs/2210.03629) - The foundational paper introducing the Reason-Act-Observe pattern
 - [Google Research: ReAct blog post](https://research.google/blog/react-synergizing-reasoning-and-acting-in-language-models/) - Overview of the ReAct framework from Google Research
@@ -479,7 +479,7 @@ This post is based on the LocalMode agent framework implementation in `packages/
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

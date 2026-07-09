@@ -76,6 +76,7 @@ export function createAgent(config: AgentConfig): Agent {
     temperature = 0,
     memory,
     onStep: configOnStep,
+    onToolApproval: configOnToolApproval,
   } = config;
 
   const toolRegistry = createToolRegistry(tools);
@@ -86,11 +87,31 @@ export function createAgent(config: AgentConfig): Agent {
         prompt,
         abortSignal,
         onStep: runOnStep,
+        onToolApproval: runOnToolApproval,
         context,
       } = options;
 
       // Per-run onStep overrides config-level onStep
       const onStep = runOnStep ?? configOnStep;
+
+      // Per-run onToolApproval overrides config-level (mirrors onStep)
+      const onToolApproval = runOnToolApproval ?? configOnToolApproval;
+
+      // Fail fast (D4): a gated tool without a decision path must not run.
+      // Validated at run() start (not createAgent) because the callback may
+      // arrive per-run. Thrown before any model call or tool execution.
+      if (!onToolApproval) {
+        const gatedTool = tools.find((tool) => tool.requiresApproval === true);
+        if (gatedTool) {
+          const { AgentError } = await import('../errors/index.js');
+          throw new AgentError(
+            `Tool "${gatedTool.name}" has requiresApproval: true but no onToolApproval callback is configured.`,
+            {
+              hint: 'Provide an onToolApproval callback (or use useAgent, which supplies one) — approval-gated tools cannot execute without a decision path.',
+            }
+          );
+        }
+      }
 
       const result = await executeReActLoop({
         model,
@@ -105,6 +126,7 @@ export function createAgent(config: AgentConfig): Agent {
         memory,
         abortSignal,
         onStep,
+        onToolApproval,
       });
 
       // Store result in memory if configured and agent finished successfully
@@ -178,15 +200,21 @@ export async function runAgent(options: RunAgentOptions): Promise<AgentResult> {
     abortSignal,
     context,
     onStep: runOnStep,
+    onToolApproval: runOnToolApproval,
     ...agentConfig
   } = options;
 
-  // Use run-level onStep if provided, fallback to config-level
-  const agent = createAgent({ ...agentConfig, onStep: options.onStep });
+  // Use run-level onStep/onToolApproval if provided, fallback to config-level
+  const agent = createAgent({
+    ...agentConfig,
+    onStep: options.onStep,
+    onToolApproval: options.onToolApproval,
+  });
   return agent.run({
     prompt,
     abortSignal,
     onStep: runOnStep,
+    onToolApproval: runOnToolApproval,
     context,
   });
 }

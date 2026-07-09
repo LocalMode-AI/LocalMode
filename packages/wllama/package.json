@@ -1,6 +1,6 @@
 {
   "name": "@localmode/wllama",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "wllama provider for @localmode - GGUF model inference via llama.cpp WASM with metadata inspection and browser compatibility checking",
   "license": "MIT",
   "author": "LocalMode",
@@ -36,7 +36,7 @@
     "clean": "rm -rf dist node_modules"
   },
   "dependencies": {
-    "@wllama/wllama": "^3.2.3",
+    "@wllama/wllama": "^3.5.1",
     "@huggingface/gguf": "^0.1.14"
   },
   "peerDependencies": {

@@ -1,0 +1,16 @@
+{
+  "title": "Input Controls",
+  "pages": [
+    "char-limit-indicator",
+    "mask-token-input",
+    "segmented-mode-picker",
+    "language-pair-selector",
+    "text-processing-panel",
+    "parameter-slider",
+    "slash-command-palette",
+    "option-list",
+    "prompt-enhance-button",
+    "copy-button",
+    "system-prompt-editor"
+  ]
+}

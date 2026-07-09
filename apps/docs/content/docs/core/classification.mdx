@@ -12,7 +12,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 LocalMode provides provider-agnostic functions for text classification, zero-shot classification, and named entity recognition (NER). Pass any model that implements the corresponding interface — the core functions handle retries, cancellation, and structured results.
 
 <Callout type="info" title="See it in action">
-  Try [Sentiment Analyzer](https://localmode.ai/sentiment-analyzer) and [Email Classifier](https://localmode.ai/email-classifier) for working demos of these APIs.
+  Try the [Text Insights blocks](https://localmode.ai/blocks/text-insights) for working demos of these APIs — the [Sentiment Analyzer](https://localmode.ai/blocks/text-insights/sentiment-analyzer) runs sentiment classification and the [Text Classifier](https://localmode.ai/blocks/text-insights/text-classifier) runs custom-label zero-shot email/intent routing, all on-device.
 </Callout>
 
 ## classify()
@@ -585,9 +585,9 @@ class MyNERModel implements NERModel {
   />
 </Cards>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Sentiment Analyzer | Classify text sentiment with sequential batch processing | [Demo](https://localmode.ai/sentiment-analyzer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/sentiment-analyzer) |
-| Email Classifier | Zero-shot email categorization into custom labels | [Demo](https://localmode.ai/email-classifier) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/email-classifier) |
+| Text Insights (Sentiment Analyzer) | Classify text sentiment with sequential batch processing | [Live block](https://localmode.ai/blocks/text-insights/sentiment-analyzer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/text-insights/sentiment-analyzer) |
+| Text Insights (Email Classifier) | Zero-shot email categorization into custom labels | [Live block](https://localmode.ai/blocks/text-insights/text-classifier) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/text-insights/text-classifier) |

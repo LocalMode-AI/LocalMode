@@ -161,6 +161,8 @@ await tracker.start();
 
 Streaming trackers report per-frame errors through `onError` instead of throwing.
 
+> **Live example**: the [Live Tracker block](https://localmode.ai/blocks/vision/live-tracker) (`apps/ui/src/app/blocks/vision/live-tracker/`) runs all four streaming trackers on webcam video with landmark-skeleton drawing and live FPS — installable into your own app with `npx shadcn add @localmode/ui/blocks/vision/live-tracker`.
+
 ## Provider Configuration
 
 ```typescript

@@ -1,0 +1,82 @@
+---
+title: "Language Pair Selector"
+description: "A paired source/target language picker — From/To pill toggles with a swap button, or a compact {source} → {target} select. Feeds useTranslate."
+icon: Languages
+---
+
+# Language Pair Selector
+
+The **Language Pair Selector** is a paired source/target language picker. The `pills` variant renders From/To pill toggles (flag + name) with a swap-languages button; the `compact` variant renders a grouped `{source} → {target}` pair of selects. It is fully controlled via `sourceCode` / `targetCode` and the `onSelectSource` / `onSelectTarget` / `onSwap` callbacks.
+
+It is presentational and portable — feed the selected codes to any translation backend. With LocalMode you can (optionally) drive [`useTranslate()`](https://localmode.dev/docs/react) from `@localmode/react`, composed with [`useDetectLanguage()`](https://localmode.dev/docs/react) to auto-fill the source.
+
+**When to use it:** any translation surface that lets the user choose a language pair and swap direction.
+
+## Preview
+
+<ComponentPreview name="ui/input-controls/language-pair-selector" note="Pick a pair and translate; the opus-mt model for that pair downloads on first run." />
+
+<OpenInV0 name="ui/input-controls/language-pair-selector" />
+
+## Installation
+
+<InstallTabs name="ui/input-controls/language-pair-selector" />
+
+### Dependencies
+
+- **Data source:** renders the selected codes you pass and emits `onSelectSource` / `onSelectTarget` / `onSwap` callbacks — works with any backend. Recommended LocalMode producer: `useTranslate` (optionally composed with `useDetectLanguage`).
+- `lucide-react` — the swap icon
+
+### Files installed
+
+- `language-pair-selector.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/input-controls/language-pair-selector/language-pair-selector.tsx" name="LanguagePairSelectorProps" />
+
+## Examples
+
+### Drive a translation
+
+```tsx
+import { useState } from 'react';
+import { useTranslate } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+import { LanguagePairSelector } from '@/components/language-pair-selector';
+
+const LANGS = [
+  { code: 'en', name: 'English', flag: '🇬🇧' },
+  { code: 'fr', name: 'French', flag: '🇫🇷' },
+];
+
+export function Translator() {
+  const [src, setSrc] = useState('en');
+  const [tgt, setTgt] = useState('fr');
+  const { execute, data } = useTranslate({
+    model: transformers.translator(`Xenova/opus-mt-${src}-${tgt}`),
+  });
+
+  return (
+    <LanguagePairSelector
+      languages={LANGS}
+      sourceCode={src}
+      targetCode={tgt}
+      onSelectSource={setSrc}
+      onSelectTarget={setTgt}
+      onSwap={() => { setSrc(tgt); setTgt(src); }}
+    />
+  );
+}
+```
+
+### Compact variant
+
+```tsx
+<LanguagePairSelector variant="compact" languages={LANGS} {...props} />
+```
+
+## Customization
+
+`flag` is optional per language and renders before the name. The active pill uses `bg-primary/10 text-primary`; the compact variant uses native styled selects for a tight footprint. Everything is theme-driven via shadcn/ui CSS variables — edit the copied file to change the pill shape or wire the swap button to additional side effects.

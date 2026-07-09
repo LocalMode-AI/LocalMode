@@ -1,0 +1,266 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+/*
+ * shadcn/ui CSS-variable theme tokens (NO daisyUI).
+ *
+ * Registry components use Tailwind utilities backed by these variables
+ * (bg-background, text-foreground, bg-primary, border-border, ring-ring, ...).
+ * A consuming shadcn project that overrides any of these variables re-themes
+ * every installed LocalMode component without code changes.
+ */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+}
+
+/*
+ * Preview theme presets — scoped to a [data-preview-theme] subtree only (the
+ * docs component-preview surface). They re-map the FULL shadcn token set within
+ * that container (background/card/foreground/border/primary/…) so a visitor can
+ * SEE components fully inherit a consumer's theme, without affecting the rest of
+ * the page. `base` intentionally has no override (uses the site theme). Each
+ * preset has a light block and a `.dark …` block so it is authentic in both
+ * modes. Values approximate the real Claude (clay + warm cream) and ChatGPT
+ * (green accent + neutral) palettes.
+ */
+
+/* Claude — warm cream light / warm charcoal dark, clay-coral accent. */
+[data-preview-theme='claude'] {
+  --background: oklch(0.9818 0.0054 95.0986);
+  --foreground: oklch(0.3438 0.0269 95.7226);
+  --card: oklch(0.9818 0.0054 95.0986);
+  --card-foreground: oklch(0.1908 0.002 106.5859);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2671 0.0196 98.939);
+  --primary: oklch(0.6171 0.1375 39.0427);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.9245 0.0138 92.9892);
+  --secondary-foreground: oklch(0.4334 0.0177 98.6048);
+  --muted: oklch(0.9341 0.0153 90.239);
+  --muted-foreground: oklch(0.6059 0.0075 97.4233);
+  --accent: oklch(0.9245 0.0138 92.9892);
+  --accent-foreground: oklch(0.2671 0.0196 98.939);
+  --border: oklch(0.8847 0.0069 97.3627);
+  --input: oklch(0.7621 0.0156 98.3528);
+  --ring: oklch(0.6171 0.1375 39.0427);
+}
+.dark [data-preview-theme='claude'] {
+  --background: oklch(0.2679 0.0036 106.6427);
+  --foreground: oklch(0.8074 0.0142 93.0137);
+  --card: oklch(0.2679 0.0036 106.6427);
+  --card-foreground: oklch(0.9818 0.0054 95.0986);
+  --popover: oklch(0.3085 0.0035 106.6039);
+  --popover-foreground: oklch(0.9211 0.004 106.4781);
+  --primary: oklch(0.6724 0.1308 38.7559);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.9818 0.0054 95.0986);
+  --secondary-foreground: oklch(0.3085 0.0035 106.6039);
+  --muted: oklch(0.2213 0.0038 106.707);
+  --muted-foreground: oklch(0.7713 0.0169 99.0603);
+  --accent: oklch(0.213 0.0078 95.4245);
+  --accent-foreground: oklch(0.9663 0.008 98.8792);
+  --border: oklch(0.3618 0.0101 106.8928);
+  --input: oklch(0.4336 0.0113 100.2195);
+  --ring: oklch(0.6724 0.1308 38.7559);
+}
+
+/* ChatGPT — clean white light / #212121 dark, signature green accent. */
+[data-preview-theme='chatgpt'] {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.2178 0 0);
+  --card: oklch(0.9881 0 0);
+  --card-foreground: oklch(0.2178 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2178 0 0);
+  --primary: oklch(0.6353 0.123 165);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.967 0.0029 264.5);
+  --secondary-foreground: oklch(0.2178 0 0);
+  --muted: oklch(0.967 0.0029 264.5);
+  --muted-foreground: oklch(0.551 0.0234 264.4);
+  --accent: oklch(0.9514 0.025 165);
+  --accent-foreground: oklch(0.373 0.07 165);
+  --border: oklch(0.9276 0.0058 264.5);
+  --input: oklch(0.9276 0.0058 264.5);
+  --ring: oklch(0.6353 0.123 165);
+}
+.dark [data-preview-theme='chatgpt'] {
+  --background: oklch(0.2103 0 0);
+  --foreground: oklch(0.9612 0 0);
+  --card: oklch(0.2686 0 0);
+  --card-foreground: oklch(0.9612 0 0);
+  --popover: oklch(0.2686 0 0);
+  --popover-foreground: oklch(0.9612 0 0);
+  --primary: oklch(0.7017 0.1385 165);
+  --primary-foreground: oklch(0.1776 0 0);
+  --secondary: oklch(0.2686 0 0);
+  --secondary-foreground: oklch(0.9612 0 0);
+  --muted: oklch(0.2686 0 0);
+  --muted-foreground: oklch(0.7155 0 0);
+  --accent: oklch(0.3211 0.04 165);
+  --accent-foreground: oklch(0.9 0.05 165);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.7017 0.1385 165);
+}
+
+/*
+ * Always-visible thin scrollbars. Scrollable containers keep a visible (not
+ * auto-hidden / overlay) scrollbar, a bit thinner than the OS default, tinted
+ * with the theme tokens so it reads in light and dark.
+ *
+ * IMPORTANT: we style ONLY the ::-webkit-scrollbar pseudo-elements for
+ * Chrome/Edge/Safari. A custom ::-webkit-scrollbar is always rendered as a
+ * classic (non-overlay) scrollbar, so it stays visible whenever a container
+ * overflows — even on macOS with "Show scrollbars: when scrolling". We must NOT
+ * set the standard `scrollbar-width`/`scrollbar-color` on `*`, because Chrome
+ * 121+ then IGNORES ::-webkit-scrollbar and falls back to the OS overlay
+ * scrollbar (which auto-hides). The standard properties are therefore scoped to
+ * Firefox only (it has no ::-webkit-scrollbar).
+ */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 9999px;
+  /* keep a grabbable thumb even in short scrollers */
+  min-height: 2rem;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted-foreground);
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+/* Firefox only (no ::-webkit-scrollbar support): thin themed scrollbar. */
+@supports (-moz-appearance: none) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+}
+
+/*
+ * Code tab (block-shell + component preview): wrap long source lines instead of
+ * scrolling horizontally, so the Code view never overflows the page body. Scoped
+ * to both the block Code tab (`[data-block-code]`) and the component preview Code
+ * tab (`[data-component-code]`).
+ */
+[data-block-code] pre,
+[data-block-code] code,
+[data-block-code] .line,
+[data-component-code] pre,
+[data-component-code] code,
+[data-component-code] .line {
+  white-space: pre-wrap !important;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+/*
+ * Fumadocs renders the <pre> with `w-max` (width: max-content), which gives it
+ * an unbounded width so `pre-wrap` has nothing to wrap against. Force it back to
+ * the container width so long lines actually wrap and never scroll sideways.
+ */
+[data-block-code] pre,
+[data-component-code] pre {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+}
+[data-block-code] code,
+[data-component-code] code {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+/* Square the shiki code-block figure in the Code tab (rounded-xl 14px -> 0). */
+[data-block-code] figure,
+[data-component-code] figure {
+  border-radius: 0 !important;
+}
+
+/*
+ * Props tables (AutoTypeTable -> fumadocs `TypeTable`, scoped via `.lm-type-table`).
+ * The table now renders ONLY each component's own props with plain-text type
+ * signatures (see auto-type-table.tsx), so fumadocs' default layout and its
+ * theme-aware `text-fd-*` colors are correct in light AND dark with no override.
+ * We only top-align each prop's trigger row (matched by its `flex-row` class, so
+ * the header row's default alignment is untouched) so a multi-line type doesn't
+ * vertically center against the single-line prop name.
+ */
+.lm-type-table [class*='flex-row'] {
+  align-items: flex-start;
+}

@@ -3,7 +3,7 @@ title: "What Are Embeddings? A Visual, Hands-On Guide With Code You Can Run"
 description: "Embeddings turn text into numbers that capture meaning. This hands-on guide walks you through your first embedding, similarity scoring, and semantic search - with runnable code, ASCII visualizations, and zero math prerequisites."
 author: LocalMode
 date: 2026-01-25
-dateModified: "2026-05-25"
+dateModified: "2026-07-04"
 faq:
   - question: "What are embeddings in AI and machine learning?"
     answer: "Embeddings are lists of numbers (typically 384 floating-point values) that represent the meaning of text. Texts with similar meaning get similar numbers, enabling computers to understand conceptual similarity. Think of them as GPS coordinates for meaning -- nearby coordinates mean similar topics."
@@ -236,7 +236,7 @@ The query "budget concerns" matched "Budget allocation for the marketing departm
 
 ### Why This Works Offline
 
-Everything in the example above runs in the browser. The model downloads once from Hugging Face Hub and is cached in IndexedDB. The vector database stores data in IndexedDB. After the initial model download, the entire system works without a network connection. No API keys, no per-request costs, no data leaving the device.
+Everything in the example above runs in the browser. The model downloads once from Hugging Face Hub and is cached in the browser's Cache API. The vector database stores data in IndexedDB. After the initial model download, the entire system works without a network connection. No API keys, no per-request costs, no data leaving the device.
 
 ---
 
@@ -323,7 +323,7 @@ This guide uses the following models and tools, all of which run entirely in the
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

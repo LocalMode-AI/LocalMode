@@ -1,6 +1,6 @@
 ---
 title: 'DevTools'
-description: In-app DevTools widget for debugging and monitoring local AI applications.
+description: Instrumentation and React hooks for debugging and monitoring local AI applications.
 icon: MonitorDot
 ---
 
@@ -8,24 +8,25 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 # DevTools
 
-In-app DevTools widget for inspecting model cache, vector database stats, inference queue metrics, pipeline execution traces, and live event streams in LocalMode applications.
+Instrumentation and React hooks for inspecting model cache, vector database stats, inference queue metrics, pipeline execution traces, and live event streams in LocalMode applications.
 
 ## Overview
 
-`@localmode/devtools` provides an in-app overlay widget (like React Query Devtools or TanStack Router Devtools) that gives you full visibility into your local AI application at runtime — all without any telemetry or data leaving your device. Works in any browser that supports your application.
+`@localmode/devtools` provides headless instrumentation (`enableDevTools()`) plus React hooks (`@localmode/devtools/react`) that give you full visibility into your local AI application at runtime — all without any telemetry or data leaving your device. The hooks are the primary integration path: subscribe to any slice of the observability bridge and render it in your own UI, with your own styling.
 
 <Callout type="info" title="See it in action">
-  The DevTools widget is enabled across the entire [LocalMode showcase](https://localmode.ai) — open any app and click the DevTools button to inspect live model, VectorDB, and queue state.
+  DevTools instrumentation is enabled across the [LocalMode blocks gallery](https://localmode.ai/blocks) — open any block and use the DevTools drawer to inspect live model, VectorDB, and queue state.
 </Callout>
 
-### Features
+### What you can observe
 
-- **Models panel** — Cached models, load times, status
-- **VectorDB panel** — Collections, document counts, search stats
-- **Queue panel** — Live inference queue: pending, active, completed, latency
-- **Pipeline panel** — Step execution traces with timings
-- **Events panel** — Live scrolling event stream with filtering
-- **Device panel** — WebGPU, WASM, Chrome AI, WebNN capabilities
+- **Models** — Cached models, load times, status
+- **VectorDB** — Collections, document counts, search stats
+- **Queue** — Live inference queue: pending, active, completed, latency
+- **Pipeline** — Step execution traces with timings
+- **Events** — Live event stream with filtering
+- **Device** — WebGPU, WASM, Chrome AI, WebNN capabilities
+- **Storage** — Storage quota usage
 
 ## Installation
 
@@ -35,47 +36,69 @@ pnpm add -D @localmode/devtools
 
 ## Quick Start
 
-### Option 1: Widget (recommended)
-
-Import the React widget component and render it in your app layout:
+Enable instrumentation once, then subscribe to any data domain with a hook:
 
 ```tsx
-import { DevToolsWidget } from '@localmode/devtools/widget';
-
-// In your layout or root component
-export default function Layout({ children }) {
-  return (
-    <>
-      {children}
-      {process.env.NODE_ENV === 'development' && <DevToolsWidget />}
-    </>
-  );
-}
-```
-
-The widget auto-enables instrumentation. A floating "LM" button appears — click it to expand the DevTools panel.
-
-### Option 2: Headless (no UI)
-
-If you only want instrumentation without the widget UI:
-
-```typescript
 import { enableDevTools } from '@localmode/devtools';
+import { useDevToolsQueueStats, useDevToolsEvents } from '@localmode/devtools/react';
 
 if (process.env.NODE_ENV === 'development') {
   enableDevTools();
 }
+
+function Observability() {
+  const queues = useDevToolsQueueStats();
+  const events = useDevToolsEvents({ types: ['vectordb'], limit: 50 });
+
+  return (
+    <div>
+      {Object.entries(queues).map(([name, stats]) => (
+        <p key={name}>{name}: {stats.pending} pending, {stats.active} active</p>
+      ))}
+      {events.map((e) => (
+        <p key={e.id}>{e.type}</p>
+      ))}
+    </div>
+  );
+}
 ```
 
-## Widget Props
+If you only want instrumentation without any UI, calling `enableDevTools()` alone is enough — data is written to the bridge and you can inspect `window.__LOCALMODE_DEVTOOLS__` directly.
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `position` | `'bottom-right' \| 'bottom-left' \| 'top-right' \| 'top-left'` | `'bottom-right'` | Where the floating button appears |
-| `defaultOpen` | `boolean` | `false` | Whether the panel starts open |
-| `autoEnable` | `boolean` | `true` | Auto-call `enableDevTools()` if bridge not found |
-| `panelHeight` | `number` | `400` | Panel height in pixels |
-| `zIndex` | `number` | `99999` | z-index for the widget overlay |
+## React Hooks
+
+`@localmode/devtools/react` exports nine hooks — one per bridge data domain — all built on `useSyncExternalStore` with version-keyed immutable snapshots:
+
+| Hook | Returns |
+|------|---------|
+| `useDevToolsBridge` | The raw bridge object (`window.__LOCALMODE_DEVTOOLS__`), or `null` when absent |
+| `useDevToolsStatus` | `{ available, enabled }` — bridge availability and instrumentation state |
+| `useDevToolsQueueStats` | Live stats per registered inference queue (`Record<string, QueueStats>`) |
+| `useDevToolsEvents` | Recent bridge events, filterable by `types` with a `limit` |
+| `useDevToolsModelCache` | Per-model load info (`Record<string, ModelCacheInfo>`) |
+| `useDevToolsPipelineRuns` | Pipeline step execution traces (`Record<string, PipelineSnapshot>`) |
+| `useDevToolsVectorDBs` | Per-collection VectorDB operation stats (`Record<string, VectorDBSnapshot>`) |
+| `useDevToolsStorage` | Storage quota snapshot, or `null` before the first sample |
+| `useDevToolsCapabilities` | Device capabilities snapshot, or `null` before detection |
+
+Guarantees shared by all hooks:
+
+- **Subscribe on mount, fully unsubscribe on unmount** — no leaks
+- **SSR-safe** — no `window` access during server render; inert values on the server
+- **Inert when devtools is absent** — referentially stable fallback values; no errors in production builds
+- **Late-enable attachment** — a hook mounted before `enableDevTools()` attaches once the bridge appears, no remount needed
+- **Immutable snapshots** — slice hooks return fresh copies per notification; they never alias the bridge's mutable objects
+
+<Callout type="info" title="Prebuilt UI: the ui/devtools family + drawer">
+  Prefer copy-owned components to hand-rolling panels? The [`ui/devtools`
+  family](https://localmode.ai/docs/devtools) ships four theme-aware,
+  zero-dependency primitives (`inference-queue-monitor`, `event-log-viewer`,
+  `pipeline-run-inspector`, `model-cache-table`) that render these hooks'
+  output, and `npx shadcn add @localmode/ui/blocks/devtools-drawer` installs a
+  composed six-tab observability drawer (Queue / Events / Pipeline / Models /
+  Device / VectorDB — off by default, zero-overhead when closed). These are the
+  successor UI to the removed widget (see below).
+</Callout>
 
 ## How It Works
 
@@ -87,39 +110,33 @@ if (process.env.NODE_ENV === 'development') {
 - `getStorageQuota()` for storage usage
 - `detectCapabilities()` for device features
 
-Data is written to `window.__LOCALMODE_DEVTOOLS__`. The widget reads this bridge directly via `subscribe()` for instant, non-polling updates. Zero core changes needed — DevTools is a pure read-only visualization layer.
+Data is written to `window.__LOCALMODE_DEVTOOLS__`. The React hooks read this bridge directly via `subscribe()` for instant, non-polling updates. Zero core changes needed — DevTools is a pure read-only visualization layer.
 
-## Next.js Integration
+## DevToolsWidget (removed in v3.0.0)
 
-For Next.js apps, use `dynamic()` to avoid SSR issues:
+<Callout type="warn" title="Removed in v3.0.0">
+  The prebuilt `DevToolsWidget` overlay and its `@localmode/devtools/widget`
+  subpath were **removed in v3.0.0**. Its replacements are the [React
+  hooks](#react-hooks) above (build your own panel with your own styling), the
+  copy-owned [`ui/devtools` family](https://localmode.ai/docs/devtools)
+  primitives (`inference-queue-monitor`, `event-log-viewer`,
+  `pipeline-run-inspector`, `model-cache-table`), and the composed six-tab
+  `ui/blocks/devtools-drawer` (`npx shadcn add @localmode/ui/blocks/devtools-drawer`).
+  The data layer — `enableDevTools()`, the `window.__LOCALMODE_DEVTOOLS__`
+  bridge, and every collector — is unchanged; only the widget UI was removed.
+</Callout>
 
-```tsx
-import dynamic from 'next/dynamic';
-
-const DevToolsWidget = dynamic(
-  () => import('@localmode/devtools/widget').then((m) => m.DevToolsWidget),
-  { ssr: false }
-);
-
-export default function RootLayout({ children }) {
-  return (
-    <html>
-      <body>
-        {children}
-        {process.env.NODE_ENV === 'development' && <DevToolsWidget />}
-      </body>
-    </html>
-  );
-}
-```
+See [Data Domains](/docs/devtools/panels) for the six domains the bridge
+collects — each maps 1:1 to a `/react` hook, a `ui/devtools` primitive, and a
+tab of the drawer.
 
 ## Requirements
 
 - `@localmode/core` ^1.0.0 (peer dependency)
-- `react` >=18.0.0 (peer dependency, only for widget import)
+- `react` >=18.0.0 (peer dependency, only for the `/react` hooks)
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
-|-----|-------------|-------|
-| LocalMode Showcase | DevTools widget enabled globally across all 34 showcase apps | [Demo](https://localmode.ai) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/_components/devtools.tsx) |
+| Block | Description | Links |
+|-------|-------------|-------|
+| DevTools Drawer | Six-tab global observability drawer composing the `@localmode/devtools` bridge and hooks across the `/blocks` gallery | [Live](https://localmode.ai/blocks) · Install: `npx shadcn add @localmode/ui/blocks/devtools-drawer` |

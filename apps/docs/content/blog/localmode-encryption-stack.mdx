@@ -3,7 +3,7 @@ title: "The LocalMode Encryption Stack: PBKDF2 Key Derivation, AES-256-GCM, and 
 description: "A deep technical walkthrough of LocalMode's zero-knowledge encryption pipeline. From PBKDF2 key derivation with configurable iterations to AES-256-GCM authenticated encryption of vectors, metadata, and text -- all running entirely in the browser via the Web Crypto API. No server ever sees a plaintext byte."
 author: LocalMode
 date: 2026-02-03
-dateModified: "2026-05-26"
+dateModified: "2026-07-04"
 faq:
   - question: "How does LocalMode encrypt embedding vectors in the browser?"
     answer: "LocalMode uses AES-256-GCM encryption via the Web Crypto API. Vectors are encrypted by passing the Float32Array buffer directly to AES-GCM with a fresh 12-byte IV per operation. The IV is prepended to the ciphertext and the result is stored as a padded Float32Array in IndexedDB."
@@ -26,7 +26,7 @@ LocalMode ships a complete encryption stack that closes this gap. Every layer --
 This post walks through every layer of that stack, from the raw cryptographic primitives to the high-level middleware that encrypts your VectorDB transparently.
 
 <Callout type="info" title="Working demo">
-  The [Encrypted Vault](https://localmode.ai/encrypted-vault) showcase app implements the complete encryption pipeline described here. Create a vault, add encrypted entries, lock and unlock with a master password -- all running locally in your browser with AES-256-GCM encryption.
+  The [Encrypted Vault block](https://localmode.ai/blocks/privacy/encrypted-vault) implements the complete encryption pipeline described here. Create a vault, add encrypted entries, lock and unlock with a master password -- all running locally in your browser with AES-256-GCM encryption.
 </Callout>
 
 ---
@@ -199,7 +199,7 @@ This is not a full timing-attack-proof implementation (JavaScript's runtime char
 Raw encryption functions are low-level primitives. The `Keystore` class provides the session management layer that applications actually interact with:
 
 ```typescript
-// Keystore is used internally by the encrypted-vault showcase app.
+// Keystore is used internally by the Encrypted Vault block.
 // For production use, the encryptionMiddleware + deriveEncryptionKey pattern is recommended.
 import { deriveEncryptionKey, hashPassphrase, verifyPassphrase } from '@localmode/core';
 
@@ -340,7 +340,7 @@ The most common architecture for encrypted semantic search in LocalMode is:
 2. **During session**: search against in-memory plaintext vectors; all results pass through `afterSearch` for metadata decryption
 3. **On lock**: clear in-memory vectors and the derived key
 
-This gives you zero-knowledge storage (nothing readable on disk without the password) while maintaining full-speed HNSW search during active sessions. The encrypted-vault showcase app demonstrates this pattern.
+This gives you zero-knowledge storage (nothing readable on disk without the password) while maintaining full-speed HNSW search during active sessions. The [Encrypted Vault block](https://localmode.ai/blocks/privacy/encrypted-vault) demonstrates this pattern.
 
 ---
 
@@ -467,7 +467,7 @@ await encryptedDb.add({ id: '1', vector: embedding, metadata: { text: 'Confident
 const results = await encryptedDb.search(embedding, { topK: 5 });
 ```
 
-For a complete working application, explore the [Encrypted Vault](https://localmode.ai/encrypted-vault) showcase app, which demonstrates vault creation, password-based unlock, entry encryption/decryption, and locking -- all built on the stack described in this post.
+For a complete working application, explore the [Encrypted Vault block](https://localmode.ai/blocks/privacy/encrypted-vault), which demonstrates vault creation, password-based unlock, entry encryption/decryption, and locking -- all built on the stack described in this post.
 
 ---
 

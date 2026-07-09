@@ -1,0 +1,559 @@
+{
+  "family": "conversation",
+  "navLabel": "Conversation",
+  "docsFolder": "conversation",
+  "npmDependencies": [],
+  "previews": {
+    "ui/conversation/conversation": "@/registry/localmode/conversation/conversation/conversation-demo",
+    "ui/conversation/message": "@/registry/localmode/conversation/message/message-demo",
+    "ui/conversation/response": "@/registry/localmode/conversation/response/response-demo",
+    "ui/conversation/loader": "@/registry/localmode/conversation/loader/loader-demo",
+    "ui/conversation/prompt-input": "@/registry/localmode/conversation/prompt-input/prompt-input-demo",
+    "ui/conversation/prompt-input-attachments": "@/registry/localmode/conversation/prompt-input-attachments/prompt-input-attachments-demo",
+    "ui/conversation/suggestions": "@/registry/localmode/conversation/suggestions/suggestions-demo",
+    "ui/conversation/actions": "@/registry/localmode/conversation/actions/actions-demo",
+    "ui/conversation/reasoning": "@/registry/localmode/conversation/reasoning/reasoning-demo",
+    "ui/conversation/sources": "@/registry/localmode/conversation/sources/sources-demo",
+    "ui/conversation/tool": "@/registry/localmode/conversation/tool/tool-demo",
+    "ui/conversation/task": "@/registry/localmode/conversation/task/task-demo",
+    "ui/conversation/code-block": "@/registry/localmode/conversation/code-block/code-block-demo",
+    "ui/conversation/agent-step-timeline": "@/registry/localmode/conversation/agent-step-timeline/agent-step-timeline-demo",
+    "ui/conversation/source-citation-list": "@/registry/localmode/conversation/source-citation-list/source-citation-list-demo",
+    "ui/conversation/structured-output-viewer": "@/registry/localmode/conversation/structured-output-viewer/structured-output-viewer-demo",
+    "ui/conversation/pipeline-tracker": "@/registry/localmode/conversation/pipeline-tracker/pipeline-tracker-demo",
+    "ui/conversation/branch": "@/registry/localmode/conversation/branch/branch-demo",
+    "ui/conversation/inline-citation": "@/registry/localmode/conversation/inline-citation/inline-citation-demo",
+    "ui/conversation/tool-approval": "@/registry/localmode/conversation/tool-approval/tool-approval-demo",
+    "ui/conversation/chain-of-thought": "@/registry/localmode/conversation/chain-of-thought/chain-of-thought-demo",
+    "ui/conversation/scroll-to-bottom-button": "@/registry/localmode/conversation/scroll-to-bottom-button/scroll-to-bottom-button-demo",
+    "ui/conversation/system-notice-banner": "@/registry/localmode/conversation/system-notice-banner/system-notice-banner-demo",
+    "ui/conversation/in-message-error": "@/registry/localmode/conversation/in-message-error/in-message-error-demo"
+  },
+  "items": [
+    {
+      "name": "ui/conversation/conversation",
+      "type": "registry:component",
+      "title": "Conversation",
+      "description": "Scrollable message-display surface with first-class scroll-anchoring: auto-pins to the newest content while tokens stream, releases on scroll-up with a scroll-to-bottom control, and re-pins on return. Presentational; renders useChat().messages.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "button"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/conversation/conversation.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/message",
+      "type": "registry:component",
+      "title": "Message",
+      "description": "Role-aware chat message (data-role) rendering string or ContentPart[] — markdown text, image thumbnails with a fullscreen dialog, and file download chips from local bytes — with contained/flat variants and an inter-message Checkpoint savepoint marker. Matches @localmode/react's message model.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/conversation/lib-markdown",
+        "avatar",
+        "button",
+        "dialog",
+        "@localmode/ui/lib/browser-utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/message/message.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "registry/localmode/conversation/lib/markdown.tsx",
+          "type": "registry:lib"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/response",
+      "type": "registry:component",
+      "title": "Response",
+      "description": "Streaming markdown renderer for assistant output: shows a cursor while streaming, tolerates partial/unterminated markdown without layout breakage, supports an optional typewriter reveal, and routes LaTeX/Mermaid blocks to swappable renderers gated behind props (declare katex/mermaid if used).",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/conversation/lib-markdown"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/response/response.tsx",
+          "type": "registry:component"
+        },
+        {
+          "path": "registry/localmode/conversation/lib/markdown.tsx",
+          "type": "registry:lib"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/loader",
+      "type": "registry:component",
+      "title": "Loader",
+      "description": "A small family of busy indicators (dots / pulse / typing / spinner) plus a Shimmer skeleton-text variant, shown while a local model warms up or streams its first token.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/loader/loader.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/prompt-input",
+      "type": "registry:component",
+      "title": "Prompt Input",
+      "description": "Form-based, auto-resizing chat composer: Enter submits, Shift+Enter inserts a newline, the submit control swaps to a stop control while streaming, with optional controlled value/onValueChange, a PromptInputProvider, a voice/dictation mic toggle (wire to local Whisper), and a slash-command / + picker.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/input-controls/char-limit-indicator",
+        "button"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/prompt-input/prompt-input.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/prompt-input-attachments",
+      "type": "registry:component",
+      "title": "Prompt Input Attachments",
+      "description": "Attachment surface for the composer: image/file attach via picker, paste, and drag-and-drop with preview thumbnails, per-item removal, a hovercard preview, media-category auto-detection, and upload-state chips. Produces attachments via a bundled readFileAsDataUrl helper (copy-owned); the shape matches common chat image-content models.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/conversation/prompt-input",
+        "button",
+        "hover-card",
+        "@localmode/ui/lib/browser-utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/prompt-input-attachments/prompt-input-attachments.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/suggestions",
+      "type": "registry:component",
+      "title": "Suggestions",
+      "description": "A horizontal row of selectable prompt chips; each Suggestion invokes a callback with its text to seed the composer.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "button"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/suggestions/suggestions.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/actions",
+      "type": "registry:component",
+      "title": "Actions",
+      "description": "Message-level controls — copy (with copied state), regenerate, read-aloud (wire to local Kokoro TTS), an overflow more-menu, and an on-device FeedbackBar (thumbs up/down, no telemetry).",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "button",
+        "dropdown-menu",
+        "tooltip"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/actions/actions.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/reasoning",
+      "type": "registry:component",
+      "title": "Reasoning",
+      "description": "The model's own thinking tokens (DeepSeek-R1 style) in a collapsible region: auto-expands while streaming with an elapsed timer and auto-collapses on the final answer, plus a compact ThinkingBar one-line status strip. Tier of the thinking taxonomy: ThinkingBar -> Reasoning -> ChainOfThought.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "collapsible"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/reasoning/reasoning.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/sources",
+      "type": "registry:component",
+      "title": "Sources",
+      "description": "Retrieval citations from local RAG results: a collapsible container with favicon/title/excerpt chips, a 0-1 relevance score, and an optional Web/Images/News tabbed layout. All metadata is local — no remote unfurl.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "collapsible",
+        "tabs"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/sources/sources.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/tool",
+      "type": "registry:component",
+      "title": "Tool",
+      "description": "A single tool invocation card with a status taxonomy (pending/running/streaming/completed/error), expandable ToolInput/ToolOutput, a per-tool renderer registry with a Fallback for unregistered tools, and a ToolGroup that collapses consecutive calls behind a stacked-icon summary. Data source: useAgent / wllama/transformers tool calling.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "badge",
+        "collapsible"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/tool/tool.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/task",
+      "type": "registry:component",
+      "title": "Task",
+      "description": "A multi-step agent process as an ordered list of steps (index, tool, status, args, observation) with the final-answer step distinguished. Its data shape aligns with @localmode/react useAgent steps so agent UIs wire up without adapters.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/task/task.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/code-block",
+      "type": "registry:component",
+      "title": "Code Block",
+      "description": "Syntax-highlighted code (lazy Shiki, plain-pre fallback) with a language label and a copy-to-clipboard control.",
+      "author": "LocalMode",
+      "dependencies": [
+        "shiki"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "button"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/code-block/code-block.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/agent-step-timeline",
+      "type": "registry:component",
+      "title": "Agent Step Timeline",
+      "description": "A vertical timeline of ReAct agent steps: collapsible per-step cards (color-coded tool badge, args, observation show-more, index, elapsed-ms), a finish final-answer card, auto-scroll, a Thinking row while running, a finish-reason badge (max_steps/timeout/loop_detected/error), and nested sub-agent/handoff rendering. Data source: useAgent.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "badge"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/agent-step-timeline/agent-step-timeline.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/source-citation-list",
+      "type": "registry:component",
+      "title": "Source Citation List",
+      "description": "In-message attributed-sources list extending Sources: numbered items, a similarity score with a radial confidence ring, and clamped body text with staggered fade-in, behind a collapsible Show N sources toggle. Data source: useSemanticSearch / useAnswerQuestion / useAskDocument.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "collapsible"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/source-citation-list/source-citation-list.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/structured-output-viewer",
+      "type": "registry:component",
+      "title": "Structured Output Viewer",
+      "description": "A result panel for useGenerateObject extending Response: pretty-printed JSON, an independently-usable inference-stats footer (tokens, duration, attempts), and a navigable typed schema-tree view.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "tabs"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/structured-output-viewer/structured-output-viewer.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/pipeline-tracker",
+      "type": "registry:component",
+      "title": "Multi-Step Pipeline Tracker",
+      "description": "Progress surfaces for local workflows: a horizontal numbered-step indicator (active/completed/pending), a stage+percentage variant for ingest, a Steps/Plan vertical outline with expandable detail, and an inference-queue surface grouped by priority. Maps to usePipeline onProgress and useInferenceQueue.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "collapsible",
+        "progress"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/pipeline-tracker/pipeline-tracker.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/branch",
+      "type": "registry:component",
+      "title": "Branch",
+      "description": "A message-versioning navigator that pages between regenerated/edited assistant variants for one turn, with prev/next controls and an X of N indicator (hidden at N=1). Wraps an existing Message non-intrusively; pure client state. Data source: useChat.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "button"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/branch/branch.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/inline-citation",
+      "type": "registry:component",
+      "title": "Inline Citation",
+      "description": "Inline superscript citation markers in prose that open a hovercard with the cited local chunk (title, excerpt, quoted snippet), with a carousel paging multiple sources for one claim. References locally-stored chunks only — no remote unfurl. Data source: useSemanticSearch.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "hover-card"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/inline-citation/inline-citation.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/tool-approval",
+      "type": "registry:component",
+      "title": "Tool Approval",
+      "description": "A human-in-the-loop confirmation card that gates a tool call before execution (pending tool + args with approve/reject), then re-renders read-only as an immutable receipt. Pairs with Tool and feeds the choice back into the agent loop. Data source: useAgent.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "button"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/tool-approval/tool-approval.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/chain-of-thought",
+      "type": "registry:component",
+      "title": "Chain of Thought",
+      "description": "A structured step-by-step reasoning timeline (distinct from free-text Reasoning): labeled steps with per-step status and icons, and nested slots for embedded retrieved sources and images, collapsing to one line on completion. Data source: useGenerateText reasoning-mode + local RAG.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "collapsible"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/chain-of-thought/chain-of-thought.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/scroll-to-bottom-button",
+      "type": "registry:component",
+      "title": "Scroll To Bottom Button",
+      "description": "A floating scroll-to-bottom affordance tied to a chat container's scroll state — appears when the user scrolls up, scrolls to and pins the latest content. Pairs with a ScrollAnchor pin element. Data source: useChat.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "button"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/scroll-to-bottom-button/scroll-to-bottom-button.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/system-notice-banner",
+      "type": "registry:component",
+      "title": "System Notice Banner",
+      "description": "An in-conversation info/warning banner (not a message bubble) for local-first state changes: offline/online, model switch, capability-unavailable, WebGPU->WASM fallback, cache eviction, or download-required. Data source: useNetworkStatus / useCapabilities.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "button"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/system-notice-banner/system-notice-banner.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    },
+    {
+      "name": "ui/conversation/in-message-error",
+      "type": "registry:component",
+      "title": "In-Message Error",
+      "description": "An accessible per-message error/retry block rendered inline on a failed assistant message (not a global toast), with auto-extracted error text, a classified hint (OOM / WebGPU lost / model load), and a retry action. Data source: useChat error state.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "button"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/conversation/in-message-error/in-message-error.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "conversation"
+      ]
+    }
+  ]
+}

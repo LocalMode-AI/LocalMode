@@ -15,7 +15,8 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 PDF text extraction using PDF.js for local document processing. Extract text, metadata, and structure from PDFs entirely in the browser.
 
 <Callout type="info" title="See it in action">
-  Try [PDF Search](https://localmode.ai/pdf-search) for a working demo.
+  Try the [Knowledge Base block](https://localmode.ai/blocks/knowledge/semantic-search) — it extracts PDF
+  text on-device, then chunks, embeds, and searches it for grounded Q&A.
 </Callout>
 
 ## Features
@@ -213,8 +214,8 @@ async function ingestPDF(file: File) {
       metadata: {
         filename: file.name,
         page: pageIndex + 1,
-        start: c.startIndex,
-        end: c.endIndex,
+        start: c.start,
+        end: c.end,
       },
     }))
   );
@@ -231,14 +232,14 @@ async function ingestPDF(file: File) {
 
 // Query
 async function queryPDF(question: string) {
-  const results = await semanticSearch({
+  const { results } = await semanticSearch({
     db,
     model: embeddingModel,
     query: question,
     k: 3,
   });
 
-  const context = results.map((r) => `[Page ${r.metadata.page}]\n${r.metadata.text}`).join('\n\n');
+  const context = results.map((r) => `[Page ${r.metadata?.page}]\n${r.text}`).join('\n\n');
 
   const result = await streamText({
     model: llm,
@@ -369,8 +370,8 @@ if (metadata) {
   />
 </Cards>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| PDF Search | Extract text from PDFs for semantic search and Q&A | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |
+| RAG Chat | Streaming grounded RAG over your own text/PDF corpus with inline citations, on a core ⇄ LangChain engine toggle | [Live](https://localmode.ai/blocks/knowledge/rag-chat) · Install: `npx shadcn add @localmode/ui/blocks/knowledge/rag-chat` |

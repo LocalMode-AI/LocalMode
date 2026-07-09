@@ -8,12 +8,14 @@ const content = `# LocalMode
 
 - [Getting Started](https://localmode.dev/docs/getting-started): Installation and quickstart
 - [Core Package](https://localmode.dev/docs/core): VectorDB, embeddings, generation, pipelines, agents, middleware
-- [Transformers Provider](https://localmode.dev/docs/transformers): HuggingFace Transformers.js models (embeddings, classification, NER, vision, audio, OCR, TTS)
-- [WebLLM Provider](https://localmode.dev/docs/webllm): 32 curated LLM models via WebGPU
-- [Wllama Provider](https://localmode.dev/docs/wllama): GGUF models via llama.cpp WASM (30 curated + 160K+ models)
+- [Transformers Provider](https://localmode.dev/docs/transformers): HuggingFace Transformers.js models (embeddings, classification, NER, vision-language chat, audio, OCR, TTS)
+- [WebLLM Provider](https://localmode.dev/docs/webllm): 32 curated LLM models via WebGPU (vision chat via Phi-3.5-vision)
+- [Wllama Provider](https://localmode.dev/docs/wllama): GGUF models via llama.cpp WASM (30 curated + 160K+ models; vision chat via mmprojUrl)
 - [LiteRT Provider](https://localmode.dev/docs/litert): Google LiteRT on-device models (Gemma 4, Qwen3)
+- [Chrome AI Provider](https://localmode.dev/docs/chrome-ai): Zero-download text generation (Prompt API / Gemini Nano), summarization, and translation via Chrome built-in AI
 - [MediaPipe Provider](https://localmode.dev/docs/mediapipe): Hand/pose/face tracking, gestures, audio/image classification, language detection
 - [React Hooks](https://localmode.dev/docs/react): 56 hooks for all core functions
+- [Next.js Integration](https://localmode.dev/docs/nextjs): ssr:false provider loading, COOP/COEP headers, CSP, bundler aliases, service-worker rules
 
 ## Blog
 
@@ -25,7 +27,7 @@ const content = `# LocalMode
 ## Links
 
 - [Demo Apps](https://localmode.ai): 34 live showcase apps
-- [GitHub](https://github.com/user/LocalMode): Source code
+- [GitHub](https://github.com/LocalMode-AI/LocalMode): Source code
 - [npm](https://www.npmjs.com/org/localmode): Published packages
 - [Full Documentation for AI](https://localmode.dev/llms-full.txt): Complete API reference
 `;

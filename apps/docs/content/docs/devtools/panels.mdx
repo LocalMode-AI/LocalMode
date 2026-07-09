@@ -1,12 +1,18 @@
 ---
 title: 'Panels'
-description: Reference for each DevTools widget panel tab.
+description: Reference for each DevTools bridge data domain.
 icon: LayoutPanelLeft
 ---
 
-# Panels Reference
+import { Callout } from 'fumadocs-ui/components/callout';
 
-The DevTools widget displays six tabbed panels. Data updates are instant — the widget subscribes to the bridge directly, with no polling delay.
+# Data Domains Reference
+
+<Callout type="warn" title="DevToolsWidget was removed in v3.0.0">
+  The prebuilt widget and its `@localmode/devtools/widget` subpath were **removed in v3.0.0**. Surface these same six data domains in your own UI with the [React hooks](/docs/devtools#react-hooks) (`@localmode/devtools/react`: `useDevToolsQueueStats`, `useDevToolsEvents`, and friends), or install the copy-owned [`ui/devtools` family](https://localmode.ai/docs/devtools) primitives and the composed `ui/blocks/devtools-drawer` (which reproduces these six tabs). Each domain below maps 1:1 to a hook and to a `ui/devtools` primitive.
+</Callout>
+
+The bridge collects six data domains, surfaced as the six tabs of `ui/blocks/devtools-drawer`. Updates are instant — hooks subscribe to the bridge directly, with no polling delay.
 
 ## Models
 

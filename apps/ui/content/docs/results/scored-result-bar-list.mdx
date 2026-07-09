@@ -1,0 +1,73 @@
+---
+title: "Scored Result Bar List"
+description: "A ranked list of {label, score} pairs with proportional fill bars, top-row highlight, skeleton-loading, and an empty-state slot."
+icon: ListOrdered
+---
+
+# Scored Result Bar List
+
+The **Scored Result Bar List** renders any ranked `{label, score}` output as a vertical list: each row shows the label, a formatted confidence percentage (via `ConfidenceScoreBadge`), and an animated horizontal fill bar proportional to the 0–1 score, with the top row highlighted. It ships with a skeleton-loading state and an empty-state slot so it drops straight into async hook flows.
+
+**When to use it:** one data contract serves every ranked-output hook — `useClassify`, `useClassifyZeroShot`, `useDetectObjects`, `useFillMask`, and reranked / `useSemanticSearch` results.
+
+## Preview
+
+<ComponentPreview name="ui/results/scored-result-bar-list" note="Toggle between ranked data, the skeleton-loading state, and the empty state — runs locally." />
+
+<OpenInV0 name="ui/results/scored-result-bar-list" />
+
+## Installation
+
+<InstallTabs name="ui/results/scored-result-bar-list" />
+
+### Dependencies
+
+- **Data source:** renders `Array<{ label, score }>` you pass — works with any backend (classifier, search ranker, or a constant). Recommended producers: `useClassify` / `useClassifyZeroShot` / `useSemanticSearch` from `@localmode/react`. See [Bring your own data](/docs/bring-your-own-data#results--insights).
+
+- `ConfidenceScoreBadge` — the per-row percentage badge (installed automatically as a registry dependency)
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+
+### Files installed
+
+- `scored-result-bar-list.tsx` — the component
+- `confidence-score-badge.tsx` — the embedded badge
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/results/scored-result-bar-list/scored-result-bar-list.tsx" name="ScoredResultBarListProps" />
+
+## Examples
+
+### Zero-shot classification
+
+```tsx
+import { ScoredResultBarList } from '@/components/scored-result-bar-list';
+import { useClassifyZeroShot } from '@localmode/react';
+
+export function Example({ model }) {
+  const { data, isLoading } = useClassifyZeroShot({ model });
+  // classifyZeroShot() returns parallel `labels` / `scores` arrays.
+  const results = (data?.labels ?? []).map((label, i) => ({
+    label,
+    score: data.scores[i],
+  }));
+  return <ScoredResultBarList results={results} isLoading={isLoading} />;
+}
+```
+
+### Limit to the top 3, preserve input order
+
+```tsx
+<ScoredResultBarList results={detections} sort={false} limit={3} />
+```
+
+### Custom empty state
+
+```tsx
+<ScoredResultBarList results={[]} emptyState={<span>Run a query to see results</span>} />
+```
+
+## Customization
+
+Each row uses shadcn/ui token utilities (`bg-card`, `border-border`, `bg-primary/5` for the top row). The proportional fill bar is a positioned `<div>` whose width is the row's score relative to the max — adjust its color classes in the copied file. The per-row percentage is delegated to `ConfidenceScoreBadge`, so tier colors stay consistent with the rest of your results UI.

@@ -153,4 +153,4 @@ The `ImageInput` type accepts:
 
 - **L2 normalization**: Both text and image embeddings are L2-normalized by the provider, so cosine similarity gives well-calibrated cross-modal scores.
 - **Memory**: CLIP loads two separate encoders. On memory-constrained devices, consider using only one modality at a time.
-- **Batch size**: The default `maxEmbeddingsPerCall` is 32. For large batches, use `embedManyImages()` which handles batching automatically.
+- **Batch size**: The default `maxEmbeddingsPerCall` is 32. For large batches, use `embedManyImages()` which handles batching automatically — or [`streamEmbedManyImages()`](/docs/core/multimodal-embeddings#streamembedmanyimages) to stream results with per-batch progress.

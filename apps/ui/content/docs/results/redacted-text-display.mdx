@@ -1,0 +1,74 @@
+---
+title: "Redacted Text Display"
+description: "Inline-annotated text interleaving plain text with color-coded redaction tokens (e.g. [PER], [LOC]) with tooltips, a scan skeleton, and an empty placeholder."
+icon: ShieldAlert
+---
+
+# Redacted Text Display
+
+The **Redacted Text Display** renders source text with detected entities replaced inline by color-coded redaction tokens (e.g. `[PER]`, `[LOC]`), each styled per entity type and tooltipped with its type. It includes a scanning loading skeleton and an empty placeholder. Pass the original text plus the detected entity spans (with `start`/`end` offsets); segmentation happens internally.
+
+**When to use it:** reviewing the output of `useExtractEntities` for NER, PII redaction, or content moderation.
+
+## Preview
+
+<ComponentPreview name="ui/results/redacted-text-display" note="Inline color-coded redaction tokens from a sample NER result — runs locally." />
+
+<OpenInV0 name="ui/results/redacted-text-display" />
+
+## Installation
+
+<InstallTabs name="ui/results/redacted-text-display" />
+
+### Dependencies
+
+- **Data source:** renders the `text` plus `entities` spans you pass — works with any backend. Recommended producer: `useExtractEntities` (NER) from `@localmode/react` (optional). See [Bring your own data](/docs/bring-your-own-data#results--insights).
+
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+
+### Files installed
+
+- `redacted-text-display.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/results/redacted-text-display/redacted-text-display.tsx" name="RedactedTextDisplayProps" />
+
+## Examples
+
+### From extracted entities
+
+```tsx
+import { RedactedTextDisplay } from '@/components/redacted-text-display';
+import { useExtractEntities } from '@localmode/react';
+
+export function Example({ model, text }) {
+  const { data, isLoading, execute } = useExtractEntities({ model });
+  // Call execute(text) to run NER; `data` holds the result.
+  return (
+    <>
+      <button onClick={() => execute(text)}>Scan</button>
+      <RedactedTextDisplay
+        text={text}
+        entities={data?.entities ?? []}
+        isScanning={isLoading}
+      />
+    </>
+  );
+}
+```
+
+### Custom type colors
+
+```tsx
+<RedactedTextDisplay
+  text={text}
+  entities={entities}
+  registry={{ EMAIL: { label: 'Email', color: 'var(--color-rose-500)' } }}
+/>
+```
+
+## Customization
+
+Tokens are tinted with the registry color at low opacity (`color26`) over `bg-card`, falling back to a muted color for unregistered types. Tooltips use the native `title` attribute (no extra dependency). The exported `segmentText()` helper performs the offset-based interleaving — overlapping spans are resolved by keeping the earliest — so you can reuse or test it independently.

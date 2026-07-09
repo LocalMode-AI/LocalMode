@@ -1,0 +1,95 @@
+---
+title: "File Dropzone"
+description: "A generic, format-agnostic drag-and-drop + click-to-browse upload zone for non-image files, with accept-list and max-size validation."
+icon: Upload
+---
+
+# File Dropzone
+
+The **File Dropzone** is a generic, format-agnostic drag-and-drop + click-to-browse upload zone built for non-image files — PDFs, CSV/JSON vector exports, audio, and the like. It validates every file with the copy-owned `validateFile()` helper against an `accept` MIME list and a `maxSize`, emitting only the valid files via `onUpload(files)`; rejected files go to `onReject`. The helper is installed automatically as a registry dependency, so the dropzone is portable — no `@localmode/react` requirement.
+
+It is intentionally distinct from media-vision's `MediaDropzone`: there are **no image-preview semantics** here (no thumbnails). Two focused primitives beat one prop-bloated dropzone, and both reuse `validateFile`.
+
+**When to use it:** ingest documents into a RAG pipeline (pdf-search), import vector exports (data-migrator), or accept meeting recordings (meeting-assistant) — anywhere you take non-image files and need accept-list + size validation with a processing overlay.
+
+## Preview
+
+<ComponentPreview name="ui/data-documents/file-dropzone" note="Accepts PDF / CSV / JSON up to 10MB. Validation runs locally — no model download." />
+
+<OpenInV0 name="ui/data-documents/file-dropzone" />
+
+## Installation
+
+<InstallTabs name="ui/data-documents/file-dropzone" />
+
+### Dependencies
+
+- **Data source:** validates and emits the `File[]` you drop — works in any React app; no backend or model required.
+- `@localmode/ui/lib/browser-utils` — the copy-owned `validateFile()` helper (installed automatically as a registry dependency)
+- `lucide-react` — the upload / spinner icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `file-dropzone.tsx` — the component
+- `lib/browser-utils.ts` — the copy-owned file helpers (if not already present)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/data-documents/file-dropzone/file-dropzone.tsx" name="FileDropzoneProps" />
+
+## Examples
+
+### Accept PDF / CSV / JSON
+
+```tsx
+import { FileDropzone } from '@/components/file-dropzone';
+
+export function Ingest() {
+  return (
+    <FileDropzone
+      accept={['application/pdf', 'text/csv', 'application/json']}
+      maxSize={10_000_000}
+      onUpload={(files) => ingest(files)}
+      onReject={(rejected) => rejected.forEach((r) => console.warn(r.reason))}
+    />
+  );
+}
+```
+
+### Processing overlay
+
+```tsx
+const [busy, setBusy] = useState(false);
+
+<FileDropzone
+  accept={['application/pdf']}
+  processing={busy}
+  processingLabel="Indexing…"
+  onUpload={async (files) => {
+    setBusy(true);
+    await indexAll(files);
+    setBusy(false);
+  }}
+/>
+```
+
+### Single-file, custom hint
+
+```tsx
+<FileDropzone
+  accept={['application/json']}
+  multiple={false}
+  label="Drop a vector export"
+  hint="One .json file, up to 50MB"
+  maxSize={50_000_000}
+  onUpload={([file]) => importExport(file)}
+/>
+```
+
+## Customization
+
+The zone is styled with shadcn/ui CSS-variable utilities (`border-border`, `bg-card`, `bg-accent`, `text-muted-foreground`, `bg-primary/5`), so the dashed border, hover highlight, drag state, and overlay all inherit your theme. Because you own the file, you can swap the `UploadCloud` icon, change the `min-h-40` footprint, or extend the validation (e.g. dedupe by name) in the copied `file-dropzone.tsx`.
+
+The `hint` line defaults to a human-readable summary derived from `accept` (extensions) and `maxSize`; pass an explicit `hint` to override it.

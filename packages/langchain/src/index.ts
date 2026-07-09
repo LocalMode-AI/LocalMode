@@ -18,3 +18,15 @@ export type {
   LocalModeVectorStoreOptions,
   LocalModeRerankerOptions,
 } from './types.js';
+
+// Knowledge base engine — a LangChain-adapter implementation of the frozen
+// `KnowledgeBaseEngine` contract exported by `@localmode/core` (the contract
+// type source; already a peerDependency). Consumers who never toggle the
+// LangChain engine never pull this dependency.
+export { createLangChainKnowledgeBaseEngine } from './knowledge-base-engine.js';
+
+export type {
+  CreateLangChainKnowledgeBaseEngineOptions,
+  LangChainKnowledgeBaseAskConfig,
+  LangChainKnowledgeBaseChunkDefaults,
+} from './knowledge-base-engine.js';

@@ -14,7 +14,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 The GGUF format is the standard for quantized LLM models, with 160,000+ models on HuggingFace. The `@localmode/wllama` package provides tools to inspect model metadata and check browser compatibility before downloading multi-GB files.
 
 <Callout type="info" title="See it in action">
-  Try [GGUF Explorer](https://localmode.ai/gguf-explorer) for a working demo.
+  Try the [Device & Model Lab block](https://localmode.ai/blocks/device/gguf-explorer) to browse 160,000+ GGUF models on HuggingFace, inspect metadata via ~4KB Range reads, and check compatibility against your actual device.
 </Callout>
 
 ## What is GGUF?
@@ -238,6 +238,122 @@ Search HuggingFace for GGUF models:
 - **Qwen** -- Official Qwen GGUF releases
 - **meta-llama** -- Official Meta Llama releases (often converted by community)
 
+## Search GGUF Models on HuggingFace
+
+Instead of hard-coding repo ids, search the live catalog programmatically. `searchGGUFModels()` queries GGUF-tagged repos, and `listGGUFFiles()` lists a repo's `.gguf` files with byte sizes and parsed quantization labels. Both are **anonymous** (no `@huggingface/hub` dependency — raw `fetch` against the public HF REST API), run no code at import time, and accept an `AbortSignal` so a stale search cancels on keystroke or model switch.
+
+```typescript
+import { searchGGUFModels, listGGUFFiles, HFApiError } from '@localmode/wllama';
+
+const controller = new AbortController();
+
+try {
+  // Search by relevance; an EMPTY query browses the top models for the sort
+  // (the 160K+ catalog browse entry point).
+  const { results, nextCursor } = await searchGGUFModels({
+    query: 'llama 1b',
+    sort: 'downloads', // 'downloads' | 'likes' | 'lastModified' (always descending)
+    abortSignal: controller.signal,
+  });
+
+  // Pick a repo and list its .gguf files
+  const repo = results[0];
+  const files = await listGGUFFiles(repo.repoId, { abortSignal: controller.signal });
+
+  for (const file of files) {
+    console.log(file.filename, file.quantLabel, file.sizeBytes);
+    // → 'Llama-3.2-1B-Instruct-Q4_K_M.gguf'  'Q4_K_M'  807694464
+  }
+
+  // Pagination: pass nextCursor back as `cursor` for the next page.
+  if (nextCursor) {
+    const page2 = await searchGGUFModels({ query: 'llama 1b', sort: 'downloads', cursor: nextCursor });
+    // nextCursor === null means the last page.
+  }
+} catch (err) {
+  if (err instanceof HFApiError) {
+    switch (err.kind) {
+      case 'rate-limit': // HTTP 429 — wait and retry
+        break;
+      case 'not-found': // HTTP 404/401/403 — unknown or private repo
+        break;
+      case 'network': // fetch failure, non-OK status, or malformed response
+        break;
+    }
+  }
+  // Abort rejections propagate untouched (the original AbortError, never wrapped),
+  // so a cancelled search is distinguishable from a real failure.
+}
+```
+
+`searchGGUFModels({ query, sort, cursor?, abortSignal? })` resolves to `{ results, nextCursor }`. An empty `query` omits the search filter and browses the top models for that `sort`. Feed the returned `nextCursor` back as `cursor` (with the same query and sort) to page; `nextCursor === null` marks the last page.
+
+### HFModelSearchResult
+
+<TypeTable
+  type={{
+    repoId: {
+      description: "Full repo id, e.g. 'bartowski/Llama-3.2-1B-Instruct-GGUF'",
+      type: 'string',
+    },
+    author: {
+      description: "Repo owner (the 'author/' prefix of the repo id) when derivable",
+      type: 'string | undefined',
+    },
+    downloads: {
+      description: 'All-time download count when reported by the API',
+      type: 'number | undefined',
+    },
+    likes: {
+      description: 'Like count when reported by the API',
+      type: 'number | undefined',
+    },
+    lastModified: {
+      description: 'ISO timestamp of the last repo modification when reported',
+      type: 'string | undefined',
+    },
+    tags: {
+      description: 'Repo tags (pipeline, license, architecture, ...) when reported',
+      type: 'string[] | undefined',
+    },
+  }}
+/>
+
+### HFModelFile
+
+<TypeTable
+  type={{
+    filename: {
+      description: "File name (repo-relative path), e.g. 'Llama-3.2-1B-Instruct-Q4_K_M.gguf'",
+      type: 'string',
+    },
+    sizeBytes: {
+      description: 'File size in bytes when the API reports it',
+      type: 'number | undefined',
+    },
+    quantLabel: {
+      description: "Quantization label parsed from the filename (e.g. 'Q4_K_M', 'IQ2_XS', 'F16', 'Q8_0')",
+      type: 'string | undefined',
+    },
+  }}
+/>
+
+### Errors
+
+Both functions throw `HFApiError` with a `kind` discriminant — exactly three classes:
+
+| `kind` | HTTP | Meaning |
+|--------|------|---------|
+| `'rate-limit'` | 429 | Anonymous API rate limit reached; pause and retry. |
+| `'not-found'` | 404 / 401 / 403 | Unknown or private repo — anonymous HF returns 401/403 for private repos to avoid leaking their existence. |
+| `'network'` | — | Fetch failure, non-OK status, or malformed response body. |
+
+<Callout type="warn" title="Network-dependent">
+  These calls hit the live HuggingFace API, so they are subject to network flakiness and rate limits. The authoritative live surface is the [Device & Model Lab block](https://localmode.ai/blocks/device/gguf-explorer), which browses 160,000+ GGUF models and inspects metadata via ~4KB Range reads without downloading full files.
+</Callout>
+
+New exports: `searchGGUFModels`, `listGGUFFiles`, `HFApiError`, and the `HFSort`, `HFModelSearchResult`, `HFModelFile`, `HFApiErrorKind` types.
+
 ## GGUFMetadata Fields
 
 <TypeTable
@@ -375,8 +491,8 @@ Search HuggingFace for GGUF models:
   />
 </Cards>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| GGUF Explorer | Browse 160K+ GGUF models with metadata inspection and chat | [Demo](https://localmode.ai/gguf-explorer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/gguf-explorer) |
+| GGUF Explorer | Browse 160K+ HuggingFace GGUF models with Range-only metadata inspection, browser-compat verdicts, and a chat handoff | [Live](https://localmode.ai/blocks/device/gguf-explorer) · Install: `npx shadcn add @localmode/ui/blocks/device/gguf-explorer` |

@@ -1,0 +1,87 @@
+---
+title: "Media Dropzone"
+description: "A drag-and-drop + click-to-browse image upload zone with accept-list / max-size validation, idle / drag-over / processing states, and an \"add another\" variant."
+icon: ImagePlus
+---
+
+# Media Dropzone
+
+The **Media Dropzone** is a drag-and-drop + click-to-browse upload zone for image/media files. It renders an idle state (icon + title + subtitle + accepted-formats hint), a drag-over state (highlight + tint + scale), and a processing state (spinner + label overlay), plus a compact **"add another"** variant for adding more files once some exist.
+
+Files are validated with the copy-owned `validateFile` helper (from `@localmode/ui/lib/browser-utils`, installed automatically) against the `accept` list and `maxSize`; valid files are emitted via `onFiles(File[])` and rejected files via `onReject`. It is portable and presentational — no `@localmode/react` runtime requirement — so wire `processing` to any loading state and read the emitted files yourself.
+
+**When to use it:** any image-AI surface — background removal, object detection, OCR, captioning, smart galleries — that takes an image from the user. It replaces the hand-rolled dropzone duplicated across many vision apps. For format-agnostic document uploads (PDF/CSV/JSON, no preview), use `FileDropzone` from the Data & Documents family instead.
+
+## Preview
+
+<ComponentPreview name="ui/media-vision/media-dropzone" note="Drop or pick an image — validated locally, no model download." />
+
+<OpenInV0 name="ui/media-vision/media-dropzone" />
+
+## Installation
+
+<InstallTabs name="ui/media-vision/media-dropzone" />
+
+### Dependencies
+
+- **Data source:** validates files locally and emits them via `onFiles` / `onReject` — works with any backend; pass the emitted `File`s to whatever vision pipeline you use. Recommended LocalMode producers: any vision hook (`useDetectObjects` / `useSegmentImage` / `useCaptionImage`, …) from `@localmode/react` (optional).
+
+- `@localmode/ui/lib/browser-utils` — the copy-owned `validateFile` helper (installed automatically as a registry dependency)
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `media-dropzone.tsx` — the component
+- `lib/browser-utils.ts` — the copy-owned file helpers (if not already present)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/media-vision/media-dropzone/media-dropzone.tsx" name="MediaDropzoneProps" />
+
+## Backing hooks
+
+Turn the emitted `File`s into data URLs with the copy-owned `readFileAsDataUrl` helper (from `@localmode/ui/lib/browser-utils`, installed automatically with this component) and pass them to any vision hook (`useDetectObjects`, `useSegmentImage`, `useCaptionImage`, … from `@localmode/react`, or your own backend).
+
+## Examples
+
+### Basic
+
+```tsx
+import { MediaDropzone } from '@/components/media-dropzone';
+import { readFileAsDataUrl } from '@/lib/browser-utils';
+
+export function Example() {
+  return (
+    <MediaDropzone
+      accept={['image/png', 'image/jpeg']}
+      maxSize={5_000_000}
+      onFiles={async (files) => {
+        const dataUrl = await readFileAsDataUrl(files[0]);
+        // pass dataUrl to a vision hook…
+      }}
+    />
+  );
+}
+```
+
+### Add-another variant
+
+```tsx
+<MediaDropzone addAnother onFiles={(files) => append(files)} />
+```
+
+### Processing state
+
+```tsx
+const { isLoading } = useDetectObjects({ model });
+
+<MediaDropzone processing={isLoading} processingLabel="Detecting…" onFiles={handleFiles} />
+```
+
+## Customization
+
+The zone is styled with shadcn/ui CSS-variable utilities (`border-border`, `bg-card`, `bg-primary`, `text-muted-foreground`), so it inherits your theme. Because you own the file, adjust the `accept` default, swap the `UploadCloud` / `ImagePlus` icons, or restyle the drag-over highlight directly in the copied `media-dropzone.tsx`.
+
+<OpenInV0 name="ui/media-vision/media-dropzone" />

@@ -9,14 +9,28 @@ import type { PipelineStep, PipelineProgress, UsePipelineReturn } from '../core/
 const IS_SERVER = typeof window === 'undefined';
 
 /**
+ * Return type from usePipeline — {@link UsePipelineReturn} plus the run
+ * metrics that the core `PipelineResult` reports (`durationMs`,
+ * `stepsCompleted`).
+ */
+export interface UsePipelineWithMetricsReturn<TResult = unknown>
+  extends UsePipelineReturn<TResult> {
+  /** Wall-clock duration of the last successful run in milliseconds (null until a run completes) */
+  durationMs: number | null;
+  /** Number of steps executed by the last successful run (null until a run completes) */
+  stepsCompleted: number | null;
+}
+
+/**
  * Hook for executing multi-step pipelines with unified progress and cancellation.
  *
  * @param steps - Array of pipeline step definitions
- * @returns Pipeline state with progress tracking and execution controls
+ * @returns Pipeline state with progress tracking, run metrics
+ *   (`durationMs`, `stepsCompleted`), and execution controls
  *
  * @example
  * ```tsx
- * const { result, isRunning, progress, execute, cancel } = usePipeline([
+ * const { result, isRunning, progress, durationMs, execute, cancel } = usePipeline([
  *   chunkStep({ size: 512 }),
  *   embedStep(model),
  *   searchStep(db, 10),
@@ -26,12 +40,14 @@ const IS_SERVER = typeof window === 'undefined';
  */
 export function usePipeline<TResult = unknown>(
   steps: PipelineStep[]
-): UsePipelineReturn<TResult> {
+): UsePipelineWithMetricsReturn<TResult> {
   const [result, setResult] = useState<TResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [currentStep, setCurrentStep] = useState<string | null>(null);
   const [progress, setProgress] = useState<PipelineProgress | null>(null);
+  const [durationMs, setDurationMs] = useState<number | null>(null);
+  const [stepsCompleted, setStepsCompleted] = useState<number | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
@@ -56,9 +72,12 @@ export function usePipeline<TResult = unknown>(
     setError(null);
     setIsRunning(true);
     setResult(null);
+    setDurationMs(null);
+    setStepsCompleted(null);
 
     let currentInput = input;
     const totalSteps = stepsRef.current.length;
+    const startTime = Date.now();
 
     try {
       for (let i = 0; i < totalSteps; i++) {
@@ -77,6 +96,8 @@ export function usePipeline<TResult = unknown>(
         const finalResult = currentInput as TResult;
         setResult(finalResult);
         setProgress({ completed: totalSteps, total: totalSteps, currentStep: '' });
+        setDurationMs(Date.now() - startTime);
+        setStepsCompleted(totalSteps);
         setCurrentStep(null);
         setIsRunning(false);
         return finalResult;
@@ -106,6 +127,8 @@ export function usePipeline<TResult = unknown>(
     setError(null);
     setCurrentStep(null);
     setProgress(null);
+    setDurationMs(null);
+    setStepsCompleted(null);
     setIsRunning(false);
   }, []);
 
@@ -116,11 +139,24 @@ export function usePipeline<TResult = unknown>(
       error: null,
       currentStep: null,
       progress: null,
+      durationMs: null,
+      stepsCompleted: null,
       execute: async () => null,
       cancel: () => {},
       reset: () => {},
     };
   }
 
-  return { result, isRunning, error, currentStep, progress, execute, cancel, reset };
+  return {
+    result,
+    isRunning,
+    error,
+    currentStep,
+    progress,
+    durationMs,
+    stepsCompleted,
+    execute,
+    cancel,
+    reset,
+  };
 }

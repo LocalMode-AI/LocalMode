@@ -11,7 +11,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 LocalMode can optionally use WebGPU compute shaders to accelerate vector distance computation during HNSW search. This is entirely opt-in and falls back to CPU distance functions silently when WebGPU is unavailable.
 
 <Callout type="info" title="See it in action">
-  Try [PDF Search](https://localmode.ai/pdf-search) and [Semantic Search](https://localmode.ai/semantic-search) for working demos of these APIs.
+  Try the [Knowledge Base block](https://localmode.ai/blocks/knowledge/semantic-search) for a working demo of these APIs.
 </Callout>
 
 ## Quick Start
@@ -258,9 +258,9 @@ gpu.destroy();
 
 Failing to clean up may leak GPU buffers until the page is unloaded.
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| PDF Search | GPU-accelerated vector distance for PDF search | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |
-| Semantic Search | WebGPU batch distance computation for large indexes | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
+| Knowledge Base (PDF Search) | GPU-accelerated vector distance for PDF search | [Live block](https://localmode.ai/blocks/knowledge/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/semantic-search) |
+| Knowledge Base (Semantic Search) | WebGPU batch distance computation for large indexes | [Live block](https://localmode.ai/blocks/knowledge/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/semantic-search) |

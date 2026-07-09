@@ -19,7 +19,7 @@ import { isCrossOriginIsolated, resolveModelUrl } from './utils.js';
 import { parseGGUFMetadata } from './gguf.js';
 import { resolveWasmPath } from './model.js';
 
-type WllamaInstance = InstanceType<Awaited<typeof import('@wllama/wllama')>['Wllama']>;
+import { importWllama, type WllamaInstance } from './wllama-loader.js';
 
 /**
  * wllama Embedding Model implementation.
@@ -64,9 +64,7 @@ export class WllamaEmbeddingModel implements EmbeddingModel {
 
     this.loadPromise = (async () => {
       try {
-        const cdnBase = 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.2.3';
-        const dynamicImport = new Function('u', 'return import(u)') as (url: string) => Promise<{ Wllama: new (config: { default: string }) => WllamaInstance }>;
-        const { Wllama } = await dynamicImport(`${cdnBase}/esm/index.js`);
+        const { Wllama } = await importWllama();
 
         const catalogEntry = (WLLAMA_MODELS as Record<string, { url: string; dimensions?: number }>)[this.baseModelId];
         const modelUrl = resolveModelUrl(
@@ -108,6 +106,7 @@ export class WllamaEmbeddingModel implements EmbeddingModel {
           nGpuLayers = this.settings.nGpuLayers;
         } else if (this.settings.useWebGPU === true || this.settings.useWebGPU === 'auto') {
           try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports -- optional peer dep probed synchronously; import() would force this sync helper async
             const { isWebGPUSupported } = require('@localmode/core') as { isWebGPUSupported: () => boolean };
             if (isWebGPUSupported()) nGpuLayers = -1;
           } catch { /* core not available */ }

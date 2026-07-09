@@ -1,0 +1,87 @@
+---
+title: "Chunk Boundary Visualizer"
+description: "Visualizes a document split into distinct chunks with C# badges and, in semantic mode, inter-chunk boundary similarity scores."
+icon: SquareSplitHorizontal
+---
+
+# Chunk Boundary Visualizer
+
+The **Chunk Boundary Visualizer** shows how a document was split into chunks. Each chunk renders as a distinct alternating-accent segment with a monospace `C1`/`C2` badge; in **semantic mode**, the inter-chunk boundary similarity (e.g. `sim: 0.74`) appears as a faint label between segments — lower values mark stronger topic breaks.
+
+It takes a decoupled `ChunkInfo[]` (`text`, `chunkIndex`, `rightSimilarity`) plus the active mode, so it pairs directly with [`useSemanticChunk()`](https://localmode.dev/docs/react) from `@localmode/react`: map its `Chunk[]` output into `ChunkInfo[]`, pulling `rightSimilarity` from `chunk.metadata.semanticBoundaries`. It is display-only — it owns no chunking logic.
+
+**When to use it:** a RAG ingest UI or a chunking playground where you want users to see *why* the document split where it did (e.g. tuning the semantic threshold).
+
+## Preview
+
+<ComponentPreview name="ui/data-documents/chunk-boundary-visualizer" note="Toggle semantic mode to show inter-chunk sim labels. Fed pre-computed ChunkInfo[] — no model download." />
+
+<OpenInV0 name="ui/data-documents/chunk-boundary-visualizer" />
+
+## Installation
+
+<InstallTabs name="ui/data-documents/chunk-boundary-visualizer" />
+
+### Dependencies
+
+- **Data source:** renders the plain `ChunkInfo[]` you pass — works with any chunker; recommended LocalMode producer: `useSemanticChunk` output mapped to `ChunkInfo[]` (optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `chunk-boundary-visualizer.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/data-documents/chunk-boundary-visualizer/chunk-boundary-visualizer.tsx" name="ChunkBoundaryVisualizerProps" />
+
+## Examples
+
+### Visualize `useSemanticChunk` output
+
+```tsx
+import { ChunkBoundaryVisualizer } from '@/components/chunk-boundary-visualizer';
+import { useSemanticChunk } from '@localmode/react';
+
+export function ChunkingPlayground({ model }: { model: any }) {
+  const { data: chunks, execute } = useSemanticChunk({ model, threshold: 0.4 });
+
+  return (
+    <div>
+      <button onClick={() => execute(documentText)}>Chunk</button>
+      <ChunkBoundaryVisualizer
+        mode="semantic"
+        chunks={(chunks ?? []).map((c) => ({
+          text: c.text,
+          chunkIndex: c.index,
+          rightSimilarity: c.metadata?.semanticBoundaries?.rightSimilarity ?? null,
+        }))}
+      />
+    </div>
+  );
+}
+```
+
+### Fixed mode (segments only)
+
+```tsx
+{/* boundary labels are hidden when mode !== "semantic" */}
+<ChunkBoundaryVisualizer mode="fixed" chunks={chunks} />
+```
+
+### Truncate long chunks
+
+```tsx
+<ChunkBoundaryVisualizer
+  mode="semantic"
+  maxCharsPerChunk={160}
+  chunks={chunks}
+/>
+```
+
+## Customization
+
+Segments cycle through four soft accent tints (`sky` / `violet` / `emerald` / `amber` at low opacity) with shadcn/ui CSS-variable text and borders, so they read as distinct while inheriting your theme. The `C#` badge uses a `font-mono` chip; the boundary label is a faint `sim: 0.NN` between thin rules.
+
+Boundary similarity labels render only when `mode === "semantic"`, the chunk is not the last, and `rightSimilarity` is a finite number — so non-semantic modes show clean segments without labels. Because you own the file, you can swap the `SEGMENT_TINTS` palette, color-code boundaries by threshold, or render the full text instead of truncating in the copied `chunk-boundary-visualizer.tsx`.

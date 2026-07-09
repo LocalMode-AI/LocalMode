@@ -1,0 +1,225 @@
+{
+  "family": "results",
+  "navLabel": "Results & Insights",
+  "docsFolder": "results",
+  "npmDependencies": [
+    "@localmode/core",
+    "@localmode/react",
+    "@localmode/transformers",
+    "lucide-react"
+  ],
+  "previews": {
+    "ui/results/confidence-score-badge": "@/registry/localmode/results/confidence-score-badge/confidence-score-badge-demo",
+    "ui/results/scored-result-bar-list": "@/registry/localmode/results/scored-result-bar-list/scored-result-bar-list-demo",
+    "ui/results/top-result-card": "@/registry/localmode/results/top-result-card/top-result-card-demo",
+    "ui/results/cosine-similarity-meter": "@/registry/localmode/results/cosine-similarity-meter/cosine-similarity-meter-demo",
+    "ui/results/editable-label-set": "@/registry/localmode/results/editable-label-set/editable-label-set-demo",
+    "ui/results/entity-stats-bar": "@/registry/localmode/results/entity-stats-bar/entity-stats-bar-demo",
+    "ui/results/redacted-text-display": "@/registry/localmode/results/redacted-text-display/redacted-text-display-demo",
+    "ui/results/evaluation-metrics-dashboard": "@/registry/localmode/results/evaluation-metrics-dashboard/evaluation-metrics-dashboard-demo",
+    "ui/results/entity-relationship-graph": "@/registry/localmode/results/entity-relationship-graph/entity-relationship-graph-demo",
+    "ui/results/threshold-calibration-panel": "@/registry/localmode/results/threshold-calibration-panel/threshold-calibration-panel-demo",
+    "ui/results/error-alert": "@/registry/localmode/results/error-alert/error-alert-demo",
+    "ui/results/mode-error-boundary": "@/registry/localmode/results/mode-error-boundary/mode-error-boundary-demo"
+  },
+  "items": [
+    {
+      "name": "ui/results/confidence-score-badge",
+      "type": "registry:component",
+      "title": "Confidence Score Badge",
+      "description": "Maps a 0–1 score to a semantic color tier (configurable thresholds; default high ≥ 0.8 success, medium ≥ 0.5 warning, low muted) and renders the formatted percentage as a flat pill badge or a radial dial (conic-gradient ring wired to CSS variables, not daisyUI). The shared scored-output atom replacing 12 copied score-color helpers; consumed cross-family by media-vision's ImageResultGallery. Pairs with useClassify / useClassifyZeroShot / useSemanticSearch / useAnswerQuestion. Self-contained and presentational; exports resolveTier().",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": ["@localmode/ui/lib/utils"],
+      "files": [
+        {
+          "path": "registry/localmode/results/confidence-score-badge/confidence-score-badge.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": ["results"]
+    },
+    {
+      "name": "ui/results/scored-result-bar-list",
+      "type": "registry:component",
+      "title": "Scored Result Bar List",
+      "description": "A ranked vertical list of {label, score} pairs — each row shows the label, a confidence percentage (via ConfidenceScoreBadge), and an animated horizontal fill bar proportional to the 0–1 score, with the top row highlighted. Ships skeleton-loading and empty-state slots. One data contract serves useClassify / useClassifyZeroShot / useDetectObjects / useFillMask / useSemanticSearch.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/results/confidence-score-badge"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/results/scored-result-bar-list/scored-result-bar-list.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": ["results"]
+    },
+    {
+      "name": "ui/results/top-result-card",
+      "type": "registry:component",
+      "title": "Top Result Card",
+      "description": "A hero card highlighting the single winning classification result — large label, prominent radial confidence dial (via ConfidenceScoreBadge), and a tier-tinted gradient-border glow. Designed to pair above a ScoredResultBarList; serves any single-winner output (sentiment, intent, language detection, gesture, zero-shot). Pairs with useClassifyZeroShot (top result).",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/results/confidence-score-badge"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/results/top-result-card/top-result-card.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": ["results"]
+    },
+    {
+      "name": "ui/results/cosine-similarity-meter",
+      "type": "registry:component",
+      "title": "Cosine Similarity Meter",
+      "description": "A display card showing a cosine similarity (0–1) as a large numeric value with a human-readable bucket label (Very similar … Unrelated) using configurable thresholds, plus a proportional half-ring SVG arc gauge. Derived from two embeddings (useEmbed / useEmbedImage). Self-contained; exports resolveBucket().",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": ["@localmode/ui/lib/utils"],
+      "files": [
+        {
+          "path": "registry/localmode/results/cosine-similarity-meter/cosine-similarity-meter.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": ["results"]
+    },
+    {
+      "name": "ui/results/editable-label-set",
+      "type": "registry:component",
+      "title": "Editable Label Set",
+      "description": "An editable set of color-cycling removable chips managing a candidate-label list (zero-shot candidate labels or any string-tag collection): hover-reveal remove, inline add input (Enter to commit, Backspace-on-empty to remove last). Fully controlled via labels / onAdd / onRemove, cycling a CSS-variable palette by index. Feeds useClassifyZeroShot candidate labels.",
+      "author": "LocalMode",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": ["@localmode/ui/lib/utils"],
+      "files": [
+        {
+          "path": "registry/localmode/results/editable-label-set/editable-label-set.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": ["results"]
+    },
+    {
+      "name": "ui/results/entity-stats-bar",
+      "type": "registry:component",
+      "title": "Entity Stats Bar",
+      "description": "A horizontal stats bar showing the total detected-entity count plus per-type breakdown badges (PER / LOC / ORG / MISC — colored dot + count + label), computing counts internally from a DetectedEntity[] (or a pre-computed counts map) against a color/label registry. Pairs with useExtractEntities. Self-contained; exports countByType().",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": ["@localmode/ui/lib/utils"],
+      "files": [
+        {
+          "path": "registry/localmode/results/entity-stats-bar/entity-stats-bar.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": ["results"]
+    },
+    {
+      "name": "ui/results/redacted-text-display",
+      "type": "registry:component",
+      "title": "Redacted Text Display",
+      "description": "An inline-annotated text renderer interleaving plain text with color-coded redaction tokens (e.g. [PER], [LOC]) styled per entity type with native tooltips, including a scanning loading skeleton and an empty placeholder. Takes source text + detected entity spans (start/end) from useExtractEntities; segments internally (overlaps resolved by earliest). Exports segmentText().",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": ["@localmode/ui/lib/utils"],
+      "files": [
+        {
+          "path": "registry/localmode/results/redacted-text-display/redacted-text-display.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": ["results"]
+    },
+    {
+      "name": "ui/results/evaluation-metrics-dashboard",
+      "type": "registry:component",
+      "title": "Evaluation Metrics Dashboard",
+      "description": "A composite evaluation dashboard: a KPI/stat-tile row (value + delta), a grid of metric cards (accuracy / precision / recall / F1), a color-coded N×N confusion matrix (diagonal success-tinted, off-diagonal error-tinted, intensity scaled to max cell, with legend), a radar/spider sub-view, and a threshold-calibration panel. Driven by useEvaluateModel + useCalibrateThreshold. All charts are minimal in-component SVG — no external chart library. Each section is optional.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": ["@localmode/ui/lib/utils"],
+      "files": [
+        {
+          "path": "registry/localmode/results/evaluation-metrics-dashboard/evaluation-metrics-dashboard.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": ["results"]
+    },
+    {
+      "name": "ui/results/entity-relationship-graph",
+      "type": "registry:component",
+      "title": "Entity Relationship Graph",
+      "description": "An interactive force-directed graph of typed nodes + relationship-labeled edges with drag / zoom / pan / hover / click and SVG/PNG export — for visualizing VectorDB entity relationships, agent-memory connections, embedding clusters, or useExtractEntities (NER) co-occurrences. The layout runs entirely client-side over local data via a lightweight in-component force simulation (no d3-force, no network). Exports layoutGraph().",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": ["@localmode/ui/lib/utils"],
+      "files": [
+        {
+          "path": "registry/localmode/results/entity-relationship-graph/entity-relationship-graph.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": ["results"]
+    },
+    {
+      "name": "ui/results/threshold-calibration-panel",
+      "type": "registry:component",
+      "title": "Threshold Calibration Panel",
+      "description": "A presentational panel for similarity-threshold calibration results: the empirically calibrated threshold shown side-by-side with the model's preset default (or an explicit no-preset state), calibration metadata (percentile, sample size, model ID, distance function), the pairwise similarity-distribution statistics (mean / median / std-dev / min / max / pair count), and a reference list of known-good preset thresholds with the active model highlighted. Loading and empty states carry optional calibrate / cancel affordances. Designed from the ThresholdCalibration result shape; the full-fidelity standalone complement to evaluation-metrics-dashboard's embedded calibration sub-view. Driven by useCalibrateThreshold (pair presetThreshold with getDefaultThreshold and presets with MODEL_THRESHOLD_PRESETS). All in-component SVG-free token styling — no chart library.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": ["@localmode/ui/lib/utils"],
+      "files": [
+        {
+          "path": "registry/localmode/results/threshold-calibration-panel/threshold-calibration-panel.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": ["results"]
+    },
+    {
+      "name": "ui/results/error-alert",
+      "type": "registry:component",
+      "title": "Error Alert",
+      "description": "A compact, dismissible error surface with an optional retry action — a role=\"alert\" region showing the message, a Retry button (only when onRetry is provided), and a dismiss control. Presentational: the consumer owns the operation state and decides what retry and dismiss do. The deduped shared alert for operation feedback near a result. Pairs with any hook that surfaces an error string.",
+      "author": "LocalMode",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": ["@localmode/ui/lib/utils"],
+      "files": [
+        {
+          "path": "registry/localmode/results/error-alert/error-alert.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": ["results"]
+    },
+    {
+      "name": "ui/results/mode-error-boundary",
+      "type": "registry:component",
+      "title": "Mode Error Boundary",
+      "description": "A React error boundary that isolates a render failure in its subtree: it catches the error, renders a compact recoverable role=\"alert\" notice with the message and a Reset button that clears the error and re-renders the children, so one failing surface cannot blank the whole page. A structural copy-owned utility with local prop shapes.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": ["@localmode/ui/lib/utils"],
+      "files": [
+        {
+          "path": "registry/localmode/results/mode-error-boundary/mode-error-boundary.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": ["results"]
+    }
+  ]
+}

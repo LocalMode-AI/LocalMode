@@ -183,7 +183,7 @@ export class ModelLoadError extends EmbeddingError {
   readonly modelId: string;
 
   constructor(modelId: string, cause?: Error) {
-    super(`Failed to load embedding model: ${modelId}`, {
+    super(`Failed to load model: ${modelId}`, {
       hint: `Model loading failed. Try:
 1. Check your network connection (first load downloads the model)
 2. Ensure sufficient storage space for model cache

@@ -17,7 +17,7 @@ HuggingFace Transformers.js provider for LocalMode. Run ML models locally in the
 
 - 🚀 **Browser-Native** — Run ML models directly in the browser
 - 🔒 **Privacy-First** — All processing happens locally
-- 📦 **Model Caching** — Models cached in IndexedDB for instant subsequent loads
+- 📦 **Model Caching** — Model files cached in the browser Cache API (`transformers-cache`) for instant subsequent loads, with a resilient write path that never fails a load
 - ⚡ **Optimized** — Uses quantized models for smaller size and faster inference
 
 ## Installation
@@ -223,6 +223,35 @@ await preloadModel('Xenova/bge-small-en-v1.5', {
 const usage = await getModelStorageUsage();
 ```
 
+### Model Caching & Reliability
+
+Model files are cached in the **browser Cache API** under the cache name
+`transformers-cache` (not IndexedDB, not OPFS). After the first download,
+subsequent loads are served from that cache with no network requests — models
+work fully offline once cached.
+
+The provider installs a **resilient cache** by default: model-file cache reads
+and writes never fail a model load. If a cache write fails (the intermittent
+`NetworkError: Cache.add() encountered a network error` class of failure some
+environments hit around CDN redirects, or a full/unavailable Cache Storage),
+the model still loads from the network response and a single warning per file
+is logged — caching is retried on the next load. Environments without the
+Cache API (some private-browsing modes) degrade to always-download without
+errors.
+
+Opt out to restore stock transformers.js caching:
+
+```typescript
+import { createTransformers } from '@localmode/transformers';
+
+const provider = createTransformers({ resilientCache: false });
+```
+
+If you run a PWA service worker, do **not** route or cache model downloads in
+the app-shell service worker — the provider self-caches, and intercepting the
+multi-gigabyte files double-caches them. See the
+[offline-first PWA guide](/blog/offline-first-ai-pwa).
+
 ### Custom Provider Instances
 
 Use `createTransformers()` to create a provider instance with custom settings instead of the default singleton:
@@ -332,7 +361,7 @@ export async function embedText(text: string) {
 ```
 
 <Callout type="tip">
-  Model creation is lightweight (it returns a lazy proxy), but keeping a single reference avoids redundant setup. This pattern is used across all 21 showcase apps that use `@localmode/transformers`.
+  Model creation is lightweight (it returns a lazy proxy), but keeping a single reference avoids redundant setup. This pattern applies anywhere you use `@localmode/transformers`.
 </Callout>
 
 ### WebGPU Device Detection

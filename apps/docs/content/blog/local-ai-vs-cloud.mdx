@@ -3,7 +3,7 @@ title: "Near Cloud-Quality AI at $0 Cost: No APIs, No Servers, Completely Privat
 description: "We benchmarked 18 local browser model categories across 60+ curated models against OpenAI, Google, AWS, and Cohere. Qwen3.5-4B scores 88.8% on MMLU-Redux (thinking mode), approaching GPT-5. Embeddings hit 99% of cloud quality, and the annual savings at scale reach six figures -- all while keeping data 100% private."
 author: LocalMode
 date: 2026-03-25
-dateModified: "2026-05-28"
+dateModified: "2026-07-04"
 faq:
   - question: "How do local browser AI models compare to cloud APIs in quality?"
     answer: "Seven out of 18 model categories hit 90%+ of cloud API quality. Embeddings match OpenAI at 99%, NER reaches 93-96% of GPT-5, and Qwen3.5-4B scores 88.8% on MMLU-Redux in thinking mode -- within 4 points of GPT-5's 92.5% on MMLU."
@@ -14,7 +14,7 @@ faq:
   - question: "What is the privacy advantage of local browser AI?"
     answer: "Privacy is architectural, not contractual. The code physically cannot send data to external servers because all inference runs in the browser's WebAssembly or WebGPU runtime. This matters for healthcare (HIPAA), legal (attorney-client privilege), finance, and any user-sensitive data."
   - question: "What local LLM providers does LocalMode support for browser inference?"
-    answer: "LocalMode ships four LLM providers: WebLLM (MLC/WebGPU, fastest), Transformers.js v4 (ONNX/WebGPU, broadest model selection), wllama (GGUF/WASM, universal browser support), and LiteRT-LM (Google's on-device engine). Together they offer 60+ curated models and access to 160,000+ GGUF models."
+    answer: "LocalMode ships four LLM providers: WebLLM (MLC/WebGPU, fastest), Transformers.js v4 (ONNX/WebGPU, broadest model selection), wllama (GGUF/WASM, universal browser support), and LiteRT-LM (Google's on-device engine). Together they offer 76 curated models and access to 160,000+ GGUF models."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
@@ -117,7 +117,7 @@ The structural limitation: Opus-MT requires downloading a separate model for eac
 
 ### LLM Chat: 75-96% of GPT-5 (Depending on Task and Mode)
 
-LocalMode now ships **four LLM providers** that run entirely in the browser - WebLLM (MLC/WebGPU, fastest), Transformers.js v4 (ONNX/WebGPU, broadest model selection), wllama (GGUF/WASM, universal browser support), and LiteRT-LM (Google's on-device engine, early preview). Together they offer 60+ curated models and access to 160,000+ GGUF models on HuggingFace.
+LocalMode now ships **four LLM providers** that run entirely in the browser - WebLLM (MLC/WebGPU, fastest), Transformers.js v4 (ONNX/WebGPU, broadest model selection), wllama (GGUF/WASM, universal browser support), and LiteRT-LM (Google's on-device engine, early preview). Together they offer 76 curated models and access to 160,000+ GGUF models on HuggingFace.
 
 The headline result: **Qwen3.5-4B** (ONNX, Feb 2026) scores **88.8% on MMLU-Redux** in thinking mode - within 4 points of GPT-5's 92.5% on MMLU. (Note: MMLU and MMLU-Redux are related but distinct benchmarks; this is a close comparison, not an exact apples-to-apples match.) For knowledge-intensive tasks -- the kind that power search, classification, and Q&A features -- a browser model is now in the same tier as the flagship cloud API.
 
@@ -335,7 +335,7 @@ All benchmarks use published scores from model cards, academic papers, and offic
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

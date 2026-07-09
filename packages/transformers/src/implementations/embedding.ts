@@ -8,6 +8,7 @@
 
 import type { EmbeddingModel } from '@localmode/core';
 import type { ModelSettings, TransformersDevice, ModelLoadProgress } from '../types.js';
+import { installResilientModelCache } from '../resilient-cache.js';
 
 // Dynamic import to avoid bundling transformers.js if not used
 type FeatureExtractionPipeline = Awaited<
@@ -80,6 +81,7 @@ export class TransformersEmbeddingModel implements EmbeddingModel {
       // `[W:onnxruntime:, session_state.cc:1280 VerifyEachNodeIsAssignedToAnEp]`
       // verbose mixed-EP warning that fires on every WebGPU/WASM split.
       env.backends.onnx.logLevel = 'error';
+      installResilientModelCache(env);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (env.backends.onnx as any).logSeverityLevel = 3;
       if (env.backends.onnx.wasm) {

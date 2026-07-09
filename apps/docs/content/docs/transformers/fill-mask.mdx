@@ -14,7 +14,7 @@ Predict masked tokens in text using BERT-style models. Useful for smart autocomp
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [Smart Autocomplete](https://localmode.ai/smart-autocomplete) for a working demo.
+  The [Complete block](https://localmode.ai/blocks/writing-tools/complete) runs ModernBERT fill-mask completion live in the browser.
 </Callout>
 
 ## Recommended Models
@@ -28,7 +28,7 @@ Predict masked tokens in text using BERT-style models. Useful for smart autocomp
 
 ## Smart Autocomplete Example
 
-Based on the [Smart Autocomplete](https://localmode.ai/smart-autocomplete) showcase app:
+Based on the [Complete block](https://localmode.ai/blocks/writing-tools/complete):
 
 ```typescript
 import { transformers } from '@localmode/transformers';
@@ -63,11 +63,11 @@ async function getSuggestions(partialSentence: string) {
   4. **ModernBERT for suggestions** — `ModernBERT-base-ONNX` provides strong general-purpose predictions
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| Smart Autocomplete | Predict masked words for intelligent text completion | [Demo](https://localmode.ai/smart-autocomplete) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-autocomplete) |
+| Complete | ModernBERT fill-mask completion | [Live](https://localmode.ai/blocks/writing-tools/complete) · Install: `npx shadcn add @localmode/ui/blocks/writing-tools/complete` |
 
 ## Next Steps
 

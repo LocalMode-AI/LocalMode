@@ -411,6 +411,31 @@ describe('generateObject()', () => {
     ).rejects.toThrow();
   });
 
+  it('appends the /no_think soft switch to the USER prompt (thinking models)', async () => {
+    // Regression: Qwen3's thinking soft switch is detected in USER messages
+    // by its chat template; buildStructuredPrompt's system-prompt copy is
+    // ignored by engines with a baked template (e.g. LiteRT .litertlm), and
+    // unsuppressed thinking overruns the token budget mid-<think> so no JSON
+    // is ever emitted. Found by the blocks-chat agent E2E lane.
+    let capturedPrompt: string | undefined;
+    const model = {
+      modelId: 'test',
+      provider: 'test',
+      contextLength: 4096,
+      async doGenerate(opts: { prompt: string }) {
+        capturedPrompt = opts.prompt;
+        return {
+          text: '{"name": "A", "age": 1}',
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, durationMs: 1 },
+        };
+      },
+    };
+
+    await generateObject({ model, schema: objectSchema, prompt: 'Extract the user' });
+    expect(capturedPrompt).toBe('Extract the user\n/no_think');
+  });
+
   it('defaults temperature to 0', async () => {
     let capturedTemp: number | undefined;
     const model = {

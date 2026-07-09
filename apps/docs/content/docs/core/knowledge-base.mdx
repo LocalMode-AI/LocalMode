@@ -1,0 +1,522 @@
+---
+title: Knowledge Base
+description: Provider-agnostic RAG engine — ingest, search, and grounded Q&A over your own documents.
+icon: Library
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+The **Knowledge Base engine** wraps the RAG building blocks — chunking, embedding, in-browser vector search, and grounded generation — behind one small `KnowledgeBaseEngine` contract. You inject an embedding model and a lazily-resolved language model; the engine owns chunk → embed → store on `ingest()`, vector retrieval on `search()`, and retrieve → generate on `ask()`.
+
+<Callout type="info" title="See it in action">
+  Try the [knowledge blocks](https://localmode.ai/blocks/knowledge) for a working demo of this engine — the Ingest, Search, Ask, and Data experiences running entirely in the browser.
+</Callout>
+
+The engine is **provider-agnostic**: it constructs no `transformers.*` (or any provider) instance, so `@localmode/core` gains RAG-engine surface but no new runtime dependency. Nothing loads on construction — the embedding model runs on the first `ingest()`/`search()`, and the language model downloads only on the **first `ask()`**.
+
+## Quick Start
+
+```ts
+import { createKnowledgeBaseEngine } from '@localmode/core';
+import type { RawDocument } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+// Inject the embedding model; the answer model is lazily constructed (loads on first ask()).
+const engine = createKnowledgeBaseEngine({
+  embeddingModel: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  getLanguageModel: () =>
+    transformers.languageModel('onnx-community/granite-4.0-350m-ONNX-web'),
+});
+
+const docs: RawDocument[] = [
+  {
+    id: crypto.randomUUID(),
+    title: 'Privacy Overview',
+    text: 'LocalMode runs models entirely in the browser. Data never leaves the device...',
+    source: 'text',
+    addedAt: Date.now(),
+  },
+];
+
+// 1. Ingest (chunk → embed → store)
+await engine.ingest(docs, { chunking: 'recursive', chunkSize: 500 });
+
+// 2. Search (vector-ranked hits only)
+const hits = await engine.search('privacy and encryption', { topK: 10 });
+
+// 3. Ask (retrieve → grounded answer; downloads the language model on first call)
+const { answer, sources } = await engine.ask('What is encrypted?');
+```
+
+<Callout type="info" title="Type names">
+  Inside the module the contract keeps the verbatim names `ChunkMetadata`, `IngestOptions`, and
+  `SearchOptions`. Because those collide with the existing core RAG/VectorDB exports, `@localmode/core`
+  re-exports them from its barrel under `KnowledgeBase*` **aliases**. When you import the types from
+  `@localmode/core`, use the aliased names:
+
+  ```ts
+  import type {
+    KnowledgeBaseChunkMetadata, // = ChunkMetadata
+    KnowledgeBaseIngestOptions, // = IngestOptions
+    KnowledgeBaseSearchOptions, // = SearchOptions
+  } from '@localmode/core';
+  ```
+
+  The other contract types — `KnowledgeBaseEngine`, `RawDocument`, `KBSearchResult`, `AskOptions`,
+  `AskResult`, `EngineStats`, `ChunkingMode`, `DocumentSource` — are exported verbatim.
+</Callout>
+
+## API Reference
+
+### `createKnowledgeBaseEngine(options)`
+
+Creates the provider-agnostic core `KnowledgeBaseEngine` (`kind: 'core'`) bound to one embedding space. Switching embedding models means a new engine plus a re-ingest of your raw-document store.
+
+<TypeTable
+  type={{
+    embeddingModel: {
+      description:
+        'The embedding model that defines the corpus space. A single engine instance is bound to one embedding space.',
+      type: 'EmbeddingModel',
+      required: true,
+    },
+    getLanguageModel: {
+      description:
+        'Lazy factory for the grounded-answer language model. Called (and awaited) only when ask() first runs, so nothing loads on construction. The caller owns model creation and any device pre-probe (e.g. a WebGPU adapter probe). Resolved once and reused; a rejection is not cached, so a later ask() retries.',
+      type: '() => Promise<LanguageModel> | LanguageModel',
+      required: true,
+    },
+    storage: {
+      description:
+        "VectorDB storage backend — an in-memory session store, 'indexeddb', or a custom StorageAdapter.",
+      type: "'memory' | 'indexeddb' | StorageAdapter",
+      default: "'memory'",
+    },
+    chunkDefaults: {
+      description: 'Default recursive-chunker sizes applied when IngestOptions omits them.',
+      type: 'KnowledgeBaseChunkDefaults',
+    },
+    askConfig: {
+      description: 'Overridable ask-time generation parameters (system prompt, tokens, temperature, retrieval depth).',
+      type: 'KnowledgeBaseAskConfig',
+    },
+  }}
+/>
+
+### `KnowledgeBaseEngine`
+
+The frozen engine contract. Both the core engine and the LangChain-adapter engine implement exactly this shape over their own session-scoped stores; `kind` identifies the active implementation.
+
+<TypeTable
+  type={{
+    kind: {
+      description: 'Which implementation is active (readonly).',
+      type: "'core' | 'langchain'",
+    },
+    ingest: {
+      description: '(Re-)ingest the given raw documents (chunk → embed → store). Re-ingesting a document id replaces its existing chunks.',
+      type: '(docs: RawDocument[], opts: KnowledgeBaseIngestOptions) => Promise<{ chunks: number }>',
+    },
+    search: {
+      description: 'Vector search over the indexed corpus. Returns vector-ranked hits only — add your own rerank stage if needed.',
+      type: '(query: string, opts: KnowledgeBaseSearchOptions) => Promise<KBSearchResult[]>',
+    },
+    ask: {
+      description: 'Grounded RAG answer (retrieve → generate, reasoning tags stripped). Downloads the language model on first call.',
+      type: '(question: string, opts?: AskOptions) => Promise<AskResult>',
+    },
+    removeDocument: {
+      description: "Remove a document's chunks by document id.",
+      type: '(docId: string) => Promise<void>',
+    },
+    clear: {
+      description: 'Drop every chunk vector from the index.',
+      type: '() => Promise<void>',
+    },
+    stats: {
+      description: 'Snapshot of the indexed corpus.',
+      type: '() => Promise<EngineStats>',
+    },
+  }}
+/>
+
+### `RawDocument`
+
+The raw (pre-chunking) input to `ingest()`. Chunk vector ids are derived as `` `${id}:${chunkIndex}` ``.
+
+<TypeTable
+  type={{
+    id: {
+      description: 'Stable id (uuid). Chunk vector ids are derived from it.',
+      type: 'string',
+      required: true,
+    },
+    title: {
+      description: 'Display title (filename, sample title, or first-line derivation).',
+      type: 'string',
+      required: true,
+    },
+    text: {
+      description: 'Full extracted text.',
+      type: 'string',
+      required: true,
+    },
+    source: {
+      description: "Origin lane. 'pdf' enables page attribution.",
+      type: 'DocumentSource',
+      required: true,
+    },
+    addedAt: {
+      description: 'Epoch milliseconds the document was added to the store.',
+      type: 'number',
+      required: true,
+    },
+    category: {
+      description: 'Optional category label (drives facets). Inherited by every chunk.',
+      type: 'string',
+    },
+    meta: {
+      description: 'Lane-specific extras (PDF page count / OCR model id / import format).',
+      type: 'Record<string, string | number>',
+    },
+    pages: {
+      description: 'Per-page text with page numbers (PDF lane; enables page attribution).',
+      type: 'Array<{ page: number; text: string }>',
+    },
+  }}
+/>
+
+<Callout type="info">
+  `DocumentSource` is `'text' | 'sample' | 'pdf' | 'ocr' | 'import'`.
+</Callout>
+
+### `KnowledgeBaseIngestOptions`
+
+Options for `ingest()` (the module's `IngestOptions`).
+
+<TypeTable
+  type={{
+    chunking: {
+      description: "Chunking strategy applied to every document. 'off' stores each doc as a single chunk; 'semantic' derives its own windows (size/overlap do not apply).",
+      type: "'off' | 'recursive' | 'semantic'",
+      required: true,
+    },
+    chunkSize: {
+      description: 'Recursive-chunker size in characters (falls back to chunkDefaults, then core defaults).',
+      type: 'number',
+    },
+    chunkOverlap: {
+      description: 'Recursive-chunker overlap in characters.',
+      type: 'number',
+    },
+    onProgress: {
+      description: "Phase-scoped progress callback, fired as chunk → embed → store.",
+      type: "(p: { phase: 'chunk' | 'embed' | 'store'; completed: number; total: number }) => void",
+    },
+    abortSignal: {
+      description: 'Cancellation signal — honored between chunking/embedding phases and per document.',
+      type: 'AbortSignal',
+    },
+  }}
+/>
+
+### `KnowledgeBaseSearchOptions`
+
+Options for `search()` (the module's `SearchOptions`).
+
+<TypeTable
+  type={{
+    topK: {
+      description: 'Number of hits to return.',
+      type: 'number',
+      required: true,
+    },
+    filter: {
+      description: 'Metadata filter passed to the vector store. Over-fetch (e.g. topK × 3) for a downstream rerank stage is the caller\'s responsibility.',
+      type: 'Record<string, unknown>',
+    },
+    minScore: {
+      description: 'Minimum vector score a hit must reach to be returned.',
+      type: 'number',
+    },
+    abortSignal: {
+      description: 'Cancellation signal.',
+      type: 'AbortSignal',
+    },
+  }}
+/>
+
+### `AskOptions`
+
+Options for `ask()`.
+
+<TypeTable
+  type={{
+    topK: {
+      description: 'Retrieval depth for grounding chunks (engine default of 4 applies when unset).',
+      type: 'number',
+    },
+    onToken: {
+      description: 'Streaming token callback. Reasoning tags are filtered before emission, and a tag split across chunk boundaries is never emitted.',
+      type: '(text: string) => void',
+    },
+    abortSignal: {
+      description: 'Cancellation signal.',
+      type: 'AbortSignal',
+    },
+  }}
+/>
+
+### `AskResult`
+
+<TypeTable
+  type={{
+    answer: {
+      description: 'The grounded answer, with <think>…</think> reasoning stripped.',
+      type: 'string',
+    },
+    sources: {
+      description: 'The retrieved chunks the answer was grounded on, best-first.',
+      type: 'KBSearchResult[]',
+    },
+    durationMs: {
+      description: 'Wall-clock generation time in milliseconds.',
+      type: 'number',
+    },
+  }}
+/>
+
+### `KBSearchResult`
+
+One search hit surfaced to `search()` and `ask()`.
+
+<TypeTable
+  type={{
+    id: {
+      description: 'Contract id, reconstructed as `${docId}:${chunkIndex}`.',
+      type: 'string',
+    },
+    score: {
+      description: 'Vector similarity score (cosine, higher-is-better, in [0, 1]).',
+      type: 'number',
+    },
+    rerankScore: {
+      description: 'Present after an optional (caller-added) rerank stage; the raw vector score stays in `score`.',
+      type: 'number',
+    },
+    metadata: {
+      description: 'Full chunk metadata for the hit.',
+      type: 'KnowledgeBaseChunkMetadata',
+    },
+  }}
+/>
+
+### `KnowledgeBaseChunkMetadata`
+
+Chunk-level metadata stored alongside every vector (the module's `ChunkMetadata`).
+
+<TypeTable
+  type={{
+    docId: {
+      description: 'Id of the RawDocument this chunk was derived from.',
+      type: 'string',
+    },
+    docTitle: {
+      description: 'Display title of the source document.',
+      type: 'string',
+    },
+    chunkIndex: {
+      description: '0-based index of the chunk within its source document.',
+      type: 'number',
+    },
+    text: {
+      description: 'Chunk text (stored for result rendering, rerank, and ask grounding).',
+      type: 'string',
+    },
+    source: {
+      description: 'Origin lane inherited from the source document.',
+      type: 'DocumentSource',
+    },
+    category: {
+      description: 'Category inherited from the source document, when present.',
+      type: 'string',
+    },
+    page: {
+      description: '1-based PDF page the chunk starts on, when known.',
+      type: 'number',
+    },
+  }}
+/>
+
+<Callout type="info">
+  `KnowledgeBaseChunkMetadata` carries an index signature (`[key: string]: unknown`), so engines may
+  store additional fields alongside the ones above.
+</Callout>
+
+### `EngineStats`
+
+<TypeTable
+  type={{
+    documents: {
+      description: 'Number of distinct documents currently indexed.',
+      type: 'number',
+    },
+    chunks: {
+      description: 'Total number of chunk vectors currently indexed.',
+      type: 'number',
+    },
+    dimensions: {
+      description: 'Embedding dimensionality of the active model.',
+      type: 'number',
+    },
+  }}
+/>
+
+### `KnowledgeBaseAskConfig`
+
+Overridable ask-time generation parameters, passed as `askConfig` to `createKnowledgeBaseEngine`.
+
+<TypeTable
+  type={{
+    systemPrompt: {
+      description: 'System prompt grounding the model on the numbered sources.',
+      type: 'string',
+    },
+    maxTokens: {
+      description: 'Generation budget.',
+      type: 'number',
+      default: '256',
+    },
+    temperature: {
+      description: 'Sampling temperature — grounded answers should stick to sources.',
+      type: 'number',
+      default: '0.2',
+    },
+    topK: {
+      description: 'Retrieval depth when AskOptions.topK is omitted.',
+      type: 'number',
+      default: '4',
+    },
+    maxSourceChars: {
+      description: 'Per-source character cap in the ask prompt.',
+      type: 'number',
+      default: '1500',
+    },
+  }}
+/>
+
+<Callout type="info">
+  `KnowledgeBaseChunkDefaults` (`chunkSize?`, `chunkOverlap?`) supplies default recursive-chunker
+  sizes applied when a per-call `KnowledgeBaseIngestOptions` omits them.
+</Callout>
+
+<Callout type="info">
+  For recommended embedding and generation models, provider-specific options, and practical recipes,
+  see the [Transformers Embeddings](/docs/transformers/embeddings) and
+  [Transformers Text Generation](/docs/transformers/text-generation) guides. This page owns the API reference
+  only — model tables live in the provider guides.
+</Callout>
+
+## Cancellation Support
+
+Every method accepts an `AbortSignal`. `ingest()` honors it **between the chunking and embedding phases and per document** — the underlying `addMany` store step has no per-call signal, so an in-flight store batch completes. `search()` and `ask()` call `throwIfAborted()` **between stages** (embed → retrieve → generate).
+
+```ts
+const controller = new AbortController();
+
+// Cancel after 10 seconds
+setTimeout(() => controller.abort(), 10_000);
+
+try {
+  await engine.ingest(docs, {
+    chunking: 'recursive',
+    chunkSize: 500,
+    abortSignal: controller.signal,
+    onProgress: ({ phase, completed, total }) => {
+      console.log(`${phase}: ${completed}/${total}`);
+    },
+  });
+} catch (error) {
+  if (error.name === 'AbortError') {
+    console.log('Ingestion was cancelled');
+  }
+}
+```
+
+## Lazy Loading
+
+The engine keeps self-contained lazy singletons in its closure, so it upholds the no-model-download-on-page-load invariant:
+
+- **VectorDB** — created on the first call that has a real embedding in hand; the embedding's length fixes the collection's dimensionality exactly.
+- **Language model** — resolved via `getLanguageModel()` only when `ask()` first runs, so the answer-model download is triggered by the first question, never by construction or ingestion.
+
+An engine or embedding-model switch means a new engine plus a re-ingest of your raw-document store — a single engine instance is bound to one embedding space.
+
+## Custom Engine Implementation
+
+Implement the `KnowledgeBaseEngine` interface to back a knowledge base with your own stack (a different vector store, a remote index, a custom retrieval pipeline) while keeping the same session contract:
+
+```ts
+import type {
+  KnowledgeBaseEngine,
+  RawDocument,
+  KBSearchResult,
+  AskResult,
+  EngineStats,
+  KnowledgeBaseIngestOptions,
+  KnowledgeBaseSearchOptions,
+  AskOptions,
+} from '@localmode/core';
+
+class MyEngine implements KnowledgeBaseEngine {
+  readonly kind = 'core';
+
+  async ingest(
+    docs: RawDocument[],
+    opts: KnowledgeBaseIngestOptions,
+  ): Promise<{ chunks: number }> {
+    // chunk → embed → store in your backing index
+    return { chunks: 0 };
+  }
+
+  async search(
+    query: string,
+    opts: KnowledgeBaseSearchOptions,
+  ): Promise<KBSearchResult[]> {
+    // vector-ranked hits from your index
+    return [];
+  }
+
+  async ask(question: string, opts?: AskOptions): Promise<AskResult> {
+    // retrieve → generate; strip reasoning tags before returning
+    return { answer: '', sources: [], durationMs: 0 };
+  }
+
+  async removeDocument(docId: string): Promise<void> {}
+
+  async clear(): Promise<void> {}
+
+  async stats(): Promise<EngineStats> {
+    return { documents: 0, chunks: 0, dimensions: 0 };
+  }
+}
+```
+
+<Callout type="info">
+  The LangChain-adapter engine `createLangChainKnowledgeBaseEngine` in `@localmode/langchain`
+  (`kind: 'langchain'`) is a **result-equivalent** implementation of this same contract over a
+  LangChain retrieval stack — see the [LangChain](/docs/langchain) guide.
+</Callout>
+
+<Callout type="info">
+  In React, the [`useKnowledgeBase`](/docs/react/knowledge-base) hook owns a session raw-document
+  store and re-ingests it through the selected engine on an engine-kind or embedding-model toggle,
+  exposing ingest/search/ask state with built-in loading, progress, and cancellation.
+</Callout>
+
+## Composed Block
+
+| Block | Description | Links |
+|-----|-------------|-------|
+| RAG Chat | Streaming grounded RAG over your own text/PDF corpus with inline citations, on a core ⇄ LangChain engine toggle | [Live](https://localmode.ai/blocks/knowledge/rag-chat) · Install: `npx shadcn add @localmode/ui/blocks/knowledge/rag-chat` |

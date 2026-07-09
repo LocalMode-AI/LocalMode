@@ -1,0 +1,93 @@
+---
+title: "Code Diff Viewer"
+description: "A unified or side-by-side text/code diff of two local strings — before/after of redacted, translated, or transformed text — computed entirely client-side."
+icon: GitCompare
+---
+
+# Code Diff Viewer
+
+The **Code Diff Viewer** shows a line-level diff of two **local** strings — additions in green, deletions in red — in either a **unified** (single-column) or **split** (side-by-side) layout. The diff is computed in-browser with a dependency-free longest-common-subsequence algorithm. There is **no ML hook and no server**.
+
+It is the text/code analog of the image-only `BeforeAfterImageViewer`. Use it for the before/after of:
+
+- **PII redaction** — `redactPII()` raw → redacted.
+- **Translation** — `translate()` source → target.
+- **Any text transform** — prompt edits, formatting, rewrites.
+
+**Local content only.** You pass two strings; it draws the diff. Nothing leaves the device.
+
+**When to use it:** make a text transformation legible — show exactly what your local pipeline changed.
+
+## Preview
+
+<ComponentPreview name="ui/artifacts/code-diff-viewer" note="Diffs a PII-redaction before/after with a unified ↔ split toggle — pure client-side, no model download." />
+
+<OpenInV0 name="ui/artifacts/code-diff-viewer" />
+
+## Installation
+
+<InstallTabs name="ui/artifacts/code-diff-viewer" />
+
+### Dependencies
+
+- **Data source:** diffs the two strings you pass — works with any backend; the diff itself needs no hook. Recommended LocalMode producers: `redactPII()` / `translate()` from `@localmode/core` to generate the before/after strings (optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+> No diff library is installed — the line diff is computed in-component (LCS).
+
+### Files installed
+
+- `code-diff-viewer.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/artifacts/code-diff-viewer/code-diff-viewer.tsx" name="CodeDiffViewerProps" />
+
+## Examples
+
+### PII-redaction before/after
+
+```tsx
+import { redactPII } from '@localmode/core';
+import { CodeDiffViewer } from '@/components/artifacts/code-diff-viewer';
+
+export function RedactionDiff({ raw }: { raw: string }) {
+  const redacted = redactPII(raw);
+  return (
+    <CodeDiffViewer
+      original={raw}
+      modified={redacted}
+      originalLabel="Raw"
+      modifiedLabel="Redacted"
+    />
+  );
+}
+```
+
+### Translation source/target (split view)
+
+```tsx
+<CodeDiffViewer
+  original={source}
+  modified={translated}
+  mode="split"
+  originalLabel="English"
+  modifiedLabel="French"
+/>
+```
+
+### Unified vs split
+
+```tsx
+<CodeDiffViewer original={a} modified={b} mode="unified" />
+<CodeDiffViewer original={a} modified={b} mode="split" />
+```
+
+## Local-first boundary
+
+This is a **local** diff. It takes two in-memory strings and computes the diff client-side. It needs no model, makes no network request, and runs no remote tooling.
+
+## Customization
+
+Additions/deletions use Tailwind's `emerald` / `red` palettes; everything else is shadcn/ui CSS-variable utilities (`bg-card`, `border-border`, `text-muted-foreground`), so it inherits your theme. Because you own the file, swap the highlight colors, hide line numbers via `showLineNumbers={false}`, or render the viewer inside an [`Artifact`](/docs/artifacts/artifact) canvas.

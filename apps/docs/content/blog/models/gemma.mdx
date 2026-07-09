@@ -12,7 +12,7 @@ faq:
   - question: "What is the difference between Gemma 2 and Gemma 4 in LocalMode?"
     answer: "Gemma 2 (2B and 9B) uses grouped-query attention with interleaved local-global attention. Gemma 4 (E2B and E4B) introduced Mixture-of-Experts architecture and is available exclusively through the LiteRT provider as WebGPU-only GPU-compiled builds."
   - question: "Can I run Gemma offline after downloading?"
-    answer: "Yes. All Gemma variants work offline after the initial download. Models are cached in IndexedDB via LocalMode's model caching system, and subsequent uses require no network connection."
+    answer: "Yes. All Gemma variants work offline after the initial download. Models are cached by the browser via LocalMode's model caching system, and subsequent uses require no network connection."
   - question: "How many providers support Gemma models?"
     answer: "Gemma is available through three providers: WebLLM (WebGPU), wllama (WASM via GGUF), and LiteRT (WebGPU-only for Gemma 4). This gives the widest browser coverage using the same LanguageModel interface."
 ---
@@ -158,7 +158,7 @@ Gemma models are a strong choice when:
 - **You need text generation** - Gemma is optimized for generation tasks with models across multiple size tiers.
 - **Browser compatibility matters** - Available through 3 providers (webllm, wllama, litert), ensuring coverage across Chrome, Firefox, Safari, and Edge.
 - **Size flexibility is important** - The 1.3GB–5GB range means you can target everything from mid-range devices to high-end desktops with the same model family.
-- **Offline functionality is required** - All variants work offline after the initial download, cached in IndexedDB via LocalMode's model caching system.
+- **Offline functionality is required** - All variants work offline after the initial download, cached by the browser via LocalMode's model caching system.
 
 ## HuggingFace Model Cards
 

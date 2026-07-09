@@ -13,6 +13,7 @@ import type {
   TextToSpeechModel,
 } from '@localmode/core';
 import type { ModelSettings, TransformersDevice, ModelLoadProgress } from '../types.js';
+import { installResilientModelCache } from '../resilient-cache.js';
 import { isKokoroModel, kokoroSynthesize, getKokoroVoiceIds } from './kokoro-tts.js';
 import { KOKORO_DEFAULT_VOICE } from '../kokoro-voices.js';
 
@@ -68,6 +69,7 @@ export class TransformersTextToSpeechModel implements TextToSpeechModel {
       const { pipeline, AutoModel, env } = await import('@huggingface/transformers');
 
       env.backends.onnx.logLevel = 'error';
+      installResilientModelCache(env);
 
       const device = this.settings.device ?? 'wasm';
       const dtype = this.settings.quantized === true ? 'q8' : 'fp32';

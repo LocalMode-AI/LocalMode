@@ -3,7 +3,7 @@ title: "Add Local AI to Your Vue/Svelte/Angular App - LocalMode Works Everywhere
 description: "LocalMode is not a React library. The core packages are plain TypeScript with zero dependencies - they work in Vue 3, Svelte 5, Angular, vanilla JS, and any framework that can import an npm package. Here is the same semantic search feature built four ways to prove it."
 author: LocalMode
 date: 2026-02-09
-dateModified: "2026-05-27"
+dateModified: "2026-07-04"
 faq:
   - question: "Does LocalMode work with Vue, Svelte, and Angular?"
     answer: "Yes. The core packages (@localmode/core and provider packages like @localmode/transformers) are plain TypeScript with zero framework dependencies. They export async functions that work in Vue 3, Svelte 5, Angular, Solid, Qwik, Lit, or vanilla JavaScript -- 14 out of 15 LocalMode packages are framework-agnostic."
@@ -17,7 +17,7 @@ faq:
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-Most of the LocalMode examples you see online are written in React. That is because the showcase app at [localmode.ai](https://localmode.ai) is a Next.js application, and because `@localmode/react` ships 56 purpose-built hooks that make React integration especially smooth.
+Most of the LocalMode examples you see online are written in React. That is because the blocks app at [localmode.ai](https://localmode.ai) is a Next.js application, and because `@localmode/react` ships 59 purpose-built hooks that make React integration especially smooth.
 
 But here is the thing most people miss: **React is optional.** The two packages that do all the actual work - `@localmode/core` and provider packages like `@localmode/transformers` - are plain TypeScript with zero framework dependencies. They export async functions. They return promises. They work anywhere JavaScript runs in a browser.
 
@@ -45,7 +45,7 @@ import { transformers } from '@localmode/transformers';
 // This is vanilla TypeScript. No framework. No hooks. No decorators.
 const model = transformers.embedding('Xenova/bge-small-en-v1.5');
 const db = await createVectorDB({ name: 'docs', dimensions: 384 });
-const results = await semanticSearch({ db, model, query: 'budget concerns', k: 5 });
+const { results } = await semanticSearch({ db, model, query: 'budget concerns', k: 5 });
 ```
 
 That snippet runs the same way whether you paste it into a Vue composable, a Svelte `$effect`, an Angular service, or a plain `.ts` file.
@@ -266,7 +266,7 @@ The `streamText()` function returns an async iterable. You consume it with `for 
 ## What About React?
 
 <Callout type="info" title="React developers">
-  If you are using React, you do not have to use the vanilla API. The `@localmode/react` package provides 56 hooks - `useEmbed`, `useChat`, `useClassify`, `useTranscribe`, `useCaptionImage`, `useSemanticSearch`, and many more - with built-in loading states, error handling, and AbortSignal cancellation. See the [React hooks documentation](/docs/react) for the full API.
+  If you are using React, you do not have to use the vanilla API. The `@localmode/react` package provides 61 hooks - `useEmbed`, `useChat`, `useClassify`, `useTranscribe`, `useCaptionImage`, `useSemanticSearch`, and many more - with built-in loading states, error handling, and AbortSignal cancellation. See the [React hooks documentation](/docs/react) for the full API.
 </Callout>
 
 The `@localmode/react` package is a convenience layer. It wraps the same `@localmode/core` functions in React hooks that manage `useState`, `useRef`, and cleanup logic for you. Under the hood, `useEmbed` calls `embed()`. `useChat` calls `streamText()`. There is no separate React-only runtime.
@@ -283,7 +283,7 @@ Every package in LocalMode except `@localmode/react` is framework-agnostic:
 |---|---|---|---|---|---|---|
 | `@localmode/core` | Functions, VectorDB, types, middleware | Yes | Yes | Yes | Yes | Yes |
 | `@localmode/transformers` | 25+ model types via Transformers.js | Yes | Yes | Yes | Yes | Yes |
-| `@localmode/webllm` | LLM chat via WebGPU (30 models) | Yes | Yes | Yes | Yes | Yes |
+| `@localmode/webllm` | LLM chat via WebGPU (32 models) | Yes | Yes | Yes | Yes | Yes |
 | `@localmode/wllama` | GGUF models via llama.cpp WASM (160K+ models) | Yes | Yes | Yes | Yes | Yes |
 | `@localmode/chrome-ai` | Chrome Built-in AI (zero download) | Yes | Yes | Yes | Yes | Yes |
 | `@localmode/pdfjs` | PDF text extraction | Yes | Yes | Yes | Yes | Yes |
@@ -293,7 +293,7 @@ Every package in LocalMode except `@localmode/react` is framework-agnostic:
 | `@localmode/localforage` | localForage storage adapter | Yes | Yes | Yes | Yes | Yes |
 | `@localmode/devtools` | In-app DevTools widget | Yes | Yes | Yes | Yes | Yes |
 | `@localmode/ai-sdk` | Vercel AI SDK provider | Yes | Yes | Yes | Yes | Yes |
-| `@localmode/react` | React hooks (56 hooks) | **Yes** | No | No | No | No |
+| `@localmode/react` | React hooks (61 hooks) | **Yes** | No | No | No | No |
 
 The pattern is clear: 14 out of 15 packages work with any framework. The one exception exists specifically to provide idiomatic React integration.
 
@@ -341,7 +341,7 @@ ngOnDestroy() { this.controller.abort(); }
 
 ### Handle the First Load
 
-Models download from HuggingFace Hub on first use and cache in IndexedDB. Show a loading indicator during this one-time download:
+Models download from HuggingFace Hub on first use and cache in the browser cache. Show a loading indicator during this one-time download:
 
 ```ts
 import { transformers, preloadModel, isModelCached } from '@localmode/transformers';
@@ -420,7 +420,7 @@ Framework usage statistics are from the [Stack Overflow Developer Survey 2025](h
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

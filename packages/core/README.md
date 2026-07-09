@@ -78,7 +78,7 @@ npm install @localmode/core
 
 - `embed()` - Generate embeddings for single values
 - `embedMany()` - Batch embedding with progress tracking
-- `semanticSearch()` - Search with embeddings
+- `semanticSearch()` - Embed a query and search a VectorDB; `results[].text` round-trips chunk text stored by `ingest()`
 - Middleware support for caching, logging, validation
 
 ### Embedding Drift Detection — [Docs](https://localmode.dev/docs/core/embedding-drift)
@@ -102,6 +102,7 @@ npm install @localmode/core
 
 - `embedImage()` - Embed images into the same vector space as text
 - `embedManyImages()` - Batch image embedding
+- `streamEmbedManyImages()` - Streaming batch image embedding with progress
 - `MultimodalEmbeddingModel` interface for CLIP/SigLIP providers
 - Cross-modal similarity search (text-to-image, image-to-text)
 
@@ -114,9 +115,18 @@ npm install @localmode/core
 - Text chunking (recursive, markdown, code-aware, semantic)
 - `chunk()` - Split documents into optimal chunks
 - `semanticChunk()` - Embedding-aware chunking at topic boundaries
+- `ingest()` - Chunk + embed + store in one call — positional `ingest(db, documents, options?)` or object `ingest({ db, documents, model })` with model-driven embedding via `embedMany()`, AbortSignal support
+- `TEXT_METADATA_FIELD` - The shared metadata key (`'_text'`) under which ingestion stores chunk text and `semanticSearch()` reads it back
 - `createBM25()` - BM25 keyword search
 - `hybridFuse()`, `reciprocalRankFusion()` - Hybrid search combining vector and keyword results
 - Document loaders (Text, JSON, CSV, HTML)
+
+### Knowledge Base Engine — [Docs](https://localmode.dev/docs/core/knowledge-base)
+
+- `createKnowledgeBaseEngine()` - provider-agnostic `KnowledgeBaseEngine` (`kind: 'core'`) wiring chunk (off/recursive/semantic) → embed → typed-metadata VectorDB, vector search, and grounded `ask` with `<think>…</think>` reasoning stripped
+- Models are **injected** (an `EmbeddingModel` + a lazy `getLanguageModel()`) — no provider dependency, no new core dependency
+- Frozen `KnowledgeBaseEngine` contract (`RawDocument`, `KBSearchResult`, `IngestOptions`, `SearchOptions`, `AskOptions`, `AskResult`, `EngineStats`, `ChunkingMode`, `DocumentSource`) implemented identically by the LangChain-adapter engine in `@localmode/langchain`
+- Re-ingest-safe store (`removeDocument`, `clear`, `stats`), PDF page attribution, `AbortSignal` honored between phases
 
 ### WebGPU-Accelerated Vector Search — [Docs](https://localmode.dev/docs/core/webgpu-vector-search)
 
@@ -132,8 +142,10 @@ npm install @localmode/core
 - `createAgent()` - Create reusable agents with tools, instructions, and optional memory
 - `runAgent()` - One-shot agent execution with ReAct loop
 - `createToolRegistry()` - Type-safe tool registration with Zod schemas
+- `defineTool()` - Type-inferring tool definition helper — `parameters` and `execute(params)` are checked against each other, and typed tools fit `ToolDefinition[]` without casts
 - `createAgentMemory()` - VectorDB-backed conversation memory with semantic retrieval
 - Max-step guards, loop detection, duration limits
+- Human-in-the-loop tool approval — flag a tool with `requiresApproval: true` and provide an `onToolApproval` callback (config-level or per-run): the loop pauses before executing the flagged tool, `{ approved: true }` resumes it unchanged, `{ approved: false, reason? }` skips execution and feeds a denial observation back so the model adapts; `AgentStep.approval` records the decision. A pending decision races the run's `abortSignal` (aborting rejects immediately without executing) and its wait time does not count toward `maxDurationMs`; a gated tool with no callback fails fast with `AgentError` before any model call
 - Works with any `LanguageModel` provider (WebLLM, wllama, transformers, litert, chrome-ai)
 
 ### Vector Import/Export — [Docs](https://localmode.dev/docs/core/import-export)
@@ -398,6 +410,16 @@ import {
 } from '@localmode/core';
 ```
 
+### Multimodal Embeddings
+
+```typescript
+import {
+  embedImage,
+  embedManyImages,
+  streamEmbedManyImages,
+} from '@localmode/core';
+```
+
 ### Reranking
 
 ```typescript
@@ -420,7 +442,29 @@ import {
   reciprocalRankFusion,
   // Ingestion
   ingest,
+  TEXT_METADATA_FIELD,
 } from '@localmode/core';
+```
+
+### Knowledge Base Engine
+
+```typescript
+import { createKnowledgeBaseEngine } from '@localmode/core';
+import type {
+  KnowledgeBaseEngine,
+  RawDocument,
+  KBSearchResult,
+  AskResult,
+  EngineStats,
+} from '@localmode/core';
+
+const engine = createKnowledgeBaseEngine({
+  embeddingModel, // an EmbeddingModel you construct (e.g. transformers.embedding(...))
+  getLanguageModel: () => languageModel, // lazy — loaded on first ask()
+});
+await engine.ingest(docs, { chunking: 'recursive', chunkSize: 500 });
+const hits = await engine.search('privacy and encryption', { topK: 10 });
+const { answer, sources } = await engine.ask('What is encrypted?');
 ```
 
 ### Text Generation
@@ -671,6 +715,7 @@ import {
 ```typescript
 import {
   createMockEmbeddingModel,
+  createMockRerankerModel,
   createMockStorage,
   createMockVectorDB,
   createTestVector,
@@ -681,6 +726,9 @@ import {
   createMockFaceLandmarkModel,
   createMockGestureRecognitionModel,
   createMockLanguageDetectionModel,
+  // Framework-agnostic StorageAdapter contract suite for custom adapters —
+  // returns Array<{ name, run }>; register with `for (const c of suite) it(c.name, c.run)`
+  createStorageAdapterConformanceSuite,
 } from '@localmode/core';
 ```
 

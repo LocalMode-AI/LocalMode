@@ -15,7 +15,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 Run large language models locally in the browser using WebGPU. Uses 4-bit quantized models for efficient inference.
 
 <Callout type="info" title="See it in action">
-  Try [LLM Chat](https://localmode.ai/llm-chat) and [Research Agent](https://localmode.ai/research-agent) for working demos.
+  Try the [Chat block](https://localmode.ai/blocks/chat) — a flagship multi-provider chat where WebLLM is one of four selectable backends, with vision attachments, reasoning display, semantic cache, and agent mode.
 </Callout>
 
 ## Features
@@ -394,7 +394,7 @@ import { semanticSearch, rerank, streamText } from '@localmode/core';
 
 async function ragChat(query: string, db: VectorDB) {
   // 1. Retrieve context
-  const results = await semanticSearch({
+  const { results } = await semanticSearch({
     db,
     model: embeddingModel,
     query,
@@ -405,7 +405,7 @@ async function ragChat(query: string, db: VectorDB) {
   const reranked = await rerank({
     model: rerankerModel,
     query,
-    documents: results.map((r) => r.metadata.text as string),
+    documents: results.map((r) => r.text ?? ''),
     topK: 3,
   });
 
@@ -551,12 +551,10 @@ try {
   />
 </Cards>
 
-## Showcase Apps
+## Composed Blocks
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| LLM Chat | Multi-model chat with WebGPU-accelerated LLM inference and vision (Phi 3.5 Vision) | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |
-| Data Extractor | Structured data extraction using WebLLM models | [Demo](https://localmode.ai/data-extractor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/data-extractor) |
-| Research Agent | ReAct agent powered by WebLLM language models | [Demo](https://localmode.ai/research-agent) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/research-agent) |
-| LangChain RAG | RAG pipeline with WebLLM for answer generation | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |
-| PDF Search | PDF Q&A with WebLLM-powered response generation | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |
+| Chat | Multi-provider LLM chat (transformers, WebLLM, wllama, LiteRT) with vision, reasoning, semantic cache, and agent mode | [Live](https://localmode.ai/blocks/chat) · Install: `npx shadcn add @localmode/ui/blocks/chat` |
+| Research Agent | Tool-using ReAct agent over a WebGPU WebLLM model with a step timeline and a human-in-the-loop tool-approval gate | [Live](https://localmode.ai/blocks/agents/research-agent) · Install: `npx shadcn add @localmode/ui/blocks/agents/research-agent` |
+| RAG Chat | Streaming grounded RAG over your own text/PDF corpus with inline citations, on a core ⇄ LangChain engine toggle | [Live](https://localmode.ai/blocks/knowledge/rag-chat) · Install: `npx shadcn add @localmode/ui/blocks/knowledge/rag-chat` |

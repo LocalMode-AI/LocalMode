@@ -1,0 +1,258 @@
+---
+title: "Results & Insights UI Components for Browser AI: The LocalMode Results Family"
+description: "@localmode/ui ships nine copy-owned React components for displaying AI output in the browser -- ConfidenceScoreBadge, ScoredResultBarList, TopResultCard, EditableLabelSet, CosineSimilarityMeter, EvaluationMetricsDashboard, EntityStatsBar, RedactedTextDisplay, and EntityRelationshipGraph. Score-to-color badges, ranked bar lists, confusion matrices, and a force-directed NER graph, all hook-driven and provider-agnostic. Every chart renders client-side; no chart library, no network."
+author: LocalMode
+date: "2026-05-31"
+dateModified: "2026-07-04"
+faq:
+  - question: "What is the LocalMode UI Results & Insights family?"
+    answer: "It is a set of nine copy-owned React components in the @localmode/ui shadcn registry for displaying AI output: ConfidenceScoreBadge (score-to-color tier), ScoredResultBarList (ranked bar list), TopResultCard (winning-result hero), EditableLabelSet (candidate-label chips), CosineSimilarityMeter (similarity gauge), EvaluationMetricsDashboard (KPIs, metric cards, confusion matrix, radar), EntityStatsBar (per-type NER counts), RedactedTextDisplay (inline redaction tokens), and EntityRelationshipGraph (force-directed entity graph). You install them with the shadcn CLI and own the copied code."
+  - question: "How do I install a LocalMode results component?"
+    answer: "Add the @localmode namespace to your components.json, then run the shadcn CLI: npx shadcn add @localmode/ui/results/confidence-score-badge for one component, or npx shadcn add @localmode/ui/results for the whole family. The files are copied into your project and you own the code -- no @localmode/* package is installed. To drive them with the recommended local-first hooks, add @localmode/react and a provider like @localmode/transformers, or wire them to any backend."
+  - question: "What is the ConfidenceScoreBadge component?"
+    answer: "ConfidenceScoreBadge is the shared scored-output atom across LocalMode UI. It maps a 0–1 score to a semantic color tier -- by default high ≥ 0.8 (success), medium ≥ 0.5 (warning), low (muted) -- and renders the formatted percentage as a flat pill badge or a radial dial. The tier breakpoints are props, so apps with cosine vs dot-product score distributions can tune them. It is consumed cross-family by ScoredResultBarList, TopResultCard, and media-vision's ImageResultGallery."
+  - question: "Do the results components run entirely in the browser?"
+    answer: "Yes. The components are presentational and hook-driven -- they render the output of LocalMode React hooks like useClassify, useClassifyZeroShot, useSemanticSearch, useExtractEntities, and useEvaluateModel, all of which run on-device. Every chart, including the confusion matrix, radar sub-view, and the EntityRelationshipGraph's force simulation, is a minimal in-component SVG/canvas implementation with no external chart library and no network calls. SVG/PNG export serializes the live graph in-browser."
+  - question: "How does the family handle reranked output from the useRerank hook?"
+    answer: "The useRerank hook in @localmode/react wraps the core rerank() function with loading, error, and cancellation state, and its ranked output renders like any other scored list. ScoredResultBarList and ConfidenceScoreBadge display it the same way they render any { label, score } list -- map data.results to props, or surface reranked matches through useSemanticSearch. The components only care about the { label, score } shape, not how it was produced."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+The single most duplicated piece of code across LocalMode's browser AI apps is not a model call — it is the "score to color plus percentage plus bar" pattern. The audit found `getScoreColor` and `formatScore` helpers copied verbatim in **twelve** apps, and a confidence badge used in eight. Every classifier, search result, QA answer, detection, fill-mask, and evaluation surface re-derives the same tiering and formatting.
+
+These are cross-cutting "results and insights" primitives. They are not chat, so a Conversation-family home would be wrong — they live in product search, smart galleries, sentiment analyzers, model evaluators, and document redactors. So `@localmode/ui` consolidates them into the **Results & Insights** family: nine copy-owned, hook-driven React components for scored-result display, classification heroes, label editing, similarity meters, evaluation dashboards, and entity/NER rendering.
+
+This post covers all nine and how they pair with the LocalMode hooks.
+
+---
+
+## What `@localmode/ui` Is
+
+`@localmode/ui` is a [shadcn-style registry](https://ui.shadcn.com/docs/registry) of copy-owned AI UI primitives. It is not an npm package — you install a component with the shadcn CLI and own the copied `.tsx`. Components are styled with shadcn/ui CSS-variable tokens (`bg-card`, `text-card-foreground`, `border-border`), so they inherit your theme.
+
+Add the namespace to `components.json` once, then install a component, a family, or everything:
+
+```bash
+# A single component
+npx shadcn add @localmode/ui/results/confidence-score-badge
+
+# The whole Results & Insights family
+npx shadcn add @localmode/ui/results
+
+# Everything
+npx shadcn add @localmode/ui/all
+```
+
+Every component is **presentational and hook-driven**, and the thresholds and color/label registries are props — so the same `ConfidenceScoreBadge` works for a cosine-similarity distribution and a softmax classifier without touching its internals.
+
+---
+
+## ConfidenceScoreBadge: The Shared Scored Atom
+
+`ConfidenceScoreBadge` is the foundation the rest of the family builds on. It maps a 0–1 score to a semantic color tier — by default high ≥ 0.8 (success), medium ≥ 0.5 (warning), low (muted) — and renders the formatted percentage as a flat pill or a radial dial. The breakpoints are props, so apps with different score distributions tune them rather than forking the component.
+
+```tsx
+import { ConfidenceScoreBadge } from '@/components/confidence-score-badge';
+
+<ConfidenceScoreBadge score={0.92} label="positive" />;
+<ConfidenceScoreBadge score={0.63} variant="radial" size={64} />;
+<ConfidenceScoreBadge score={0.72} thresholds={{ high: 0.65, medium: 0.4 }} />;
+```
+
+Use it for any scalar confidence or similarity — [`useClassify`](/docs/react), `useClassifyZeroShot`, `useSemanticSearch`, `useAnswerQuestion`. It is also consumed cross-family by `ScoredResultBarList`, `TopResultCard`, and media-vision's `ImageResultGallery`, and it exports a `resolveTier()` helper so you can reuse the exact tiering logic in your own styling. See the [ConfidenceScoreBadge docs](https://localmode.ai/docs/results/confidence-score-badge).
+
+---
+
+## ScoredResultBarList: One List for Every Ranked Output
+
+`ScoredResultBarList` renders any ranked `{label, score}` output as a vertical list: each row shows the label, its confidence percentage (via `ConfidenceScoreBadge`), and an animated horizontal fill bar proportional to the score, with the top row highlighted. It ships with a skeleton-loading state and an empty-state slot, so it drops straight into async hook flows.
+
+```tsx
+import { ScoredResultBarList } from '@/components/scored-result-bar-list';
+import { useClassifyZeroShot } from '@localmode/react';
+
+const { results, isLoading } = useClassifyZeroShot({ model });
+<ScoredResultBarList results={results ?? []} isLoading={isLoading} />;
+```
+
+One data contract serves `useClassify`, `useClassifyZeroShot`, `useDetectObjects`, `useFillMask`, and reranked / `useSemanticSearch` results. Pass `sort={false}` to preserve input order, `limit={3}` to cap the rows, or a custom `emptyState`. See the [ScoredResultBarList docs](https://localmode.ai/docs/results/scored-result-bar-list).
+
+---
+
+## TopResultCard: The Winning Result, in a Hero
+
+`TopResultCard` highlights the single winning classification result — a large label, a prominent confidence dial (again via `ConfidenceScoreBadge`), and a tier-tinted glow. It is designed to sit above a `ScoredResultBarList`:
+
+```tsx
+const [top, ...rest] = [...results].sort((a, b) => b.score - a.score);
+
+<div className="space-y-4">
+  {top && <TopResultCard title="Sentiment" label={top.label} score={top.score} />}
+  <ScoredResultBarList results={rest} highlightTop={false} />
+</div>;
+```
+
+It fits any single-winner output — sentiment, intent, language detection, gesture, or the top result from `useClassifyZeroShot`. Forward `thresholds` to keep the tier and glow consistent with the rest of your scored UI. See the [TopResultCard docs](https://localmode.ai/docs/results/top-result-card).
+
+---
+
+## EditableLabelSet: Edit the Candidate Labels
+
+Zero-shot classification needs candidate labels, and users want to edit them. `EditableLabelSet` is an editable collection of color-cycling removable chips — chips reveal a remove control, and an inline input adds new labels (Enter to commit, Backspace on empty to remove the last). It is fully controlled via `labels` / `onAdd` / `onRemove`:
+
+```tsx
+import { EditableLabelSet } from '@/components/editable-label-set';
+
+const [labels, setLabels] = useState(['positive', 'negative', 'neutral']);
+
+<EditableLabelSet
+  labels={labels}
+  onAdd={(l) => setLabels((p) => [...p, l])}
+  onRemove={(_, i) => setLabels((p) => p.filter((__, j) => j !== i))}
+/>;
+```
+
+Feed the edited list straight into `useClassifyZeroShot`. Because it is fully controlled, dedup and validation live in your `onAdd` handler. See the [EditableLabelSet docs](https://localmode.ai/docs/results/editable-label-set).
+
+---
+
+## CosineSimilarityMeter: Make a Similarity Score Legible
+
+When you compute the cosine similarity of two embeddings yourself (from [`useEmbed`](/docs/react) / `useEmbedImage`), `CosineSimilarityMeter` presents it as a large numeric value, a human-readable bucket label ("Very similar", "Unrelated") using configurable thresholds, and a proportional half-ring arc gauge.
+
+```tsx
+import { CosineSimilarityMeter } from '@/components/cosine-similarity-meter';
+
+<CosineSimilarityMeter similarity={cosine(queryVec, docVec)} caption="query ↔ document" />;
+```
+
+It is the natural display for semantic-search relevance, duplicate detection, or cross-modal matching, and it exports a `resolveBucket()` helper for reusing the bucketing logic. See the [CosineSimilarityMeter docs](https://localmode.ai/docs/results/cosine-similarity-meter).
+
+---
+
+## EvaluationMetricsDashboard: A Full Eval View, No Chart Library
+
+`EvaluationMetricsDashboard` composes the displays that co-occur in a model-evaluation flow: a labeled KPI/stat-tile row (value plus delta), a grid of metric cards (accuracy / precision / recall / F1), a color-coded N×N confusion matrix (diagonal success-tinted, off-diagonal error-tinted, intensity scaled to the max cell), a radar/spider sub-view, and a threshold-calibration panel. Every chart is a minimal in-component SVG — **no external chart library**.
+
+```tsx
+import { EvaluationMetricsDashboard } from '@/components/evaluation-metrics-dashboard';
+
+// `accuracy`/`f1Score` and `confusionMatrix` are core helpers; `useEvaluateModel`
+// returns `{ score, datasetSize, ... }` for a single chosen metric.
+<EvaluationMetricsDashboard
+  stats={[{ label: 'Dataset', value: evaluation.datasetSize }]}
+  metrics={[{ label: 'Accuracy', value: accuracy(preds, labels) }, { label: 'F1', value: f1Score(preds, labels) }]}
+  confusionMatrix={confusionMatrix(preds, labels)}
+  calibration={{ threshold: calibration.threshold, percentile: calibration.percentile, distribution: calibration.distribution }}
+/>;
+```
+
+The dashboard is purely presentational — it takes `stats`, `metrics`, `confusionMatrix` (`{ labels, matrix }`, the shape `@localmode/core`'s `confusionMatrix()` returns), and `calibration` props from wherever you have them. Drive it with `useEvaluateModel` (which returns `{ score, datasetSize, ... }` for one metric) plus the core `accuracy` / `f1Score` / `confusionMatrix` helpers and `useCalibrateThreshold`. Each section is optional — pass only the data you have. See the [EvaluationMetricsDashboard docs](https://localmode.ai/docs/results/evaluation-metrics-dashboard).
+
+---
+
+## EntityStatsBar & RedactedTextDisplay: NER and PII Review
+
+Two components render named-entity-recognition output from [`useExtractEntities`](/docs/react).
+
+`EntityStatsBar` shows the total detected-entity count plus a per-type breakdown badge (colored dot, count, label) for each type (PER / LOC / ORG / MISC, or your own registry). Counts are computed internally from a `DetectedEntity[]`:
+
+```tsx
+import { EntityStatsBar } from '@/components/entity-stats-bar';
+
+const { entities } = useExtractEntities({ model, text });
+<EntityStatsBar entities={entities ?? []} />;
+```
+
+`RedactedTextDisplay` renders the source text with detected entities replaced inline by color-coded redaction tokens (`[PER]`, `[LOC]`), each tooltipped with its type, plus a scanning skeleton and an empty placeholder. Pass the original text and the entity spans; offset-based segmentation happens internally via an exported `segmentText()` helper.
+
+```tsx
+const { entities, isLoading } = useExtractEntities({ model, text });
+<RedactedTextDisplay text={text} entities={entities ?? []} isScanning={isLoading} />;
+```
+
+Together they cover entity review, PII triage, and content-moderation dashboards. See the [EntityStatsBar](https://localmode.ai/docs/results/entity-stats-bar) and [RedactedTextDisplay](https://localmode.ai/docs/results/redacted-text-display) docs.
+
+---
+
+## EntityRelationshipGraph: A Force-Directed Graph, Client-Side
+
+`EntityRelationshipGraph` is an interactive force-directed graph of typed nodes and relationship-labeled edges — drag, zoom, pan, hover, click, and SVG/PNG export. The layout runs entirely client-side over local data using a lightweight in-component force simulation (no `d3-force` or other heavy dependency).
+
+```tsx
+import { EntityRelationshipGraph } from '@/components/entity-relationship-graph';
+
+const nodes = [
+  { id: 'ada', label: 'Ada Lovelace', type: 'PER' },
+  { id: 'london', label: 'London', type: 'LOC' },
+];
+const edges = [{ source: 'ada', target: 'london', label: 'lived in' }];
+
+<EntityRelationshipGraph nodes={nodes} edges={edges} onNodeClick={(n) => console.log(n)} />;
+```
+
+Use it to visualize `useExtractEntities` co-occurrences, VectorDB entity relationships, agent-memory connections, or embedding clusters. SVG and PNG export serialize the live SVG entirely in-browser — no network, no third-party service. The exported `layoutGraph()` simulation is a compact repulsion-plus-edge-spring-plus-center-gravity loop you can tune. See the [EntityRelationshipGraph docs](https://localmode.ai/docs/results/entity-relationship-graph).
+
+---
+
+## A Note on Reranking
+
+Ranked-rerank output is worth calling out: `@localmode/react` now ships a dedicated `useRerank` hook that wraps the core `rerank()` function with loading, error, and cancellation state. That changes nothing about rendering. `ScoredResultBarList` and `ConfidenceScoreBadge` render reranked results exactly like any other `{ label, score }` list — map `data.results` to props, or surface them through `useSemanticSearch`. The components care about the shape, not the source.
+
+<Callout type="info" title="Everything renders client-side">
+  Every component in this family is presentational and runs in the browser. The charts — confusion
+  matrix, radar, similarity gauge, and the force-directed graph — are in-component SVG/canvas with no
+  chart library. The hooks that produce the data (`useClassify`, `useExtractEntities`,
+  `useEvaluateModel`, ...) run their models on-device. No data leaves the device.
+</Callout>
+
+---
+
+## How They Compose
+
+A sentiment analyzer pairs `TopResultCard` with `ScoredResultBarList`. A zero-shot classifier adds `EditableLabelSet` for the candidate labels. A semantic-search result list uses `ScoredResultBarList` with `ConfidenceScoreBadge` per row and a `CosineSimilarityMeter` for the top match. A document redactor uses `EntityStatsBar`, `RedactedTextDisplay`, and `EntityRelationshipGraph` over the same NER output. A model evaluator is a single `EvaluationMetricsDashboard`.
+
+Because thresholds and registries are props and `ConfidenceScoreBadge` is shared, the color tiering stays consistent across every one of these surfaces — which is exactly the duplication the family was built to eliminate.
+
+These same surfaces ship pre-assembled as installable blocks in the [Text Insights category](https://localmode.ai/blocks/text-insights) — its [sentiment-analyzer](https://localmode.ai/blocks/text-insights/sentiment-analyzer), [text-classifier](https://localmode.ai/blocks/text-insights/text-classifier), [model-evaluator](https://localmode.ai/blocks/text-insights/model-evaluator), and [threshold-calibrator](https://localmode.ai/blocks/text-insights/threshold-calibrator) blocks wire these results primitives (including a threshold-calibration panel) to on-device Transformers.js models. Install one with `npx shadcn add @localmode/ui/blocks/text-insights/sentiment-analyzer`.
+
+---
+
+## Methodology
+
+Every component name, prop, threshold, install command, and code example in this post was verified directly against the `@localmode/ui` source — the nine results-family component files under `apps/ui/registry/localmode/results/**/*.tsx` (the source of truth for the default tier thresholds — `high ≥ 0.8`, `medium ≥ 0.5`, `low` muted — the exported helpers `resolveTier`, `resolveBucket`, `segmentText`, `layoutGraph`, and every prop name), `apps/ui/registry.json` (which lists exactly nine `categories: ["results"]` items), the family `meta.json`, the nine `apps/ui/content/docs/results/*.mdx` doc pages, and the `ui-elements-results` change proposal. The "twelve apps duplicated the score helpers, eight the confidence badge" figures, the cross-family `ImageResultGallery` dependency, and the reranking compatibility note all come from that proposal's family audit, with `ImageResultGallery`'s registry dependency on `@localmode/ui/results/confidence-score-badge` confirmed in `apps/ui/registry/localmode/media-vision/`.
+
+The backing hooks (`useClassify`, `useClassifyZeroShot`, `useSemanticSearch`, `useAnswerQuestion`, `useDetectObjects`, `useFillMask`, `useEmbed`, `useEmbedImage`, `useExtractEntities`, `useEvaluateModel`, `useCalibrateThreshold`, `useRerank`) were each confirmed to exist in `packages/react/src/hooks/`; `useRerank` — added after this post first ran — wraps the core `rerank()` function in `packages/core/src/classification/rerank.ts`. The evaluation metrics shown in the dashboard map to real core helpers — `accuracy`, `precision`, `recall`, `f1Score`, and `confusionMatrix` (returning `{ labels, matrix }`) — in `packages/core/src/evaluation/metrics.ts`; note that `useEvaluateModel` itself returns a single `{ score, datasetSize, predictions, durationMs }` for one chosen metric, so the dashboard's `metrics` and `confusionMatrix` props are composed from those helpers rather than read off one result object. Two install-portability facts were verified directly: none of the nine results components imports `@localmode/core` or `@localmode/react`, and every results item's only `registryDependency` is `@localmode/ui/lib/utils` (plus `lucide-react` as an npm dep for `EditableLabelSet`) — so adding a results component installs no `@localmode/*` npm package.
+
+## Sources
+
+- [LocalMode UI Installation](https://localmode.ai/docs/installation) — configure the `@localmode` namespace
+- [ConfidenceScoreBadge](https://localmode.ai/docs/results/confidence-score-badge) — score-to-color tier atom
+- [ScoredResultBarList](https://localmode.ai/docs/results/scored-result-bar-list) — ranked bar list
+- [TopResultCard](https://localmode.ai/docs/results/top-result-card) — winning-result hero
+- [EditableLabelSet](https://localmode.ai/docs/results/editable-label-set) — candidate-label chips
+- [CosineSimilarityMeter](https://localmode.ai/docs/results/cosine-similarity-meter) — similarity gauge
+- [EvaluationMetricsDashboard](https://localmode.ai/docs/results/evaluation-metrics-dashboard) — KPIs, confusion matrix, radar
+- [EntityStatsBar](https://localmode.ai/docs/results/entity-stats-bar) — per-type NER counts
+- [RedactedTextDisplay](https://localmode.ai/docs/results/redacted-text-display) — inline redaction tokens
+- [EntityRelationshipGraph](https://localmode.ai/docs/results/entity-relationship-graph) — force-directed entity graph
+- [`@localmode/react` hooks](/docs/react) — the backing hooks
+- [shadcn registry docs](https://ui.shadcn.com/docs/registry) — the distribution system `@localmode/ui` builds on
+
+Primary-source code paths:
+
+- `apps/ui/registry/localmode/results/**/*.tsx` — the nine component sources (props, default thresholds, exported helpers)
+- `apps/ui/registry.json` — the catalog (nine `categories: ["results"]` items; per-item `dependencies` / `registryDependencies`)
+- `packages/react/src/hooks/` — the backing hooks (including `use-rerank.ts`)
+- `packages/core/src/evaluation/metrics.ts` — `accuracy`, `precision`, `recall`, `f1Score`, `confusionMatrix`
+- `packages/core/src/classification/rerank.ts` — the core `rerank()` function
+- `openspec/changes/ui-elements-results/` — the family proposal and family-audit figures
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

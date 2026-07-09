@@ -1,0 +1,93 @@
+---
+title: "Threshold Calibration Panel"
+description: "A presentational panel for similarity-threshold calibration — calibrated vs. preset threshold, metadata, distribution statistics, and a preset reference list."
+icon: SlidersHorizontal
+---
+
+# Threshold Calibration Panel
+
+The **Threshold Calibration Panel** renders a similarity-threshold calibration result: the empirically **calibrated threshold** side-by-side with the model's **preset default** (or an explicit no-preset state), the calibration **metadata** (percentile, sample size, model ID, distance function), the pairwise similarity **distribution statistics** (mean / median / std-dev / min / max / pair count), and a **preset-thresholds reference** list with the active model highlighted. Loading and empty states carry optional calibrate / cancel affordances.
+
+**When to use it:** surfacing the output of `useCalibrateThreshold` — tuning a semantic-search relevance threshold to your corpus, or comparing an empirical threshold against a model's known-good default.
+
+**Relationship to [Evaluation Metrics Dashboard](/docs/results/evaluation-metrics-dashboard):** that composite ships an optional embedded calibration sub-view. This standalone panel is the full-fidelity calibration surface — it adds the preset comparison, the preset reference list, and the calibrate / cancel affordances. Use the dashboard for a combined metrics + matrix + calibration overview; use this panel when calibration is the focus.
+
+## Preview
+
+<ComponentPreview name="ui/results/threshold-calibration-panel" note="Fixture calibration data — no model runs here." />
+
+<OpenInV0 name="ui/results/threshold-calibration-panel" />
+
+## Installation
+
+<InstallTabs name="ui/results/threshold-calibration-panel" />
+
+### Dependencies
+
+- **Data source:** renders the `calibration` object you pass — works with any backend. Recommended producer: `useCalibrateThreshold` from `@localmode/react` (optional). See [Bring your own data](/docs/bring-your-own-data#results--insights).
+
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+
+### Files installed
+
+- `threshold-calibration-panel.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/results/threshold-calibration-panel/threshold-calibration-panel.tsx" name="ThresholdCalibrationPanelProps" />
+
+## Examples
+
+### Wired to `useCalibrateThreshold`
+
+The panel is backend-agnostic — pass any producer of the `CalibrationResult` shape. The recommended LocalMode wiring pairs `presetThreshold` with `getDefaultThreshold(modelId)` and `presets` with `MODEL_THRESHOLD_PRESETS`:
+
+```tsx
+import { ThresholdCalibrationPanel } from '@/components/threshold-calibration-panel';
+import { useCalibrateThreshold } from '@localmode/react';
+import { getDefaultThreshold, MODEL_THRESHOLD_PRESETS } from '@localmode/core';
+
+export function Example({ model, corpus }) {
+  const { calibration, isCalibrating, calibrate, cancel } = useCalibrateThreshold({
+    model,
+    percentile: 90,
+  });
+
+  const presets = Object.entries(MODEL_THRESHOLD_PRESETS).map(([modelId, threshold]) => ({
+    modelId,
+    threshold,
+  }));
+
+  return (
+    <ThresholdCalibrationPanel
+      calibration={calibration}
+      presetThreshold={getDefaultThreshold(model.modelId)}
+      presets={presets}
+      isCalibrating={isCalibrating}
+      onCalibrate={() => calibrate(corpus)}
+      onCancel={cancel}
+    />
+  );
+}
+```
+
+### Read-only result
+
+Omit the callbacks to render the panel as a static result surface:
+
+```tsx
+<ThresholdCalibrationPanel calibration={calibration} presetThreshold={0.5} />
+```
+
+### Model without a preset
+
+When `presetThreshold` is omitted, the panel shows an explicit "no preset for this model" state instead of a comparison value:
+
+```tsx
+<ThresholdCalibrationPanel calibration={calibration} />
+```
+
+## Customization
+
+Sections render only when their data is present, so the panel adapts to read-only, busy, and empty states. The calibrated value uses `bg-primary/5` + `text-primary` to stand out from the preset; the delta caption tints amber when the calibrated threshold sits above the preset and sky when below. The preset reference highlights the entry matching `calibration.modelId` with `bg-primary/10`. All colors are shadcn/ui CSS-variable tokens, so the panel inherits the consumer's theme.

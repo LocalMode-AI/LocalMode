@@ -16,6 +16,7 @@ import type {
   ZeroShotAudioClassificationResultItem,
 } from '@localmode/core';
 import type { ModelSettings, TransformersDevice, ModelLoadProgress } from '../types.js';
+import { installResilientModelCache } from '../resilient-cache.js';
 
 // Dynamic import types
 type AudioClassificationPipeline = Awaited<
@@ -60,6 +61,7 @@ export class TransformersAudioClassificationModel implements AudioClassification
       const { pipeline, env } = await import('@huggingface/transformers');
 
       env.backends.onnx.logLevel = 'error';
+      installResilientModelCache(env);
 
       const pipe = await pipeline('audio-classification', this.baseModelId, {
         device: this.settings.device ?? 'auto',
@@ -171,6 +173,7 @@ export class TransformersZeroShotAudioClassificationModel
       const { pipeline, env } = await import('@huggingface/transformers');
 
       env.backends.onnx.logLevel = 'error';
+      installResilientModelCache(env);
 
       const pipe = await pipeline('zero-shot-audio-classification', this.baseModelId, {
         device: this.settings.device ?? 'auto',

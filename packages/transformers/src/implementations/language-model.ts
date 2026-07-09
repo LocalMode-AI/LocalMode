@@ -28,6 +28,7 @@ import type {
 } from '@localmode/core';
 import { ModelLoadError, GenerationError } from '@localmode/core';
 import type { LanguageModelSettings } from '../types.js';
+import { installResilientModelCache } from '../resilient-cache.js';
 
 /**
  * Type for the TJS v4 text-generation pipeline instance.
@@ -96,6 +97,43 @@ function isImageTextToTextModel(modelId: string): boolean {
  */
 function isVLMModel(modelId: string): boolean {
   return isQwen35Model(modelId) || isQwenVLModel(modelId) || isGemma4Model(modelId) || isImageTextToTextModel(modelId);
+}
+
+/**
+ * Default per-component dtype for split-architecture multimodal loads
+ * (embed_tokens + vision_encoder + decoder_model_merged), by device.
+ *
+ * The quantized embedding-bearing components (embed_tokens q4/q4f16 AND q8
+ * "_quantized", vision_encoder q4/q4f16 AND q8 — the ViT's learned
+ * pos_embed) are encoded with the ONNX `GatherBlockQuantized` operator,
+ * which the bundled onnxruntime-web only executes on the WebGPU (JSEP)
+ * execution provider — on the WASM EP session creation fails with
+ * `Could not find an implementation for GatherBlockQuantized` (verified by
+ * grepping every onnx-community/Qwen3.5-0.8B-ONNX component graph for the
+ * op). fp16 kernels are likewise WebGPU-only. On WASM the only executable
+ * combination is fp32 embed_tokens + fp32 vision_encoder with the q4
+ * decoder (its weights are MatMulNBits — the same WASM-supported op the q4
+ * text pipelines already run; its graph carries zero GatherBlockQuantized
+ * nodes). Heavier to download, but it loads and runs — the previous default
+ * could never create a session on WASM at all.
+ *
+ * @param device - The resolved inference device ('webgpu' | 'wasm')
+ * @returns The per-component dtype map used when `settings.dtype` is not set
+ * @internal Exported for unit tests.
+ */
+export function defaultMultimodalDtype(device: string): Record<string, string> {
+  if (device === 'webgpu') {
+    return {
+      embed_tokens: 'q4',
+      vision_encoder: 'fp16',
+      decoder_model_merged: 'q4',
+    };
+  }
+  return {
+    embed_tokens: 'fp32',
+    vision_encoder: 'fp32',
+    decoder_model_merged: 'q4',
+  };
 }
 
 /**
@@ -207,6 +245,7 @@ export class TransformersLanguageModel implements LanguageModel {
 
     // Suppress ONNX runtime warnings about node execution providers
     env.backends.onnx.logLevel = 'error';
+    installResilientModelCache(env);
 
     const pipe = await pipeline('text-generation', this.baseModelId, {
       device,
@@ -238,13 +277,11 @@ export class TransformersLanguageModel implements LanguageModel {
 
     // Suppress ONNX runtime warnings about node execution providers
     tjs.env.backends.onnx.logLevel = 'error';
+    installResilientModelCache(tjs.env);
 
-    // Use the most efficient dtype for browser: q4 for text, fp16 for vision encoder
-    const dtype = this.settings.dtype ?? {
-      embed_tokens: 'q4',
-      vision_encoder: 'fp16',
-      decoder_model_merged: 'q4',
-    };
+    // Device-aware default: the q4/fp16 component mix only has WebGPU
+    // kernels — WASM needs the q8 variants (see defaultMultimodalDtype).
+    const dtype = this.settings.dtype ?? defaultMultimodalDtype(device);
 
     // Try the dedicated model class first for faster loading, then fall back
     // to AutoModelForCausalLM which auto-detects architecture from config.json.
@@ -292,12 +329,11 @@ export class TransformersLanguageModel implements LanguageModel {
   private async loadImageTextToText(device: string): Promise<LoadedModel> {
     const tjs = await import('@huggingface/transformers');
     tjs.env.backends.onnx.logLevel = 'error';
+    installResilientModelCache(tjs.env);
 
-    const dtype = this.settings.dtype ?? {
-      embed_tokens: 'q4',
-      vision_encoder: 'fp16',
-      decoder_model_merged: 'q4',
-    };
+    // Device-aware default: the q4/fp16 component mix only has WebGPU
+    // kernels — WASM needs the q8 variants (see defaultMultimodalDtype).
+    const dtype = this.settings.dtype ?? defaultMultimodalDtype(device);
 
     const modelLoader = (tjs as Record<string, unknown>).AutoModelForImageTextToText
       ? (tjs as { AutoModelForImageTextToText: { from_pretrained: Function } })

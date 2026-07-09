@@ -1,0 +1,50 @@
+---
+title: "Introduction"
+description: "A shadcn-style registry of copy-owned, composable AI UI primitives for the browser — local-first and privacy-first."
+icon: House
+---
+
+# LocalMode UI
+
+**LocalMode UI** is a shadcn-style registry of copy-owned, composable AI UI primitives for the browser. It is the UI layer on top of [`@localmode/core`](https://localmode.dev/docs/core) and the [`@localmode/react`](https://localmode.dev/docs/react) hooks — chat surfaces, model-download progress, device-capability gates, and the other local-first surfaces that have no off-the-shelf equivalent.
+
+<Callout type="info" title="Local-first by default">
+  Every component runs entirely in the browser. Inference happens on-device — no servers, no API
+  keys, and data never leaves the user's device.
+</Callout>
+
+<Callout type="info" title="…and cloud-compatible by contract">
+  The components are presentational — they render plain props and own no orchestration state — so
+  they install with **zero `@localmode/*` packages** and work with any backend. Pair them with the
+  LocalMode hooks (recommended) or drive them from the [Vercel AI SDK](/docs/use-with-ai-sdk) or
+  [your own data](/docs/bring-your-own-data).
+</Callout>
+
+## How it works
+
+LocalMode UI is **not** an npm package. Like shadcn/ui, you install components with the shadcn CLI and **own the copied code**. Components are styled with shadcn/ui CSS variables (`bg-background`, `text-primary`, …), so they drop into your existing shadcn project and inherit your theme automatically.
+
+```bash
+npx shadcn@latest add @localmode/ui/device-badge
+```
+
+## The `@localmode/ui` namespace
+
+All UI registry items live under the `ui/*` path so they stay distinct from the `@localmode/*` npm packages (core / react / providers). The item-naming scheme is:
+
+| Pattern | Installs | Example |
+| ------- | -------- | ------- |
+| `ui/all` | The whole catalog | `@localmode/ui/all` |
+| `ui/<family>` | A whole family | `@localmode/ui/conversation` |
+| `ui/<family>/<component>` | A single component | `@localmode/ui/conversation/message` |
+
+The shadcn namespace key is the single token `@localmode`; the `ui/` separation lives in the item name.
+
+## Next steps
+
+<Cards>
+  <Card title="Installation" href="/docs/installation" description="Configure the @localmode namespace in your components.json and install your first component." />
+  <Card title="Components" href="/docs/components" description="Browse every available Element, grouped by category." />
+  <Card title="Device Badge" href="/docs/device-badge" description="The seed component — a local-first capability badge driven by useCapabilities()." />
+  <Card title="Core Docs" href="https://localmode.dev/docs" description="The @localmode engine and the 59 React hooks these components are built on." />
+</Cards>

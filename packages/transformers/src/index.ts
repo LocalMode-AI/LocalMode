@@ -75,6 +75,23 @@ export {
 } from './utils.js';
 
 // ═══════════════════════════════════════════════════════════════
+// RESILIENT MODEL CACHE
+// ═══════════════════════════════════════════════════════════════
+
+export {
+  createResilientModelCache,
+  installResilientModelCache,
+  setResilientModelCacheEnabled,
+} from './resilient-cache.js';
+
+export type {
+  ResilientModelCache,
+  ResilientModelCacheOptions,
+  TransformersCacheEnv,
+  TransformersCacheLike,
+} from './resilient-cache.js';
+
+// ═══════════════════════════════════════════════════════════════
 // POPULAR MODELS
 // ═══════════════════════════════════════════════════════════════
 

@@ -1,0 +1,82 @@
+---
+title: "Transcribed Note Card"
+description: "A transcription list item pairing transcript text with inline audio playback — with a \"transcribing…\" placeholder that morphs into the populated card."
+icon: NotebookPen
+---
+
+# Transcribed Note Card
+
+**Transcribed Note Card** is a list item that pairs transcribed text with inline audio playback. It has two variants from one component:
+
+- **Placeholder** (`transcribing`) — a waveform row + a "Transcribing…" label, the canonical loading state for a `useOperationList`-backed STT list where items stream in.
+- **Populated** — a relative timestamp (hover → absolute), the transcript body, a native `<audio>` footer, and a hover-revealed delete.
+
+Drive it from [`useTranscribe`](https://localmode.dev/docs/react) + `useOperationList`.
+
+**When to use it:** render a growing list of voice notes / meeting snippets where each item starts as a placeholder and morphs into the finished transcription.
+
+## Preview
+
+<ComponentPreview name="ui/audio/transcribed-note-card" note="Simulates the placeholder → populated morph on a timer, plus a populated note with inline audio + delete. The real app flips `transcribing` off when useTranscribe resolves." />
+
+<OpenInV0 name="ui/audio/transcribed-note-card" />
+
+## Installation
+
+<InstallTabs name="ui/audio/transcribed-note-card" />
+
+### Data source & dependencies
+
+**Data source:** renders the transcript text + audio Blob you pass — works with any backend. Recommended producer: `useTranscribe` + `useOperationList` (with the Whisper STT model from `@localmode/transformers`) from `@localmode/react` (on-device, optional).
+- `@localmode/ui/lib/browser-utils` — `useObjectUrl` for Blob lifecycle (installed automatically as a registry dependency)
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+
+### Files installed
+
+- `transcribed-note-card.tsx` — the component
+- `waveform-activity-bars.tsx` — the placeholder indicator (registry dependency)
+- `lib/browser-utils.ts` — generic browser helpers (`useObjectUrl`)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/audio/transcribed-note-card/transcribed-note-card.tsx" name="TranscribedNoteCardProps" />
+
+## Examples
+
+### A streaming transcription list
+
+```tsx
+import { TranscribedNoteCard } from '@/components/transcribed-note-card';
+import { useOperationList, useVoiceRecorder } from '@localmode/react';
+import { transcribe } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+export function VoiceNotes() {
+  const recorder = useVoiceRecorder();
+  const { items, isLoading, execute, removeItem } = useOperationList({
+    fn: (audio: Blob, signal) =>
+      transcribe({ model: transformers.speechToText('onnx-community/whisper-base'), audio, abortSignal: signal }),
+    transform: (result, audio) => ({ id: crypto.randomUUID(), text: result.text, audio, timestamp: new Date() }),
+  });
+
+  return (
+    <div className="flex flex-col gap-3">
+      {isLoading && <TranscribedNoteCard transcribing />}
+      {items.map((note) => (
+        <TranscribedNoteCard
+          key={note.id}
+          text={note.text}
+          audio={note.audio}
+          timestamp={note.timestamp}
+          onDelete={() => removeItem((n) => n.id === note.id)}
+        />
+      ))}
+    </div>
+  );
+}
+```
+
+## Customization
+
+The relative-time formatter lives in the copied file — swap it for your own (or a library) if you need finer granularity. The delete control is hover-revealed via `group-hover`; remove the `opacity-0` classes to keep it always visible. Pass either a `Blob` or an object-URL string for `audio`.

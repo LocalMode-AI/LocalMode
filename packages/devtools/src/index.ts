@@ -11,6 +11,7 @@
 import type { InferenceQueue } from '@localmode/core';
 import type { DevToolsBridge, DevToolsOptions, CleanupFn } from './types.js';
 import { createBridge } from './bridge.js';
+import { signalBridgeLifecycle } from './lifecycle.js';
 import { startEventCollector } from './collectors/events.js';
 import { registerQueueCollector, cleanupAllQueues } from './collectors/queue.js';
 import { createPipelineCollector } from './collectors/pipeline.js';
@@ -61,6 +62,10 @@ export function enableDevTools(options?: DevToolsOptions): void {
   cleanups.push(startCapabilitiesCollector(bridge, notifyFn));
 
   enabled = true;
+
+  // Package-internal lifecycle signal (design D4): tell mounted React hooks
+  // a bridge now exists on window so they can attach without a remount.
+  signalBridgeLifecycle();
 }
 
 /**
@@ -96,6 +101,10 @@ export function disableDevTools(): void {
   bridge = null;
   notifyFn = null;
   eventBufferRef = null;
+
+  // Package-internal lifecycle signal (design D4): tell mounted React hooks
+  // the bridge flipped to disabled so status/snapshots refresh.
+  signalBridgeLifecycle();
 }
 
 /**

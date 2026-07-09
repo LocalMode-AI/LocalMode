@@ -12,7 +12,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 Transcribe speech to text and synthesize speech from text, entirely in the browser. No servers, no API keys — audio never leaves the device.
 
 <Callout type="info" title="See it in action">
-  Try [Voice Notes](https://localmode.ai/voice-notes) and [Meeting Assistant](https://localmode.ai/meeting-assistant) for working demos of these APIs.
+  Try the [Audio Studio block](https://localmode.ai/blocks/audio) for a working demo of these APIs.
 </Callout>
 
 ## transcribe()
@@ -185,19 +185,21 @@ try {
 
 ### Language & Translation
 
-Specify a language hint or translate non-English audio to English:
+Specify a language hint or translate non-English audio to English. These options require a **multilingual** model (e.g. `Xenova/whisper-tiny`) — English-only checkpoints such as Moonshine or `whisper-tiny.en` reject `language`/`task` hints other than `'en'`/`'transcribe'`:
 
 ```ts
+const whisper = transformers.speechToText('Xenova/whisper-tiny');
+
 // Transcribe German audio with language hint
 const { text, language } = await transcribe({
-  model,
+  model: whisper,
   audio: germanAudioBlob,
   language: 'de',
 });
 
 // Translate French audio to English
 const { text: englishText } = await transcribe({
-  model,
+  model: whisper,
   audio: frenchAudioBlob,
   task: 'translate',
 });
@@ -480,10 +482,10 @@ class MyTextToSpeech implements TextToSpeechModel {
   />
 </Cards>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Voice Notes | Record and transcribe audio with Moonshine models | [Demo](https://localmode.ai/voice-notes) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/voice-notes) |
-| Meeting Assistant | Transcribe and summarize meeting recordings | [Demo](https://localmode.ai/meeting-assistant) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/meeting-assistant) |
-| Audiobook Creator | Generate speech audio from text | [Demo](https://localmode.ai/audiobook-creator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/audiobook-creator) |
+| Audio Studio (Voice Notes) | Record and transcribe audio with Moonshine models | [Live block](https://localmode.ai/blocks/audio) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/audio) |
+| Audio Studio (Meeting Assistant) | Transcribe and summarize meeting recordings | [Live block](https://localmode.ai/blocks/audio) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/audio) |
+| Audio Studio (Audiobook Creator) | Generate speech audio from text | [Live block](https://localmode.ai/blocks/audio) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/audio) |

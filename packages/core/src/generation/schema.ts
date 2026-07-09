@@ -59,7 +59,7 @@ interface ZodLike<T = unknown> {
  *
  * @throws {Error} If the schema type is not recognized
  */
-export function jsonSchema<T, S extends { parse: (v: unknown) => T }>(zodSchema: S): ObjectSchema<T> {
+export function jsonSchema<T>(zodSchema: { parse: (v: unknown) => T }): ObjectSchema<T> {
   const zod = zodSchema as ZodLike<T>;
 
   return {
@@ -398,7 +398,7 @@ export function parsePartialJSON(text: string): unknown | undefined {
 
   if (jsonStart === -1) return undefined;
 
-  let partial = trimmed.slice(jsonStart);
+  const partial = trimmed.slice(jsonStart);
 
   // Try to repair and parse
   const repaired = repairJSON(partial);

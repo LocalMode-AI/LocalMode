@@ -14,7 +14,7 @@ Extract dense feature vectors from images using SigLIP models. These vectors ena
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [Duplicate Finder](https://localmode.ai/duplicate-finder) and [Smart Gallery](https://localmode.ai/smart-gallery) for working demos.
+  Try the [Photo Search block](https://localmode.ai/blocks/photo/duplicate-finder) — its Duplicates tab groups near-duplicates with a tunable similarity threshold, alongside image-to-image similarity search over the same in-browser vector space.
 </Callout>
 
 ## Recommended Models
@@ -32,7 +32,7 @@ Extract dense feature vectors from images using SigLIP models. These vectors ena
 
 ## Duplicate Detection Example
 
-Based on the [Duplicate Finder](https://localmode.ai/duplicate-finder) showcase app:
+Based on the [Photo Search block](https://localmode.ai/blocks/photo/duplicate-finder):
 
 ```typescript
 import { transformers } from '@localmode/transformers';
@@ -70,7 +70,7 @@ async function findDuplicates(images: string[]) {
 
 ## Semantic Image Search with VectorDB
 
-Based on the [Smart Gallery](https://localmode.ai/smart-gallery) and [Product Search](https://localmode.ai/product-search) showcase apps:
+Based on the [Photo Search block](https://localmode.ai/blocks/photo/image-search):
 
 ```typescript
 import { createVectorDB, embed, extractImageFeatures } from '@localmode/core';
@@ -110,13 +110,11 @@ async function searchByText(query: string, topK = 10) {
   4. **768 dimensions** — SigLIP-Base produces 768-dimensional vectors
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| Duplicate Finder | Extract image features for near-duplicate detection | [Demo](https://localmode.ai/duplicate-finder) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/duplicate-finder) |
-| Smart Gallery | Image feature extraction for gallery organization | [Demo](https://localmode.ai/smart-gallery) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-gallery) |
-| Product Search | Visual feature extraction for product matching | [Demo](https://localmode.ai/product-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/product-search) |
+| Image Search | Text→image and image→image CLIP search over your photo library with a top-K slider and similarity threshold | [Live](https://localmode.ai/blocks/photo/image-search) · Install: `npx shadcn add @localmode/ui/blocks/photo/image-search` |
 
 ## Next Steps
 

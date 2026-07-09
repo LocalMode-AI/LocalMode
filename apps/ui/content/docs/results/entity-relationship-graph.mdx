@@ -1,0 +1,57 @@
+---
+title: "Entity Relationship Graph"
+description: "An interactive force-directed graph of typed nodes and labeled edges — drag, zoom, pan, hover, click, and SVG/PNG export, all client-side."
+icon: Network
+---
+
+# Entity Relationship Graph
+
+The **Entity Relationship Graph** is an interactive force-directed graph of typed nodes and relationship-labeled edges, supporting drag, zoom, pan, hover, click, and SVG/PNG export. The layout runs entirely client-side over local data using a lightweight in-component force simulation (no `d3-force` or other heavy dependency).
+
+**When to use it:** visualizing VectorDB entity relationships, agent-memory connections, embedding clusters, or `useExtractEntities` (NER) co-occurrences — all from local data, with no network calls.
+
+## Preview
+
+<ComponentPreview name="ui/results/entity-relationship-graph" note="Force-directed graph of sample NER co-occurrences — drag, zoom, pan, export. Runs locally, no network." />
+
+<OpenInV0 name="ui/results/entity-relationship-graph" />
+
+## Installation
+
+<InstallTabs name="ui/results/entity-relationship-graph" />
+
+### Dependencies
+
+- **Data source:** renders the `nodes` / `edges` arrays you pass — works with any backend. Recommended producer: `useExtractEntities` (NER co-occurrences) from `@localmode/react` (optional). See [Bring your own data](/docs/bring-your-own-data#results--insights).
+
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+
+### Files installed
+
+- `entity-relationship-graph.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/results/entity-relationship-graph/entity-relationship-graph.tsx" name="EntityRelationshipGraphProps" />
+
+## Examples
+
+### From NER co-occurrences
+
+```tsx
+import { EntityRelationshipGraph } from '@/components/entity-relationship-graph';
+
+export function Example() {
+  const nodes = [
+    { id: 'ada', label: 'Ada Lovelace', type: 'PER' },
+    { id: 'london', label: 'London', type: 'LOC' },
+  ];
+  const edges = [{ source: 'ada', target: 'london', label: 'lived in' }];
+  return <EntityRelationshipGraph nodes={nodes} edges={edges} onNodeClick={(n) => console.log(n)} />;
+}
+```
+
+## Customization
+
+Node colors come from a per-type registry (defaults wired to CSS variables); pass your own `registry` to recolor. The force simulation (`layoutGraph`, exported) is a compact repulsion + edge-spring + center-gravity loop — tune the constants in the copied file for tighter or looser layouts. SVG and PNG export serialize the live SVG entirely in-browser; no network or third-party service is involved.

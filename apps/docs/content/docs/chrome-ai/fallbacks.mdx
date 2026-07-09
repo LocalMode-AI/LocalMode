@@ -11,7 +11,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 Chrome AI is only available in Chrome 138+. For broader browser support, pair it with `@localmode/transformers` as a fallback.
 
 <Callout type="info" title="See it in action">
-  Try [Smart Writer](https://localmode.ai/smart-writer) for a working demo.
+  The [Writing Tools blocks](https://localmode.ai/blocks/writing-tools) are the canonical real-app example of this pattern — four single-purpose blocks (Write, Translate, Summarize, Complete) that each run Chrome AI with automatic Transformers.js fallback.
 </Callout>
 
 ## The Provider Cascade
@@ -60,7 +60,7 @@ const { translation } = await translate({
 
 ## Service Pattern (Recommended)
 
-For showcase apps and production code, encapsulate provider selection in a service:
+For production code, encapsulate provider selection in a service:
 
 ```ts
 // _services/summarizer.service.ts
@@ -125,11 +125,16 @@ function ProviderStatus() {
 ```
 
 <Callout type="tip">
-  The Smart Writer showcase app at [localmode.ai/smart-writer](https://localmode.ai/smart-writer) demonstrates this fallback pattern in action.
+  The [Writing Tools blocks](https://localmode.ai/blocks/writing-tools) demonstrate this fallback pattern in action — install any of them, e.g. `npx shadcn add @localmode/ui/blocks/writing-tools/write`.
 </Callout>
 
-## Showcase Apps
+## Composed Blocks
 
-| App | Description | Links |
+The four writing capabilities — writing assistance, translation, summarization, and fill-mask completion — ship as four installable blocks that share this exact fallback wiring:
+
+| Block | Description | Links |
 |-----|-------------|-------|
-| Smart Writer | Chrome AI with transformers fallback for writing assistance | [Demo](https://localmode.ai/smart-writer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-writer) |
+| Write | Chrome AI writing assistance with automatic Transformers.js fallback | [Live](https://localmode.ai/blocks/writing-tools/write) · Install: `npx shadcn add @localmode/ui/blocks/writing-tools/write` |
+| Translate | Chrome AI translation with automatic Transformers.js fallback | [Live](https://localmode.ai/blocks/writing-tools/translate) · Install: `npx shadcn add @localmode/ui/blocks/writing-tools/translate` |
+| Summarize | Chrome AI summarization with automatic Transformers.js fallback | [Live](https://localmode.ai/blocks/writing-tools/summarize) · Install: `npx shadcn add @localmode/ui/blocks/writing-tools/summarize` |
+| Complete | Transformers.js ModernBERT fill-mask completion | [Live](https://localmode.ai/blocks/writing-tools/complete) · Install: `npx shadcn add @localmode/ui/blocks/writing-tools/complete` |

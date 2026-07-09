@@ -1,0 +1,10 @@
+{
+  "title": "DevTools",
+  "pages": [
+    "index",
+    "inference-queue-monitor",
+    "event-log-viewer",
+    "pipeline-run-inspector",
+    "model-cache-table"
+  ]
+}

@@ -13,6 +13,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "feed": "^5.2.0",
     "fumadocs-core": "16.7.4",
     "fumadocs-mdx": "14.2.11",

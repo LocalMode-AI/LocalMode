@@ -1,0 +1,64 @@
+---
+title: "Inline Citation"
+description: "Inline superscript markers that open a hovercard with the cited local chunk, paging multiple sources via a carousel."
+icon: Quote
+---
+
+# Inline Citation
+
+The **InlineCitation** primitives embed numbered/superscript citation markers in prose that open a hovercard showing the cited local chunk (title, excerpt, quoted snippet), with a carousel paging multiple sources for one claim. Distinct from the list-style `SourceCitationList`, citations reference locally-stored chunks only — no remote unfurl. Data source: `useSemanticSearch`.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/inline-citation" />
+
+<OpenInV0 name="ui/conversation/inline-citation" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/inline-citation" />
+
+### Data source & dependencies
+
+**Data source:** renders the cited-chunk shape you pass — works with any backend. Recommended producer: local chunk provenance from `useSemanticSearch` in `@localmode/react` (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `inline-citation.tsx` — `InlineCitation`, `InlineCitationCard`, `InlineCitationCardTrigger`, `InlineCitationCardBody`, `InlineCitationCarousel`, `InlineCitationSource`, `InlineCitationQuote`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/inline-citation/inline-citation.tsx" name="InlineCitationCardTriggerProps" />
+
+## Examples
+
+### A cited claim
+
+```tsx
+import {
+  InlineCitation, InlineCitationCard, InlineCitationCardBody, InlineCitationCardTrigger,
+  InlineCitationCarousel, InlineCitationQuote, InlineCitationSource,
+} from '@/components/inline-citation';
+
+LocalMode runs in your browser
+<InlineCitation>
+  <InlineCitationCard>
+    <InlineCitationCardTrigger label={1} />
+    <InlineCitationCardBody>
+      <InlineCitationCarousel count={1}>
+        <InlineCitationSource title="architecture.md" excerpt="Execution model">
+          <InlineCitationQuote>All inference executes on-device.</InlineCitationQuote>
+        </InlineCitationSource>
+      </InlineCitationCarousel>
+    </InlineCitationCardBody>
+  </InlineCitationCard>
+</InlineCitation>.
+```
+
+## Customization
+
+The marker is a focusable `<sup>` so it works by hover and keyboard. Pass `count > 1` to `InlineCitationCarousel` with multiple `InlineCitationSource` children to page sources for one claim.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useSemanticSearch`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

@@ -12,7 +12,7 @@ HuggingFace Transformers.js provider for LocalMode — run ML models locally in 
 
 - **Browser-Native** - Run ML models directly in the browser with WebGPU/WASM
 - **Privacy-First** - All processing happens locally, no data leaves the device
-- **Model Caching** - Models are cached in IndexedDB for instant subsequent loads
+- **Model Caching** - Model files are cached in the browser Cache API (`transformers-cache`) for instant subsequent loads, with a resilient write path that never fails a model load (opt out: `createTransformers({ resilientCache: false })`)
 - **Optimized** - Uses quantized models for smaller size and faster inference
 
 ## Installation
@@ -292,6 +292,24 @@ await preloadModel('Xenova/bge-small-en-v1.5', {
 });
 
 const usage = await getModelStorageUsage();
+```
+
+### Resilient Model-File Cache
+
+Model files are cached in the browser **Cache API** (cache name `transformers-cache`, honoring a user-set `env.cacheKey`) — not IndexedDB. The provider installs a resilient wrapper by default so a failing cache write (e.g. the intermittent `NetworkError` some browsers throw mid-write, or `QuotaExceededError`) never fails a model load: the model still loads from the network response, and one warning per URL per session is logged. Environments without `caches` (Node/SSR) skip installation and keep Transformers.js's own file cache.
+
+```typescript
+import { createTransformers } from '@localmode/transformers';
+
+// Opt out of the resilient cache (global — the transformers.js env is a singleton)
+const provider = createTransformers({ resilientCache: false });
+
+// Manual control (advanced)
+import {
+  createResilientModelCache,   // build a Cache-API-backed cache implementing match/put/delete
+  installResilientModelCache,  // idempotently configure env.useCustomCache + env.customCache
+  setResilientModelCacheEnabled, // enable/disable installation globally
+} from '@localmode/transformers';
 ```
 
 ---

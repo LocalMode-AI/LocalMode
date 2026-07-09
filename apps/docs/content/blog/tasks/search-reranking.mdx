@@ -128,11 +128,16 @@ npm install @localmode/react
 ```
 
 ```typescript
-import { rerank } from '@localmode/core';
+import { useRerank } from '@localmode/react';
 import { transformers } from '@localmode/transformers';
+
+const model = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+const { data, isLoading, execute, cancel } = useRerank({ model, topK: 3 });
+await execute({ query: 'What is machine learning?', documents });
+// data.results - documents sorted by relevance score (highest first)
 ```
 
-Use `rerank()` directly inside a React hook or component. There is no dedicated `useRerank` hook in `@localmode/react` - wrap `rerank()` with `useState` and `useEffect` (or a custom `useOperation` pattern) for loading states, error handling, and cancellation. The `rerankStep` export from `@localmode/react` is available for use inside a `usePipeline()` pipeline.
+The dedicated [`useRerank` hook](https://localmode.dev/docs/react/classification#usererank) wraps `rerank()` with loading states, error handling, and AbortSignal cancellation; a hook-level `topK` applies to every call and can be overridden per call. The `rerankStep` export from `@localmode/react` is available for use inside a `usePipeline()` pipeline.
 
 ## Related Pages
 

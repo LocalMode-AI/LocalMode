@@ -21,13 +21,28 @@ import type { LocalForageStorageOptions } from './types.js';
 /**
  * Internal vector record stored in localforage.
  * Uses a plain number array because localforage serializes values to JSON
- * when using the localStorage driver, and Float32Array does not survive
+ * when using the localStorage driver, and typed arrays do not survive
  * JSON round-tripping.
  */
 interface VectorRecord {
   id: string;
   collectionId: string;
   vector: number[];
+  /**
+   * Payload type — 'u8' for SQ8/PQ-compressed vectors, 'f32' for float
+   * vectors. Records written by older versions have no field and hold
+   * f32 data.
+   */
+  dtype?: 'f32' | 'u8';
+}
+
+/**
+ * Revive a stored record's vector preserving its payload type.
+ */
+function reviveVector(record: VectorRecord): Float32Array | Uint8Array {
+  return record.dtype === 'u8'
+    ? new Uint8Array(record.vector)
+    : new Float32Array(record.vector);
 }
 
 /**
@@ -170,26 +185,27 @@ export class LocalForageStorage implements StorageAdapter {
       id: vec.id,
       collectionId: vec.collectionId,
       vector: Array.from(vec.vector),
+      dtype: vec.vector instanceof Uint8Array ? 'u8' : 'f32',
     });
   }
 
-  async getVector(id: string): Promise<Float32Array | null> {
+  async getVector(id: string): Promise<Float32Array | Uint8Array | null> {
     const record = await this.vecs.getItem<VectorRecord>(id);
     if (!record) return null;
 
-    return new Float32Array(record.vector);
+    return reviveVector(record);
   }
 
   async deleteVector(id: string): Promise<void> {
     await this.vecs.removeItem(id);
   }
 
-  async getAllVectors(collectionId: string): Promise<Map<string, Float32Array>> {
-    const map = new Map<string, Float32Array>();
+  async getAllVectors(collectionId: string): Promise<Map<string, Float32Array | Uint8Array>> {
+    const map = new Map<string, Float32Array | Uint8Array>();
 
     await this.vecs.iterate<VectorRecord, void>((value) => {
       if (value.collectionId === collectionId) {
-        map.set(value.id, new Float32Array(value.vector));
+        map.set(value.id, reviveVector(value));
       }
     });
 
@@ -222,26 +238,22 @@ export class LocalForageStorage implements StorageAdapter {
   // ============================================
   // Collection Operations
   // ============================================
+  //
+  // Collection records are persisted and returned in full — including the
+  // optional extended fields (`modelFingerprint`, `calibration`, `pqCodebook`,
+  // `compression`, `compressionCalibration`, `deltaCalibration`, and any
+  // future optional field). Core stores quantization/compression calibration
+  // and the embedding-model fingerprint ON the collection record; dropping
+  // any of them silently corrupts quantized/compressed vectors on the next
+  // session and disables drift detection.
 
   async createCollection(collection: Collection): Promise<void> {
-    await this.cols.setItem<Collection>(collection.id, {
-      id: collection.id,
-      name: collection.name,
-      dimensions: collection.dimensions,
-      createdAt: collection.createdAt,
-    });
+    await this.cols.setItem<Collection>(collection.id, { ...collection });
   }
 
   async getCollection(id: string): Promise<Collection | null> {
     const record = await this.cols.getItem<Collection>(id);
-    if (!record) return null;
-
-    return {
-      id: record.id,
-      name: record.name,
-      dimensions: record.dimensions,
-      createdAt: record.createdAt,
-    };
+    return record ?? null;
   }
 
   async getCollectionByName(name: string): Promise<Collection | null> {
@@ -249,12 +261,7 @@ export class LocalForageStorage implements StorageAdapter {
 
     await this.cols.iterate<Collection, void>((value) => {
       if (value.name === name) {
-        found = {
-          id: value.id,
-          name: value.name,
-          dimensions: value.dimensions,
-          createdAt: value.createdAt,
-        };
+        found = value;
       }
     });
 
@@ -265,24 +272,14 @@ export class LocalForageStorage implements StorageAdapter {
     const collections: Collection[] = [];
 
     await this.cols.iterate<Collection, void>((value) => {
-      collections.push({
-        id: value.id,
-        name: value.name,
-        dimensions: value.dimensions,
-        createdAt: value.createdAt,
-      });
+      collections.push(value);
     });
 
     return collections;
   }
 
   async updateCollection(collection: Collection): Promise<void> {
-    await this.cols.setItem<Collection>(collection.id, {
-      id: collection.id,
-      name: collection.name,
-      dimensions: collection.dimensions,
-      createdAt: collection.createdAt,
-    });
+    await this.cols.setItem<Collection>(collection.id, { ...collection });
   }
 
   async deleteCollection(id: string): Promise<void> {

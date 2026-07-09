@@ -1,0 +1,94 @@
+---
+title: "Text Processing Panel"
+description: "A two-column input→output NLP shell — labeled textarea + word count + optional Char Limit Indicator, a result pane with copy, and a run/cancel/clear toolbar."
+icon: PanelsTopLeft
+---
+
+# Text Processing Panel
+
+The **Text Processing Panel** is a two-column (stacked on mobile) single-input → single-output NLP shell. The left column is a labeled textarea with a live word count and an optional [`CharLimitIndicator`](/docs/input-controls/char-limit-indicator); the right column is a result pane (spinner while processing, pre-wrap text otherwise, or an empty slot) with a copy-with-feedback button. A run / cancel / clear toolbar sits below, and an optional `header` slot renders above both columns — drop a [`SegmentedModePicker`](/docs/input-controls/segmented-mode-picker) or [`LanguagePairSelector`](/docs/input-controls/language-pair-selector) there.
+
+It is layout-only. Own the inference in your app by wiring the toolbar to any text-in/text-out hook — `useSummarize`, `useTranslate`, `useFillMask`, `useAnswerQuestion`, or `useGenerateText` — and passing `result` / `isProcessing` back in.
+
+**When to use it:** the paste → process → copy layout that recurs across summarization, translation, QA-context, and generation utilities.
+
+## Preview
+
+<ComponentPreview name="ui/input-controls/text-processing-panel" note="Summarize via a real model; the summarizer downloads on first run. Spinner → result → copy, plus cancel and clear." />
+
+<OpenInV0 name="ui/input-controls/text-processing-panel" />
+
+## Installation
+
+<InstallTabs name="ui/input-controls/text-processing-panel" />
+
+### Dependencies
+
+- **Data source:** layout-only — renders the `result` / `isProcessing` you pass and emits `onRun` / `onCancel` / `onClear` callbacks, so it works with any text-in/text-out backend. Recommended LocalMode producers: `useSummarize` / `useTranslate` / `useFillMask` / `useAnswerQuestion` / `useGenerateText` (optional).
+- `CharLimitIndicator` — composed for the optional limit ring (installed automatically as a registry dependency)
+- `lucide-react` — icons
+
+### Files installed
+
+- `text-processing-panel.tsx` — the component
+- `char-limit-indicator.tsx` — composed for the optional limit ring (registry dependency)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/input-controls/text-processing-panel/text-processing-panel.tsx" name="TextProcessingPanelProps" />
+
+## Examples
+
+### Summarize
+
+```tsx
+import { useState } from 'react';
+import { useSummarize } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+import { TextProcessingPanel } from '@/components/text-processing-panel';
+
+export function Summarizer() {
+  const [text, setText] = useState('');
+  const { data, isLoading, execute, cancel, reset } = useSummarize({
+    model: transformers.summarizer('Xenova/distilbart-cnn-6-6'),
+  });
+
+  return (
+    <TextProcessingPanel
+      value={text}
+      onChange={setText}
+      result={data?.summary}
+      isProcessing={isLoading}
+      onRun={() => execute({ text })}
+      onCancel={cancel}
+      onClear={reset}
+      inputLabel="Article"
+      resultLabel="Summary"
+      runLabel="Summarize"
+    />
+  );
+}
+```
+
+### Translate (header slot)
+
+```tsx
+const { data, isLoading, execute } = useTranslate({ model });
+<TextProcessingPanel
+  value={text}
+  onChange={setText}
+  result={data?.translation}
+  isProcessing={isLoading}
+  onRun={() => execute({ text, sourceLanguage: src, targetLanguage: tgt })}
+  header={<LanguagePairSelector {...pairProps} />}
+/>
+```
+
+## Customization
+
+Pass `maxLength` to show the `CharLimitIndicator` under the input. The result pane renders `result` pre-wrap; for richer output (lists, predictions) drop your own node into `emptyState` or format `result` before passing it in. Keep the inference in your app — the panel stays a layout shell with slots. Everything is theme-driven via shadcn/ui CSS variables.
+
+## Accessibility
+
+The input textarea has no rendered `<label>` element, so it takes its **accessible name from `inputLabel`** — the same string shown above the column is also wired as the textarea's `aria-label`. Give each panel a descriptive `inputLabel` ("Text to summarize", "Source text") and `getByLabel(inputLabel)` resolves the field uniquely across panels on the same page. The Copy button on the result pane is labelled `"Copy result"`.

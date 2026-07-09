@@ -1,0 +1,83 @@
+---
+title: "Mask Token Input"
+description: "A fill-mask / cloze textarea that detects a configurable mask token, highlights the mask span inline, validates, randomizes a sample, and submits on Cmd+Enter."
+icon: SquareAsterisk
+---
+
+# Mask Token Input
+
+The **Mask Token Input** is a textarea for fill-mask / cloze input. It detects a configurable mask token (default `[MASK]`), renders an inline highlighted preview with the mask span accented, shows a validation hint (`Mask detected` vs `Add [MASK]`), offers a randomize button that inserts a valid sample, and surfaces a Cmd+Enter badge for one-key submit.
+
+It is presentational and portable — pair its `value` / `onSubmit` with any fill-mask backend to run predictions and render the returned fills. With LocalMode you can (optionally) wire it to [`useFillMask()`](https://localmode.dev/docs/react) from `@localmode/react`.
+
+**When to use it:** any masked-language task — "The capital of France is `[MASK]`." → top predictions.
+
+## Preview
+
+<ComponentPreview name="ui/input-controls/mask-token-input" note="Submitting downloads a small BERT model on first run, then predicts the masked token." />
+
+<OpenInV0 name="ui/input-controls/mask-token-input" />
+
+## Installation
+
+<InstallTabs name="ui/input-controls/mask-token-input" />
+
+### Dependencies
+
+- **Data source:** renders the `value` you pass and emits `onChange` / `onSubmit` callbacks — works with any backend. Recommended LocalMode producer: `useFillMask` (optional).
+- No npm dependencies (only the shared `cn()` util via `@localmode/ui/lib/utils`).
+
+### Files installed
+
+- `mask-token-input.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/input-controls/mask-token-input/mask-token-input.tsx" name="MaskTokenInputProps" />
+
+## Examples
+
+### Wired to `useFillMask`
+
+```tsx
+import { useState } from 'react';
+import { useFillMask } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+import { MaskTokenInput } from '@/components/mask-token-input';
+
+export function ClozeBox() {
+  const [text, setText] = useState('The capital of France is [MASK].');
+  const { data, isLoading, execute } = useFillMask({
+    model: transformers.fillMask('Xenova/bert-base-uncased'),
+    topK: 5,
+  });
+
+  return (
+    <div className="flex flex-col gap-3">
+      <MaskTokenInput value={text} onChange={setText} onSubmit={execute} disabled={isLoading} />
+      {data?.predictions.map((p) => (
+        <div key={p.token}>{p.token} — {(p.score * 100).toFixed(1)}%</div>
+      ))}
+    </div>
+  );
+}
+```
+
+### Custom mask token
+
+```tsx
+<MaskTokenInput value={text} onChange={setText} maskToken="<mask>" />
+```
+
+### Accessible name
+
+The textarea has no visible `<label>`, so it ships with an `aria-label` (default `"Fill-mask sentence"`). Override `ariaLabel` to match a nearby heading in your layout.
+
+```tsx
+<MaskTokenInput value={text} onChange={setText} ariaLabel="Sentence to complete" />
+```
+
+## Customization
+
+The mask span is highlighted with `bg-primary/15 text-primary`; the validation hint uses Tailwind's `emerald` / `amber` palettes. Pass your own `samples` (each containing the mask token) to control what Randomize inserts. Set `ariaLabel` to give the textarea a programmatic name. The component is theme-driven via shadcn/ui CSS variables — edit the copied `mask-token-input.tsx` to change the preview styling or add multi-mask support.

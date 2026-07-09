@@ -10,7 +10,7 @@ faq:
   - question: "Is embedding quality really comparable between LocalMode and OpenAI?"
     answer: "For retrieval tasks, BGE-small-en-v1.5 (33MB, free) achieves within 5% of text-embedding-3-small on MTEB benchmarks. The gap narrows further with BGE-base (110MB, 768 dimensions). For most search and RAG applications, users cannot distinguish between the two."
   - question: "What about the initial model download time?"
-    answer: "Models download once and are cached in IndexedDB. BGE-small (33MB) downloads in 2-5 seconds on a typical connection. LLMs (1-4GB) take 30-120 seconds. After caching, models load from local storage in under a second. Use preloadModel() to download during onboarding or idle time."
+    answer: "Models download once and are cached by the browser. BGE-small (33MB) downloads in 2-5 seconds on a typical connection. LLMs (1-4GB) take 30-120 seconds. After caching, models load from local storage in under a second. Use preloadModel() to download during onboarding or idle time."
   - question: "Can I use both LocalMode and OpenAI in the same app?"
     answer: "Yes. The hybrid architecture pattern uses LocalMode for high-volume, low-complexity tasks (embeddings, classification, NER) at $0 cost, and routes complex reasoning tasks to OpenAI. A try/catch around the local call makes this automatic."
 ---
@@ -36,7 +36,7 @@ Understanding these trade-offs is essential for architects and developers evalua
 | **Offline Support** | Full offline support after initial model download. Works on planes, in the field, on unreliable networks. | No offline support. Every request requires internet connection. |
 | **Setup Complexity** | npm install + 3 lines of code. No API keys, no backend, no environment variables. | API key management. Backend proxy for security. Environment variable configuration. |
 | **Scalability** | Scales with user devices (each user runs their own inference). Zero server costs regardless of user count. | Scales with API costs. 100K users = 100K× the API bill. Rate limits may throttle. |
-| **Model Variety** | 88 curated models across 13+ task types. Embeddings, classification, vision, audio, LLMs. | Many models across the GPT-5 family plus text-embedding-3, Whisper, TTS-1, and gpt-image-2 (DALL-E was deprecated May 12, 2026). |
+| **Model Variety** | 148 curated models across 13+ task types. Embeddings, classification, vision, audio, LLMs. | Many models across the GPT-5 family plus text-embedding-3, Whisper, TTS-1, and gpt-image-2 (DALL-E was deprecated May 12, 2026). |
 | **Compliance** | GDPR-friendly by design (no third-party data processing). No DPA needed for the AI processing. No cross-border transfer issues. | Requires DPA. Data processed in US/EU. GDPR Article 28 compliance needed. |
 | **Reliability** | No server outages. No rate limits. Works independently per user. | Subject to OpenAI outages (3 major outages in Dec 2024-Jan 2025). Rate limits per tier. |
 
@@ -109,7 +109,7 @@ This approach gives you the best of both worlds: the privacy and cost benefits o
 
 ## Methodology
 
-LocalMode model counts and API shapes were verified directly against the package catalogs in `packages/webllm/src/models.ts`, `packages/wllama/src/models.ts`, `packages/transformers/src/models.ts`, `packages/mediapipe/src/models.ts`, and `packages/litert/src/models.ts` (88 total curated models as of this writing). OpenAI pricing figures are sourced from the official OpenAI API pricing page and corroborated by pricepertoken.com and devtk.ai (verified May 22, 2026); pricing changes frequently - confirm current rates at openai.com/api/pricing before making decisions. Benchmark scores (Qwen3-4B MMLU-Redux 83.7, GPT-5 MMLU 92.5, BGE-small-en-v1.5 MTEB 62.17) are sourced from official technical reports and HuggingFace model cards. OpenAI outage history references incidents from status.openai.com in December 2024 and January 2025.
+LocalMode model counts and API shapes were verified directly against the package catalogs in `packages/webllm/src/models.ts`, `packages/wllama/src/models.ts`, `packages/transformers/src/models.ts`, `packages/mediapipe/src/models.ts`, and `packages/litert/src/models.ts` (148 total curated models as of this writing: 70 unique Transformers + 32 WebLLM + 30 wllama + 13 MediaPipe + 3 LiteRT). OpenAI pricing figures are sourced from the official OpenAI API pricing page and corroborated by pricepertoken.com and devtk.ai (verified May 22, 2026); pricing changes frequently - confirm current rates at openai.com/api/pricing before making decisions. Benchmark scores (Qwen3-4B MMLU-Redux 83.7, GPT-5 MMLU 92.5, BGE-small-en-v1.5 MTEB 62.17) are sourced from official technical reports and HuggingFace model cards. OpenAI outage history references incidents from status.openai.com in December 2024 and January 2025.
 
 ## Sources
 

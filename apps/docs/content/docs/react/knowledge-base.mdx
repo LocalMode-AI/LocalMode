@@ -1,0 +1,114 @@
+---
+title: 'Knowledge Base'
+description: React hook for knowledge-base session orchestration over the KnowledgeBaseEngine contract — document store, embedding-model lifecycle, and switch-driven re-ingest.
+icon: Library
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+# Knowledge Base Hook
+
+<Callout type="info" title="See it in action">
+  Try the [knowledge blocks](https://localmode.ai/blocks/knowledge) for working demos — the Ingest, Search, Ask, and Data experiences, each on a core-pipeline ⇄ LangChain engine toggle powered by this hook.
+</Callout>
+
+## useKnowledgeBase
+
+The knowledge-base session-orchestration hook over the core `KnowledgeBaseEngine` contract. It owns the full session so no consuming block re-implements it: the raw-document store (`documents` + add / remove / clear), the embedding-model load lifecycle (via `useModelLoad`, key `kb-embedding:${id}` preserved verbatim), chunking + embedding-model config, busy / error / stats, and — the load-bearing part — re-ingest of the whole raw-document store on either an **engine-kind toggle** or an **embedding-model switch**.
+
+The active engine is produced by an injected `createEngine(kind)` factory, so the hook consumes **only** the `KnowledgeBaseEngine` contract and never imports a specific engine. A core-only factory keeps `@localmode/langchain` entirely out of the session; a toggle-capable factory dynamically imports the LangChain engine (`await import('@localmode/langchain')`) only when the toggle flips.
+
+```tsx
+import { useKnowledgeBase } from '@localmode/react';
+import { createKnowledgeBaseEngine } from '@localmode/core';
+import { transformers, isModelCached } from '@localmode/transformers';
+
+const kb = useKnowledgeBase({
+  embeddingModelId: 'Xenova/bge-small-en-v1.5',
+  createEmbeddingModel: (id, onProgress) => transformers.embedding(id, { onProgress }),
+  isModelCached: (id) => isModelCached(id),
+  // core-only factory: never imports @localmode/langchain
+  createEngine: () =>
+    createKnowledgeBaseEngine({
+      embeddingModel: transformers.embedding('Xenova/bge-small-en-v1.5'),
+      getLanguageModel: async () => transformers.languageModel('onnx-community/granite-4.0'),
+    }),
+});
+```
+
+### Options
+
+<TypeTable
+  type={{
+    createEngine: { description: 'Produce the engine for a kind. Core-only blocks return a core engine for every kind (no langchain module loads); toggle-capable blocks return the LangChain engine via a dynamic import.', type: '(kind: EngineKind) => Promise<KnowledgeBaseEngine> | KnowledgeBaseEngine', required: true },
+    createEmbeddingModel: { description: 'Construct the embedding model for a given id, wiring the hook-bound load-progress callback.', type: '(id: string, onProgress: (p: AnyLoadProgress) => void) => EmbeddingModel', required: true },
+    embeddingModelId: { description: 'Initial embedding-model id.', type: 'string', required: true },
+    isModelCached: { description: 'Optional cache probe for the active embedding model.', type: '(id: string) => Promise<boolean>' },
+    engineKind: { description: 'Initial engine kind.', type: 'EngineKind', default: "'core'" },
+    chunking: { description: 'Initial chunking mode.', type: "'off' | 'recursive' | 'semantic'", default: "'recursive'" },
+    chunkSize: { description: 'Initial recursive-chunker size in chars.', type: 'number', default: '512' },
+    modelLoadKey: { description: 'Derive the useModelLoad key from the embedding-model id. Defaults to kb-embedding:${id}, preserved verbatim.', type: '(id: string) => string' },
+  }}
+/>
+
+### Return Value
+
+**Session**
+
+<TypeTable
+  type={{
+    engine: { description: 'The active engine, or null while it is being (re-)created.', type: 'KnowledgeBaseEngine | null' },
+    engineKind: { description: 'The active engine kind.', type: 'EngineKind' },
+    setEngineKind: { description: 'Toggle the engine kind — re-ingests the corpus through the new engine.', type: '(kind: EngineKind) => void' },
+    documents: { description: 'Raw documents currently in the corpus.', type: 'RawDocument[]' },
+    addDocuments: { description: 'Add documents: assigns ids, ingests through the engine, appends to the store.', type: "(docs: Array<Omit<RawDocument, 'id' | 'addedAt'>>) => Promise<void>" },
+    removeDocument: { description: 'Remove one document by id.', type: '(docId: string) => Promise<void>' },
+    clearAll: { description: 'Clear the whole corpus.', type: '() => Promise<void>' },
+    chunking: { description: 'Active chunking config (applied on the next ingest).', type: "'off' | 'recursive' | 'semantic'" },
+    setChunking: { description: 'Set the chunking mode.', type: '(mode: KnowledgeBaseChunkingMode) => void' },
+    chunkSize: { description: 'Active recursive-chunk size in chars (a chunk-size edit does not re-ingest).', type: 'number' },
+    setChunkSize: { description: 'Set the chunk size.', type: '(n: number) => void' },
+    embeddingModelId: { description: 'Active embedding-model id — a switch re-ingests the corpus.', type: 'string' },
+    setEmbeddingModelId: { description: 'Switch the embedding model (re-ingests through the new model).', type: '(id: string) => void' },
+    busy: { description: 'True while any ingest / re-ingest runs.', type: 'boolean' },
+    error: { description: 'Last ingest / engine / model error, or null.', type: 'string | null' },
+    stats: { description: 'Corpus stats from the last successful ingest, or null.', type: 'KnowledgeBaseStats | null' },
+    ingestProgress: { description: 'Progress of a regular addDocuments ingest, or null.', type: 'KnowledgeBaseProgress | null' },
+    reingestProgress: { description: 'Progress of the whole-corpus re-ingest that runs on a switch, or null.', type: 'KnowledgeBaseProgress | null' },
+    switching: { description: 'True from a switch until its re-ingest settles.', type: 'boolean' },
+  }}
+/>
+
+**Embedding-model load lifecycle**
+
+<TypeTable
+  type={{
+    modelStatus: { description: 'Model-load status from useModelLoad.', type: "'idle' | 'loading' | 'ready' | 'error'" },
+    modelProgress: { description: 'Normalized load progress 0-1.', type: 'number' },
+    modelReady: { description: 'True when modelStatus === "ready".', type: 'boolean' },
+    modelCached: { description: 'Whether the active embedding model is cached (from the optional probe).', type: 'boolean | undefined' },
+    loadModel: { description: 'Load (or join the in-flight load of) the active embedding model.', type: '() => Promise<void>' },
+  }}
+/>
+
+### The engine contract
+
+The hook is engine-agnostic: it talks only to the `KnowledgeBaseEngine` contract in `@localmode/core`. Both engines implement it:
+
+| Engine | Factory | Package |
+|--------|---------|---------|
+| Core pipeline | `createKnowledgeBaseEngine` | `@localmode/core` |
+| LangChain | `createLangChainKnowledgeBaseEngine` | `@localmode/langchain` |
+
+An engine-kind toggle **or** an embedding-model switch drives a single effect (keyed on `[engineKind, embeddingModelId]`) that recreates the engine and, if the raw-document store is non-empty, re-ingests the whole corpus through it with visible progress. Regular `addDocuments` calls ingest incrementally.
+
+<Callout type="info">
+For the engine contract and the core pipeline engine, see the [Core Knowledge Base](/docs/core/knowledge-base) guide; for the LangChain engine, see the [LangChain](/docs/langchain) adapter guide.
+</Callout>
+
+## Blocks
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Knowledge Base | Ingest / Search / Ask / Data knowledge base on a core ⇄ LangChain engine toggle via useKnowledgeBase | [Live block](https://localmode.ai/blocks/knowledge) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge) |

@@ -3,7 +3,7 @@ title: "Drop-In Local AI for Your LangChain.js App - No Cloud Provider Needed"
 description: "Migrate your LangChain.js application from OpenAI and Pinecone to 100% local inference by changing three imports. LocalModeEmbeddings, ChatLocalMode, and LocalModeVectorStore are thin adapters that wrap browser-based models behind standard LangChain interfaces - same chains, same retrievers, zero API keys."
 author: LocalMode
 date: 2026-02-03
-dateModified: "2026-05-29"
+dateModified: "2026-07-04"
 faq:
   - question: "How do I migrate a LangChain.js app from OpenAI to local models?"
     answer: "Replace three provider constructors: OpenAIEmbeddings becomes LocalModeEmbeddings (wrapping any @localmode/core EmbeddingModel), ChatOpenAI becomes ChatLocalMode (wrapping any LanguageModel), and PineconeStore becomes LocalModeVectorStore (backed by IndexedDB). All downstream chain logic, retrievers, and output parsers stay identical."
@@ -12,7 +12,7 @@ faq:
   - question: "Can I use local models for retrieval and cloud models for generation in the same LangChain pipeline?"
     answer: "Yes. Use LocalModeEmbeddings and LocalModeVectorStore for the retrieval pipeline (runs locally at zero cost, keeps documents private) and keep ChatOpenAI for the generation step when frontier model quality is needed. This hybrid approach gives roughly 90% cost savings while maintaining answer quality."
   - question: "What models are recommended for a local LangChain.js RAG pipeline?"
-    answer: "BGE-small-en-v1.5 (33 MB, 384 dimensions) for embeddings via @localmode/transformers, and Qwen3 1.7B (~1.1 GB) for chat via @localmode/webllm. The LangChain RAG showcase app at localmode.ai/langchain-rag demonstrates this exact combination with document ingestion and source-cited answers."
+    answer: "BGE-small-en-v1.5 (33 MB, 384 dimensions) for embeddings via @localmode/transformers, and Qwen3 1.7B (~1.1 GB) for chat via @localmode/webllm. The Knowledge Base block at localmode.ai/blocks/knowledge/rag-chat demonstrates this exact combination with document ingestion and source-cited answers."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
@@ -232,7 +232,7 @@ console.log(answer.content);
 Everything after the provider setup - `asRetriever()`, `invoke()`, prompt construction - is standard LangChain code that works with any provider. If you later decide to switch back to cloud for certain use cases, you only change the constructor lines.
 
 <Callout type="info" title="Working demo">
-  The [LangChain RAG showcase app](https://localmode.ai/langchain-rag) implements this exact pattern with a full UI: paste a document, ask questions, and see retrieved sources with relevance scores. All inference runs in your browser. [View the source code](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/%28apps%29/langchain-rag).
+  The [Knowledge Base block](https://localmode.ai/blocks/knowledge/rag-chat) implements this exact pattern with a full UI: paste a document, ask questions, and see retrieved sources with relevance scores. All inference runs in your browser. [View the source code](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/rag-chat).
 </Callout>
 
 ---
@@ -276,7 +276,7 @@ The adapter implementations are open source and can be inspected directly:
 - [LocalModeEmbeddings source](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/langchain/src/embeddings.ts) - 61 lines, extends `@langchain/core` `Embeddings`
 - [ChatLocalMode source](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/langchain/src/chat-model.ts) - 172 lines, extends `@langchain/core` `BaseChatModel`
 - [LocalModeVectorStore source](https://github.com/LocalMode-AI/LocalMode/blob/main/packages/langchain/src/vector-store.ts) - 148 lines, extends `@langchain/core` `VectorStore`
-- [LangChain RAG showcase app](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/%28apps%29/langchain-rag) - full working demo
+- [Knowledge Base block](https://localmode.ai/blocks/knowledge/rag-chat) - the live LangChain RAG demo, with a core ⇄ LangChain engine toggle
 - [LangChain.js documentation](https://docs.langchain.com/oss/javascript/langchain/overview) - official framework docs
 - [LocalMode LangChain integration docs](/docs/langchain) - full adapter API reference and migration guide
 - Quality benchmarks referenced from our [Local AI vs Cloud](/blog/local-ai-vs-cloud) analysis
@@ -284,7 +284,7 @@ The adapter implementations are open source and can be inspected directly:
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

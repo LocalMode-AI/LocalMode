@@ -12,7 +12,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 Generate concise summaries of text using provider-agnostic summarization models. Works with any provider that implements the `SummarizationModel` interface.
 
 <Callout type="info" title="See it in action">
-  Try [Text Summarizer](https://localmode.ai/text-summarizer) and [Meeting Assistant](https://localmode.ai/meeting-assistant) for working demos of these APIs.
+  Try the [Text Summarizer block](https://localmode.ai/blocks/writing-tools/summarize) and [Audio Studio block](https://localmode.ai/blocks/audio) for working demos of these APIs.
 </Callout>
 
 ## summarize()
@@ -190,10 +190,10 @@ class MySummarizer implements SummarizationModel {
   />
 </Cards>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Text Summarizer | Summarize articles and documents | [Demo](https://localmode.ai/text-summarizer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/text-summarizer) |
-| Meeting Assistant | Summarize transcribed meeting recordings | [Demo](https://localmode.ai/meeting-assistant) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/meeting-assistant) |
-| Smart Writer | Summarize and rewrite content | [Demo](https://localmode.ai/smart-writer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-writer) |
+| Writing Tools (Text Summarizer) | Summarize articles and documents | [Live block](https://localmode.ai/blocks/writing-tools/summarize) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/writing-tools/summarize) |
+| Audio Studio (Meeting Assistant) | Summarize transcribed meeting recordings | [Live block](https://localmode.ai/blocks/audio) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/audio) |
+| Writing Tools (Smart Writer) | Summarize and rewrite content | [Live block](https://localmode.ai/blocks/writing-tools/write) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/writing-tools/write) |

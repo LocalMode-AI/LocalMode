@@ -69,10 +69,13 @@ vi.mock('@localmode/core', async () => {
       this.state = to as typeof this.state;
       for (const l of this.stateListeners) l({ from, to });
     }
+    fireBargeIn() {
+      for (const l of this.bargeInListeners) l();
+    }
   }
 
   const created: FakeTurnTaker[] = [];
-  (globalThis as { __lastFakeTT__?: () => FakeTurnTaker }).__lastFakeTT__ = () =>
+  (globalThis as unknown as { __lastFakeTT__?: () => FakeTurnTaker }).__lastFakeTT__ = () =>
     created[created.length - 1];
 
   return {
@@ -118,7 +121,7 @@ describe('useTurnTaker', () => {
     expect(result.current.isPlanning).toBe(false);
     expect(result.current.isSpeaking).toBe(false);
 
-    const fake = (globalThis as { __lastFakeTT__: () => { fireState(f: string, t: string): void } }).__lastFakeTT__();
+    const fake = (globalThis as unknown as { __lastFakeTT__: () => { fireState(f: string, t: string): void } }).__lastFakeTT__();
 
     await act(async () => {
       fake.fireState('listening', 'planning');
@@ -139,7 +142,7 @@ describe('useTurnTaker', () => {
       await result.current.start();
     });
 
-    const fake = (globalThis as { __lastFakeTT__: () => { fireUserUtterance(s: string): void; fireAgentResponse(s: string): void } }).__lastFakeTT__();
+    const fake = (globalThis as unknown as { __lastFakeTT__: () => { fireUserUtterance(s: string): void; fireAgentResponse(s: string): void } }).__lastFakeTT__();
 
     await act(async () => {
       fake.fireUserUtterance('first user');
@@ -164,7 +167,7 @@ describe('useTurnTaker', () => {
       await result.current.start();
     });
 
-    const fake = (globalThis as { __lastFakeTT__: () => { interruptCalls: number; state: string; fireState(f: string, t: string): void } }).__lastFakeTT__();
+    const fake = (globalThis as unknown as { __lastFakeTT__: () => { interruptCalls: number; state: string; fireState(f: string, t: string): void } }).__lastFakeTT__();
 
     // Move to planning so interrupt has effect.
     await act(async () => {
@@ -186,12 +189,82 @@ describe('useTurnTaker', () => {
       await result.current.start();
     });
 
-    const fake = (globalThis as { __lastFakeTT__: () => { state: string } }).__lastFakeTT__();
+    const fake = (globalThis as unknown as { __lastFakeTT__: () => { state: string } }).__lastFakeTT__();
     expect(fake.state).toBe('listening');
 
     unmount();
     await new Promise((r) => setTimeout(r, 0));
     // After dispose() the FakeTurnTaker resets to 'idle'.
     expect(fake.state).toBe('idle');
+  });
+
+  it('accumulates user + agent turns in order and clears via clearTurns()', async () => {
+    const { result } = renderHook(() => useTurnTaker(dummyOptions()));
+
+    expect(result.current.turns).toEqual([]);
+
+    await act(async () => {
+      await result.current.start();
+    });
+
+    const fake = (globalThis as unknown as { __lastFakeTT__: () => { fireUserUtterance(s: string): void; fireAgentResponse(s: string): void } }).__lastFakeTT__();
+
+    await act(async () => {
+      fake.fireUserUtterance('hello agent');
+    });
+    await act(async () => {
+      fake.fireAgentResponse('hello user');
+    });
+    await act(async () => {
+      fake.fireUserUtterance('follow-up');
+    });
+
+    expect(result.current.turns.length).toBe(3);
+    expect(result.current.turns[0]).toMatchObject({ role: 'user', text: 'hello agent' });
+    expect(result.current.turns[1]).toMatchObject({ role: 'agent', text: 'hello user' });
+    expect(result.current.turns[2]).toMatchObject({ role: 'user', text: 'follow-up' });
+    for (const turn of result.current.turns) {
+      expect(turn.timestamp).toBeInstanceOf(Date);
+    }
+
+    // Existing last* behavior unchanged.
+    expect(result.current.lastUserUtterance).toBe('follow-up');
+    expect(result.current.lastAgentResponse).toBe('hello user');
+
+    act(() => {
+      result.current.clearTurns();
+    });
+
+    expect(result.current.turns).toEqual([]);
+    // clearTurns does NOT clear the last* fields.
+    expect(result.current.lastUserUtterance).toBe('follow-up');
+  });
+
+  it('surfaces barge-in via lastBargeIn state and the onBargeIn option', async () => {
+    const onBargeIn = vi.fn();
+    const { result } = renderHook(() => useTurnTaker({ ...dummyOptions(), onBargeIn }));
+
+    expect(result.current.lastBargeIn).toBeNull();
+
+    await act(async () => {
+      await result.current.start();
+    });
+
+    const fake = (globalThis as unknown as { __lastFakeTT__: () => { fireBargeIn(): void } }).__lastFakeTT__();
+
+    await act(async () => {
+      fake.fireBargeIn();
+    });
+
+    expect(result.current.lastBargeIn).toBeInstanceOf(Date);
+    expect(onBargeIn).toHaveBeenCalledTimes(1);
+
+    const first = result.current.lastBargeIn;
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 5));
+      fake.fireBargeIn();
+    });
+    expect(onBargeIn).toHaveBeenCalledTimes(2);
+    expect(result.current.lastBargeIn!.getTime()).toBeGreaterThanOrEqual(first!.getTime());
   });
 });

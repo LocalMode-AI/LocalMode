@@ -32,8 +32,10 @@ export interface UseReindexReturn {
   isReindexing: boolean;
   /** Current progress (null if not started) */
   progress: ReindexProgress | null;
-  /** Error if reindex failed (null otherwise) */
-  error: { message: string } | null;
+  /** Result of the last successful reindex (null until one completes; cleared when a new run starts) */
+  result: ReindexResult | null;
+  /** Error if reindex failed (null otherwise). A real `Error` (package convention); read `.message` as before. */
+  error: Error | null;
   /** Start reindexing */
   reindex: () => Promise<ReindexResult | null>;
   /** Cancel the current reindex operation */
@@ -77,7 +79,8 @@ export function useReindex(options: UseReindexOptions): UseReindexReturn {
 
   const [isReindexing, setIsReindexing] = useState(false);
   const [progress, setProgress] = useState<ReindexProgress | null>(null);
-  const [error, setError] = useState<{ message: string } | null>(null);
+  const [result, setResult] = useState<ReindexResult | null>(null);
+  const [error, setError] = useState<Error | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
@@ -103,10 +106,11 @@ export function useReindex(options: UseReindexOptions): UseReindexReturn {
     setError(null);
     setIsReindexing(true);
     setProgress(null);
+    setResult(null);
 
     try {
       const { reindexCollection } = await import('@localmode/core');
-      const result = await reindexCollection(db, model, {
+      const reindexResult = await reindexCollection(db, model, {
         abortSignal: controller.signal,
         batchSize,
         textExtractor,
@@ -119,8 +123,9 @@ export function useReindex(options: UseReindexOptions): UseReindexReturn {
       });
 
       if (mountedRef.current && !controller.signal.aborted) {
+        setResult(reindexResult);
         setIsReindexing(false);
-        return result;
+        return reindexResult;
       }
       return null;
     } catch (err) {
@@ -136,8 +141,7 @@ export function useReindex(options: UseReindexOptions): UseReindexReturn {
         return null;
       }
 
-      const message = err instanceof Error ? err.message : String(err);
-      setError({ message });
+      setError(err instanceof Error ? err : new Error(String(err)));
       setIsReindexing(false);
       return null;
     }
@@ -156,6 +160,7 @@ export function useReindex(options: UseReindexOptions): UseReindexReturn {
     return {
       isReindexing: false,
       progress: null,
+      result: null,
       error: null,
       reindex: async () => null,
       cancel: () => {},
@@ -163,5 +168,5 @@ export function useReindex(options: UseReindexOptions): UseReindexReturn {
     };
   }
 
-  return { isReindexing, progress, error, reindex, cancel, clearError };
+  return { isReindexing, progress, result, error, reindex, cancel, clearError };
 }

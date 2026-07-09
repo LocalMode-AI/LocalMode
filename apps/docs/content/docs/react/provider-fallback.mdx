@@ -1,0 +1,147 @@
+---
+title: 'Provider Fallback'
+description: React hook for per-capability Chrome Built-in AI ⇄ Transformers.js provider resolution with truthful badge provenance.
+icon: Split
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+# Provider Fallback Hook
+
+<Callout type="info" title="See it in action">
+  Try the [Writing Tools blocks](https://localmode.ai/blocks/writing-tools) for a working demo — the Write / Translate / Summarize / Complete blocks resolve Chrome Built-in AI independently per capability and fall back to Transformers.js behind an explicit download gate, rendering a truthful provider badge derived from this hook.
+</Callout>
+
+## useProviderFallback
+
+Resolve each capability (Summarizer, Translator, AI-edit, fill-mask) to Chrome Built-in AI or Transformers.js. Detection is **independent per capability** and reads the browser globals directly, so one capability can be Chrome-AI-served while another falls back in the same session. Every provider package is loaded via a dynamic `import()` inside the resolution path, so `@localmode/react` gains **no hard dependency** on `@localmode/chrome-ai` or `@localmode/transformers` — nothing about a provider ships until a capability first resolves. Resolution is lazy and session-cached, and each result carries truthful `resolution` provenance for a badge.
+
+```tsx
+import { useProviderFallback, providerName } from '@localmode/react';
+
+function SummarizeTab() {
+  const { resolveSummarizer, resolution, isResolving } = useProviderFallback();
+
+  async function run(text: string) {
+    const { model } = await resolveSummarizer({
+      chromeStyle: 'key-points',
+      length: 'medium',
+      fallbackModelId: 'Xenova/distilbart-cnn-6-6',
+    });
+    return summarize({ model, text });
+  }
+
+  return resolution ? <Badge provider={providerName(resolution.provider)} tier={resolution.tier} /> : null;
+}
+```
+
+### Options
+
+<TypeTable
+  type={{
+    loadChromeAI: { description: 'Override the @localmode/chrome-ai loader. Defaults to a dynamic import(). Provide a fake for testing, a custom provider build, or a literal import for strict-CSP (no unsafe-eval) consumers.', type: 'LoadChromeAI' },
+    loadTransformers: { description: 'Override the @localmode/transformers loader. Defaults to a dynamic import().', type: 'LoadTransformers' },
+  }}
+/>
+
+<Callout type="warn" title="In the browser, inject static loader overrides">
+  The default `loadChromeAI` / `loadTransformers` loaders use a `Function`-constructed `import()` so `@localmode/react` keeps no hard dependency on the provider packages. That indirection is opaque to bundlers, so a browser build can't resolve the bare specifier at runtime. When you consume this hook in the browser, pass loaders with literal imports the bundler can see:
+
+  ```tsx
+  useProviderFallback({
+    loadChromeAI: () => import('@localmode/chrome-ai'),
+    loadTransformers: () => import('@localmode/transformers'),
+  });
+  ```
+</Callout>
+
+### Return Value
+
+<TypeTable
+  type={{
+    resolveSummarizer: { description: 'Resolve the summarization model (Chrome Summarizer API ⇄ DistilBART fallback).', type: '(params: ResolveSummarizerParams) => Promise<ResolvedModel<SummarizationModel>>' },
+    resolveTranslator: { description: 'Resolve the translation model (Chrome Translator API ⇄ Opus-MT fallback).', type: '(params: ResolveTranslatorParams) => Promise<ResolvedModel<TranslationModel>>' },
+    resolveEditEngine: { description: 'Resolve the AI-edit engine (Chrome Prompt API ⇄ Transformers.js instruct fallback).', type: '(params: ResolveEditEngineParams) => Promise<ResolvedModel<LanguageModel>>' },
+    resolveFillMask: { description: 'Resolve the fill-mask model. Transformers.js only — no Chrome equivalent, so it always resolves transformers / download.', type: '(modelId: string) => Promise<ResolvedModel<FillMaskModel>>' },
+    resolution: { description: 'Last resolved provider/model — the truthful badge source, or null.', type: 'ProviderResolution | null' },
+    isResolving: { description: 'True while any resolver is in flight.', type: 'boolean' },
+    error: { description: 'Last resolution error, or null.', type: 'Error | null' },
+  }}
+/>
+
+### Resolver Params
+
+Each resolver takes exactly the params its capability needs, so the split Write / Translate / Summarize / Complete surfaces each import only one. `resolveFillMask` takes a plain `modelId: string` (no Chrome equivalent).
+
+**`ResolveSummarizerParams`**
+
+<TypeTable
+  type={{
+    chromeStyle: { description: 'Chrome Summarizer summary style (used when Chrome AI serves).', type: "'tl;dr' | 'key-points' | 'teaser' | 'headline'", required: true },
+    length: { description: 'Chrome Summarizer output length (used when Chrome AI serves).', type: "'short' | 'medium' | 'long'", required: true },
+    fallbackModelId: { description: 'Transformers.js fallback model id (used when Chrome AI is unavailable).', type: 'string', required: true },
+  }}
+/>
+
+**`ResolveTranslatorParams`**
+
+<TypeTable
+  type={{
+    source: { description: 'Source (BCP-47-ish) language code.', type: 'string', required: true },
+    target: { description: 'Target language code.', type: 'string', required: true },
+    fallbackModelId: { description: 'Transformers.js fallback model id for this directed pair.', type: 'string', required: true },
+  }}
+/>
+
+**`ResolveEditEngineParams`**
+
+<TypeTable
+  type={{
+    fallbackModelId: { description: 'Transformers.js fallback instruct model id.', type: 'string', required: true },
+    device: { description: 'Compute device for the Transformers.js fallback.', type: "'webgpu' | 'wasm'", required: true },
+  }}
+/>
+
+### ResolvedModel and provenance
+
+Every resolver returns a `ResolvedModel<M>` — the concrete model instance plus the provenance a badge derives from — and updates the hook's `resolution`, so a badge reflects what **actually** serves requests, never the detection probe alone.
+
+<TypeTable
+  type={{
+    model: { description: 'The concrete model instance (Chrome AI or Transformers.js).', type: 'M' },
+    provider: { description: 'The provider that will serve requests through model.', type: "'chrome-ai' | 'transformers'" },
+    modelId: { description: 'model.modelId (e.g. chrome-ai:gemini-nano-summarizer, transformers:Xenova/...).', type: 'string' },
+    tier: { description: "'built-in' for Chrome AI, 'download' for Transformers.js — derived from provider.", type: "'built-in' | 'download'" },
+  }}
+/>
+
+### Standalone detectors and badge helpers
+
+The detection functions are exported standalone (all `async`, all returning a `ProviderId` of `'chrome-ai' | 'transformers'`). They read the same browser surfaces the `@localmode/chrome-ai` detectors read, so no provider import is needed to detect.
+
+| Function | Signature | Behavior |
+|----------|-----------|----------|
+| `detectSummarizerProvider` | `() => Promise<ProviderId>` | `'chrome-ai'` when the Chrome Summarizer API is present, else `'transformers'`. |
+| `detectTranslatorProvider` | `() => Promise<ProviderId>` | `'chrome-ai'` when the Chrome Translator API is present, else `'transformers'`. |
+| `detectPromptProvider` | `() => Promise<ProviderId>` | Gated on `LanguageModel.availability() === 'available'` — presence alone is **not** enough, which prevents committing to a merely-downloadable Gemini Nano. Every other state falls back to `'transformers'`. The legacy `self.ai.languageModel` surface (no `availability()`) trusts presence. |
+| `providerTier` | `(provider: ProviderId) => ProviderTier` | Maps `'chrome-ai'` → `'built-in'`, `'transformers'` → `'download'`. |
+| `providerName` | `(provider: ProviderId) => string` | Human-readable name: `'Chrome AI'` or `'Transformers.js'`. |
+
+```tsx
+import { detectPromptProvider, providerName, providerTier } from '@localmode/react';
+
+const provider = await detectPromptProvider(); // 'chrome-ai' only when Gemini Nano is actually 'available'
+const label = providerName(provider); // 'Chrome AI' | 'Transformers.js'
+const tier = providerTier(provider); // 'built-in' | 'download'
+```
+
+<Callout type="info">
+For the Chrome Built-in AI provider (Summarizer, Translator, Prompt APIs) see the [Chrome AI](/docs/chrome-ai) guide; for the Transformers.js fallback models see the [Transformers](/docs/transformers) provider guide.
+</Callout>
+
+## Blocks
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Writing Tools | Per-capability Chrome AI ⇄ Transformers.js resolution with a truthful provider-fallback badge via useProviderFallback | [Live block](https://localmode.ai/blocks/writing-tools) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/writing-tools) |

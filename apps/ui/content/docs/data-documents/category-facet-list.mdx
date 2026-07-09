@@ -1,0 +1,113 @@
+---
+title: "Category Facet List"
+description: "A domain-decoupled, filterable category list/pills with per-category counts, single-select toggle, and an All/clear affordance."
+icon: ListFilter
+---
+
+# Category Facet List
+
+The **Category Facet List** is a filterable facet for narrowing a result set by category. It renders a single-select **list** or **pill** row with per-category count badges, an active highlight, and an "All"/clear affordance. Single-select with deselect: re-clicking the active category clears it.
+
+It is deliberately **domain-decoupled** — it takes `categories`, `counts`, `selected`, and `onSelect`, so the same primitive serves [`useSemanticSearch()`](https://localmode.dev/docs/react) metadata filtering (wire `onSelect` to `search(query, { filter })`), zero-shot classification labels, NER entity-type filters, and document categories alike.
+
+**When to use it:** filter semantic-search results by a metadata facet (semantic-search, product-search), or filter classification/NER output by label. Derive `counts` from your result set and feed `selected`/`onSelect` from local state.
+
+## Preview
+
+<ComponentPreview name="ui/data-documents/category-facet-list" note="List + pill variants sharing one selection. Re-click the active facet to deselect, or All to clear. Presentational — no model download." />
+
+<OpenInV0 name="ui/data-documents/category-facet-list" />
+
+## Installation
+
+<InstallTabs name="ui/data-documents/category-facet-list" />
+
+### Dependencies
+
+- **Data source:** renders the plain `categories` / `counts` / `selected` props you pass — works with any backend; recommended LocalMode producer: `useSemanticSearch` results' metadata (optional).
+- `lucide-react` — the active-state check icon
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `category-facet-list.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/data-documents/category-facet-list/category-facet-list.tsx" name="CategoryFacetListProps" />
+
+## Examples
+
+### Filter `useSemanticSearch` results
+
+```tsx
+import { CategoryFacetList } from '@/components/category-facet-list';
+import { useSemanticSearch } from '@localmode/react';
+
+export function Facets({ db, model, query }: { db: any; model: any; query: string }) {
+  const { results, usage, search } = useSemanticSearch({ model, db });
+  const [selected, setSelected] = useState<string | null>(null);
+
+  const counts = results.reduce<Record<string, number>>((acc, r) => {
+    const c = String(r.metadata.category ?? 'uncategorized');
+    acc[c] = (acc[c] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  // Selecting a facet re-runs the search with a metadata filter applied
+  // inside the vector DB — not a client-side post-filter of stale results.
+  const select = (category: string | null) => {
+    setSelected(category);
+    search(query, category ? { filter: { category } } : undefined);
+  };
+
+  return (
+    <>
+      <CategoryFacetList
+        categories={Object.keys(counts)}
+        counts={counts}
+        selected={selected}
+        onSelect={select}
+      />
+      {usage && (
+        <span className="text-xs text-muted-foreground">
+          {Math.round(usage.embedDurationMs + usage.searchDurationMs)} ms
+        </span>
+      )}
+    </>
+  );
+}
+```
+
+`useSemanticSearch` accepts a hook-level `filter` / `threshold` (applied to every search) and per-call overrides via `search(query, { filter, threshold, topK })`. The `usage` from the last completed search (`{ embeddingTokens, embedDurationMs, searchDurationMs }`) feeds a latency badge.
+
+### Horizontal pills
+
+```tsx
+<CategoryFacetList
+  variant="pills"
+  categories={['Privacy', 'Security', 'Performance']}
+  counts={{ Privacy: 12, Security: 8, Performance: 5 }}
+  selected={selected}
+  onSelect={setSelected}
+/>
+```
+
+### No counts, no "All"
+
+```tsx
+<CategoryFacetList
+  categories={labels}
+  counts={false}
+  showAll={false}
+  selected={selected}
+  onSelect={setSelected}
+/>
+```
+
+## Customization
+
+The facet is styled with shadcn/ui CSS-variable utilities (`bg-accent`, `text-accent-foreground`, `bg-primary`, `text-primary-foreground`, `bg-muted`), so the active highlight and count badges inherit your theme. The `list` variant shows a leading check on the active row; the `pills` variant fills the active pill with the primary color.
+
+Selection is fully controlled: `selected` is the active category or `null` ("All"), and `onSelect` receives the next selection (`null` when the active item is re-clicked or "All" is activated). Because you own the file, you can add multi-select, sort categories by count, or swap the count badge styling in the copied `category-facet-list.tsx`.

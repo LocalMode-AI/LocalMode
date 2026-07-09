@@ -1,0 +1,87 @@
+---
+title: "Bounding Box Overlay"
+description: "Color-coded detection boxes positioned over an image as percentage offsets from natural dimensions, with a companion label legend. Serves object / face / hand / pose output."
+icon: SquareDashed
+---
+
+# Bounding Box Overlay
+
+The **Bounding Box Overlay** renders detection results (`{ label, score, box }`) as absolutely-positioned, color-coded boxes with label chips over a parent image. Pixel-coordinate boxes are converted to **percentage offsets** using the image's natural width/height, so placement is correct at any display size — resize the container and the boxes stay aligned. A companion **`DetectionLabelLegend`** renders a wrapping strip of color → class pills that match the overlay colors.
+
+The overlay consumes one shape — `{ label, score, box }`, where `box` is `{ x, y, width, height }` in natural image pixels. [`useDetectObjects`](https://localmode.dev/docs/react) returns this directly (`DetectObjectsResult.objects`, each a `DetectedObject`). `useDetectFace` returns boxes too (`FaceDetectionResultItem` has `box` + `score`, but no `label`), and `useDetectHands` / `useDetectPose` return landmark sets (`{ landmarks, worldLandmarks, … }`, no `box`) — for those, derive a `label` (and, for hands/pose, a `box` from the landmark extents) before passing them in.
+
+**When to use it:** object/face detection viewers, pose/hand annotation, anything that draws boxes over a still image. (For real-time webcam landmark drawing, use the [Video Canvas](/docs/media-vision/video-canvas) instead.)
+
+## Preview
+
+<ComponentPreview name="ui/media-vision/bounding-box-overlay" note="Static detections placed by percentage offset — correct at any size. No model download." />
+
+<OpenInV0 name="ui/media-vision/bounding-box-overlay" />
+
+## Installation
+
+<InstallTabs name="ui/media-vision/bounding-box-overlay" />
+
+### Dependencies
+
+- **Data source:** renders the `{ label, score, box }` detections you pass — works with any backend that returns boxes. Recommended LocalMode producer: `useDetectObjects` from `@localmode/react` (its `DetectedObject` matches this shape directly). `useDetectFace` boxes (no `label`) and `useDetectHands` / `useDetectPose` landmark output map in with a small adapter (optional).
+
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `bounding-box-overlay.tsx` — `BoundingBoxOverlay` + `DetectionLabelLegend`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/media-vision/bounding-box-overlay/bounding-box-overlay.tsx" name="BoundingBoxOverlayProps" />
+
+<AutoTypeTable path="registry/localmode/media-vision/bounding-box-overlay/bounding-box-overlay.tsx" name="DetectionLabelLegendProps" />
+
+## Backing hooks
+
+Feed it `{ label, score, box }` detections plus the image's `naturalWidth` / `naturalHeight` (read off the rendered `<img>`). `useDetectObjects` from [`@localmode/react`](https://localmode.dev/docs/react) returns `objects` in this shape directly; `useDetectFace` returns boxes without a `label`, and `useDetectHands` / `useDetectPose` return landmark sets (no `box`) — map those to `{ label, score, box }` before passing them in.
+
+## Examples
+
+### Over a detection result
+
+```tsx
+import { BoundingBoxOverlay, DetectionLabelLegend } from '@/components/bounding-box-overlay';
+import { useDetectObjects } from '@localmode/react';
+
+export function Example({ src }: { src: string }) {
+  const imgRef = useRef<HTMLImageElement>(null);
+  const { data } = useDetectObjects({ model });
+
+  return (
+    <>
+      <div className="relative">
+        <img ref={imgRef} src={src} alt="" className="w-full" />
+        {data && (
+          <BoundingBoxOverlay
+            detections={data.objects}
+            naturalWidth={imgRef.current?.naturalWidth ?? 0}
+            naturalHeight={imgRef.current?.naturalHeight ?? 0}
+          />
+        )}
+      </div>
+      {data && <DetectionLabelLegend labels={data.objects.map((o) => o.label)} />}
+    </>
+  );
+}
+```
+
+### Boxes without label chips (dense output)
+
+```tsx
+// `detections` is already shaped as { label, score, box }[]
+<BoundingBoxOverlay detections={detections} naturalWidth={w} naturalHeight={h} hideLabels />
+```
+
+## Customization
+
+Colors come from Tailwind palette classes in the internal `COLOR_SLOTS` array — edit them in the copied `bounding-box-overlay.tsx` to match your design system; the legend reads the same map so the two stay in sync. The overlay is non-interactive (`pointer-events-none`) and fills its `relative` parent.
+
+<OpenInV0 name="ui/media-vision/bounding-box-overlay" />

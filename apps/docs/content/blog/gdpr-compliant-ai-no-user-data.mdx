@@ -3,7 +3,7 @@ title: "Build a GDPR-Compliant AI Feature Without Touching User Data"
 description: "On-device browser inference eliminates the data processor relationship, cross-border transfers, and DPA negotiations that cloud AI demands. Four technical patterns -- PII redaction, encrypted vectors, differential privacy, and local classification -- show how to architect AI features that satisfy GDPR Articles 5, 25, 28, and 35 by design."
 author: LocalMode
 date: 2026-02-05
-dateModified: "2026-05-28"
+dateModified: "2026-07-04"
 faq:
   - question: "How does on-device AI inference change GDPR compliance requirements?"
     answer: "When ML inference runs in a WebAssembly sandbox inside the browser, no personal data reaches any third party. This eliminates the data processor relationship (Article 28), removes cross-border transfer obligations (Chapter V), achieves data minimization by architecture (Article 5(1)(c)), and implements privacy by design (Article 25) at the infrastructure level."
@@ -125,7 +125,7 @@ const { embedding } = await embed({
 // The model actually embeds: 'Contact [EMAIL_REDACTED] at [PHONE_REDACTED]'
 ```
 
-**GDPR relevance**: This implements the Article 5(1)(c) data minimization principle at the application layer. Even though the model runs locally, the stored vector contains no PII signal. The [Document Redactor](https://localmode.ai/document-redactor) showcase app demonstrates this pattern with NER-based entity detection and downloadable redacted output.
+**GDPR relevance**: This implements the Article 5(1)(c) data minimization principle at the application layer. Even though the model runs locally, the stored vector contains no PII signal. The [PII Redactor block](https://localmode.ai/blocks/privacy/pii-redactor) demonstrates this pattern with NER-based entity detection and downloadable redacted output.
 
 ### Pattern 2: Encrypted Vector Storage
 
@@ -170,7 +170,7 @@ const results = await encryptedDb.search(queryVector, { k: 5 });
 
 All cryptographic operations use the Web Crypto API (`crypto.subtle`). No cryptographic dependencies are bundled -- `@localmode/core` has zero runtime dependencies.
 
-**GDPR relevance**: Encryption at rest is explicitly cited in Article 32(1)(a) as an appropriate technical measure. The [Encrypted Vault](https://localmode.ai/encrypted-vault) showcase app demonstrates password-based encryption with PBKDF2 key derivation and lock/unlock lifecycle.
+**GDPR relevance**: Encryption at rest is explicitly cited in Article 32(1)(a) as an appropriate technical measure. The [Encrypted Vault block](https://localmode.ai/blocks/privacy/encrypted-vault) demonstrates password-based encryption with PBKDF2 key derivation and lock/unlock lifecycle.
 
 ### Pattern 3: Differential Privacy for Embeddings
 
@@ -358,12 +358,12 @@ This post references the following legal sources. All GDPR article texts are fro
 - [European Commission -- Standard Contractual Clauses (SCCs)](https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/standard-contractual-clauses-scc_en)
 - [European Commission -- What is a data controller or data processor?](https://commission.europa.eu/law/law-topic/data-protection/rules-business-and-organisations/obligations/controllerprocessor/what-data-controller-or-data-processor_en)
 
-All code examples use API signatures from [`@localmode/core`](https://www.npmjs.com/package/@localmode/core) (zero runtime dependencies) and [`@localmode/transformers`](https://www.npmjs.com/package/@localmode/transformers). The [Document Redactor](https://localmode.ai/document-redactor) and [Encrypted Vault](https://localmode.ai/encrypted-vault) showcase apps demonstrate these patterns in a running application.
+All code examples use API signatures from [`@localmode/core`](https://www.npmjs.com/package/@localmode/core) (zero runtime dependencies) and [`@localmode/transformers`](https://www.npmjs.com/package/@localmode/transformers). The [Document Redactor](https://localmode.ai/blocks/privacy/pii-redactor) and [Encrypted Vault](https://localmode.ai/blocks/privacy/encrypted-vault) patterns are both available as blocks in the [Privacy category](https://localmode.ai/blocks/privacy), which demonstrates them in running applications.
 
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

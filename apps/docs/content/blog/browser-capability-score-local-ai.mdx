@@ -3,7 +3,7 @@ title: "Is Your User's Browser Ready for Local AI? Building a Capability Score a
 description: "Not every browser has WebGPU, 16GB of RAM, and a discrete GPU. Learn how to detect device capabilities at runtime, compute an ML Readiness score from 0-100, check whether a specific model can run, get adaptive model recommendations, and build a 'Can I Run It?' UI -- all with @localmode/core's zero-dependency capability detection pipeline."
 author: LocalMode
 date: 2026-01-31
-dateModified: "2026-05-25"
+dateModified: "2026-07-04"
 faq:
   - question: "How does LocalMode detect whether a browser can run local AI models?"
     answer: "The detectCapabilities() function probes 16 browser features including WebGPU adapter availability, WASM SIMD support, device memory, CPU core count, GPU renderer, and storage quota. It returns a DeviceCapabilities object in under 50ms that feeds into scoring, model recommendation, and batch size computation."
@@ -445,7 +445,7 @@ All API references in this post correspond to functions exported from `@localmod
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

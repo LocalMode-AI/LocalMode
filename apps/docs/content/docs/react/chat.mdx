@@ -1,6 +1,6 @@
 ---
 title: 'Chat'
-description: Streaming LLM chat with message persistence and cancellation.
+description: 'Streaming LLM chat with persistence, token usage, regenerate, and reply variants.'
 icon: MessageSquare
 ---
 
@@ -9,10 +9,10 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 
 # useChat
 
-Streaming LLM chat with message history, IndexedDB persistence, system prompts, and cancellation.
+Streaming LLM chat with message history, IndexedDB persistence, system prompts, cancellation, per-turn token usage, a lifecycle `status`, and regenerate-into-variants for branch-style UIs.
 
 <Callout type="info" title="See it in action">
-  Try [LLM Chat](https://localmode.ai/llm-chat) and [PDF Search](https://localmode.ai/pdf-search) for working demos of these hooks.
+  Try the [Chat block](https://localmode.ai/blocks/chat) and [Knowledge Base block](https://localmode.ai/blocks/knowledge/rag-chat) for working demos of these hooks.
 </Callout>
 
 ## Basic Usage
@@ -60,13 +60,91 @@ function Chat() {
 
 <TypeTable type={{
   messages: { type: 'ReactChatMessage[]', description: 'All messages in the conversation.' },
-  isStreaming: { type: 'boolean', description: 'Whether the assistant is currently streaming.' },
+  isStreaming: { type: 'boolean', description: 'Whether the assistant is currently streaming. Derived from status (true while submitted or streaming).' },
+  status: { type: 'ChatStatus', description: "Lifecycle status of the current request: 'ready' | 'submitted' | 'streaming' | 'error'." },
+  streamingMessageId: { type: 'string | null', description: 'ID of the assistant message currently being streamed (null when idle).' },
   error: { type: 'Error | null', description: 'Error from the last failed operation.' },
-  send: { type: '(text: string, options?: { images?: ImageAttachment[] }) => Promise<void>', description: 'Send a user message and stream the response. Pass images for vision-capable models.' },
+  usage: { type: 'GenerationUsage | null', description: 'Token usage from the last completed turn (null until a turn completes).' },
+  totalUsage: { type: 'GenerationUsage', description: 'Cumulative token usage across all completed turns this session.' },
+  variants: { type: 'string[]', description: 'Text variants for the last assistant turn (index 0 is the original reply).' },
+  variantIndex: { type: 'number', description: 'Index of the variant currently shown as the last assistant message.' },
+  send: { type: '(text: string, options?: { images?: ImageAttachment[]; providerOptions?: Record<string, Record<string, unknown>> }) => Promise<void>', description: 'Send a user message and stream the response. Pass images for vision-capable models, providerOptions for provider-specific settings.' },
+  regenerate: { type: '() => Promise<void>', description: 'Re-run the last user turn, appending the result as a new variant of the last assistant reply.' },
+  setVariantIndex: { type: '(index: number) => void', description: 'Show the variant at the given index as the last assistant message (clamped to the valid range).' },
   cancel: { type: '() => void', description: 'Cancel the current stream. Partial content is preserved.' },
   clearMessages: { type: '() => void', description: 'Clear all messages and persisted storage.' },
-  setSystemPrompt: { type: '(prompt: string) => void', description: 'Update the system prompt.' },
+  setMessages: { type: '(messages: ReactChatMessage[]) => void', description: 'Replace all messages. The new state is persisted when persistence is enabled; variants from the previous turn are reset.' },
+  setSystemPrompt: { type: '(prompt: string) => void', description: 'Update the system prompt for future requests.' },
 }} />
+
+## Status Lifecycle
+
+`status` tracks the request lifecycle: `'ready'` → `'submitted'` (send/regenerate called, first chunk not yet arrived) → `'streaming'` (chunks are flowing) → back to `'ready'` (or `'error'` if the request failed).
+
+`isStreaming` is derived from `status` — it is `true` while `status` is `'submitted'` or `'streaming'`. Use `status` when you need to distinguish the pre-first-chunk phase (e.g. a "thinking" indicator) from active streaming:
+
+```tsx
+const { status } = useChat({ model });
+
+{status === 'submitted' && <Spinner label="Thinking..." />}
+{status === 'streaming' && <TypingIndicator />}
+{status === 'error' && <ErrorBanner />}
+```
+
+## Regenerate & Variants
+
+`regenerate()` re-runs the last user turn with the same prior context and appends the result as a new variant of the last assistant reply. The first regeneration freezes the original reply as `variants[0]`; `setVariantIndex()` swaps which variant is shown as the last assistant message (the choice persists). Sending a new message resets the variants, and cancelling mid-regeneration restores the previously active variant.
+
+```tsx
+import { useChat } from '@localmode/react';
+
+function BranchBar() {
+  const { status, regenerate, variants, variantIndex, setVariantIndex } = useChat({ model });
+
+  if (variants.length === 0) return null;
+
+  return (
+    <div className="branch-bar">
+      <button
+        onClick={() => setVariantIndex(variantIndex - 1)}
+        disabled={variantIndex === 0}
+      >
+        ‹
+      </button>
+      <span>{variantIndex + 1} / {variants.length}</span>
+      <button
+        onClick={() => setVariantIndex(variantIndex + 1)}
+        disabled={variantIndex === variants.length - 1}
+      >
+        ›
+      </button>
+      <button onClick={regenerate} disabled={status !== 'ready'}>
+        Regenerate
+      </button>
+    </div>
+  );
+}
+```
+
+## Token Usage
+
+`usage` holds the last completed turn's `GenerationUsage` (`inputTokens`, `outputTokens`, `totalTokens`, `durationMs`); `totalUsage` accumulates across all completed turns this session. Feed `totalUsage` into a context meter to warn before hitting the model's context window:
+
+```tsx
+const { usage, totalUsage } = useChat({ model });
+const CONTEXT_WINDOW = 4096;
+
+const used = totalUsage.totalTokens;
+const percent = Math.min(100, (used / CONTEXT_WINDOW) * 100);
+
+return (
+  <div>
+    <progress value={used} max={CONTEXT_WINDOW} />
+    <span>{used} / {CONTEXT_WINDOW} tokens ({percent.toFixed(0)}%)</span>
+    {usage && <span>Last turn: {usage.totalTokens} tokens in {usage.durationMs}ms</span>}
+  </div>
+);
+```
 
 ## Persistence
 
@@ -123,7 +201,15 @@ function VisionChat() {
 }
 ```
 
-Check `model.supportsVision` to conditionally show image upload UI. Messages with images have `content` as `ContentPart[]` instead of `string`.
+Check `model.supportsVision` to conditionally show image upload UI. Messages with images have `content` as `ContentPart[]` instead of `string`. Use the `getTextContent()` and `normalizeContent()` helpers (re-exported from `@localmode/react`) when rendering mixed content:
+
+```tsx
+import { getTextContent } from '@localmode/react';
+
+{messages.map((m) => (
+  <div key={m.id}><b>{m.role}:</b> {getTextContent(m.content)}</div>
+))}
+```
 
 <Callout type="info">
   For the full multimodal API reference, see the [Core Generation — Vision](/docs/core/generation#vision-multimodal-input) guide.
@@ -133,10 +219,10 @@ Check `model.supportsVision` to conditionally show image upload UI. Messages wit
 For full API reference on `streamText()`, see the [Core Generation](/docs/core/generation) guide. For model setup, see [WebLLM](/docs/webllm) or [Transformers](/docs/transformers).
 </Callout>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| LLM Chat | Full chat interface with streaming, model selection, and vision image input | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |
-| PDF Search | Document Q&A chat powered by RAG | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |
-| GGUF Explorer | Chat with locally-loaded GGUF models | [Demo](https://localmode.ai/gguf-explorer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/gguf-explorer) |
+| Chat (LLM Chat) | Full chat interface with streaming, model selection, and vision image input | [Live block](https://localmode.ai/blocks/chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/chat) |
+| Knowledge Base (PDF Search) | Document Q&A chat powered by RAG | [Live block](https://localmode.ai/blocks/knowledge/rag-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/rag-chat) |
+| Device & Model Lab (GGUF Explorer) | Chat with locally-loaded GGUF models | [Live block](https://localmode.ai/blocks/device/gguf-explorer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/device/gguf-explorer) |

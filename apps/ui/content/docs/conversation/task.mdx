@@ -1,0 +1,54 @@
+---
+title: "Task"
+description: "A multi-step agent process as an ordered list of steps, aligned to the useAgent step shape, with the final answer distinguished."
+icon: ListChecks
+---
+
+# Task
+
+The **Task** primitive renders a multi-step agent process as an ordered list of steps. Each `TaskItem` shows its index, tool, status, and — when expanded — args and observation, with the `finish` step styled as the distinguished final answer. Its data shape mirrors `@localmode/react` `useAgent` steps (`{ index, type, toolName, toolArgs, observation, result }`) so agent UIs wire up without adapters.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/task" />
+
+<OpenInV0 name="ui/conversation/task" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/task" />
+
+### Data source & dependencies
+
+**Data source:** renders the step list you pass — works with any backend. Recommended producer: `useAgent().steps` from `@localmode/react` (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `task.tsx` — `Task` + `TaskItem`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/task/task.tsx" name="TaskItemProps" />
+
+## Examples
+
+### Render agent steps
+
+```tsx
+import { useAgent } from '@localmode/react';
+import { Task, TaskItem } from '@/components/task';
+
+const { steps } = useAgent({ model, tools });
+
+<Task>
+  {steps.map((s) => <TaskItem key={s.index} step={s} />)}
+</Task>
+```
+
+## Customization
+
+For a richer vertical timeline with durations, finish-reason badges, and nested sub-agents, use [Agent Step Timeline](/docs/conversation/agent-step-timeline). `Task` is the lighter, list-style option.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useAgent`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

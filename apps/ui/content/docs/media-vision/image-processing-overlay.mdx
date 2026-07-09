@@ -1,0 +1,79 @@
+---
+title: "Image Processing Overlay"
+description: "A full-bleed overlay shown over a dimmed source image while vision inference runs — spinner ring, status, optional cancel, and an animated scan variant. Renders nothing when idle."
+icon: ScanLine
+---
+
+# Image Processing Overlay
+
+The **Image Processing Overlay** is a full-bleed overlay shown over a dimmed source image while vision inference runs: a spinner ring + centered icon, a status headline + optional sub-line, and an optional cancel link. A **`scan`** variant adds an animated scan-line sweep + scan-grid. It renders **nothing** when not processing — the element is absent from the DOM, not merely hidden.
+
+Drive it with any vision hook's `isLoading` and wire the cancel link to the hook's `cancel` to abort the in-flight operation.
+
+**When to use it:** over the source image of any model that takes a moment — detection, segmentation, OCR, captioning — to show progress without blocking the page.
+
+## Preview
+
+<ComponentPreview name="ui/media-vision/image-processing-overlay" note="Toggle a simulated processing pass — try the scan variant. No model download." />
+
+<OpenInV0 name="ui/media-vision/image-processing-overlay" />
+
+## Installation
+
+<InstallTabs name="ui/media-vision/image-processing-overlay" />
+
+### Dependencies
+
+- **Data source:** driven purely by the `processing` boolean and the `onCancel` callback you pass — works with any backend's loading/cancel state. Recommended LocalMode producers: any vision hook's `isLoading` + `cancel` — `useDetectObjects` / `useSegmentImage` / `useCaptionImage` / `useImageToImage` from `@localmode/react` (optional).
+
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `image-processing-overlay.tsx` — the component (scan keyframes shipped inline)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/media-vision/image-processing-overlay/image-processing-overlay.tsx" name="ImageProcessingOverlayProps" />
+
+## Backing hooks
+
+Any vision hook from [`@localmode/react`](https://localmode.dev/docs/react) exposes `isLoading` and `cancel` — `useDetectObjects`, `useSegmentImage`, `useCaptionImage`, `useImageToImage`, … Pass `isLoading` to `processing` and `cancel` to `onCancel`.
+
+## Examples
+
+### Over a dimmed image
+
+```tsx
+import { ImageProcessingOverlay } from '@/components/image-processing-overlay';
+import { useDetectObjects } from '@localmode/react';
+
+export function Example({ src }: { src: string }) {
+  const { isLoading, cancel } = useDetectObjects({ model });
+
+  return (
+    <div className="relative">
+      <img src={src} alt="" className={isLoading ? 'opacity-50' : ''} />
+      <ImageProcessingOverlay
+        processing={isLoading}
+        status="Detecting objects…"
+        onCancel={cancel}
+      />
+    </div>
+  );
+}
+```
+
+### Scan variant
+
+```tsx
+<ImageProcessingOverlay processing={isLoading} variant="scan" status="Scanning document…" />
+```
+
+## Customization
+
+The scan-line/scan-grid keyframes are shipped inline (a scoped `<style>`), so the overlay animates standalone after `shadcn add` with no global CSS. Swap the icon via the `icon` prop, restyle the spinner ring, or tune the scan animation directly in the copied `image-processing-overlay.tsx`. The overlay inherits `rounded-[inherit]` from its container.
+
+<OpenInV0 name="ui/media-vision/image-processing-overlay" />

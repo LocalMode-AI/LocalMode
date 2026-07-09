@@ -1,0 +1,56 @@
+---
+title: "Sources"
+description: "Collapsible local RAG citations with favicon/title/excerpt chips, a relevance score, and an optional tabbed layout."
+icon: Globe
+---
+
+# Sources
+
+The **Sources** primitives render retrieval citations from local RAG results (e.g. `useSemanticSearch`). `Sources` is the collapsible container; `SourcesTrigger` shows the count; each `Source` renders a favicon/title/excerpt chip and a 0–1 relevance score. An optional tabbed layout switches between Web / Images / News-style result variants. All favicons/images come from already-stored local metadata — there is no remote unfurl.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/sources" />
+
+<OpenInV0 name="ui/conversation/sources" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/sources" />
+
+### Data source & dependencies
+
+**Data source:** renders a list of `{ href, title }` you pass — works with any backend. Recommended producer: `useSemanticSearch` from `@localmode/react` (on-device). See [Use with the Vercel AI SDK](/docs/use-with-ai-sdk#source-parts--sources).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `sources.tsx` — `Sources`, `SourcesTrigger`, `SourcesContent`, `Source`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/sources/sources.tsx" name="SourceProps" />
+
+## Examples
+
+### From local search results
+
+```tsx
+import { Source, Sources, SourcesContent, SourcesTrigger } from '@/components/sources';
+
+<Sources>
+  <SourcesTrigger count={results.length} />
+  <SourcesContent>
+    {results.map((r) => (
+      <Source key={r.id} source={{ id: r.id, title: r.metadata.title, excerpt: r.text, score: r.score }} />
+    ))}
+  </SourcesContent>
+</Sources>
+```
+
+## Customization
+
+Enable the tabbed layout by passing `tabbed` + `sources` to `SourcesContent`. Favicons render from `faviconUrl` in your stored metadata — leave it unset for the default globe icon.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useSemanticSearch`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

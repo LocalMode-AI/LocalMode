@@ -1,0 +1,10 @@
+{
+  "title": "Artifacts & Canvas",
+  "description": "Docked canvas surfaces and typed renderers driven by local data.",
+  "pages": [
+    "artifact",
+    "data-table-artifact",
+    "chart-artifact",
+    "code-diff-viewer"
+  ]
+}

@@ -1,0 +1,118 @@
+---
+title: "Image Result Gallery"
+description: "A responsive grid / list of image result cards — in-flight overlay, persistent metadata, confidence score, multi-select and delete — sharing one data contract across both layouts."
+icon: LayoutGrid
+---
+
+# Image Result Gallery
+
+The **Image Result Gallery** is a responsive grid/list of image result cards. Each card shows the image in an aspect container, an in-flight processing overlay, a **persistent metadata caption** (filename + category badge + a confidence score badge) that stays visible at rest on every viewport — scannable without a hover, so it is keyboard-, touch- and AT-reachable — a multi-select checkbox, and a delete affordance, with a staggered fade-in. Grid and list layouts share **one data contract** (`ImageResultCard`), so apps switch layout without reshaping data.
+
+Per-card scores render through a self-contained fallback score badge so this component installs and builds on its own. Its color tiers are configurable via the `scoreThresholds` prop — pass CLIP-scaled breakpoints (e.g. `{ high: 0.35, medium: 0.2 }`) so cross-modal similarity scores (which land in ~0.15–0.35) aren't misread as red "low" failures. It also declares the richer [`ConfidenceScoreBadge`](/docs/results/confidence-score-badge) (Results family) as a registry dependency — when that is installed you can swap the internal badge for it.
+
+**When to use it:** smart galleries, duplicate finders, product search, batch image classification/captioning — anywhere you display a set of image results with scores and selection.
+
+## Preview
+
+<ComponentPreview name="ui/media-vision/image-result-gallery" note="Static result cards — switch grid/list, select, and delete. No model download." />
+
+<OpenInV0 name="ui/media-vision/image-result-gallery" />
+
+## Installation
+
+<InstallTabs name="ui/media-vision/image-result-gallery" />
+
+### Dependencies
+
+- **Data source:** renders the `ImageResultCard[]` you pass — works with any backend that yields image results. Recommended LocalMode producers: `useClassifyImageZeroShot` (label + score), `useEmbedImage` (similarity results), or `useCaptionImage` (caption as the label) from `@localmode/react` (optional).
+
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Registry dependencies
+
+- `@localmode/ui/results/confidence-score-badge` — pulled in on install for the richer score badge (a minimal fallback is inlined so the gallery works standalone)
+
+### Files installed
+
+- `image-result-gallery.tsx` — the component (fade-in keyframes shipped inline)
+- `confidence-score-badge.tsx` — the richer score badge (pulled in as a registry dependency)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/media-vision/image-result-gallery/image-result-gallery.tsx" name="ImageResultGalleryProps" />
+
+<AutoTypeTable path="registry/localmode/media-vision/image-result-gallery/image-result-gallery.tsx" name="ImageResultCard" />
+
+<AutoTypeTable path="registry/localmode/media-vision/image-result-gallery/image-result-gallery.tsx" name="ScoreThresholds" />
+
+## Backing hooks
+
+Build the cards from `useClassifyImageZeroShot` (label + score), `useEmbedImage` (similarity results), or `useCaptionImage` (caption as the label) from [`@localmode/react`](https://localmode.dev/docs/react).
+
+## Examples
+
+### Grid with selection and delete
+
+```tsx
+import { ImageResultGallery, type ImageResultCard } from '@/components/image-result-gallery';
+
+export function Example({ cards }: { cards: ImageResultCard[] }) {
+  const [selected, setSelected] = useState<string[]>([]);
+
+  return (
+    <ImageResultGallery
+      cards={cards}
+      layout="grid"
+      selectedIds={selected}
+      onSelect={(id, on) =>
+        setSelected((prev) => (on ? [...prev, id] : prev.filter((x) => x !== id)))
+      }
+      onDelete={(id) => remove(id)}
+    />
+  );
+}
+```
+
+### List layout, same data
+
+```tsx
+<ImageResultGallery cards={cards} layout="list" />
+```
+
+### CLIP-scale similarity scores
+
+Cross-modal (text→image / image→image) CLIP similarity scores compress into roughly `0.15–0.35`. Pass tuned `scoreThresholds` so the strongest matches read as high/medium instead of a red "low" badge:
+
+```tsx
+<ImageResultGallery
+  cards={searchResults}
+  layout="grid"
+  scoreThresholds={{ high: 0.35, medium: 0.2 }}
+/>
+```
+
+### From classification results
+
+```tsx
+const { data } = useClassifyImageZeroShot({ model });
+
+const cards: ImageResultCard[] = images.map((img) => ({
+  id: img.id,
+  src: img.src,
+  label: img.top?.label,
+  score: img.top?.score,
+  processing: img.pending,
+}));
+```
+
+## Customization
+
+The staggered fade-in keyframes are shipped inline, so the gallery animates standalone after `shadcn add`. Adjust the grid column counts, the persistent caption gradient, or the score tiers (per-instance via `scoreThresholds`, or globally by editing the `ScoreBadge` tones) in the copied `image-result-gallery.tsx`. To use the full Results-family badge, install `@localmode/ui/results/confidence-score-badge` and replace the internal `ScoreBadge`.
+
+## Accessibility
+
+The metadata caption (filename + category + score) is **persistent** — it stays visible at rest on every viewport rather than appearing only on hover, so it is reachable by keyboard, touch, and assistive tech without a pointer. Each card `<img>` carries intrinsic `width` / `height` plus `loading="lazy"` and `decoding="async"`, so the grid reserves its aspect box up front (no cumulative layout shift as thumbnails decode). Score badges are colored by the `scoreThresholds` bands, so a low CLIP-scale similarity isn't misread as a red failure — pass CLIP-tuned breakpoints for cross-modal galleries.
+
+<OpenInV0 name="ui/media-vision/image-result-gallery" />

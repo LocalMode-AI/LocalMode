@@ -1,0 +1,50 @@
+---
+title: "Adaptive Batch Card"
+description: "Surfaces useAdaptiveBatchSize: a computed optimal batch number, hardware summary, detection source, and collapsible reasoning — with a compact badge variant."
+icon: Layers
+---
+
+# Adaptive Batch Card
+
+The **Adaptive Batch Card** surfaces `useAdaptiveBatchSize` output: a prominent computed optimal batch number, a hardware summary (cores / RAM / GPU), the detection source (detected / estimated / override), and a collapsible reasoning string. A compact `AdaptiveBatchBadge` variant (e.g. "Batch: 32") offers a click-to-expand device-profile popover. Use it to explain why your `embedMany` / `ingest` batch size is what it is on this device.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/adaptive-batch-card" note="Uses your device's real useAdaptiveBatchSize output — the batch number reflects this machine." />
+
+<OpenInV0 name="ui/local-first/adaptive-batch-card" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/adaptive-batch-card" />
+
+### Data source & dependencies
+
+**Data source:** renders the batch-size result you pass — works with any backend. Recommended producer: `useAdaptiveBatchSize` (backed by `computeOptimalBatchSize`) from `@localmode/react` (on-device, optional).
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `adaptive-batch-card.tsx` — `AdaptiveBatchCard` + `AdaptiveBatchBadge`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/adaptive-batch-card/adaptive-batch-card.tsx" name="AdaptiveBatchCardProps" />
+
+<AutoTypeTable path="registry/localmode/local-first/adaptive-batch-card/adaptive-batch-card.tsx" name="AdaptiveBatchResult" />
+
+## Examples
+
+### Bound to the hook
+
+```tsx
+const result = useAdaptiveBatchSize({ taskType: 'embedding', modelDimensions: 384 });
+<AdaptiveBatchCard result={result} />
+<AdaptiveBatchBadge result={result} />
+```
+
+## Customization
+
+The `result` shape is exactly `useAdaptiveBatchSize`'s return (`{ batchSize, reasoning, deviceProfile }`), so you can pass it straight through. The badge popover summarizes the device profile. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

@@ -1,0 +1,55 @@
+---
+title: "Scroll To Bottom Button"
+description: "A floating scroll-to-bottom affordance tied to a container, appearing when the user scrolls up, with a ScrollAnchor pin element."
+icon: ArrowDownToLine
+---
+
+# Scroll To Bottom Button
+
+The **ScrollToBottomButton** is a floating scroll-to-bottom affordance tied to a chat container’s scroll state. It appears when the user scrolls up from the bottom and scrolls to + pins the latest content on click. Pass a `containerRef`, or let it find the nearest scrollable ancestor. `ScrollAnchor` is the zero-height pin element you place at the end of the message list. Data source: `useChat` (token-stream growth).
+
+## Preview
+
+<ComponentPreview name="ui/conversation/scroll-to-bottom-button" />
+
+<OpenInV0 name="ui/conversation/scroll-to-bottom-button" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/scroll-to-bottom-button" />
+
+### Data source & dependencies
+
+**Data source:** observes a scroll container you pass — works with any backend. Recommended producer: the streaming chat container fed by `useChat` from `@localmode/react` (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `scroll-to-bottom-button.tsx` — `ScrollToBottomButton` + `ScrollAnchor`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/scroll-to-bottom-button/scroll-to-bottom-button.tsx" name="ScrollToBottomButtonProps" />
+
+## Examples
+
+### Attach to a scroll container
+
+```tsx
+import { ScrollAnchor, ScrollToBottomButton } from '@/components/scroll-to-bottom-button';
+
+<div className="relative">
+  <div ref={scrollRef} className="overflow-y-auto">
+    {messages.map((m) => <Bubble key={m.id} {...m} />)}
+    <ScrollAnchor />
+  </div>
+  <ScrollToBottomButton containerRef={scrollRef} />
+</div>
+```
+
+## Customization
+
+This is the standalone counterpart to the built-in `ConversationScrollButton`; use it when your chat surface is not the `Conversation` container. Adjust the `threshold` for how far up the user must scroll before it appears.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useChat`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

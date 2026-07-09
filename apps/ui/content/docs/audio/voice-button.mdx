@@ -1,0 +1,82 @@
+---
+title: "Voice Button"
+description: "A press-to-record / release-to-transcribe push-to-talk button with an explicit state machine — idle → recording (pulse + live waveform) → processing → success/error."
+icon: MicVocal
+---
+
+# Voice Button
+
+**Voice Button** is a press-to-record / release-to-transcribe push-to-talk control with an explicit visual state machine: `idle → recording` (animated pulse rings + live waveform) `→ processing` (loader) `→ success` / `error`. Recording is the app's job ([`useVoiceRecorder`](https://localmode.dev/docs/react) → `getUserMedia` / `MediaRecorder`); transcription routes to local Whisper ([`useTranscribe`](https://localmode.dev/docs/react)). This component renders the state and emits press/release events.
+
+**When to use it:** a single hands-on-keyboard (or touch) affordance to capture and transcribe a short spoken phrase — search-by-voice, quick notes, command input.
+
+## Preview
+
+<ComponentPreview name="ui/audio/voice-button" note="Walks the state machine on a timer with a simulated mic volume so transitions are visible without mic permission. The real app wires onStart/onStop to useVoiceRecorder + useTranscribe." />
+
+<OpenInV0 name="ui/audio/voice-button" />
+
+## Installation
+
+<InstallTabs name="ui/audio/voice-button" />
+
+### Data source & dependencies
+
+**Data source:** renders the recording state you pass and emits press/release events — works with any backend. Recommended producer: `useVoiceRecorder` (recording, `deviceId` selection, live `getVolume()`) + `useTranscribe` (with the Whisper STT model from `@localmode/transformers`) from `@localmode/react` (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+
+### Files installed
+
+- `voice-button.tsx` — the component
+- `waveform-activity-bars.tsx` — the in-button recording waveform (registry dependency)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/audio/voice-button/voice-button.tsx" name="VoiceButtonProps" />
+
+## Examples
+
+### Push-to-talk with local Whisper
+
+```tsx
+import { VoiceButton, type VoiceButtonState } from '@/components/voice-button';
+import { useVoiceRecorder, useTranscribe } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+export function VoiceSearch({ onResult }: { onResult: (text: string) => void }) {
+  const [state, setState] = useState<VoiceButtonState>('idle');
+  const [volume, setVolume] = useState(0);
+  const recorder = useVoiceRecorder();
+  const stt = useTranscribe({ model: transformers.speechToText('onnx-community/whisper-base') });
+
+  // Sample the live mic level while recording to drive the in-button waveform.
+  useEffect(() => {
+    if (!recorder.isRecording) return;
+    let raf = requestAnimationFrame(function tick() {
+      setVolume(recorder.getVolume());
+      raf = requestAnimationFrame(tick);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [recorder.isRecording]);
+
+  return (
+    <VoiceButton
+      state={state}
+      volume={volume}
+      onStart={() => { setState('recording'); recorder.startRecording(); }}
+      onStop={async () => {
+        setState('processing');
+        const blob = await recorder.stopRecording();
+        const res = blob ? await stt.execute(blob) : null;
+        if (res) { onResult(res.text); setState('success'); } else { setState('error'); }
+        setTimeout(() => setState('idle'), 1500);
+      }}
+    />
+  );
+}
+```
+
+## Customization
+
+The button is fully controlled — you own the `state` and decide when to advance the machine. The recording state shows the in-button `WaveformActivityBars`; pass `volume` (0..1) from `useVoiceRecorder().getVolume()` (sampled in a `requestAnimationFrame` loop, as above) to make it react to real mic loudness — no hand-rolled `AnalyserNode` needed. State colors use `bg-primary` / `bg-destructive` / `bg-emerald-600` — swap in the copied file to match your tokens.

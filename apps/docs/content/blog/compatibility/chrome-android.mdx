@@ -12,7 +12,7 @@ faq:
   - question: "Can background tab killing interrupt model downloads on Android?"
     answer: "Yes. Android's OOM killer aggressively terminates background tabs, which can interrupt model downloads. LocalMode's createModelLoader uses chunked downloads with automatic resume to handle this, so interrupted downloads can continue where they left off."
   - question: "How much storage does model caching require on Chrome Android?"
-    answer: "Storage depends on the models you download. Chrome grants up to 60% of total disk size per origin for IndexedDB. Recommended Android models range from about 33MB (BGE-small embeddings) to 360MB (SmolLM2-360M). Use getStorageQuota() to check available space before downloading."
+    answer: "Storage depends on the models you download. Chrome grants up to 60% of total disk size per origin for browser storage. Recommended Android models range from about 33MB (BGE-small embeddings) to 360MB (SmolLM2-360M). Use getStorageQuota() to check available space before downloading."
   - question: "What is the minimum Chrome version needed for LocalMode on Android?"
     answer: "Basic WASM-based inference works on Chrome 57+. For WebGPU-accelerated LLM inference, Chrome 121+ on Android 12+ with a compatible GPU is required. Module workers require Chrome 80+."
 ---

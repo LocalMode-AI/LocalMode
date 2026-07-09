@@ -14,8 +14,8 @@ React hooks for local-first AI. Embed, chat, classify, transcribe, and more — 
 
 ## Features
 
-- **39 hooks** — One for each AI capability in @localmode/core plus agents, import/export, multimodal, utility, batch, and pipeline hooks
-- **Streaming** — `useChat` with real-time message updates and persistence
+- **64 hooks** — One for each AI capability in @localmode/core plus agents, import/export, multimodal, utility, batch, and pipeline hooks
+- **Streaming** — `useChat` with real-time message updates, persistence, token usage, and regenerate-into-variants
 - **List accumulation** — `useOperationList` for building result lists from repeated operations
 - **Batch processing** — `useBatchOperation` for concurrent, `useSequentialBatch` for sequential with progress
 - **Cancellation** — Every hook supports AbortSignal-based cancellation
@@ -108,16 +108,23 @@ function ClassifyDemo() {
 | `useEmbedMany` | Embeddings | `embedMany()` |
 | `useSemanticSearch` | Embeddings | `semanticSearch()` |
 | `useSemanticChunk` | RAG | `semanticChunk()` — embedding-aware chunking |
+| `useKnowledgeBase` | RAG | Knowledge-base session orchestration over the `KnowledgeBaseEngine` contract |
 | `useEmbedImage` | Multimodal | `embedImage()` — CLIP cross-modal |
-| `useEmbedManyImages` | Multimodal | `embedManyImages()` — batch image embedding |
+| `useEmbedManyImages` | Multimodal | `streamEmbedManyImages()` — batch image embedding with progress |
+| `usePhotoLibrary` | Multimodal | Shared CLIP photo library — embeddings + zero-shot categorization over one model |
 | `useChat` | Generation | `streamText()` with message state |
 | `useGenerateText` | Generation | `generateText()` |
 | `useGenerateObject` | Generation | `generateObject()` — typed JSON output |
+| `useProviderFallback` | Generation | Per-capability Chrome AI ⇄ Transformers.js provider resolution |
 | `useClassify` | Classification | `classify()` |
 | `useClassifyZeroShot` | Classification | `classifyZeroShot()` |
 | `useExtractEntities` | NER | `extractEntities()` |
+| `useRerank` | Reranking | `rerank()` — cross-encoder document reranking |
 | `useTranscribe` | Audio | `transcribe()` |
 | `useSynthesizeSpeech` | Audio | `synthesizeSpeech()` |
+| `useStreamSpeech` | Audio | `streamSynthesizeSpeech()` + `playStreamedSpeech()` |
+| `useLiveTranscribe` | Audio | `createLiveTranscriber()` — streaming STT with VAD |
+| `useTurnTaker` | Audio | `createTurnTaker()` — voice loop orchestration |
 | `useCaptionImage` | Vision | `captionImage()` |
 | `useDetectObjects` | Vision | `detectObjects()` |
 | `useClassifyImage` | Vision | `classifyImage()` |
@@ -125,6 +132,7 @@ function ClassifyDemo() {
 | `useSegmentImage` | Vision | `segmentImage()` |
 | `useExtractImageFeatures` | Vision | `extractImageFeatures()` |
 | `useImageToImage` | Vision | `imageToImage()` / `upscaleImage()` |
+| `useStreamingTracker` | Vision | MediaPipe streaming trackers — real-time video (experimental) |
 | `useTranslate` | Text | `translate()` |
 | `useSummarize` | Text | `summarize()` |
 | `useExtractText` | OCR | `extractText()` |
@@ -133,15 +141,19 @@ function ClassifyDemo() {
 | `useAskDocument` | Document QA | `askDocument()` |
 | `useAgent` | Agents | `createAgent()` + `runAgent()` — ReAct loop with tools |
 | `useImportExport` | Import/Export | `importFrom()`, `exportToCSV()`, `exportToJSONL()` |
-| `useModelStatus` | Utility | Model readiness |
+| `useModelLoad` | Utility | Provider model load lifecycle — singleton creation, normalized progress, warmup-driven status |
+| `useModelStatus` | Utility | Model readiness — read-only view of the `useModelLoad` registry |
 | `useCapabilities` | Utility | `detectCapabilities()` |
 | `useNetworkStatus` | Utility | Online/offline |
 | `useStorageQuota` | Utility | Storage quota |
 | `useSemanticCache` | Utility | Semantic cache lifecycle and stats |
 | `useReindex` | Utility | Embedding drift re-embedding with progress |
-| `useVoiceRecorder` | Utility | MediaRecorder lifecycle |
+| `useVoiceRecorder` | Utility | MediaRecorder lifecycle with device selection and volume metering |
+| `useAuditLog` | Security | `AuditLog` append/verify with `lastVerification` |
+| `useEncryptedVault` | Security | Passphrase-locked AES-GCM item vault over pluggable storage |
 | `useInferenceQueue` | Utility | Priority-based task scheduling |
 | `useModelLoader` | Utility | Model cache downloads, prefetch, evict |
+| `useObjectUrl` | Helper | Object URL from a Blob with auto-revoke |
 | `usePipeline` | Pipeline | Multi-step workflows |
 | `useBatchOperation` | Batch | Concurrent batch processing |
 | `useOperationList` | Batch | Accumulate results into a list |
@@ -153,7 +165,7 @@ function ClassifyDemo() {
 <Cards>
   <Card title="useChat" href="/docs/react/chat" description="Streaming chat with message persistence" />
   <Card title="Embeddings" href="/docs/react/embeddings" description="useEmbed, useEmbedMany, useSemanticSearch" />
-  <Card title="Classification" href="/docs/react/classification" description="useClassify, useClassifyZeroShot, useExtractEntities" />
+  <Card title="Classification" href="/docs/react/classification" description="useClassify, useClassifyZeroShot, useExtractEntities, useRerank" />
   <Card title="Agents" href="/docs/react/agents" description="useAgent — ReAct loop with tools and memory" />
   <Card title="Import/Export" href="/docs/react/import-export" description="useImportExport — Pinecone, ChromaDB, CSV, JSONL" />
   <Card title="Advanced" href="/docs/react/advanced" description="usePipeline, testing, and custom composition" />

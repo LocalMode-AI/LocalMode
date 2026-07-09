@@ -15,7 +15,10 @@ import type {
   EmbedImageResult,
   EmbedManyImagesOptions,
   EmbedManyImagesResult,
+  StreamEmbedManyImagesOptions,
+  StreamEmbedImageResult,
 } from './types.js';
+import { computeOptimalBatchSize } from '../capabilities/batch-size.js';
 
 // Global provider for string model ID resolution
 let globalMultimodalEmbeddingProvider: MultimodalEmbeddingModelFactory | null = null;
@@ -189,6 +192,7 @@ export async function embedImage(options: EmbedImageOptions): Promise<EmbedImage
  *
  * @see {@link embedImage} for single image embedding
  * @see {@link embedMany} for batch text embedding
+ * @see {@link streamEmbedManyImages} for streaming with progress
  */
 export async function embedManyImages(
   options: EmbedManyImagesOptions
@@ -253,6 +257,100 @@ export async function embedManyImages(
     usage: { tokens: totalTokens },
     response: lastResponse,
   };
+}
+
+/**
+ * Stream embeddings for large image arrays with progress tracking.
+ *
+ * Yields embeddings one at a time as they're generated, allowing
+ * for progress tracking and early processing.
+ *
+ * @param options - Streaming image embed options
+ * @yields StreamEmbedImageResult with embedding and index
+ *
+ * @example
+ * ```ts
+ * import { streamEmbedManyImages } from '@localmode/core';
+ *
+ * for await (const { embedding, index } of streamEmbedManyImages({
+ *   model: transformers.multimodalEmbedding('Xenova/clip-vit-base-patch32'),
+ *   images: photoBlobs,
+ *   batchSize: 8,
+ *   onBatch: ({ index, count, total }) => {
+ *     console.log(`Progress: ${index + count}/${total}`);
+ *   },
+ * })) {
+ *   await db.add({ id: `img-${index}`, vector: embedding });
+ * }
+ * ```
+ *
+ * @see {@link embedManyImages} for non-streaming batch image embedding
+ * @see {@link streamEmbedMany} for streaming text embedding
+ */
+export async function* streamEmbedManyImages(
+  options: StreamEmbedManyImagesOptions
+): AsyncGenerator<StreamEmbedImageResult> {
+  const {
+    model: modelOrId,
+    images,
+    batchSize: explicitBatchSize,
+    adaptiveBatching,
+    abortSignal,
+    maxRetries = 2,
+    headers,
+    providerOptions,
+    onBatch,
+  } = options;
+
+  // Resolve string model ID to model object
+  const model = resolveModel(modelOrId);
+
+  // Determine batch size: explicit > adaptive > default (32)
+  let batchSize: number;
+  if (explicitBatchSize !== undefined) {
+    batchSize = explicitBatchSize;
+  } else if (adaptiveBatching) {
+    batchSize = computeOptimalBatchSize({
+      taskType: 'embedding',
+      modelDimensions: model.dimensions,
+    }).batchSize;
+  } else {
+    batchSize = 32;
+  }
+
+  // Check for cancellation before starting
+  abortSignal?.throwIfAborted();
+
+  const total = images.length;
+
+  for (let i = 0; i < images.length; i += batchSize) {
+    // Check for cancellation before each batch
+    abortSignal?.throwIfAborted();
+
+    const batch = images.slice(i, i + batchSize);
+    const result = await embedImagesWithRetry(model, batch, {
+      abortSignal,
+      maxRetries,
+      headers,
+      providerOptions,
+    });
+
+    // Yield each embedding individually
+    for (let j = 0; j < result.embeddings.length; j++) {
+      yield {
+        embedding: result.embeddings[j],
+        index: i + j,
+      };
+    }
+
+    // Call progress callback
+    onBatch?.({
+      index: i,
+      count: result.embeddings.length,
+      total,
+      usage: result.usage,
+    });
+  }
 }
 
 /**

@@ -11,7 +11,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 LangChain `VectorStore` backed by LocalMode's VectorDB — HNSW-indexed vector search with persistent IndexedDB storage.
 
 <Callout type="info" title="See it in action">
-  Try [LangChain RAG](https://localmode.ai/langchain-rag) for a working demo.
+  Switch the [Knowledge Base block](https://localmode.ai/blocks/knowledge/semantic-search) to its LangChain engine — indexing and retrieval there run through `LocalModeVectorStore`, live in the browser.
 </Callout>
 
 ## Constructor
@@ -177,8 +177,8 @@ const results = await store.similaritySearch('query', 5);
 
 The `_vectorstoreType()` method returns `'localmode'` for identification in LangChain logging.
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| LangChain RAG | Vector storage using LocalModeVectorStore adapter | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |
+| Semantic Search | Text/PDF/OCR ingest with chunking, then reranked vector search with category facets and calibrated thresholds — on a core ⇄ LangChain engine toggle | [Live](https://localmode.ai/blocks/knowledge/semantic-search) · Install: `npx shadcn add @localmode/ui/blocks/knowledge/semantic-search` |

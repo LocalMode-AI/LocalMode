@@ -1,0 +1,168 @@
+{
+  "family": "media-vision",
+  "navLabel": "Media & Vision",
+  "docsFolder": "media-vision",
+  "npmDependencies": [
+    "@localmode/core",
+    "@localmode/react",
+    "lucide-react"
+  ],
+  "previews": {
+    "ui/media-vision/media-dropzone": "@/registry/localmode/media-vision/media-dropzone/media-dropzone-demo",
+    "ui/media-vision/bounding-box-overlay": "@/registry/localmode/media-vision/bounding-box-overlay/bounding-box-overlay-demo",
+    "ui/media-vision/before-after-image-viewer": "@/registry/localmode/media-vision/before-after-image-viewer/before-after-image-viewer-demo",
+    "ui/media-vision/image-processing-overlay": "@/registry/localmode/media-vision/image-processing-overlay/image-processing-overlay-demo",
+    "ui/media-vision/video-canvas": "@/registry/localmode/media-vision/video-canvas/video-canvas-demo",
+    "ui/media-vision/image-result-gallery": "@/registry/localmode/media-vision/image-result-gallery/image-result-gallery-demo",
+    "ui/media-vision/use-webcam": "@/registry/localmode/media-vision/use-webcam/use-webcam-demo"
+  },
+  "items": [
+    {
+      "name": "ui/media-vision/media-dropzone",
+      "type": "registry:component",
+      "title": "Media Dropzone",
+      "description": "A drag-and-drop + click-to-browse image upload zone with idle / drag-over / processing states, accept-list + max-size validation via validateFile, an \"add another\" variant, and an onFiles(File[]) callback.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/lib/browser-utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/media-vision/media-dropzone/media-dropzone.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "media-vision"
+      ]
+    },
+    {
+      "name": "ui/media-vision/bounding-box-overlay",
+      "type": "registry:component",
+      "title": "Bounding Box Overlay",
+      "description": "Color-coded detection boxes (with a companion DetectionLabelLegend) positioned over an image as percentage offsets from its natural dimensions, so placement is display-size independent. Serves object / face / hand / pose output.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/media-vision/bounding-box-overlay/bounding-box-overlay.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "media-vision"
+      ]
+    },
+    {
+      "name": "ui/media-vision/before-after-image-viewer",
+      "type": "registry:component",
+      "title": "Before / After Image Viewer",
+      "description": "Compare an original image with a transformed result — a two-panel grid with checkerboard transparency (shipped inline) or a segmented Original / Enhanced toggle. Pairs with useImageToImage / useSegmentImage.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/media-vision/before-after-image-viewer/before-after-image-viewer.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "media-vision"
+      ]
+    },
+    {
+      "name": "ui/media-vision/image-processing-overlay",
+      "type": "registry:component",
+      "title": "Image Processing Overlay",
+      "description": "A full-bleed overlay over a dimmed source image while vision inference runs — spinner ring + icon + status + optional cancel, plus an animated scan variant (keyframes shipped inline). Renders nothing when idle. Driven by any vision hook's isLoading.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/media-vision/image-processing-overlay/image-processing-overlay.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "media-vision"
+      ]
+    },
+    {
+      "name": "ui/media-vision/video-canvas",
+      "type": "registry:component",
+      "title": "Video Canvas",
+      "description": "A mirrored 16:9 webcam surface — a video element with a pixel-aligned transparent canvas overlay for landmark / skeleton drawing, an FPS badge, and a child slot. A shell for the MediaPipe streaming trackers (useDetectHands / useDetectPose / useDetectFace / useRecognizeGesture); the app supplies the stream and draw callback.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/media-vision/video-canvas/video-canvas.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "media-vision"
+      ]
+    },
+    {
+      "name": "ui/media-vision/image-result-gallery",
+      "type": "registry:component",
+      "title": "Image Result Gallery",
+      "description": "A responsive grid / list of image result cards sharing one data contract — in-flight overlay, hover metadata, confidence score, multi-select, delete, and staggered fade-in. Composes ConfidenceScoreBadge (Results family) via a registry dependency, with a minimal score-badge fallback inlined so it builds independently. Pairs with useClassifyImageZeroShot / useEmbedImage / useCaptionImage.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/results/confidence-score-badge"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/media-vision/image-result-gallery/image-result-gallery.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "media-vision"
+      ]
+    },
+    {
+      "name": "ui/media-vision/use-webcam",
+      "type": "registry:hook",
+      "title": "useWebcam",
+      "description": "A React hook that owns a getUserMedia video stream: start() acquires (or re-acquires after a denial — the retry path), stop() releases every track, and unmount cleanup guarantees the camera light goes off. Runtime permission denial surfaces as a recoverable error (permission / hardware / unknown) rather than a thrown exception. Returns { stream, isActive, error, start, stop, clearError }; exports WebcamError / WebcamErrorKind. Imports only React and browser APIs — zero @localmode. Powers webcam-driven vision surfaces (object detection, live landmark tracking).",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [],
+      "files": [
+        {
+          "path": "registry/localmode/media-vision/use-webcam/use-webcam.ts",
+          "type": "registry:hook",
+          "target": "hooks/use-webcam.ts"
+        }
+      ],
+      "categories": [
+        "media-vision"
+      ]
+    }
+  ]
+}

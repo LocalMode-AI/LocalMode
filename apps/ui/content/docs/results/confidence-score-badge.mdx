@@ -1,0 +1,64 @@
+---
+title: "Confidence Score Badge"
+description: "Maps a 0–1 score to a semantic color tier (configurable thresholds) and renders it as a flat badge or a radial dial."
+icon: Gauge
+---
+
+# Confidence Score Badge
+
+The **Confidence Score Badge** is the shared scored-output atom across LocalMode Elements. It maps a 0–1 score to a semantic color tier — by default high ≥ 0.8 (success), medium ≥ 0.5 (warning), and low (muted) — and renders the formatted percentage as either a flat pill badge or a radial dial. The tier breakpoints are props, so apps with cosine vs dot-product score distributions can tune them.
+
+**When to use it:** anywhere you surface a scalar confidence or similarity score — `useClassify`, `useClassifyZeroShot`, `useSemanticSearch`, `useAnswerQuestion`. It is also consumed cross-family (e.g. by `ScoredResultBarList`, `TopResultCard`, and media-vision's `ImageResultGallery`).
+
+## Preview
+
+<ComponentPreview name="ui/results/confidence-score-badge" note="Flat and radial variants across the three tiers — runs locally, no model download." />
+
+<OpenInV0 name="ui/results/confidence-score-badge" />
+
+## Installation
+
+<InstallTabs name="ui/results/confidence-score-badge" />
+
+### Dependencies
+
+- **Data source:** renders a single `score` (0–1) and optional `label` you pass — works with any backend. Recommended producers: `useClassify` / `useSemanticSearch` / `useAnswerQuestion` from `@localmode/react` (optional). See [Bring your own data](/docs/bring-your-own-data#results--insights).
+
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `confidence-score-badge.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/results/confidence-score-badge/confidence-score-badge.tsx" name="ConfidenceScoreBadgeProps" />
+
+## Examples
+
+### Flat badge with a label
+
+```tsx
+import { ConfidenceScoreBadge } from '@/components/confidence-score-badge';
+
+export function Example() {
+  return <ConfidenceScoreBadge score={0.92} label="positive" />;
+}
+```
+
+### Radial dial
+
+```tsx
+<ConfidenceScoreBadge score={0.63} variant="radial" size={64} />
+```
+
+### Custom thresholds (tighter cosine distribution)
+
+```tsx
+<ConfidenceScoreBadge score={0.72} thresholds={{ high: 0.65, medium: 0.4 }} />
+```
+
+## Customization
+
+The component is styled with shadcn/ui CSS-variable tokens (`bg-card`, `text-card-foreground`). The radial dial's fill uses a `conic-gradient` driven by CSS variables so it themes via the consumer's tokens. The per-tier colors map to Tailwind's `emerald` / `amber` palettes with a muted fallback — swap them in the copied `TIER_STYLES` map to match your design system. The exported `resolveTier()` helper lets you reuse the exact tiering logic for your own styling.

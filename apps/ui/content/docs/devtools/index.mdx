@@ -1,0 +1,63 @@
+---
+title: DevTools
+description: Local-AI observability surfaces — queue, event, pipeline, and model-cache monitors that render @localmode/devtools hook snapshots (or any backend's data) with zero @localmode dependencies.
+icon: Activity
+---
+
+The **DevTools family** turns on-device AI observability into copy-owned UI. Each
+primitive renders plain props — the recommended producers are the nine hooks on
+`@localmode/devtools/react`, but any backend that shapes the same data works
+("local-first by design, cloud-compatible by contract").
+
+## Components
+
+| Component | Renders | Recommended hook |
+| --------- | ------- | ---------------- |
+| [Inference Queue Monitor](/docs/devtools/inference-queue-monitor) | Per-queue pending / active / completed / failed / avg-latency | `useDevToolsQueueStats` |
+| [Event Log Viewer](/docs/devtools/event-log-viewer) | Newest-first namespaced event stream with filter + cap | `useDevToolsEvents` |
+| [Pipeline Run Inspector](/docs/devtools/pipeline-run-inspector) | Per-run status, progress, current step, durations | `useDevToolsPipelineRuns` |
+| [Model Cache Table](/docs/devtools/model-cache-table) | Cached models: status, load time, last used, size, evict | `useDevToolsModelCache` |
+
+## Widget-parity map
+
+This family (plus two reused local-first items) supersedes the deprecated
+`DevToolsWidget`'s six panels:
+
+| Widget panel | Successor |
+| ------------ | --------- |
+| Queue | `ui/devtools/inference-queue-monitor` |
+| Events | `ui/devtools/event-log-viewer` |
+| Pipeline | `ui/devtools/pipeline-run-inspector` |
+| Models | `ui/devtools/model-cache-table` |
+| Device | [`ui/local-first/device-capability-grid`](/docs/local-first/device-capability-grid) (reused — device data is not devtools-specific) |
+| VectorDB | [`ui/local-first/vector-storage-observability`](/docs/local-first/vector-storage-observability) (reused; per-collection op counts come from `useDevToolsVectorDBs`) |
+
+## Wiring
+
+Collectors are off until you opt in — enable them once, then render hook
+snapshots straight into the primitives:
+
+```tsx
+import { enableDevTools } from '@localmode/devtools';
+import { useDevToolsQueueStats } from '@localmode/devtools/react';
+import { InferenceQueueMonitor } from '@/components/inference-queue-monitor';
+
+enableDevTools(); // e.g. behind your own debug toggle
+
+export function QueuePanel() {
+  const queues = useDevToolsQueueStats();
+  return <InferenceQueueMonitor queues={queues} />;
+}
+```
+
+## The composed drawer
+
+A ready-made six-tab drawer (Queue / Events / Pipeline / Models / Device /
+VectorDB) that wires all of the above ships as an installable block:
+
+```bash
+npx shadcn@latest add @localmode/ui/blocks/devtools-drawer
+```
+
+Blocks are the wiring layer, so the drawer legitimately depends on
+`@localmode/devtools` — the four primitives above stay zero-`@localmode/*`.

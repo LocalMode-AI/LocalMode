@@ -12,7 +12,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 LocalMode provides twelve vision functions that run entirely in the browser — no server required. All accept an `ImageInput` (Blob, ImageData, string URL, or ArrayBuffer) and return structured results with usage metrics.
 
 <Callout type="info" title="See it in action">
-  Try [Object Detector](https://localmode.ai/object-detector) and [Background Remover](https://localmode.ai/background-remover) for working demos of these APIs.
+  Try the [Vision block](https://localmode.ai/blocks/vision) and [Image Studio block](https://localmode.ai/blocks/image-studio) for working demos of these APIs.
 </Callout>
 
 | Function | Purpose |
@@ -736,14 +736,14 @@ const { caption } = await captionImage({ model, image: imageBlob });
   />
 </Cards>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Object Detector | Detect and label objects in images | [Demo](https://localmode.ai/object-detector) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/object-detector) |
-| Image Captioner | Generate natural language image descriptions | [Demo](https://localmode.ai/image-captioner) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/image-captioner) |
-| Background Remover | Segment and remove image backgrounds | [Demo](https://localmode.ai/background-remover) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/background-remover) |
-| Photo Enhancer | Upscale and enhance photos with image-to-image models | [Demo](https://localmode.ai/photo-enhancer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/photo-enhancer) |
-| Duplicate Finder | Extract image features for duplicate detection | [Demo](https://localmode.ai/duplicate-finder) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/duplicate-finder) |
-| Smart Gallery | Classify and organize photos by content | [Demo](https://localmode.ai/smart-gallery) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-gallery) |
-| Product Search | Visual product classification and search | [Demo](https://localmode.ai/product-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/product-search) |
+| Vision (Object Detector) | Detect and label objects in images | [Live block](https://localmode.ai/blocks/vision/object-detector) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/vision/object-detector) |
+| Image Studio (Image Captioner) | Generate natural language image descriptions | [Live block](https://localmode.ai/blocks/image-studio/image-captioner) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/image-studio/image-captioner) |
+| Image Studio (Background Remover) | Segment and remove image backgrounds | [Live block](https://localmode.ai/blocks/image-studio/background-remover) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/image-studio/background-remover) |
+| Image Studio (Photo Enhancer) | Upscale and enhance photos with image-to-image models | [Live block](https://localmode.ai/blocks/image-studio/image-enhancer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/image-studio/image-enhancer) |
+| Photo Search (Duplicate Finder) | Extract image features for duplicate detection | [Live block](https://localmode.ai/blocks/photo/duplicate-finder) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/photo/duplicate-finder) |
+| Photo Search (Smart Gallery) | Classify and organize photos by content | [Live block](https://localmode.ai/blocks/photo/smart-gallery) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/photo/smart-gallery) |
+| Photo Search (Product Search) | Visual product classification and search | [Live block](https://localmode.ai/blocks/photo/image-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/photo/image-search) |

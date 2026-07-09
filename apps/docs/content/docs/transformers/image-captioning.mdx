@@ -14,7 +14,8 @@ Generate natural language descriptions of images using vision-language models li
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [Image Captioner](https://localmode.ai/image-captioner) for a working demo.
+  Run it in the [Image Captioner block](https://localmode.ai/blocks/image-studio/image-captioner) — an
+  installable, registry-composed version with an accumulating gallery.
 </Callout>
 
 ## Recommended Models
@@ -25,7 +26,7 @@ Generate natural language descriptions of images using vision-language models li
 
 ## File Upload Example
 
-Based on the [Image Captioner](https://localmode.ai/image-captioner) showcase app:
+Based on the [Image Captioner block](https://localmode.ai/blocks/image-studio/image-captioner):
 
 ```typescript
 import { transformers } from '@localmode/transformers';
@@ -65,11 +66,11 @@ The `image` parameter accepts:
   4. **Handle errors** — Invalid or corrupted images will throw
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| Image Captioner | Generate natural language descriptions of images | [Demo](https://localmode.ai/image-captioner) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/image-captioner) |
+| Image Captioner | ViT-GPT2 alt-text captioning with an accumulating gallery | [Live](https://localmode.ai/blocks/image-studio/image-captioner) · Install: `npx shadcn add @localmode/ui/blocks/image-studio/image-captioner` |
 
 ## Next Steps
 

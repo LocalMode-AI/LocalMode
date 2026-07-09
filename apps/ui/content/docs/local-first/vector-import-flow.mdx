@@ -1,0 +1,59 @@
+---
+title: "Vector Import Flow"
+description: "A guarded vector-import flow: format-aware preview, phased progress, a result stats banner, and a record-preview table before a destructive ingest."
+icon: FileUp
+---
+
+# Vector Import Flow
+
+The **Vector Import Flow** wraps `useImportExport`: a preview panel (detected-format badge, total / with-vectors / text-only counts, detected dimensions, dimension-mismatch warning, Cancel/Confirm), a phased progress bar (parsing → validating → embedding → importing), a result stats banner (imported / skipped / re-embedded, format, duration), and a record-preview table for row-level sanity checks before a destructive ingest. It references the cross-family `FormatDetectionBadge` and inlines a minimal fallback so it builds independently.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/vector-import-flow" note="Shows the pre-import preview with a record table, then a result banner on Confirm." />
+
+<OpenInV0 name="ui/local-first/vector-import-flow" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/vector-import-flow" />
+
+### Data source & dependencies
+
+**Data source:** renders the import preview/progress/result you pass and emits Cancel/Confirm — works with any backend. Recommended producer: `useImportExport` (backed by the import/export parsers) from `@localmode/react` (on-device, optional).
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Registry dependencies
+
+- `@localmode/ui/data-documents/format-detection-badge` — the shared format badge (a minimal inline fallback ships with this item)
+
+### Files installed
+
+- `vector-import-flow.tsx` — the `VectorImportFlow` component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/vector-import-flow/vector-import-flow.tsx" name="VectorImportFlowProps" />
+
+<AutoTypeTable path="registry/localmode/local-first/vector-import-flow/vector-import-flow.tsx" name="ImportPreview" />
+
+## Examples
+
+### Preview then import
+
+```tsx
+const { parseResult, progress, stats, parsePreview, importData } = useImportExport({ db, model });
+<VectorImportFlow
+  preview={parseResult}
+  targetDimensions={db.dimensions}
+  progress={progress}
+  stats={stats}
+  onConfirm={() => importData({ content })}
+/>
+```
+
+## Customization
+
+The dimension-mismatch warning compares `preview.dimensions` against `targetDimensions`. Swap the inline `FormatBadge` for the installed `@localmode/ui/data-documents/format-detection-badge` when present. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

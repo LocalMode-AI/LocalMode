@@ -7,6 +7,7 @@
  */
 
 import { embed } from './embed.js';
+import { TEXT_METADATA_FIELD } from '../rag/types.js';
 import type {
   SemanticSearchOptions,
   SemanticSearchResult,
@@ -112,13 +113,17 @@ export async function semanticSearch(
 
 /**
  * Extract text from metadata if available.
- * Looks for common text field names.
+ *
+ * Checks common text field names in priority order. Explicit user-provided
+ * `text` metadata wins; the ingest-written key ({@link TEXT_METADATA_FIELD},
+ * `_text`) is resolved after the user-facing names so `ingest()` results
+ * round-trip out of the box.
  */
 function extractText(metadata?: Record<string, unknown>): string | undefined {
   if (!metadata) return undefined;
 
-  // Common text field names
-  const textFields = ['text', 'content', 'body', '__text', 'pageContent'];
+  // Common text field names, in priority order
+  const textFields = ['text', 'content', 'body', TEXT_METADATA_FIELD, '__text', 'pageContent'];
 
   for (const field of textFields) {
     const value = metadata[field];

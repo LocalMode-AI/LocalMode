@@ -10,7 +10,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 # Import / Export Hook
 
 <Callout type="info" title="See it in action">
-  Try [Semantic Search](https://localmode.ai/semantic-search) and [Data Migrator](https://localmode.ai/data-migrator) for working demos of these hooks.
+  Try the [Knowledge Base block](https://localmode.ai/blocks/knowledge/vector-data-manager) for a working demo of these hooks — its Data tab runs Pinecone/CSV/JSONL import and export against a live in-browser corpus.
 </Callout>
 
 ## useImportExport
@@ -128,9 +128,9 @@ await importData({ content: csvWithTextOnly });
 For full import/export API reference including `importFrom()`, `parseExternalFormat()`, `exportToCSV()`, format specifications, and error handling, see the [Core Import/Export](/docs/core/import-export) guide.
 </Callout>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Semantic Search | Export and import vector indexes with useImportExport | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
-| Data Migrator | Migrate vectors between formats with useImportExport | [Demo](https://localmode.ai/data-migrator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/data-migrator) |
+| Knowledge Base (Semantic Search) | Export and import vector indexes with useImportExport | [Live block](https://localmode.ai/blocks/knowledge/vector-data-manager) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/vector-data-manager) |
+| Knowledge Base (Data Migrator) | Migrate vectors between formats with useImportExport | [Live block](https://localmode.ai/blocks/knowledge/vector-data-manager) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/vector-data-manager) |

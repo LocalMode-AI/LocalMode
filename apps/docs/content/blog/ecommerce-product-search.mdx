@@ -3,7 +3,7 @@ title: "E-Commerce Product Search That Understands Intent - No Algolia Required"
 description: "Build semantic product search with text-to-product matching, visual similarity via CLIP, and auto-categorization - all running in the browser at $0/month. Complete code walkthrough with LocalMode's VectorDB, embedImage, and classifyImageZeroShot APIs."
 author: LocalMode
 date: 2026-03-23
-dateModified: "2026-05-26"
+dateModified: "2026-07-04"
 faq:
   - question: "How does semantic product search solve the vocabulary mismatch problem in e-commerce?"
     answer: "Customers search with their own words ('warm winter jacket under $100') while merchants describe products differently ('Insulated Puffer Coat'). CLIP/SigLIP models map both text and images into the same 768-dimensional vector space, so similarity is computed by meaning rather than keyword overlap. This eliminates the vocabulary gap."
@@ -21,7 +21,7 @@ This is the fundamental problem with keyword search in e-commerce. Products are 
 
 Algolia, Elasticsearch, and Searchspring solve this with cloud-hosted semantic layers - and charge you for every single query. Algolia's Grow plan bills $0.50 per 1,000 search requests. Their AI-powered Grow Plus tier charges $1.75 per 1,000. A mid-size Shopify store running 500,000 searches per month pays $250–$875/month just for search, before you count record storage fees ($0.40/1,000 records), analytics add-ons, or merchandising tools. Enterprise tiers start at $50K+ annually.
 
-What if the search engine ran entirely in the customer's browser? No API keys. No per-request billing. No data leaving the device. That is what we built in the [Product Search demo](https://localmode.ai/product-search) - and in this post, we will walk through every line of code.
+What if the search engine ran entirely in the customer's browser? No API keys. No per-request billing. No data leaving the device. That is what the [Photo Search block](https://localmode.ai/blocks/photo/image-search) does - and in this post, we will walk through every line of code.
 
 ---
 
@@ -58,7 +58,7 @@ const db = await createVectorDB({
 The `dimensions` value must match the model output. SigLIP-Base-Patch16-224 produces 768-dimensional vectors. Standard CLIP ViT-Base models produce 512. LocalMode's `TransformersCLIPEmbeddingModel` infers this automatically from the model ID, but the VectorDB needs the explicit number.
 
 <Callout type="warn" title="Memory vs IndexedDB">
-  For a production catalog with thousands of products, use `'indexeddb'` storage so vectors persist across page reloads. The showcase demo uses `'memory'` storage because uploaded images are ephemeral. For a Shopify plugin, you would persist to IndexedDB and only re-index when the catalog changes.
+  For a production catalog with thousands of products, use `'indexeddb'` storage so vectors persist across page reloads. The demo uses `'memory'` storage because uploaded images are ephemeral. For a Shopify plugin, you would persist to IndexedDB and only re-index when the catalog changes.
 </Callout>
 
 ---
@@ -112,7 +112,7 @@ console.log(reasoning);
 // → "16 cores, 32GB RAM, GPU: Yes → batch size 128"
 ```
 
-The showcase app displays this in the header as a "Batch: N" badge - customers on a MacBook Pro with 32GB RAM and a GPU get batch size 128, while a budget Chromebook might get 16. The ingestion pipeline never overwhelms the device.
+The Image Search block displays this in the header as a "Batch: N" badge - customers on a MacBook Pro with 32GB RAM and a GPU get batch size 128, while a budget Chromebook might get 16. The ingestion pipeline never overwhelms the device.
 
 ---
 
@@ -151,7 +151,7 @@ const matches = await db.search(embedding, {
 });
 ```
 
-Notice the `threshold: 0.2`. Cross-modal CLIP/SigLIP similarity scores are lower than same-modality text embeddings. A score of 0.25 in cross-modal search represents strong relevance, while the same score in a text-only embedding model like BGE would be poor. The showcase app uses `getDefaultThreshold()` from `@localmode/core` to look up per-model presets, falling back to 0.2 for SigLIP.
+Notice the `threshold: 0.2`. Cross-modal CLIP/SigLIP similarity scores are lower than same-modality text embeddings. A score of 0.25 in cross-modal search represents strong relevance, while the same score in a text-only embedding model like BGE would be poor. The Image Search block uses `getDefaultThreshold()` from `@localmode/core` to look up per-model presets, falling back to 0.2 for SigLIP.
 
 The `filter` parameter enables metadata-based narrowing without a separate faceting service. Algolia charges extra for faceted search. Here, it is a single object on the search call, evaluated against typed metadata stored alongside each vector.
 
@@ -246,7 +246,7 @@ The tradeoff is a one-time ~400MB model download on the customer's first visit. 
 
 ## Putting It All Together: The React Integration
 
-The [Product Search showcase app](https://localmode.ai/product-search) wires everything together with `@localmode/react` hooks. Here is the simplified architecture:
+The [Photo Search block](https://localmode.ai/blocks/photo/image-search) wires everything together with `@localmode/react` hooks. Here is the simplified architecture:
 
 ```ts
 import { useSemanticSearch } from '@localmode/react';
@@ -328,7 +328,7 @@ Install the packages:
 npm install @localmode/core @localmode/transformers @localmode/react
 ```
 
-The complete source code for the Product Search app is in the [showcase repository](https://github.com/LocalMode-AI/LocalMode) under `apps/showcase-nextjs/src/app/(apps)/product-search/`. The service layer in `_services/search.service.ts` contains the full indexing and search pipeline. The hook in `_hooks/use-product-search.ts` shows the React integration with `useSemanticSearch` and `useBatchOperation`.
+The live successor to the original Product Search app is the [Image Search block](https://localmode.ai/blocks/photo/image-search); its source under `apps/ui/src/app/blocks/photo/image-search/` contains the full indexing and search pipeline and shows the React integration with `useSemanticSearch` and `useBatchOperation`.
 
 ---
 
@@ -347,7 +347,7 @@ Cost figures sourced from official pricing pages accessed March 2026:
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

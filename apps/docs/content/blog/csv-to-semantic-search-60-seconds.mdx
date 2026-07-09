@@ -3,7 +3,7 @@ title: "From CSV to Semantic Search in 60 Seconds: Loading Any Document Into a L
 description: "Load CSV, JSON, HTML, or PDF files into a fully local semantic search pipeline with just a few lines of code. LocalMode's built-in document loaders, the ingest() shortcut, and semanticSearch() get you from raw data to AI-powered search in under a minute - no server, no API key, no data leaving the device."
 author: LocalMode
 date: 2026-02-16
-dateModified: "2026-05-29"
+dateModified: "2026-07-04"
 faq:
   - question: "What file formats can be loaded into a local semantic search pipeline with LocalMode?"
     answer: "Four formats are supported with built-in loaders: CSV (via CSVLoader with auto-detection of text columns), JSON (via JSONLoader with nested path navigation), HTML (via HTMLLoader with CSS selector targeting and tag stripping), and PDF (via @localmode/pdfjs wrapping PDF.js). The loadDocument() function auto-detects format from file name and content."
@@ -226,7 +226,7 @@ const docs = await loadDocuments([file1, file2, file3]);
 Most real applications let users drop files into the browser. Here is the pattern that connects a drop event to the full pipeline:
 
 ```tsx
-function handleDrop(event: React.DragEvent) {
+async function handleDrop(event: React.DragEvent) {
   event.preventDefault();
   const files = Array.from(event.dataTransfer.files);
 
@@ -347,7 +347,7 @@ const { results } = await semanticSearch({ db, model, query: 'wireless noise can
 Swap `CSVLoader` for `JSONLoader`, `HTMLLoader`, or `extractPDFText`. The rest stays the same. That is the point - one pipeline shape handles any data you throw at it.
 
 <Callout type="info" title="Try it live">
-  The [Semantic Search](https://localmode.ai/semantic-search) and [PDF Search](https://localmode.ai/pdf-search) showcase apps implement everything in this post. Drop your own files in and search them - entirely in the browser, entirely offline after the first model download.
+  The [Knowledge Base block](https://localmode.ai/blocks/knowledge/semantic-search) implements everything in this post. Drop your own files in and search them - entirely in the browser, entirely offline after the first model download.
 </Callout>
 
 ---

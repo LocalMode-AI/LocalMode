@@ -1,0 +1,72 @@
+---
+title: "Streaming Speech Panel"
+description: "Streaming TTS status surface — waveform + spinner + now-playing clause while synthesizing, then a clause count, local-privacy note, and Download WAV on completion."
+icon: AudioWaveform
+---
+
+# Streaming Speech Panel
+
+**Streaming Speech Panel** visualizes a streaming text-to-speech run. While synthesis or playback is active it shows a waveform + spinner, a synthesizing/playing label, the processed-clause count, and the current clause in a highlighted "now playing" box. When the stream completes it shows the clause-count summary, a "generated locally" privacy note, and a Download WAV action.
+
+Drive it from [`useStreamSpeech()`](https://localmode.dev/docs/react) (`isSynthesizing`, `isPlaying`, `currentClause`, `clauses`) and wire `onDownload` to `downloadBlob`.
+
+**When to use it:** give live feedback during clause-by-clause Kokoro streaming and offer a one-click WAV export.
+
+## Preview
+
+<ComponentPreview name="ui/audio/streaming-speech-panel" note="Simulates a streaming run (active → finished). The real app passes useStreamSpeech state and wires onDownload to downloadBlob." />
+
+<OpenInV0 name="ui/audio/streaming-speech-panel" />
+
+## Installation
+
+<InstallTabs name="ui/audio/streaming-speech-panel" />
+
+### Data source & dependencies
+
+**Data source:** renders the streaming-TTS state you pass and emits `onDownload` — works with any backend. Recommended producer: `useStreamSpeech` (with the Kokoro TTS model from `@localmode/transformers`) from `@localmode/react` (on-device, optional); wire `onDownload` to your own download handler (e.g. the `downloadBlob` helper).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+
+### Files installed
+
+- `streaming-speech-panel.tsx` — the component
+- `waveform-activity-bars.tsx` — the active-state indicator (registry dependency)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/audio/streaming-speech-panel/streaming-speech-panel.tsx" name="StreamingSpeechPanelProps" />
+
+## Examples
+
+### Wired to useStreamSpeech
+
+```tsx
+import { StreamingSpeechPanel } from '@/components/streaming-speech-panel';
+import { useStreamSpeech, downloadBlob } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+export function Reader({ text }: { text: string }) {
+  const speech = useStreamSpeech({
+    model: transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX'),
+    voice: 'af_heart',
+  });
+
+  return (
+    <>
+      <button onClick={() => speech.speak(text)}>Read aloud</button>
+      <StreamingSpeechPanel
+        isSynthesizing={speech.isSynthesizing}
+        isPlaying={speech.isPlaying}
+        currentClause={speech.currentClause}
+        clauses={speech.clauses}
+        onDownload={() => downloadBlob(wavBlob, 'speech.wav')}
+      />
+    </>
+  );
+}
+```
+
+## Customization
+
+The panel renders three states — active, finished, and ready — driven entirely by the `isSynthesizing` / `isPlaying` / `clauses` props. The privacy note is plain text in the copied file; reword it to match your product voice. The Download action only fires `onDownload`; assemble the WAV from the streamed clauses (or capture the played audio) on your side and call `downloadBlob`.

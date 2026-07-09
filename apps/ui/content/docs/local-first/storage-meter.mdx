@@ -1,0 +1,55 @@
+---
+title: "Storage Meter"
+description: "IndexedDB / origin storage usage versus quota, with a warning threshold and a graceful unavailable state."
+icon: HardDrive
+---
+
+# Storage Meter
+
+The **Storage Meter** shows origin / IndexedDB storage usage against quota as a meter, with a warning state past a configurable threshold. Storage estimates are approximate and blocked in some browsers (e.g. Safari private mode), so the component degrades to a graceful "unavailable" state rather than erroring. Bind it to `useStorageQuota` (the default) or pass an explicit `quota`.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/storage-meter" note="Reads your device's real navigator.storage.estimate() via useStorageQuota." />
+
+<OpenInV0 name="ui/local-first/storage-meter" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/storage-meter" />
+
+### Data source & dependencies
+
+**Data source:** reads `navigator.storage.estimate()` via the bundled `useStorageQuota` navigator hook (or pass an explicit `quota`) — self-contained, works in any React app. (It mirrors `useStorageQuota` from `@localmode/react`.)
+- `@localmode/ui/lib/use-environment` — the bundled `useStorageQuota` navigator hook (installed automatically as a registry dependency)
+- `@localmode/ui/lib/browser-utils` — `formatBytes` for the usage readout (installed automatically as a registry dependency)
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `storage-meter.tsx` — the `StorageMeter` component
+- `lib/use-environment.ts` — the bundled `useStorageQuota` navigator hook
+- `lib/browser-utils.ts` — generic browser helpers (`formatBytes`)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/storage-meter/storage-meter.tsx" name="StorageMeterProps" />
+
+## Examples
+
+### Default (live quota)
+
+```tsx
+<StorageMeter warnThreshold={0.9} />
+```
+
+### Explicit quota
+
+```tsx
+<StorageMeter quota={{ usedBytes: 1.9e9, quotaBytes: 2e9 }} />
+```
+
+## Customization
+
+The warning state turns the bar amber and shows a hint past `warnThreshold` (default `0.8`). When no estimate is available the component renders a muted "Storage estimate unavailable" row — never an error. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

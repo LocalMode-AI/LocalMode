@@ -1,0 +1,65 @@
+---
+title: "Mic Selector"
+description: "A microphone input-device picker with permission handling and live device enumeration — fully offline, browser device APIs only."
+icon: Settings2
+---
+
+# Mic Selector
+
+**Mic Selector** is a microphone input-device picker with permission handling and device enumeration. It is fully offline — it uses only the browser device APIs (`getUserMedia` for the one-time permission prompt, `enumerateDevices` for the list, and a `devicechange` listener to stay current). Selecting a device emits its `deviceId`, which flows straight into [`useVoiceRecorder({ deviceId })`](https://localmode.dev/docs/react) — the recorder requests `{ deviceId: { exact } }`, so the selected microphone is actually used (recording errors rather than silently falling back when the device is unavailable).
+
+Pairs with [`useVoiceRecorder` / `useLiveTranscribe`](https://localmode.dev/docs/react), `VoiceButton`, and `VoiceOrb`.
+
+**When to use it:** let users choose which microphone feeds a voice agent or transcription pipeline.
+
+## Preview
+
+<ComponentPreview name="ui/audio/mic-selector" note="Renders the real picker. Clicking 'Allow microphone' triggers a genuine permission prompt and lists your actual audio inputs." />
+
+<OpenInV0 name="ui/audio/mic-selector" />
+
+## Installation
+
+<InstallTabs name="ui/audio/mic-selector" />
+
+### Data source & dependencies
+
+**Data source:** enumerates devices via the browser `MediaDevices` API and emits the chosen `deviceId` — works with any backend. Recommended consumer: feed it into `useVoiceRecorder({ deviceId })` (pairs with `useLiveTranscribe`) from `@localmode/react` (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+- No external dependency — browser `MediaDevices` API only
+
+### Files installed
+
+- `mic-selector.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/audio/mic-selector/mic-selector.tsx" name="MicSelectorProps" />
+
+## Examples
+
+### Route the chosen device into a recorder
+
+```tsx
+import { MicSelector } from '@/components/mic-selector';
+import { useVoiceRecorder } from '@localmode/react';
+
+export function Capture() {
+  const [deviceId, setDeviceId] = useState('');
+  const recorder = useVoiceRecorder(deviceId ? { deviceId } : undefined);
+
+  return (
+    <div className="flex items-center gap-2">
+      <MicSelector value={deviceId} onValueChange={setDeviceId} />
+      <button onClick={recorder.startRecording}>Start</button>
+    </div>
+  );
+}
+```
+
+`useVoiceRecorder` forwards `deviceId` to `getUserMedia` as `{ deviceId: { exact: deviceId } }` and surfaces a failure on `recorder.error` instead of silently recording from the wrong microphone. While recording, `recorder.stream` exposes the live `MediaStream` and `recorder.getVolume()` returns the RMS input level for meters.
+
+## Customization
+
+Device labels are empty until permission is granted — the component shows an "Allow microphone" button until then, and surfaces a "Permission denied" message on rejection. It releases the mic immediately after reading labels (it only needs permission, not a live stream). The `devicechange` listener keeps the list current when devices are plugged/unplugged.

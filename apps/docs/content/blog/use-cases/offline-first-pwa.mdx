@@ -8,7 +8,7 @@ faq:
   - question: "How much storage do AI models need in a PWA?"
     answer: "BGE-small (33MB) for embeddings, DistilBERT (65MB) for classification, and Moonshine-tiny (50MB) for speech form a complete AI toolkit in ~150MB. LLMs add 70MB-5GB depending on model size. Use getStorageQuota() to check available space."
   - question: "Do cached AI models survive PWA app updates?"
-    answer: "Yes. Models are cached in IndexedDB, which persists across app updates and browser restarts. The only exception is Safari Private Browsing, which clears IndexedDB on close — use MemoryStorage as a fallback."
+    answer: "Yes. Models are cached by the browser, which persists across app updates and browser restarts. The only exception is Safari Private Browsing, which clears IndexedDB on close — use MemoryStorage as a fallback."
   - question: "Can a PWA download AI models during installation?"
     answer: "Yes. Use preloadModel() with an onProgress callback during the PWA install flow. Combine with Service Workers to cache the LocalMode library and app code, so everything works offline after setup."
 ---
@@ -35,7 +35,7 @@ Building this feature with on-device inference provides three structural advanta
 
 1. **Zero marginal cost** - After the initial model download, every inference operation is free. No per-token fees, no monthly API bills, no surprise invoices. This matters especially for features used frequently or by many users.
 2. **Architectural privacy** - User data never leaves the device. This is not a policy promise ("we won't look at your data") but an architectural guarantee: the data physically cannot reach any server because the processing happens in the browser tab.
-3. **Offline capability** - Once models are cached in IndexedDB, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
+3. **Offline capability** - Once models are cached by the browser, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
 
 ## Technology Stack
 
@@ -106,12 +106,12 @@ When deploying this solution to production, consider these factors:
 
 ## Methodology
 
-Code examples were verified against the actual exported functions in `@localmode/core` and `@localmode/transformers` (specifically `packages/core/src/utils/network.ts`, `packages/core/src/capabilities/recommend.ts`, and `packages/transformers/src/utils.ts`). Model sizes were verified against `packages/transformers/src/models.ts` in the monorepo. Storage quota figures were verified against the MDN Storage API reference page. The PWA implementation patterns (Serwist, service worker registration, offline fallback) were cross-checked against the actual LocalMode showcase app at `apps/showcase-nextjs/src/app/sw.ts`, `manifest.ts`, and `_components/sw-registrar.tsx`.
+Code examples were verified against the actual exported functions in `@localmode/core` and `@localmode/transformers` (specifically `packages/core/src/utils/network.ts`, `packages/core/src/capabilities/recommend.ts`, and `packages/transformers/src/utils.ts`). Model sizes were verified against `packages/transformers/src/models.ts` in the monorepo. Storage quota figures were verified against the MDN Storage API reference page. The PWA implementation patterns (Serwist, service worker registration, offline fallback) were cross-checked against the LocalMode UI app at `apps/ui/src/app/sw.ts`, `apps/ui/src/app/manifest.ts`, and `apps/ui/src/components/sw-registrar.tsx`.
 
 ## Sources
 
 - [Storage quotas and eviction criteria - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria) - Chrome quota: up to 60% of total disk size per origin
 - [Window: beforeinstallprompt event - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/API/Window/beforeinstallprompt_event) - install prompt browser compatibility
 - [Progressive Web Apps - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps) - PWA fundamentals
-- [Serwist - GitHub](https://github.com/serwist/serwist) - service worker library used in the LocalMode showcase app
+- [Serwist - GitHub](https://github.com/serwist/serwist) - service worker library used in the LocalMode UI app
 - [LocalMode monorepo - packages/transformers/src/models.ts](https://github.com/LocalMode-AI/LocalMode) - model size reference (BGE-small ~33MB, DistilBERT ~65MB, Moonshine-tiny ~50MB)

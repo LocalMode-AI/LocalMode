@@ -1,0 +1,79 @@
+---
+title: "Context Usage Meter"
+description: "A token / context-window budget meter breaking down input / output / reasoning / cache tokens against the model context limit. No cost field — local models have no billing."
+icon: Gauge
+---
+
+# Context Usage Meter
+
+The **Context Usage Meter** is a token / context-window budget meter for local generation: a bar breaking down input / output / reasoning / cache token usage against the model's context-window limit (a hard local GGUF/LiteRT KV-cache constraint), warning as it approaches the limit. Feed it the `usage` from a generate result — or `useChat`'s per-turn `usage` / cumulative `totalUsage` (`{ inputTokens, outputTokens, totalTokens, durationMs }`). It is **local-only — there is no cost field**, and it complements the Storage Meter (disk) with a token-budget gauge. For a composable hovercard layout, use the lower-level `Context` / `ContextTrigger` / `ContextContent` / `ContextInputUsage` / `ContextOutputUsage` parts.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/context-usage-meter" note="A budget gauge with no cost field — pass the usage from a generate result or useChat's usage/totalUsage." />
+
+<OpenInV0 name="ui/local-first/context-usage-meter" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/context-usage-meter" />
+
+### Data source & dependencies
+
+**Data source:** renders the `usage` shape you pass — works with any backend. Recommended producer: `useChat`'s `usage` (last turn) / `totalUsage` (cumulative), or a `useGenerateText` result's `usage`, from `@localmode/react` (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `context-usage-meter.tsx` — `ContextUsageMeter` + `Context` / `ContextTrigger` / `ContextContent` / `ContextInputUsage` / `ContextOutputUsage`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/context-usage-meter/context-usage-meter.tsx" name="ContextUsageMeterProps" />
+
+<AutoTypeTable path="registry/localmode/local-first/context-usage-meter/context-usage-meter.tsx" name="ContextProps" />
+
+## Examples
+
+### Simple meter
+
+```tsx
+<ContextUsageMeter inputTokens={1200} outputTokens={300} contextWindow={8192} />
+```
+
+### Wired to `useChat` usage
+
+```tsx
+import { useChat } from '@localmode/react';
+import { ContextUsageMeter } from '@/components/context-usage-meter';
+
+export function ChatBudget({ model }) {
+  const { totalUsage } = useChat({ model });
+  return (
+    <ContextUsageMeter
+      inputTokens={totalUsage.inputTokens}
+      outputTokens={totalUsage.outputTokens}
+      contextWindow={8192}
+    />
+  );
+}
+```
+
+`useChat` exposes `usage` (the last completed turn) and `totalUsage` (a running sum across the conversation) — use `totalUsage` for a context-budget gauge and `usage` for a per-turn readout.
+
+### Composable parts
+
+```tsx
+<Context usage={result.usage} contextWindow={8192}>
+  <ContextTrigger />
+  <ContextContent>
+    <ContextInputUsage />
+    <ContextOutputUsage />
+  </ContextContent>
+</Context>
+```
+
+## Customization
+
+The warn state (amber) triggers past `warnThreshold` (default `0.85`). There is deliberately **no cost field** — local inference has no per-token billing. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

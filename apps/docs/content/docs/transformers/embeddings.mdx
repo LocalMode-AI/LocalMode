@@ -14,7 +14,8 @@ Generate dense vector representations of text for semantic search, clustering, a
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [Semantic Search](https://localmode.ai/semantic-search) and [PDF Search](https://localmode.ai/pdf-search) for working demos.
+  Try the [Knowledge Base block](https://localmode.ai/blocks/knowledge/semantic-search) — it embeds your
+  documents into an in-browser VectorDB for semantic search and grounded Q&A.
 </Callout>
 
 ## Model Configuration
@@ -151,13 +152,12 @@ const { embedding: e2 } = await embed({ model, value: 'Hello' });
   5. **Choose model wisely** — Balance quality vs speed for your use case
 </Callout>
 
-## Showcase Apps
+## Composed Blocks
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| Semantic Search | Generate embeddings for document search | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
-| Product Search | Embed product descriptions for catalog search | [Demo](https://localmode.ai/product-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/product-search) |
-| PDF Search | Embed PDF chunks for document retrieval | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |
+| Semantic Search | Text/PDF/OCR ingest with chunking, then reranked vector search with category facets and calibrated thresholds | [Live](https://localmode.ai/blocks/knowledge/semantic-search) · Install: `npx shadcn add @localmode/ui/blocks/knowledge/semantic-search` |
+| Image Search | Text→image and image→image CLIP search over your photo library with a top-K slider and similarity threshold | [Live](https://localmode.ai/blocks/photo/image-search) · Install: `npx shadcn add @localmode/ui/blocks/photo/image-search` |
 
 ## Next Steps
 

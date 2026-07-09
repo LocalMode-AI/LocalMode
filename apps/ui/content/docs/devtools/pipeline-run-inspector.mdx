@@ -1,0 +1,93 @@
+---
+title: "Pipeline Run Inspector"
+description: "Per-run pipeline observability cards: status badge, completed/total progress bar, current step while running, duration when done, and optional per-step timing rows."
+icon: Workflow
+---
+
+# Pipeline Run Inspector
+
+The **Pipeline Run Inspector** renders one card per tracked pipeline run: the run name, a status badge (running pulses on the primary color, completed goes emerald, failed goes destructive), a progress bar derived from `completed`/`total`, the current step while running, and the total duration once done. When a run carries an optional `steps[]` array, an expandable per-step timing section renders each step's name, status, and duration; when absent, the aggregate view alone renders. With no runs, an empty state points at `createDevToolsProgressCallback()` as the instrumentation hint. The `runs` prop mirrors the `@localmode/devtools` `PipelineSnapshot` record (keyed by pipeline name), so `useDevToolsPipelineRuns()` output feeds it directly — no mapping layer.
+
+## Preview
+
+<ComponentPreview name="ui/devtools/pipeline-run-inspector" note="Fixture-driven: one running run with live step timings, one completed run, one failed run. No models, no network." />
+
+<OpenInV0 name="ui/devtools/pipeline-run-inspector" />
+
+## Installation
+
+<InstallTabs name="ui/devtools/pipeline-run-inspector" />
+
+### Data source & dependencies
+
+**Data source:** renders whatever `runs` record you pass — works with any backend. Recommended producer: `useDevToolsPipelineRuns()` from `@localmode/devtools/react` (on-device, optional); its snapshot record spreads straight into the `runs` prop.
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `pipeline-run-inspector.tsx` — the `PipelineRunInspector` component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/devtools/pipeline-run-inspector/pipeline-run-inspector.tsx" name="PipelineRunInspectorProps" />
+
+<AutoTypeTable path="registry/localmode/devtools/pipeline-run-inspector/pipeline-run-inspector.tsx" name="PipelineRunLike" />
+
+<AutoTypeTable path="registry/localmode/devtools/pipeline-run-inspector/pipeline-run-inspector.tsx" name="PipelineStepLike" />
+
+## Examples
+
+### Bound to the devtools bridge
+
+```tsx
+import { enableDevTools } from '@localmode/devtools';
+import { useDevToolsPipelineRuns } from '@localmode/devtools/react';
+import { PipelineRunInspector } from '@/components/pipeline-run-inspector';
+
+enableDevTools(); // once, at app init
+
+function PipelineTab() {
+  const runs = useDevToolsPipelineRuns();
+  return <PipelineRunInspector runs={runs} />;
+}
+```
+
+Runs appear once a pipeline is instrumented with a devtools-aware progress callback:
+
+```tsx
+import { createDevToolsProgressCallback } from '@localmode/devtools';
+
+await pipeline.run(input, {
+  onProgress: createDevToolsProgressCallback('rag-ingest'),
+});
+```
+
+### Per-step timings
+
+The bridge snapshot is aggregate-only today (`currentStep`, `completed`/`total`, `durationMs`), and the card renders exactly that when `steps` is absent. If your wiring tracks individual step durations, attach them and the card grows an expandable "Step timings" section:
+
+```tsx
+<PipelineRunInspector
+  runs={{
+    'semantic-search': {
+      currentStep: 'rerank',
+      completed: 3,
+      total: 3,
+      status: 'completed',
+      startedAt: '2026-07-03T09:11:40.000Z',
+      durationMs: 1834,
+      steps: [
+        { name: 'embed', durationMs: 412, status: 'completed' },
+        { name: 'search', durationMs: 96, status: 'completed' },
+        { name: 'rerank', durationMs: 1326, status: 'completed' },
+      ],
+    },
+  }}
+/>
+```
+
+## Customization
+
+Status styling is table-driven: `STATUS_BADGE_STYLES`, `PROGRESS_BAR_STYLES`, and `STEP_DOT_STYLES` map each status (`running` | `completed` | `idle` | `failed`) to utility classes — swap the emerald success accent or the running pulse there. Durations format via the local `formatDuration()` (ms → s → m s). Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

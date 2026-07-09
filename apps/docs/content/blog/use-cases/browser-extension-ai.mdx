@@ -8,7 +8,7 @@ faq:
   - question: "Which browser extension contexts support LocalMode?"
     answer: "All of them — content scripts, background/service workers, offscreen documents, side panels, popup pages, and options pages. For heavy tasks like LLM inference, use offscreen documents to avoid blocking the extension UI."
   - question: "How do I handle model downloads in a browser extension?"
-    answer: "Use preloadModel() from @localmode/transformers during extension installation or first use. Models cache in the extension's IndexedDB storage, shared across all extension contexts. Subsequent loads are instant from cache."
+    answer: "Use preloadModel() from @localmode/transformers during extension installation or first use. Models cache in the extension's Cache API storage, shared across all extension contexts. Subsequent loads are instant from cache."
   - question: "Do browser extension security policies block LocalMode?"
     answer: "No. LocalMode runs via WASM and standard Web APIs, which are allowed in Manifest V3 extensions. You need wasm-unsafe-eval in your content security policy (supported since Chrome 103)."
   - question: "Can I run LLM inference in a browser extension background script?"
@@ -29,7 +29,7 @@ This is a common challenge for teams building modern applications. Traditional a
 
 ## The Solution
 
-LocalMode runs directly in browser extension contexts - content scripts, background scripts, offscreen documents, and side panels. Models are loaded once and cached in the extension's IndexedDB. Use offscreen documents for heavy inference tasks (LLM generation) to avoid blocking the main extension UI. Content scripts can run lightweight tasks (classification, NER) directly on page content.
+LocalMode runs directly in browser extension contexts - content scripts, background scripts, offscreen documents, and side panels. Models are loaded once and cached in the extension's browser cache. Use offscreen documents for heavy inference tasks (LLM generation) to avoid blocking the main extension UI. Content scripts can run lightweight tasks (classification, NER) directly on page content.
 
 ### Why Local-First?
 
@@ -37,7 +37,7 @@ Building this feature with on-device inference provides three structural advanta
 
 1. **Zero marginal cost** - After the initial model download, every inference operation is free. No per-token fees, no monthly API bills, no surprise invoices. This matters especially for features used frequently or by many users.
 2. **Architectural privacy** - User data never leaves the device. This is not a policy promise ("we won't look at your data") but an architectural guarantee: the data physically cannot reach any server because the processing happens in the browser tab.
-3. **Offline capability** - Once models are cached in IndexedDB, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
+3. **Offline capability** - Once models are cached by the browser, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
 
 ## Technology Stack
 

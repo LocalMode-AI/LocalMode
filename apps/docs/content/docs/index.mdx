@@ -1,6 +1,6 @@
 ---
 title: Introduction
-description: Local-first, privacy-first, offline-first AI for the browser. 15 packages. 34 demo apps. Zero cloud dependencies.
+description: Local-first, privacy-first, offline-first AI for the browser. 15 packages. 11 live blocks. Zero cloud dependencies.
 icon: House
 ---
 
@@ -13,7 +13,7 @@ import { Steps } from 'fumadocs-ui/components/steps';
 
 **LocalMode** is a modular, local-first AI engine for the browser. Run embeddings, vector search, RAG pipelines, LLM chat, agents, structured output, text classification, NER, translation, summarization, speech-to-text, text-to-speech, image captioning, object detection, image segmentation, OCR, document Q&A, multimodal search, hand/pose/face tracking, gesture recognition, language detection, and evaluation — all directly in the browser with zero server dependencies.
 
-**15 packages. 34 demo apps. Zero cloud dependencies.**
+**15 packages. 11 live blocks. Zero cloud dependencies.**
 
 <Callout type="info" title="Privacy by Default">
   All processing happens locally. No data ever leaves the user's device. Zero telemetry. Zero
@@ -42,7 +42,12 @@ import { Steps } from 'fumadocs-ui/components/steps';
   <Card
     title="@localmode/react"
     href="/docs/react"
-    description="56 React hooks for all core functions — useChat, useEmbed, useClassify, useTranscribe, and more with built-in loading, error handling, and cancellation."
+    description="61 React hooks for all core functions — useChat, useEmbed, useClassify, useTranscribe, and more with built-in loading, error handling, and cancellation."
+  />
+  <Card
+    title="@localmode/ui"
+    href="/docs/ui"
+    description="A shadcn registry of 100+ copy-owned, local-first AI UI components across 10 families — chat, model-download, capability gates, results, audio, vision, and artifact canvases. Lives at localmode.ai."
   />
 </Cards>
 
@@ -77,7 +82,7 @@ import { Steps } from 'fumadocs-ui/components/steps';
   <Card
     title="@localmode/chrome-ai"
     href="/docs/chrome-ai"
-    description="Chrome Built-in AI provider — zero-download inference via Gemini Nano with automatic fallback."
+    description="Chrome Built-in AI provider — zero-download text generation (Prompt API / Gemini Nano), summarization, and translation, with Transformers.js as the cross-browser fallback."
   />
 </Cards>
 
@@ -177,7 +182,7 @@ const results = await db.search(query, { k: 5 });
 
 ### LLM chat with streaming
 
-Four providers implement the same `LanguageModel` interface — choose based on your needs:
+Five providers implement the same `LanguageModel` interface — choose based on your needs:
 
 ```typescript
 import { streamText } from '@localmode/core';
@@ -187,6 +192,7 @@ import { webllm } from '@localmode/webllm';
 const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
 // const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
 // const model = transformers.languageModel('onnx-community/Qwen3-0.6B-ONNX');
+// const model = chromeAI.languageModel(); // zero-download Gemini Nano (Chrome 138+)
 
 const result = await streamText({
   model,
@@ -226,11 +232,11 @@ import { useChat, useEmbed, useClassify } from '@localmode/react';
 import { webllm } from '@localmode/webllm';
 
 function ChatApp() {
-  const { messages, sendMessage, isStreaming } = useChat({
+  const { messages, send, isStreaming } = useChat({
     model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
   });
 
-  return <ChatUI messages={messages} onSend={sendMessage} loading={isStreaming} />;
+  return <ChatUI messages={messages} onSend={send} loading={isStreaming} />;
 }
 ```
 
@@ -243,7 +249,7 @@ function ChatApp() {
 | Feature | Functions | Description |
 | ------- | --------- | ----------- |
 | **Embeddings** | `embed()`, `embedMany()`, `streamEmbedMany()` | Text embeddings with streaming and batching |
-| **Multimodal Embeddings** | `embedImage()`, `embedManyImages()` | CLIP-based text-image cross-modal search |
+| **Multimodal Embeddings** | `embedImage()`, `embedManyImages()`, `streamEmbedManyImages()` | CLIP-based text-image cross-modal search |
 | **Streaming LLM** | `streamText()`, `generateText()` | Streaming and complete text generation |
 | **Structured Output** | `generateObject()`, `streamObject()` | Typed JSON generation with Zod schema validation |
 | **Classification** | `classify()`, `classifyZeroShot()`, `classifyMany()` | Sentiment, intent, topic classification |
@@ -310,6 +316,8 @@ function ChatApp() {
 | **Browser Support** | Chrome/Edge 113+, Safari 26+, Firefox 141+ | All modern browsers | All modern browsers (WebGPU optional) | Chrome/Edge 113+, Safari 26+, Firefox 141+ (WebGPU); Qwen3 0.6B also runs on CPU WASM |
 | **Best For** | Maximum performance | Universal compatibility, model variety, reranking | Multi-task (embeddings + LLM in one package) | First-party Google runtime for Gemma |
 
+A fifth option, [`@localmode/chrome-ai`](/docs/chrome-ai), provides **zero-download text generation** via Chrome's built-in Gemini Nano (Prompt API, Chrome 138+) — no model files to fetch, with `@localmode/transformers` as the recommended fallback for other browsers. For **image input in chat** (vision), use wllama (`mmprojUrl` models like Gemma 4), WebLLM (Phi 3.5 Vision), or Transformers.js (Qwen3.5 / Gemma 4 VLMs) — see the Vision row above.
+
 ## Architecture
 
 LocalMode follows a **"zero-dependency core, thin provider wrappers"** architecture:
@@ -318,7 +326,7 @@ LocalMode follows a **"zero-dependency core, thin provider wrappers"** architect
 ┌───────────────────────────────────────────────────────────────────────┐
 │                          Your Application                             │
 ├───────────────────────────────────────────────────────────────────────┤
-│                    @localmode/react  (56 hooks)                       │
+│                    @localmode/react  (61 hooks)                       │
 ├───────────────────────┬───────────────────────┬───────────────────────┤
 │   @localmode/ai-sdk   │  @localmode/langchain │  @localmode/devtools  │
 ├───────────────────────┴───────────────────────┴───────────────────────┤
@@ -347,19 +355,23 @@ LocalMode follows a **"zero-dependency core, thin provider wrappers"** architect
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-## Demo Applications
+## Blocks
 
-See LocalMode in action at [localmode.ai](https://localmode.ai) — 34 apps showcasing every feature.
+See LocalMode in action at [localmode.ai/blocks](https://localmode.ai/blocks) — 11 installable blocks that wire the UI primitives to real on-device models. Each runs entirely in the browser and installs with `npx shadcn add @localmode/ui/blocks/<name>`.
 
-| Category | Apps |
-| -------- | ---- |
-| **Chat & Agents** | [LLM Chat](https://localmode.ai/llm-chat), [Research Agent](https://localmode.ai/research-agent), [GGUF Explorer](https://localmode.ai/gguf-explorer) |
-| **Audio** | [Voice Notes](https://localmode.ai/voice-notes), [Meeting Assistant](https://localmode.ai/meeting-assistant), [Audiobook Creator](https://localmode.ai/audiobook-creator) |
-| **Text & NLP** | [Smart Writer](https://localmode.ai/smart-writer), [Data Extractor](https://localmode.ai/data-extractor), [Sentiment Analyzer](https://localmode.ai/sentiment-analyzer), [Email Classifier](https://localmode.ai/email-classifier), [Translator](https://localmode.ai/translator), [Text Summarizer](https://localmode.ai/text-summarizer), [Q&A Bot](https://localmode.ai/qa-bot), [Smart Autocomplete](https://localmode.ai/smart-autocomplete), [Invoice Q&A](https://localmode.ai/invoice-qa) |
-| **Vision** | [Background Remover](https://localmode.ai/background-remover), [Smart Gallery](https://localmode.ai/smart-gallery), [Product Search](https://localmode.ai/product-search), [Cross-Modal Search](https://localmode.ai/cross-modal-search), [Image Captioner](https://localmode.ai/image-captioner), [OCR Scanner](https://localmode.ai/ocr-scanner), [Object Detector](https://localmode.ai/object-detector), [Duplicate Finder](https://localmode.ai/duplicate-finder), [Photo Enhancer](https://localmode.ai/photo-enhancer) |
-| **RAG & Search** | [PDF Search](https://localmode.ai/pdf-search), [Semantic Search](https://localmode.ai/semantic-search), [LangChain RAG](https://localmode.ai/langchain-rag), [Data Migrator](https://localmode.ai/data-migrator) |
-| **Privacy** | [Document Redactor](https://localmode.ai/document-redactor), [Encrypted Vault](https://localmode.ai/encrypted-vault) |
-| **Developer Tools** | [Model Advisor](https://localmode.ai/model-advisor), [Model Evaluator](https://localmode.ai/model-evaluator) |
+| Block | What it does |
+| ----- | ------------ |
+| [Chat](https://localmode.ai/blocks/chat) | Multi-provider LLM chat (transformers, WebLLM, wllama, LiteRT) with vision, reasoning, semantic cache, and agent mode |
+| [Knowledge Base](https://localmode.ai/blocks/knowledge) | RAG over your own documents — embeddings, in-browser VectorDB, reranking, PDF/OCR ingest, and grounded Q&A |
+| [Audio Studio](https://localmode.ai/blocks/audio) | Whisper transcription, meeting notes, Kokoro TTS, and audiobook generation |
+| [Vision](https://localmode.ai/blocks/vision) | Object detection plus MediaPipe hand, pose, face, and gesture tracking |
+| [Image Studio](https://localmode.ai/blocks/image-studio) | Background removal, photo enhancement, and image captioning |
+| [Photo Search](https://localmode.ai/blocks/photo) | CLIP-powered smart gallery, duplicate finder, and cross-modal / product search |
+| [Text Insights](https://localmode.ai/blocks/text-insights) | Sentiment analysis, zero-shot classification, and model evaluation |
+| [Writing Tools](https://localmode.ai/blocks/writing-tools) | Writing assistance, translation, summarization, and fill-mask completion |
+| [Agent & Structured Data](https://localmode.ai/blocks/agents) | ReAct research agent and schema-typed structured extraction |
+| [Privacy](https://localmode.ai/blocks/privacy) | PII redaction and passphrase-encrypted local storage |
+| [Device & Model Lab](https://localmode.ai/blocks/device) | Device capability detection, ranked model recommendations, and a 160K+ GGUF explorer |
 
 ## Browser Compatibility
 
@@ -394,7 +406,7 @@ See LocalMode in action at [localmode.ai](https://localmode.ai) — 34 apps show
   <Card
     title="React Hooks"
     href="/docs/react"
-    description="56 hooks for chat, embeddings, classification, vision, audio, and more."
+    description="61 hooks for chat, embeddings, classification, vision, audio, and more."
   />
   <Card
     title="Transformers Provider"

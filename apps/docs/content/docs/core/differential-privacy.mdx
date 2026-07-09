@@ -12,7 +12,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 Differential privacy (DP) adds calibrated mathematical noise to outputs so that no single input can be identified from the result. LocalMode provides DP for both embeddings and classification, using cryptographically secure noise and privacy budget tracking.
 
 <Callout type="info" title="See it in action">
-  Try [Document Redactor](https://localmode.ai/document-redactor) for a working demo of these APIs.
+  Try the [PII Redactor block](https://localmode.ai/blocks/privacy/pii-redactor) for a working demo of these APIs — its differential-privacy demonstration wires `dpEmbeddingMiddleware` and `createPrivacyBudget` live in the browser.
 </Callout>
 
 ## Threat Model
@@ -607,8 +607,8 @@ The failed `consume()` call is rolled back -- `consumedEpsilon` reflects the sta
   />
 </Cards>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Document Redactor | Apply differential privacy noise to NER + embeddings | [Demo](https://localmode.ai/document-redactor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/document-redactor) |
+| Privacy (PII Redactor) | Apply differential privacy noise to NER + embeddings | [Live block](https://localmode.ai/blocks/privacy/pii-redactor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/privacy/pii-redactor) |

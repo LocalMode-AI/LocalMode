@@ -1,6 +1,6 @@
 {
   "name": "@localmode/idb",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Minimal IndexedDB storage adapter using the idb library",
   "license": "MIT",
   "author": "LocalMode",

@@ -11,7 +11,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 Migrate existing LangChain.js applications from cloud providers to 100% local inference. Only provider instantiation changes — all chain, retriever, and agent code stays the same.
 
 <Callout type="info" title="See it in action">
-  Try [LangChain RAG](https://localmode.ai/langchain-rag) for a working demo of a fully migrated RAG pipeline.
+  Try the [Knowledge Base block](https://localmode.ai/blocks/knowledge) for a fully migrated RAG pipeline — its engine toggle runs the same ingest, search, and grounded answers through the LocalMode adapters and the core pipeline behind identical UI.
 </Callout>
 
 ## Component Mapping
@@ -157,8 +157,8 @@ const results = await compressedRetriever.invoke('search query');
 **Hybrid approach:** Use `LocalModeEmbeddings` + `LocalModeVectorStore` + `LocalModeReranker` for the retrieval pipeline (runs locally at $0 cost), and keep `ChatOpenAI` for the generation step when you need frontier model quality. This gives you 90% cost savings while maintaining answer quality.
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| LangChain RAG | End-to-end RAG app demonstrating migration from cloud to local providers | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |
+| RAG Chat | Streaming grounded RAG over your own text/PDF corpus with inline citations, on a core ⇄ LangChain engine toggle | [Live](https://localmode.ai/blocks/knowledge/rag-chat) · Install: `npx shadcn add @localmode/ui/blocks/knowledge/rag-chat` |

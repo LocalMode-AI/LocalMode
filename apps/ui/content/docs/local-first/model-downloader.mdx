@@ -1,0 +1,81 @@
+---
+title: "Model Downloader"
+description: "The headline local-first card a user sees while a model loads on-device — name, size, context, live progress, and cached-vs-downloading copy."
+icon: CloudDownload
+---
+
+# Model Downloader
+
+The **Model Downloader** is the single most defining LocalMode surface: the card a user sees while their model loads on **their** device. It renders the model name, size, context length, and category alongside a live progress bar, and clearly distinguishes a first-time download ("Downloading…") from a cache load ("Loading from cache…") and a ready state. A lower-level **Download Progress** renders just the bar + percentage.
+
+It is presentational and hook-driven — bind `progress` to `useModelLoad`'s `progressValue` (its `percent` is a 0–1 fraction matching this component's `DownloadProgressValue` contract, with `loaded` / `total` bytes and a `cached` flag when known) and pass metadata from `useModelRecommendations` or your catalog. It does **not** initiate or own the download — `useModelLoad().load()` does.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/model-downloader" note="Simulated download animation — no real model is fetched in the preview." />
+
+<OpenInV0 name="ui/local-first/model-downloader" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/model-downloader" />
+
+### Data source & dependencies
+
+**Data source:** renders the `progress` + metadata you pass — works with any backend. Recommended producer: `useModelLoad` (provider-model loads; `useModelStatus` for a read-only view, `useModelLoader` for raw `createModelLoader` file downloads) from `@localmode/react` (on-device, optional).
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+
+### Files installed
+
+- `model-downloader.tsx` — `ModelDownloader` + `DownloadProgress`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/model-downloader/model-downloader.tsx" name="ModelDownloaderProps" />
+
+<AutoTypeTable path="registry/localmode/local-first/model-downloader/model-downloader.tsx" name="DownloadProgressProps" />
+
+## Examples
+
+### Bound to `useModelLoad`
+
+```tsx
+import { useModelLoad } from '@localmode/react';
+import { wllama, isModelCached } from '@localmode/wllama';
+import { ModelDownloader } from '@/components/model-downloader';
+
+export function Loading() {
+  const { status, progressValue } = useModelLoad({
+    key: 'Llama-3.2-1B-Instruct-Q4_K_M',
+    create: (onProgress) =>
+      wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M', { onProgress }),
+    isCached: () => isModelCached('Llama-3.2-1B-Instruct-Q4_K_M'),
+    autoLoad: true,
+  });
+
+  return (
+    <ModelDownloader
+      name="Llama 3.2 1B Instruct"
+      size="1.2 GB"
+      contextLength={8192}
+      category="Chat"
+      progress={progressValue}
+      ready={status === 'ready'}
+    />
+  );
+}
+```
+
+`useModelLoad` normalizes every provider's `onProgress` shape (transformers per-file, webllm percent, wllama/litert bytes) into one `progressValue` — `{ loaded?, total?, percent, cached? }` with `percent` as a 0–1 fraction — which drops straight into this component's `progress` prop. Its `cached` flag (from the `isCached` probe) switches the copy to "Loading from cache…" automatically.
+
+### Standalone progress bar
+
+```tsx
+<DownloadProgress value={0.42} />
+```
+
+## Customization
+
+Styled entirely with shadcn/ui CSS variables (`bg-card`, `text-card-foreground`, `bg-primary`), so it inherits your theme. The cached state uses Tailwind's `emerald` palette — swap those classes in the copied file to match your design system. The progress shape accepts either a `0–1` fraction or a `{ loaded, total, percent, cached }` object, so it adapts to any provider's `onProgress` — `useModelLoad`'s `progressValue` matches this object shape exactly.

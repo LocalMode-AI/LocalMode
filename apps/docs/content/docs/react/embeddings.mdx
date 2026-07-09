@@ -9,7 +9,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 # Embedding Hooks
 
 <Callout type="info" title="See it in action">
-  Try [Semantic Search](https://localmode.ai/semantic-search) and [Product Search](https://localmode.ai/product-search) for working demos of these hooks.
+  Try the [Knowledge Base block](https://localmode.ai/blocks/knowledge/semantic-search) and [Photo Search block](https://localmode.ai/blocks/photo/image-search) for working demos of these hooks.
 </Callout>
 
 ## useEmbed
@@ -51,7 +51,7 @@ await execute(['Hello', 'World', 'Foo', 'Bar']);
 
 ## useSemanticSearch
 
-Combines embedding and vector DB search in one hook.
+Combines embedding and vector DB search in one hook. A hook-level metadata `filter` and similarity `threshold` apply to every search, and each can be overridden per call.
 
 ```tsx
 import { useSemanticSearch } from '@localmode/react';
@@ -62,10 +62,12 @@ const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
 const db = await createVectorDB({ name: 'notes', dimensions: 384 });
 
 function SearchDemo() {
-  const { results, isSearching, search } = useSemanticSearch({
+  const { results, isSearching, usage, search, reset } = useSemanticSearch({
     model,
     db,
     topK: 10,
+    filter: { category: 'docs' },
+    threshold: 0.4,
   });
 
   return (
@@ -74,10 +76,42 @@ function SearchDemo() {
       {results.map((r) => (
         <div key={r.id}>{r.content} (score: {r.score.toFixed(2)})</div>
       ))}
+      {usage && <small>{usage.embeddingTokens} tokens · {usage.searchDurationMs}ms search</small>}
     </div>
   );
 }
 ```
+
+### Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `model` | `EmbeddingModel` | The embedding model to use (required) |
+| `db` | `SemanticSearchDB` | The vector database to search (required) |
+| `topK` | `number` | Number of results to return (default: 10) |
+| `filter` | `Record<string, unknown>` | Metadata filter applied to every search |
+| `threshold` | `number` | Minimum similarity threshold for results |
+
+### Per-Call Overrides
+
+`search(query, options?)` accepts `SemanticSearchCallOptions` — per-call `filter`, `threshold`, and `topK` that override the hook-level values for that call only:
+
+```tsx
+await search('find documents about privacy');                         // hook-level filter
+await search('blog posts only', { filter: { category: 'blog' } });    // per-call override
+await search('strict match', { threshold: 0.7, topK: 3 });
+```
+
+### Return Value
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `results` | `Array<{ id, content, metadata, score }>` | Search results from the last query |
+| `isSearching` | `boolean` | Whether a search is currently running |
+| `error` | `Error \| null` | Error from the last failed search |
+| `usage` | `SemanticSearchUsage \| null` | `{ embeddingTokens, embedDurationMs, searchDurationMs }` from the last completed search (null until one completes) |
+| `search` | `(query, options?) => Promise<void>` | Execute a search, optionally overriding filter/threshold/topK |
+| `reset` | `() => void` | Reset results, usage, and error state |
 
 <Callout type="tip">
 For full API reference on `embed()` and `semanticSearch()`, see the [Core Embeddings](/docs/core/embeddings) guide. For recommended models, see the [Transformers Embeddings](/docs/transformers/embeddings) guide.
@@ -100,39 +134,43 @@ await execute(imageDataUrl);
 
 ## useEmbedManyImages
 
-Batch image embedding for indexing image collections.
+Batch image embedding for indexing image collections, with progress tracking (streams via `streamEmbedManyImages()`, mirroring `useEmbedMany`).
 
 ```tsx
 import { useEmbedManyImages } from '@localmode/react';
 
-const { data, execute } = useEmbedManyImages({ model });
+const { data, progress, execute } = useEmbedManyImages({ model, batchSize: 8 });
 await execute([imageUrl1, imageUrl2, imageUrl3]);
+// progress = { completed: 3, total: 3 }
 // data.embeddings = [Float32Array, Float32Array, Float32Array]
 ```
 
 ## useReindex
 
-Re-embed all documents in a VectorDB when switching embedding models. Supports progress tracking, cancellation, and resume.
+Re-embed all documents in a VectorDB with a new embedding model. Wraps `reindexCollection()` with progress tracking, cancellation, and a `result` summary.
 
 ```tsx
 import { useReindex } from '@localmode/react';
 
-const { progress, isReindexing, execute, cancel } = useReindex({
+const { isReindexing, progress, result, error, reindex, cancel } = useReindex({
   db: vectorDB,
-  oldModel: transformers.embedding('Xenova/all-MiniLM-L6-v2'),
-  newModel: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  model: transformers.embedding('Xenova/bge-small-en-v1.5'), // the new model
+  batchSize: 50,
 });
 
-// progress = { completed: 500, total: 1000, percentage: 50 }
+// While running: progress = { completed, total, phase }
+// After completion: result holds the ReindexResult of the last successful run
+// (null until one completes; cleared when a new run starts)
+await reindex();
 ```
 
 <Callout type="info">
 For multimodal embedding details, see [Multimodal Embeddings](/docs/core/multimodal-embeddings). For drift detection, see [Embedding Drift Detection](/docs/core/embedding-drift).
 </Callout>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Semantic Search | Full-text semantic search with useSemanticSearch | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
-| Product Search | Product catalog search with useSemanticSearch | [Demo](https://localmode.ai/product-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/product-search) |
+| Knowledge Base (Semantic Search) | Full-text semantic search with useSemanticSearch | [Live block](https://localmode.ai/blocks/knowledge/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/semantic-search) |
+| Photo Search (Product Search) | Product catalog search with useSemanticSearch | [Live block](https://localmode.ai/blocks/photo/image-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/photo/image-search) |

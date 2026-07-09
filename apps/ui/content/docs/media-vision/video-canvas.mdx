@@ -1,0 +1,92 @@
+---
+title: "Video Canvas"
+description: "A mirrored 16:9 webcam surface — a video element with a pixel-aligned transparent canvas overlay for landmark / skeleton drawing, an FPS badge, and a child slot. Powers real-time MediaPipe trackers."
+icon: Video
+---
+
+# Video Canvas
+
+The **Video Canvas** is a mirrored 16:9 webcam surface: a `<video>` element with a **pixel-aligned transparent `<canvas>` overlay** for drawing landmark/skeleton annotations, an absolutely-positioned FPS-counter badge, and a child slot for status/badges. The canvas is kept sized to the video's intrinsic resolution, so the coordinates a tracker returns map 1:1 onto it; both layers share the same mirror transform, so the overlay stays aligned.
+
+It is a **shell, not an acquisition engine** — the consuming app supplies the `stream` (`getUserMedia`) and wires a MediaPipe streaming tracker (`createHandTracker` / `createPoseTracker` / `createFaceTracker` / `createGestureTracker` from `@localmode/mediapipe`) via the experimental [`useStreamingTracker`](https://localmode.dev/docs/react) hook. The trackers own their own video frame loop — the app just draws each `results` batch onto the exposed canvas. This keeps the primitive presentational and free of device-permission logic.
+
+**When to use it:** real-time hand/pose/face tracking, gesture recognition, any live-webcam annotation UI (MediaPipe Studio-style apps).
+
+## Preview
+
+<ComponentPreview name="ui/media-vision/video-canvas" note="Preview draws a simulated landmark (no camera). Pass a real stream + MediaPipe tracker in your app." />
+
+<OpenInV0 name="ui/media-vision/video-canvas" />
+
+## Installation
+
+<InstallTabs name="ui/media-vision/video-canvas" />
+
+### Dependencies
+
+- **Data source:** a presentational shell — you supply the `stream` (`getUserMedia`) and draw each tracker batch onto the exposed `<canvas>`; works with any frame source. Recommended LocalMode producer: the experimental `useStreamingTracker` from `@localmode/react` wired to a `@localmode/mediapipe` `create*Tracker` factory (optional).
+
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `video-canvas.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/media-vision/video-canvas/video-canvas.tsx" name="VideoCanvasProps" />
+
+## Backing hooks
+
+Wire the experimental [`useStreamingTracker`](https://localmode.dev/docs/react) hook from `@localmode/react` to a `@localmode/mediapipe` streaming tracker factory (`createHandTracker`, `createPoseTracker`, `createFaceTracker`, `createGestureTracker`) running against the exposed `<video>` (`ref.current.video`). The tracker owns its own frame loop; the hook surfaces `{ status, results, fps, start, stop }` — draw each `results` batch onto the exposed `<canvas>` (`ref.current.canvas`) and feed `fps` to the badge. (The single-shot `useDetectHands` / `useDetectPose` / `useDetectFace` / `useRecognizeGesture` hooks are for still images, not the live loop.)
+
+## Examples
+
+### Wire a webcam stream and tracker
+
+```tsx
+import { VideoCanvas, type VideoCanvasHandle } from '@/components/video-canvas';
+import { useStreamingTracker } from '@localmode/react';
+import { createHandTracker } from '@localmode/mediapipe';
+
+export function Example() {
+  const ref = useRef<VideoCanvasHandle>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+
+  const { results, fps, start } = useStreamingTracker({
+    video: () => ref.current?.video ?? null,
+    create: ({ video, onResults, onError }) =>
+      createHandTracker({ video, onResults, onError }),
+    onResults: (hands) => {
+      const ctx = ref.current?.canvas?.getContext('2d');
+      if (ctx) drawHandLandmarks(ctx, hands); // your draw helper
+    },
+  });
+
+  useEffect(() => {
+    navigator.mediaDevices.getUserMedia({ video: true }).then((s) => {
+      setStream(s);
+      start(); // tracker owns the frame loop from here
+    });
+  }, []);
+
+  return (
+    <VideoCanvas ref={ref} stream={stream} fps={fps}>
+      <span className="rounded-full bg-emerald-500/90 px-2.5 py-1 text-xs text-white">
+        ✋ Open palm
+      </span>
+    </VideoCanvas>
+  );
+}
+```
+
+`useStreamingTracker` is experimental: it creates the tracker lazily on the first `start()`, reuses it across start/stop cycles (the model stays warm), measures `fps` over a one-second window, and disposes the tracker on unmount.
+
+## Customization
+
+The component owns only the video/canvas composition, the mirror transform, and the FPS badge. Set `mirrored={false}` for non-selfie views, hide the badge with `hideFps`, and restyle the 16:9 shell in the copied `video-canvas.tsx`. You retain full control over acquisition and the draw loop.
+
+> **Real-hardware dependency:** the live preview here uses a simulated marker. A real webcam stream requires `getUserMedia` and a user permission grant in the browser — wire that in your app.
+
+<OpenInV0 name="ui/media-vision/video-canvas" />

@@ -18,7 +18,7 @@ import type {
 import type { DexieStorageOptions } from './types.js';
 
 /**
- * Internal Dexie record types (vector stored as ArrayBuffer for Dexie compatibility).
+ * Internal Dexie record types.
  */
 interface DocumentRecord {
   id: string;
@@ -31,7 +31,13 @@ interface DocumentRecord {
 interface VectorRecord {
   id: string;
   collectionId: string;
-  vector: ArrayBuffer;
+  /**
+   * The stored vector. Current versions store the typed array itself
+   * (IndexedDB's structured clone preserves the type): `Float32Array` for
+   * float vectors, `Uint8Array` for SQ8/PQ-compressed payloads. Records
+   * written by older versions hold a raw `ArrayBuffer` of f32 data.
+   */
+  vector: Float32Array | Uint8Array | ArrayBuffer;
 }
 
 interface IndexRecord {
@@ -40,11 +46,29 @@ interface IndexRecord {
   updatedAt: number;
 }
 
-interface CollectionRecord {
-  id: string;
-  name: string;
-  dimensions: number;
-  createdAt: number;
+/**
+ * Revive a stored vector preserving its payload type. Records written by
+ * current versions hold the typed array itself (`Float32Array`, or
+ * `Uint8Array` for SQ8/PQ-compressed payloads); records written by older
+ * versions hold a raw `ArrayBuffer` of f32 data.
+ *
+ * Type detection uses the toString tag instead of `instanceof` because
+ * structured clone can hand back typed arrays from another realm (e.g.
+ * fake-indexeddb in tests), where `instanceof` fails. Views are re-wrapped
+ * into same-realm typed arrays so downstream `instanceof` checks (core's
+ * `decompressFromStorage`) see the expected types.
+ */
+function reviveVector(stored: Float32Array | Uint8Array | ArrayBuffer): Float32Array | Uint8Array {
+  const tag = Object.prototype.toString.call(stored);
+  if (tag === '[object Uint8Array]') {
+    const view = stored as Uint8Array;
+    return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+  }
+  if (tag === '[object Float32Array]') {
+    const view = stored as Float32Array;
+    return new Float32Array(view.buffer, view.byteOffset, view.length);
+  }
+  return new Float32Array(stored as ArrayBuffer);
 }
 
 /**
@@ -54,7 +78,15 @@ class DexieDB extends Dexie {
   documents!: Table<DocumentRecord, string>;
   vectors!: Table<VectorRecord, string>;
   indexes!: Table<IndexRecord, string>;
-  collections!: Table<CollectionRecord, string>;
+  /**
+   * Collection records are stored as the FULL {@link Collection} object —
+   * including every optional extended field (`modelFingerprint`,
+   * `calibration`, `pqCodebook`, `compression`, `compressionCalibration`,
+   * `deltaCalibration`, and any future optional field). The schema below only
+   * declares the indexed keys (`id`, unique `name`); Dexie persists all
+   * remaining fields via structured clone.
+   */
+  collections!: Table<Collection, string>;
 
   constructor(name: string) {
     super(name);
@@ -166,37 +198,40 @@ export class DexieStorage implements StorageAdapter {
   // ============================================
 
   async addVector(vec: StoredVector): Promise<void> {
-    // Copy to standalone ArrayBuffer to avoid shared buffer issues
-    const buffer = new ArrayBuffer(vec.vector.byteLength);
-    new Float32Array(buffer).set(vec.vector);
+    // Copy to a standalone typed array (avoids persisting a view over a
+    // larger shared buffer) while preserving the payload type — Uint8Array
+    // for SQ8/PQ-compressed vectors, Float32Array otherwise.
+    const copy = vec.vector instanceof Uint8Array
+      ? new Uint8Array(vec.vector)
+      : new Float32Array(vec.vector);
 
     await this.db.vectors.put({
       id: vec.id,
       collectionId: vec.collectionId,
-      vector: buffer,
+      vector: copy,
     });
   }
 
-  async getVector(id: string): Promise<Float32Array | null> {
+  async getVector(id: string): Promise<Float32Array | Uint8Array | null> {
     const record = await this.db.vectors.get(id);
     if (!record) return null;
 
-    return new Float32Array(record.vector);
+    return reviveVector(record.vector);
   }
 
   async deleteVector(id: string): Promise<void> {
     await this.db.vectors.delete(id);
   }
 
-  async getAllVectors(collectionId: string): Promise<Map<string, Float32Array>> {
+  async getAllVectors(collectionId: string): Promise<Map<string, Float32Array | Uint8Array>> {
     const records = await this.db.vectors
       .where('collectionId')
       .equals(collectionId)
       .toArray();
 
-    const map = new Map<string, Float32Array>();
+    const map = new Map<string, Float32Array | Uint8Array>();
     for (const r of records) {
-      map.set(r.id, new Float32Array(r.vector));
+      map.set(r.id, reviveVector(r.vector));
     }
     return map;
   }
@@ -232,56 +267,34 @@ export class DexieStorage implements StorageAdapter {
   // Collection Operations
   // ============================================
 
+  // Collection records round-trip the FULL Collection object: writes spread
+  // `{ ...collection }` (never a cherry-picked subset) and reads return the
+  // stored record as-is, so the optional extended fields core persists on the
+  // collection (quantization/compression calibration, PQ codebooks, model
+  // fingerprint — and any future optional field) survive across sessions.
+  // Dropping them silently corrupts quantized/compressed vectors on reopen
+  // and disables drift detection.
+
   async createCollection(collection: Collection): Promise<void> {
-    await this.db.collections.put({
-      id: collection.id,
-      name: collection.name,
-      dimensions: collection.dimensions,
-      createdAt: collection.createdAt,
-    });
+    await this.db.collections.put({ ...collection });
   }
 
   async getCollection(id: string): Promise<Collection | null> {
     const record = await this.db.collections.get(id);
-    if (!record) return null;
-
-    return {
-      id: record.id,
-      name: record.name,
-      dimensions: record.dimensions,
-      createdAt: record.createdAt,
-    };
+    return record ?? null;
   }
 
   async getCollectionByName(name: string): Promise<Collection | null> {
     const record = await this.db.collections.where('name').equals(name).first();
-    if (!record) return null;
-
-    return {
-      id: record.id,
-      name: record.name,
-      dimensions: record.dimensions,
-      createdAt: record.createdAt,
-    };
+    return record ?? null;
   }
 
   async getAllCollections(): Promise<Collection[]> {
-    const records = await this.db.collections.toArray();
-    return records.map((r) => ({
-      id: r.id,
-      name: r.name,
-      dimensions: r.dimensions,
-      createdAt: r.createdAt,
-    }));
+    return this.db.collections.toArray();
   }
 
   async updateCollection(collection: Collection): Promise<void> {
-    await this.db.collections.put({
-      id: collection.id,
-      name: collection.name,
-      dimensions: collection.dimensions,
-      createdAt: collection.createdAt,
-    });
+    await this.db.collections.put({ ...collection });
   }
 
   async deleteCollection(id: string): Promise<void> {

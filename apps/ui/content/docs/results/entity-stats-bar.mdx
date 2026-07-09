@@ -1,0 +1,87 @@
+---
+title: "Entity Stats Bar"
+description: "A horizontal stats bar with total entity count plus per-type breakdown badges (PER / LOC / ORG / MISC) computed from detected entities."
+icon: ChartColumnBig
+---
+
+# Entity Stats Bar
+
+The **Entity Stats Bar** shows the total detected-entity count plus a per-type breakdown badge (colored dot + count + label) for each entity type. Counts are computed internally from a `DetectedEntity[]` (or pass a pre-computed `counts` map) against a color/label registry.
+
+**When to use it:** summarizing the output of `useExtractEntities` (NER) — entity review, PII triage, or content moderation dashboards.
+
+## Preview
+
+<ComponentPreview name="ui/results/entity-stats-bar" note="Total + per-type breakdown from a sample NER result — runs locally." />
+
+<OpenInV0 name="ui/results/entity-stats-bar" />
+
+## Installation
+
+<InstallTabs name="ui/results/entity-stats-bar" />
+
+### Dependencies
+
+- **Data source:** renders the `entities` array (or a pre-computed `counts` map) you pass — works with any backend. Recommended producer: `useExtractEntities` (NER) from `@localmode/react` (optional). See [Bring your own data](/docs/bring-your-own-data#results--insights).
+
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+
+### Files installed
+
+- `entity-stats-bar.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/results/entity-stats-bar/entity-stats-bar.tsx" name="EntityStatsBarProps" />
+
+## Examples
+
+### From extracted entities
+
+```tsx
+import { EntityStatsBar } from '@/components/entity-stats-bar';
+import { useExtractEntities } from '@localmode/react';
+
+export function Example({ model, text }) {
+  const { data, execute } = useExtractEntities({ model });
+  // Call execute(text) to run NER; `data` holds the result.
+  return (
+    <>
+      <button onClick={() => execute(text)}>Extract</button>
+      <EntityStatsBar entities={data?.entities ?? []} />
+    </>
+  );
+}
+```
+
+### Custom type registry
+
+```tsx
+<EntityStatsBar
+  entities={entities}
+  registry={{
+    EMAIL: { label: 'Email', color: 'var(--color-rose-500)' },
+    PHONE: { label: 'Phone', color: 'var(--color-sky-500)' },
+  }}
+/>
+```
+
+### Non-NER labels (`itemNoun`)
+
+The total defaults to the NER-flavored noun ("6 entities" / "1 entity"). Non-NER consumers — sentiment tallies, classification routes, dedupe groups — relabel it with `itemNoun`; the plural is derived automatically ("result" → "results"). Pass `itemNounPlural` only for irregular plurals.
+
+```tsx
+<EntityStatsBar
+  counts={{ POSITIVE: 3, NEGATIVE: 3 }}
+  registry={{
+    POSITIVE: { label: 'Positive', color: 'var(--color-emerald-500)' },
+    NEGATIVE: { label: 'Negative', color: 'var(--color-rose-500)' },
+  }}
+  itemNoun="result" // renders "6 results" / "1 result"
+/>
+```
+
+## Customization
+
+Each per-type badge takes its color from the registry (defaults wired to CSS variables) and falls back to a muted color for unregistered types. The container uses `bg-card` / `border-border`. Pass `hideEmpty={false}` to always show every registered type, even at a count of zero. Set `itemNoun` (and, for irregular plurals, `itemNounPlural`) to relabel the total for non-NER use. The exported `countByType()` helper computes the tally if you need it elsewhere.

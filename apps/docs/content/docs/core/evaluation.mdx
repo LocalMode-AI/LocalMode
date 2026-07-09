@@ -12,7 +12,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 Evaluate model quality entirely in the browser. Compare embedding models, score classifiers, measure retrieval accuracy, and assess text generation quality -- all offline, all private.
 
 <Callout type="info" title="See it in action">
-  Try [Model Evaluator](https://localmode.ai/model-evaluator) for a working demo of these APIs.
+  Try the [Model Evaluator block](https://localmode.ai/blocks/text-insights/model-evaluator) for a working demo of these APIs — it scores a classifier in-browser (accuracy/precision/recall/F1 with a color-coded confusion matrix and JSON export).
 </Callout>
 
 <Callout type="info">
@@ -482,8 +482,8 @@ accuracy(['a', 'b'], ['a']);
 - **Simplified ROUGE**: ROUGE-1, ROUGE-2, and ROUGE-L only. No stemming or stopword removal.
 - **Synchronous metrics**: Metric functions are synchronous (pure math). For very large datasets (100K+ items), consider running in a Web Worker.
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Model Evaluator | Evaluate model accuracy, precision, recall, and F1 | [Demo](https://localmode.ai/model-evaluator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/model-evaluator) |
+| Text Insights (Model Evaluator) | Evaluate model accuracy, precision, recall, and F1 | [Live block](https://localmode.ai/blocks/text-insights/model-evaluator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/text-insights/model-evaluator) |

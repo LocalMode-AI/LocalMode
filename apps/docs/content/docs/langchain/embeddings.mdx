@@ -11,7 +11,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 Drop-in replacement for `OpenAIEmbeddings` or any LangChain `Embeddings` class, backed by local inference.
 
 <Callout type="info" title="See it in action">
-  Try [LangChain RAG](https://localmode.ai/langchain-rag) for a working demo.
+  Switch the [Knowledge Base block](https://localmode.ai/blocks/knowledge/semantic-search) to its LangChain engine — document ingest and search there run through `LocalModeEmbeddings`, live in the browser.
 </Callout>
 
 ## Constructor
@@ -96,8 +96,8 @@ const vectors = await embeddings.embedDocuments(texts);
 const queryVec = await embeddings.embedQuery('search');
 ```
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| LangChain RAG | Document embeddings using LocalModeEmbeddings adapter | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |
+| Semantic Search | Text/PDF/OCR ingest with chunking, then reranked vector search with category facets and calibrated thresholds — on a core ⇄ LangChain engine toggle | [Live](https://localmode.ai/blocks/knowledge/semantic-search) · Install: `npx shadcn add @localmode/ui/blocks/knowledge/semantic-search` |

@@ -1,0 +1,61 @@
+---
+title: "Top Result Card"
+description: "A hero card for the single winning classification result — large label, prominent confidence dial, and a tier-tinted glow."
+icon: Award
+---
+
+# Top Result Card
+
+The **Top Result Card** highlights the single winning classification result: a large label, a prominent confidence dial (via `ConfidenceScoreBadge`), and a tier-tinted gradient-border glow. It is designed to pair above a `ScoredResultBarList`.
+
+**When to use it:** any single-winner output — sentiment, intent, language detection, gesture, or the top result from `useClassifyZeroShot`.
+
+## Preview
+
+<ComponentPreview name="ui/results/top-result-card" note="A winning sentiment result with its glow treatment — runs locally." />
+
+<OpenInV0 name="ui/results/top-result-card" />
+
+## Installation
+
+<InstallTabs name="ui/results/top-result-card" />
+
+### Dependencies
+
+- **Data source:** renders the `label` + `score` (0–1) you pass — works with any backend. Recommended producer: `useClassifyZeroShot` (top result) from `@localmode/react` (optional). See [Bring your own data](/docs/bring-your-own-data#results--insights).
+
+- `ConfidenceScoreBadge` — the radial confidence dial (installed automatically as a registry dependency)
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+
+### Files installed
+
+- `top-result-card.tsx` — the component
+- `confidence-score-badge.tsx` — the embedded dial
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/results/top-result-card/top-result-card.tsx" name="TopResultCardProps" />
+
+## Examples
+
+### Above a result list
+
+```tsx
+import { TopResultCard } from '@/components/top-result-card';
+import { ScoredResultBarList } from '@/components/scored-result-bar-list';
+
+export function Example({ results }) {
+  const [top, ...rest] = [...results].sort((a, b) => b.score - a.score);
+  return (
+    <div className="space-y-4">
+      {top && <TopResultCard title="Sentiment" label={top.label} score={top.score} />}
+      <ScoredResultBarList results={rest} highlightTop={false} />
+    </div>
+  );
+}
+```
+
+## Customization
+
+The glow tint is derived from the score's confidence tier and applied via `box-shadow` plus a blurred radial accent, both wired to CSS variables. The card itself uses `bg-card` / `border-border` so it inherits your theme. Forward `thresholds` to keep the tier (and glow) consistent with the rest of your scored UI.

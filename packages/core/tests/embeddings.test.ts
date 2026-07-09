@@ -173,7 +173,7 @@ describe('embedMany()', () => {
   });
 
   it('respects batchSize option', async () => {
-    let batchSizes: number[] = [];
+    const batchSizes: number[] = [];
     const model = createMockEmbeddingModel({
       dimensions: 384,
       onEmbed: (options) => {

@@ -1,0 +1,44 @@
+---
+title: "Device Capability Grid"
+description: "A full device-capability diagnostic card — the expanded sibling of Device Badge — with a stats bar, feature-flag grid, storage, and browser/OS footer."
+icon: LayoutGrid
+---
+
+# Device Capability Grid
+
+The **Device Capability Grid** is the expanded sibling of the Device Badge: a full diagnostic card reading `useCapabilities`. It renders a stats bar (CPU cores / memory / GPU), a status row per feature flag (WebGPU, WASM, SIMD, Threads, IndexedDB, Web Workers), a storage row, and a browser/OS footer, with a spinner while detection runs. It does not replace the Device Badge.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/device-capability-grid" note="Renders your device's real detected capabilities once useCapabilities resolves." />
+
+<OpenInV0 name="ui/local-first/device-capability-grid" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/device-capability-grid" />
+
+### Data source & dependencies
+
+**Data source:** detects device capabilities via the bundled `useCapabilities` navigator hook — self-contained, works in any React app, no backend required. (It mirrors the detection `useCapabilities` from `@localmode/react` performs.)
+- `@localmode/ui/lib/use-environment` — the bundled `useCapabilities` navigator hook (installed automatically as a registry dependency)
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `device-capability-grid.tsx` — the `DeviceCapabilityGrid` component
+- `lib/use-environment.ts` — the bundled `useCapabilities` navigator hook
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Examples
+
+### Full diagnostic
+
+```tsx
+<DeviceCapabilityGrid />
+```
+
+## Customization
+
+Each feature row shows a colored dot (emerald when on, muted when off). Add or remove flags by editing the `FEATURES` array in the copied file. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

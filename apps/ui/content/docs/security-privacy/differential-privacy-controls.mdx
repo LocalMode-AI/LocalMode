@@ -1,0 +1,148 @@
+---
+title: "Differential Privacy Controls"
+description: "A collapsible DP settings panel (enable toggle, epsilon slider, privacy-budget bar) plus a compact \"DP Applied\" provenance badge — driven by the app's DP-middleware state."
+icon: ShieldCheck
+---
+
+# Differential Privacy Controls
+
+The **Differential Privacy Controls** are a collapsible settings panel — an
+enable toggle, an epsilon slider with a derived privacy-level label
+(High/Balanced/Low), and a privacy-budget bar that turns warning then error as
+the budget is consumed — plus a compact **DP Applied** provenance badge (lock
+icon, epsilon used, embedding dimensionality) for rendering beneath protected
+output.
+
+> **No turnkey hook.** This primitive does no DP math. There is no
+> `@localmode/react` hook behind it — the app owns the DP state, wiring
+> [`dpEmbeddingMiddleware` / `dpClassificationMiddleware`](https://localmode.dev/docs/core)
+> and a `createPrivacyBudget` tracker from `@localmode/core`, then passing
+> `enabled`, `epsilon`, and the live `budget` in. The component only renders and
+> reports user intent through the change callbacks.
+
+**When to use it:** any local-first surface that perturbs embeddings or
+classification results with differential privacy and wants the user to control
+the privacy/accuracy tradeoff and see how much budget is left.
+
+## Preview
+
+<ComponentPreview name="ui/security-privacy/differential-privacy-controls" note="Toggle DP, adjust epsilon, and run queries to watch the budget bar move ok → warning → error. The DP Applied badge appears beneath the result. All local, no model download." />
+
+<OpenInV0 name="ui/security-privacy/differential-privacy-controls" />
+
+## Installation
+
+<InstallTabs name="ui/security-privacy/differential-privacy-controls" />
+
+### Dependencies
+
+- **Data source:** renders the `enabled` / `epsilon` / `budget` props you pass and emits change callbacks — works with any backend; the component does no DP math. Recommended LocalMode producers: `dpEmbeddingMiddleware` / `dpClassificationMiddleware` + `createPrivacyBudget` from `@localmode/core`, whose state you wire in (optional).
+- `lucide-react` — the `ShieldCheck` / `ChevronDown` / `Lock` icons
+- `radix-ui` — via the `Collapsible`, `Slider`, and `Switch` primitives
+- `ui/collapsible`, `ui/slider`, `ui/switch`, `ui/badge` — the shadcn/ui base primitives (installed automatically as registry dependencies)
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `differential-privacy-controls.tsx` — the panel **and** the `DpAppliedBadge`
+- `ui/collapsible.tsx`, `ui/slider.tsx`, `ui/switch.tsx`, `ui/badge.tsx` — base primitives (registry dependencies)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+### DifferentialPrivacyControls
+
+<AutoTypeTable path="registry/localmode/security-privacy/differential-privacy-controls/differential-privacy-controls.tsx" name="DifferentialPrivacyControlsProps" />
+
+### DpAppliedBadge
+
+<AutoTypeTable path="registry/localmode/security-privacy/differential-privacy-controls/differential-privacy-controls.tsx" name="DpAppliedBadgeProps" />
+
+## Examples
+
+### Driven by app DP state
+
+The app owns the DP middleware and the budget tracker. The panel renders that
+state and reports user changes:
+
+```tsx
+import { createPrivacyBudget } from '@localmode/core';
+import { DifferentialPrivacyControls } from '@/components/differential-privacy-controls';
+
+const budget = await createPrivacyBudget({ maxEpsilon: 10, persistKey: 'my-app' });
+
+export function Settings() {
+  const [enabled, setEnabled] = useState(true);
+  const [epsilon, setEpsilon] = useState(1.0);
+  const [consumed, setConsumed] = useState(budget.consumed());
+
+  return (
+    <DifferentialPrivacyControls
+      enabled={enabled}
+      onEnabledChange={setEnabled}
+      epsilon={epsilon}
+      onEpsilonChange={setEpsilon}
+      budget={{ consumed, maxEpsilon: 10 }}
+    />
+  );
+}
+```
+
+Each protected query consumes epsilon from the real tracker; reflect that into the
+budget prop so the bar transitions ok → warning → error:
+
+```tsx
+// after a DP-protected embedding/classification runs
+budget.consume(epsilon);
+setConsumed(budget.consumed());
+```
+
+### "DP Applied" provenance badge
+
+Render the badge beneath protected output **only when DP was actually applied**,
+with the real epsilon and the embedding model's dimensionality:
+
+```tsx
+import { DpAppliedBadge } from '@/components/differential-privacy-controls';
+
+{dpEnabled && <DpAppliedBadge epsilon={epsilon} dimensions={model.dimensions} />}
+```
+
+The badge fields must match the values emitted by the DP middleware run
+(`DPEmbeddingConfig.epsilon`, the embedding model's `dimensions`) — never
+placeholder values.
+
+### Disabled state
+
+When the toggle is off, the slider and budget bar dim and you should not render
+the `DpAppliedBadge` — no DP was applied, so showing provenance would be
+misleading:
+
+```tsx
+<DifferentialPrivacyControls enabled={false} /* … */ />
+{/* no DpAppliedBadge while disabled */}
+```
+
+## Customization
+
+The panel is styled with shadcn/ui CSS-variable utilities (`bg-card`,
+`border-border`, `text-muted-foreground`) and composes the `Collapsible`,
+`Slider`, `Switch`, and `Badge` base primitives, so it inherits your theme. The
+budget/level state colors use Tailwind's `red` / `amber` / `emerald` palettes
+directly — swap those classes in the copied file to match your design system.
+
+Because you own the file, you can adjust the epsilon→level thresholds
+(`privacyLevelForEpsilon`) and the budget warning/error thresholds to match your
+privacy policy.
+
+## Accessibility
+
+The ε control renders the Radix `Slider` primitive **directly** (Radix ignores
+`aria-label` on the Root), so the accessible name and readout land on the
+focusable Thumb — the `role="slider"` element. The Thumb carries a fixed
+`aria-label` (`"Epsilon (privacy budget per query)"`) and an `aria-valuetext`
+that spells out both the value and the derived privacy level (e.g. `"ε 1.0 —
+High privacy"`), so screen readers announce the privacy trade-off, not just a
+number. The spent-budget bar is a labelled `role="progressbar"` (`"Privacy
+budget consumed"`). `getByRole('slider', { name: /epsilon/i })` resolves the
+control uniquely.

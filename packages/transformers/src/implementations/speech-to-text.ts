@@ -13,6 +13,7 @@ import type {
   AudioUsage,
 } from '@localmode/core';
 import type { ModelSettings, TransformersDevice, ModelLoadProgress } from '../types.js';
+import { installResilientModelCache } from '../resilient-cache.js';
 
 // Dynamic import types
 type AutomaticSpeechRecognitionPipeline = Awaited<
@@ -159,6 +160,7 @@ export class TransformersSpeechToTextModel implements SpeechToTextModel {
       // `[W:onnxruntime:, session_state.cc:1280 VerifyEachNodeIsAssignedToAnEp]`
       // verbose mixed-EP warnings on every WebGPU/WASM split inference.
       env.backends.onnx.logLevel = 'error';
+      installResilientModelCache(env);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (env.backends.onnx as any).logSeverityLevel = 3;
       if (env.backends.onnx.wasm) {
@@ -326,14 +328,31 @@ export class TransformersSpeechToTextModel implements SpeechToTextModel {
     try {
       // Build pipeline options
       const pipelineOptions: Record<string, unknown> = {
-        // Default to English to avoid multilingual hallucination on short/noisy clips
-        language: language ?? 'en',
-        task: task ?? 'transcribe',
         return_timestamps: returnTimestamps ?? false,
       };
 
       if (returnTimestamps === 'word') {
         pipelineOptions.return_timestamps = 'word';
+      }
+
+      // English-only Whisper checkpoints (e.g. whisper-tiny.en) reject BOTH
+      // `language` and `task`: Transformers.js throws "Cannot specify `task`
+      // or `language` for an English-only model" (_retrieve_init_tokens).
+      // Mirror the exact signal the library uses — `generation_config
+      // .is_multilingual` — and only apply the defaults to multilingual
+      // models. For English-only models, drop redundant values ('en' /
+      // 'transcribe') and pass anything else through so Transformers.js
+      // surfaces its own descriptive error.
+      const generationConfig = (
+        pipe.model as unknown as { generation_config?: { is_multilingual?: boolean } }
+      ).generation_config;
+      if (generationConfig?.is_multilingual === true) {
+        // Default to English to avoid multilingual hallucination on short/noisy clips
+        pipelineOptions.language = language ?? 'en';
+        pipelineOptions.task = task ?? 'transcribe';
+      } else {
+        if (language && language !== 'en') pipelineOptions.language = language;
+        if (task && task !== 'transcribe') pipelineOptions.task = task;
       }
 
       const output = await pipe(preparedAudio, pipelineOptions);

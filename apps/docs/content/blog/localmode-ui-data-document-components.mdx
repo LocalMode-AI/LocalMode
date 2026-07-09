@@ -1,0 +1,240 @@
+---
+title: "Data & Document UI Components for Local-First RAG: Dropzones, Chunk Visualizers, and Facets You Own"
+description: "Build the file-ingestion and retrieval surfaces of a browser RAG app with @localmode/ui — a copy-owned shadcn registry. FileDropzone, IndexedDocumentCard, FormatDetectionBadge, CategoryFacetList, and ChunkBoundaryVisualizer, installed with one shadcn command and wired to LocalMode's local hooks. No server, no model lock-in."
+author: LocalMode
+date: 2026-05-31
+dateModified: "2026-05-31"
+faq:
+  - question: "What is @localmode/ui and how is it different from an npm component library?"
+    answer: "@localmode/ui is a shadcn-style registry of copy-owned React components for local-first AI apps. You install a component with the shadcn CLI (npx shadcn add @localmode/ui/data-documents/file-dropzone) and the code is copied into your project — you own and edit it, exactly like shadcn/ui. There is no runtime package to version-lock against, and the components are styled with shadcn CSS variables so they inherit your existing theme."
+  - question: "Do the data & document components require a server or send files anywhere?"
+    answer: "No. Every component in the data & documents family is presentational or hook-driven, and the hooks they pair with (validateFile, useSemanticChunk, useImportExport, useSemanticSearch) run entirely in the browser. File validation, chunking, format detection, and similarity search all happen on-device. Files never leave the user's machine."
+  - question: "How do I install a whole family of @localmode/ui components at once?"
+    answer: "Use the bulk family item: npx shadcn add @localmode/ui/data-documents installs all five data & document components (FileDropzone, IndexedDocumentCard, FormatDetectionBadge, CategoryFacetList, ChunkBoundaryVisualizer) and their shared cn() utility in one command. You can also install components individually with @localmode/ui/data-documents/<component>."
+  - question: "What does the ChunkBoundaryVisualizer show in semantic mode?"
+    answer: "It renders each chunk as a distinct alternating-accent segment with a monospace C1/C2 badge. In semantic mode it also shows the inter-chunk boundary similarity (e.g. sim: 0.74) between segments — lower values indicate a stronger topic break. You feed it the chunks from useSemanticChunk(), pulling rightSimilarity from chunk.metadata.semanticBoundaries, so users can see why a document split where it did."
+  - question: "Are the data & document components tied to a specific embedding model or vector database?"
+    answer: "No. They are domain-decoupled and presentational. CategoryFacetList takes categories, counts, and a selection callback; IndexedDocumentCard takes a filename and counts; FormatDetectionBadge takes a format string. You wire them to any embedding model, any VectorDB, and any storage adapter LocalMode supports. The components render the state your app computes."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Every browser RAG app reinvents the same handful of surfaces. A dropzone for the PDFs and CSVs. A list of indexed documents with a delete button. A badge that says which export format you just dropped in. A facet list to narrow search results. A visualizer that shows how a document got split into chunks. None of it is the hard part — the embeddings and the vector search are the hard part — but all of it has to exist, and most teams hand-roll it from scratch, twice.
+
+The **data & documents** family of `@localmode/ui` is that boilerplate, done once, as copy-owned components you install with the shadcn CLI. They are styled with shadcn CSS variables so they inherit your theme, and they pair with the local-first hooks from [`@localmode/react`](https://localmode.dev/docs/react) — `validateFile`, `useSemanticChunk`, `useImportExport`, and `useSemanticSearch`. Nothing runs on a server. Files never leave the device.
+
+<Callout type="info" title="Copy-owned, not a dependency">
+  `@localmode/ui` is a [shadcn registry](https://localmode.ai), not an npm package. You run one CLI command and the component source is copied into your project. You own it, you edit it, and there is no version to lock against.
+</Callout>
+
+---
+
+## The five components
+
+The family covers the full ingest-to-retrieval path of a local-first document app:
+
+| Component | What it does | Backing hook |
+| --------- | ------------ | ------------ |
+| `FileDropzone` | Format-agnostic drag-drop + browse for non-image files (PDF / CSV / JSON), with accept-list and max-size validation | `validateFile` |
+| `IndexedDocumentCard` | A card for one VectorDB-indexed document — filename, page/chunk counts, size, hover-reveal delete | ingest state |
+| `FormatDetectionBadge` | A color-coded badge for an auto-detected export format (PINECONE / CHROMA / CSV / JSONL) | `useImportExport` |
+| `CategoryFacetList` | A filterable single-select facet (list or pills) with per-category counts and an All/clear affordance | `useSemanticSearch` |
+| `ChunkBoundaryVisualizer` | A view of a document split into chunks, with inter-chunk similarity in semantic mode | `useSemanticChunk` |
+
+Install the whole set in one command:
+
+```bash
+npx shadcn@latest add @localmode/ui/data-documents
+```
+
+Or pull a single component:
+
+```bash
+npx shadcn@latest add @localmode/ui/data-documents/file-dropzone
+```
+
+---
+
+## Step 1: Take in files with the FileDropzone
+
+Every RAG pipeline starts with a file. The [`FileDropzone`](https://localmode.ai/docs/data-documents/file-dropzone) is a generic, format-agnostic drag-and-drop and click-to-browse zone built specifically for non-image files — PDFs to index, CSV/JSON vector exports to migrate, audio to transcribe. It is deliberately separate from the image-preview dropzone in the media family: no thumbnails, no image semantics, just accept-list and size validation.
+
+It runs every dropped file through `validateFile()` from `@localmode/react` against your `accept` MIME list and a `maxSize`, then emits only the valid files via `onUpload`. Rejected files go to `onReject` with a reason, so you can show the user exactly why a file bounced.
+
+```tsx
+import { FileDropzone } from '@/components/file-dropzone';
+
+export function Ingest() {
+  return (
+    <FileDropzone
+      accept={['application/pdf', 'text/csv', 'application/json']}
+      maxSize={10_000_000}
+      onUpload={(files) => ingest(files)}
+      onReject={(rejected) => rejected.forEach((r) => console.warn(r.reason))}
+    />
+  );
+}
+```
+
+While you index, flip on the processing overlay so the zone reads as busy:
+
+```tsx
+const [busy, setBusy] = useState(false);
+
+<FileDropzone
+  accept={['application/pdf']}
+  processing={busy}
+  processingLabel="Indexing…"
+  onUpload={async (files) => {
+    setBusy(true);
+    await indexAll(files);
+    setBusy(false);
+  }}
+/>
+```
+
+The validation runs locally — no model download, no upload. The `hint` line under the prompt auto-derives a human-readable summary from your `accept` extensions and `maxSize`, or you can override it.
+
+---
+
+## Step 2: Show what got indexed with IndexedDocumentCard
+
+Once a file is chunked and embedded into a VectorDB, you need somewhere to show it — and a way to delete it. The [`IndexedDocumentCard`](https://localmode.ai/docs/data-documents/indexed-document-card) is the consistent visual unit for a single indexed document. It renders a truncated filename (full name in a native tooltip), the chunk count, an optional page count and file size, and a delete control that reveals on hover or focus and spins while the removal is in flight.
+
+It is purely presentational. The counts come from your app's ingest state — the length of your `useSemanticChunk()` output plus a PDF page count — so the prop contract stays explicit and any knowledge-base layout fits.
+
+```tsx
+const [removingId, setRemovingId] = useState<string | null>(null);
+
+{docs.map((doc) => (
+  <IndexedDocumentCard
+    key={doc.id}
+    filename={doc.filename}
+    chunkCount={doc.chunks}
+    pageCount={doc.pages}
+    sizeBytes={doc.size}
+    deleting={removingId === doc.id}
+    onDelete={async () => {
+      setRemovingId(doc.id);
+      await db.delete(doc.id);
+      setRemovingId(null);
+    }}
+  />
+))}
+```
+
+There is no `@localmode` runtime dependency here — the card just renders the filename, counts, and size you feed it. Because you own the file, extending `IndexedDocumentCardProps` with an indexed-at timestamp or a source type is a one-line change.
+
+---
+
+## Step 3: Confirm the format with FormatDetectionBadge
+
+If your app imports vector exports — migrating from Pinecone, ChromaDB, or a CSV/JSONL dump — the user wants to know the format was detected correctly before they commit to an import. The [`FormatDetectionBadge`](https://localmode.ai/docs/data-documents/format-detection-badge) displays an auto-detected format (`PINECONE`, `CHROMA`, `CSV`, `JSONL`, or anything custom) as a color-coded pill.
+
+Pair it with `useImportExport()`: after `parsePreview()` returns a `parseResult`, render `parseResult.format`.
+
+```tsx
+import { FormatDetectionBadge } from '@/components/format-detection-badge';
+import { useImportExport } from '@localmode/react';
+
+export function ImportPreview({ db, content }) {
+  const { parsePreview, parseResult } = useImportExport({ db });
+
+  return (
+    <div className="flex items-center gap-2">
+      <button onClick={() => parsePreview({ content })}>Detect format</button>
+      <FormatDetectionBadge format={parseResult?.format} />
+    </div>
+  );
+}
+```
+
+A nullish `format` renders a pulsing "detecting…" state; an unrecognized format falls back to a neutral style. You can override or add a single format's colors through `colorMap` without editing the component, since your map merges over the built-in `DEFAULT_FORMAT_COLORS`.
+
+---
+
+## Step 4: Narrow results with CategoryFacetList
+
+Retrieval rarely stops at the raw result list. Users want to filter by category, by source, by entity type. The [`CategoryFacetList`](https://localmode.ai/docs/data-documents/category-facet-list) is a single-select facet — a list or a pill row — with per-category count badges, an active highlight, and an All/clear affordance. Re-clicking the active category clears it.
+
+It is intentionally domain-decoupled: it takes `categories`, `counts`, `selected`, and `onSelect`, so the same primitive filters semantic-search result metadata, zero-shot classification labels, NER entity types, or plain document categories. Derive the counts straight from your result set:
+
+```tsx
+import { CategoryFacetList } from '@/components/category-facet-list';
+import { useSemanticSearch } from '@localmode/react';
+
+export function Facets({ db, model }) {
+  const { results } = useSemanticSearch({ model, db });
+  const [selected, setSelected] = useState<string | null>(null);
+
+  const counts = results.reduce<Record<string, number>>((acc, r) => {
+    const c = String(r.metadata.category ?? 'uncategorized');
+    acc[c] = (acc[c] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <CategoryFacetList
+      categories={Object.keys(counts)}
+      counts={counts}
+      selected={selected}
+      onSelect={setSelected}
+    />
+  );
+}
+```
+
+Selection is fully controlled — `selected` is the active category or `null` for "All", and `onSelect` receives the next selection. Swap `variant="pills"` for a compact horizontal row, or drop the counts and the All affordance entirely for a bare label filter.
+
+---
+
+## Step 5: Explain the split with ChunkBoundaryVisualizer
+
+Chunking is the least visible and most consequential step in a RAG pipeline. Split too coarsely and retrieval pulls in noise; split too finely and you fragment the meaning. The [`ChunkBoundaryVisualizer`](https://localmode.ai/docs/data-documents/chunk-boundary-visualizer) makes the split legible. Each chunk renders as a distinct alternating-accent segment with a monospace `C1`/`C2` badge. In semantic mode, the inter-chunk boundary similarity appears as a faint `sim: 0.74` label between segments — lower values mark stronger topic breaks.
+
+It is display-only and owns no chunking logic. Feed it the output of [`useSemanticChunk()`](https://localmode.dev/docs/react), mapping each chunk to the decoupled `ChunkInfo` shape:
+
+```tsx
+import { ChunkBoundaryVisualizer } from '@/components/chunk-boundary-visualizer';
+import { useSemanticChunk } from '@localmode/react';
+
+export function ChunkingPlayground({ model }) {
+  const { data: chunks, execute } = useSemanticChunk({ model, threshold: 0.4 });
+
+  return (
+    <div>
+      <button onClick={() => execute(documentText)}>Chunk</button>
+      <ChunkBoundaryVisualizer
+        mode="semantic"
+        chunks={(chunks ?? []).map((c) => ({
+          text: c.text,
+          chunkIndex: c.index,
+          rightSimilarity: c.metadata?.semanticBoundaries?.rightSimilarity ?? null,
+        }))}
+      />
+    </div>
+  );
+}
+```
+
+This is the component that turns "tune the semantic threshold" from a guessing game into a feedback loop. The user drops the threshold, watches more boundaries appear, and sees their similarity scores — all in the browser, against their own document.
+
+---
+
+## Why copy-owned matters for AI UIs
+
+AI UI moves fast. The model you ship on launch day is not the model you ship in six months; the layout you start with is not the one you end with. A traditional component library forces you to wait for an upstream release, or to fight the abstraction the maintainer chose. A copy-owned registry inverts that. The component lands in your repo as plain TSX. When you need to add a "reindex" action to `IndexedDocumentCard`, or color-code chunk boundaries by threshold band in `ChunkBoundaryVisualizer`, you edit the file. There is no PR to upstream and no escape hatch to invent.
+
+Because the styling is shadcn CSS variables — `border-border`, `bg-card`, `text-muted-foreground`, `bg-primary/5` — the components drop into any shadcn project and match instantly. And because the inference lives in the hooks, not the components, you can swap embedding models, storage adapters, or chunkers without touching a single piece of UI.
+
+---
+
+## Where this fits
+
+The data & documents family pairs naturally with the rest of the `@localmode/ui` catalog. `FormatDetectionBadge` is consumed by the local-first `VectorImportFlow` import preview; `IndexedDocumentCard` sits alongside the conversation family's `MultiStepPipelineTracker` during ingest. Together they cover the document side of a browser RAG app, end to end.
+
+If you have not built the search half yet, start with [Add AI Search to Any React App in 10 Minutes](/blog/ai-search-react-10-minutes) or [From CSV to Semantic Search in 60 Seconds](/blog/csv-to-semantic-search-60-seconds), then layer these components on top. For the full grounded-answer pattern, see [Private RAG Chat with No Backend](/blog/private-rag-chat-no-backend).
+
+<Callout type="info" title="Browse the components">
+  Every component in this post has a live preview and full prop tables at [localmode.ai](https://localmode.ai/docs/data-documents/file-dropzone). Install one with the shadcn CLI and start editing the copy in your own project.
+</Callout>

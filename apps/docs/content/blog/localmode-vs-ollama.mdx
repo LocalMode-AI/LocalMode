@@ -3,7 +3,7 @@ title: "LocalMode vs Ollama: Browser AI vs Desktop AI - Choosing the Right Local
 description: "A fair, detailed comparison of two great local AI tools: Ollama runs LLMs natively on your desktop with GPU acceleration, while LocalMode runs 25 model types entirely in the browser with zero installation. Learn when to use each - and how they complement each other."
 author: LocalMode
 date: 2026-02-03
-dateModified: "2026-05-29"
+dateModified: "2026-07-04"
 faq:
   - question: "What is the main difference between LocalMode and Ollama?"
     answer: "Ollama is a native desktop runtime that installs a Go binary and exposes a local REST API on port 11434, offering direct GPU access for fast LLM inference. LocalMode is a browser SDK that runs ML models inside the browser tab using WebGPU and WebAssembly -- no installation, no background process, no server."
@@ -187,7 +187,7 @@ Both tools keep data on the device, but the security models differ.
 | **Network surface** | Listens on localhost:11434 (TCP socket) | No network listener, runs in browser sandbox |
 | **Process isolation** | OS-level process | Browser sandbox (same-origin policy) |
 | **Multi-user** | One server, shared by local apps | Each browser tab is fully isolated |
-| **Data at rest** | Model files on disk, conversation data depends on client | Model cache in IndexedDB/OPFS, encrypted storage available |
+| **Data at rest** | Model files on disk, conversation data depends on client | Model cache in Cache API/OPFS, encrypted storage available |
 | **Encryption** | Depends on client application | Built-in `encrypt()`/`decrypt()` with Web Crypto API |
 | **PII protection** | Depends on client application | Built-in `redactPII()` middleware |
 
@@ -325,7 +325,7 @@ Sources:
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

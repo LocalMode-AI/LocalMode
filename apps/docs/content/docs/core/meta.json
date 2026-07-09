@@ -13,6 +13,7 @@
     "vector-quantization",
     "typed-metadata",
     "rag",
+    "knowledge-base",
     "pipelines",
     "inference-queue",
     "document-loaders",

@@ -1,0 +1,24 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "installation",
+    "---Guides---",
+    "use-with-ai-sdk",
+    "bring-your-own-data",
+    "mcp",
+    "---Components---",
+    "components",
+    "device-badge",
+    "artifacts",
+    "audio",
+    "conversation",
+    "data-documents",
+    "input-controls",
+    "local-first",
+    "media-vision",
+    "results",
+    "security-privacy",
+    "devtools"
+  ]
+}

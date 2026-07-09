@@ -3,7 +3,7 @@ title: "Add AI Search to Any React App in 10 Minutes"
 description: "Build semantic search that understands meaning, not just keywords - running entirely in the browser with zero API keys. Step-by-step guide using LocalMode with a complete, copy-pasteable React component."
 author: LocalMode
 date: 2026-02-12
-dateModified: "2026-05-27"
+dateModified: "2026-07-04"
 faq:
   - question: "How does semantic search differ from keyword search in a React app?"
     answer: "Keyword search requires exact string matches, so a query like 'how to fix a broken deployment' misses a document titled 'Troubleshooting CI/CD Pipeline Failures.' Semantic search converts text into 384-dimensional vectors using an AI model and finds results by meaning via nearest-neighbor search, scoring that same document at 0.847 similarity."
@@ -28,7 +28,7 @@ Here is the complete walkthrough.
 A search component that converts text into 384-dimensional vectors using a 33MB AI model, stores them in an in-browser vector database, and finds results by meaning instead of exact string matches. The model downloads once, caches in the browser, and runs offline after that.
 
 <Callout type="info" title="Live demo">
-  The full version of this - with model selection, vector quantization, chunking modes, import/export, and drift detection - is the **Semantic Search** app at [localmode.ai](https://localmode.ai).
+  The full version of this - with model selection, vector quantization, chunking modes, import/export, and drift detection - is the **Search** tab of the [Knowledge Base block](https://localmode.ai/blocks/knowledge/semantic-search).
 </Callout>
 
 ---
@@ -277,7 +277,7 @@ The example above covers the basics. The full LocalMode toolkit goes much furthe
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

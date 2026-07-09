@@ -14,7 +14,7 @@ Classify images into arbitrary categories without fine-tuning using CLIP (Contra
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [Smart Gallery](https://localmode.ai/smart-gallery) and [Product Search](https://localmode.ai/product-search) for working demos.
+  Try the [Photo Search block](https://localmode.ai/blocks/photo/photo-categorizer) — its Categories tab runs editable-label zero-shot auto-categorization (with faceting) over a CLIP photo library, on-device.
 </Callout>
 
 ## How It Works
@@ -77,12 +77,11 @@ console.log(`Category: ${labels[0]}`);
   The model compares image features against text features, so more descriptive labels give better signal.
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| Smart Gallery | Classify photos into custom categories | [Demo](https://localmode.ai/smart-gallery) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-gallery) |
-| Product Search | Classify products with zero-shot image labels | [Demo](https://localmode.ai/product-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/product-search) |
+| Photo Categorizer | Editable-label-set zero-shot categorization with Photo/Product presets and on-device re-categorization | [Live](https://localmode.ai/blocks/photo/photo-categorizer) · Install: `npx shadcn add @localmode/ui/blocks/photo/photo-categorizer` |
 
 ## Next Steps
 

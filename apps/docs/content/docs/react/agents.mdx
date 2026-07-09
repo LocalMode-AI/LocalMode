@@ -10,7 +10,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 # Agent Hook
 
 <Callout type="info" title="See it in action">
-  Try [Research Agent](https://localmode.ai/research-agent) and [LLM Chat](https://localmode.ai/llm-chat) for working demos of these hooks.
+  Try the [Agent & Structured Data block](https://localmode.ai/blocks/agents/research-agent) and [Chat block](https://localmode.ai/blocks/chat) for working demos of these hooks.
 </Callout>
 
 ## useAgent
@@ -18,7 +18,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 Run AI agents with a ReAct loop, tool execution, real-time step streaming, and cancellation.
 
 ```tsx
-import { useAgent } from '@localmode/react';
+import { useAgent, jsonSchema } from '@localmode/react';
 import { webllm } from '@localmode/webllm';
 import { z } from 'zod';
 
@@ -28,7 +28,7 @@ const tools = [
   {
     name: 'search',
     description: 'Search for information',
-    parameters: z.object({ query: z.string() }),
+    parameters: jsonSchema(z.object({ query: z.string() })),
     execute: async ({ query }) => `Results for: ${query}`,
   },
 ];
@@ -49,14 +49,15 @@ function AgentDemo() {
 
       {steps.map((step, i) => (
         <div key={i}>
-          <b>Step {i + 1}:</b> {step.thinking}
-          {step.action.type === 'tool_call' && (
-            <p>Tool: {step.action.toolName}({JSON.stringify(step.action.toolArgs)})</p>
+          <b>Step {i + 1}:</b> {step.type}
+          {step.type === 'tool_call' && (
+            <p>Tool: {step.toolName}({JSON.stringify(step.toolArgs)})</p>
           )}
+          {step.observation && <p>Observation: {step.observation}</p>}
         </div>
       ))}
 
-      {result && <p><b>Answer:</b> {result.finalAnswer}</p>}
+      {result && <p><b>Answer:</b> {result.result}</p>}
       {error && <p className="text-error">{error.message}</p>}
     </div>
   );
@@ -85,11 +86,52 @@ function AgentDemo() {
     result: { description: 'Final result when agent completes', type: 'AgentResult | null' },
     isRunning: { description: 'Whether the agent is currently executing', type: 'boolean' },
     error: { description: 'Error if the agent failed', type: 'Error | null' },
+    pendingApproval: { description: 'The tool call currently awaiting a human decision — non-null only while the loop is paused on a tool flagged requiresApproval: true', type: 'ToolApprovalRequest | null' },
+    approve: { description: 'Approve the pending tool call: the tool executes and the run resumes. No-op when nothing is pending', type: '() => void' },
+    deny: { description: 'Deny the pending tool call (optional reason): the tool is not executed and a denial observation is fed back to the model. No-op when nothing is pending', type: '(reason?: string) => void' },
     run: { description: 'Start the agent with a prompt and optional context', type: '(prompt: string, context?: string) => Promise<AgentResult | null>' },
-    cancel: { description: 'Abort the current agent run', type: '() => void' },
-    reset: { description: 'Clear steps, result, and error state', type: '() => void' },
+    cancel: { description: 'Abort the current agent run (also clears any pending approval)', type: '() => void' },
+    reset: { description: 'Clear steps, result, error, and pending-approval state', type: '() => void' },
   }}
 />
+
+### Human-in-the-Loop Tool Approval
+
+Flag sensitive tools with `requiresApproval: true` and the hook does the rest — it installs the core `onToolApproval` callback internally. When the ReAct loop pauses on a gated call, `pendingApproval` becomes non-null (exposing the pending call's `toolName`, model-proposed `args`, and `stepIndex`) and the run waits until you call `approve()` or `deny(reason?)` — or cancel the run. Denied calls are not executed; a denial observation is fed back to the model so the loop continues. Tools without the flag never surface a pending approval.
+
+```tsx
+function GatedAgent() {
+  const { pendingApproval, approve, deny, steps, run } = useAgent({
+    model,
+    tools: [{ ...deleteFileTool, requiresApproval: true }],
+  });
+
+  return (
+    <div>
+      <button onClick={() => run('Clean up temp files')}>Start</button>
+      {pendingApproval && (
+        <div>
+          <p>Allow {pendingApproval.toolName}({JSON.stringify(pendingApproval.args)})?</p>
+          <button onClick={() => approve()}>Approve</button>
+          <button onClick={() => deny('User rejected')}>Deny</button>
+        </div>
+      )}
+      {steps.map((step, i) => (
+        // step.approval?.decision is 'approved' | 'denied' for gated steps
+        <div key={i}>{step.toolName} {step.approval?.decision}</div>
+      ))}
+    </div>
+  );
+}
+```
+
+<Callout type="info">
+For the approval contract — `requiresApproval`, `onToolApproval`, `ToolApprovalDecision`, deny-as-observation, and the fail-fast rule when a gated tool has no callback — see [Core Agents: Human-in-the-Loop Tool Approval](/docs/core/agents#human-in-the-loop-tool-approval).
+</Callout>
+
+<Callout type="info">
+See this whole flow live — the pending-approval pause, approve-to-run, and deny-feeds-back-into-the-loop — in the [**Agent & Structured Data block**](https://localmode.ai/blocks/agents/research-agent), which drives `useAgent` (with the approval gate) over a real on-device model composed with the `ui/conversation/tool-approval` and `agent-step-timeline` primitives.
+</Callout>
 
 ### Step Structure
 
@@ -97,9 +139,17 @@ Each `AgentStep` contains:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `thinking` | `string` | The agent's reasoning for this step |
-| `action` | `{ type: 'tool_call', toolName, toolArgs, result }` or `{ type: 'finish', answer }` | The action taken |
+| `index` | `number` | Zero-based step number |
+| `type` | `'tool_call' \| 'finish'` | What the model decided to do this step |
+| `toolName` | `string \| undefined` | Tool called (when `type` is `'tool_call'`) |
+| `toolArgs` | `Record<string, unknown> \| undefined` | Arguments passed to the tool |
+| `observation` | `string \| undefined` | Stringified tool result or error message |
+| `result` | `string \| undefined` | Final answer text (when `type` is `'finish'`) |
 | `durationMs` | `number` | Time taken for this step |
+| `usage` | `GenerationUsage \| undefined` | Token usage from the model call |
+| `approval` | `object \| undefined` | Approval decision, on `requiresApproval` tool calls only |
+
+For the full `AgentStep`/`AgentResult` reference, see the [Core Agents](/docs/core/agents) guide.
 
 ### Agent with Memory
 
@@ -124,9 +174,9 @@ function AgentWithMemory() {
 For full agent API reference including `createAgent()`, `runAgent()`, tool definitions, and memory, see the [Core Agents](/docs/core/agents) guide.
 </Callout>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Research Agent | Multi-step ReAct agent with useAgent | [Demo](https://localmode.ai/research-agent) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/research-agent) |
-| LLM Chat | Agent mode with tool calling via useAgent | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |
+| Agent & Structured Data (Research Agent) | Multi-step ReAct agent with useAgent | [Live block](https://localmode.ai/blocks/agents/research-agent) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/agents/research-agent) |
+| Chat (LLM Chat) | Agent mode with tool calling via useAgent | [Live block](https://localmode.ai/blocks/chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/chat) |

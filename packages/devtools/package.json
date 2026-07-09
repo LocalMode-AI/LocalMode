@@ -1,7 +1,7 @@
 {
   "name": "@localmode/devtools",
-  "version": "2.0.1",
-  "description": "In-app DevTools widget for debugging and monitoring LocalMode applications",
+  "version": "3.0.0",
+  "description": "DevTools instrumentation and React hooks for debugging and monitoring LocalMode applications",
   "license": "MIT",
   "author": "LocalMode",
   "publishConfig": {
@@ -18,7 +18,6 @@
   },
   "keywords": [
     "devtools",
-    "devtools-widget",
     "debugging",
     "monitoring",
     "local-first",
@@ -41,14 +40,14 @@
         "default": "./dist/index.cjs"
       }
     },
-    "./widget": {
+    "./react": {
       "import": {
-        "types": "./dist/widget.d.ts",
-        "default": "./dist/widget.js"
+        "types": "./dist/react.d.ts",
+        "default": "./dist/react.js"
       },
       "require": {
-        "types": "./dist/widget.d.cts",
-        "default": "./dist/widget.cjs"
+        "types": "./dist/react.d.cts",
+        "default": "./dist/react.cjs"
       }
     }
   },

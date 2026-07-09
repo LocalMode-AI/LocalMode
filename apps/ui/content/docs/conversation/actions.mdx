@@ -1,0 +1,53 @@
+---
+title: "Actions"
+description: "Message-level controls — copy, regenerate, read-aloud, an overflow menu, and an on-device feedback bar (no telemetry)."
+icon: MousePointerClick
+---
+
+# Actions
+
+The **Actions** primitives are message-level controls. `Actions` is the row (with optional hover-reveal); `Action` is an accessible icon button with a tooltip; `CopyAction` handles clipboard + copied state; `RegenerateAction` and `ReadAloudAction` (wire to local Kokoro TTS) cover common cases; `ActionsMenu` groups secondary actions behind a "more" menu; and `FeedbackBar` is an on-device thumbs up/down that stays local — no telemetry.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/actions" />
+
+<OpenInV0 name="ui/conversation/actions" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/actions" />
+
+### Data source & dependencies
+
+**Data source:** renders plain props and emits callbacks (`onRegenerate`, read-aloud) — works with any backend. Recommended producer: your chat + `useSynthesizeSpeech` from `@localmode/react` (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `actions.tsx` — `Actions`, `Action`, `CopyAction`, `RegenerateAction`, `ReadAloudAction`, `ActionsMenu`, `FeedbackBar`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/actions/actions.tsx" name="CopyActionProps" />
+
+## Examples
+
+### A message action row
+
+```tsx
+import { Actions, CopyAction, FeedbackBar, RegenerateAction } from '@/components/actions';
+
+<Actions hoverReveal>
+  <CopyAction text={message.text} />
+  <RegenerateAction onRegenerate={() => regenerate(message.id)} />
+  <FeedbackBar onFeedback={(v) => saveFeedbackLocally(message.id, v)} />
+</Actions>
+```
+
+## Customization
+
+`Action` wraps a `TooltipProvider` so it works standalone. `FeedbackBar` reports via callback only — persist it to local IndexedDB if you want it to survive reloads. Read-aloud is presentational: drive `onReadAloud` from `useSynthesizeSpeech`.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useChat`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

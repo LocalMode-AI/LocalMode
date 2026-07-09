@@ -1,0 +1,182 @@
+---
+title: "Model Search Browser"
+description: "A cmdk-based searchable model-repo browser: search, sort, result rows, load-more pagination, and per-repo expandable file lists."
+icon: PackageSearch
+---
+
+# Model Search Browser
+
+The **Model Search Browser** is a cmdk-based searchable model-repo browser: a controlled search input, a sort selector (downloads / likes / last-modified), result rows (repo id, author, compact download/like counts, relative last-modified, capped tag badges), load-more pagination, and a per-repo expandable file list (filename, quantization badge, human-readable size) with per-file select actions — plus distinct loading, empty, and error-with-retry states.
+
+It is purely presentational: every value arrives via props and every action leaves via a callback, so **any backend can feed it** — the HuggingFace Hub API, a private model registry, or static fixtures. The consumer owns all fetching, debouncing, and pagination state; cmdk's built-in filtering is disabled because results arrive pre-filtered from your backend.
+
+**When to use it:** browsing a large remote model catalog (e.g. the 160K+ GGUF repos on HuggingFace) down to a concrete file the user can load.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/model-search-browser" note="Pure UI over static fixtures — search, sort, expand a repo, pick a file. No network, no model download." />
+
+<OpenInV0 name="ui/local-first/model-search-browser" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/model-search-browser" />
+
+### Data source & dependencies
+
+**Data source:** renders the `results` and `files` you pass and emits every action via callbacks — works with any backend. Recommended wiring: the HuggingFace Hub API (see the example below); a private registry endpoint or a static catalog works identically (optional).
+- `cmdk` — the underlying command/list primitive
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `model-search-browser.tsx` — the `ModelSearchBrowser` component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/model-search-browser/model-search-browser.tsx" name="ModelSearchBrowserProps" />
+
+<AutoTypeTable path="registry/localmode/local-first/model-search-browser/model-search-browser.tsx" name="ModelSearchResult" />
+
+<AutoTypeTable path="registry/localmode/local-first/model-search-browser/model-search-browser.tsx" name="ModelRepoFile" />
+
+## Examples
+
+### Fixture-driven (any backend)
+
+The component owns no fetching — hand it rows from anywhere:
+
+```tsx
+<ModelSearchBrowser
+  query={query}
+  onQueryChange={setQuery}
+  sort={sort}
+  onSortChange={setSort}
+  results={results}
+  expandedRepoId={expanded}
+  onSelectRepo={setExpanded}
+  files={files}
+  onSelectFile={(repoId, file) => pick(`${repoId}:${file.filename}`)}
+/>
+```
+
+### Wiring to the HuggingFace API
+
+The component doesn't care where results come from — this recipe feeds it from the public HuggingFace Hub API, but swapping the two `fetch` calls for your own registry endpoint changes nothing else:
+
+```tsx
+import { useEffect, useState } from 'react';
+import {
+  ModelSearchBrowser,
+  type ModelRepoFile,
+  type ModelSearchResult,
+  type ModelSearchSort,
+} from '@/components/model-search-browser';
+
+export function GGUFBrowser() {
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<ModelSearchSort>('downloads');
+  const [results, setResults] = useState<ModelSearchResult[]>([]);
+  const [isLoading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [files, setFiles] = useState<ModelRepoFile[] | null>(null);
+
+  // Debounced, abortable search — the consumer owns all orchestration.
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const url = `https://huggingface.co/api/models?filter=gguf&search=${encodeURIComponent(query)}&sort=${sort}&direction=-1&limit=30`;
+        const res = await fetch(url, { signal: controller.signal });
+        if (!res.ok) throw new Error(`Search failed (HTTP ${res.status})`);
+        const repos: {
+          id: string;
+          downloads?: number;
+          likes?: number;
+          lastModified?: string;
+          tags?: string[];
+        }[] = await res.json();
+        setResults(
+          repos.map((r) => ({
+            repoId: r.id,
+            author: r.id.split('/')[0],
+            downloads: r.downloads,
+            likes: r.likes,
+            lastModified: r.lastModified,
+            tags: r.tags,
+          })),
+        );
+      } catch (e) {
+        if (!controller.signal.aborted)
+          setError(e instanceof Error ? e.message : 'Search failed');
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, sort]);
+
+  const selectRepo = async (repoId: string | null) => {
+    setExpanded(repoId);
+    setFiles(null);
+    if (!repoId) return;
+    const res = await fetch(`https://huggingface.co/api/models/${repoId}?blobs=true`);
+    const repo: { siblings?: { rfilename: string; size?: number }[] } = await res.json();
+    setFiles(
+      (repo.siblings ?? [])
+        .filter((s) => s.rfilename.endsWith('.gguf'))
+        .map((s) => ({
+          filename: s.rfilename,
+          sizeBytes: s.size,
+          quantLabel: s.rfilename.match(/(?:I?Q\d|F16|F32|BF16)[\w]*/i)?.[0]?.toUpperCase(),
+        })),
+    );
+  };
+
+  return (
+    <ModelSearchBrowser
+      query={query}
+      onQueryChange={setQuery}
+      sort={sort}
+      onSortChange={setSort}
+      results={results}
+      isLoading={isLoading}
+      error={error}
+      onRetry={() => setQuery((q) => q.trim())}
+      expandedRepoId={expanded}
+      onSelectRepo={selectRepo}
+      files={files}
+      filesLoading={expanded !== null && files === null}
+      onSelectFile={(repoId, file) => console.log(`load ${repoId}:${file.filename}`)}
+    />
+  );
+}
+```
+
+### Error state with retry
+
+Pass the failure message and a retry callback — the component renders the error panel and the retry affordance:
+
+```tsx
+<ModelSearchBrowser
+  query={query}
+  onQueryChange={setQuery}
+  sort={sort}
+  onSortChange={setSort}
+  results={[]}
+  error="Rate limited by the search API — try again in a minute."
+  onRetry={refetch}
+/>
+```
+
+## Customization
+
+Result rows cap tags at 4 before collapsing into a `+N` overflow chip — change `MAX_TAGS` in the copied file. The sort labels live in the `SORT_OPTIONS` array; the compact-count, byte-size, and relative-time formatters (`formatCount`, `formatBytes`, `formatRelative`) are plain local functions you can swap for `Intl` variants. The list height is the `max-h-96` on `Command.List`. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

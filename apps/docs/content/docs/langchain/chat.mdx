@@ -11,7 +11,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 Drop-in replacement for `ChatOpenAI` or any LangChain `BaseChatModel`, backed by local LLM inference.
 
 <Callout type="info" title="See it in action">
-  Try [LangChain RAG](https://localmode.ai/langchain-rag) for a working demo.
+  Switch the [Knowledge Base block](https://localmode.ai/blocks/knowledge/rag-chat) to its LangChain engine — grounded answers there stream through `ChatLocalMode`, live in the browser.
 </Callout>
 
 ## Constructor
@@ -128,8 +128,8 @@ const stream = await llm.stream('Tell me a story');
 
 The `_llmType()` method returns `'localmode'` for identification in LangChain logging and callbacks.
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| LangChain RAG | Chat interface using ChatLocalMode adapter | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |
+| RAG Chat | Streaming grounded RAG over your own text/PDF corpus with inline citations, on a core ⇄ LangChain engine toggle | [Live](https://localmode.ai/blocks/knowledge/rag-chat) · Install: `npx shadcn add @localmode/ui/blocks/knowledge/rag-chat` |

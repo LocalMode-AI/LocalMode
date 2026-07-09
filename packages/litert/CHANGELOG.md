@@ -1,5 +1,12 @@
 # @localmode/litert
 
+## 2.0.1
+
+### Fixed
+
+- `doGenerate()` no longer freezes the browser tab for the whole generation. LiteRT-LM's non-streaming `sendMessage()` runs the entire prefill+decode in one synchronous WASM call, which locks the main thread for tens of seconds without cross-origin isolation (no React commits, no input handling). `doGenerate()` now drains `sendMessageStreaming()` and accumulates the chunks — identical results, per-token main-thread yields.
+- CPU-capable models no longer fail to load in WebGPU-less browsers. LiteRT-LM's default backend selects GPU whenever `navigator.gpu` merely exists, so adapterless/headless browsers ("No available adapters") failed even CPU-capable models like `qwen3-0.6B`. The provider now probes actual device usability and pins the CPU backend when WebGPU cannot deliver a device.
+
 ## 2.0.0
 
 ### Major Changes

@@ -3,7 +3,7 @@ title: "The Complete Browser RAG Stack: BM25 + Embeddings + Reranking in One Pip
 description: "Pure vector search misses exact terms. Pure keyword search misses meaning. This guide builds a production-grade hybrid retrieval pipeline - BM25 keyword search, vector semantic search, Reciprocal Rank Fusion, and cross-encoder reranking - all running in the browser with LocalMode. No servers, no API keys, dramatically better recall."
 author: LocalMode
 date: 2026-02-01
-dateModified: "2026-05-26"
+dateModified: "2026-07-04"
 faq:
   - question: "Why is vector-only search insufficient for production RAG systems?"
     answer: "Vector search struggles with exact identifiers, acronyms, error codes, and IP addresses because these tokens get mapped to generic regions of embedding space. A query for 'error code XJ-4021' returns general error-handling documents instead of the specific match. BM25 keyword search catches these exact-match cases that embeddings miss."
@@ -565,5 +565,5 @@ Your user's data never has to leave their device to get production-grade retriev
   - [Reranking guide](/docs/core/reranking) - cross-encoder models, topK tuning, pipeline integration
   - [Embeddings guide](/docs/core/embeddings) - model selection, batch embedding, streaming
   - [Private RAG Chat tutorial](/blog/private-rag-chat-no-backend) - full end-to-end RAG chat with PDF loading
-  - [Live demos](https://localmode.ai) - try hybrid search and RAG in your browser, no sign-up required
+  - [Knowledge Base block](https://localmode.ai/blocks/knowledge/semantic-search) - try semantic search, reranking, and RAG in your browser, no sign-up required
 </Callout>

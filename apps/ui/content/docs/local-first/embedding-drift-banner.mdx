@@ -1,0 +1,56 @@
+---
+title: "Embedding Drift Banner"
+description: "A warning shown when the active embedding model is incompatible with stored vectors — with reindex progress, phase, and Re-embed/Cancel."
+icon: TriangleAlert
+---
+
+# Embedding Drift Banner
+
+The **Embedding Drift Banner** is a warning panel shown when the active embedding model is incompatible with vectors already stored (the model changed or dimensions mismatch). It explains the stored-vs-current model ids, shows a reindex progress bar + phase label while re-embedding, and offers "Re-embed All" / Cancel. Bind to `useReindex` + your compatibility check.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/embedding-drift-banner" note="Simulates a re-embed run advancing through the embedding phase; wire to useReindex." />
+
+<OpenInV0 name="ui/local-first/embedding-drift-banner" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/embedding-drift-banner" />
+
+### Data source & dependencies
+
+**Data source:** renders the drift/reindex state you pass and emits Re-embed/Cancel — works with any backend. Recommended producer: `useReindex` from `@localmode/react` (on-device, optional).
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `embedding-drift-banner.tsx` — the `EmbeddingDriftBanner` component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/embedding-drift-banner/embedding-drift-banner.tsx" name="EmbeddingDriftBannerProps" />
+
+<AutoTypeTable path="registry/localmode/local-first/embedding-drift-banner/embedding-drift-banner.tsx" name="ReindexProgressLike" />
+
+## Examples
+
+### Bound to useReindex
+
+```tsx
+const { isReindexing, progress, reindex, cancel } = useReindex({ db, model });
+<EmbeddingDriftBanner
+  storedModelId={stored}
+  currentModelId={current}
+  isReindexing={isReindexing}
+  progress={progress}
+  onReindex={reindex}
+  onCancel={cancel}
+/>
+```
+
+## Customization
+
+The banner uses the `amber` palette to read as a warning. The phase label maps `useReindex` phases (`embedding` / `indexing`) to human strings in `PHASE_LABEL`. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

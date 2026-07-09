@@ -1,15 +1,16 @@
 ---
 title: 'Utilities'
-description: Hooks for model status, capabilities, network, storage, voice recording, and helper utilities for files and downloads.
+description: 'Hooks for model loading, model status, capabilities, network, storage, voice recording, audit logs, and helper utilities for files and downloads.'
 icon: Wrench
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
 
 # Utility Hooks
 
 <Callout type="info" title="See it in action">
-  Try [LLM Chat](https://localmode.ai/llm-chat), [Semantic Search](https://localmode.ai/semantic-search), and [Voice Notes](https://localmode.ai/voice-notes) for working demos of these hooks.
+  Try the [Chat block](https://localmode.ai/blocks/chat), [Knowledge Base block](https://localmode.ai/blocks/knowledge), and [Audio Studio block](https://localmode.ai/blocks/audio) for working demos of these hooks.
 </Callout>
 
 ## useVoiceRecorder
@@ -44,18 +45,46 @@ function VoiceInput() {
 | Property | Type | Description |
 |----------|------|-------------|
 | `isRecording` | `boolean` | Whether audio is being recorded |
+| `stream` | `MediaStream \| null` | The live MediaStream while recording (e.g. for waveform visualizers), null otherwise |
 | `error` | `AppError \| null` | Recording error (e.g., mic denied) |
 | `startRecording` | `() => Promise<void>` | Request mic access and start recording |
 | `stopRecording` | `() => Promise<Blob \| null>` | Stop recording, return audio blob |
+| `getVolume` | `() => number` | Current input volume as RMS in [0, 1] (0 when not recording) |
 | `clearError` | `() => void` | Clear the error state |
 
 ### Options
 
+| Option | Type | Description |
+|--------|------|-------------|
+| `mimeType` | `string` | Preferred MIME type (default: `'audio/webm;codecs=opus'`) |
+| `deviceId` | `string` | Specific microphone to record from (a `deviceId` from `enumerateDevices()`). Forwarded as `{ deviceId: { exact: deviceId } }` — recording fails with `error` set if the device is unavailable, rather than silently falling back |
+| `constraints` | `MediaTrackConstraints` | Additional audio track constraints merged into the `getUserMedia` request (e.g. `{ echoCancellation: true }`). An explicit `deviceId` takes precedence over `constraints.deviceId` |
+
 ```tsx
 const recorder = useVoiceRecorder({
-  mimeType: 'audio/mp4', // Custom MIME type (default: 'audio/webm;codecs=opus')
+  deviceId: selectedMicId,
+  constraints: { echoCancellation: true },
 });
 ```
+
+### Volume Metering
+
+`getVolume()` lazily creates an `AnalyserNode` on first call while recording and tears it down on stop/unmount. Call it from a `requestAnimationFrame` loop to drive level meters:
+
+```tsx
+useEffect(() => {
+  if (!recorder.isRecording) return;
+  let raf: number;
+  const tick = () => {
+    setLevel(recorder.getVolume()); // RMS in [0, 1]
+    raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+  return () => cancelAnimationFrame(raf);
+}, [recorder.isRecording]);
+```
+
+To play back the recorded blob, pair with [`useObjectUrl`](#useobjecturl).
 
 ## toAppError
 
@@ -82,6 +111,14 @@ error: error ? { message: error.message, recoverable: true } : null
 error: toAppError(error)
 ```
 
+When the source error is a core `LocalModeError`, its `code` is carried over to `AppError.code` and its `hint` is appended to the message:
+
+```tsx
+// LocalModeError('Model failed', 'MODEL_LOAD_ERROR', { hint: 'Check your network' })
+toAppError(error)
+// → { message: 'Model failed — Check your network', code: 'MODEL_LOAD_ERROR', recoverable: true }
+```
+
 ### AppError Type
 
 ```tsx
@@ -92,41 +129,132 @@ interface AppError {
 }
 ```
 
+## useModelLoad
+
+Own the full provider-model load lifecycle: construct the model once per `key`, normalize download progress across all LocalMode providers into one 0–1 aggregate, and drive a `status` machine from a warmup inference — the only reliable "fully loaded" signal, since providers load lazily on first inference.
+
+State lives in a module-level registry (consumed via `useSyncExternalStore`), so progress survives unmount/remount mid-download and multiple components can observe the same load.
+
+```tsx
+import { useModelLoad } from '@localmode/react';
+import { transformers, isModelCached } from '@localmode/transformers';
+
+const MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
+
+function SearchPanel() {
+  const { status, progressValue, model, load, error } = useModelLoad({
+    key: MODEL_ID,
+    create: (onProgress) => transformers.embedding(MODEL_ID, { onProgress }),
+    isCached: () => isModelCached(MODEL_ID),
+  });
+
+  if (status === 'error') return <p>Failed: {error?.message}</p>;
+  if (status !== 'ready') {
+    return (
+      <button onClick={load} disabled={status === 'loading'}>
+        Load model ({(progressValue.percent * 100).toFixed(0)}%)
+      </button>
+    );
+  }
+  return <SearchView model={model} />;
+}
+```
+
+### The create-factory pattern
+
+Providers bind `onProgress` at model construction, so the hook owns the progress callback and your `create` factory wires it in. The factory is invoked at most once per `key`, and only on the client (never during SSR):
+
+```tsx
+// transformers
+create: (onProgress) => transformers.embedding(id, { onProgress })
+// webllm
+create: (onProgress) => webllm.languageModel(id, { onProgress })
+// wllama
+create: (onProgress) => wllama.languageModel(id, { onProgress })
+```
+
+Progress events from every provider shape (transformers per-file bytes, webllm aggregate percent, wllama/litert single-file bytes) are normalized into `progress` (0–1) and the `perFile` map. The published `progress` / `progressValue.percent` is non-decreasing within a load attempt: when a provider discovers additional files mid-download the raw Σloaded/Σtotal can dip, so the aggregate holds its high-water mark (reset on each `load()` attempt) while `perFile` keeps the raw byte counts.
+
+### Options
+
+<TypeTable type={{
+  key: { type: 'string', description: 'Singleton/dedup key — typically the modelId. All useModelLoad instances (and useModelStatus lookups) sharing this key share one registry entry, one model instance, and one load lifecycle.' },
+  create: { type: '(onProgress: (progress: AnyLoadProgress) => void) => M', description: 'Factory that constructs the provider model with the registry-bound progress callback. Invoked at most once per key, client-only.' },
+  warmup: { type: '(model: M) => Promise<unknown>', description: "Inference that forces the provider's lazy load to completion. Defaults to a feature-detected minimal inference: doGenerate → generateText 1 token; doEmbed → embed('.'); anything else throws asking for an explicit warmup." },
+  isCached: { type: '() => Promise<boolean>', description: 'Provider cache probe (e.g. () => webllm.isModelCached(id)). Evaluated once when load() starts; result exposed as cached.' },
+  autoLoad: { type: 'boolean', description: 'Start loading automatically on mount (client only). Default: false.' },
+}} />
+
+### Return Value
+
+<TypeTable type={{
+  status: { type: "'idle' | 'loading' | 'ready' | 'error'", description: 'Load lifecycle status — driven by the warmup promise, never by progress events.' },
+  progress: { type: 'number', description: 'Aggregate load progress, 0-1. Non-decreasing within a load attempt (high-water clamp); perFile carries the raw byte counts.' },
+  perFile: { type: 'ReadonlyMap<string, ModelFileProgress>', description: 'Per-file byte progress ({ loaded, total }), keyed by file name (or a synthetic single entry).' },
+  cached: { type: 'boolean | undefined', description: 'Whether the model was cached when load() started (undefined until probed).' },
+  error: { type: 'Error | null', description: 'Load error (warmup rejection), or null.' },
+  model: { type: 'M | null', description: 'The model instance — null until first client use (created in a mount effect).' },
+  load: { type: '() => Promise<void>', description: "Start (or join) the load. Idempotent: concurrent calls join the in-flight load; calls after 'ready' resolve immediately; calls after 'error' retry. Rejects with the warmup error." },
+  progressValue: { type: 'ModelLoadProgressValue', description: 'Pre-shaped { loaded?, total?, percent (0–1 fraction), cached? } matching the @localmode/ui DownloadProgressValue contract.' },
+}} />
+
+### Pairing progressValue with a download UI
+
+`progressValue` is shaped to match download-progress UI components directly — for example the `DownloadProgress` element from the `@localmode/ui` registry accepts it as its `value` prop with no adapter:
+
+```tsx
+// installed via: npx shadcn add @localmode/ui/local-first/model-downloader
+import { DownloadProgress } from '@/components/ui/model-downloader';
+
+const { progressValue } = useModelLoad({ key, create });
+
+<DownloadProgress value={progressValue} />
+```
+
+<Callout type="warn" title="Not abortable in v1">
+`load()` cannot be cancelled — provider model loads do not accept an AbortSignal, so an in-flight load runs to completion (or failure). Treat the load as a commit once started.
+</Callout>
+
 ## useModelStatus
 
-Track whether a model is ready for inference.
+Read-only view of whether a model is ready for inference. Backed by the same registry as `useModelLoad`: it looks up the shared load lifecycle by `model.modelId` and reflects the real state — `isLoading` while a load is in flight, `isReady` once the warmup inference resolved, `progress` (0–1) from normalized provider progress events (non-decreasing within a load attempt, like `useModelLoad`), and `error` when the load failed.
 
 ```tsx
 import { useModelStatus } from '@localmode/react';
 
 const model = transformers.embedding('Xenova/all-MiniLM-L6-v2');
 
-function Demo() {
-  const { isReady, isLoading, error } = useModelStatus(model);
+function StatusBadge() {
+  const { isReady, isLoading, progress, error } = useModelStatus(model);
 
-  if (isLoading) return <p>Loading model...</p>;
+  if (isLoading) return <p>Loading {(progress * 100).toFixed(0)}%...</p>;
   if (error) return <p>Failed to load: {error.message}</p>;
-  if (isReady) return <p>Model ready</p>;
+  return <p>{isReady ? 'Model ready' : 'Not loaded'}</p>;
 }
 ```
 
+<Callout type="warn" title="Corrected semantics">
+`useModelStatus` previously reported `isReady: true` optimistically as soon as a model instance existed — but provider models load lazily on first inference, so a constructed instance proves nothing. It now observes the actual lifecycle driven by `useModelLoad({ key: model.modelId, ... })`. When no load has been observed for the modelId, it reports `{ isReady: false, isLoading: false, progress: 0, error: null }`.
+</Callout>
+
 ## useCapabilities
 
-Detect browser AI capabilities on mount.
+Detect browser AI capabilities on mount. Returns a typed `DeviceCapabilities` (with `browser`, `device`, `hardware`, `features`, and `storage` sub-objects), a detection `error`, and a `refresh()` function to re-detect.
 
 ```tsx
 import { useCapabilities } from '@localmode/react';
 
 function Demo() {
-  const { capabilities, isDetecting } = useCapabilities();
+  const { capabilities, isDetecting, error, refresh } = useCapabilities();
 
   if (isDetecting) return <p>Detecting...</p>;
+  if (error) return <button onClick={refresh}>Retry detection</button>;
 
   return (
     <ul>
-      <li>WebGPU: {capabilities?.features?.webgpu ? 'Yes' : 'No'}</li>
-      <li>WASM: {capabilities?.features?.wasm ? 'Yes' : 'No'}</li>
-      <li>IndexedDB: {capabilities?.features?.indexedDB ? 'Yes' : 'No'}</li>
+      <li>WebGPU: {capabilities?.features.webgpu ? 'Yes' : 'No'}</li>
+      <li>WASM: {capabilities?.features.wasm ? 'Yes' : 'No'}</li>
+      <li>IndexedDB: {capabilities?.features.indexedDB ? 'Yes' : 'No'}</li>
     </ul>
   );
 }
@@ -148,17 +276,25 @@ function Demo() {
 
 ## useStorageQuota
 
-Monitor browser storage usage.
+Monitor browser storage usage. Exposes the full core `StorageQuota` (`usedBytes`, `quotaBytes`, `percentUsed`, `isPersisted`, `availableBytes`) — or `null` while unavailable — plus loading state, the query `error`, and `refresh()`.
 
 ```tsx
 import { useStorageQuota } from '@localmode/react';
 
 function Demo() {
-  const { quota, isLoading, refresh } = useStorageQuota();
+  const { quota, isLoading, error, refresh } = useStorageQuota();
+
+  if (error) return <p>Quota unavailable: {error.message}</p>;
 
   return (
     <div>
-      {quota && <p>Used: {(quota.usedBytes / 1024 / 1024).toFixed(1)} MB</p>}
+      {quota && (
+        <p>
+          {quota.percentUsed.toFixed(1)}% used
+          ({(quota.availableBytes / 1024 / 1024).toFixed(0)} MB free)
+          {quota.isPersisted ? ' — persisted' : ''}
+        </p>
+      )}
       <button onClick={refresh}>Refresh</button>
     </div>
   );
@@ -225,17 +361,34 @@ downloadBlob('transcript text...', 'transcript.txt');
 downloadBlob(audioBlob, 'recording.webm', 'audio/webm');
 ```
 
+## useObjectUrl
+
+Derive a stable object URL from a `Blob` with automatic `URL.revokeObjectURL` when the blob changes or the component unmounts. Returns `null` when the blob is null/undefined, during SSR, and for the first render after a blob change (the URL is created in an effect so server and client markup match).
+
+```tsx
+import { useObjectUrl } from '@localmode/react';
+
+function NotePlayback({ audio }: { audio: Blob | null }) {
+  const src = useObjectUrl(audio);
+  return src ? <audio controls src={src} /> : null;
+}
+```
+
+Pairs naturally with `useVoiceRecorder` (recorded blobs) and `useSynthesizeSpeech` (synthesized audio).
+
 ## useModelLoader
 
-Wraps `createModelLoader()` from `@localmode/core` with React state for downloading model files directly from URLs. Use this for custom ONNX models, self-hosted models, or other direct file downloads — not for models loaded through `@localmode/transformers` or `@localmode/webllm` (those providers manage their own caching).
+Wraps `createModelLoader()` from `@localmode/core` with React state for downloading model files directly from URLs. Use this for custom ONNX models, self-hosted models, or other direct file downloads — not for models loaded through `@localmode/transformers` or `@localmode/webllm` (those providers manage their own caching; use [`useModelLoad`](#usemodelload) for those).
 
 ```tsx
 import { useModelLoader } from '@localmode/react';
 
 function ModelManager() {
-  const { downloads, isDownloading, prefetch, cancel, evict } = useModelLoader({
+  const { downloads, isDownloading, error, prefetch, cancel, evict } = useModelLoader({
     maxCacheSize: '2GB',
   });
+
+  if (error) return <p>Loader unavailable: {error.message}</p>; // e.g. IndexedDB blocked
 
   return (
     <button onClick={() => prefetch([{
@@ -248,7 +401,7 @@ function ModelManager() {
 }
 ```
 
-For full API reference and when-to-use guidance, see the [Model Cache](/docs/core/model-cache) documentation.
+The `error` field surfaces loader initialization failures (e.g. IndexedDB blocked in private browsing) instead of silently no-oping. For full API reference and when-to-use guidance, see the [Model Cache](/docs/core/model-cache) documentation.
 
 ## useInferenceQueue
 
@@ -308,13 +461,115 @@ function CachedApp() {
 
 For full API reference, see the [Semantic Cache](/docs/core/semantic-cache) documentation.
 
-## Showcase Apps
+## useAuditLog
+
+Wraps a `@localmode/core` `AuditLog` instance (append-only, hash-chained, signed). Loads entries on mount, exposes `append`/`verify`/`refresh`, and retains the most recent verification result as `lastVerification`.
+
+```tsx
+import { useAuditLog } from '@localmode/react';
+import type { AuditLog } from '@localmode/core';
+
+function AuditPanel({ log }: { log: AuditLog }) {
+  const { entries, append, verify, lastVerification, isLoading, error } = useAuditLog(log);
+
+  return (
+    <div>
+      {entries.map((e) => <div key={e.id}>{e.kind}</div>)}
+      <button onClick={() => append('user.click', {})}>Log click</button>
+      <button onClick={verify}>Verify chain</button>
+      {lastVerification && <p>{lastVerification.ok ? 'Chain intact' : `Chain broken at #${lastVerification.brokenAt}`}</p>}
+    </div>
+  );
+}
+```
+
+### Return Value
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `entries` | `AuditEntry[]` | Entries in chain order, oldest first |
+| `isLoading` | `boolean` | True while the initial load or refresh is in flight |
+| `error` | `Error \| null` | Last error from append/verify/refresh |
+| `append` | `(kind, payload) => Promise<AuditEntry>` | Append an entry; updates `entries` on success |
+| `verify` | `() => Promise<AuditLogVerifyResult>` | Run `verifyChain` against the log |
+| `lastVerification` | `AuditLogVerifyResult \| null` | Result of the most recent resolved `verify()` call — `{ ok, brokenAt?, reason?, entriesChecked, durationMs }` (null until one resolves; unchanged when `verify()` throws) |
+| `refresh` | `() => Promise<void>` | Re-read entries from storage |
+
+There is intentionally no `clear` — the audit log is append-only. For full API reference, see the [Audit Log](/docs/core/audit-log) documentation.
+
+## useEncryptedVault
+
+Passphrase-locked, encrypted CRUD vault over a pluggable core `StorageAdapter` (default: a dedicated `IndexedDBStorage('vault_<name>')`). Items are AES-GCM envelopes at rest (fresh 12-byte IV per write, versioned, base64) — everything except the item id and timestamps is ciphertext. The key is derived once per unlock via core `deriveEncryptionKey` (PBKDF2) and held only in a ref while unlocked; the passphrase is never retained and no key material is ever persisted. `lock()` and unmount clear it.
+
+A single `unlock(passphrase)` entrypoint initializes the vault on first use and verifies the passphrase afterwards — wrong passphrases are detected deterministically via an encrypted verifier record, which works even on an empty vault.
+
+<Callout type="info" title="See it live">
+  The [Encrypted Vault block](https://localmode.ai/blocks/privacy/encrypted-vault) drives `useEncryptedVault` end-to-end in the browser — it runs the full passphrase lifecycle (create / lock / unlock), encrypted note + document CRUD with ciphertext at rest in IndexedDB, and a tamper-evident hash-chained audit log, all built on the `ui/security-privacy/passphrase-gate`, `vault-item-card`, and `lock-status-badge` primitives.
+</Callout>
+
+```tsx
+import { useEncryptedVault } from '@localmode/react';
+
+function Vault() {
+  const { status, items, error, unlock, lock, createItem, deleteItem } =
+    useEncryptedVault<{ note: string }>({ name: 'notes' });
+
+  if (status !== 'unlocked') {
+    return (
+      <form onSubmit={(e) => { e.preventDefault(); unlock(passphraseInput); }}>
+        <button>{status === 'uninitialized' ? 'Create vault' : 'Unlock'}</button>
+        {error?.name === 'VaultPassphraseError' && <p>Wrong passphrase</p>}
+      </form>
+    );
+  }
+  return (
+    <div>
+      {items.map((i) => (
+        <div key={i.id}>
+          {i.data.note} <button onClick={() => deleteItem(i.id)}>x</button>
+        </div>
+      ))}
+      <button onClick={() => createItem({ note: 'hello' })}>Add</button>
+      <button onClick={lock}>Lock</button>
+    </div>
+  );
+}
+```
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `name` | `string` | `'default'` | Vault namespace — names the default IndexedDB database (`vault_<name>`) and the vault's storage collection |
+| `storage` | `StorageAdapter` | — | Pluggable storage adapter (e.g. `MemoryStorage`, Dexie/idb/localForage adapters). When omitted, a dedicated `IndexedDBStorage` is created, opened, and closed by the hook |
+| `iterations` | `number` | `100000` | PBKDF2 iterations used when the vault is initialized (first unlock). Subsequent unlocks always use the iteration count persisted in the vault meta record |
+
+### Return Value
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `status` | `'uninitialized' \| 'locked' \| 'unlocked'` | Vault lifecycle state, detected from the persisted meta record on mount |
+| `items` | `VaultItem<T>[]` | Decrypted item list while unlocked; `[]` otherwise |
+| `isBusy` | `boolean` | True while an unlock/CRUD/refresh operation is in flight |
+| `error` | `Error \| null` | Last operation error — `VaultPassphraseError` on wrong passphrase, `VaultLockedError` on CRUD while locked |
+| `unlock` | `(passphrase) => Promise<boolean>` | Unlock the vault — initializes on first use, verifies the passphrase afterwards. Resolves `true` on success |
+| `lock` | `() => void` | Synchronously lock: clears the in-memory key and decrypted items |
+| `createItem` | `(data) => Promise<VaultItem<T> \| null>` | Encrypt and persist a new item. Resolves `null` on failure or while locked |
+| `readItem` | `(id) => Promise<VaultItem<T> \| null>` | Read and decrypt a single item by id |
+| `updateItem` | `(id, data) => Promise<VaultItem<T> \| null>` | Re-encrypt an existing item with new data |
+| `deleteItem` | `(id) => Promise<boolean>` | Delete an item by id. Resolves `false` if missing or locked |
+| `refresh` | `() => Promise<void>` | Re-read and decrypt all items from storage into `items` |
+| `cancel` | `() => void` | Abort the in-flight operation (silent — no `error` state) |
+
+Methods never throw to the caller — failures resolve `null`/`false` and surface via `error`. Encryption uses the Web Crypto API only, so the vault requires a secure context (HTTPS or localhost). One vault per storage namespace: give each vault its own adapter (the default IndexedDB database is already namespaced per vault name). For the underlying primitives, see the [Encryption](/docs/core/security) documentation.
+
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| LLM Chat | Uses toAppError for error handling, downloadBlob for exports | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |
-| Semantic Search | Uses toAppError, downloadBlob, validateFile | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
-| Voice Notes | Uses toAppError for transcription error handling | [Demo](https://localmode.ai/voice-notes) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/voice-notes) |
-| Object Detector | Uses readFileAsDataUrl for image loading | [Demo](https://localmode.ai/object-detector) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/object-detector) |
-| Document Redactor | Uses toAppError and downloadBlob | [Demo](https://localmode.ai/document-redactor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/document-redactor) |
-| Model Evaluator | Uses toAppError for evaluation error handling | [Demo](https://localmode.ai/model-evaluator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/model-evaluator) |
+| Chat (LLM Chat) | Uses toAppError for error handling, downloadBlob for exports | [Live block](https://localmode.ai/blocks/chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/chat) |
+| Knowledge Base (Semantic Search) | Uses toAppError, downloadBlob, validateFile | [Live block](https://localmode.ai/blocks/knowledge) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge) |
+| Audio Studio (Voice Notes) | Uses toAppError for transcription error handling | [Live block](https://localmode.ai/blocks/audio) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/audio) |
+| Vision (Object Detector) | Uses readFileAsDataUrl for image loading | [Live block](https://localmode.ai/blocks/vision/object-detector) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/vision/object-detector) |
+| Privacy (PII Redactor) | Uses toAppError and downloadBlob | [Live block](https://localmode.ai/blocks/privacy/pii-redactor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/privacy/pii-redactor) |
+| Text Insights (Model Evaluator) | Uses toAppError for evaluation error handling | [Live block](https://localmode.ai/blocks/text-insights/model-evaluator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/text-insights/model-evaluator) |

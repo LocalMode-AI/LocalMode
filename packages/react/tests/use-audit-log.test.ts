@@ -5,11 +5,13 @@
 import { describe, it, expect } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { createAuditLog, MemoryStorage } from '@localmode/core';
-import type { AuditLog } from '@localmode/core';
+import type { AuditLog, StorageAdapter } from '@localmode/core';
 import { useAuditLog } from '../src/hooks/use-audit-log.js';
 
 async function makeLog(name: string) {
-  const storage = new MemoryStorage();
+  // StorageAdapter.getVector/getAllVectors were widened (2026-06-12) to match
+  // the implementations' Float32Array | Uint8Array reality, so no cast needed.
+  const storage: StorageAdapter = new MemoryStorage();
   const log = await createAuditLog({ name, storage });
   return log;
 }
@@ -64,6 +66,51 @@ describe('useAuditLog', () => {
     expect(vr).toBeDefined();
     expect(vr!.ok).toBe(true);
     expect(vr!.entriesChecked).toBe(2);
+  });
+
+  it('verify() retains the verification result as lastVerification', async () => {
+    const log = await makeLog('verify-retained');
+    await log.append('a', {});
+    await log.append('b', {});
+    const { result } = renderHook(() => useAuditLog(log));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    // No verification has run yet
+    expect(result.current.lastVerification).toBeNull();
+
+    let returned: Awaited<ReturnType<(typeof result.current)['verify']>> | undefined;
+    await act(async () => {
+      returned = await result.current.verify();
+    });
+
+    // Two witnesses: the promise resolution AND the retained state agree
+    expect(returned).toBeDefined();
+    expect(result.current.lastVerification).toEqual(returned);
+    expect(result.current.lastVerification!.ok).toBe(true);
+    expect(result.current.lastVerification!.entriesChecked).toBe(2);
+  });
+
+  it('lastVerification updates on each subsequent verify()', async () => {
+    const log = await makeLog('verify-updates');
+    await log.append('a', {});
+    const { result } = renderHook(() => useAuditLog(log));
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(async () => {
+      await result.current.verify();
+    });
+    expect(result.current.lastVerification!.entriesChecked).toBe(1);
+
+    await act(async () => {
+      await result.current.append('b', {});
+    });
+    await act(async () => {
+      await result.current.verify();
+    });
+    expect(result.current.lastVerification!.entriesChecked).toBe(2);
+    expect(result.current.lastVerification!.ok).toBe(true);
   });
 
   it('null log returns empty defaults and append() throws a clear error', async () => {

@@ -14,7 +14,8 @@ Translate text between languages using Helsinki-NLP OPUS-MT models. Each model h
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [Translator](https://localmode.ai/translator) and [Smart Writer](https://localmode.ai/smart-writer) for working demos.
+  Try the [Translator block](https://localmode.ai/blocks/writing-tools/translate) — it
+  runs offline Opus-MT translation live in the browser.
 </Callout>
 
 ## Recommended Models
@@ -36,7 +37,7 @@ Translate text between languages using Helsinki-NLP OPUS-MT models. Each model h
 
 ## Multi-Language Support
 
-Based on the [Translator](https://localmode.ai/translator) showcase app — use a different model per language pair:
+Based on the [Translator block](https://localmode.ai/blocks/writing-tools/translate) — use a different model per language pair:
 
 ```typescript
 import { transformers } from '@localmode/transformers';
@@ -69,12 +70,11 @@ async function translateText(text: string, pair: keyof typeof models) {
   4. **Support cancellation** — Pass `abortSignal` for user-cancelable translations
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| Translator | Translate between 200+ language pairs | [Demo](https://localmode.ai/translator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/translator) |
-| Smart Writer | Multi-language writing with translation support | [Demo](https://localmode.ai/smart-writer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-writer) |
+| Translator | Offline Opus-MT translation across language pairs | [Live](https://localmode.ai/blocks/writing-tools/translate) · Install: `npx shadcn add @localmode/ui/blocks/writing-tools/translate` |
 
 ## Next Steps
 

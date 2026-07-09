@@ -1,0 +1,260 @@
+---
+title: Next.js Integration
+description: Wire LocalMode into a Next.js App Router app — client-only provider loading with ssr false, one assembled next.config example (COOP/COEP, CSP, bundler aliases), the useChat naming note, and service worker rules for model weights.
+icon: Hexagon
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+LocalMode runs models **entirely in the browser** — there is no server-side inference, no API route to proxy through, and nothing for React Server Components to render. Integrating with Next.js therefore comes down to four pieces of glue, all collected on this page:
+
+1. [Load provider runtimes client-side only](#run-providers-client-side-only) (`ssr: false`)
+2. [Avoid the `useChat` naming collision](#the-usechat-naming-collision) with `@ai-sdk/react`
+3. [One assembled `next.config.mjs`](#nextconfigmjs-all-of-it-assembled) — headers, CSP, and bundler aliases
+4. [Service workers, PWA, and Turbopack](#service-workers-pwa-and-turbopack) — and the one rule that matters: never cache model weights in your service worker
+
+This page owns only the Next.js-specific wiring. For depth on each topic it links out: [CSP and security](/docs/core/security), [deployment header trade-offs](/blog/deploying-static-hosting-ai-apps), and the [offline-first PWA architecture guide](/blog/offline-first-ai-pwa).
+
+## Run providers client-side only
+
+Provider runtimes (`@localmode/transformers`, `@localmode/webllm`, `@localmode/wllama`, `@localmode/litert`, `@localmode/mediapipe`) touch browser APIs — WebGPU, WebAssembly, IndexedDB, workers — and must never execute during server-side rendering or inside a React Server Component. Two patterns keep them client-only; both also keep the multi-megabyte runtime out of your initial JavaScript chunk.
+
+### Pattern 1: `next/dynamic` with `ssr: false`
+
+In the App Router, `ssr: false` is only allowed inside Client Components, so the pattern is: a Server Component page renders a thin client wrapper, and the wrapper dynamically imports the component that actually uses LocalMode.
+
+```tsx title="app/chat/page.tsx"
+// Server Component — imports nothing from @localmode/*
+import { ChatPanelLoader } from './chat-panel-loader';
+
+export default function ChatPage() {
+  return (
+    <main>
+      <h1>Local Chat</h1>
+      <ChatPanelLoader />
+    </main>
+  );
+}
+```
+
+```tsx title="app/chat/chat-panel-loader.tsx"
+'use client';
+
+import dynamic from 'next/dynamic';
+
+// The provider runtime touches WebGPU/WASM/IndexedDB — never render it on the server.
+const ChatPanel = dynamic(() => import('./chat-panel'), {
+  ssr: false,
+  loading: () => <p>Loading chat…</p>,
+});
+
+export function ChatPanelLoader() {
+  return <ChatPanel />;
+}
+```
+
+```tsx title="app/chat/chat-panel.tsx"
+'use client';
+
+import { useChat } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+// Creating the model instance is lazy — nothing downloads until first inference.
+const model = transformers.languageModel('onnx-community/Qwen3-0.6B-ONNX');
+
+export default function ChatPanel() {
+  const { messages, send, isStreaming, cancel } = useChat({ model });
+
+  return (
+    <div>
+      {messages.map((msg) => (
+        <p key={msg.id}>
+          <strong>{msg.role}:</strong> {msg.content}
+        </p>
+      ))}
+      <button onClick={() => send('Hello!')}>Send</button>
+      {isStreaming && <button onClick={cancel}>Stop</button>}
+    </div>
+  );
+}
+```
+
+### Pattern 2: dynamic `import()` inside the component
+
+If you prefer to skip the wrapper file, load the provider imperatively from a Client Component — in `useEffect` or, better, behind a user action so the runtime only loads when it is actually needed:
+
+```tsx title="app/search/search-box.tsx"
+'use client';
+
+import { useEffect, useState } from 'react';
+import type { EmbeddingModel } from '@localmode/core';
+
+export function SearchBox() {
+  const [model, setModel] = useState<EmbeddingModel | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Resolved in the browser only — never evaluated during SSR.
+    import('@localmode/transformers').then(({ transformers }) => {
+      if (!cancelled) setModel(transformers.embedding('Xenova/bge-small-en-v1.5'));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!model) return <p>Loading model runtime…</p>;
+  // ... use the model with embed(), useSemanticSearch(), etc.
+}
+```
+
+<Callout type="info" title="Types are always safe">
+  `import type { ... } from '@localmode/core'` (or from any provider) is erased at compile time
+  and is safe in any file, including Server Components. Only **value** imports of provider
+  runtimes must stay client-side.
+</Callout>
+
+## The `useChat` naming collision
+
+`@localmode/react` exports `useChat` — and so does `@ai-sdk/react`. If both packages are installed (common in hybrid apps that use cloud models through the Vercel AI SDK and local models through LocalMode), auto-import will happily pick the wrong one. Alias at the import site:
+
+```tsx title="hybrid-chat.tsx"
+'use client';
+
+import { useChat } from '@ai-sdk/react'; // cloud chat via your /api route
+import { useChat as useLocalChat } from '@localmode/react'; // on-device chat
+import { webllm } from '@localmode/webllm';
+
+const localModel = webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC');
+
+export function HybridChat({ local }: { local: boolean }) {
+  const cloud = useChat();
+  const onDevice = useLocalChat({ model: localModel });
+  // ...render whichever surface is active
+}
+```
+
+The two hooks are not interchangeable: `@localmode/react`'s `useChat` takes a `{ model }` and runs inference in the browser ([API reference](/docs/react/chat)); `@ai-sdk/react`'s posts to a server route. If you want to keep the Vercel AI SDK surface (`generateText`, `streamText`, `embed` from `ai`) while running locally, use the [`@localmode/ai-sdk` provider](/docs/ai-sdk) instead of mixing hooks.
+
+## next.config.mjs — all of it, assembled
+
+Each piece below is documented in depth elsewhere; this is the complete, copy-pasteable combination for a Next.js app running LocalMode:
+
+```javascript title="next.config.mjs"
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  // Keep Node-only optional deps of the Transformers.js runtime out of the
+  // client bundle — they are never used in the browser.
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      sharp$: false,
+      'onnxruntime-node$': false,
+    };
+    return config;
+  },
+
+  // Leave the ML runtime external to the server build so Node resolves it
+  // natively if a server file ever pulls it in transitively.
+  // (Next.js 14: use `experimental.serverComponentsExternalPackages` instead.)
+  serverExternalPackages: ['@huggingface/transformers', 'sharp', 'onnxruntime-node'],
+
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          // Cross-origin isolation → SharedArrayBuffer → multi-threaded WASM
+          // (2-4x faster wllama inference; also used by other WASM runtimes).
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+          // `credentialless`, NOT `require-corp`: HuggingFace/CDN model hosts
+          // don't send Cross-Origin-Resource-Policy headers, so `require-corp`
+          // would block model downloads. `credentialless` enables isolation
+          // while still allowing cross-origin fetches (made without credentials).
+          { key: 'Cross-Origin-Embedder-Policy', value: 'credentialless' },
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              // 'wasm-unsafe-eval' permits WebAssembly compilation without
+              // enabling JavaScript eval().
+              "script-src 'self' 'wasm-unsafe-eval'",
+              // Inference runs in workers spawned from blob: URLs.
+              "worker-src 'self' blob:",
+              // Model downloads.
+              "connect-src 'self' https://huggingface.co https://cdn-lfs.huggingface.co",
+            ].join('; '),
+          },
+        ],
+      },
+    ];
+  },
+};
+
+export default nextConfig;
+```
+
+Notes on the trade-offs (with links for depth):
+
+- **Why `credentialless` over `require-corp`**: `require-corp` blocks every cross-origin resource that does not send a `Cross-Origin-Resource-Policy` header — and you do not control HuggingFace's CDN headers, so model downloads would break. `credentialless` keeps them working. The catch: `credentialless` is not supported in Safari (as of mid-2026), which falls back to single-threaded WASM. The full header matrix, per-platform configs (Vercel, Netlify, Cloudflare), and the Safari trade-off are covered in the [deployment guide](/blog/deploying-static-hosting-ai-apps).
+- **CSP**: `'wasm-unsafe-eval'` is required for `WebAssembly.instantiate()`; `worker-src 'self' blob:` is required for inference workers. Depending on your setup, Next.js's inline bootstrap scripts may additionally require `'unsafe-inline'` or nonces in `script-src`. Extend `connect-src` with any additional model hosts you use (e.g. regional HuggingFace CDN mirrors, or `storage.googleapis.com` for MediaPipe/LiteRT assets). See [Security](/docs/core/security) for the full CSP discussion.
+- **Bundler aliases**: `sharp` and `onnxruntime-node` are Node-only optional dependencies of `@huggingface/transformers`; aliasing them to `false` stops webpack from trying to bundle native modules for the browser. The `webpack()` hook does not run under Turbopack builds — see the [Turbopack note](#turbopack) below.
+- **Cross-origin isolation is page-wide**: third-party iframes on isolated pages must themselves support isolation. If an embed breaks, scope the COOP/COEP headers to the routes that run models instead of `/(.*)`.
+
+## Service workers, PWA, and Turbopack
+
+### The one rule: never cache model weights in your service worker
+
+Providers cache their own weights: Transformers.js uses the browser Cache API (`transformers-cache`), LiteRT uses the Cache API (`litert-models`), wllama and WebLLM manage their own caches, and `createModelLoader()` uses chunked IndexedDB storage. Your app-shell service worker must **skip** requests to model hosts entirely — intercepting them breaks download progress tracking and resume-from-interrupt behavior, and double-caches hundreds of megabytes.
+
+```js title="public/sw.js (excerpt)"
+const MODEL_HOSTS = [
+  'huggingface.co',
+  'cdn-lfs.huggingface.co',
+  'cdn-lfs-us-1.huggingface.co',
+  'hf.co',
+  'storage.googleapis.com', // MediaPipe / LiteRT runtimes and models
+];
+
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+  // Never intercept model downloads — providers cache weights themselves.
+  if (MODEL_HOSTS.includes(url.hostname)) return;
+  // ...your app-shell caching strategy
+});
+```
+
+(With Serwist/Workbox, the equivalent is a `runtimeCaching` entry matching those hosts with a `NetworkOnly` handler.) The complete offline architecture — app-shell precaching, `requestPersistence()`, storage quotas, network-aware model selection — is in the [offline-first PWA guide](/blog/offline-first-ai-pwa).
+
+### Turbopack
+
+Next.js 16 uses Turbopack by default, which changes two things:
+
+- **Serwist integration friction**: `@serwist/next` injects the service worker through a webpack plugin, which does not run under Turbopack. Two working alternatives: compile the service worker yourself in a postbuild step (e.g. esbuild-bundle a `src/app/sw.ts` that uses the `serwist` library directly, then inject the precache manifest with `@serwist/build` — this is how [localmode.ai](https://localmode.ai) ships its PWA), or hand-roll a small `public/sw.js` like the excerpt above and register it with `navigator.serviceWorker.register('/sw.js')`.
+- **`webpack()` config does not apply**: the `sharp$`/`onnxruntime-node$` aliases above are webpack-only. Under Turbopack, `@huggingface/transformers` resolves its browser build via package exports in most setups; if you do hit resolution errors for `sharp` or `onnxruntime-node`, map them to an empty stub module via [`turbopack.resolveAlias`](https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack).
+
+## Going deeper
+
+<Cards>
+  <Card
+    title="Security & CSP"
+    href="/docs/core/security"
+    description="Full Content-Security-Policy guidance, encryption, PII redaction, and differential privacy."
+  />
+  <Card
+    title="Deploying to Static Hosting"
+    href="/blog/deploying-static-hosting-ai-apps"
+    description="COOP/COEP/CSP header trade-offs and per-platform configs for Vercel, Netlify, Cloudflare, and GitHub Pages."
+  />
+  <Card
+    title="Offline-First PWA Guide"
+    href="/blog/offline-first-ai-pwa"
+    description="Complete PWA architecture: model pre-caching, service worker configuration, storage persistence, and quota management."
+  />
+  <Card
+    title="Getting Started"
+    href="/docs/getting-started"
+    description="Install LocalMode and build your first local AI application."
+  />
+</Cards>

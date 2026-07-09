@@ -1,0 +1,99 @@
+---
+title: "useWebcam"
+description: "A React hook that owns a getUserMedia video stream — start / stop / retry with track cleanup on unmount and permission-vs-hardware error mapping."
+icon: Camera
+---
+
+# useWebcam
+
+`useWebcam` is a React hook that owns a `getUserMedia` video stream. `start()`
+acquires the camera (or re-acquires after a denial — the retry path), `stop()`
+releases every track, and unmount cleanup guarantees the camera light goes off
+with the surface. A runtime permission denial surfaces as a recoverable `error`
+(`permission` / `hardware` / `unknown`) rather than a thrown exception, so you can
+render a retry action.
+
+It returns `{ stream, isActive, error, start, stop, clearError }` and exports the
+`WebcamError` / `WebcamErrorKind` types. It imports only React and browser APIs —
+no dependencies, no `@localmode/*`.
+
+> **Pairs with [Video Canvas](/docs/media-vision/video-canvas).** The Video Canvas
+> is deliberately a shell ("the app owns acquisition + permissions"); this hook
+> owns acquisition. Feed the returned `stream` into your `<video>` and drive an
+> overlay from a vision model.
+
+**When to use it:** any webcam-driven surface — object detection on a still, live
+landmark/skeleton tracking, or a camera preview — where you want a small,
+portable acquisition lifecycle with honest error handling.
+
+## Preview
+
+<ComponentPreview name="ui/media-vision/use-webcam" gated note="Requires camera permission. Nothing touches getUserMedia until you press Run, then Start — no prompt on page load." />
+
+<OpenInV0 name="ui/media-vision/use-webcam" />
+
+## Installation
+
+<InstallTabs name="ui/media-vision/use-webcam" />
+
+The hook installs to `hooks/use-webcam.ts` (the `registry:hook` install target).
+
+### Dependencies
+
+- **Data source:** none — it reads `navigator.mediaDevices.getUserMedia` directly. Works in any React app in a secure context.
+- No npm or registry dependencies.
+
+### Files installed
+
+- `hooks/use-webcam.ts` — the hook
+
+## API
+
+<AutoTypeTable path="registry/localmode/media-vision/use-webcam/use-webcam.ts" name="UseWebcamOptions" />
+
+<AutoTypeTable path="registry/localmode/media-vision/use-webcam/use-webcam.ts" name="WebcamError" />
+
+## Examples
+
+### Acquire and render a preview
+
+```tsx
+import { useEffect, useRef } from 'react';
+import { useWebcam } from '@/hooks/use-webcam';
+
+export function CameraPreview() {
+  const { stream, isActive, error, start, stop, clearError } = useWebcam({ width: 640 });
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.srcObject = stream;
+  }, [stream]);
+
+  return (
+    <div>
+      <button onClick={() => start()} disabled={isActive}>Start</button>
+      <button onClick={stop} disabled={!isActive}>Stop</button>
+      {error && (
+        <p role="alert">
+          {error.message} <button onClick={clearError}>Dismiss</button>
+        </p>
+      )}
+      <video ref={videoRef} autoPlay muted playsInline />
+    </div>
+  );
+}
+```
+
+### Retry after a permission denial
+
+Because `start()` re-acquires, wiring the error's retry to `start()` is enough:
+
+```tsx
+{error?.kind === 'permission' && <button onClick={() => start()}>Retry</button>}
+```
+
+## Customization
+
+The hook maps `NotAllowedError` / `SecurityError` to `permission`,
+`NotFoundError` / `NotReadableError` / `OverconstrainedError` to `hardware`, and
+everything else to `unknown`. Because you own the copied file, change the
+constraints (resolution, `facingMode`), the error copy, or add audio capture.

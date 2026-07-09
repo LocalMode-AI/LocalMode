@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Full-bleed rounded square (no margin), black. -->
+  <rect width="512" height="512" rx="96" ry="96" fill="#0a0a0a"/>
+  <!-- Subtle inner border (inset so it isn't clipped at the edge). -->
+  <rect x="4" y="4" width="504" height="504" rx="92" ry="92" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="8"/>
+  <!-- CloudOff glyph (the local-first / offline mark), centered. -->
+  <g transform="translate(112, 112) scale(12)" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="m2 2 20 20"/>
+    <path d="M5.782 5.782A7 7 0 0 0 9 19h8.5a4.5 4.5 0 0 0 1.307-.193"/>
+    <path d="M21.532 16.5A4.5 4.5 0 0 0 17.5 10h-1.79A7.008 7.008 0 0 0 10 5.07"/>
+  </g>
+</svg>

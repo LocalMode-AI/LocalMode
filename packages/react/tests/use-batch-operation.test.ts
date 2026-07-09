@@ -126,4 +126,94 @@ describe('useBatchOperation', () => {
     expect(result.current.progress).toBeNull();
     expect(result.current.isRunning).toBe(false);
   });
+
+  describe('progressive publication', () => {
+    it('publishes per-item results as they complete (not only when the batch ends)', async () => {
+      const gates: Record<number, () => void> = {};
+
+      const { result } = renderHook(() =>
+        useBatchOperation({
+          fn: (n: number) =>
+            new Promise<number>((resolve) => {
+              gates[n] = () => resolve(n * 2);
+            }),
+        })
+      );
+
+      let executePromise!: Promise<unknown>;
+      await act(async () => {
+        executePromise = result.current.execute([1, 2, 3]);
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      // Nothing finished yet
+      expect(result.current.isRunning).toBe(true);
+      expect(result.current.results).toEqual([]);
+
+      // Complete ONLY item 2 (index 1) — out of order on purpose
+      await act(async () => {
+        gates[2]();
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      expect(result.current.isRunning).toBe(true);
+      expect(result.current.progress).toEqual({ completed: 1, total: 3, succeeded: 1, failed: 0 });
+      // The completed item is already visible, carrying its original index
+      expect(result.current.results).toHaveLength(1);
+      expect(result.current.results[0]).toEqual({ index: 1, data: 4, error: null });
+
+      await act(async () => {
+        gates[1]();
+        gates[3]();
+        await executePromise;
+      });
+
+      expect(result.current.isRunning).toBe(false);
+      expect(result.current.results).toHaveLength(3);
+      expect(result.current.results.map((r) => r.data)).toEqual([2, 4, 6]);
+    });
+
+    it('publishes a failed item progressively with its error', async () => {
+      const gates: Record<number, { resolve: () => void; reject: (e: Error) => void }> = {};
+
+      const { result } = renderHook(() =>
+        useBatchOperation({
+          fn: (n: number) =>
+            new Promise<number>((resolve, reject) => {
+              gates[n] = {
+                resolve: () => resolve(n * 2),
+                reject: (e) => reject(e),
+              };
+            }),
+        })
+      );
+
+      let executePromise!: Promise<unknown>;
+      await act(async () => {
+        executePromise = result.current.execute([1, 2]);
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      // Fail item 1 (index 0) while item 2 is still running
+      await act(async () => {
+        gates[1].reject(new Error('item 1 exploded'));
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      expect(result.current.isRunning).toBe(true);
+      expect(result.current.progress).toEqual({ completed: 1, total: 2, succeeded: 0, failed: 1 });
+      expect(result.current.results).toHaveLength(1);
+      expect(result.current.results[0].index).toBe(0);
+      expect(result.current.results[0].data).toBeNull();
+      expect(result.current.results[0].error?.message).toBe('item 1 exploded');
+
+      await act(async () => {
+        gates[2].resolve();
+        await executePromise;
+      });
+
+      expect(result.current.results).toHaveLength(2);
+      expect(result.current.results[1]).toEqual({ index: 1, data: 4, error: null });
+    });
+  });
 });

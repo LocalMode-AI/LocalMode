@@ -9,7 +9,14 @@
  */
 
 import type { LanguageModel, GenerationUsage, ObjectSchema } from '../generation/types.js';
-import type { AgentStep, AgentResult, AgentMemory, ToolRegistry } from './types.js';
+import type {
+  AgentStep,
+  AgentResult,
+  AgentMemory,
+  ToolRegistry,
+  ToolApprovalRequest,
+  ToolApprovalDecision,
+} from './types.js';
 import { generateObject } from '../generation/generate-object.js';
 
 // ═══════════════════════════════════════════════════════════════
@@ -44,7 +51,20 @@ function createActionSchema(): ObjectSchema<AgentAction> {
         throw new Error('Expected an object with a "type" field');
       }
 
-      const obj = value as Record<string, unknown>;
+      let obj = value as Record<string, unknown>;
+
+      // Small models sometimes parrot the displayed JSON schema's
+      // discriminated-union wrapper, emitting `{"oneOf": [ {action} ]}` (or
+      // anyOf) instead of the bare action object. The intent is unambiguous —
+      // unwrap a single-element union wrapper before validating. Found by the
+      // blocks-chat agent E2E lane (LiteRT qwen3-0.6B).
+      if (obj.type === undefined) {
+        const wrapper = obj.oneOf ?? obj.anyOf;
+        if (Array.isArray(wrapper) && wrapper.length >= 1 &&
+            typeof wrapper[0] === 'object' && wrapper[0] !== null) {
+          obj = wrapper[0] as Record<string, unknown>;
+        }
+      }
 
       if (obj.type === 'tool_call') {
         if (typeof obj.tool !== 'string' || !obj.tool) {
@@ -100,6 +120,18 @@ function createActionSchema(): ObjectSchema<AgentAction> {
 // ═══════════════════════════════════════════════════════════════
 // PROMPT CONSTRUCTION
 // ═══════════════════════════════════════════════════════════════
+
+/**
+ * Token budget for each ReAct action generation. generateObject's default
+ * (1024) truncates reasoning/thinking models mid-`<think>` under the large
+ * agent prompt (tools + schema + rules): the think block never closes, no
+ * JSON is ever emitted, and — at the loop's temperature 0 — every retry
+ * fails identically ("Failed to generate valid object after N attempts").
+ * 2048 gives thinking models room to close the think block and still emit
+ * the action JSON; non-thinking models stop at the JSON's end long before
+ * the cap, so the headroom costs nothing when unused.
+ */
+const ACTION_MAX_TOKENS = 2048;
 
 /**
  * Build the agent system prompt with tool descriptions and instructions.
@@ -249,6 +281,45 @@ interface ReActLoopConfig {
   memory?: AgentMemory;
   abortSignal?: AbortSignal;
   onStep?: (step: AgentStep) => void;
+  onToolApproval?: (
+    request: ToolApprovalRequest
+  ) => ToolApprovalDecision | Promise<ToolApprovalDecision>;
+}
+
+/**
+ * Await an approval decision raced against the run's abort signal (D5).
+ *
+ * The abort listener is attached only for the duration of the wait and
+ * removed once the race settles. If the signal aborts while the decision is
+ * pending, the returned promise rejects with the abort reason immediately;
+ * a decision that resolves afterwards is ignored (the race already settled).
+ */
+async function awaitApprovalDecision(
+  decision: ToolApprovalDecision | Promise<ToolApprovalDecision>,
+  abortSignal?: AbortSignal,
+): Promise<ToolApprovalDecision> {
+  if (!abortSignal) {
+    return await decision;
+  }
+
+  abortSignal.throwIfAborted();
+
+  let removeAbortListener: (() => void) | undefined;
+  try {
+    return await new Promise<ToolApprovalDecision>((resolve, reject) => {
+      const onAbort = () => {
+        reject(
+          abortSignal.reason ??
+            new DOMException('This operation was aborted', 'AbortError')
+        );
+      };
+      abortSignal.addEventListener('abort', onAbort, { once: true });
+      removeAbortListener = () => abortSignal.removeEventListener('abort', onAbort);
+      Promise.resolve(decision).then(resolve, reject);
+    });
+  } finally {
+    removeAbortListener?.();
+  }
 }
 
 /**
@@ -276,6 +347,7 @@ export async function executeReActLoop(config: ReActLoopConfig): Promise<AgentRe
     memory,
     abortSignal,
     onStep,
+    onToolApproval,
   } = config;
 
   const startTime = Date.now();
@@ -305,6 +377,11 @@ export async function executeReActLoop(config: ReActLoopConfig): Promise<AgentRe
   let lastToolCall: string | null = null;
   let consecutiveDuplicates = 0;
 
+  // Accumulated time spent awaiting approval decisions. Excluded from the
+  // maxDurationMs budget (D6) — human decision latency is unbounded and
+  // must not make a configured timeout fire spuriously mid-decision.
+  let approvalWaitMs = 0;
+
   const totalUsage: GenerationUsage = {
     inputTokens: 0,
     outputTokens: 0,
@@ -316,8 +393,8 @@ export async function executeReActLoop(config: ReActLoopConfig): Promise<AgentRe
     // Check abort signal
     abortSignal?.throwIfAborted();
 
-    // Check timeout
-    if (maxDurationMs !== undefined && Date.now() - startTime > maxDurationMs) {
+    // Check timeout (approval wait time does not consume the budget — D6)
+    if (maxDurationMs !== undefined && Date.now() - startTime - approvalWaitMs > maxDurationMs) {
       return {
         result: '',
         steps,
@@ -353,6 +430,7 @@ export async function executeReActLoop(config: ReActLoopConfig): Promise<AgentRe
         systemPrompt: agentSystemPrompt,
         maxRetries,
         temperature,
+        maxTokens: ACTION_MAX_TOKENS,
         abortSignal,
       });
 
@@ -434,6 +512,63 @@ export async function executeReActLoop(config: ReActLoopConfig): Promise<AgentRe
     }
     lastToolCall = toolCallKey;
 
+    // Approval gate: pause before executing a flagged tool (D1/D2).
+    // Consulted ONLY for tools with requiresApproval — ungated tools never
+    // touch the callback. Denied calls still participated in the loop
+    // detection above, so persistent identical retries terminate via the
+    // existing loop_detected guard.
+    let approval: AgentStep['approval'];
+    const pendingTool = toolRegistry.get(action.tool);
+    if (pendingTool?.requiresApproval && onToolApproval) {
+      const waitStart = Date.now();
+      let decision: ToolApprovalDecision;
+      try {
+        decision = await awaitApprovalDecision(
+          onToolApproval({ toolName: action.tool, args: action.args, stepIndex }),
+          abortSignal,
+        );
+      } catch (error) {
+        // Abort while pending surfaces through the existing abort path (D5)
+        if (abortSignal?.aborted) {
+          throw error;
+        }
+        // A throwing approval callback is a programming error — fail loudly
+        const { AgentError } = await import('../errors/index.js');
+        throw new AgentError(
+          `Approval callback failed at step ${stepIndex}: ${error instanceof Error ? error.message : String(error)}`,
+          {
+            steps,
+            hint: 'The onToolApproval callback threw or rejected. Return { approved: true } or { approved: false, reason? } instead of throwing.',
+            cause: error instanceof Error ? error : undefined,
+          }
+        );
+      } finally {
+        approvalWaitMs += Date.now() - waitStart;
+      }
+
+      if (!decision.approved) {
+        // Denied: skip execution and feed a rejection observation back (D3)
+        const reason = decision.reason;
+        const step: AgentStep = {
+          index: stepIndex,
+          type: 'tool_call',
+          toolName: action.tool,
+          toolArgs: action.args,
+          observation: `Tool call denied by user${reason ? `: ${reason}` : ''}. Do not repeat this exact call; try a different approach or finish with what you know.`,
+          durationMs: Date.now() - stepStart,
+          usage: stepUsage,
+          approval: reason !== undefined
+            ? { decision: 'denied', reason }
+            : { decision: 'denied' },
+        };
+        steps.push(step);
+        onStep?.(step);
+        continue;
+      }
+
+      approval = { decision: 'approved' };
+    }
+
     // Execute the tool
     let observation: string;
     try {
@@ -459,6 +594,8 @@ export async function executeReActLoop(config: ReActLoopConfig): Promise<AgentRe
       observation,
       durationMs: Date.now() - stepStart,
       usage: stepUsage,
+      // Only gated steps carry the approval field (backward compatible)
+      ...(approval ? { approval } : {}),
     };
     steps.push(step);
     onStep?.(step);

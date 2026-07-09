@@ -1,0 +1,10 @@
+{
+  "title": "Data & Documents",
+  "pages": [
+    "file-dropzone",
+    "indexed-document-card",
+    "format-detection-badge",
+    "category-facet-list",
+    "chunk-boundary-visualizer"
+  ]
+}

@@ -63,7 +63,7 @@ export function useEmbedMany(options: UseEmbedManyOptions) {
       const { streamEmbedMany } = await import('@localmode/core');
       const embeddings: Float32Array[] = new Array(values.length);
       let totalTokens = 0;
-      let responseModelId = model.modelId;
+      const responseModelId = model.modelId;
 
       for await (const item of streamEmbedMany({
         model,

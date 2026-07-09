@@ -1,0 +1,108 @@
+---
+title: "Chart Artifact"
+description: "A dependency-free SVG chart (line / bar / area / scatter / radar / gauge) for visualizing local metrics — eval curves, embedding projections, drift, latency — entirely in-browser."
+icon: ChartLine
+---
+
+# Chart Artifact
+
+The **Chart Artifact** is a client-side data-viz chart rendered from **local** data. It supports six types — `line`, `bar`, `area`, `scatter`, `radar`, `gauge` — and targets genuinely on-device metrics:
+
+- **radar** — evaluation curves: precision / recall / F1 / accuracy from [`useEvaluateModel()`](https://localmode.dev/docs/react).
+- **scatter** — 2D embedding projections (PCA / UMAP).
+- **line / area** — drift-over-time ([`useReindex()`](https://localmode.dev/docs/react)), latency / tok-s trends.
+- **bar** — embedding-similarity distributions, per-class counts.
+- **gauge** — a single normalized score (e.g. overall F1).
+
+It is **not** a generic BI widget — its value is visualizing what runs in the browser. The renderer is a **minimal, dependency-free inline SVG** (no charting library), so the copied component stays small and tree-shakeable. Colors come from `currentColor` + shadcn/ui tokens, so charts inherit your theme.
+
+**Local content only.** No server, no sandbox — you pass in local numbers and it draws them.
+
+## Preview
+
+<ComponentPreview name="ui/artifacts/chart-artifact" note="Plots local eval metrics (radar) and a 2D embedding projection (scatter) — no model download." />
+
+<OpenInV0 name="ui/artifacts/chart-artifact" />
+
+## Installation
+
+<InstallTabs name="ui/artifacts/chart-artifact" />
+
+### Dependencies
+
+- **Data source:** draws the `ChartPoint[]` you pass — works with any backend (any in-memory numbers). Recommended LocalMode producers: `useEvaluateModel()` / `useReindex()` from `@localmode/react` for eval curves and drift series (optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+> No charting library is installed — the chart is rendered with inline SVG.
+
+### Files installed
+
+- `chart-artifact.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/artifacts/chart-artifact/chart-artifact.tsx" name="ChartArtifactProps" />
+
+### ChartPoint
+
+<AutoTypeTable path="registry/localmode/artifacts/chart-artifact/chart-artifact.tsx" name="ChartPoint" />
+
+## Examples
+
+### Radar of precision / recall / F1 (from `useEvaluateModel`)
+
+```tsx
+import { useEvaluateModel } from '@localmode/react';
+import { ChartArtifact } from '@/components/artifacts/chart-artifact';
+
+export function EvalRadar({ result }) {
+  // result is a real evaluateModel() output
+  const data = [
+    { label: 'Precision', value: result.metrics.precision },
+    { label: 'Recall', value: result.metrics.recall },
+    { label: 'F1', value: result.metrics.f1 },
+  ];
+  return <ChartArtifact type="radar" title="Eval (P / R / F1)" data={data} />;
+}
+```
+
+### Scatter of a 2D embedding projection
+
+```tsx
+// projection = real local embeddings reduced to 2D (PCA / UMAP)
+<ChartArtifact
+  type="scatter"
+  title="Embedding projection"
+  data={projection.map(([x, y]) => ({ x, y }))}
+/>
+```
+
+### Line / area for drift or latency
+
+```tsx
+<ChartArtifact type="area" data={driftOverTime.map((d, i) => ({ x: i, y: d }))} />
+```
+
+### Gauge for a single score
+
+```tsx
+<ChartArtifact type="gauge" data={[{ value: 0.87 }]} />
+```
+
+## Data shapes by type
+
+| Type | Expected `ChartPoint` fields |
+| ---- | ---------------------------- |
+| `line` / `area` / `scatter` | `{ x, y }` |
+| `bar` | `{ label, value }` |
+| `radar` | `{ label, value }` (values typically 0–1) |
+| `gauge` | a single `{ value }` (0–`max`, default full-scale 1) |
+
+## Local-first boundary
+
+This is a **local** chart. It draws numbers your app computed on-device (evaluation metrics, embedding projections, drift, latency). It makes no network requests and pulls in no charting dependency.
+
+## Customization
+
+The chart uses `currentColor` for the series (defaults to `text-primary`) and shadcn/ui token classes for grid/axis text, so it inherits your theme. Because you own the file, restyle the series color, adjust `width` / `height`, add tooltips, or render the chart inside an [`Artifact`](/docs/artifacts/artifact) canvas.

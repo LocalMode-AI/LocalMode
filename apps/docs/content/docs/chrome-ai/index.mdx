@@ -13,7 +13,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 Zero-download, instant AI inference via Chrome's built-in Gemini Nano model. No model downloads, no bundle size impact, no API keys — the model ships with the browser.
 
 <Callout type="info" title="See it in action">
-  Try [Smart Writer](https://localmode.ai/smart-writer) for a working demo using Chrome AI with automatic fallback to transformers.
+  Try the [Writing Tools blocks](https://localmode.ai/blocks/writing-tools) — live, installable apps using Chrome AI with automatic fallback to Transformers.js for writing, translation, summarization, and completion.
 </Callout>
 
 ## Features
@@ -189,8 +189,11 @@ if (isSummarizerAPISupported()) {
   />
 </Cards>
 
-## Showcase Apps
+## Composed Blocks
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| Smart Writer | Chrome AI summarization and translation with automatic transformers fallback | [Demo](https://localmode.ai/smart-writer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-writer) |
+| Write | Chrome AI writing assistance with automatic Transformers.js fallback | [Live](https://localmode.ai/blocks/writing-tools/write) · Install: `npx shadcn add @localmode/ui/blocks/writing-tools/write` |
+| Translate | Chrome AI translation with automatic Transformers.js fallback | [Live](https://localmode.ai/blocks/writing-tools/translate) · Install: `npx shadcn add @localmode/ui/blocks/writing-tools/translate` |
+| Summarize | Chrome AI summarization with automatic Transformers.js fallback | [Live](https://localmode.ai/blocks/writing-tools/summarize) · Install: `npx shadcn add @localmode/ui/blocks/writing-tools/summarize` |
+| Complete | Transformers.js ModernBERT fill-mask completion | [Live](https://localmode.ai/blocks/writing-tools/complete) · Install: `npx shadcn add @localmode/ui/blocks/writing-tools/complete` |

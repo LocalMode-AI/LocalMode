@@ -27,6 +27,7 @@ wllama provider for [LocalMode](https://localmode.dev) -- run any GGUF model in 
 - **Jinja chat templates** enabled by default for accurate prompt formatting
 - **Model management** -- list cached models, clear cache
 - GGUF metadata inspection via HTTP Range requests (~4KB download)
+- **Model discovery** -- search the 160,000+ GGUF repos on HuggingFace and list a repo's `.gguf` files (`searchGGUFModels` / `listGGUFFiles`)
 - Browser compatibility checking before downloading multi-GB files
 - Auto-detects CORS isolation for multi-threaded inference
 - Chrome MV3 extension support (auto-resolves bundled WASM binaries)
@@ -92,6 +93,46 @@ console.log(metadata.quantization);   // 'Q4_K_M'
 console.log(metadata.contextLength);  // 131072
 console.log(metadata.parameterCount); // ~1.24B
 ```
+
+## GGUF Model Discovery
+
+Search the 160,000+ GGUF repos on HuggingFace and list a repo's `.gguf` files -- an anonymous, cancellable browse surface with no model download:
+
+```typescript
+import { searchGGUFModels, listGGUFFiles, HFApiError } from '@localmode/wllama';
+
+// Search GGUF-tagged repos (an empty query browses the top models for the sort).
+const { results, nextCursor } = await searchGGUFModels({
+  query: 'llama 1b',
+  sort: 'downloads', // 'downloads' | 'likes' | 'lastModified'
+});
+
+for (const repo of results) {
+  console.log(repo.repoId, repo.downloads, repo.likes);
+}
+
+// Paginate: pass nextCursor back (with the same query + sort) for page two.
+// nextCursor === null means the last page.
+
+// List a repo's .gguf files with byte sizes and parsed quant labels.
+const files = await listGGUFFiles('bartowski/Llama-3.2-1B-Instruct-GGUF');
+// → [{ filename: 'Llama-3.2-1B-Instruct-Q4_K_M.gguf', sizeBytes: 807694464, quantLabel: 'Q4_K_M' }, …]
+```
+
+Both functions support `AbortSignal` (`{ abortSignal }`) so stale searches can be cancelled on keystroke or model switch. Abort rejections propagate untouched (the original `AbortError`, never wrapped). Failures throw a typed `HFApiError`:
+
+```typescript
+try {
+  await searchGGUFModels({ query, sort: 'downloads' });
+} catch (err) {
+  if (err instanceof HFApiError) {
+    // err.kind is 'rate-limit' (HTTP 429), 'not-found' (404/401/403), or 'network'
+    console.warn(err.kind, err.message);
+  }
+}
+```
+
+Pair with `checkGGUFBrowserCompatFromURL` (below) to verify a discovered file can run on the current device before downloading.
 
 ## Embedding Models
 

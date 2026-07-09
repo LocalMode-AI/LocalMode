@@ -1,0 +1,103 @@
+---
+title: "Before / After Image Viewer"
+description: "Compare an original image with a transformed result — a two-panel grid with checkerboard transparency or a segmented Original / Enhanced toggle."
+icon: GitCompareArrows
+---
+
+# Before / After Image Viewer
+
+The **Before / After Image Viewer** compares an original image with a transformed result. It supports two modes: a **two-panel grid** (both images side-by-side, the result panel ring-highlighted and rendered on a checkerboard transparency background so alpha shows through), and a segmented **Original / Enhanced toggle** that swaps a single displayed image source.
+
+It is presentational — both `originalSrc` and `processedSrc` are image source strings (data URL or object URL). Produce the result image with [`useImageToImage`](https://localmode.dev/docs/react) (upscaling / super-resolution), whose `UpscaleImageResult.image` is an `ImageData | Blob` you convert to an object URL (`URL.createObjectURL`) before passing it as `processedSrc`. It owns only the toggle's local UI state.
+
+**When to use it:** background removers, photo enhancers / upscalers, segmentation viewers — any "here's your input, here's the result" comparison.
+
+## Preview
+
+<ComponentPreview name="ui/media-vision/before-after-image-viewer" note="Static before/after images — checkerboard reveals transparency. No model download." />
+
+<OpenInV0 name="ui/media-vision/before-after-image-viewer" />
+
+## Installation
+
+<InstallTabs name="ui/media-vision/before-after-image-viewer" />
+
+### Dependencies
+
+- **Data source:** renders the `originalSrc` / `processedSrc` image strings you pass — works with any backend that produces a transformed image. Recommended LocalMode producer: `useImageToImage` (upscale / super-resolution) from `@localmode/react` — convert its `image` (`ImageData | Blob`) to an object URL for `processedSrc`. For background removal, composite `useSegmentImage`'s `masks` onto the source into a transparent PNG first (optional).
+
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `before-after-image-viewer.tsx` — the component (checkerboard CSS shipped inline)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/media-vision/before-after-image-viewer/before-after-image-viewer.tsx" name="BeforeAfterImageViewerProps" />
+
+## Backing hooks
+
+Produce `processedSrc` with `useImageToImage` (upscale / super-resolution) from [`@localmode/react`](https://localmode.dev/docs/react): its `UpscaleImageResult.image` is an `ImageData | Blob`, so wrap it in an object URL (`URL.createObjectURL`) before passing it. For background removal, `useSegmentImage` returns `masks` (not a ready image) — composite a mask onto the source to build a transparent PNG, then pass that URL.
+
+## Examples
+
+### Grid (default)
+
+```tsx
+import { BeforeAfterImageViewer } from '@/components/before-after-image-viewer';
+import { useImageToImage } from '@localmode/react';
+
+const { data } = useImageToImage({ model });
+// data.image is ImageData | Blob — turn the Blob result into a displayable URL
+const processedSrc = data?.image instanceof Blob ? URL.createObjectURL(data.image) : undefined;
+
+<BeforeAfterImageViewer originalSrc={inputDataUrl} processedSrc={processedSrc} />
+```
+
+### Toggle mode
+
+```tsx
+<BeforeAfterImageViewer
+  originalSrc={inputDataUrl}
+  processedSrc={processedSrc} // object URL from the upscale result Blob
+  mode="toggle"
+  processedLabel="Upscaled"
+/>
+```
+
+### Background-removal result on checkerboard
+
+```tsx
+const { data } = useSegmentImage({ model });
+
+// useSegmentImage returns `masks` (SegmentMask[]), not a ready image —
+// composite a mask onto the source to produce a transparent-background PNG URL.
+const cutoutUrl = data ? compositeMaskToTransparentPng(inputDataUrl, data.masks) : undefined;
+
+<BeforeAfterImageViewer
+  originalSrc={inputDataUrl}
+  processedSrc={cutoutUrl}
+  checkerboard // default — reveals the transparent background
+/>
+```
+
+## Accessibility
+
+The two images get **distinct** alt text so assistive tech never announces the same description for both. Pass a single `alt` and the viewer derives `"{originalLabel}: {alt}"` for the original and `"{processedLabel}: {alt}"` for the result; or set `originalAlt` / `resultAlt` explicitly for full control. An empty `alt` (the default) keeps both images decorative.
+
+```tsx
+<BeforeAfterImageViewer
+  originalSrc={inputDataUrl}
+  processedSrc={cutoutUrl}
+  originalAlt="Original team photo"
+  resultAlt="Team photo with the background removed"
+/>
+```
+
+## Customization
+
+The checkerboard is a self-contained inline CSS-gradient background, so the component works standalone after `shadcn add` with no global CSS. Adjust the checker size/color in the copied `before-after-image-viewer.tsx`, or set `checkerboard={false}` for opaque results. Panels use shadcn/ui tokens (`border-border`, `bg-card`, `ring-primary`).
+
+<OpenInV0 name="ui/media-vision/before-after-image-viewer" />

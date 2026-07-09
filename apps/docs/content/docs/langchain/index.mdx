@@ -11,7 +11,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 `@localmode/langchain` provides adapter classes so existing LangChain.js applications can swap cloud providers for 100% local inference — by changing just 3 imports.
 
 <Callout type="info" title="See it in action">
-  Try [LangChain RAG](https://localmode.ai/langchain-rag) for a working demo.
+  Try the [Knowledge Base block](https://localmode.ai/blocks/knowledge) — its LangChain engine toggle runs `LocalModeEmbeddings`, `LocalModeVectorStore`, and `ChatLocalMode` end-to-end in the browser, behind the same UI as the core pipeline.
 </Callout>
 
 ## Adapters
@@ -69,6 +69,55 @@ const answer = await llm.invoke(`Based on: ${context}\n\nQuestion: How does Loca
 
 Everything runs locally. No API keys, no servers, no data leaves the device.
 
+## Knowledge Base Engine
+
+`createLangChainKnowledgeBaseEngine()` returns a `kind: 'langchain'` engine that implements the **same frozen `KnowledgeBaseEngine` contract** exported from `@localmode/core` (chunk → embed → store, vector `search`, grounded `ask`) — but runs it through the real `LocalModeEmbeddings`, `LocalModeVectorStore`, and `ChatLocalMode` adapters over an in-memory `createVectorDB`. It exists so an app can toggle the whole pipeline between the core implementation and the LangChain adapters without changing a line of calling code.
+
+```typescript
+import { createLangChainKnowledgeBaseEngine, ChatLocalMode } from '@localmode/langchain';
+import { transformers } from '@localmode/transformers';
+
+const engine = createLangChainKnowledgeBaseEngine({
+  embeddingModel: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  getChatModel: () =>
+    new ChatLocalMode({
+      model: transformers.languageModel('onnx-community/granite-4.0-350m-ONNX-web'),
+      maxTokens: 512,
+    }),
+});
+await engine.ingest(docs, { chunking: 'recursive', chunkSize: 500 });
+const hits = await engine.search('privacy and encryption', { topK: 10 });
+const { answer, sources } = await engine.ask('How is data encrypted?');
+```
+
+### Options
+
+`CreateLangChainKnowledgeBaseEngineOptions`:
+
+| Option | Type | Default | Notes |
+|--------|------|---------|-------|
+| `embeddingModel` | `EmbeddingModel` | — (required) | Defines the corpus space; wrapped internally in `LocalModeEmbeddings`. |
+| `getChatModel` | `() => Promise<ChatLocalMode> \| ChatLocalMode` | — (required) | **Lazy** — resolved (and awaited) only on the first `ask()`, so nothing loads on construction. The caller owns model construction, any device pre-probe, and the `ChatLocalMode` `maxTokens` / `temperature` budget. |
+| `storage` | `'memory' \| 'indexeddb' \| StorageAdapter` | `'memory'` | VectorDB storage backend (in-memory session store by default). |
+| `chunkDefaults` | `LangChainKnowledgeBaseChunkDefaults` | `{ chunkSize: 500, chunkOverlap: 50 }` | Applied when `IngestOptions` omits sizes. |
+| `askConfig` | `LangChainKnowledgeBaseAskConfig` | `{ topK: 4 }` | `systemPrompt?` grounds the answer; `topK?` is the retrieval depth when `AskOptions.topK` is omitted. |
+
+Because the models are **injected**, `@localmode/langchain` gains no provider dependency — apps that never toggle the LangChain engine never pull it.
+
+### Equivalence with the core engine
+
+The LangChain engine is **result-equivalent** to `@localmode/core`'s `createKnowledgeBaseEngine`: given the same corpus, embedding model, and query, both return the same ranked contract ids and the same cosine scores (higher-is-better, in `[0, 1]`). To hold that guarantee:
+
+- **Chunking** uses a faithful local port of LangChain's `RecursiveCharacterTextSplitter` (same default separators, `keepSeparator`, and merge/overlap semantics). `'semantic'` mode falls back to recursive — equivalence is defined at the **result** level, not byte-for-byte chunk parity.
+- **Contract ids** (`${docId}:${chunkIndex}`) are reconstructed from chunk metadata, because `LocalModeVectorStore` generates its own UUIDs for stored vectors.
+- **Grounded answers** strip `<think>…</think>` reasoning blocks before returning, matching the core engine.
+
+New exports: `createLangChainKnowledgeBaseEngine`, `CreateLangChainKnowledgeBaseEngineOptions`, `LangChainKnowledgeBaseAskConfig`, `LangChainKnowledgeBaseChunkDefaults`.
+
+<Callout>
+The frozen contract and full `KnowledgeBaseEngine` API reference live in core — see [Core Knowledge Base](/docs/core/knowledge-base). For the React session hook, see [`useKnowledgeBase`](/docs/react/knowledge-base). The [Knowledge Base block](https://localmode.ai/blocks/knowledge) toggles the core and LangChain engines live over one shared corpus.
+</Callout>
+
 ## Key Design Decisions
 
 - **User provides model instances** — You create the LocalMode model and pass it to the adapter. The adapter doesn't know about provider packages.
@@ -90,8 +139,8 @@ Everything runs locally. No API keys, no servers, no data leaves the device.
 For individual adapter docs, see: [Embeddings](/docs/langchain/embeddings), [Chat Model](/docs/langchain/chat), [Vector Store](/docs/langchain/vector-store), [Migration Guide](/docs/langchain/migration).
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| LangChain RAG | End-to-end RAG app using LangChain adapters | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |
+| RAG Chat | Streaming grounded RAG over your own text/PDF corpus with inline citations, on a core ⇄ LangChain engine toggle | [Live](https://localmode.ai/blocks/knowledge/rag-chat) · Install: `npx shadcn add @localmode/ui/blocks/knowledge/rag-chat` |

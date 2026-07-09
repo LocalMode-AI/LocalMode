@@ -1,0 +1,105 @@
+{
+  "family": "artifacts",
+  "navLabel": "Artifacts & Canvas",
+  "docsFolder": "artifacts",
+  "npmDependencies": [
+    "@localmode/core",
+    "@localmode/react",
+    "@localmode/transformers",
+    "lucide-react"
+  ],
+  "previews": {
+    "ui/artifacts/artifact": "@/registry/localmode/artifacts/artifact/artifact-demo",
+    "ui/artifacts/data-table-artifact": "@/registry/localmode/artifacts/data-table-artifact/data-table-artifact-demo",
+    "ui/artifacts/chart-artifact": "@/registry/localmode/artifacts/chart-artifact/chart-artifact-demo",
+    "ui/artifacts/code-diff-viewer": "@/registry/localmode/artifacts/code-diff-viewer/code-diff-viewer-demo"
+  },
+  "items": [
+    {
+      "name": "ui/artifacts/artifact",
+      "type": "registry:component",
+      "title": "Artifact",
+      "description": "A Claude-style docked side-panel/canvas shell (header, title, description, copy/download/refresh/close toolbar, scrollable content) that renders generated code, docs, SVG, or HTML beside the chat. Presentational — driven by a local model via useGenerateText/useGenerateObject. No server, no sandbox.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/lib/browser-utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/artifacts/artifact/artifact.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "artifacts"
+      ]
+    },
+    {
+      "name": "ui/artifacts/data-table-artifact",
+      "type": "registry:component",
+      "title": "Data Table Artifact",
+      "description": "A generic sortable data table for local row data — VectorDB results, model catalogs, evaluation rows, or generateObject() arrays. Click a column header to sort entirely client-side. A docked-canvas table, distinct from the inline ScoredResultBarList.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/ui/table"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/artifacts/data-table-artifact/data-table-artifact.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "artifacts"
+      ]
+    },
+    {
+      "name": "ui/artifacts/chart-artifact",
+      "type": "registry:component",
+      "title": "Chart Artifact",
+      "description": "A dependency-free inline-SVG chart (line / bar / area / scatter / radar / gauge) for local metrics — eval curves (precision/recall/F1 radar), 2D embedding projections (scatter), drift-over-time, latency/tok-s. Driven by useEvaluateModel/useReindex or any local numbers. No charting library, no server.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/artifacts/chart-artifact/chart-artifact.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "artifacts"
+      ]
+    },
+    {
+      "name": "ui/artifacts/code-diff-viewer",
+      "type": "registry:component",
+      "title": "Code Diff Viewer",
+      "description": "A unified or side-by-side text/code diff of two local strings (before/after of redacted, translated, or transformed text). Additions/deletions highlighted, computed client-side via a dependency-free LCS line diff. The text analog of BeforeAfterImageViewer. No ML hook, no server.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/artifacts/code-diff-viewer/code-diff-viewer.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "artifacts"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "new-york",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "src/app/global.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "iconLibrary": "lucide",
+  "aliases": {
+    "components": "@/registry/localmode",
+    "ui": "@/registry/localmode/ui",
+    "lib": "@/registry/localmode/lib",
+    "hooks": "@/registry/localmode/hooks",
+    "utils": "@/registry/localmode/lib/utils"
+  },
+  "registries": {
+    "@localmode": "https://localmode.ai/r/{name}.json"
+  }
+}

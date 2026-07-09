@@ -11,6 +11,39 @@
 import type { ToolDefinition, ToolRegistry, ToolExecutionContext } from './types.js';
 
 /**
+ * Define an agent tool with full type inference.
+ *
+ * Identity function at runtime; at the type level it anchors the generic
+ * parameters so `parameters` (an `ObjectSchema<TParams>`, e.g. from
+ * `jsonSchema(zodSchema)`) and `execute(params: TParams)` are checked
+ * against each other — no `as ToolDefinition` casts needed when building
+ * typed tool arrays.
+ *
+ * @param tool - The tool definition
+ * @returns The same tool definition, with `TParams`/`TResult` inferred
+ *
+ * @example
+ * ```ts
+ * import { defineTool, jsonSchema } from '@localmode/core';
+ * import { z } from 'zod';
+ *
+ * const calculator = defineTool({
+ *   name: 'calculate',
+ *   description: 'Evaluate a math expression',
+ *   parameters: jsonSchema(z.object({ expression: z.string() })),
+ *   execute: async ({ expression }) => evaluate(expression),
+ * });
+ * ```
+ *
+ * @see {@link createToolRegistry} for registering tools
+ */
+export function defineTool<TParams, TResult>(
+  tool: ToolDefinition<TParams, TResult>
+): ToolDefinition<TParams, TResult> {
+  return tool;
+}
+
+/**
  * Create a tool registry from an array of tool definitions.
  *
  * Validates that tool names are unique and stores them for lookup,

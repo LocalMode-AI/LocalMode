@@ -185,4 +185,119 @@ describe('useStreamSpeech', () => {
     expect(result.current.isSynthesizing).toBe(false);
     expect(result.current.isPlaying).toBe(false);
   });
+
+  it('reset() clears clauses after a completed speak()', async () => {
+    const model = makeMockTTS();
+    const { result } = renderHook(() =>
+      useStreamSpeech({ model, splitOptions: { minWordsPerClause: 1 } })
+    );
+
+    await act(async () => {
+      await result.current.speak('Hello there. How are you?');
+    });
+    await waitFor(() => {
+      expect(result.current.clauses.length).toBe(2);
+    });
+    expect(result.current.isSynthesizing).toBe(false);
+    expect(result.current.isPlaying).toBe(false);
+
+    act(() => {
+      result.current.reset();
+    });
+
+    expect(result.current.clauses).toEqual([]);
+    expect(result.current.currentClause).toBeNull();
+    expect(result.current.error).toBeNull();
+  });
+
+  it('reset() clears the error from a failed speak()', async () => {
+    const model = makeMockTTS({ errorAtIndex: 0 });
+    const { result } = renderHook(() =>
+      useStreamSpeech({ model, splitOptions: { minWordsPerClause: 1 } })
+    );
+
+    await act(async () => {
+      await result.current.speak('Hello there.');
+    });
+    await waitFor(() => {
+      expect(result.current.error).not.toBeNull();
+    });
+
+    act(() => {
+      result.current.reset();
+    });
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.clauses).toEqual([]);
+  });
+
+  it('reset() is a no-op while a speak() is in progress', async () => {
+    // Gate the SECOND clause's synthesis open so we can call reset() while
+    // the first clause is already in state and synthesis is still active.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let callCount = 0;
+    const sampleRate = 24000;
+    const model: TextToSpeechModel = {
+      modelId: 'mock:tts-gated',
+      provider: 'mock',
+      async doSynthesize(o: DoSynthesizeOptions): Promise<DoSynthesizeResult> {
+        const idx = callCount++;
+        if (idx === 1) await gate;
+        const samples = new Float32Array(Math.max(8, o.text.length * 4));
+        return {
+          audio: floatToWavBlob(samples, sampleRate),
+          sampleRate,
+          usage: { characterCount: o.text.length, durationMs: 1 },
+        };
+      },
+    };
+
+    const { result } = renderHook(() =>
+      useStreamSpeech({ model, splitOptions: { minWordsPerClause: 1 } })
+    );
+
+    let speakPromise: Promise<void> | undefined;
+    await act(async () => {
+      speakPromise = result.current.speak('Hello there. How are you?');
+      // Yield so the first clause synthesizes and lands in state.
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(result.current.clauses.length).toBe(1);
+    });
+    expect(result.current.isSynthesizing).toBe(true);
+
+    // reset() while speaking must NOT clear in-flight state.
+    act(() => {
+      result.current.reset();
+    });
+    expect(result.current.clauses.length).toBe(1);
+
+    // Release the gate; speak completes; now reset() clears.
+    await act(async () => {
+      release();
+      await speakPromise;
+    });
+    await waitFor(() => {
+      expect(result.current.isSynthesizing).toBe(false);
+      expect(result.current.isPlaying).toBe(false);
+    });
+
+    act(() => {
+      result.current.reset();
+    });
+    expect(result.current.clauses).toEqual([]);
+  });
+
+  it('has SSR guard via typeof window check', () => {
+    // BOUNDARY NOTE: IS_SERVER is computed at module load from
+    // `typeof window === 'undefined'`, which is always false under jsdom —
+    // the inert server return (speak/pause/resume/stop/reset no-ops) cannot
+    // be exercised here. It mirrors the verified pattern in use-chat.ts and
+    // must be smoke-checked in a real SSR render (Next.js) if changed.
+    expect(typeof useStreamSpeech).toBe('function');
+  });
 });

@@ -141,6 +141,7 @@ export type {
 export {
   embedImage,
   embedManyImages,
+  streamEmbedManyImages,
   setGlobalMultimodalEmbeddingProvider,
 } from './multimodal/index.js';
 
@@ -156,6 +157,9 @@ export type {
   // embedManyImages() function types
   EmbedManyImagesOptions,
   EmbedManyImagesResult,
+  // streamEmbedManyImages() function types
+  StreamEmbedManyImagesOptions,
+  StreamEmbedImageResult,
   // Factory types
   MultimodalEmbeddingModelFactory,
 } from './multimodal/index.js';
@@ -749,6 +753,7 @@ export type {
   // Ingestion types
   SourceDocument,
   IngestOptions,
+  IngestObjectOptions,
   IngestProgress,
   IngestResult,
   // Document loader types
@@ -767,6 +772,7 @@ export {
   ENGLISH_STOP_WORDS,
   DEFAULT_HYBRID_OPTIONS,
   DEFAULT_INGEST_OPTIONS,
+  TEXT_METADATA_FIELD,
   // Chunking functions
   chunk,
   createChunker,
@@ -797,6 +803,39 @@ export {
   createIngestPipeline,
   estimateIngestion,
 } from './rag/index.js';
+
+// ═══════════════════════════════════════════════════════════════
+// KNOWLEDGE BASE ENGINE (Frozen contract + provider-agnostic core engine)
+// ═══════════════════════════════════════════════════════════════
+
+export { createKnowledgeBaseEngine } from './rag/knowledge-base/index.js';
+
+export type {
+  // Contract + supporting types (verbatim names)
+  KnowledgeBaseEngine,
+  RawDocument,
+  KBSearchResult,
+  AskOptions,
+  AskResult,
+  EngineStats,
+  ChunkingMode,
+  DocumentSource,
+  // Core-engine construction options
+  CreateKnowledgeBaseEngineOptions,
+  KnowledgeBaseAskConfig,
+  KnowledgeBaseChunkDefaults,
+} from './rag/knowledge-base/index.js';
+
+// The KB engine's `ChunkMetadata` / `IngestOptions` / `SearchOptions` share
+// names with the existing RAG-chunking / VectorDB types above, so they are
+// re-exported from the barrel under `KnowledgeBase*` aliases (the module keeps
+// the verbatim names, so the LangChain engine + React hook import the aliases
+// and re-alias locally). Additive: no existing export changes.
+export type {
+  ChunkMetadata as KnowledgeBaseChunkMetadata,
+  IngestOptions as KnowledgeBaseIngestOptions,
+  SearchOptions as KnowledgeBaseSearchOptions,
+} from './rag/knowledge-base/index.js';
 
 // ═══════════════════════════════════════════════════════════════
 // PIPELINE (Composable Multi-Step Workflows)
@@ -1369,6 +1408,7 @@ export {
   createAgent,
   runAgent,
   createToolRegistry,
+  defineTool,
   createAgentMemory,
 } from './agents/index.js';
 
@@ -1377,6 +1417,9 @@ export type {
   ToolDefinition,
   ToolRegistry,
   ToolExecutionContext,
+  // Approval types
+  ToolApprovalRequest,
+  ToolApprovalDecision,
   // Agent types
   Agent,
   AgentConfig,
@@ -1405,6 +1448,7 @@ export {
   createMockEmbeddingModel,
   createMockClassificationModel,
   createMockNERModel,
+  createMockRerankerModel,
   createMockSpeechToTextModel,
   // Mock models (extended)
   createMockImageCaptionModel,
@@ -1440,6 +1484,8 @@ export {
   waitFor,
   createDeferred,
   createSpy,
+  // StorageAdapter conformance suite
+  createStorageAdapterConformanceSuite,
 } from './testing/index.js';
 
 export type {
@@ -1449,6 +1495,8 @@ export type {
   MockClassificationModel,
   MockNERModelOptions,
   MockNERModel,
+  MockRerankerModelOptions,
+  MockRerankerModel,
   MockSpeechToTextModelOptions,
   MockSpeechToTextModel,
   // Extended mock model types
@@ -1491,6 +1539,10 @@ export type {
   SimpleMockVectorDB,
   // Mock agent types
   MockAgentLanguageModelOptions,
+  // StorageAdapter conformance suite types
+  StorageAdapterConformanceCase,
+  StorageAdapterConformanceContext,
+  StorageAdapterConformanceFactory,
 } from './testing/index.js';
 
 // ═══════════════════════════════════════════════════════════════

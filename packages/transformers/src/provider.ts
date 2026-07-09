@@ -44,6 +44,7 @@ import {
 } from './implementations/index.js';
 import type { SileroVADSettings } from './implementations/silero-vad.js';
 import { isGenerativeOCRModel } from './implementations/generative-ocr.js';
+import { setResilientModelCacheEnabled } from './resilient-cache.js';
 
 /**
  * Create a Transformers.js provider with custom settings.
@@ -71,6 +72,12 @@ import { isGenerativeOCRModel } from './implementations/generative-ocr.js';
  * ```
  */
 export function createTransformers(settings?: TransformersProviderSettings): TransformersProvider {
+  // The Transformers.js env is a global singleton, so the resilient-cache
+  // setting is global too; only an explicit value flips it.
+  if (settings?.resilientCache !== undefined) {
+    setResilientModelCacheEnabled(settings.resilientCache);
+  }
+
   const defaultSettings = {
     device: settings?.device,
     quantized: settings?.quantized ?? false,

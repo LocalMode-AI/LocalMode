@@ -3,7 +3,7 @@ title: "Why Every SaaS Should Have a 'Local Mode' Toggle"
 description: "The product pattern hiding in plain sight: a single toggle that offloads AI inference to user devices, eliminates GDPR data-processor obligations, works offline, cuts latency to near-zero, and turns privacy into a pricing-page feature. Here is the business case, the architectural pattern, and the code to build it."
 author: LocalMode
 date: 2026-01-27
-dateModified: "2026-05-29"
+dateModified: "2026-07-04"
 faq:
   - question: "What is a 'Local Mode' toggle in a SaaS application?"
     answer: "A Local Mode toggle is a settings switch that routes AI inference to models running in the user's browser instead of cloud APIs. When enabled, features like semantic search, classification, and NER run on-device at zero cost, with no data leaving the browser."
@@ -63,7 +63,7 @@ For your pricing page, this translates to a concrete claim: "When Local Mode is 
 
 Not every user sits at a desk with gigabit fiber. Field workers, traveling sales teams, healthcare professionals doing rounds, consultants at client sites with restricted networks -- these are real users in real revenue-generating segments who lose access to AI features the moment connectivity drops.
 
-Local Mode turns every AI feature into an offline feature. Models download once during onboarding or first use, cache in the browser's IndexedDB, and run without any network dependency afterward. Search still works. Classification still works. Summarization still works. The user does not notice the difference because there is no difference -- the same code path executes whether the device is online or not.
+Local Mode turns every AI feature into an offline feature. Models download once during onboarding or first use, cache in the browser cache, and run without any network dependency afterward. Search still works. Classification still works. Summarization still works. The user does not notice the difference because there is no difference -- the same code path executes whether the device is online or not.
 
 For vertical SaaS products serving field-heavy industries -- construction, healthcare, logistics, energy, agriculture -- offline AI is not a nice-to-have. It is the difference between a product that works everywhere and a product that works only in the office.
 
@@ -187,7 +187,7 @@ async function enableLocalMode(onProgress: (pct: number) => void) {
 }
 ```
 
-Most SaaS products already have an onboarding flow, a settings page, or a "getting started" wizard. The model download fits naturally into any of these. Show a progress bar, explain what is happening ("Downloading AI models for offline use -- this only happens once"), and cache everything in IndexedDB. Every subsequent use is instant.
+Most SaaS products already have an onboarding flow, a settings page, or a "getting started" wizard. The model download fits naturally into any of these. Show a progress bar, explain what is happening ("Downloading AI models for offline use -- this only happens once"), and cache everything in the browser cache. Every subsequent use is instant.
 
 For LLM chat, the models are larger (1-4GB), so the download is a more deliberate choice. But even here, the pattern works: offer it as an opt-in during a natural pause in the user experience, and make the value proposition clear.
 
@@ -319,7 +319,7 @@ All quality benchmarks reference published scores from model cards, academic pap
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

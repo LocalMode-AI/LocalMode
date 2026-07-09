@@ -1,0 +1,89 @@
+---
+title: "Voice Comparison Panel"
+description: "A/B voice comparison — two language-grouped pickers with audio players, a shared textarea, and a Compare button to synthesize the same text through two voices."
+icon: GitCompareArrows
+---
+
+# Voice Comparison Panel
+
+**Voice Comparison Panel** is an A/B voice comparison surface. Two labeled columns each carry a language-grouped voice select and a native `<audio>` player (shown once audio is set), plus a shared comparison textarea and a Compare button with a loading state.
+
+Wire `onCompare` to synthesize the shared text through both voices — one `useSynthesizeSpeech` hook, two `execute(text, { voice })` calls — and pass the resulting Blobs back via `columnA.audio` / `columnB.audio`.
+
+**When to use it:** let users hear the same line in two Kokoro voices side by side before choosing one.
+
+## Preview
+
+<ComponentPreview name="ui/audio/voice-comparison-panel" note="Compare produces two short placeholder WAVs so both players render. The real app synthesizes via two execute(text, { voice }) calls on one useSynthesizeSpeech hook." />
+
+<OpenInV0 name="ui/audio/voice-comparison-panel" />
+
+## Installation
+
+<InstallTabs name="ui/audio/voice-comparison-panel" />
+
+### Data source & dependencies
+
+**Data source:** renders the two voice columns + audio Blobs you pass and emits `onCompare` — works with any backend. Recommended producer: `useSynthesizeSpeech` (per-call `{ voice }` overrides, with the Kokoro TTS model + voice catalog from `@localmode/transformers`) from `@localmode/react` (on-device, optional).
+- `@localmode/ui/lib/browser-utils` — `useObjectUrl` for Blob lifecycle (installed automatically as a registry dependency)
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+
+### Files installed
+
+- `voice-comparison-panel.tsx` — the component
+- `voice-picker.tsx` — the language-grouped select used in each column (registry dependency)
+- `lib/browser-utils.ts` — generic browser helpers (`useObjectUrl`)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/audio/voice-comparison-panel/voice-comparison-panel.tsx" name="VoiceComparisonPanelProps" />
+
+## Examples
+
+### Compare two voices
+
+```tsx
+import { VoiceComparisonPanel } from '@/components/voice-comparison-panel';
+import { useSynthesizeSpeech } from '@localmode/react';
+import { transformers, KOKORO_VOICES } from '@localmode/transformers';
+
+export function Compare() {
+  const [a, setA] = useState('af_heart');
+  const [b, setB] = useState('am_adam');
+  const [text, setText] = useState('Run models entirely in your browser.');
+  const [audioA, setAudioA] = useState<Blob | null>(null);
+  const [audioB, setAudioB] = useState<Blob | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const tts = useSynthesizeSpeech({ model: transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX') });
+
+  const compare = async () => {
+    setLoading(true);
+    // One hook, two per-call voice overrides (sequential — TTS runs one at a time).
+    const ra = await tts.execute(text, { voice: a });
+    const rb = await tts.execute(text, { voice: b });
+    setAudioA(ra?.audio ?? null);
+    setAudioB(rb?.audio ?? null);
+    setLoading(false);
+  };
+
+  return (
+    <VoiceComparisonPanel
+      voices={KOKORO_VOICES}
+      columnA={{ voiceId: a, audio: audioA }}
+      columnB={{ voiceId: b, audio: audioB }}
+      onVoiceAChange={setA}
+      onVoiceBChange={setB}
+      text={text}
+      onTextChange={setText}
+      onCompare={compare}
+      loading={loading}
+    />
+  );
+}
+```
+
+## Customization
+
+Each column accepts a `Blob` or an object-URL string for `audio`; the component manages the object-URL lifecycle when given a Blob. Relabel the columns via `labels`. Add more columns by composing additional `VoicePicker` + `<audio>` pairs in the copied file.

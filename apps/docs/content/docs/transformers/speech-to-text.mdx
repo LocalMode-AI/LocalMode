@@ -14,7 +14,8 @@ Transcribe audio to text using Moonshine models running locally in the browser. 
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [Voice Notes](https://localmode.ai/voice-notes) and [Meeting Assistant](https://localmode.ai/meeting-assistant) for working demos.
+  Try the [Audio Studio block](https://localmode.ai/blocks/audio) — it records and
+  transcribes audio with Whisper, then summarizes it, entirely in the browser.
 </Callout>
 
 ## Recommended Models
@@ -26,7 +27,7 @@ Transcribe audio to text using Moonshine models running locally in the browser. 
 
 ## Voice Notes Example
 
-Based on the [Voice Notes](https://localmode.ai/voice-notes) showcase app:
+Based on the [Audio Studio block](https://localmode.ai/blocks/audio):
 
 ```typescript
 import { transformers } from '@localmode/transformers';
@@ -88,12 +89,11 @@ The `audio` parameter accepts:
   4. **Handle permissions** — Request microphone access gracefully with fallback UI
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| Voice Notes | Record and transcribe audio with Moonshine models | [Demo](https://localmode.ai/voice-notes) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/voice-notes) |
-| Meeting Assistant | Transcribe meeting recordings for summarization | [Demo](https://localmode.ai/meeting-assistant) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/meeting-assistant) |
+| Voice Notes | Record or upload audio → Whisper/Moonshine transcription → saved notes with word-by-word replay and semantic search | [Live](https://localmode.ai/blocks/audio/voice-notes) · Install: `npx shadcn add @localmode/ui/blocks/audio/voice-notes` |
 
 ## Live streaming
 

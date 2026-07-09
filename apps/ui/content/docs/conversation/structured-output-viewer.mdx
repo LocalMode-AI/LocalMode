@@ -1,0 +1,52 @@
+---
+title: "Structured Output Viewer"
+description: "A useGenerateObject result panel: pretty-printed JSON, an inference-stats footer, and a navigable typed schema-tree view."
+icon: Braces
+---
+
+# Structured Output Viewer
+
+The **StructuredOutputViewer** extends `Response` for `useGenerateObject`. It pretty-prints the extracted JSON in a scrollable block, pairs it with an independently-usable `InferenceStats` footer (token count, wall-clock duration, attempt/retry count), and offers a navigable typed `SchemaTree` view so output can be inspected both as data and as its schema shape.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/structured-output-viewer" />
+
+<OpenInV0 name="ui/conversation/structured-output-viewer" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/structured-output-viewer" />
+
+### Data source & dependencies
+
+**Data source:** renders the parsed object + usage you pass — works with any backend. Recommended producer: `useGenerateObject` result + usage from `@localmode/react` (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `structured-output-viewer.tsx` — `StructuredOutputViewer`, `InferenceStats`, `SchemaTree`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/structured-output-viewer/structured-output-viewer.tsx" name="StructuredOutputViewerProps" />
+
+## Examples
+
+### Render a generated object
+
+```tsx
+import { useGenerateObject } from '@localmode/react';
+import { StructuredOutputViewer } from '@/components/structured-output-viewer';
+
+const { data } = useGenerateObject({ model, schema });
+
+{data && <StructuredOutputViewer object={data.object} usage={data.usage} durationMs={elapsed} />}
+```
+
+## Customization
+
+`InferenceStats` is exported separately — drop it beneath any `useGenerateText` result for the same tokens/duration footer. `SchemaTree` derives its tree from the value's runtime shape; swap it to read your Zod/JSON schema directly if you prefer the declared shape.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useGenerateObject`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

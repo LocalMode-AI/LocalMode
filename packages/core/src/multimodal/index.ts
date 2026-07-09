@@ -13,6 +13,7 @@
 export {
   embedImage,
   embedManyImages,
+  streamEmbedManyImages,
   setGlobalMultimodalEmbeddingProvider,
 } from './embed-image.js';
 

@@ -148,8 +148,11 @@ if (compat.canRun) {
 
 ## Backend Selection
 
-LiteRT-LM picks its own backend by default -- WebGPU when available. Pass
-`backend` to pin one explicitly:
+When no `backend` is set, the provider auto-selects: it probes actual WebGPU
+device usability (`isWebGPUDeviceUsable()`) and pins the CPU backend for
+CPU-capable models when WebGPU exposes no usable device (e.g. headless or
+adapterless browsers), so those models still load instead of failing on a
+non-functional GPU. Pass `backend` to pin one explicitly:
 
 ```typescript
 litert.languageModel('qwen3-0.6B', { backend: 'GPU' }); // or 'CPU'

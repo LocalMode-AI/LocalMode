@@ -9,7 +9,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 # Vision Hooks
 
 <Callout type="info" title="See it in action">
-  Try [Object Detector](https://localmode.ai/object-detector) and [Background Remover](https://localmode.ai/background-remover) for working demos of these hooks.
+  Try the [Vision block](https://localmode.ai/blocks/vision) and [Image Studio block](https://localmode.ai/blocks/image-studio) for working demos of these hooks.
 </Callout>
 
 ## useCaptionImage
@@ -128,17 +128,73 @@ await execute(imageBlob);
 | `useRecognizeGesture` | Hand gestures (8 categories) |
 
 <Callout type="info">
-For real-time 30-60fps video tracking, use the streaming tracker API from
+For real-time 30-60fps video tracking, use [`useStreamingTracker`](#usestreamingtracker-experimental) with the streaming tracker API from
 [`@localmode/mediapipe`](/docs/mediapipe/streaming) instead of these single-frame hooks.
 </Callout>
 
-## Showcase Apps
+## useStreamingTracker (Experimental)
+
+Owns the start/stop lifecycle of a real-time video tracker (the `@localmode/mediapipe` `createHand/Pose/Face/GestureTracker` factories). The trackers run their own frame loop internally — the hook injects a results sink at creation, mirrors the latest results into React state, measures fps over a one-second sliding window, and guarantees `close()` on unmount. The tracker is created lazily on the first `start()` and reused across start/stop cycles (the model stays loaded).
+
+<Callout type="warn" title="Experimental">
+`useStreamingTracker` is experimental and its API may change in a future minor release.
+</Callout>
+
+```tsx
+import { useRef } from 'react';
+import { useStreamingTracker } from '@localmode/react';
+import { createHandTracker } from '@localmode/mediapipe';
+import type { HandLandmarkResultItem } from '@localmode/core';
+
+function HandOverlay() {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const { status, results, fps, error, start, stop } = useStreamingTracker<
+    HandLandmarkResultItem[]
+  >({
+    video: videoRef,
+    create: ({ video, onResults, onError }) =>
+      createHandTracker({ video, onResults, onError }),
+  });
+
+  return (
+    <>
+      <video ref={videoRef} autoPlay muted playsInline />
+      <button onClick={status === 'running' ? stop : start}>
+        {status === 'running' ? `Stop (${fps} fps)` : 'Start'}
+      </button>
+      {results?.map((hand, i) => <HandSkeleton key={i} hand={hand} />)}
+    </>
+  );
+}
+```
+
+### Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `create` | `(context) => StreamingTrackerLike \| Promise<StreamingTrackerLike>` | Factory creating the tracker. Receives `{ video, onResults, onError }` — wire these into the tracker's creation options |
+| `video` | `RefObject<HTMLVideoElement \| null> \| (() => HTMLVideoElement \| null)` | The video element to track — a ref object or a getter |
+| `onResults` | `(results, timestampMs) => void` | Called once per processed frame with the latest results |
+| `autoStart` | `boolean` | Start tracking on mount (default: false) |
+
+### Return Value
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `status` | `'idle' \| 'starting' \| 'running' \| 'error'` | Lifecycle status. Per-frame errors set `error` without leaving `'running'` |
+| `results` | `TResults \| null` | Latest per-frame results (null before the first frame) |
+| `fps` | `number` | Processed frames per second over the last second (0 when stopped) |
+| `error` | `Error \| null` | Latest startup or per-frame error |
+| `start` | `() => Promise<void>` | Create (if needed) and start the tracker |
+| `stop` | `() => void` | Pause tracking; the tracker (and its model) stays alive for restart |
+
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Object Detector | Detect objects with useDetectObjects | [Demo](https://localmode.ai/object-detector) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/object-detector) |
-| Background Remover | Segment images with useSegmentImage | [Demo](https://localmode.ai/background-remover) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/background-remover) |
-| Photo Enhancer | Enhance images with useImageToImage | [Demo](https://localmode.ai/photo-enhancer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/photo-enhancer) |
-| Image Captioner | Caption images with useOperationList | [Demo](https://localmode.ai/image-captioner) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/image-captioner) |
-| MediaPipe Studio | Real-time hand/pose/face/gesture tracking | [Demo](https://localmode.ai/mediapipe-studio) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/mediapipe-studio) |
-| Duplicate Finder | Compare image features with useSequentialBatch | [Demo](https://localmode.ai/duplicate-finder) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/duplicate-finder) |
+| Vision (Object Detector) | Detect objects with useDetectObjects | [Live block](https://localmode.ai/blocks/vision/object-detector) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/vision/object-detector) |
+| Image Studio (Background Remover) | Segment images with useSegmentImage | [Live block](https://localmode.ai/blocks/image-studio/background-remover) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/image-studio/background-remover) |
+| Image Studio (Photo Enhancer) | Enhance images with useImageToImage | [Live block](https://localmode.ai/blocks/image-studio/image-enhancer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/image-studio/image-enhancer) |
+| Image Studio (Image Captioner) | Caption images with useOperationList | [Live block](https://localmode.ai/blocks/image-studio/image-captioner) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/image-studio/image-captioner) |
+| Vision (Live Tracker) | Real-time hand/pose/face/gesture tracking | [Live block](https://localmode.ai/blocks/vision/live-tracker) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/vision/live-tracker) |
+| Photo Search (Duplicate Finder) | Compare image features with useSequentialBatch | [Live block](https://localmode.ai/blocks/photo/duplicate-finder) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/photo/duplicate-finder) |

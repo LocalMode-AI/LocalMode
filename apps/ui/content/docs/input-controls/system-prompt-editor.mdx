@@ -1,0 +1,98 @@
+---
+title: "System Prompt Editor"
+description: "A controlled system-prompt editor with quick-pick presets composed via Option List — value in, onChange out; persistence stays in the consumer."
+icon: Settings2
+---
+
+# System Prompt Editor
+
+The **System Prompt Editor** is a controlled editor for a chat/completion system
+prompt with quick-pick presets. Selecting a preset replaces the textarea value;
+free-form edits that match no preset deselect all presets. It composes the
+[Option List](/docs/input-controls/option-list) primitive for the presets and
+exports `SYSTEM_PROMPT_PRESETS` and `DEFAULT_SYSTEM_PROMPT` as sensible defaults.
+
+> **Presentational (value in, `onChange` out).** Persistence and model wiring
+> stay in the consumer — the editor never touches storage. Recommended
+> destination: the `systemPrompt` you pass to `useChat` / `useGenerateText`
+> (a recommendation, never a requirement).
+
+**When to use it:** any chat or generation surface that lets the user set or
+switch the assistant's system prompt with a few opinionated presets.
+
+## Preview
+
+<ComponentPreview name="ui/input-controls/system-prompt-editor" note="Pure UI — pick a preset to replace the value, or type freely to deselect. Controlled by local state. No model download." />
+
+<OpenInV0 name="ui/input-controls/system-prompt-editor" />
+
+## Installation
+
+<InstallTabs name="ui/input-controls/system-prompt-editor" />
+
+### Dependencies
+
+- **Data source:** fully controlled — emits `onChange(value)`; the consumer owns persistence and applies the value to a model. Recommended destination: `useChat` / `useGenerateText` `systemPrompt` (optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+- Composes `@localmode/ui/input-controls/option-list` (installed automatically as a registry dependency)
+
+### Files installed
+
+- `system-prompt-editor.tsx` — the component (exports `SYSTEM_PROMPT_PRESETS`, `DEFAULT_SYSTEM_PROMPT`)
+- `option-list.tsx` — the composed preset list
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/input-controls/system-prompt-editor/system-prompt-editor.tsx" name="SystemPromptEditorProps" />
+
+<AutoTypeTable path="registry/localmode/input-controls/system-prompt-editor/system-prompt-editor.tsx" name="SystemPromptPreset" />
+
+## Examples
+
+### Wire to a chat system prompt (consumer owns persistence)
+
+```tsx
+import { useState } from 'react';
+import {
+  SystemPromptEditor,
+  DEFAULT_SYSTEM_PROMPT,
+} from '@/components/system-prompt-editor';
+
+export function PromptPanel() {
+  const [prompt, setPrompt] = useState(
+    () => localStorage.getItem('systemPrompt') ?? DEFAULT_SYSTEM_PROMPT,
+  );
+  return (
+    <SystemPromptEditor
+      value={prompt}
+      onChange={(v) => {
+        setPrompt(v);
+        localStorage.setItem('systemPrompt', v); // persistence is yours
+      }}
+    />
+  );
+}
+```
+
+### Extend the presets
+
+`SYSTEM_PROMPT_PRESETS` is exported — spread it and add your own before rendering,
+or edit the copied file directly.
+
+### Accessible name
+
+The textarea carries an `aria-label` (default `"System prompt"`) so it has a
+programmatic name independent of the visible heading. Override `ariaLabel` if
+your surrounding copy names the field differently.
+
+```tsx
+<SystemPromptEditor value={prompt} onChange={setPrompt} ariaLabel="Assistant instructions" />
+```
+
+## Customization
+
+The editor is purely presentational: value in, `onChange` out. Because you own
+the copied file, add or remove presets, change the textarea rows, or attach your
+own persistence and `useChat` wiring — the primitive stays free of orchestration
+state.

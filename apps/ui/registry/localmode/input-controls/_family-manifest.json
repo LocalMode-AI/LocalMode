@@ -1,0 +1,264 @@
+{
+  "family": "input-controls",
+  "navLabel": "Input Controls",
+  "docsFolder": "input-controls",
+  "npmDependencies": [
+    "@localmode/core",
+    "@localmode/react",
+    "@localmode/transformers",
+    "lucide-react"
+  ],
+  "previews": {
+    "ui/input-controls/char-limit-indicator": "@/registry/localmode/input-controls/char-limit-indicator/char-limit-indicator-demo",
+    "ui/input-controls/mask-token-input": "@/registry/localmode/input-controls/mask-token-input/mask-token-input-demo",
+    "ui/input-controls/segmented-mode-picker": "@/registry/localmode/input-controls/segmented-mode-picker/segmented-mode-picker-demo",
+    "ui/input-controls/language-pair-selector": "@/registry/localmode/input-controls/language-pair-selector/language-pair-selector-demo",
+    "ui/input-controls/text-processing-panel": "@/registry/localmode/input-controls/text-processing-panel/text-processing-panel-demo",
+    "ui/input-controls/parameter-slider": "@/registry/localmode/input-controls/parameter-slider/parameter-slider-demo",
+    "ui/input-controls/slash-command-palette": "@/registry/localmode/input-controls/slash-command-palette/slash-command-palette-demo",
+    "ui/input-controls/option-list": "@/registry/localmode/input-controls/option-list/option-list-demo",
+    "ui/input-controls/prompt-enhance-button": "@/registry/localmode/input-controls/prompt-enhance-button/prompt-enhance-button-demo",
+    "ui/input-controls/copy-button": "@/registry/localmode/input-controls/copy-button/copy-button-demo",
+    "ui/input-controls/system-prompt-editor": "@/registry/localmode/input-controls/system-prompt-editor/system-prompt-editor-demo"
+  },
+  "items": [
+    {
+      "name": "ui/input-controls/char-limit-indicator",
+      "type": "registry:component",
+      "title": "Char Limit Indicator",
+      "description": "A radial progress ring + n/MAX monospace counter that turns error-colored when over the limit, deriving the percentage internally from charCount + maxLength. Pure SVG, shadcn/CSS-variable themed (not daisyUI). Self-contained — sits beside any length-bounded textarea or PromptInput.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/input-controls/char-limit-indicator/char-limit-indicator.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "input"
+      ]
+    },
+    {
+      "name": "ui/input-controls/mask-token-input",
+      "type": "registry:component",
+      "title": "Mask Token Input",
+      "description": "A fill-mask / cloze textarea that detects a configurable mask token (default [MASK]), shows an inline highlighted preview of the mask span, a 'detected' vs 'Add [MASK]' validation hint, a randomize/sample button, and a Cmd+Enter submit badge. Presentational — feeds useFillMask.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/input-controls/mask-token-input/mask-token-input.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "input"
+      ]
+    },
+    {
+      "name": "ui/input-controls/segmented-mode-picker",
+      "type": "registry:component",
+      "title": "Segmented Mode Picker",
+      "description": "A pill toggle for 2–4 mutually-exclusive named modes (ring-bordered container, active item tinted + ringed), plus a typed TabBar variant with disabledTabs gating. Fully controlled, generic over the id type. Covers OCR content-type, summary length, translation formality, browse/inspect modes.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/input-controls/segmented-mode-picker/segmented-mode-picker.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "input"
+      ]
+    },
+    {
+      "name": "ui/input-controls/language-pair-selector",
+      "type": "registry:component",
+      "title": "Language Pair Selector",
+      "description": "A paired source/target language picker — From/To pill toggles with flag + name + a swap button, or a compact {source} → {target} pair of selects. Fully controlled via sourceCode/targetCode and onSelectSource/onSelectTarget/onSwap. Feeds useTranslate; composes with useDetectLanguage for auto-detect source.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/input-controls/language-pair-selector/language-pair-selector.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "input"
+      ]
+    },
+    {
+      "name": "ui/input-controls/text-processing-panel",
+      "type": "registry:component",
+      "title": "Text Processing Panel",
+      "description": "A two-column (stacked on mobile) single-input → single-output NLP shell: labeled textarea + live word count + optional CharLimitIndicator on the left; a result pane (spinner / pre-wrap text / empty slot) with copy-with-feedback on the right; a run/cancel/clear toolbar; and an optional header slot. Layout-only — compatible with useSummarize/useTranslate/useFillMask/useAnswerQuestion/useGenerateText.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/input-controls/char-limit-indicator"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/input-controls/text-processing-panel/text-processing-panel.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "input"
+      ]
+    },
+    {
+      "name": "ui/input-controls/parameter-slider",
+      "type": "registry:component",
+      "title": "Parameter Slider",
+      "description": "An inline range slider with a live value readout for reversible adjustment of a local generation parameter — temperature, top-k, top-p, maxTokens, nGpuLayers, KV-cache quant. Fully controlled; the emitted value feeds straight into useGenerateText/useChat options. Built on the shadcn/ui Slider primitive.",
+      "author": "LocalMode",
+      "dependencies": [
+        "radix-ui"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/input-controls/parameter-slider/parameter-slider.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "input"
+      ]
+    },
+    {
+      "name": "ui/input-controls/slash-command-palette",
+      "type": "registry:component",
+      "title": "Slash Command Palette",
+      "description": "A '/'-triggered command palette over a local tool/command list — name, category, description, and icon — to layer onto a PromptInput Tools slot. Purely presentational; the consumer opens it (e.g. when the composer starts with '/') and supplies the query. Built on the shadcn/ui Command (cmdk) primitive.",
+      "author": "LocalMode",
+      "dependencies": [
+        "cmdk",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/ui/command"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/input-controls/slash-command-palette/slash-command-palette.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "input"
+      ]
+    },
+    {
+      "name": "ui/input-controls/option-list",
+      "type": "registry:component",
+      "title": "Option List",
+      "description": "An inline multi-choice selection list (shows 5–7 options then paginates) for human-in-the-loop agent inquiries, distinct from quick-reply suggestion chips. The chosen option feeds back into a local agent inquiry loop. Presentational — feeds useAgent.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/input-controls/option-list/option-list.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "input"
+      ]
+    },
+    {
+      "name": "ui/input-controls/prompt-enhance-button",
+      "type": "registry:component",
+      "title": "Prompt Enhance Button",
+      "description": "A one-click 'enhance my prompt' control that hands the user's draft to a local model (via an onEnhance callback wired to useGenerateText) and applies the rewritten prompt — fully offline — with an optional few-shot example editor for interactive prompt tuning. Presentational + callback-driven.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/input-controls/prompt-enhance-button/prompt-enhance-button.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "input"
+      ]
+    },
+    {
+      "name": "ui/input-controls/copy-button",
+      "type": "registry:component",
+      "title": "Copy Button",
+      "description": "A copy-to-clipboard button that shows a 2-second \"Copied\" confirmation, disables itself when there is nothing to copy, and treats an unavailable clipboard (insecure context / denied permission) as a silent no-op. Fully controlled via value; presentational. Pairs with any generated-text or result surface.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/input-controls/copy-button/copy-button.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "input"
+      ]
+    },
+    {
+      "name": "ui/input-controls/system-prompt-editor",
+      "type": "registry:component",
+      "title": "System Prompt Editor",
+      "description": "A controlled system-prompt editor (value in, onChange out) with quick-pick presets composed via the OptionList primitive — selecting a preset replaces the textarea value; free-form edits that match no preset deselect all presets. Exports SYSTEM_PROMPT_PRESETS + DEFAULT_SYSTEM_PROMPT. Presentational: persistence and model wiring stay in the consumer. Feeds useChat / useGenerateText systemPrompt.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/input-controls/option-list"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/input-controls/system-prompt-editor/system-prompt-editor.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "input"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "family": "security-privacy",
+  "navLabel": "Security & Privacy",
+  "docsFolder": "security-privacy",
+  "npmDependencies": [
+    "@localmode/core",
+    "@localmode/react",
+    "lucide-react",
+    "radix-ui"
+  ],
+  "previews": {
+    "ui/security-privacy/password-strength-bar": "@/registry/localmode/security-privacy/password-strength-bar/password-strength-bar-demo",
+    "ui/security-privacy/differential-privacy-controls": "@/registry/localmode/security-privacy/differential-privacy-controls/differential-privacy-controls-demo",
+    "ui/security-privacy/passphrase-gate": "@/registry/localmode/security-privacy/passphrase-gate/passphrase-gate-demo",
+    "ui/security-privacy/vault-item-card": "@/registry/localmode/security-privacy/vault-item-card/vault-item-card-demo",
+    "ui/security-privacy/lock-status-badge": "@/registry/localmode/security-privacy/lock-status-badge/lock-status-badge-demo"
+  },
+  "items": [
+    {
+      "name": "ui/security-privacy/password-strength-bar",
+      "type": "registry:component",
+      "title": "Password Strength Bar",
+      "description": "A presentational password/passphrase strength meter — a themed bar + label driven by a caller-computed 0–100 strength score. The app computes strength (pairs with @localmode/core deriveKey/crypto); the component only renders. No turnkey hook.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/security-privacy/password-strength-bar/password-strength-bar.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "security"
+      ]
+    },
+    {
+      "name": "ui/security-privacy/differential-privacy-controls",
+      "type": "registry:component",
+      "title": "Differential Privacy Controls",
+      "description": "A collapsible DP settings panel (enable toggle, epsilon slider with derived High/Balanced/Low label, privacy-budget bar that warns/errors as budget is consumed) plus a compact \"DP Applied\" provenance badge (epsilon used, embedding dimensionality). Driven by the app's dpEmbeddingMiddleware/dpClassificationMiddleware + DP-budget state; the component only renders. No turnkey hook.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react",
+        "radix-ui"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/ui/collapsible",
+        "@localmode/ui/ui/switch",
+        "@localmode/ui/ui/badge"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/security-privacy/differential-privacy-controls/differential-privacy-controls.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "security"
+      ]
+    }
+  ]
+}

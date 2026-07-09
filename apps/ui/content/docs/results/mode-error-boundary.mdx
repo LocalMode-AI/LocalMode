@@ -1,0 +1,78 @@
+---
+title: "Mode Error Boundary"
+description: "A React error boundary that isolates a render failure in its subtree and offers a Reset — so one failing surface cannot blank the whole page."
+icon: ShieldAlert
+---
+
+# Mode Error Boundary
+
+The **Mode Error Boundary** is a React error boundary that isolates a render
+failure in its subtree. When a child throws during render, it catches the error
+and renders a compact recoverable `role="alert"` notice with the message and a
+**Reset** button that clears the error and re-renders the children — so a single
+failing surface (one tab, one result panel) cannot blank the whole page.
+
+> **Structural utility.** It is a copy-owned class error boundary with local prop
+> shapes — no backend, no model, no `@localmode/*` dependency. Wrap any subtree
+> whose render could throw.
+
+**When to use it:** around each independently-rendered result surface (a tab, a
+mode, a widget) so an error in one is contained and recoverable in place.
+
+## Preview
+
+<ComponentPreview name="ui/results/mode-error-boundary" note="Pure UI — Break makes the child throw; the boundary catches it and offers Reset. No model download." />
+
+<OpenInV0 name="ui/results/mode-error-boundary" />
+
+## Installation
+
+<InstallTabs name="ui/results/mode-error-boundary" />
+
+### Dependencies
+
+- **Data source:** none — it wraps children and catches their render errors. Works in any React app.
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `mode-error-boundary.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/results/mode-error-boundary/mode-error-boundary.tsx" name="ModeErrorBoundaryProps" />
+
+## Examples
+
+### Isolate a result surface
+
+```tsx
+import { ModeErrorBoundary } from '@/components/mode-error-boundary';
+
+export function Mode({ data }) {
+  return (
+    <ModeErrorBoundary>
+      <ResultSurface data={data} />
+    </ModeErrorBoundary>
+  );
+}
+```
+
+### Reset on input change
+
+Give the boundary a `key` tied to the input so switching inputs remounts it
+fresh, clearing any prior error:
+
+```tsx
+<ModeErrorBoundary key={activeMode}>
+  <ResultSurface data={data} />
+</ModeErrorBoundary>
+```
+
+## Customization
+
+The fallback notice uses `destructive` token utilities. Because you own the
+copied file, you can change the message, add error logging in
+`getDerivedStateFromError` / `componentDidCatch`, or replace the Reset button
+with your own recovery affordance.

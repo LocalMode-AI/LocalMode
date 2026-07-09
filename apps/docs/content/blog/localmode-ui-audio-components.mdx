@@ -1,0 +1,245 @@
+---
+title: "Audio & Voice UI Components for Browser AI: The LocalMode Audio Family"
+description: "@localmode/ui ships ten copy-owned React components for browser speech-to-text and text-to-speech UIs -- WaveformActivityBars, VoicePicker, StreamingSpeechPanel, VoiceComparisonPanel, TranscribedNoteCard, VoiceOrb, VoiceButton, MicSelector, AudioScrubPlayer, and SyncedTranscriptViewer. Push-to-talk, voice-agent orbs, karaoke transcripts, and Kokoro voice pickers, all hook-driven by Whisper and Kokoro running on-device. The audio never leaves the browser."
+author: LocalMode
+date: "2026-05-31"
+dateModified: "2026-07-04"
+faq:
+  - question: "What is the LocalMode UI Audio family?"
+    answer: "It is a set of ten copy-owned React components in the @localmode/ui shadcn registry for building voice and audio AI surfaces: WaveformActivityBars (pure-CSS activity/agent visualizer), VoicePicker (language-grouped Kokoro voice selection), StreamingSpeechPanel (streaming TTS status plus WAV export), VoiceComparisonPanel (A/B voice comparison), TranscribedNoteCard (streaming transcription list item), VoiceOrb (canvas voice-agent orb), VoiceButton (push-to-talk state machine), MicSelector (device picker), AudioScrubPlayer (scrubbable local player), and SyncedTranscriptViewer (karaoke word-sync). You install them with the shadcn CLI and own the copied code."
+  - question: "How do I install a LocalMode audio component?"
+    answer: "Add the @localmode namespace to your components.json, then run the shadcn CLI: npx shadcn add @localmode/ui/audio/voice-button for one component, or npx shadcn add @localmode/ui/audio for the whole family. The files are copied into your project and you own the code -- no @localmode/* package is installed. To drive them with the recommended local-first hooks, add @localmode/react and @localmode/transformers (for Whisper STT / Kokoro TTS), or wire them to any backend."
+  - question: "Does browser-based voice transcription send audio to a server?"
+    answer: "No. The audio components are presentational and hook-driven -- they render the state of LocalMode React hooks like useTranscribe, useSynthesizeSpeech, useStreamSpeech, useVoiceRecorder, and useLiveTranscribe, which run Whisper and Kokoro entirely in the browser via @localmode/transformers. Recording uses getUserMedia and MediaRecorder; transcription and synthesis happen on-device. The audio never leaves the browser."
+  - question: "Which models back the LocalMode audio components?"
+    answer: "Speech-to-text routes to local Whisper (e.g. onnx-community/whisper-base) through useTranscribe and useVoiceRecorder. Text-to-speech routes to Kokoro (onnx-community/Kokoro-82M-v1.0-ONNX, 29 English voices) through useSynthesizeSpeech and useStreamSpeech. Both run via @localmode/transformers and ONNX Runtime, downloading once and then working offline."
+  - question: "How does the VoiceButton push-to-talk component work?"
+    answer: "VoiceButton renders an explicit state machine -- idle, recording (with animated pulse rings and a live waveform), processing, then success or error. Recording is the app's job via useVoiceRecorder (getUserMedia / MediaRecorder); transcription routes to local Whisper via useTranscribe. The component renders the state and emits onStart / onStop events; you control when the machine advances."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Voice features in the browser share a recognizable set of UI pieces. A pulsing waveform that says "I'm listening." A language-grouped voice picker for text-to-speech. A push-to-talk button with a recording state. A scrubbable player for a synthesized clip. A karaoke-style transcript that highlights each word as the audio plays. A glowing orb that shows a voice agent's state.
+
+LocalMode's family audit found these copied across its speech-to-text and text-to-speech apps — a CSS waveform indicator in four apps, a language-grouped TTS voice picker in two, streaming-synthesis panels, and transcription list items. They are audio-domain surfaces that fit neither the chat-focused Conversation family nor the local-first runtime family. So `@localmode/ui` ships them as the **Audio** family: ten copy-owned, hook-driven React components, each backed by Whisper or Kokoro running on-device.
+
+This post covers all ten, how they map to the LocalMode audio hooks, and why the audio never leaves the browser.
+
+---
+
+## What `@localmode/ui` Is
+
+`@localmode/ui` is a [shadcn-style registry](https://ui.shadcn.com/docs/registry) of copy-owned AI UI primitives. It is not an npm package — like shadcn/ui, you install a component with the shadcn CLI and own the copied `.tsx`. Components are styled with shadcn/ui CSS-variable tokens (`bg-primary`, `bg-card`, `text-muted-foreground`), so they inherit your existing theme.
+
+Add the namespace to `components.json` once, then install a component, a family, or everything:
+
+```bash
+# A single component
+npx shadcn add @localmode/ui/audio/voice-button
+
+# The whole Audio family
+npx shadcn add @localmode/ui/audio
+
+# Everything
+npx shadcn add @localmode/ui/all
+```
+
+Every component is **presentational and hook-driven**: it renders the state of a LocalMode React audio hook and emits callbacks. Recording, transcription, and synthesis stay in the hooks; the components only show what is happening.
+
+---
+
+## WaveformActivityBars: The Universal "Audio Is Working" Cue
+
+`WaveformActivityBars` is a pure-CSS row of pulsing vertical bars with a staggered, sinusoid-derived animation. It needs no audio data, so it works as an "active processing" indicator, an idle empty-state illustration, or — with an explicit `state` and a `volume` value — a voice-agent visualizer that reacts to live microphone or output loudness.
+
+```tsx
+import { WaveformActivityBars } from '@/components/waveform-activity-bars';
+import { useTranscribe } from '@localmode/react';
+
+export function TranscribeIndicator({ model }) {
+  const { isLoading } = useTranscribe({ model });
+  return <WaveformActivityBars active={isLoading} />;
+}
+```
+
+The `@keyframes` ship inside the component (injected once into `document.head`), so it animates standalone after `shadcn add`. When you pass a `volume` (0..1) from a Web Audio `AnalyserNode`, the bars switch from time-based animation to amplitude-based scaling — they track measured loudness instead of wall-clock time. This component is also a building block: `VoicePicker`, `VoiceButton`, `StreamingSpeechPanel`, and `TranscribedNoteCard` all pull it in as a registry dependency. See the [WaveformActivityBars docs](https://localmode.ai/docs/audio/waveform-activity-bars).
+
+---
+
+## VoicePicker: Pick and Preview a Kokoro Voice
+
+`VoicePicker` is text-to-speech voice selection from one data contract. It ships three pieces: a compact `<select>` partitioned into `<optgroup>` by language, a rich `VoiceCard` (name, gender badge, monospace voice id, circular play/stop preview), and a `VoiceGrid` with a search box and count header. All three consume a single `VoiceOption[]` contract that matches the `KokoroVoice` shape from `@localmode/transformers` — the 29 English Kokoro voices.
+
+```tsx
+import { VoicePicker } from '@/components/voice-picker';
+import { KOKORO_VOICES } from '@localmode/transformers';
+
+const [voice, setVoice] = useState('af_heart');
+<VoicePicker voices={KOKORO_VOICES} value={voice} onValueChange={setVoice} />;
+```
+
+Wire `onPreview` to [`useSynthesizeSpeech`](/docs/react) and the grid plays a real, locally-synthesized sample before the user commits. Voices group by `languageLabel`, so any provider exposing that field groups correctly. Details in the [VoicePicker docs](https://localmode.ai/docs/audio/voice-picker).
+
+---
+
+## StreamingSpeechPanel: Live TTS Feedback + WAV Export
+
+`StreamingSpeechPanel` visualizes a streaming text-to-speech run. While synthesis or playback is active it shows a waveform, a spinner, the processed-clause count, and the current clause in a highlighted "now playing" box. When the stream completes it shows the clause-count summary, a "generated locally" privacy note, and a Download WAV action.
+
+Drive it from [`useStreamSpeech`](/docs/react) — Kokoro synthesizes clause-by-clause — and wire `onDownload` to the `downloadBlob` helper:
+
+```tsx
+import { StreamingSpeechPanel } from '@/components/streaming-speech-panel';
+import { useStreamSpeech, downloadBlob } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+const speech = useStreamSpeech({
+  model: transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX'),
+  voice: 'af_heart',
+});
+
+<StreamingSpeechPanel
+  isSynthesizing={speech.isSynthesizing}
+  isPlaying={speech.isPlaying}
+  currentClause={speech.currentClause}
+  clauses={speech.clauses}
+  onDownload={() => downloadBlob(wavBlob, 'speech.wav')}
+/>;
+```
+
+See the [StreamingSpeechPanel docs](https://localmode.ai/docs/audio/streaming-speech-panel).
+
+---
+
+## VoiceComparisonPanel: Hear Two Voices Side by Side
+
+`VoiceComparisonPanel` is an A/B voice comparison surface — two labeled columns, each with a language-grouped voice select and an audio player, a shared comparison textarea, and a Compare button. Wire `onCompare` to synthesize the same text through both voices with two `useSynthesizeSpeech` calls, then pass the resulting Blobs back via `columnA.audio` / `columnB.audio`. It is the fastest way to let users choose between Kokoro voices by ear. See the [VoiceComparisonPanel docs](https://localmode.ai/docs/audio/voice-comparison-panel).
+
+---
+
+## TranscribedNoteCard: A Streaming Transcription List
+
+`TranscribedNoteCard` is a list item that pairs transcribed text with inline audio playback, and it has two variants from one component. The **placeholder** variant (`transcribing`) shows a waveform row and a "Transcribing..." label — the canonical loading state for a `useOperationList`-backed STT list where items stream in. The **populated** variant shows a relative timestamp, the transcript body, a native `<audio>` footer, and a hover-revealed delete.
+
+```tsx
+import { TranscribedNoteCard } from '@/components/transcribed-note-card';
+import { useOperationList } from '@localmode/react';
+import { transcribe } from '@localmode/core';
+import { transformers } from '@localmode/transformers';
+
+const { items, isLoading, removeItem } = useOperationList({
+  fn: (audio: Blob, signal) =>
+    transcribe({ model: transformers.speechToText('onnx-community/whisper-base'), audio, abortSignal: signal }),
+  transform: (result, audio) => ({ id: crypto.randomUUID(), text: result.text, audio, timestamp: new Date() }),
+});
+
+<div className="flex flex-col gap-3">
+  {isLoading && <TranscribedNoteCard transcribing />}
+  {items.map((note) => (
+    <TranscribedNoteCard key={note.id} text={note.text} audio={note.audio} timestamp={note.timestamp}
+      onDelete={() => removeItem((n) => n.id === note.id)} />
+  ))}
+</div>;
+```
+
+This is the exact list pattern behind the [Audio Studio block](https://localmode.ai/blocks/audio) — for the full mic-to-text pipeline see [Real-Time Voice Notes With Transcription](/blog/voice-notes-offline-transcription). Component details in the [TranscribedNoteCard docs](https://localmode.ai/docs/audio/transcribed-note-card).
+
+---
+
+## The Voice-Agent Set: Orb, Button, Mic, Player, Transcript
+
+The audit also folded in a voice-agent UI cluster, partly inspired by external libraries like ElevenLabs UI — but rebuilt to run entirely on-device.
+
+**`VoiceOrb`** is an animated canvas visualizer that reflects discrete agent states (`idle`, `connecting`, `listening`, `thinking`, `speaking`, `muted`) and pulses with input/output volume through `getInputVolume()` / `getOutputVolume()` callbacks. Visual state is fully decoupled from the audio source — the orb reads volume through callbacks you feed from a local `AnalyserNode`, and you drive `state` from [`useLiveTranscribe`](/docs/react) / `useTurnTaker`. See the [VoiceOrb docs](https://localmode.ai/docs/audio/voice-orb).
+
+**`VoiceButton`** is a press-to-record / release-to-transcribe push-to-talk control with an explicit state machine — `idle → recording` (pulse rings plus a live waveform) `→ processing → success / error`:
+
+```tsx
+import { VoiceButton, type VoiceButtonState } from '@/components/voice-button';
+import { useVoiceRecorder, useTranscribe } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+const [state, setState] = useState<VoiceButtonState>('idle');
+const recorder = useVoiceRecorder();
+const stt = useTranscribe({ model: transformers.speechToText('onnx-community/whisper-base') });
+
+<VoiceButton
+  state={state}
+  onStart={() => { setState('recording'); recorder.startRecording(); }}
+  onStop={async () => {
+    setState('processing');
+    const blob = await recorder.stopRecording();
+    const res = blob ? await stt.execute(blob) : null;
+    if (res) { onResult(res.text); setState('success'); } else { setState('error'); }
+    setTimeout(() => setState('idle'), 1500);
+  }}
+/>;
+```
+
+The button is fully controlled — you own the `state` and decide when the machine advances. See the [VoiceButton docs](https://localmode.ai/docs/audio/voice-button).
+
+**`MicSelector`** is a microphone input-device picker that uses only browser device APIs — `getUserMedia` for the one-time permission prompt, `enumerateDevices` for the list, and a `devicechange` listener to stay current. Selecting a device emits its `deviceId` for a `getUserMedia({ audio: { deviceId } })` constraint. See the [MicSelector docs](https://localmode.ai/docs/audio/mic-selector).
+
+**`AudioScrubPlayer`** is a composable scrubbable player for local `Blob` / object-URL audio such as Kokoro output. It provides play/pause, a draggable seek bar, and a duration readout, and manages its own `<audio>` element and object-URL lifecycle — a consistent alternative to native `<audio controls>`. The draggable `ScrubBar` is exported standalone (pointer plus keyboard, `ArrowLeft`/`ArrowRight` for ±5s). See the [AudioScrubPlayer docs](https://localmode.ai/docs/audio/audio-scrub-player).
+
+**`SyncedTranscriptViewer`** plays local audio and highlights each word in lockstep with playback using word-level alignment timestamps from [`useTranscribe`](/docs/react). The playback-time to word-index mapping is a pure client-side binary search on the `timeupdate` position, so it stays cheap even for long transcripts; clicking a word seeks the audio. See the [SyncedTranscriptViewer docs](https://localmode.ai/docs/audio/synced-transcript-viewer).
+
+---
+
+## How They Compose
+
+A voice-notes app uses `VoiceButton` to capture, `TranscribedNoteCard` for the streaming list, and `AudioScrubPlayer` for playback. A text-to-speech reader uses `VoicePicker` to choose a voice and `StreamingSpeechPanel` for live feedback and WAV export. A hands-free voice agent centers on `VoiceOrb`, with `MicSelector` to choose the input and `WaveformActivityBars` for secondary state. A read-along player pairs `SyncedTranscriptViewer` with the same recording.
+
+<Callout type="info" title="The audio never leaves the device">
+  Every component in this family is presentational. Recording uses `getUserMedia` and `MediaRecorder`;
+  transcription runs local Whisper and synthesis runs local Kokoro, both via `@localmode/transformers`.
+  Models download once, then work offline. No audio is uploaded, no API key is required.
+</Callout>
+
+---
+
+## Why On-Device for Voice
+
+Cloud speech APIs charge per minute and route every recording through someone else's servers. Running Whisper and Kokoro in the browser removes both costs: inference happens on the user's device, so a voice-notes feature with tens of thousands of users costs nothing beyond serving the static model file once. It also works offline — on a plane, underground, in airplane mode — and the audio never leaves the browser, which matters for any product that handles private voice. The economics and accuracy trade-offs are covered in depth in [Real-Time Voice Notes With Transcription](/blog/voice-notes-offline-transcription).
+
+---
+
+## Methodology
+
+Every component name, prop, install command, and code example in this post was verified directly against the `@localmode/ui` source — `apps/ui/registry.json`, the ten `apps/ui/content/docs/audio/*.mdx` doc pages (`waveform-activity-bars`, `voice-picker`, `streaming-speech-panel`, `voice-comparison-panel`, `transcribed-note-card`, `voice-orb`, `voice-button`, `mic-selector`, `audio-scrub-player`, `synced-transcript-viewer`), the family `meta.json`, and the `ui-elements-audio` change proposal — together with the backing `@localmode/react` hook names (`useTranscribe`, `useSynthesizeSpeech`, `useStreamSpeech`, `useVoiceRecorder`, `useLiveTranscribe`, `useTurnTaker`, `useOperationList`) and the `downloadBlob` helper. The Kokoro voice count (29 English voices across American and British dialects) and model id (`onnx-community/Kokoro-82M-v1.0-ONNX`) were verified against the `@localmode/transformers` `KOKORO_VOICES` catalog and the `SPEECH_TO_TEXT`/Kokoro entries in `packages/transformers/src/models.ts`. The speech-to-text id (`onnx-community/whisper-base`) is the one used in the audio family's own doc pages — it is a public Transformers.js-compatible ONNX Whisper repo loaded by `transformers.speechToText()`, not a curated catalog constant; the post cites it as an example ("e.g."). The "four apps duplicated the waveform, two the voice picker" figures come from the family proposal's family audit (`openspec/changes/ui-elements-audio/proposal.md`).
+
+## Sources
+
+- [LocalMode UI Installation](https://localmode.ai/docs/installation) — configure the `@localmode` namespace
+- [WaveformActivityBars](https://localmode.ai/docs/audio/waveform-activity-bars) — pure-CSS activity/agent visualizer
+- [VoicePicker](https://localmode.ai/docs/audio/voice-picker) — language-grouped Kokoro voice selection
+- [StreamingSpeechPanel](https://localmode.ai/docs/audio/streaming-speech-panel) — streaming TTS status plus WAV export
+- [VoiceComparisonPanel](https://localmode.ai/docs/audio/voice-comparison-panel) — A/B voice comparison
+- [TranscribedNoteCard](https://localmode.ai/docs/audio/transcribed-note-card) — streaming transcription list item
+- [VoiceOrb](https://localmode.ai/docs/audio/voice-orb) — canvas voice-agent orb
+- [VoiceButton](https://localmode.ai/docs/audio/voice-button) — push-to-talk state machine
+- [MicSelector](https://localmode.ai/docs/audio/mic-selector) — microphone device picker
+- [AudioScrubPlayer](https://localmode.ai/docs/audio/audio-scrub-player) — scrubbable local audio player
+- [SyncedTranscriptViewer](https://localmode.ai/docs/audio/synced-transcript-viewer) — karaoke word-sync transcript
+- [`@localmode/react` hooks](/docs/react) — the backing audio hooks
+- [Real-Time Voice Notes With Transcription](/blog/voice-notes-offline-transcription) — the mic-to-text pipeline
+
+Primary source files:
+
+- `apps/ui/registry.json` — the catalog; the ten `ui/audio/*` items, each with empty npm `dependencies` (no `@localmode/*` package is installed on `shadcn add`)
+- `apps/ui/registry/localmode/audio/**` — the component sources (props, state machines, exported types)
+- `apps/ui/content/docs/audio/*.mdx` + `meta.json` — the ten audio doc pages this post summarizes
+- `apps/ui/consumer-tests/portability-test.mjs` — proves the no-`@localmode`-package install guarantee via the real `shadcn` CLI
+- `packages/transformers/src/kokoro-voices.ts` — the `KOKORO_VOICES` catalog (29 English voices: 12 + 9 American, 4 + 4 British) and `KokoroVoice` shape (`id`, `name`, `language`, `languageLabel`, `gender`)
+- `packages/transformers/src/models.ts` — `KOKORO_82M: 'onnx-community/Kokoro-82M-v1.0-ONNX'`
+- `packages/react/src/hooks/{use-transcribe,use-synthesize-speech,use-stream-speech,use-live-transcribe,use-turn-taker}.ts`, `packages/react/src/utilities/use-voice-recorder.ts`, `packages/react/src/helpers/download.ts` — the hook/helper signatures used in the examples
+- [`onnx-community/whisper-base`](https://huggingface.co/onnx-community/whisper-base) — the Transformers.js-compatible ONNX Whisper repo used in the speech-to-text examples
+- `openspec/changes/ui-elements-audio/{proposal,design}.md` — the family audit (waveform in 4 apps, voice picker in 2)
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

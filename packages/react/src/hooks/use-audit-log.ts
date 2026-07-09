@@ -33,8 +33,13 @@ export interface UseAuditLogReturn {
   error: Error | null;
   /** Append an entry. Updates `entries` on success. */
   append: (kind: string, payload: unknown) => Promise<AuditEntry>;
-  /** Run `verifyChain` against the log. */
+  /** Run `verifyChain` against the log. Also retained as `lastVerification`. */
   verify: () => Promise<VerifyResult>;
+  /**
+   * Result of the most recent resolved `verify()` call (null until one
+   * resolves; unchanged when `verify()` throws).
+   */
+  lastVerification: VerifyResult | null;
   /** Re-read `entries` from storage. */
   refresh: () => Promise<void>;
 }
@@ -65,6 +70,7 @@ export function useAuditLog(
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(autoLoad && log !== null);
   const [error, setError] = useState<Error | null>(null);
+  const [lastVerification, setLastVerification] = useState<VerifyResult | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
@@ -161,6 +167,9 @@ export function useAuditLog(
     const { verifyChain } = await import('@localmode/core');
     try {
       const result = await verifyChain(log, { abortSignal: controller.signal });
+      if (mountedRef.current) {
+        setLastVerification(result);
+      }
       return result;
     } catch (err) {
       if (mountedRef.current) {
@@ -196,5 +205,5 @@ export function useAuditLog(
     }
   }, [log]);
 
-  return { entries, isLoading, error, append, verify, refresh };
+  return { entries, isLoading, error, append, verify, lastVerification, refresh };
 }

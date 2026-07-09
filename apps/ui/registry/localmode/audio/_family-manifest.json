@@ -1,0 +1,237 @@
+{
+  "family": "audio",
+  "navLabel": "Audio",
+  "docsFolder": "audio",
+  "npmDependencies": [
+    "@localmode/core",
+    "@localmode/react",
+    "@localmode/transformers"
+  ],
+  "previews": {
+    "ui/audio/waveform-activity-bars": "@/registry/localmode/audio/waveform-activity-bars/waveform-activity-bars-demo",
+    "ui/audio/voice-picker": "@/registry/localmode/audio/voice-picker/voice-picker-demo",
+    "ui/audio/streaming-speech-panel": "@/registry/localmode/audio/streaming-speech-panel/streaming-speech-panel-demo",
+    "ui/audio/voice-comparison-panel": "@/registry/localmode/audio/voice-comparison-panel/voice-comparison-panel-demo",
+    "ui/audio/transcribed-note-card": "@/registry/localmode/audio/transcribed-note-card/transcribed-note-card-demo",
+    "ui/audio/voice-orb": "@/registry/localmode/audio/voice-orb/voice-orb-demo",
+    "ui/audio/voice-button": "@/registry/localmode/audio/voice-button/voice-button-demo",
+    "ui/audio/mic-selector": "@/registry/localmode/audio/mic-selector/mic-selector-demo",
+    "ui/audio/audio-scrub-player": "@/registry/localmode/audio/audio-scrub-player/audio-scrub-player-demo",
+    "ui/audio/synced-transcript-viewer": "@/registry/localmode/audio/synced-transcript-viewer/synced-transcript-viewer-demo"
+  },
+  "items": [
+    {
+      "name": "ui/audio/waveform-activity-bars",
+      "type": "registry:component",
+      "title": "Waveform Activity Bars",
+      "description": "A pure-CSS row of pulsing vertical bars (sinusoid-derived heights, staggered animation) that doubles as an active audio-processing indicator and an idle empty-state. Supports agent-state modes (connecting/listening/thinking/speaking), record/playback-scrub modes, and a live-volume mode that scales amplitude from a callback — decoupling the visual from the audio source. Ships its keyframe inline so it animates standalone after install.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/audio/waveform-activity-bars/waveform-activity-bars.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "audio"
+      ]
+    },
+    {
+      "name": "ui/audio/voice-picker",
+      "type": "registry:component",
+      "title": "Voice Picker",
+      "description": "Language-grouped TTS voice selection from one KokoroVoice[] contract — a compact grouped <select> (VoicePicker) plus rich VoiceCard / VoiceGrid variants with a color-coded gender badge, monospace voice id, a circular play/stop preview button with loading state, a per-group count header, and search/filter. Wire onPreview to useSynthesizeSpeech for local Kokoro samples.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/audio/waveform-activity-bars"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/audio/voice-picker/voice-picker.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "audio"
+      ]
+    },
+    {
+      "name": "ui/audio/streaming-speech-panel",
+      "type": "registry:component",
+      "title": "Streaming Speech Panel",
+      "description": "A streaming-TTS status surface: active state (WaveformActivityBars + spinner, synthesizing/playing label, processed-clause count, highlighted now-playing clause box) and finished state (clause-count summary, a generated-locally privacy note, and a Download WAV action). Driven by useStreamSpeech (isSynthesizing/isPlaying/currentClause/clauses); download via downloadBlob.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/audio/waveform-activity-bars"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/audio/streaming-speech-panel/streaming-speech-panel.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "audio"
+      ]
+    },
+    {
+      "name": "ui/audio/voice-comparison-panel",
+      "type": "registry:component",
+      "title": "Voice Comparison Panel",
+      "description": "A/B voice comparison — two labeled columns, each with a language-grouped voice select (VoicePicker) and a native <audio> player shown once audio is set, a shared comparison textarea, and a Compare button with a loading state. Wire onCompare to two useSynthesizeSpeech runs and pass the resulting Blobs back per column.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/audio/voice-picker",
+        "@localmode/ui/lib/browser-utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/audio/voice-comparison-panel/voice-comparison-panel.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "audio"
+      ]
+    },
+    {
+      "name": "ui/audio/transcribed-note-card",
+      "type": "registry:component",
+      "title": "Transcribed Note Card",
+      "description": "A transcription list item pairing transcript text with inline <audio> playback — relative timestamp (hover -> absolute), transcribed body, and a hover-revealed delete — plus a transcribing… placeholder variant (WaveformActivityBars + label) that morphs into the populated card. The canonical useOperationList-backed STT list pattern; driven by useTranscribe.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/audio/waveform-activity-bars",
+        "@localmode/ui/lib/browser-utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/audio/transcribed-note-card/transcribed-note-card.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "audio"
+      ]
+    },
+    {
+      "name": "ui/audio/voice-orb",
+      "type": "registry:component",
+      "title": "Voice Orb",
+      "description": "An animated Canvas 2D voice-agent orb/visualizer that reflects discrete agent states (idle/connecting/listening/thinking/speaking/muted) and pulses with input/output audio volume via getInputVolume()/getOutputVolume() callbacks, with color/glow variants. Visual state is fully decoupled from the audio source — feed volume from a local AnalyserNode. Driven by useLiveTranscribe / useTurnTaker.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/audio/voice-orb/voice-orb.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "audio"
+      ]
+    },
+    {
+      "name": "ui/audio/voice-button",
+      "type": "registry:component",
+      "title": "Voice Button",
+      "description": "A press-to-record / release-to-transcribe push-to-talk button with an explicit visual state machine: idle -> recording (pulse rings + live waveform) -> processing (loader) -> success/error. Recording uses getUserMedia/MediaRecorder (useVoiceRecorder); transcription routes to local Whisper (useTranscribe). Controlled — the app advances the state.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/audio/waveform-activity-bars"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/audio/voice-button/voice-button.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "audio"
+      ]
+    },
+    {
+      "name": "ui/audio/mic-selector",
+      "type": "registry:component",
+      "title": "Mic Selector",
+      "description": "A microphone input-device picker with permission handling and live device enumeration — fully offline, using only browser device APIs (getUserMedia for the permission prompt, enumerateDevices for the list, a devicechange listener to stay current). Emits the chosen deviceId for a getUserMedia constraint; pairs with VoiceButton / VoiceOrb / useLiveTranscribe.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/audio/mic-selector/mic-selector.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "audio"
+      ]
+    },
+    {
+      "name": "ui/audio/audio-scrub-player",
+      "type": "registry:component",
+      "title": "Audio Scrub Player",
+      "description": "A composable scrubbable audio player for local Blob/object-URL audio (Kokoro TTS output or recordings) — play/pause, a draggable seek bar, and a time/duration readout, managing its own <audio> element and object-URL lifecycle. Ships a standalone, controlled ScrubBar seek sub-primitive (pointer + keyboard). Pairs with useSynthesizeSpeech output.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/lib/browser-utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/audio/audio-scrub-player/audio-scrub-player.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "audio"
+      ]
+    },
+    {
+      "name": "ui/audio/synced-transcript-viewer",
+      "type": "registry:component",
+      "title": "Synced Transcript Viewer",
+      "description": "A karaoke-style transcript viewer that highlights words in lockstep with audio playback using word-level alignment timestamps — the playback-time -> word-index sync is pure client-side (binary search on timeupdate). Clicking a word seeks the audio to its start. Driven by useTranscribe word-level timestamps over a local audio Blob.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/lib/browser-utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/audio/synced-transcript-viewer/synced-transcript-viewer.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "audio"
+      ]
+    }
+  ]
+}

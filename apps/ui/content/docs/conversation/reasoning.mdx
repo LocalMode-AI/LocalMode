@@ -1,0 +1,52 @@
+---
+title: "Reasoning"
+description: "Collapsible model thinking tokens that auto-expand while streaming and auto-collapse on the final answer, plus a compact ThinkingBar."
+icon: Brain
+---
+
+# Reasoning
+
+The **Reasoning** primitive renders the model's own thinking tokens (DeepSeek-R1 style) in a collapsible region. It auto-expands while tokens stream — showing an elapsed timer — and auto-collapses when the final answer arrives. The compact `ThinkingBar` variant is a one-line status strip with inline stop/expand. Together with `ChainOfThought` it forms a three-tier thinking taxonomy: `ThinkingBar` → `Reasoning` → `ChainOfThought`.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/reasoning" />
+
+<OpenInV0 name="ui/conversation/reasoning" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/reasoning" />
+
+### Data source & dependencies
+
+**Data source:** renders a reasoning `string` you pass — works with any backend. Recommended producer: a reasoning-capable model via `@localmode/react` (on-device). See [Use with the Vercel AI SDK](/docs/use-with-ai-sdk#reasoning-parts--reasoning).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `reasoning.tsx` — `Reasoning`, `ReasoningTrigger`, `ReasoningContent`, `ThinkingBar`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/reasoning/reasoning.tsx" name="ReasoningProps" />
+
+## Examples
+
+### Stream reasoning tokens
+
+```tsx
+import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/components/reasoning';
+
+<Reasoning streaming={isThinking}>
+  <ReasoningTrigger />
+  <ReasoningContent>{thinkTokens}</ReasoningContent>
+</Reasoning>
+```
+
+## Customization
+
+Pass `durationMs` to display a known elapsed time instead of the internal timer, or control `open`/`onOpenChange` to override the auto-expand/collapse behavior.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useGenerateText`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

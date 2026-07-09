@@ -6,13 +6,18 @@ Run ML models entirely in your browser. No servers. No API keys. Your data never
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev)
-[![Demo](https://img.shields.io/badge/Demo-LocalMode.ai-purple)](https://localmode.ai)
+[![UI Components](https://img.shields.io/badge/UI_Components-LocalMode.ai-green)](https://localmode.ai)
+[![Demo](https://img.shields.io/badge/Demo-Blocks_Gallery-purple)](https://localmode.ai/blocks)
+
+- Docs website: https://localmode.dev
+- UI Components: https://localmode.ai
+- Demo blocks apps: https://localmode.ai/blocks
 
 ## What is LocalMode?
 
 LocalMode is a monorepo of packages for building AI-powered applications that run 100% in the browser. Everything from embeddings and vector search to LLM chat, vision, audio, agents, and structured output works offline after the initial model download.
 
-**15 packages. 34 demo apps. Zero cloud dependencies.**
+**15 packages. 36 demo blocks. Zero cloud dependencies.**
 
 ### Why LocalMode?
 
@@ -29,21 +34,69 @@ LocalMode is a monorepo of packages for building AI-powered applications that ru
 
 | Package | Version | Description |
 | ------- | ------- | ----------- |
-| [`@localmode/core`](./packages/core/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/core.svg)](https://www.npmjs.com/package/@localmode/core) | Zero-dependency core -- VectorDB (HNSW, typed metadata, WebGPU search, SQ8/PQ quantization), pipelines, inference queue, model cache, agent framework (ReAct + tools + memory), evaluation SDK, vector import/export, multimodal content, all interfaces |
-| [`@localmode/react`](./packages/react/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/react.svg)](https://www.npmjs.com/package/@localmode/react) | 56 React hooks, 10 pipeline step factories, batch/list processing, and browser helpers |
+| [`@localmode/core`](./packages/core/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/core.svg)](https://www.npmjs.com/package/@localmode/core) | Zero-dependency core -- VectorDB (HNSW, typed metadata, WebGPU search, SQ8/PQ quantization), pipelines, inference queue, model cache, agent framework (ReAct + tools with opt-in human-in-the-loop tool approval + memory), evaluation SDK, vector import/export, multimodal content, knowledge base engine (`createKnowledgeBaseEngine` + frozen `KnowledgeBaseEngine` contract), all interfaces |
+| [`@localmode/react`](./packages/react/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/react.svg)](https://www.npmjs.com/package/@localmode/react) | 64 React hooks, 10 pipeline step factories, batch/list processing, and browser helpers -- incl. `useEncryptedVault` passphrase-locked encrypted storage, `useAgent` tool-approval surface (`pendingApproval`/`approve`/`deny`), `useRerank` document reranking, `useModelLoad` unified model-download lifecycle, `useChat` usage tracking + `regenerate()` reply variants, `useProviderFallback` per-capability Chrome AI ⇄ Transformers.js resolution, `usePhotoLibrary` shared CLIP photo library, and `useKnowledgeBase` knowledge-base session orchestration |
 | [`@localmode/ai-sdk`](./packages/ai-sdk/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/ai-sdk.svg)](https://www.npmjs.com/package/@localmode/ai-sdk) | Vercel AI SDK provider for local models |
 | [`@localmode/transformers`](./packages/transformers/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/transformers.svg)](https://www.npmjs.com/package/@localmode/transformers) | HuggingFace Transformers.js provider -- 26 model factories covering embeddings, classification, vision, audio, OCR, multimodal (CLIP), and LLM inference via ONNX (Qwen3.5 vision support) |
 | [`@localmode/webllm`](./packages/webllm/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/webllm.svg)](https://www.npmjs.com/package/@localmode/webllm) | WebLLM provider for LLM inference via WebGPU -- 32 curated models including DeepSeek-R1, Qwen3, Llama 3.2, Phi 3.5 Vision |
-| [`@localmode/wllama`](./packages/wllama/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/wllama.svg)](https://www.npmjs.com/package/@localmode/wllama) | GGUF model provider via llama.cpp WASM -- 30 curated models (text, vision, embeddings, reranking), true streaming, structured output (JSON mode), reasoning mode, WebGPU acceleration, tool calling, grammar sampling (GBNF), LoRA adapters, model management, 160K+ HuggingFace models, universal browser support |
+| [`@localmode/wllama`](./packages/wllama/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/wllama.svg)](https://www.npmjs.com/package/@localmode/wllama) | GGUF model provider via llama.cpp WASM -- 30 curated models (text, vision, embeddings, reranking), true streaming, structured output (JSON mode), reasoning mode, WebGPU acceleration, tool calling, grammar sampling (GBNF), LoRA adapters, model management, GGUF model discovery (`searchGGUFModels`/`listGGUFFiles`), 160K+ HuggingFace models, universal browser support |
 | [`@localmode/litert`](./packages/litert/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/litert.svg)](https://www.npmjs.com/package/@localmode/litert) | Google LiteRT-LM provider (`.litertlm` models, WebGPU + CPU WASM fallback). Text-only, early preview. Catalog ships Gemma 4 E2B/E4B and Qwen3 0.6B, all verified end-to-end. Gated Gemma 3n / Gemma 3 1B loadable via custom URL. |
 | [`@localmode/mediapipe`](./packages/mediapipe/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/mediapipe.svg)](https://www.npmjs.com/package/@localmode/mediapipe) | Google MediaPipe Tasks provider -- real-time hand/pose/face landmark tracking, gesture recognition, image & audio classification, language detection. WASM + WebGL, all browsers. |
 | [`@localmode/chrome-ai`](./packages/chrome-ai/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/chrome-ai.svg)](https://www.npmjs.com/package/@localmode/chrome-ai) | Chrome Built-in AI provider -- zero-download inference via Gemini Nano with automatic fallback |
-| [`@localmode/langchain`](./packages/langchain/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/langchain.svg)](https://www.npmjs.com/package/@localmode/langchain) | LangChain.js adapters -- drop-in local embeddings, chat, vector store, and reranker for existing LangChain apps |
-| [`@localmode/devtools`](./packages/devtools/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/devtools.svg)](https://www.npmjs.com/package/@localmode/devtools) | In-app DevTools widget for model cache, VectorDB stats, and inference queue observability |
+| [`@localmode/langchain`](./packages/langchain/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/langchain.svg)](https://www.npmjs.com/package/@localmode/langchain) | LangChain.js adapters -- drop-in local embeddings, chat, vector store, and reranker for existing LangChain apps, plus `createLangChainKnowledgeBaseEngine` (the `KnowledgeBaseEngine` contract over LangChain adapters) |
+| [`@localmode/devtools`](./packages/devtools/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/devtools.svg)](https://www.npmjs.com/package/@localmode/devtools) | In-app AI observability -- 9 React hooks via the `@localmode/devtools/react` subpath for model cache, VectorDB stats, and inference queue data (the bundled DevTools widget UI was **removed in v3.0.0** in favor of the hooks + the `ui/devtools` registry family and `ui/blocks/devtools-drawer` at localmode.ai) |
 | [`@localmode/pdfjs`](./packages/pdfjs/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/pdfjs.svg)](https://www.npmjs.com/package/@localmode/pdfjs) | PDF text extraction with PDF.js |
 | [`@localmode/dexie`](./packages/dexie/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/dexie.svg)](https://www.npmjs.com/package/@localmode/dexie) | Dexie.js storage adapter with schema versioning and transactions |
 | [`@localmode/idb`](./packages/idb/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/idb.svg)](https://www.npmjs.com/package/@localmode/idb) | Minimal IndexedDB storage adapter using the idb library |
 | [`@localmode/localforage`](./packages/localforage/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/localforage.svg)](https://www.npmjs.com/package/@localmode/localforage) | Cross-browser storage adapter with automatic fallback |
+
+---
+
+### `@localmode/ui` — UI registry (not an npm package)
+
+[**LocalMode UI**](https://localmode.ai) is a shadcn-style registry of copy-owned AI UI components: **106 primitives across 10 families**, plus **37 blocks** that wire them to real on-device models. Like shadcn/ui, you install with the shadcn CLI and own the copied code, styled with shadcn/ui CSS variables so it inherits your theme. See the [docs](https://localmode.ai/docs), [installation guide](https://localmode.ai/docs/installation), and [`apps/ui/README.md`](./apps/ui/README.md).
+
+The primitives are presentational and install with **zero `@localmode/*` packages**, so they work with any React AI app — the LocalMode hooks (on-device), the [Vercel AI SDK](https://localmode.ai/docs/use-with-ai-sdk), or [your own data](https://localmode.ai/docs/bring-your-own-data). Local-first by design, cloud-compatible by contract.
+
+```bash
+# components.json → { "registries": { "@localmode": "https://localmode.ai/r/{name}.json" } }
+
+npx shadcn@latest add @localmode/ui/conversation/message   # a single component
+npx shadcn@latest add @localmode/ui/conversation           # a whole family
+npx shadcn@latest add @localmode/ui/all                    # the whole catalog
+```
+
+| Family | Count | What it covers |
+| ------ | ----- | -------------- |
+| [Conversation](https://localmode.ai/docs/conversation) | 24 | Chat shell, prompt input, reasoning, sources, tools, agent timelines, branches, citations |
+| [Local-First](https://localmode.ai/docs/local-first) | 24 | Model download/selection, Hub search, capability gates, storage quota, cache status, VectorDB observability |
+| [Results & Insights](https://localmode.ai/docs/results) | 12 | Confidence badges, scored result bars, similarity meters, evaluation dashboards, entity displays |
+| [Input Controls](https://localmode.ai/docs/input-controls) | 11 | Char-limit rings, fill-mask inputs, mode pickers, parameter sliders, slash-command palettes |
+| [Audio](https://localmode.ai/docs/audio) | 10 | Voice buttons/orbs, waveform bars, TTS voice pickers, streaming-speech panels, transcript viewers |
+| [Media & Vision](https://localmode.ai/docs/media-vision) | 7 | Image dropzones, bounding-box overlays, before/after viewers, webcam canvas, result galleries |
+| [Data & Documents](https://localmode.ai/docs/data-documents) | 5 | File dropzones, indexed-document cards, format badges, category facets, chunk visualizers |
+| [Security & Privacy](https://localmode.ai/docs/security-privacy) | 5 | Password-strength bar, differential-privacy controls, passphrase gate, vault item card, lock badge |
+| [Artifacts & Canvas](https://localmode.ai/docs/artifacts) | 4 | Docked canvas, sortable data tables, charts, code diffs — output rendered *beside* the chat |
+| [DevTools](https://localmode.ai/docs/devtools) | 4 | Inference-queue monitor, event-log viewer, pipeline-run inspector, model-cache table |
+
+**Blocks** are complete experiences composed from the primitives — the wiring layer, and the only items that depend on `@localmode/*`. Each runs real models on-device and gates its download behind an explicit in-block action. Try them in the [`/blocks` gallery](https://localmode.ai/blocks), then install with `npx shadcn@latest add @localmode/ui/blocks/<category>/<block>`.
+
+| Category | Blocks |
+| -------- | ------ |
+| [chat](https://localmode.ai/blocks/chat) | The flagship — streaming chat across 76 models and 4 providers, with vision, reasoning, agent mode, semantic caching, and custom GGUF URLs |
+| [knowledge](https://localmode.ai/blocks/knowledge) | `semantic-search` · `document-qa` · `rag-chat` · `vector-data-manager` — ingest text/PDF/OCR, rerank, ground answers with citations, import/export vectors |
+| [audio](https://localmode.ai/blocks/audio) | `voice-notes` · `live-transcription` · `meeting-assistant` · `voice-explorer` · `audiobook-reader` · `audio-classifier` |
+| [vision](https://localmode.ai/blocks/vision) | `object-detector` · `live-tracker` — DETR and BlazeFace detection, plus real-time hand / pose / face-mesh / gesture tracking |
+| [text](https://localmode.ai/blocks/text) | `language-detector` — 110-language detection and text-embedder similarity |
+| [device](https://localmode.ai/blocks/device) | `device-report` · `model-advisor` · `gguf-explorer` — capability report, ranked recommendations, and a 160K-model GGUF browser (zero download) |
+| [agents](https://localmode.ai/blocks/agents) | `research-agent` · `data-extractor` — a ReAct loop with human-in-the-loop tool approval, and schema-validated extraction rendered as artifacts |
+| [writing-tools](https://localmode.ai/blocks/writing-tools) | `write` · `translate` · `summarize` · `complete` — the Chrome Built-in AI ⇄ Transformers.js provider-fallback reference |
+| [text-insights](https://localmode.ai/blocks/text-insights) | `sentiment-analyzer` · `text-classifier` · `model-evaluator` · `threshold-calibrator` |
+| [photo](https://localmode.ai/blocks/photo) | `smart-gallery` · `image-search` · `duplicate-finder` · `photo-categorizer` — one CLIP model for both embeddings and zero-shot categorization |
+| [image-studio](https://localmode.ai/blocks/image-studio) | `background-remover` · `image-enhancer` · `image-captioner` |
+| [privacy](https://localmode.ai/blocks/privacy) | `pii-redactor` · `encrypted-vault` — on-device NER redaction with a differential-privacy demo, and a passphrase-locked AES-GCM vault |
+
+The 37th item, `ui/blocks/devtools-drawer`, is layout chrome rather than a gallery page: a six-tab observability drawer over `@localmode/devtools`, off by default and loaded only on first open. The 34 demo-app URLs from the previous `localmode.ai` site permanently redirect to the block that absorbed each one.
 
 ---
 
@@ -154,22 +207,25 @@ const { object } = await generateObject({
 ### AI Agent with Tools
 
 ```typescript
-import { createAgent, runAgent } from '@localmode/core';
+import { createAgent, defineTool, jsonSchema } from '@localmode/core';
 import { webllm } from '@localmode/webllm';
+import { z } from 'zod';
+
+// defineTool() infers the parameter/result types so `execute`'s args are typed
+const searchTool = defineTool({
+  name: 'search',
+  description: 'Search the knowledge base',
+  parameters: jsonSchema(z.object({ query: z.string() })),
+  execute: async ({ query }) => searchDB(query),
+});
 
 const agent = createAgent({
   model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
-  tools: {
-    search: {
-      description: 'Search the knowledge base',
-      parameters: jsonSchema(z.object({ query: z.string() })),
-      execute: async ({ query }) => searchDB(query),
-    },
-  },
+  tools: [searchTool],
   maxSteps: 5,
 });
 
-const result = await runAgent({ agent, prompt: 'Find documents about machine learning' });
+const result = await agent.run({ prompt: 'Find documents about machine learning' });
 ```
 
 ### React Hooks
@@ -180,11 +236,11 @@ import { transformers } from '@localmode/transformers';
 import { webllm } from '@localmode/webllm';
 
 function ChatApp() {
-  const { messages, sendMessage, isStreaming } = useChat({
+  const { messages, send, isStreaming } = useChat({
     model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
   });
 
-  return <ChatUI messages={messages} onSend={sendMessage} loading={isStreaming} />;
+  return <ChatUI messages={messages} onSend={send} loading={isStreaming} />;
 }
 ```
 
@@ -217,7 +273,7 @@ await tracker.start();
 | Feature | Functions | Description |
 | ------- | --------- | ----------- |
 | **Embeddings** | `embed()`, `embedMany()`, `streamEmbedMany()` | Text embeddings with streaming and batching |
-| **Multimodal Embeddings** | `embedImage()`, `embedManyImages()` | CLIP-based text-image cross-modal search |
+| **Multimodal Embeddings** | `embedImage()`, `embedManyImages()`, `streamEmbedManyImages()` | CLIP-based text-image cross-modal search |
 | **Streaming LLM** | `streamText()`, `generateText()` | Streaming and complete text generation |
 | **Structured Output** | `generateObject()`, `streamObject()` | Typed JSON generation with Zod schema validation |
 | **Classification** | `classify()`, `classifyZeroShot()`, `classifyMany()` | Sentiment, intent, topic classification |
@@ -290,21 +346,13 @@ await tracker.start();
 
 ---
 
-## Demo Applications
+## Demo Applications — the Blocks Gallery
 
-See LocalMode in action at [localmode.ai](https://localmode.ai) -- 34 apps showcasing every feature.
+See LocalMode running real models entirely in your browser at the **[/blocks gallery](https://localmode.ai/blocks)** (`localmode.ai/blocks`). The gallery ships **36 route-served blocks across 12 categories** — full experiences assembled from the registry primitives ([`chat`](https://localmode.ai/blocks/chat) plus the [`knowledge`](https://localmode.ai/blocks/knowledge), [`vision`](https://localmode.ai/blocks/vision), [`audio`](https://localmode.ai/blocks/audio), [`text`](https://localmode.ai/blocks/text), [`device`](https://localmode.ai/blocks/device), [`writing-tools`](https://localmode.ai/blocks/writing-tools), [`agents`](https://localmode.ai/blocks/agents), [`text-insights`](https://localmode.ai/blocks/text-insights), [`photo`](https://localmode.ai/blocks/photo), [`image-studio`](https://localmode.ai/blocks/image-studio), and [`privacy`](https://localmode.ai/blocks/privacy) category pages) plus the global-observability `devtools-drawer` chrome — each installable with `npx shadcn@latest add @localmode/ui/blocks/<name>`.
 
-| Category | Apps |
-| -------- | ---- |
-| **Chat & Agents** | [LLM Chat](https://localmode.ai/llm-chat), [Research Agent](https://localmode.ai/research-agent), [GGUF Explorer](https://localmode.ai/gguf-explorer) |
-| **Audio** | [Voice Notes](https://localmode.ai/voice-notes), [Meeting Assistant](https://localmode.ai/meeting-assistant), [Audiobook Creator](https://localmode.ai/audiobook-creator), [Voice Studio](https://localmode.ai/voice-studio) |
-| **Text & NLP** | [Smart Writer](https://localmode.ai/smart-writer), [Data Extractor](https://localmode.ai/data-extractor), [Sentiment Analyzer](https://localmode.ai/sentiment-analyzer), [Email Classifier](https://localmode.ai/email-classifier), [Translator](https://localmode.ai/translator), [Text Summarizer](https://localmode.ai/text-summarizer), [Q&A Bot](https://localmode.ai/qa-bot), [Smart Autocomplete](https://localmode.ai/smart-autocomplete), [Invoice Q&A](https://localmode.ai/invoice-qa) |
-| **Vision** | [Background Remover](https://localmode.ai/background-remover), [Smart Gallery](https://localmode.ai/smart-gallery), [Product Search](https://localmode.ai/product-search), [Cross-Modal Search](https://localmode.ai/cross-modal-search), [Image Captioner](https://localmode.ai/image-captioner), [OCR Scanner](https://localmode.ai/ocr-scanner), [Object Detector](https://localmode.ai/object-detector), [Duplicate Finder](https://localmode.ai/duplicate-finder), [Photo Enhancer](https://localmode.ai/photo-enhancer), [MediaPipe Studio](https://localmode.ai/mediapipe-studio) |
-| **RAG & Search** | [PDF Search](https://localmode.ai/pdf-search), [Semantic Search](https://localmode.ai/semantic-search), [LangChain RAG](https://localmode.ai/langchain-rag), [Data Migrator](https://localmode.ai/data-migrator) |
-| **Privacy** | [Document Redactor](https://localmode.ai/document-redactor), [Encrypted Vault](https://localmode.ai/encrypted-vault) |
-| **Developer Tools** | [Model Advisor](https://localmode.ai/model-advisor), [Model Evaluator](https://localmode.ai/model-evaluator) |
+**Full block descriptions, what each one covers, and install commands are in the `@localmode/ui` UI-registry section above** (the authoritative block catalog).
 
-[View source code](./apps/showcase-nextjs/README.md)
+> Legacy `localmode.ai/<slug>` URLs permanently redirect to the corresponding block.
 
 ---
 
@@ -314,7 +362,7 @@ See LocalMode in action at [localmode.ai](https://localmode.ai) -- 34 apps showc
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                            Your Application                              │
 ├──────────────────────────────────────────────────────────────────────────┤
-│                    @localmode/react  (56 React hooks)                    │
+│                    @localmode/react  (64 React hooks)                    │
 ├────────────────────────┬────────────────────────┬────────────────────────┤
 │  @localmode/langchain  │  @localmode/ai-sdk     │  @localmode/devtools   │
 ├────────────────────────┴────────────────────────┴────────────────────────┤
@@ -405,12 +453,12 @@ Full documentation available at [localmode.dev](https://localmode.dev)
 | MediaPipe Provider | [localmode.dev/docs/mediapipe](https://localmode.dev/docs/mediapipe) | [`packages/mediapipe/README.md`](./packages/mediapipe/README.md) |
 | Chrome AI Provider | [localmode.dev/docs/chrome-ai](https://localmode.dev/docs/chrome-ai) | [`packages/chrome-ai/README.md`](./packages/chrome-ai/README.md) |
 | LangChain Adapters | [localmode.dev/docs/langchain](https://localmode.dev/docs/langchain) | [`packages/langchain/README.md`](./packages/langchain/README.md) |
-| DevTools Widget | [localmode.dev/docs/devtools](https://localmode.dev/docs/devtools) | [`packages/devtools/README.md`](./packages/devtools/README.md) |
+| DevTools | [localmode.dev/docs/devtools](https://localmode.dev/docs/devtools) | [`packages/devtools/README.md`](./packages/devtools/README.md) |
 | PDF Extraction | [localmode.dev/docs/pdfjs](https://localmode.dev/docs/pdfjs) | [`packages/pdfjs/README.md`](./packages/pdfjs/README.md) |
 | Dexie Storage | [localmode.dev/docs/dexie](https://localmode.dev/docs/dexie) | [`packages/dexie/README.md`](./packages/dexie/README.md) |
 | IDB Storage | [localmode.dev/docs/idb](https://localmode.dev/docs/idb) | [`packages/idb/README.md`](./packages/idb/README.md) |
 | LocalForage Storage | [localmode.dev/docs/localforage](https://localmode.dev/docs/localforage) | [`packages/localforage/README.md`](./packages/localforage/README.md) |
-| Next.js Showcase | | [`apps/showcase-nextjs/README.md`](./apps/showcase-nextjs/README.md) |
+| UI Registry & Blocks (`@localmode/ui`) | [localmode.ai](https://localmode.ai) | [`apps/ui/README.md`](./apps/ui/README.md) |
 
 ---
 
@@ -419,7 +467,7 @@ Full documentation available at [localmode.dev](https://localmode.dev)
 ```
 packages/
   core/            # Zero-dependency core (functions, interfaces, VectorDB, agents, evaluation)
-  react/           # React hooks for all core functions (56 hooks + pipeline step factories)
+  react/           # React hooks for all core functions (64 hooks + pipeline step factories)
   ai-sdk/          # Vercel AI SDK provider
   transformers/    # HuggingFace Transformers.js provider (26 model factories)
   webllm/          # WebLLM provider (32 curated WebGPU models)
@@ -428,13 +476,13 @@ packages/
   mediapipe/       # MediaPipe Tasks provider (landmarks, gestures, vision/audio/text)
   chrome-ai/       # Chrome Built-in AI provider (Gemini Nano)
   langchain/       # LangChain.js adapters (embeddings, chat, vector store, reranker)
-  devtools/        # In-app DevTools widget for observability
+  devtools/        # DevTools observability (/react hooks; widget UI deprecated)
   pdfjs/           # PDF text extraction
   dexie/           # Dexie.js storage adapter
   idb/             # idb storage adapter
   localforage/     # localForage storage adapter
 apps/
-  showcase-nextjs/ # Next.js 16 showcase with 34 self-contained demo apps (localmode.ai)
+  ui/              # @localmode/ui registry + blocks platform — the app-demo layer (localmode.ai; 36-block /blocks gallery across 12 categories + copy-owned UI primitives + Fumadocs)
   docs/            # Documentation site (localmode.dev)
 ```
 

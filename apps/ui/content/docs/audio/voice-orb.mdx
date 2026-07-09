@@ -1,0 +1,68 @@
+---
+title: "Voice Orb"
+description: "An animated canvas voice-agent orb that reflects discrete agent states and pulses with input/output volume via callbacks — visual state decoupled from the audio source."
+icon: Orbit
+---
+
+# Voice Orb
+
+**Voice Orb** is an animated canvas visualizer for voice agents. It reflects discrete agent states (`idle` / `connecting` / `listening` / `thinking` / `speaking` / `muted`) and reacts to input/output audio volume through `getInputVolume()` / `getOutputVolume()` callbacks. Visual state is fully decoupled from the audio source — the orb reads volume through the callbacks, which you can feed from [`useVoiceRecorder().getVolume()`](https://localmode.dev/docs/react) (mic input) or a Web Audio `AnalyserNode` (e.g. on the TTS output node).
+
+Drive `state` from [`useLiveTranscribe()` / `useTurnTaker()`](https://localmode.dev/docs/react) and `getInputVolume` from `useVoiceRecorder().getVolume()`.
+
+**When to use it:** the centerpiece of a hands-free voice-agent UI, showing the agent's state and "loudness" at a glance.
+
+## Preview
+
+<ComponentPreview name="ui/audio/voice-orb" note="Cycles agent states with a simulated volume so reactivity is visible without mic permission. The real app feeds getInputVolume from useVoiceRecorder().getVolume() (and getOutputVolume from an AnalyserNode on the TTS output)." />
+
+<OpenInV0 name="ui/audio/voice-orb" />
+
+## Installation
+
+<InstallTabs name="ui/audio/voice-orb" />
+
+### Data source & dependencies
+
+**Data source:** renders the `state` you pass and reads volume through callbacks — works with any backend. Recommended producer: `useLiveTranscribe` / `useTurnTaker` for agent state and `useVoiceRecorder().getVolume()` for input volume from `@localmode/react` (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+- No external visualizer dependency — pure Canvas 2D
+
+### Files installed
+
+- `voice-orb.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/audio/voice-orb/voice-orb.tsx" name="VoiceOrbProps" />
+
+## Examples
+
+### Driven by the recorder's live volume
+
+```tsx
+import { VoiceOrb } from '@/components/voice-orb';
+import { useVoiceRecorder } from '@localmode/react';
+
+export function Agent({ state }: { state: 'listening' | 'speaking' | 'idle' }) {
+  const recorder = useVoiceRecorder();
+
+  // The orb polls getInputVolume() on every animation frame; getVolume()
+  // returns the live RMS input level in [0, 1] while recording (0 otherwise).
+  return (
+    <>
+      <button onClick={recorder.isRecording ? () => recorder.stopRecording() : recorder.startRecording}>
+        {recorder.isRecording ? 'Stop' : 'Listen'}
+      </button>
+      <VoiceOrb state={state} getInputVolume={recorder.getVolume} />
+    </>
+  );
+}
+```
+
+For the speaking state, feed `getOutputVolume` from an `AnalyserNode` on your TTS output node — the agent's speech is not a microphone stream, so the recorder doesn't cover it.
+
+## Customization
+
+The orb draws to a single canvas; tune the per-state pulse speed and base radius in `STATE_CONFIG`, or swap the radial gradient for your brand colors via `color` / `glowColor` (both accept CSS `var(--…)` tokens, resolved against the live canvas). Because volume comes through callbacks, the orb never touches your audio graph — point it at input, output, or any custom amplitude source.

@@ -12,6 +12,7 @@
 import type { VADProvider, VADStartOptions } from '@localmode/core';
 import { SileroVADProvider } from '@localmode/core';
 import type { ModelSettings, ModelLoadProgress, TransformersDevice } from '../types.js';
+import { installResilientModelCache, type TransformersCacheEnv } from '../resilient-cache.js';
 
 /**
  * Options for the silero VAD factory.
@@ -96,9 +97,10 @@ export class TransformersSileroVAD implements VADProvider {
   private async loadModel(): Promise<unknown> {
     const { AutoModel, env } = (await import('@huggingface/transformers')) as unknown as {
       AutoModel: { from_pretrained(id: string, options?: Record<string, unknown>): Promise<unknown> };
-      env: { backends: { onnx: { logLevel: string } } };
+      env: { backends: { onnx: { logLevel: string } } } & TransformersCacheEnv;
     };
     env.backends.onnx.logLevel = 'error';
+    installResilientModelCache(env);
 
     const device: TransformersDevice = this.settings.device ?? 'wasm';
     const session = await AutoModel.from_pretrained(this.baseModelId, {

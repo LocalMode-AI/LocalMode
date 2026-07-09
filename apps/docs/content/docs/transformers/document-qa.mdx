@@ -14,7 +14,8 @@ Answer questions about document images — invoices, forms, receipts — using d
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [Invoice QA](https://localmode.ai/invoice-qa) for a working demo.
+  Try the [Knowledge Base block](https://localmode.ai/blocks/knowledge/document-qa) — it ingests
+  documents and answers questions about them, grounded and on-device.
 </Callout>
 
 ## Recommended Models
@@ -26,7 +27,7 @@ Answer questions about document images — invoices, forms, receipts — using d
 
 ## Invoice QA Example
 
-Based on the [Invoice QA](https://localmode.ai/invoice-qa) showcase app:
+Based on the [Knowledge Base block](https://localmode.ai/blocks/knowledge/document-qa):
 
 ```typescript
 import { transformers } from '@localmode/transformers';
@@ -102,11 +103,11 @@ The `document` parameter accepts:
   [Question Answering](/docs/transformers/question-answering) instead.
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| Invoice QA | Ask questions about invoice and document images | [Demo](https://localmode.ai/invoice-qa) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/invoice-qa) |
+| Document QA | Extractive Q&A over your own text/PDF corpus plus Donut document/invoice QA on an uploaded image | [Live](https://localmode.ai/blocks/knowledge/document-qa) · Install: `npx shadcn add @localmode/ui/blocks/knowledge/document-qa` |
 
 ## Next Steps
 

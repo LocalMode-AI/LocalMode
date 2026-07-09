@@ -96,6 +96,28 @@ await db.clear('my-collection');
 
 This prevents data corruption from partial writes (e.g., documents deleted but vectors left orphaned).
 
+## Persistence Guarantees
+
+DexieStorage round-trips the **full `Collection` object**, so everything core stores on it survives a page reload or database reopen: SQ8/PQ vector quantization calibration (`calibration`, `pqCodebook`), storage-compression calibration (`compressionCalibration`, `deltaCalibration`, `compression`), and the embedding-drift `modelFingerprint`. Quantized and compressed databases decode identically across sessions, and drift detection works the same as with core's built-in `IndexedDBStorage`.
+
+<Callout type="warn" title="Used quantization or compression before this fix?">
+  Earlier versions of this adapter persisted only four `Collection` fields and silently dropped
+  the calibration data — quantized/compressed vectors round-tripped fine in-session but decoded
+  as raw bytes after a reopen. The calibration was never stored, so affected databases cannot be
+  repaired: clear and re-ingest (databases that never used quantization or compression are
+  unaffected).
+</Callout>
+
+```typescript
+// Recover a database that used quantization/compression before the fix
+await db.clear(); // or delete the underlying database: indexedDB.deleteDatabase('my-app')
+
+// Then re-ingest from your source documents
+await ingest({ db, model, documents });
+```
+
+Writing your own adapter? Verify the same guarantees with the [StorageAdapter conformance suite](/docs/core/storage#verify-with-the-conformance-suite) — the official adapters run it in their own test suites.
+
 ## Storage Fallback
 
 Gracefully fallback when IndexedDB is unavailable (e.g., Safari private browsing):

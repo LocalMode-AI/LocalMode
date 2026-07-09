@@ -3,7 +3,7 @@ title: "WebGPU + WebLLM: Running a 4B Parameter LLM in Chrome at 90 Tokens/Secon
 description: "A deep dive into how MLC compilation transforms HuggingFace models into WebGPU shaders, enabling 32 curated LLMs to run entirely in the browser. We cover the full model catalog, Qwen3-4B's 97% on MATH-500, VRAM management, and real performance numbers across GPU tiers."
 author: LocalMode
 date: 2026-03-05
-dateModified: "2026-05-28"
+dateModified: "2026-07-04"
 faq:
   - question: "How fast can WebLLM run an LLM in the browser?"
     answer: "A 4-bit quantized Qwen3-4B model generates text at 60-90+ tokens per second on modern hardware via WebGPU. The model loads in under 30 seconds, occupies roughly 2.2GB of GPU memory, and runs entirely inside a Chrome tab with zero network requests after the initial download."
@@ -261,9 +261,9 @@ This runs entirely in the browser. No API call, no server-side validation, no da
 
 ---
 
-## The LLM Chat Showcase App
+## The Chat Block
 
-The [LLM Chat](https://localmode.ai/llm-chat) showcase app demonstrates everything discussed in this post. It provides a multi-model chat interface where you can:
+The [Chat block](https://localmode.ai/blocks/chat) demonstrates everything discussed in this post. It provides a multi-model chat interface where you can:
 
 - Select from all 32 WebLLM models (plus wllama GGUF and Transformers ONNX backends)
 - Stream responses in real time with cancellation support
@@ -395,7 +395,7 @@ All benchmark scores cited in this post are sourced from official model cards, t
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

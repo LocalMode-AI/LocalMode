@@ -61,9 +61,65 @@ export interface ToolDefinition<TParams = unknown, TResult = unknown> {
   /** Zod-wrapped schema for tool parameters (via jsonSchema()) */
   parameters: ObjectSchema<TParams>;
 
-  /** Async function that executes the tool */
-  execute: (params: TParams, context: ToolExecutionContext) => Promise<TResult>;
+  /**
+   * Async function that executes the tool.
+   *
+   * Declared with method syntax so a tool typed via {@link defineTool}
+   * (e.g. `ToolDefinition<{ query: string }, Result>`) remains assignable
+   * to `ToolDefinition[]` in mixed tool arrays.
+   */
+  execute(params: TParams, context: ToolExecutionContext): Promise<TResult>;
+
+  /**
+   * When `true`, the ReAct loop pauses before executing this tool and awaits
+   * a human-in-the-loop decision from the `onToolApproval` callback
+   * (config-level or per-run). Approved calls execute exactly like ungated
+   * calls; denied calls are skipped and a rejection observation is fed back
+   * to the model so the loop can adapt.
+   *
+   * Default: absent/`false` — the tool executes immediately without approval.
+   *
+   * A run that includes a tool with `requiresApproval: true` but no effective
+   * `onToolApproval` callback fails fast with an `AgentError` before any
+   * model call.
+   *
+   * @see AgentConfig.onToolApproval
+   */
+  requiresApproval?: boolean;
 }
+
+/**
+ * Request passed to the `onToolApproval` callback when the ReAct loop
+ * pauses on a tool flagged with `requiresApproval`.
+ *
+ * @see AgentConfig.onToolApproval
+ * @see ToolDefinition.requiresApproval
+ */
+export interface ToolApprovalRequest {
+  /** Name of the tool the model wants to call */
+  toolName: string;
+
+  /** Arguments proposed by the model (schema validation happens at execution, as for ungated calls) */
+  args: Record<string, unknown>;
+
+  /** Zero-based step index of the pending tool call */
+  stepIndex: number;
+}
+
+/**
+ * Decision returned by the `onToolApproval` callback.
+ *
+ * - `{ approved: true }` — the loop resumes and executes the tool exactly
+ *   like an ungated call.
+ * - `{ approved: false, reason? }` — the tool is NOT executed; the loop
+ *   records a denial observation (including the optional reason) and
+ *   continues so the model can adapt.
+ *
+ * @see AgentConfig.onToolApproval
+ */
+export type ToolApprovalDecision =
+  | { approved: true }
+  | { approved: false; reason?: string };
 
 /**
  * Registry for managing tool registration and lookup.
@@ -114,11 +170,25 @@ export interface AgentStep {
   /** Final answer text (when type is 'finish') */
   result?: string;
 
-  /** Time spent on this step (model generation + tool execution) in milliseconds */
+  /**
+   * Time spent on this step in milliseconds (model generation + tool
+   * execution). For approval-gated steps this INCLUDES the time spent
+   * awaiting the approval decision — the wait is part of the step.
+   */
   durationMs: number;
 
   /** Token usage from the model call */
   usage?: GenerationUsage;
+
+  /**
+   * Approval decision recorded for approval-gated tool calls
+   * (`requiresApproval: true`). Absent on ungated steps.
+   * `reason` is set when the deny decision carried one.
+   *
+   * @see ToolDefinition.requiresApproval
+   * @see AgentConfig.onToolApproval
+   */
+  approval?: { decision: 'approved' | 'denied'; reason?: string };
 }
 
 /**
@@ -145,7 +215,11 @@ export interface AgentResult {
   /** Why the agent stopped */
   finishReason: AgentFinishReason;
 
-  /** Wall-clock time for the entire run in milliseconds */
+  /**
+   * Wall-clock time for the entire run in milliseconds. Includes time spent
+   * awaiting approval decisions (it reports reality), even though that wait
+   * does not count toward `maxDurationMs`.
+   */
   totalDurationMs: number;
 
   /** Accumulated token usage across all steps */
@@ -270,7 +344,11 @@ export interface AgentConfig {
   /** Maximum ReAct loop iterations (default: 10) */
   maxSteps?: number;
 
-  /** Maximum total duration in milliseconds (no default — unlimited unless set) */
+  /**
+   * Maximum total duration in milliseconds (no default — unlimited unless set).
+   * Time spent awaiting approval decisions (`onToolApproval`) does NOT count
+   * toward this budget — human decision latency is unbounded.
+   */
   maxDurationMs?: number;
 
   /** Max retries per generateObject() call within a step (default: 3) */
@@ -284,6 +362,44 @@ export interface AgentConfig {
 
   /** Callback invoked after each completed step */
   onStep?: (step: AgentStep) => void;
+
+  /**
+   * Human-in-the-loop approval callback for tools flagged
+   * `requiresApproval: true`. The ReAct loop pauses before executing a
+   * flagged tool, invokes this callback with the pending call's
+   * `{ toolName, args, stepIndex }`, and awaits the decision (sync or
+   * Promise). Return `{ approved: true }` to execute the tool, or
+   * `{ approved: false, reason? }` to skip it and feed a denial observation
+   * back to the model so the loop continues. Tools without the flag never
+   * consult this callback. Can be overridden per-run via
+   * {@link AgentRunOptions.onToolApproval} (run-level wins, mirroring `onStep`).
+   *
+   * NOTE: the loop waits indefinitely for the decision — there is no
+   * built-in approval timeout. The escape hatch is the run's `abortSignal`
+   * (a pending decision races the signal, and aborting rejects the run
+   * immediately without executing the tool). Approval wait time does not
+   * count toward `maxDurationMs`.
+   *
+   * @example
+   * ```ts
+   * const result = await runAgent({
+   *   model,
+   *   tools: [{ ...deleteFileTool, requiresApproval: true }],
+   *   prompt: 'Clean up temp files',
+   *   onToolApproval: async ({ toolName, args }) => {
+   *     const ok = await showConfirmDialog(`Allow ${toolName}?`, args);
+   *     return ok ? { approved: true } : { approved: false, reason: 'User rejected' };
+   *   },
+   * });
+   * ```
+   *
+   * @see ToolDefinition.requiresApproval
+   * @see ToolApprovalRequest
+   * @see ToolApprovalDecision
+   */
+  onToolApproval?: (
+    request: ToolApprovalRequest
+  ) => ToolApprovalDecision | Promise<ToolApprovalDecision>;
 }
 
 /**
@@ -298,6 +414,15 @@ export interface AgentRunOptions {
 
   /** Per-run step callback (overrides config-level onStep) */
   onStep?: (step: AgentStep) => void;
+
+  /**
+   * Per-run approval callback (overrides config-level onToolApproval).
+   *
+   * @see AgentConfig.onToolApproval for the full contract
+   */
+  onToolApproval?: (
+    request: ToolApprovalRequest
+  ) => ToolApprovalDecision | Promise<ToolApprovalDecision>;
 
   /** Additional context to include in the agent prompt */
   context?: string;

@@ -25,6 +25,7 @@ import type {
 } from '@localmode/core';
 import type { DoEmbedOptions, DoEmbedResult } from '@localmode/core';
 import type { ModelSettings, TransformersDevice, ModelLoadProgress } from '../types.js';
+import { installResilientModelCache } from '../resilient-cache.js';
 
 /**
  * CLIP multimodal embedding model using Transformers.js.
@@ -101,6 +102,7 @@ export class TransformersCLIPEmbeddingModel implements MultimodalEmbeddingModel 
 
       // Suppress ONNX runtime warnings
       env.backends.onnx.logLevel = 'error';
+      installResilientModelCache(env);
 
       const dtype = this.settings.quantized !== false ? 'q8' : 'fp32';
 
@@ -147,6 +149,7 @@ export class TransformersCLIPEmbeddingModel implements MultimodalEmbeddingModel 
 
       // Suppress ONNX runtime warnings
       env.backends.onnx.logLevel = 'error';
+      installResilientModelCache(env);
 
       const dtype = this.settings.quantized !== false ? 'q8' : 'fp32';
 

@@ -3,7 +3,7 @@ title: "How Transformers.js Runs 200+ ML Models in Your Browser Tab"
 description: "A deep dive into the runtime stack that makes browser-native ML possible: HuggingFace model export, ONNX Runtime Web, WebGPU vs WASM backends, quantization tradeoffs, and how LocalMode wraps it all in 26 factory methods across 27 implementation files."
 author: LocalMode
 date: 2026-03-18
-dateModified: "2026-05-28"
+dateModified: "2026-07-04"
 faq:
   - question: "How does Transformers.js run ML models in the browser?"
     answer: "Transformers.js converts HuggingFace models to ONNX format via Optimum, applies quantization (q4/int8/fp16), and executes them through ONNX Runtime Web using either a WebGPU or WebAssembly backend. Models download once from HuggingFace Hub and cache in the browser's Cache API."
@@ -349,7 +349,7 @@ All LocalMode-specific claims (factory method counts, implementation file counts
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

@@ -14,7 +14,7 @@ export default defineConfig([
     external: ['@localmode/core'],
   },
   {
-    entry: { widget: 'src/widget/index.tsx' },
+    entry: { react: 'src/react/index.ts' },
     format: ['esm', 'cjs'],
     dts: true,
     minify: true,

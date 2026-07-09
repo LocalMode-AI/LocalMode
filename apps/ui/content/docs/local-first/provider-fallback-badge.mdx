@@ -1,0 +1,49 @@
+---
+title: "Provider Fallback Badge"
+description: "Surfaces the active AI backend tier (zero-download built-in vs model-download provider) and a WASM threading variant."
+icon: Cloud
+---
+
+# Provider Fallback Badge
+
+The **Provider Fallback Badge** surfaces the active AI backend tier — a zero-download built-in (Chrome AI) vs a model-download provider (Transformers.js) — plus a WASM threading variant ("Multi-thread" when cross-origin isolated / SharedArrayBuffer is available, else "Single-thread"). It is a software-side sibling to the Device Badge (which surfaces hardware).
+
+## Preview
+
+<ComponentPreview name="ui/local-first/provider-fallback-badge" note="The threading sub-badge reflects the runtime's real crossOriginIsolated state." />
+
+<OpenInV0 name="ui/local-first/provider-fallback-badge" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/provider-fallback-badge" />
+
+### Data source & dependencies
+
+**Data source:** reads the threading capability via the bundled `useCapabilities` navigator hook (the active-tier prop is yours to pass) — self-contained, works in any React app. (It mirrors `useCapabilities` from `@localmode/react`.)
+- `@localmode/ui/lib/use-environment` — the bundled `useCapabilities` navigator hook (installed automatically as a registry dependency)
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `provider-fallback-badge.tsx` — the `ProviderFallbackBadge` component
+- `lib/use-environment.ts` — the bundled `useCapabilities` navigator hook
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/provider-fallback-badge/provider-fallback-badge.tsx" name="ProviderFallbackBadgeProps" />
+
+## Examples
+
+### Built-in vs download provider
+
+```tsx
+<ProviderFallbackBadge tier="built-in" providerName="Chrome AI" />
+<ProviderFallbackBadge tier="download" providerName="Transformers.js" />
+```
+
+## Customization
+
+The threading flag falls back to `useCapabilities` then `globalThis.crossOriginIsolated` when not passed. Hide the threading sub-badge with `hideThreading`. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

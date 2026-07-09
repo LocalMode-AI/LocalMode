@@ -13,6 +13,7 @@ import type {
   VisionUsage,
 } from '@localmode/core';
 import type { ModelSettings, TransformersDevice, ModelLoadProgress } from '../types.js';
+import { installResilientModelCache } from '../resilient-cache.js';
 
 // Dynamic import types
 type ImageClassificationPipeline = Awaited<
@@ -54,6 +55,7 @@ export class TransformersImageClassificationModel implements ImageClassification
 
       // Suppress ONNX runtime warnings about node execution providers
       env.backends.onnx.logLevel = 'error';
+      installResilientModelCache(env);
 
       const pipe = await pipeline('image-classification', this.baseModelId, {
         device: this.settings.device ?? 'auto',

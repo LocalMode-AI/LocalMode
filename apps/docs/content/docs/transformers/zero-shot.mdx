@@ -14,7 +14,7 @@ Classify text into any set of labels without needing a fine-tuned model. Provide
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [Email Classifier](https://localmode.ai/email-classifier) for a working demo.
+  Try the [Text Classifier block](https://localmode.ai/blocks/text-insights/text-classifier) — it runs custom-label zero-shot email/intent routing (MobileBERT MNLI) in the browser. Install it with `npx shadcn add @localmode/ui/blocks/text-insights/text-classifier`.
 </Callout>
 
 ## Recommended Models
@@ -27,7 +27,7 @@ Classify text into any set of labels without needing a fine-tuned model. Provide
 
 ## Email Classification Example
 
-Based on the [Email Classifier](https://localmode.ai/email-classifier) showcase app:
+Based on the [Text Classifier block](https://localmode.ai/blocks/text-insights/text-classifier):
 
 ```typescript
 import { transformers } from '@localmode/transformers';
@@ -64,11 +64,11 @@ console.log(`Confidence: ${(scores[0] * 100).toFixed(1)}%`); // '95.2%'
   4. **Consider fine-tuned models** — If you always use the same labels, a fine-tuned classifier is faster
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| Email Classifier | Classify emails into custom labels without fine-tuning | [Demo](https://localmode.ai/email-classifier) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/email-classifier) |
+| Text Classifier | Custom-label zero-shot email/intent routing (MobileBERT MNLI) | [Live](https://localmode.ai/blocks/text-insights/text-classifier) · Install: `npx shadcn add @localmode/ui/blocks/text-insights/text-classifier` |
 
 ## Next Steps
 

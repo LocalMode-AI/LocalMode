@@ -1,0 +1,295 @@
+---
+title: "Vision UI Components for Browser AI: The LocalMode Media & Vision Family"
+description: "@localmode/ui ships six copy-owned React components for image and video AI in the browser -- MediaDropzone, BoundingBoxOverlay, BeforeAfterImageViewer, ImageProcessingOverlay, VideoCanvas, and ImageResultGallery. Drag-drop upload, detection overlays, before/after comparison, and live webcam annotation, all hook-driven and provider-agnostic. Models run on-device; the image never leaves the browser."
+author: LocalMode
+date: "2026-05-31"
+dateModified: "2026-07-04"
+faq:
+  - question: "What is the LocalMode UI Media & Vision family?"
+    answer: "It is a set of six copy-owned React components in the @localmode/ui shadcn registry for building image and video AI surfaces: MediaDropzone (drag-drop image upload), BoundingBoxOverlay (detection boxes over an image), BeforeAfterImageViewer (original vs result comparison), ImageProcessingOverlay (in-flight overlay during inference), VideoCanvas (mirrored webcam plus pixel-aligned canvas for landmark drawing), and ImageResultGallery (responsive grid/list of scored image results). You install them with the shadcn CLI and own the copied code."
+  - question: "How do I install a LocalMode vision component?"
+    answer: "Add the @localmode namespace to your components.json, then run the shadcn CLI: npx shadcn add @localmode/ui/media-vision/media-dropzone for one component, or npx shadcn add @localmode/ui/media-vision for the whole family. The files are copied into your project and you own the code -- no @localmode/* package is installed. To drive them with the recommended local-first hooks, add @localmode/react and your chosen vision provider, or wire them to any backend."
+  - question: "Do the vision components send images to a server?"
+    answer: "No. The components are presentational and hook-driven -- they render the state of LocalMode React hooks like useDetectObjects, useSegmentImage, and useCaptionImage, which run the model entirely in the browser via @localmode/transformers or @localmode/mediapipe. The image is read locally with readFileAsDataUrl and inference happens on-device. Nothing is uploaded."
+  - question: "Are the bounding boxes correct at any display size?"
+    answer: "Yes. BoundingBoxOverlay converts pixel-coordinate detection boxes into percentage offsets using the image's natural width and height, so the boxes stay aligned when the container is resized. It takes a detections array of { label, score?, box } — the shape useDetectObjects returns (DetectedObject). useDetectFace returns a per-face box and score too, so it maps on once you supply a label; useDetectHands and useDetectPose return landmark arrays rather than boxes, so draw those as skeletons on a VideoCanvas instead."
+  - question: "How does VideoCanvas handle real-time webcam tracking?"
+    answer: "VideoCanvas is a presentational shell, not an acquisition engine. Your app supplies the MediaStream from getUserMedia and drives the per-frame draw loop with the useStreamingTracker hook wrapping a MediaPipe streaming tracker (createHandTracker, createPoseTracker, createFaceTracker, or createGestureTracker from @localmode/mediapipe). The canvas is kept at the video's intrinsic resolution and shares the same mirror transform, so tracker coordinates map 1:1 onto the overlay."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Every image-AI feature you build in the browser ends up re-implementing the same handful of UI surfaces. A drag-and-drop dropzone. An overlay that draws boxes over a detection. A spinner that sits over a dimmed image while a model runs. A before/after comparison for a background remover. A grid of result cards. A webcam view with a canvas on top for landmarks.
+
+A pressure-test of LocalMode's 34 browser AI apps found exactly that: a drag-and-drop image dropzone was hand-rolled in **ten** separate apps, and a processing overlay in six. That is the most duplicated UI surface in the whole project. So `@localmode/ui` now ships them as copy-owned, hook-driven React components you install once and own forever.
+
+This post walks through the six components in the **Media & Vision** family, how they pair with the LocalMode vision hooks, and why every one of them keeps the image on the device.
+
+---
+
+## What `@localmode/ui` Is
+
+`@localmode/ui` is a [shadcn-style registry](https://ui.shadcn.com/docs/registry) of copy-owned AI UI primitives. It is not an npm package. Like shadcn/ui, you install a component with the shadcn CLI and own the copied `.tsx` file — edit it, restyle it, delete what you do not need. The components are styled with shadcn/ui CSS-variable tokens (`bg-card`, `text-muted-foreground`, `border-border`), so they drop into your existing theme.
+
+Add the namespace to your `components.json` once:
+
+```json title="components.json"
+{
+  "registries": {
+    "@localmode": "https://localmode.ai/r/{name}.json"
+  }
+}
+```
+
+Then install a single component, a whole family, or everything:
+
+```bash
+# A single component
+npx shadcn add @localmode/ui/media-vision/media-dropzone
+
+# The whole Media & Vision family
+npx shadcn add @localmode/ui/media-vision
+
+# Everything
+npx shadcn add @localmode/ui/all
+```
+
+Each component is **presentational and hook-driven**: it renders the state of a LocalMode React hook and emits callbacks. It owns no orchestration state, no model loading, and no network code. That separation is what makes the family provider-agnostic — the same `BoundingBoxOverlay` renders output from `@localmode/transformers` or `@localmode/mediapipe` without changing a line.
+
+---
+
+## MediaDropzone: One Dropzone Instead of Ten
+
+`MediaDropzone` is a drag-and-drop plus click-to-browse upload zone for image files. It renders an idle state (icon, title, accepted-formats hint), a drag-over state (highlight and scale), and a processing state (spinner overlay), plus a compact "add another" variant for adding more files once some exist.
+
+Files are validated locally with the copy-owned `validateFile` helper — installed automatically from `@localmode/ui/lib/browser-utils`, so MediaDropzone has **no `@localmode/react` runtime requirement** — against the `accept` list and `maxSize`. Valid files come back through `onFiles(File[])`; rejected ones through `onReject`. Pair them with the copy-owned `readFileAsDataUrl` helper to feed any vision hook.
+
+```tsx
+import { MediaDropzone } from '@/components/media-dropzone';
+import { readFileAsDataUrl } from '@/lib/browser-utils';
+
+export function Upload() {
+  return (
+    <MediaDropzone
+      accept={['image/png', 'image/jpeg']}
+      maxSize={5_000_000}
+      onFiles={async (files) => {
+        const dataUrl = await readFileAsDataUrl(files[0]);
+        // pass dataUrl to a vision hook...
+      }}
+    />
+  );
+}
+```
+
+Wire the `processing` prop to a vision hook's `isLoading` and the dropzone shows its spinner overlay while the model runs. It replaces the bespoke dropzone copied across background removal, OCR, captioning, object detection, and smart-gallery apps. (For format-agnostic document uploads with no preview, the Data & Documents family ships a separate `FileDropzone`.)
+
+See the [MediaDropzone docs](https://localmode.ai/docs/media-vision/media-dropzone) for the full prop table.
+
+---
+
+## BoundingBoxOverlay: Detections That Stay Aligned
+
+`BoundingBoxOverlay` draws detection results as absolutely-positioned, color-coded boxes with label chips over a parent image. The trick is that it converts pixel-coordinate boxes into **percentage offsets** using the image's natural width and height — so the boxes stay correctly placed at any display size. Resize the container, and the boxes follow.
+
+It takes a `detections` array of `{ label, score?, box }` — the shape of [`useDetectObjects`](/docs/react)'s `DetectedObject` (`{ label, score, box }`). Face detection (`useDetectFace`) returns a per-face `box` and `score` too, so it maps onto the overlay once you supply a `label`. Hand and pose detection (`useDetectHands`, `useDetectPose`) instead return landmark arrays rather than boxes — draw those as skeletons on a `VideoCanvas`, not as boxes here. A companion `DetectionLabelLegend` renders a matching strip of color-to-class pills.
+
+```tsx
+import { BoundingBoxOverlay, DetectionLabelLegend } from '@/components/bounding-box-overlay';
+import { useDetectObjects } from '@localmode/react';
+
+export function Detected({ src }: { src: string }) {
+  const imgRef = useRef<HTMLImageElement>(null);
+  const { data } = useDetectObjects({ model });
+
+  return (
+    <>
+      <div className="relative">
+        <img ref={imgRef} src={src} alt="" className="w-full" />
+        {data && (
+          <BoundingBoxOverlay
+            detections={data.objects}
+            naturalWidth={imgRef.current?.naturalWidth ?? 0}
+            naturalHeight={imgRef.current?.naturalHeight ?? 0}
+          />
+        )}
+      </div>
+      {data && <DetectionLabelLegend labels={data.objects.map((o) => o.label)} />}
+    </>
+  );
+}
+```
+
+The overlay is non-interactive (`pointer-events-none`) and fills its `relative` parent. For dense box output, set `hideLabels` to draw boxes without chips. Details in the [BoundingBoxOverlay docs](https://localmode.ai/docs/media-vision/bounding-box-overlay).
+
+---
+
+## BeforeAfterImageViewer: Input vs Result
+
+Background removers, photo enhancers, upscalers, and segmentation viewers all show the same thing — here is your input, here is the result. `BeforeAfterImageViewer` handles it in two modes: a two-panel grid (both images side by side, the result on a checkerboard transparency background so alpha shows through) and a segmented Original/Enhanced toggle that swaps a single displayed source.
+
+Feed it `originalSrc` and a `processedSrc` produced by [`useImageToImage`](/docs/react) (upscaling, super-resolution) or `useSegmentImage` (background removal, segmentation). Both hooks return their raster output as an `ImageData`/`Blob` (`useImageToImage`) or a set of masks (`useSegmentImage`), so convert the result to a displayable source — e.g. `URL.createObjectURL(blob)` — before passing it in:
+
+```tsx
+const { data } = useImageToImage({ model }); // result.image: ImageData | Blob
+
+<BeforeAfterImageViewer
+  originalSrc={inputDataUrl}
+  processedSrc={processedUrl} // e.g. URL.createObjectURL(data.image as Blob)
+  checkerboard // default -- reveals the transparent background
+/>
+```
+
+The checkerboard is a self-contained inline CSS gradient, so the component works standalone after `shadcn add` with no global CSS. See the [BeforeAfterImageViewer docs](https://localmode.ai/docs/media-vision/before-after-image-viewer).
+
+---
+
+## ImageProcessingOverlay: Progress Without Blocking
+
+`ImageProcessingOverlay` is a full-bleed overlay shown over a dimmed source image while inference runs: a spinner ring with a centered icon, a status headline, and an optional cancel link. A `scan` variant adds an animated scan-line sweep for document-style apps. It renders **nothing** when idle — the element is absent from the DOM, not just hidden.
+
+Drive it with any vision hook's `isLoading`, and wire the cancel link to the hook's `cancel` to abort the in-flight run:
+
+```tsx
+import { ImageProcessingOverlay } from '@/components/image-processing-overlay';
+import { useDetectObjects } from '@localmode/react';
+
+export function Scanning({ src }: { src: string }) {
+  const { isLoading, cancel } = useDetectObjects({ model });
+
+  return (
+    <div className="relative">
+      <img src={src} alt="" className={isLoading ? 'opacity-50' : ''} />
+      <ImageProcessingOverlay processing={isLoading} status="Detecting objects..." onCancel={cancel} />
+    </div>
+  );
+}
+```
+
+The scan keyframes ship inline as a scoped style block, so it animates standalone. More in the [ImageProcessingOverlay docs](https://localmode.ai/docs/media-vision/image-processing-overlay).
+
+---
+
+## VideoCanvas: Real-Time Webcam Annotation
+
+`VideoCanvas` is a mirrored 16:9 webcam surface: a `<video>` element with a **pixel-aligned transparent `<canvas>` overlay** for drawing landmarks and skeletons, an FPS-counter badge, and a child slot for status pills. The canvas is kept at the video's intrinsic resolution, so the coordinates a tracker returns map 1:1 onto it, and both layers share the same mirror transform so the overlay stays aligned.
+
+Crucially, it is a **shell, not an acquisition engine**. Your app supplies the `stream` from `getUserMedia` and drives the per-frame draw loop with the [`useStreamingTracker`](/docs/react) hook wrapping a MediaPipe streaming tracker — `createHandTracker`, `createPoseTracker`, `createFaceTracker`, or `createGestureTracker` from `@localmode/mediapipe` — keeping device-permission logic out of the primitive. (For one-shot detection on a still frame, the `useDetectHands` / `useDetectPose` / `useDetectFace` / `useRecognizeGesture` hooks run a single inference instead.)
+
+```tsx
+import { VideoCanvas, type VideoCanvasHandle } from '@/components/video-canvas';
+
+export function Tracker() {
+  const ref = useRef<VideoCanvasHandle>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [fps, setFps] = useState(0);
+
+  useEffect(() => {
+    navigator.mediaDevices.getUserMedia({ video: true }).then(setStream);
+  }, []);
+
+  return (
+    <VideoCanvas
+      ref={ref}
+      stream={stream}
+      fps={fps}
+      onCanvasReady={(ctx, canvas) => {
+        // useStreamingTracker drives ref.current.video via a MediaPipe
+        // tracker (createHandTracker, ...); draw its landmarks onto ctx.
+      }}
+    />
+  );
+}
+```
+
+This is the surface behind MediaPipe Studio-style apps — live hand, pose, face, and gesture tracking with the camera frame going straight from the `<video>` element into a WebAssembly model and back out as landmarks. For the broader on-device perception story, see [Hand, Pose & Face Tracking in the Browser with MediaPipe + LocalMode](/blog/mediapipe-hand-pose-face-tracking-browser). Component details in the [VideoCanvas docs](https://localmode.ai/docs/media-vision/video-canvas).
+
+---
+
+## ImageResultGallery: Scored Results, Grid or List
+
+`ImageResultGallery` is a responsive grid or list of image result cards. Each card shows the image in an aspect container, an in-flight processing overlay, a hover gradient with the filename and a category badge, a confidence score badge, a multi-select checkbox, and a delete affordance. Grid and list layouts share **one data contract** (`ImageResultCard`), so you switch layout without reshaping data.
+
+```tsx
+import { ImageResultGallery, type ImageResultCard } from '@/components/image-result-gallery';
+import { useClassifyImageZeroShot } from '@localmode/react';
+
+const { data } = useClassifyImageZeroShot({ model });
+
+const cards: ImageResultCard[] = images.map((img) => ({
+  id: img.id,
+  src: img.src,
+  label: img.top?.label,
+  score: img.top?.score,
+  processing: img.pending,
+}));
+
+<ImageResultGallery cards={cards} layout="grid" />;
+```
+
+Build the cards from `useClassifyImageZeroShot` (label and score), `useEmbedImage` (similarity results), or `useCaptionImage` (caption as the label). Per-card scores render through a self-contained fallback badge so the gallery installs and builds on its own; install the [`ConfidenceScoreBadge`](https://localmode.ai/docs/results/confidence-score-badge) from the Results family and you can swap in the richer version. See the [ImageResultGallery docs](https://localmode.ai/docs/media-vision/image-result-gallery).
+
+---
+
+## How the Pieces Fit Together
+
+A typical image-AI screen composes three or four of these. An object detector uses `MediaDropzone` to take the image, `ImageProcessingOverlay` while `useDetectObjects` runs, and `BoundingBoxOverlay` plus `DetectionLabelLegend` over the result. A background remover uses `MediaDropzone`, then `BeforeAfterImageViewer` on the `useSegmentImage` output. A smart gallery batches images into an `ImageResultGallery`. A gesture demo wires `VideoCanvas` to a MediaPipe streaming tracker via `useStreamingTracker`.
+
+Because they are all hook-driven, the orchestration — model loading, batching, cancellation — stays in your hooks, exactly where the LocalMode blocks already keep it. The components only render state and emit events.
+
+<Callout type="info" title="The image never leaves the device">
+  Every component in this family is presentational. The actual inference happens in LocalMode's
+  vision hooks, which run the model in the browser. Files are read locally with `readFileAsDataUrl`,
+  and the model downloads once then runs offline. No image is uploaded, no API key is required.
+</Callout>
+
+---
+
+## When to Reach for Each
+
+- **`MediaDropzone`** — any screen that takes an image from the user.
+- **`BoundingBoxOverlay`** — object and face detection viewers over a still image (box-based output).
+- **`BeforeAfterImageViewer`** — background removal, enhancement, upscaling, segmentation.
+- **`ImageProcessingOverlay`** — show progress over the source image of any slow vision model.
+- **`VideoCanvas`** — real-time webcam landmark and skeleton drawing.
+- **`ImageResultGallery`** — batches of scored image results with selection and delete.
+
+The Media & Vision family is one of several in `@localmode/ui` — the Audio and Results families cover voice surfaces and scored-output display with the same copy-owned, hook-driven, local-first approach.
+
+---
+
+## Methodology
+
+Every component name, prop, install command, and code example in this post was verified directly against the `@localmode/ui` source. The six Media & Vision items and their dependencies were confirmed in `apps/ui/registry.json` and the component `.tsx` files under `apps/ui/registry/localmode/media-vision/` (`MediaDropzoneProps`, `BoundingBoxOverlayProps`/`DetectionLabelLegendProps`, `BeforeAfterImageViewerProps`, `ImageProcessingOverlayProps`, `VideoCanvasProps`/`VideoCanvasHandle`, `ImageResultGalleryProps`/`ImageResultCard`), cross-checked against the six `apps/ui/content/docs/media-vision/*.mdx` doc pages, the family `_family-manifest.json` / `meta.json`, and the `openspec/changes/ui-elements-media-vision` proposal. `MediaDropzone` imports `validateFile` from the copy-owned `@/lib/browser-utils` (registry dependency `@localmode/ui/lib/browser-utils`), not from `@localmode/react` — confirmed in the component source and validated end-to-end by `apps/ui/consumer-tests/portability-test.mjs`, which installs items into a project with no `@localmode/*` packages. The backing `@localmode/react` hooks (`useDetectObjects`, `useDetectFace`, `useDetectHands`, `useDetectPose`, `useSegmentImage`, `useImageToImage`, `useCaptionImage`, `useClassifyImageZeroShot`, `useEmbedImage`, `useStreamingTracker`) were verified in `packages/react/src/index.ts`, and the result shapes (`DetectObjectsResult.objects`, `DetectedObject` as `{ label, score, box }`, `UpscaleImageResult.image` as `ImageData | Blob`, `SegmentImageResult.masks`) in `packages/core/src/vision/types.ts`. The real-time webcam path uses `useStreamingTracker` with `@localmode/mediapipe`'s `createHandTracker` / `createPoseTracker` / `createFaceTracker` / `createGestureTracker` (verified in `packages/mediapipe/src/streaming/`), distinct from the single-shot `useDetect*` hooks. The "ten apps duplicated the dropzone, six the overlay" figures and the "34 apps" count come from the family proposal's family audit (`openspec/changes/ui-elements-media-vision/proposal.md`).
+
+**Codebase (primary source of truth):**
+
+- `apps/ui/registry.json` — the catalog; six `ui/media-vision/*` items and their dependencies
+- `apps/ui/registry/localmode/media-vision/**/*.tsx` — the component source (props, `validateFile` import path)
+- `apps/ui/registry/localmode/lib/browser-utils.ts` — the copy-owned `validateFile` / `readFileAsDataUrl` helpers
+- `apps/ui/consumer-tests/portability-test.mjs` — proves items install with no `@localmode/*` packages
+- `packages/react/src/index.ts` — the backing vision hooks (`useDetectObjects`, `useStreamingTracker`, …)
+- `packages/core/src/vision/types.ts` — result shapes (`DetectedObject`, `UpscaleImageResult`, `SegmentImageResult`)
+- `packages/mediapipe/src/streaming/` — `createHand/Pose/Face/GestureTracker` real-time factories
+- `openspec/changes/ui-elements-media-vision/proposal.md` — the family-audit figures (10 / 6 / 34)
+
+**Docs:**
+
+- [shadcn registry documentation](https://ui.shadcn.com/docs/registry) — the registry mechanism `@localmode/ui` builds on
+- [LocalMode UI Installation](https://localmode.ai/docs/installation) — configure the `@localmode` namespace
+- [MediaDropzone](https://localmode.ai/docs/media-vision/media-dropzone) — drag-drop image upload
+- [BoundingBoxOverlay](https://localmode.ai/docs/media-vision/bounding-box-overlay) — detection boxes by percentage offset
+- [BeforeAfterImageViewer](https://localmode.ai/docs/media-vision/before-after-image-viewer) — original vs result comparison
+- [ImageProcessingOverlay](https://localmode.ai/docs/media-vision/image-processing-overlay) — in-flight overlay
+- [VideoCanvas](https://localmode.ai/docs/media-vision/video-canvas) — webcam plus pixel-aligned canvas
+- [ImageResultGallery](https://localmode.ai/docs/media-vision/image-result-gallery) — scored result grid/list
+- [`@localmode/react` hooks](/docs/react) — the backing vision hooks
+- [MediaPipe + LocalMode](/blog/mediapipe-hand-pose-face-tracking-browser) — the on-device perception provider
+
+---
+
+<Callout type="info" title="Try it yourself">
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+
+  Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
+</Callout>

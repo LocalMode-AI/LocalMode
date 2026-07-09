@@ -5,7 +5,7 @@
  */
 
 import { globalEventBus } from '@localmode/core';
-import type { DevToolsBridge, VectorDBSnapshot, CleanupFn } from '../types.js';
+import type { DevToolsBridge, CleanupFn } from '../types.js';
 import { createEvent } from '../bridge.js';
 
 /** VectorDB event types to subscribe to. */

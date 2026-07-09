@@ -87,7 +87,7 @@ export async function generateObject<T>(
   const structuredSystemPrompt = buildStructuredPrompt(schema, mode, systemPrompt);
 
   let lastError: Error | null = null;
-  let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, durationMs: 0 };
+  const totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, durationMs: 0 };
   let lastResponse = { modelId: '', timestamp: new Date() };
   let lastFinishReason: 'stop' | 'length' | 'content_filter' | 'error' = 'stop';
   let lastRawText = '';
@@ -103,7 +103,14 @@ export async function generateObject<T>(
 
     const result = await generateText({
       model,
-      prompt: prompt + retryHint,
+      // `/no_think` is appended to the USER prompt in addition to the system
+      // prompt (buildStructuredPrompt): Qwen3's thinking soft switch is
+      // detected in USER messages by its chat template — engines with a baked
+      // template (e.g. LiteRT .litertlm builds) ignore the system-prompt
+      // copy, and unsuppressed thinking overruns the token budget mid-<think>
+      // so no JSON is ever emitted. Verified against LiteRT qwen3-0.6B:
+      // system-prompt-only → always thinks; user-prompt switch → clean JSON.
+      prompt: `${prompt}\n/no_think` + retryHint,
       systemPrompt: structuredSystemPrompt,
       messages,
       maxTokens,

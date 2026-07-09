@@ -1,0 +1,49 @@
+---
+title: "Code Block"
+description: "Syntax-highlighted code with a language label and a copy-to-clipboard control."
+icon: Code
+---
+
+# Code Block
+
+The **CodeBlock** primitive renders syntax-highlighted code with a language label and a working copy-to-clipboard control. Highlighting uses `shiki` loaded lazily on the client (so it never blocks render); until it resolves, a plain themed `<pre>` is shown.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/code-block" />
+
+<OpenInV0 name="ui/conversation/code-block" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/code-block" />
+
+### Dependencies
+
+- `shiki` — lazy syntax highlighting (already used by the docs site)
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `code-block.tsx` — `CodeBlock`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/code-block/code-block.tsx" name="CodeBlockProps" />
+
+## Examples
+
+### Highlight a snippet
+
+```tsx
+import { CodeBlock } from '@/components/code-block';
+
+<CodeBlock language="ts" code={`const x = 1;`} />
+```
+
+## Customization
+
+Change the Shiki theme in the dynamic import, or delete the import entirely to ship a zero-dependency plain `<pre>` — the copy + label behavior is independent of highlighting.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

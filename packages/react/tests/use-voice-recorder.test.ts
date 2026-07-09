@@ -27,7 +27,9 @@ class MockMediaRecorder {
     }, 0);
   }
 
-  static isTypeSupported(type: string) {
+  // Annotated `boolean` so TS doesn't infer a narrowing type predicate,
+  // which would block tests from swapping in a broader implementation.
+  static isTypeSupported(type: string): boolean {
     return type === 'audio/webm;codecs=opus' || type === 'audio/webm';
   }
 }
@@ -210,5 +212,222 @@ describe('useVoiceRecorder', () => {
     // The hook was already verified to have the IS_SERVER check and inert return
     // in the spec verification.
     expect(typeof useVoiceRecorder).toBe('function');
+  });
+});
+
+// ── Device selection (the test-lab mic-selection defect) ──────────────────
+//
+// BOUNDARY NOTE: jsdom has no real microphone. getUserMedia is mocked here,
+// which is the correct layer-below boundary for a unit test of the hook —
+// the assertion is on the exact constraints object the hook hands to the
+// browser, which is precisely what the real browser acts on. Actual device
+// switching must still be verified manually in a real browser with >1 mic.
+describe('useVoiceRecorder device selection', () => {
+  it('forwards deviceId to getUserMedia constraints (red-first for the mic-selection bug)', async () => {
+    const getUserMedia = vi.fn().mockResolvedValue(mockStream);
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: { getUserMedia },
+      configurable: true,
+    });
+
+    const { result } = renderHook(() => useVoiceRecorder({ deviceId: 'mic-2' }));
+
+    await act(async () => {
+      await result.current.startRecording();
+    });
+
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(getUserMedia).toHaveBeenCalledWith({
+      audio: { deviceId: { exact: 'mic-2' } },
+    });
+    expect(result.current.isRecording).toBe(true);
+  });
+
+  it('merges custom track constraints, with deviceId taking precedence', async () => {
+    const getUserMedia = vi.fn().mockResolvedValue(mockStream);
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: { getUserMedia },
+      configurable: true,
+    });
+
+    const { result } = renderHook(() =>
+      useVoiceRecorder({
+        deviceId: 'mic-3',
+        constraints: { echoCancellation: true, deviceId: 'ignored' },
+      })
+    );
+
+    await act(async () => {
+      await result.current.startRecording();
+    });
+
+    expect(getUserMedia).toHaveBeenCalledWith({
+      audio: { echoCancellation: true, deviceId: { exact: 'mic-3' } },
+    });
+  });
+
+  it('passes constraints alone (no deviceId) through to getUserMedia', async () => {
+    const getUserMedia = vi.fn().mockResolvedValue(mockStream);
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: { getUserMedia },
+      configurable: true,
+    });
+
+    const { result } = renderHook(() =>
+      useVoiceRecorder({ constraints: { noiseSuppression: false } })
+    );
+
+    await act(async () => {
+      await result.current.startRecording();
+    });
+
+    expect(getUserMedia).toHaveBeenCalledWith({
+      audio: { noiseSuppression: false },
+    });
+  });
+
+  it('still requests { audio: true } when no device options are given', async () => {
+    const getUserMedia = vi.fn().mockResolvedValue(mockStream);
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: { getUserMedia },
+      configurable: true,
+    });
+
+    const { result } = renderHook(() => useVoiceRecorder());
+
+    await act(async () => {
+      await result.current.startRecording();
+    });
+
+    expect(getUserMedia).toHaveBeenCalledWith({ audio: true });
+  });
+});
+
+// ── Live stream + volume metering ──────────────────────────────────────────
+//
+// BOUNDARY NOTE: jsdom has no Web Audio. The AnalyserNode below is a fake
+// that fills the time-domain buffer with a known full-swing waveform so the
+// RMS math in getVolume() is exercised against deterministic samples. Real
+// microphone levels must be verified in a browser.
+describe('useVoiceRecorder stream + getVolume', () => {
+  /** Fake analyser producing a near-full-swing square wave (RMS ≈ 1). */
+  class FakeAnalyser {
+    fftSize = 2048;
+    getByteTimeDomainData(buf: Uint8Array) {
+      for (let i = 0; i < buf.length; i++) {
+        buf[i] = i % 2 === 0 ? 0 : 255;
+      }
+    }
+  }
+
+  const createdContexts: FakeAudioContext[] = [];
+
+  class FakeAudioContext {
+    state: 'running' | 'closed' = 'running';
+    sourceDisconnects = 0;
+    constructor() {
+      createdContexts.push(this);
+    }
+    createMediaStreamSource() {
+      // Arrow functions capture `this` lexically — no alias needed.
+      return {
+        connect: () => {},
+        disconnect: () => {
+          this.sourceDisconnects++;
+        },
+      };
+    }
+    createAnalyser() {
+      return new FakeAnalyser();
+    }
+    async close() {
+      this.state = 'closed';
+    }
+  }
+
+  beforeEach(() => {
+    createdContexts.length = 0;
+    // @ts-expect-error -- mocking global Web Audio
+    globalThis.AudioContext = FakeAudioContext;
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: { getUserMedia: vi.fn().mockResolvedValue(mockStream) },
+      configurable: true,
+    });
+  });
+
+  it('exposes the live MediaStream while recording, null otherwise', async () => {
+    const { result } = renderHook(() => useVoiceRecorder());
+
+    expect(result.current.stream).toBeNull();
+
+    await act(async () => {
+      await result.current.startRecording();
+    });
+    expect(result.current.stream).toBe(mockStream);
+
+    await act(async () => {
+      await result.current.stopRecording();
+    });
+    expect(result.current.stream).toBeNull();
+  });
+
+  it('getVolume() returns 0 when idle, RMS 0–1 while recording, 0 after stop', async () => {
+    const { result } = renderHook(() => useVoiceRecorder());
+
+    // Idle: no analyser, no stream.
+    expect(result.current.getVolume()).toBe(0);
+    // Analyser is lazy — nothing created yet.
+    expect(createdContexts.length).toBe(0);
+
+    await act(async () => {
+      await result.current.startRecording();
+    });
+
+    const volume = result.current.getVolume();
+    // Full-swing square wave → RMS ≈ 0.996, clamped to ≤ 1.
+    expect(volume).toBeGreaterThan(0.9);
+    expect(volume).toBeLessThanOrEqual(1);
+    // Lazy creation happened exactly once.
+    expect(createdContexts.length).toBe(1);
+    // Repeated calls reuse the same analyser.
+    result.current.getVolume();
+    expect(createdContexts.length).toBe(1);
+
+    await act(async () => {
+      await result.current.stopRecording();
+    });
+
+    // Cleaned up on stop: context closed, source disconnected, volume back to 0.
+    expect(createdContexts[0].state).toBe('closed');
+    expect(createdContexts[0].sourceDisconnects).toBe(1);
+    expect(result.current.getVolume()).toBe(0);
+  });
+
+  it('cleans up the analyser AudioContext on unmount while recording', async () => {
+    const { result, unmount } = renderHook(() => useVoiceRecorder());
+
+    await act(async () => {
+      await result.current.startRecording();
+    });
+    // Trigger lazy analyser creation.
+    expect(result.current.getVolume()).toBeGreaterThan(0);
+    expect(createdContexts.length).toBe(1);
+
+    unmount();
+    expect(createdContexts[0].state).toBe('closed');
+    expect(mockTrack.stop).toHaveBeenCalled();
+  });
+
+  it('getVolume() returns 0 when AudioContext is unavailable', async () => {
+    // @ts-expect-error -- simulate environment without Web Audio
+    delete globalThis.AudioContext;
+
+    const { result } = renderHook(() => useVoiceRecorder());
+
+    await act(async () => {
+      await result.current.startRecording();
+    });
+
+    expect(result.current.getVolume()).toBe(0);
   });
 });

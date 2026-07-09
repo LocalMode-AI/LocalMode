@@ -17,6 +17,7 @@ import type {
 } from '@localmode/core';
 import { ModelLoadError } from '@localmode/core';
 import type { ModelSettings, TransformersDevice, ModelLoadProgress } from '../types.js';
+import { installResilientModelCache } from '../resilient-cache.js';
 
 const DEFAULT_PROMPT = 'Text Recognition:';
 
@@ -111,6 +112,7 @@ export class TransformersGenerativeOCRModel implements OCRModel {
       try {
         const tjs = await import('@huggingface/transformers');
         tjs.env.backends.onnx.logLevel = 'error';
+        installResilientModelCache(tjs.env);
 
         const device = this.getDevice();
         const dtype = this.settings.dtype ?? {

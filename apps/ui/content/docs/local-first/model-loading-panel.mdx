@@ -1,0 +1,69 @@
+---
+title: "Model Loading Panel"
+description: "A full-height \"waiting for model\" splash combining metadata, a progress bar, and a first-download-vs-cache-load help message."
+icon: Cpu
+---
+
+# Model Loading Panel
+
+The **Model Loading Panel** is the richer, blocking sibling of the Model Downloader: a full-height "waiting for model" splash that combines model metadata (size, context length, category, a cached-vs-downloading badge) with a progress bar and a two-path help message (first-download vs cache-load). It composes the lower-level `DownloadProgress` and binds to `useModelLoad` (`progressValue`, `cached`, `status`).
+
+## Preview
+
+<ComponentPreview name="ui/local-first/model-loading-panel" note="Simulated first-time download splash — no real model is fetched in the preview." />
+
+<OpenInV0 name="ui/local-first/model-loading-panel" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/model-loading-panel" />
+
+### Data source & dependencies
+
+**Data source:** renders the load state + metadata you pass — works with any backend. Recommended producer: `useModelLoad` (drive the load) / `useModelStatus` (read-only view of the same lifecycle) from `@localmode/react` (on-device, optional).
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Registry dependencies
+
+- `@localmode/ui/local-first/model-downloader` — composes `DownloadProgress`
+
+### Files installed
+
+- `model-loading-panel.tsx` — the `ModelLoadingPanel` component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/model-loading-panel/model-loading-panel.tsx" name="ModelLoadingPanelProps" />
+
+## Examples
+
+### Blocking load state
+
+```tsx
+import { useModelLoad } from '@localmode/react';
+import { webllm, isModelCached } from '@localmode/webllm';
+import { ModelLoadingPanel } from '@/components/model-loading-panel';
+
+export function Gate({ children }) {
+  const { status, progressValue } = useModelLoad({
+    key: 'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+    create: (onProgress) =>
+      webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC', { onProgress }),
+    isCached: () => isModelCached('Llama-3.2-1B-Instruct-q4f16_1-MLC'),
+    autoLoad: true,
+  });
+
+  if (status !== 'ready') {
+    return <ModelLoadingPanel name="Llama 3.2 1B" size="1.2 GB" progress={progressValue} />;
+  }
+  return children;
+}
+```
+
+`progressValue` (`{ loaded?, total?, percent, cached? }`, `percent` 0–1) drops straight into the panel's `progress` prop, and its `cached` flag (from the `isCached` probe) flips the help copy between the first-download and cache-load paths.
+
+## Customization
+
+The help copy switches on the `cached` flag (or `progress.cached` — set automatically when you pass `useModelLoad`'s `progressValue`). It reuses `DownloadProgress` from the Model Downloader item, which the CLI installs as a registry dependency. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

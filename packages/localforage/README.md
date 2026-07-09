@@ -57,9 +57,9 @@ new LocalForageStorage({ name: string, driver?: string[] })
 | `getAllDocuments(collectionId)` | Get all documents in a collection |
 | `countDocuments(collectionId)` | Count documents in a collection |
 | `addVector(vec)` | Add/upsert a vector |
-| `getVector(id)` | Get vector as `Float32Array \| null` |
+| `getVector(id)` | Get vector as `Float32Array \| Uint8Array \| null` (`Uint8Array` for SQ8/PQ-compressed payloads) |
 | `deleteVector(id)` | Delete a vector |
-| `getAllVectors(collectionId)` | Get all vectors as `Map<string, Float32Array>` |
+| `getAllVectors(collectionId)` | Get all vectors as `Map<string, Float32Array \| Uint8Array>` |
 | `saveIndex(collectionId, index)` | Save serialized HNSW index |
 | `loadIndex(collectionId)` | Load serialized HNSW index |
 | `deleteIndex(collectionId)` | Delete an index |
@@ -72,6 +72,8 @@ new LocalForageStorage({ name: string, driver?: string[] })
 | `clearCollection(collectionId)` | Clear a specific collection |
 | `estimateSize()` | Estimate storage size in bytes |
 
+Collection records round-trip the **full `Collection` object** — including quantization calibration (`calibration`, `pqCodebook`), storage-compression calibration (`compressionCalibration`, `deltaCalibration`, `compression`), and the drift-detection `modelFingerprint` — so SQ8/PQ-quantized and compressed databases decode identically after a close→reopen. Verified by core's `createStorageAdapterConformanceSuite` contract tests (`tests/conformance.test.ts`).
+
 ## Auto-Fallback Behavior
 
 localforage automatically selects the best available storage driver:
@@ -83,6 +85,8 @@ localforage automatically selects the best available storage driver:
 | localStorage | 3 | Limited to 5-10MB, synchronous under the hood |
 
 This means `LocalForageStorage` works in environments where IndexedDB is unavailable, such as **Safari Private Browsing** mode, by falling back to localStorage.
+
+**Note:** the localStorage fallback driver JSON-serializes stored values, and the typed arrays nested inside quantization/compression calibration data do not survive that round-trip — calibration degrades under the localStorage driver only (the default IndexedDB driver preserves it fully). Avoid vector quantization/compression when users may land on the localStorage fallback, or pin `driver` to `[localforage.INDEXEDDB]`.
 
 ## Comparison
 

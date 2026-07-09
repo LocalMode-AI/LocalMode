@@ -12,7 +12,7 @@ faq:
   - question: "Do BGE embedding models require WebGPU?"
     answer: "No. Both BGE variants run through Transformers.js on WASM, meaning they work in every browser including Safari on iOS and Firefox without requiring WebGPU."
   - question: "Can I run BGE embeddings offline?"
-    answer: "Yes. After the initial model download (33MB or 110MB), BGE models are cached in IndexedDB and work entirely offline. No network connection is needed for subsequent use."
+    answer: "Yes. After the initial model download (33MB or 110MB), BGE models are cached in the browser's Cache API and work entirely offline. No network connection is needed for subsequent use."
 ---
 
 # BGE Embeddings Models in the Browser

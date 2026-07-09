@@ -1,0 +1,136 @@
+---
+title: "Use LocalMode UI with the Vercel AI SDK — or Any Backend"
+description: "@localmode/ui components are presentational and hook-driven, so they install with zero @localmode packages and render from any data source — the Vercel AI SDK, a cloud API, or static fixtures. Local-first by design, cloud-compatible by contract. Here is how the same chat elements run on @ai-sdk/react with a three-line mapping."
+author: LocalMode
+date: "2026-06-13"
+dateModified: "2026-06-13"
+faq:
+  - question: "Can I use @localmode/ui components without LocalMode or installing @localmode packages?"
+    answer: "Yes. Every non-local-first @localmode/ui component is presentational — it renders plain props and owns no orchestration state — so after npx shadcn add it has zero @localmode/* runtime dependencies and compiles in a project with no @localmode packages installed. You supply the data from any source: the Vercel AI SDK, a cloud API, or a static fixture. The LocalMode @localmode/react hooks are the recommended on-device producer, never a requirement."
+  - question: "How do I use LocalMode UI with the Vercel AI SDK?"
+    answer: "Install the conversation family with npx shadcn@latest add @localmode/ui/conversation, then drive it with useChat from @ai-sdk/react instead of @localmode/react. The only differences are the logic hook and a short data mapping: messages map to Message/Response, status to a streaming boolean, and sendMessage/stop to PromptInput. Tool invocations, reasoning parts, and sources each map onto the Tool, Reasoning, and Sources elements in about three lines per part type."
+  - question: "Do the components pull in a model provider when installed?"
+    answer: "No. No @localmode/ui component imports an inference symbol or a model provider at runtime. The generic browser helpers a few components need (formatBytes, validateFile, readFileAsDataUrl, downloadBlob, and the useObjectUrl hook) are copy-owned in @localmode/ui/lib/browser-utils, and the navigator-reading hooks (useCapabilities, useStorageQuota, useNetworkStatus) are copy-owned in @localmode/ui/lib/use-environment. Both are dependency-free and contain no AI."
+  - question: "What does 'local-first by design, cloud-compatible by contract' mean?"
+    answer: "Local-first by design means the recommended pairing is the on-device @localmode/react hooks, so by default inference runs in the browser with no server, no API keys, and no data leaving the device. Cloud-compatible by contract means the components only depend on the prop shapes they render — never on where the data came from — so the same elements work unchanged with a cloud backend. You pick the logic layer; the components are the constant."
+  - question: "Which @localmode/ui components are local-first only?"
+    answer: "The local-first family — model download/selection, capability gates, storage-quota meters, VectorDB observability — describes on-device AI, so a cloud app generally would not install it. Notably it is local-first by topic, not by dependency: those components are still presentational and ship zero @localmode runtime dependencies. The one broadly reusable member is ContextUsageMeter, which renders token-usage data from any LLM, local or cloud."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Most AI UI libraries assume a cloud backend. LocalMode UI assumes the opposite — the model runs in the browser. That framing is the point of the library, but it raised a fair question: are these components *locked* to LocalMode, or can a team drop them into an app backed by the Vercel AI SDK, OpenAI, or their own API?
+
+The answer, verified by a code-level audit of the whole catalog, is that they were already portable — and now it is a tested, first-class guarantee.
+
+<Callout type="info" title="The contract">
+  Every non-local-first component is presentational: it renders plain props, emits callbacks, and
+  owns no model, no inference, and no message history. After `shadcn add`, it has **zero
+  `@localmode/*` runtime dependencies**. You wire your own data source.
+</Callout>
+
+---
+
+## The audit: the coupling was almost entirely phantom
+
+The catalog ships 100+ components. We grepped every component file for what it imports at runtime and found the entire coupling to `@localmode/*` was **16 files importing 8 generic, AI-free symbols** — five browser utilities (`formatBytes`, `useObjectUrl`, `validateFile`, `readFileAsDataUrl`, `downloadBlob`) and three navigator-reading hooks (`useCapabilities`, `useStorageQuota`, `useNetworkStatus`). Not one component imported an inference function (`generateText`, `streamText`, `embed`, `transcribe`) or a model provider.
+
+So we made the portability real:
+
+- **Manifest cleanup.** ~75 components declared `@localmode` packages they never imported; those declarations are gone (including a `@localmode/transformers` model provider that was being installed just to render a list of voice names).
+- **Two copy-owned libs.** The five generic helpers moved into `@localmode/ui/lib/browser-utils`; the three navigator hooks into `@localmode/ui/lib/use-environment`. Both are dependency-free.
+
+The result: **nothing in the catalog requires a `@localmode` package at runtime** — the local-first family included.
+
+---
+
+## The same chat on `@ai-sdk/react`
+
+Install the conversation family:
+
+```bash
+npx shadcn@latest add @localmode/ui/conversation
+```
+
+Then drive it with the Vercel AI SDK. The components are identical to a LocalMode chat; only the logic line and a small mapping change.
+
+```tsx
+'use client';
+
+import { useChat } from '@ai-sdk/react'; // cloud logic instead of @localmode/react
+import { Conversation, ConversationContent } from '@/components/conversation';
+import { Message, MessageAvatar, MessageContent } from '@/components/message';
+import {
+  PromptInput,
+  PromptInputTextarea,
+  PromptInputTools,
+  PromptInputSubmit,
+} from '@/components/prompt-input';
+
+const textOf = (m) => m.parts.filter((p) => p.type === 'text').map((p) => p.text).join('');
+
+export default function Chat() {
+  const { messages, status, sendMessage, stop } = useChat(); // hits /api/chat
+  const streaming = status === 'streaming';
+
+  return (
+    <>
+      <Conversation streaming={streaming}>
+        <ConversationContent>
+          {messages.map((m) => (
+            <Message key={m.id} role={m.role}>
+              <MessageAvatar role={m.role} />
+              <MessageContent role={m.role} content={textOf(m)} />
+            </Message>
+          ))}
+        </ConversationContent>
+      </Conversation>
+
+      <PromptInput streaming={streaming} onStop={stop} onSubmit={(text) => sendMessage({ text })}>
+        <PromptInputTextarea />
+        <PromptInputTools>
+          <PromptInputSubmit />
+        </PromptInputTools>
+      </PromptInput>
+    </>
+  );
+}
+```
+
+`Tool`, `Reasoning`, and `Sources` map the SDK's tool-call, reasoning, and source parts onto their elements in about three lines each — the full mappings are in the [Use with the Vercel AI SDK](https://localmode.ai/docs/use-with-ai-sdk) guide.
+
+<Callout type="info" title="Any data source">
+  Not on the AI SDK? The [Bring your own data](https://localmode.ai/docs/bring-your-own-data)
+  guide documents the prop shape each family expects, so a `fetch()`, a custom API, or a static
+  fixture drives the components just the same.
+</Callout>
+
+---
+
+## Why this is the wedge, not a retreat
+
+Making the UI portable does not dilute the local-first story — it widens the door to it. A team can start with familiar cloud patterns and the same components they would reach for anyway, then adopt the [local-first families](https://localmode.ai/docs/components) — model-download progress, device-capability gates, on-device storage observability — that **no cloud UI library ships**. Portability is the on-ramp; local-first is the destination.
+
+Local-first by design. Cloud-compatible by contract.
+
+---
+
+## Methodology
+
+The LocalMode-specific numbers and the zero-`@localmode` guarantee were verified directly against the source of truth — the `apps/ui` registry and component source — not against memory:
+
+- **Catalog size (100+ components).** Counted from `apps/ui/registry.json`, which lists the public components plus 3 internal `ui/lib/*` items (`ui/lib/utils`, `ui/lib/browser-utils`, `ui/lib/use-environment`).
+- **The "16 files / 8 symbols" coupling.** Grepped every component source under `apps/ui/registry/localmode/**`: exactly 16 distinct shipped files import from the two copy-owned libs, and exactly 8 distinct symbols are imported — `formatBytes`, `useObjectUrl`, `validateFile`, `readFileAsDataUrl`, `downloadBlob` (from `@localmode/ui/lib/browser-utils`) and `useCapabilities`, `useStorageQuota`, `useNetworkStatus` (from `@localmode/ui/lib/use-environment`). No shipped component imports an inference function or a model provider.
+- **The zero-`@localmode` guarantee.** Verified empirically by the `apps/ui/consumer-tests/portability-test.mjs` harness, which serves the prebuilt registry, runs the real `shadcn` CLI to install representative items into a scratch project that has no `@localmode/*` packages, then checks four independent witnesses (no `@localmode` import statements, no `@localmode` package in the consumer's `package.json`, a real `tsc --noEmit` exit 0, and a real server-render of fixture data) plus a red-first negative test that installs a deliberately-coupled fixture and asserts the detector flags it. `registry.json` currently declares zero `@localmode` dependencies on any item.
+- **Component props in the code example.** Cross-checked against the component source: `Conversation` accepts `streaming`; `Message` accepts `role`; `MessageAvatar` accepts `role`; `MessageContent` takes a `content` prop (a markdown string or `ContentPart[]`) plus `role`, not children; `PromptInput` accepts `streaming`, `onStop`, and `onSubmit(text, attachments?)`. `Tool`, `Reasoning`, and `Sources` exist as exported components in the conversation family.
+- **Vercel AI SDK usage.** Verified against the official `@ai-sdk/react` documentation: `useChat` returns `messages`, `status`, `sendMessage`, and `stop`; `status` is one of `'submitted' | 'streaming' | 'ready' | 'error'`; `sendMessage` accepts `{ text }`; messages carry a typed `parts` array (`text`, `reasoning`, `tool-${name}` with a `state` field, `source-url`, `file`). The shadcn namespaced install (`@localmode/ui/conversation`) was verified against the official shadcn registry namespace docs.
+
+The audit narrative figure of "~75 components" carrying unused `@localmode` manifest declarations describes the pre-cleanup state captured during the audit; it is reported as an approximate count, and the verifiable end state is that the catalog now declares zero `@localmode` runtime dependencies.
+
+## Sources
+
+- [AI SDK — `useChat()` reference (`@ai-sdk/react`)](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat)
+- [AI SDK — Chatbot guide (message `parts`)](https://ai-sdk.dev/docs/ai-sdk-ui/chatbot)
+- [AI SDK — Chatbot tool usage (`tool-${name}` parts and states)](https://ai-sdk.dev/docs/ai-sdk-ui/chatbot-tool-usage)
+- [shadcn — Registry namespaces](https://ui.shadcn.com/docs/registry/namespace)
+- LocalMode codebase: `apps/ui/registry.json`, `apps/ui/registry/localmode/**`, `apps/ui/registry/localmode/lib/browser-utils.ts`, `apps/ui/registry/localmode/lib/use-environment.ts`, `apps/ui/consumer-tests/portability-test.mjs`

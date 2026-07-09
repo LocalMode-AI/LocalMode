@@ -1,0 +1,67 @@
+---
+title: "Tool"
+description: "A single tool invocation card with a status taxonomy, expandable input/output, a renderer registry + fallback, and a grouping wrapper."
+icon: Wrench
+---
+
+# Tool
+
+The **Tool** primitive renders a single tool invocation. `ToolHeader` shows the name and a status badge (pending / running / streaming / completed / error); `ToolContent` hosts expandable `ToolInput` (JSON params) and `ToolOutput` (result or error). A per-tool renderer registry lets you customize specific tools, `ToolFallback`/`ToolView` cover unregistered ones, and `ToolGroup` collapses consecutive calls behind a stacked-icon summary. Data source: `useAgent` / wllama/transformers tool calling.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/tool" />
+
+<OpenInV0 name="ui/conversation/tool" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/tool" />
+
+### Data source & dependencies
+
+**Data source:** renders a tool-call shape (name/input/output/state) you pass — works with any backend. Recommended producer: `useAgent` from `@localmode/react` (on-device). See [Use with the Vercel AI SDK](/docs/use-with-ai-sdk#tool-invocations--tool) for AI-SDK tool parts.
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `tool.tsx` — `Tool`, `ToolHeader`, `ToolContent`, `ToolInput`, `ToolOutput`, `ToolFallback`, `ToolView`, `ToolGroup`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/tool/tool.tsx" name="ToolHeaderProps" />
+
+## Examples
+
+### A single tool call
+
+```tsx
+import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from '@/components/tool';
+
+<Tool defaultOpen>
+  <ToolHeader name={call.name} status={call.status} />
+  <ToolContent>
+    <ToolInput input={call.input} />
+    <ToolOutput output={call.output} error={call.error} />
+  </ToolContent>
+</Tool>
+```
+
+### Custom renderer registry
+
+```tsx
+import { ToolView } from '@/components/tool';
+
+const registry = {
+  search_documents: (call) => <MySearchCard call={call} />,
+};
+
+<ToolView call={call} registry={registry} />
+```
+
+## Customization
+
+The status badge colors map through `STATUS_META`; edit it to match your palette. Pass a registry to `ToolView`/`ToolGroup` to render specific tools with custom UIs while everything else falls back to the generic card.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useAgent`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

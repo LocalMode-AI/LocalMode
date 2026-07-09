@@ -17,8 +17,10 @@ export type {
   PipelineProgress,
   UseChatOptions,
   UseChatReturn,
+  ChatStatus,
   UseSemanticSearchOptions,
   UseSemanticSearchReturn,
+  SemanticSearchCallOptions,
   UsePipelineReturn,
 } from './core/types.js';
 
@@ -42,13 +44,17 @@ export { useEmbedManyImages } from './hooks/use-embed-many-images.js';
 // Domain hooks — Chat & Generation
 export { useChat } from './hooks/use-chat.js';
 export { useGenerateText } from './hooks/use-generate-text.js';
+export type { UseGenerateTextOptions, GenerateTextExecuteOptions } from './hooks/use-generate-text.js';
 export { useGenerateObject } from './hooks/use-generate-object.js';
 export type { UseGenerateObjectOptions } from './hooks/use-generate-object.js';
 
 // Domain hooks — Classification
 export { useClassify } from './hooks/use-classify.js';
 export { useClassifyZeroShot } from './hooks/use-classify-zero-shot.js';
+export type { UseClassifyZeroShotOptions, ClassifyZeroShotInput } from './hooks/use-classify-zero-shot.js';
 export { useExtractEntities } from './hooks/use-extract-entities.js';
+export { useRerank } from './hooks/use-rerank.js';
+export type { UseRerankOptions, RerankInput } from './hooks/use-rerank.js';
 
 // Domain hooks — Audio
 export { useTranscribe } from './hooks/use-transcribe.js';
@@ -109,11 +115,12 @@ export { useSequentialBatch } from './core/use-sequential-batch.js';
 // Utilities
 export { toAppError } from './core/app-error.js';
 
-// Re-export jsonSchema from core for convenience
-export { jsonSchema } from '@localmode/core';
+// Re-export jsonSchema + content helpers from core for convenience
+export { jsonSchema, getTextContent, normalizeContent } from '@localmode/core';
 
 // Helpers (browser utilities)
 export { readFileAsDataUrl } from './helpers/read-file.js';
+export { useObjectUrl } from './helpers/use-object-url.js';
 export { validateFile } from './helpers/validate-file.js';
 export type { ValidateFileOptions } from './helpers/validate-file.js';
 export { downloadBlob } from './helpers/download.js';
@@ -139,6 +146,15 @@ export type { UseInferenceQueueReturn } from './utilities/use-inference-queue.js
 
 // Model Loader
 export { useModelLoader } from './utilities/use-model-loader.js';
+export { useModelLoad } from './utilities/use-model-load.js';
+export type {
+  ModelLoadStatus,
+  AnyLoadProgress,
+  ModelFileProgress,
+  ModelLoadProgressValue,
+  UseModelLoadOptions,
+  UseModelLoadReturn,
+} from './utilities/use-model-load.js';
 export type { UseModelLoaderReturn } from './utilities/use-model-loader.js';
 
 // Semantic Cache
@@ -168,6 +184,19 @@ export type { UseCalibrateThresholdOptions, UseCalibrateThresholdReturn } from '
 export { useAuditLog } from './hooks/use-audit-log.js';
 export type { UseAuditLogOptions, UseAuditLogReturn } from './hooks/use-audit-log.js';
 
+// Encrypted Vault (passphrase-locked encrypted CRUD over pluggable storage)
+export {
+  useEncryptedVault,
+  VaultPassphraseError,
+  VaultLockedError,
+} from './hooks/use-encrypted-vault.js';
+export type {
+  VaultStatus,
+  VaultItem,
+  UseEncryptedVaultOptions,
+  UseEncryptedVaultReturn,
+} from './hooks/use-encrypted-vault.js';
+
 // Live Transcription (Streaming STT with VAD)
 export { useLiveTranscribe } from './hooks/use-live-transcribe.js';
 export type {
@@ -180,3 +209,77 @@ export type {
   UseTurnTakerOptions,
   UseTurnTakerReturn,
 } from './hooks/use-turn-taker.js';
+
+// Audio/AV additions (2026-06-12 hook-ergonomics pass)
+export type { UseSynthesizeSpeechOptions, UseSynthesizeSpeechCallOptions } from './hooks/use-synthesize-speech.js';
+export type { UseTranscribeOptions, UseTranscribeCallOptions } from './hooks/use-transcribe.js';
+export type { TurnEntry } from './hooks/use-turn-taker.js';
+export { useStreamingTracker } from './hooks/use-streaming-tracker.js';
+export type {
+  StreamingTrackerLike,
+  StreamingTrackerCreateContext,
+  UseStreamingTrackerStatus,
+  UseStreamingTrackerOptions,
+  UseStreamingTrackerReturn,
+} from './hooks/use-streaming-tracker.js';
+export type { UsePipelineWithMetricsReturn } from './hooks/use-pipeline.js';
+
+// Provider fallback (per-capability Chrome Built-in AI ⇄ Transformers.js)
+export {
+  useProviderFallback,
+  detectSummarizerProvider,
+  detectTranslatorProvider,
+  detectPromptProvider,
+  providerTier,
+  providerName,
+} from './hooks/use-provider-fallback.js';
+export type {
+  ProviderId,
+  ProviderTier,
+  ProviderCapability,
+  ChromeSummaryStyle,
+  ChromeSummaryLength,
+  ResolvedModel,
+  ProviderResolution,
+  ResolveSummarizerParams,
+  ResolveTranslatorParams,
+  ResolveEditEngineParams,
+  ChromeAIModuleLike,
+  TransformersModuleLike,
+  LoadChromeAI,
+  LoadTransformers,
+  UseProviderFallbackOptions,
+  UseProviderFallbackReturn,
+} from './hooks/use-provider-fallback.js';
+
+// Photo library (shared CLIP-family multimodal image library)
+export {
+  usePhotoLibrary,
+  rankByEmbedding,
+  computeSimilarCounts,
+  groupDuplicates,
+  duplicateIds,
+  selectAllDuplicateIds,
+  DEFAULT_SIMILAR_COUNT_THRESHOLD,
+} from './hooks/use-photo-library.js';
+export type {
+  PhotoEntry,
+  RankedHit,
+  DuplicateGroup,
+  ProcessProgress,
+  IngestRejection,
+  ActivePreset,
+  UsePhotoLibraryOptions,
+  PhotoLibrary,
+} from './hooks/use-photo-library.js';
+
+// Knowledge base (session-orchestration hook over the core engine contract)
+export { useKnowledgeBase } from './hooks/use-knowledge-base.js';
+export type {
+  EngineKind,
+  KnowledgeBaseChunkingMode,
+  KnowledgeBaseProgress,
+  KnowledgeBaseStats,
+  UseKnowledgeBaseOptions,
+  UseKnowledgeBaseReturn,
+} from './hooks/use-knowledge-base.js';

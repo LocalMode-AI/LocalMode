@@ -12,7 +12,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 Embeddings convert text into numerical vectors that capture semantic meaning. Use them for similarity search, clustering, and RAG applications.
 
 <Callout type="info" title="See it in action">
-  Try [Semantic Search](https://localmode.ai/semantic-search) and [PDF Search](https://localmode.ai/pdf-search) for working demos of these APIs.
+  Try the [Knowledge Base block](https://localmode.ai/blocks/knowledge/semantic-search) for a working demo of these APIs.
 </Callout>
 
 ## embed()
@@ -227,9 +227,9 @@ import { semanticSearch, createVectorDB } from '@localmode/core';
 
 const db = await createVectorDB({ name: 'docs', dimensions: 384 });
 
-// Add documents to the database first...
+// Add documents to the database first (e.g. via ingest())...
 
-const results = await semanticSearch({
+const { results } = await semanticSearch({
   db,
   model,
   query: 'What is machine learning?',
@@ -238,14 +238,37 @@ const results = await semanticSearch({
 
 results.forEach((result) => {
   console.log(`Score: ${result.score.toFixed(3)}`);
-  console.log(`Text: ${result.metadata.text}`);
+  console.log(`Text: ${result.text}`);
 });
+```
+
+`semanticSearch()` returns `{ results, usage }` — `results` is an array of `{ id, score, text?, metadata? }` items, and `usage` reports `embeddingTokens`, `embedDurationMs`, and `searchDurationMs`.
+
+### Result Text Extraction
+
+Each result's `text` is extracted from its stored metadata by checking these fields in priority order and returning the first string value found:
+
+1. `text`
+2. `content`
+3. `body`
+4. `_text` — the `TEXT_METADATA_FIELD` constant, the key `ingest()`/`ingestChunks()` write chunk text under
+5. `__text`
+6. `pageContent`
+
+If none match, `text` is `undefined` (the result is still returned). Because the [RAG `ingest()` pipeline](/docs/core/rag#ingestion) stores chunk text under `TEXT_METADATA_FIELD` (`'_text'`), an ingest → search round-trip populates `results[].text` out of the box — and metadata you stored yourself under `text` always wins over the ingest-written key:
+
+```typescript
+import { TEXT_METADATA_FIELD } from '@localmode/core';
+
+const { results } = await semanticSearch({ db, model, query, k: 5 });
+results[0].text; // chunk text stored by ingest()
+results[0].metadata?.[TEXT_METADATA_FIELD]; // the same text, via the raw key
 ```
 
 ### With Filters
 
 ```typescript
-const results = await semanticSearch({
+const { results } = await semanticSearch({
   db,
   model,
   query: 'AI applications',
@@ -262,10 +285,11 @@ const results = await semanticSearch({
 ```typescript
 interface SemanticSearchOptions {
   db: VectorDB;
-  model: EmbeddingModel;
+  model: EmbeddingModel | string;
   query: string;
   k?: number;
-  filter?: FilterExpression;
+  filter?: Record<string, unknown>;
+  threshold?: number;
   abortSignal?: AbortSignal;
 }
 ```
@@ -384,15 +408,15 @@ const { embedding } = await embed({ model, value: 'Hello' });
   />
 </Cards>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Semantic Search | Embed documents and search by meaning | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
-| Cross-Modal Search | Embed text and images for cross-modal retrieval | [Demo](https://localmode.ai/cross-modal-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/cross-modal-search) |
-| Product Search | Embed product catalog for semantic product discovery | [Demo](https://localmode.ai/product-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/product-search) |
-| Smart Gallery | Embed images for intelligent photo organization | [Demo](https://localmode.ai/smart-gallery) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-gallery) |
-| Document Redactor | Embed text with differential privacy noise | [Demo](https://localmode.ai/document-redactor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/document-redactor) |
-| PDF Search | Embed PDF chunks for document Q&A | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |
-| LangChain RAG | Embed documents in a LangChain RAG pipeline | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |
-| Duplicate Finder | Embed image features to detect near-duplicates | [Demo](https://localmode.ai/duplicate-finder) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/duplicate-finder) |
+| Knowledge Base (Semantic Search) | Embed documents and search by meaning | [Live block](https://localmode.ai/blocks/knowledge/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/semantic-search) |
+| Photo Search (Cross-Modal Search) | Embed text and images for cross-modal retrieval | [Live block](https://localmode.ai/blocks/photo/image-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/photo/image-search) |
+| Photo Search (Product Search) | Embed product catalog for semantic product discovery | [Live block](https://localmode.ai/blocks/photo/image-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/photo/image-search) |
+| Photo Search (Smart Gallery) | Embed images for intelligent photo organization | [Live block](https://localmode.ai/blocks/photo/smart-gallery) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/photo/smart-gallery) |
+| Privacy (PII Redactor) | Embed text with differential privacy noise | [Live block](https://localmode.ai/blocks/privacy/pii-redactor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/privacy/pii-redactor) |
+| Knowledge Base (PDF Search) | Embed PDF chunks for document Q&A | [Live block](https://localmode.ai/blocks/knowledge/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/semantic-search) |
+| Knowledge Base (LangChain RAG) | Embed documents in a LangChain RAG pipeline | [Live block](https://localmode.ai/blocks/knowledge/rag-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/rag-chat) |
+| Photo Search (Duplicate Finder) | Embed image features to detect near-duplicates | [Live block](https://localmode.ai/blocks/photo/duplicate-finder) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/photo/duplicate-finder) |

@@ -12,7 +12,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 LocalMode provides flexible storage options for persisting vector databases and application data.
 
 <Callout type="info" title="See it in action">
-  Try [Encrypted Vault](https://localmode.ai/encrypted-vault) for a working demo of these APIs.
+  Try the [Encrypted Vault block](https://localmode.ai/blocks/privacy/encrypted-vault) for a working demo of these APIs.
 </Callout>
 
 ## Storage Options
@@ -137,16 +137,16 @@ All storage adapters implement the `StorageAdapter` interface:
       type: 'Promise<void>',
     },
     'getVector(id)': {
-      description: 'Get a vector by ID',
-      type: 'Promise<Float32Array | null>',
+      description: 'Get a vector by ID (Uint8Array when SQ8/PQ-compressed)',
+      type: 'Promise<Float32Array | Uint8Array | null>',
     },
     'deleteVector(id)': {
       description: 'Delete a vector by ID',
       type: 'Promise<void>',
     },
     'getAllVectors(collectionId)': {
-      description: 'Get all vectors in a collection',
-      type: 'Promise<Map<string, Float32Array>>',
+      description: 'Get all vectors in a collection (Uint8Array values when SQ8/PQ-compressed)',
+      type: 'Promise<Map<string, Float32Array | Uint8Array>>',
     },
     'saveIndex(collectionId, index)': {
       description: 'Save a serialized HNSW index',
@@ -300,7 +300,7 @@ class MyCustomStorage implements StorageAdapter {
 
   // Vector operations
   async addVector(vec: StoredVector) { /* store vector */ }
-  async getVector(id: string) { /* return Float32Array or null */ return null; }
+  async getVector(id: string) { /* Float32Array (or Uint8Array if you store compressed) or null */ return null; }
   async deleteVector(id: string) { /* remove vector */ }
   async getAllVectors(collectionId: string) { return new Map(); }
 
@@ -322,6 +322,54 @@ class MyCustomStorage implements StorageAdapter {
   async estimateSize() { return 0; }
 }
 ```
+
+<Callout type="warn" title="Persist the full Collection object">
+Collection write and read operations must round-trip **every** field of the
+`Collection` object — including the optional extended fields core stores on it
+(`modelFingerprint` for drift detection, `calibration`/`pqCodebook` for vector
+quantization, `compressionCalibration`/`deltaCalibration`/`compression` for
+storage compression). Persist `{ ...collection }` rather than cherry-picking
+known fields: an adapter that drops these silently corrupts SQ8/PQ-compressed
+vectors after a reopen and disables drift detection.
+</Callout>
+
+### Verify with the conformance suite
+
+Core's testing utilities ship a framework-agnostic StorageAdapter conformance
+suite. It covers the full contract — document/vector/index/collection
+operations, `Uint8Array` payload fidelity, extended-field round-trips, and
+close→reopen persistence (including an SQ8 compression fidelity check). Run it
+against any custom adapter:
+
+```typescript
+import { describe, it } from 'vitest';
+import { createStorageAdapterConformanceSuite } from '@localmode/core';
+import { MyCustomStorage } from './my-custom-storage';
+
+describe('MyCustomStorage conformance', () => {
+  const suite = createStorageAdapterConformanceSuite(async () => {
+    const name = `conformance-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const adapter = new MyCustomStorage({ name });
+    await adapter.open();
+    return {
+      adapter,
+      // A NEW adapter instance over the SAME underlying database
+      reopen: async () => {
+        const reopened = new MyCustomStorage({ name });
+        await reopened.open();
+        return reopened;
+      },
+    };
+  });
+
+  for (const testCase of suite) {
+    it(testCase.name, () => testCase.run());
+  }
+});
+```
+
+The official adapters (`@localmode/dexie`, `@localmode/idb`,
+`@localmode/localforage`) run this same suite in their own test suites.
 
 ## Storage Fallback
 
@@ -721,8 +769,8 @@ console.log(`Total migrations: ${MIGRATIONS.length}`);
   />
 </Cards>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Encrypted Vault | Encrypted client-side storage with Web Crypto API | [Demo](https://localmode.ai/encrypted-vault) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/encrypted-vault) |
+| Privacy (Encrypted Vault) | Encrypted client-side storage with Web Crypto API | [Live block](https://localmode.ai/blocks/privacy/encrypted-vault) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/privacy/encrypted-vault) |

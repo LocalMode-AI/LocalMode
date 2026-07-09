@@ -14,7 +14,8 @@ Extract answers directly from a context passage. The model finds the span of tex
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [QA Bot](https://localmode.ai/qa-bot) for a working demo.
+  Try the [Knowledge Base block](https://localmode.ai/blocks/knowledge/document-qa) — it answers
+  questions from your own documents with grounded, on-device retrieval.
 </Callout>
 
 ## Recommended Models
@@ -26,7 +27,7 @@ Extract answers directly from a context passage. The model finds the span of tex
 
 ## QA Bot Example
 
-Based on the [QA Bot](https://localmode.ai/qa-bot) showcase app:
+Based on the [Knowledge Base block](https://localmode.ai/blocks/knowledge/document-qa):
 
 ```typescript
 import { transformers } from '@localmode/transformers';
@@ -61,11 +62,11 @@ async function askQuestion(question: string, context: string) {
   4. **Combine with search** — Use semantic search to find relevant context first
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| QA Bot | Answer questions from provided context passages | [Demo](https://localmode.ai/qa-bot) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/qa-bot) |
+| Document QA | Extractive Q&A over your own text/PDF corpus plus Donut document/invoice QA on an uploaded image | [Live](https://localmode.ai/blocks/knowledge/document-qa) · Install: `npx shadcn add @localmode/ui/blocks/knowledge/document-qa` |
 
 ## Next Steps
 

@@ -58,7 +58,8 @@ describe('useCalibrateThreshold', () => {
       await result.current.calibrate(['single']); // Less than 2 samples
     });
 
-    expect(result.current.error).not.toBeNull();
+    // The hook exposes a real Error (not a { message } shape).
+    expect(result.current.error).toBeInstanceOf(Error);
     expect(result.current.error?.message).toContain('at least 2');
     expect(result.current.calibration).toBeNull();
     expect(result.current.isCalibrating).toBe(false);

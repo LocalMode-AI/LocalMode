@@ -12,7 +12,7 @@
 export { createAgent, runAgent } from './agent.js';
 
 // Tool registry
-export { createToolRegistry } from './tools.js';
+export { createToolRegistry, defineTool } from './tools.js';
 
 // Agent memory
 export { createAgentMemory } from './memory.js';
@@ -23,6 +23,9 @@ export type {
   ToolDefinition,
   ToolRegistry,
   ToolExecutionContext,
+  // Approval types
+  ToolApprovalRequest,
+  ToolApprovalDecision,
   // Agent types
   Agent,
   AgentConfig,

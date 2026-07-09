@@ -1,0 +1,66 @@
+---
+title: "Option List"
+description: "An inline multi-choice selection list (5–7 options then paginate) for human-in-the-loop agent inquiries — distinct from quick-reply suggestion chips."
+icon: ListChecks
+---
+
+# Option List
+
+The **Option List** is an inline multi-choice selection list presented in a chat / agent turn for the user to pick from — distinct from quick-reply suggestion chips. It shows up to `pageSize` (5–7) options at a time and paginates longer lists. The chosen option is meant to feed back into your agent inquiry loop — for example a local human-in-the-loop disambiguation step (optionally [`useAgent`](https://localmode.dev/docs/react)).
+
+It is presentational; the agent loop is owned by the consumer.
+
+**When to use it:** when a local agent needs the user to disambiguate among several candidates ("Which file did you mean?") before continuing.
+
+## Preview
+
+<ComponentPreview name="ui/input-controls/option-list" note="Pure UI — 8 options paginate past the 6-per-page limit; select one. No model download." />
+
+<OpenInV0 name="ui/input-controls/option-list" />
+
+## Installation
+
+<InstallTabs name="ui/input-controls/option-list" />
+
+### Dependencies
+
+- **Data source:** renders the `options` you pass and emits the `onSelect` callback — works with any backend or agent loop. Recommended LocalMode producer: `useAgent` inquiry/human-in-the-loop (optional).
+- `lucide-react` — the pagination icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically)
+
+### Files installed
+
+- `option-list.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/input-controls/option-list/option-list.tsx" name="OptionListProps" />
+
+## Examples
+
+### Feed a `useAgent` inquiry
+
+```tsx
+import { OptionList } from '@/components/option-list';
+
+export function Disambiguator({ candidates, onPick }) {
+  return (
+    <OptionList
+      prompt="Which file did you mean?"
+      options={candidates}
+      onSelect={(opt) => onPick(opt.id)} // resume the agent loop with the choice
+    />
+  );
+}
+```
+
+### Custom page size
+
+```tsx
+<OptionList options={options} onSelect={onSelect} pageSize={5} />
+```
+
+## Customization
+
+Lists longer than `pageSize` paginate automatically with Prev / Next controls. Each option can carry a `description` for a secondary line. Pass `selectedId` to render the chosen option as active. Everything is theme-driven via shadcn/ui CSS variables — edit the copied file to change the row layout or add keyboard navigation.

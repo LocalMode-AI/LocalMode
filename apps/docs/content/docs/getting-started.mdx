@@ -58,26 +58,7 @@ pnpm install @localmode/pdfjs           # PDF text extraction
 
 ### Configure bundler (if needed)
 
-For **Next.js**, add to `next.config.js`:
-
-```javascript title="next.config.js"
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  webpack: (config) => {
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      sharp$: false,
-      'onnxruntime-node$': false,
-    };
-    return config;
-  },
-  experimental: {
-    serverComponentsExternalPackages: ['sharp', 'onnxruntime-node'],
-  },
-};
-
-module.exports = nextConfig;
-```
+For **Next.js**, follow the [Next.js Integration guide](/docs/nextjs) — client-only provider loading (`ssr: false`), the assembled `next.config.mjs` (bundler aliases, COOP/COEP, CSP), and service-worker rules, all in one place.
 
 For **Vite**, models work out of the box. For workers, you may need:
 
@@ -113,8 +94,8 @@ console.log('Tokens used:', usage.tokens);
 ```
 
 <Callout type="info" title="First Load">
-  The first time you use a model, it downloads from HuggingFace Hub and caches in IndexedDB.
-  Subsequent loads are instant.
+  The first time you use a model, it downloads from HuggingFace Hub and caches in the browser
+  Cache API (the `transformers-cache`). Subsequent loads are instant.
 </Callout>
 
 ## Build a Semantic Search App
@@ -156,8 +137,8 @@ await db.addMany(
   }))
 );
 
-// 5. Search
-const results = await semanticSearch({
+// 5. Search — semanticSearch returns { results, usage }
+const { results } = await semanticSearch({
   db,
   model,
   query: 'How do neural networks work?',
@@ -166,7 +147,7 @@ const results = await semanticSearch({
 
 console.log('Results:');
 results.forEach((r, i) => {
-  console.log(`${i + 1}. ${r.metadata.text} (score: ${r.score.toFixed(3)})`);
+  console.log(`${i + 1}. ${r.text ?? ''} (score: ${r.score.toFixed(3)})`);
 });
 ```
 
@@ -214,14 +195,14 @@ await ingest({
   model: embeddingModel,
   documents: chunks.map((c) => ({
     text: c.text,
-    metadata: { start: c.startIndex, end: c.endIndex },
+    metadata: { start: c.start, end: c.end },
   })),
 });
 
 // Search and rerank for better accuracy
 const query = 'What are the applications of machine learning?';
 
-const searchResults = await semanticSearch({
+const { results: searchResults } = await semanticSearch({
   db,
   model: embeddingModel,
   query,
@@ -231,7 +212,7 @@ const searchResults = await semanticSearch({
 const { results: reranked } = await rerank({
   model: rerankerModel,
   query,
-  documents: searchResults.map((r) => r.metadata.text as string),
+  documents: searchResults.map((r) => r.text ?? ''),
   topK: 3,
 });
 
@@ -265,6 +246,11 @@ for await (const chunk of result.stream) {
   process.stdout.write(chunk.text);
 }
 ```
+
+<Callout type="info" title="More generation options">
+  - **Zero-download text generation** — [`@localmode/chrome-ai`](/docs/chrome-ai) runs Chrome's built-in Gemini Nano through the same `LanguageModel` interface, with no model download at all.
+  - **Vision in chat** — send images alongside text with [wllama](/docs/wllama) GGUF vision models (via `mmprojUrl`), [WebLLM](/docs/webllm)'s Phi-3.5-vision, or [Transformers.js](/docs/transformers) VLMs like Qwen3.5 and Gemma 4.
+</Callout>
 
 Combine with RAG results for grounded answers:
 
@@ -325,7 +311,7 @@ import { useChat } from '@localmode/react';
 import { webllm } from '@localmode/webllm';
 
 function ChatApp() {
-  const { messages, sendMessage, isStreaming, cancel } = useChat({
+  const { messages, send, isStreaming, cancel } = useChat({
     model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
   });
 
@@ -336,7 +322,7 @@ function ChatApp() {
           <strong>{msg.role}:</strong> {msg.content}
         </div>
       ))}
-      <button onClick={() => sendMessage('Hello!')}>Send</button>
+      <button onClick={() => send('Hello!')}>Send</button>
       {isStreaming && <button onClick={cancel}>Stop</button>}
     </div>
   );
@@ -349,13 +335,13 @@ import { transformers } from '@localmode/transformers';
 
 function SearchApp() {
   const model = transformers.embedding('Xenova/bge-small-en-v1.5');
-  const { data, isLoading, execute } = useSemanticSearch({ model, db });
+  const { results, isSearching, search } = useSemanticSearch({ model, db, topK: 5 });
 
   return (
     <div>
-      <input onChange={(e) => execute({ query: e.target.value, k: 5 })} />
-      {isLoading && <p>Searching...</p>}
-      {data?.map((r) => <p key={r.id}>{r.metadata.text}</p>)}
+      <input onChange={(e) => search(e.target.value)} />
+      {isSearching && <p>Searching...</p>}
+      {results.map((r) => <p key={r.id}>{r.content}</p>)}
     </div>
   );
 }
@@ -419,7 +405,7 @@ Beyond embeddings, RAG, and LLM chat, LocalMode provides a full suite of local A
 | **Vision** | `captionImage()`, `detectObjects()`, `segmentImage()` | Image captioning, object detection, background removal |
 | **Landmarks & Gestures** | `detectHands()`, `detectPose()`, `detectFaceLandmarks()`, `recognizeGesture()` | Hand, pose, face tracking, gesture recognition (MediaPipe) |
 | **Language Detection** | `detectLanguage()` | Identify language from text (110 languages, MediaPipe) |
-| **Multimodal Search** | `embedImage()`, `embedManyImages()` | Cross-modal text-to-image search with CLIP |
+| **Multimodal Search** | `embedImage()`, `embedManyImages()`, `streamEmbedManyImages()` | Cross-modal text-to-image search with CLIP |
 | **Audio** | `transcribe()`, `synthesizeSpeech()` | Voice notes, meeting transcription, audiobook creation |
 | **Translation** | `translate()` | Multi-language translation (20+ languages) |
 | **Summarization** | `summarize()` | Text and document summarization |
@@ -447,7 +433,7 @@ All of these work offline after the initial model download, with no server or AP
   <Card
     title="React Hooks"
     href="/docs/react"
-    description="56 hooks for chat, embeddings, classification, vision, audio, and more."
+    description="61 hooks for chat, embeddings, classification, vision, audio, and more."
   />
   <Card
     title="Transformers Provider"

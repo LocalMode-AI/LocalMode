@@ -6,7 +6,14 @@
 import { useState, useEffect, useRef } from 'react';
 import type { SemanticCache, SemanticCacheConfig, CacheStats } from '@localmode/core';
 
-/** Options for the useSemanticCache hook */
+/**
+ * Options for the useSemanticCache hook.
+ *
+ * ⚠️ Options are captured ONCE on mount. Changing any option after mount
+ * (threshold, maxEntries, ttlMs, embeddingModel, ...) has NO effect — the
+ * cache is NOT re-created. Remount the component (e.g. with a React `key`)
+ * to apply new options.
+ */
 export interface UseSemanticCacheOptions extends SemanticCacheConfig {}
 
 /** Return type for the useSemanticCache hook */
@@ -14,7 +21,11 @@ export interface UseSemanticCacheReturn {
   /** The cache instance (null until initialized) */
   cache: SemanticCache | null;
 
-  /** Current cache statistics */
+  /**
+   * Cache statistics snapshot. NOT live — taken at initialization and after
+   * `clear()`; call `refreshStats()` after `cache.store()` / `cache.lookup()`
+   * to update it.
+   */
   stats: CacheStats;
 
   /** Whether the cache is being initialized */
@@ -25,6 +36,13 @@ export interface UseSemanticCacheReturn {
 
   /** Refresh stats from the cache */
   refreshStats: () => void;
+
+  /**
+   * Clear cached entries (optionally for a single modelId) and automatically
+   * refresh `stats`. Resolves to `{ entriesRemoved: 0 }` if the cache is not
+   * initialized yet.
+   */
+  clear: (filter?: { modelId?: string }) => Promise<{ entriesRemoved: number }>;
 }
 
 /** Empty stats used before initialization */
@@ -41,10 +59,20 @@ const EMPTY_STATS: CacheStats = {
  * Hook for managing a SemanticCache lifecycle.
  *
  * Creates a `SemanticCache` on mount and destroys it on unmount.
- * Provides the cache instance and live stats.
+ * Provides the cache instance, a stats snapshot, and a `clear()` helper
+ * that auto-refreshes stats.
  *
- * @param options - SemanticCacheConfig passed to createSemanticCache()
- * @returns Cache instance, stats, loading state, and error
+ * ⚠️ **Options are captured once, on mount.** Changing any option after
+ * mount is silently ignored — the cache is NOT re-created and the new values
+ * never reach it. To apply different options, remount the component (e.g.
+ * by changing its React `key`).
+ *
+ * Stats are a snapshot, not a live subscription: call `refreshStats()` after
+ * `cache.store()` / `cache.lookup()` calls; the hook's own `clear()` refreshes
+ * stats automatically.
+ *
+ * @param options - SemanticCacheConfig passed to createSemanticCache() (read once on mount)
+ * @returns Cache instance, stats, loading state, error, refreshStats, and clear
  *
  * @example
  * ```tsx
@@ -127,5 +155,15 @@ export function useSemanticCache(options: UseSemanticCacheOptions): UseSemanticC
     }
   };
 
-  return { cache, stats, isLoading, error, refreshStats };
+  const clear = async (filter?: { modelId?: string }) => {
+    if (!cacheRef.current) {
+      // Cache not initialized (or already destroyed) — nothing to remove
+      return { entriesRemoved: 0 };
+    }
+    const result = await cacheRef.current.clear(filter);
+    refreshStats();
+    return result;
+  };
+
+  return { cache, stats, isLoading, error, refreshStats, clear };
 }

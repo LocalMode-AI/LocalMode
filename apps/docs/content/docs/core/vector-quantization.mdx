@@ -19,6 +19,10 @@ Vector quantization compresses stored vectors to reduce IndexedDB storage requir
 **Phase 1 (current):** Quantization applies to storage only. The in-memory HNSW index continues to use Float32Array for maximum search accuracy. This gives you storage savings without sacrificing search quality.
 </Callout>
 
+<Callout type="warn" title="External storage adapters must persist the calibration">
+The SQ8/PQ calibration (`calibration`, `pqCodebook`) lives on the `Collection` object. A storage adapter that drops those fields decodes quantized vectors as raw bytes after a reopen. The official adapters (`@localmode/dexie`, `@localmode/idb`, `@localmode/localforage`) now round-trip the full `Collection`, so calibration survives across sessions — but databases quantized with an **earlier** adapter version never stored it and must be cleared and re-ingested. See the [full-`Collection` persistence rule](/docs/core/storage#verify-with-the-conformance-suite) and your adapter's recovery note ([Dexie](/docs/dexie), [idb](/docs/idb), [localForage](/docs/localforage)).
+</Callout>
+
 ## Quick Start
 
 <Tabs items={['Scalar (SQ8)', 'Product (PQ)']}>
@@ -269,6 +273,7 @@ import {
   pqQuantize,
   pqDequantize,
   kMeansCluster,
+  createSeededRandom,
 } from '@localmode/core';
 
 // Train a PQ codebook from training vectors
@@ -289,6 +294,9 @@ const decoded: Float32Array = pqDequantize(encoded, codebook);
 const { centroids, assignments, iterations } = kMeansCluster(data, 8, {
   maxIterations: 20,
   threshold: 1e-6,
+  // Optional: inject a seeded random source for deterministic clustering
+  // (k-means random init can converge to different local optima run-to-run)
+  random: createSeededRandom(42),
 });
 ```
 

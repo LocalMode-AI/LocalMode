@@ -1,6 +1,6 @@
 ---
 title: 'Classification'
-description: Hooks for text classification, zero-shot classification, and NER.
+description: Hooks for text classification, zero-shot classification, NER, and reranking.
 icon: Tags
 ---
 
@@ -9,7 +9,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 # Classification Hooks
 
 <Callout type="info" title="See it in action">
-  Try [Sentiment Analyzer](https://localmode.ai/sentiment-analyzer) and [Email Classifier](https://localmode.ai/email-classifier) for working demos of these hooks.
+  Try the [Text Insights blocks](https://localmode.ai/blocks/text-insights) for working demos of these hooks — the [Sentiment Analyzer](https://localmode.ai/blocks/text-insights/sentiment-analyzer) drives `useClassify` and the [Text Classifier](https://localmode.ai/blocks/text-insights/text-classifier) drives `useClassifyZeroShot`, both over on-device models.
 </Callout>
 
 ## useClassify
@@ -35,15 +35,36 @@ function Demo() {
 
 ## useClassifyZeroShot
 
-Classify text with custom labels — no model fine-tuning required.
+Classify text with custom labels — no model fine-tuning required. Hook-level `multiLabel` and `hypothesisTemplate` apply to every call and can be overridden per call via the execute input.
 
 ```tsx
 import { useClassifyZeroShot } from '@localmode/react';
 
-const { data, execute } = useClassifyZeroShot({ model });
+const { data, execute } = useClassifyZeroShot({
+  model,
+  multiLabel: true,                            // allow multiple labels per text
+  hypothesisTemplate: 'This text is about {}.', // custom NLI hypothesis
+});
+
 await execute({ text: 'The server is down', candidateLabels: ['bug', 'feature', 'question'] });
 // data.labels = [{ label: 'bug', score: 0.89 }, ...]
+
+// Per-call overrides win over hook-level options:
+await execute({
+  text: 'New phone camera review',
+  candidateLabels: ['tech', 'food'],
+  multiLabel: false,
+  hypothesisTemplate: 'This review covers {}.',
+});
 ```
+
+### Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `model` | `ZeroShotClassificationModel` | The zero-shot classification model (required) |
+| `multiLabel` | `boolean` | Allow multiple labels per text (default: provider default, usually false) |
+| `hypothesisTemplate` | `string` | Hypothesis template, e.g. `"This text is about {}."` — delivered at the model boundary |
 
 ## useExtractEntities
 
@@ -57,13 +78,54 @@ await execute('John works at Google in Seattle');
 // data.entities = [{ entity: 'PER', word: 'John' }, { entity: 'ORG', word: 'Google' }, ...]
 ```
 
+## useRerank
+
+Rerank documents by relevance to a query with a cross-encoder model. Hook-level `topK` applies to every call and can be overridden per call via the execute input; when neither is set, all documents are returned ranked.
+
+```tsx
+import { useRerank } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+const model = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
+
+function Demo() {
+  const { data, isLoading, execute } = useRerank({ model, topK: 3 });
+  return (
+    <div>
+      <button onClick={() => execute({ query: 'What is machine learning?', documents })}>
+        Rerank
+      </button>
+      {data?.results.map((r) => (
+        <p key={r.index}>{r.score.toFixed(2)} — {r.text}</p>
+      ))}
+    </div>
+  );
+}
+
+// Per-call override wins over the hook-level topK:
+await execute({ query: 'What is machine learning?', documents, topK: 5 });
+```
+
+`data` is the core `RerankResult` — `results` sorted by relevance score (highest first), plus `usage` and `response`.
+
+### Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `model` | `RerankerModel` | The reranker model to use (required) |
+| `topK` | `number` | Number of top results to return (default: all); a per-call `topK` on the execute input overrides this |
+
+<Callout type="info">
+For full API reference (`rerank()`, options, result types, and custom providers), see the [Core Reranking](/docs/core/reranking) guide. For recommended reranker models and RAG recipes, see the [Transformers Reranking](/docs/transformers/reranking) guide.
+</Callout>
+
 <Callout type="tip">
 For full API reference, see the [Core Classification](/docs/core) guide.
 </Callout>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Sentiment Analyzer | Batch sentiment analysis with useSequentialBatch | [Demo](https://localmode.ai/sentiment-analyzer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/sentiment-analyzer) |
-| Email Classifier | Zero-shot classification with useOperationList | [Demo](https://localmode.ai/email-classifier) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/email-classifier) |
+| Text Insights (Sentiment Analyzer) | Batch sentiment analysis with useSequentialBatch | [Live block](https://localmode.ai/blocks/text-insights/sentiment-analyzer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/text-insights/sentiment-analyzer) |
+| Text Insights (Email Classifier) | Zero-shot classification with useOperationList | [Live block](https://localmode.ai/blocks/text-insights/text-classifier) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/text-insights/text-classifier) |

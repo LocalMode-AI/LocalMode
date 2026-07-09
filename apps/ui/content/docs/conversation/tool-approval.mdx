@@ -1,0 +1,55 @@
+---
+title: "Tool Approval"
+description: "A human-in-the-loop gate that confirms a tool call before execution, then re-renders read-only as a decision receipt."
+icon: ShieldCheck
+---
+
+# Tool Approval
+
+The **ToolApproval** primitive is a human-in-the-loop confirmation card that gates a tool call before it executes. It shows the pending tool + args with approve/reject buttons, then re-renders read-only as an immutable "receipt" of the decision. It pairs with the `Tool` primitive and feeds the choice back into the agent loop via callbacks. Data source: `useAgent` (ReAct tool calls).
+
+## Preview
+
+<ComponentPreview name="ui/conversation/tool-approval" />
+
+<OpenInV0 name="ui/conversation/tool-approval" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/tool-approval" />
+
+### Data source & dependencies
+
+**Data source:** renders the pending call and emits the approve/reject decision — works with any backend. Recommended producer: resume the `useAgent` loop on the decision (optionally logging to the audit log) via `@localmode/react` (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `tool-approval.tsx` — `ToolApproval`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/tool-approval/tool-approval.tsx" name="ToolApprovalProps" />
+
+## Examples
+
+### Gate a sensitive tool
+
+```tsx
+import { ToolApproval } from '@/components/tool-approval';
+
+<ToolApproval
+  toolName="send_email"
+  args={pendingCall.args}
+  decision={decision}
+  onApprove={() => resume('approved')}
+  onReject={() => resume('rejected')}
+/>
+```
+
+## Customization
+
+Pass a controlled `decision` to render the receipt from persisted state; leave it unset to let the card manage its own approve/reject state. Pair it with the audit-log primitives to record an immutable approval trail.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useAgent`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

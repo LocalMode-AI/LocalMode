@@ -37,7 +37,11 @@ export interface BatchItemResult<TResult> {
 
 /** Return type from useBatchOperation */
 export interface UseBatchOperationReturn<TItem, TResult> {
-  /** All item results from the last batch execution */
+  /**
+   * Item results from the current/last batch execution. Published
+   * progressively as items complete (ordered by original item index;
+   * each entry carries its `index`), then finalized when the batch ends.
+   */
   results: BatchItemResult<TResult>[];
   /** Whether the batch is currently running */
   isRunning: boolean;
@@ -135,6 +139,12 @@ export function useBatchOperation<TItem, TResult>(
         completed++;
         if (mountedRef.current) {
           setProgress({ completed, total, succeeded, failed });
+          // Publish progressively — dense snapshot of the items completed so
+          // far, ordered by index (itemResults is sparse until the batch ends;
+          // filter skips the holes). Each entry carries its original `index`.
+          setResults(
+            itemResults.filter((r): r is BatchItemResult<TResult> => r !== undefined)
+          );
         }
       };
 

@@ -1,0 +1,94 @@
+---
+title: "Indexed Document Card"
+description: "A card for a single locally-indexed document — truncated filename with tooltip, page and chunk counts, file size, and a hover-reveal delete with loading state."
+icon: FileText
+---
+
+# Indexed Document Card
+
+The **Indexed Document Card** is a consistent visual unit for a single document indexed into a VectorDB. It shows a truncated filename (full name in a native tooltip), the chunk count, an optional page count and file size, and a delete control that reveals on hover/focus and shows a spinner while the removal is in flight.
+
+It is presentational: the page/chunk counts come from your app's ingest state — for example the length of [`useSemanticChunk()`](https://localmode.dev/docs/react) output plus a PDF page count — not a single hook, so the prop contract is explicit and any RAG / knowledge-base app fits.
+
+**When to use it:** render the list of indexed files in a RAG sidebar or knowledge-base manager, with per-document delete. Pairs with RAG ingest (the `MultiStepPipelineTracker` from the conversation family).
+
+## Preview
+
+<ComponentPreview name="ui/data-documents/indexed-document-card" note="Hover a card to reveal delete; deleting shows a loading state. Presentational — no model download." />
+
+<OpenInV0 name="ui/data-documents/indexed-document-card" />
+
+## Installation
+
+<InstallTabs name="ui/data-documents/indexed-document-card" />
+
+### Dependencies
+
+- **Data source:** renders the plain filename, counts, and size props you pass — works with any backend; recommended LocalMode producer: `useSemanticChunk` output length for the chunk count (optional).
+- `lucide-react` — the document / delete / spinner icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `indexed-document-card.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/data-documents/indexed-document-card/indexed-document-card.tsx" name="IndexedDocumentCardProps" />
+
+## Examples
+
+### Render an indexed document
+
+```tsx
+import { IndexedDocumentCard } from '@/components/indexed-document-card';
+
+<IndexedDocumentCard
+  filename="annual-report-2024.pdf"
+  pageCount={42}
+  chunkCount={128}
+  sizeBytes={2_400_000}
+  onDelete={() => removeFromVectorDB(doc.id)}
+/>;
+```
+
+### Wire delete to your VectorDB
+
+```tsx
+const [removingId, setRemovingId] = useState<string | null>(null);
+
+{docs.map((doc) => (
+  <IndexedDocumentCard
+    key={doc.id}
+    filename={doc.filename}
+    chunkCount={doc.chunks}
+    pageCount={doc.pages}
+    sizeBytes={doc.size}
+    deleting={removingId === doc.id}
+    onDelete={async () => {
+      setRemovingId(doc.id);
+      await db.delete(doc.id);
+      setRemovingId(null);
+    }}
+  />
+))}
+```
+
+### From `useSemanticChunk` output
+
+```tsx
+const { data: chunks } = useSemanticChunk({ model });
+
+<IndexedDocumentCard
+  filename={file.name}
+  chunkCount={chunks?.length ?? 0}
+  sizeBytes={file.size}
+/>;
+```
+
+## Customization
+
+The card is styled with shadcn/ui CSS-variable utilities (`border-border`, `bg-card`, `bg-muted`, `text-muted-foreground`, `hover:bg-destructive/10`), so it inherits your theme. The delete control hides until the card is hovered or the button is focused (and stays visible while `deleting`) via the `group/doc` hover scope — adjust that in the copied file if you want the control always visible.
+
+The truncated filename uses a native `title` tooltip to keep the component dependency-free. Because you own the file, you can extend `IndexedDocumentCardProps` with extra metadata (e.g. indexed-at time, source type) and render it in the stats line.

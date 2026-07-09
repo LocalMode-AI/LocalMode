@@ -1,0 +1,73 @@
+---
+title: "Error Alert"
+description: "A compact, dismissible error surface with an optional retry action — the deduped shared alert for operation feedback near a result."
+icon: TriangleAlert
+---
+
+# Error Alert
+
+The **Error Alert** is a compact, dismissible error surface with an optional
+retry action. It renders a `role="alert"` region with the message, a **Retry**
+button (shown only when you pass `onRetry`), and a dismiss control. It is the
+single, deduplicated alert used across blocks for operation feedback.
+
+> **Presentational.** The alert owns no operation state — you decide what retry
+> and dismiss do. Wire it to any hook that surfaces an error string (e.g.
+> `useGenerateText`, `useClassify`, `useTranslate` — a recommendation, never a
+> requirement).
+
+**When to use it:** any place a local operation can fail and the user should be
+able to retry or dismiss the message inline, near the affected result.
+
+## Preview
+
+<ComponentPreview name="ui/results/error-alert" note="Pure UI — dismiss hides the alert; Retry fires the callback. No model download." />
+
+<OpenInV0 name="ui/results/error-alert" />
+
+## Installation
+
+<InstallTabs name="ui/results/error-alert" />
+
+### Dependencies
+
+- **Data source:** renders the `message` you pass and emits `onRetry` / `onDismiss` — works with any backend. Recommended LocalMode source: any hook's `error` string (optional).
+- `lucide-react` — the alert / retry / dismiss icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `error-alert.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/results/error-alert/error-alert.tsx" name="ErrorAlertProps" />
+
+## Examples
+
+### Retryable operation feedback
+
+```tsx
+import { ErrorAlert } from '@/components/error-alert';
+
+export function Result({ error, run, clear }) {
+  if (!error) return null;
+  return <ErrorAlert message={error} onRetry={run} onDismiss={clear} />;
+}
+```
+
+### Dismiss-only (no retry)
+
+Omit `onRetry` and the Retry button is not rendered:
+
+```tsx
+<ErrorAlert message={error} onDismiss={() => setError(null)} />
+```
+
+## Customization
+
+The alert uses `destructive` token utilities so it inherits your theme's error
+color. Because you own the copied file, the layout, icon, and button styling are
+all yours to change — swap the icons, add an error-code line, or wrap the message
+in a `<pre>` for stack traces.

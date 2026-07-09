@@ -34,6 +34,9 @@ export { parseGGUFMetadata, mapQuantizationType } from './gguf.js';
 // Browser compatibility checker
 export { checkGGUFBrowserCompat, checkGGUFBrowserCompatFromURL } from './compat.js';
 
+// GGUF model discovery (HuggingFace search + file listing)
+export { searchGGUFModels, listGGUFFiles, HFApiError } from './discovery.js';
+
 // Types
 export type {
   WllamaProvider,
@@ -55,3 +58,11 @@ export type { GGUFMetadata } from './gguf.js';
 
 // Compat types
 export type { GGUFBrowserCompat } from './compat.js';
+
+// GGUF model discovery types
+export type {
+  HFSort,
+  HFModelSearchResult,
+  HFModelFile,
+  HFApiErrorKind,
+} from './discovery.js';

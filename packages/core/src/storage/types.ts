@@ -68,14 +68,23 @@ export interface StorageAdapter {
   /** Add or update a vector. */
   addVector(vec: StoredVector): Promise<void>;
 
-  /** Get a vector by ID. Returns `null` if not found. */
-  getVector(id: string): Promise<Float32Array | null>;
+  /**
+   * Get a vector by ID. Returns `null` if not found.
+   *
+   * Returns `Uint8Array` when the stored payload is SQ8/PQ-compressed —
+   * decompress with `decompressVectors()` / `pqDequantize()` before use as
+   * float data (VectorDB does this internally via `decompressFromStorage`).
+   */
+  getVector(id: string): Promise<Float32Array | Uint8Array | null>;
 
   /** Delete a vector by ID. */
   deleteVector(id: string): Promise<void>;
 
-  /** Get all vectors in a collection as a Map of ID → Float32Array. */
-  getAllVectors(collectionId: string): Promise<Map<string, Float32Array>>;
+  /**
+   * Get all vectors in a collection as a Map of ID → vector payload.
+   * Entries are `Uint8Array` when SQ8/PQ-compressed (see {@link getVector}).
+   */
+  getAllVectors(collectionId: string): Promise<Map<string, Float32Array | Uint8Array>>;
 
   // ============================================
   // Index Operations

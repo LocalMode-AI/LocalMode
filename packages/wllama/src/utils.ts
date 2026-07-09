@@ -7,6 +7,7 @@
  */
 
 import type { WllamaLoadProgress } from './types.js';
+import { importWllama, WLLAMA_CDN_WASM } from './wllama-loader.js';
 import { WLLAMA_MODELS, type WllamaModelId } from './models.js';
 
 /** Base URL for HuggingFace model file resolution */
@@ -161,13 +162,12 @@ export async function preloadModel(
     modelUrl?: string;
   }
 ): Promise<void> {
-  const dynamicImport = new Function('u', 'return import(u)') as (url: string) => Promise<{ Wllama: new (config: { default: string }) => { loadModelFromUrl: (url: string, opts: Record<string, unknown>) => Promise<void>; exit: () => Promise<void> } }>;
-  const { Wllama } = await dynamicImport('https://cdn.jsdelivr.net/npm/@wllama/wllama@3.2.3/esm/index.js');
+  const { Wllama } = await importWllama();
 
   const url = resolveModelUrl(modelId, options?.modelUrl);
 
   const wllamaInstance = new Wllama({
-    default: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.2.3/src/wasm/wllama.wasm',
+    default: WLLAMA_CDN_WASM,
   });
 
   const numThreads = isCrossOriginIsolated()

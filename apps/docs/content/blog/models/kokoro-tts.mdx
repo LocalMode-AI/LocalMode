@@ -8,7 +8,7 @@ faq:
   - question: "How many voices does Kokoro TTS support?"
     answer: "Kokoro offers 29 English voices (American and British English) from a single 86MB model. Each voice has distinct pitch, cadence, and style characteristics. The phonemizer npm package only ships English eSpeak-NG dictionary data, so only English voices are available."
   - question: "How large is the Kokoro TTS model download?"
-    answer: "The default q8 quantized Kokoro model is 86MB. The full fp32 version is 326MB. At 82M parameters, it is compact enough to cache in IndexedDB for instant offline use after the first download."
+    answer: "The default q8 quantized Kokoro model is 86MB. The full fp32 version is 326MB. At 82M parameters, it is compact enough to cache in the browser's Cache API for instant offline use after the first download."
   - question: "Can I control the speech speed with Kokoro?"
     answer: "Yes. Kokoro supports speed control from 0.5x to 2.0x at synthesis time, without post-processing artifacts. This is useful for slow narration for accessibility or fast playback for productivity tools."
   - question: "Does Kokoro TTS require WebGPU?"
@@ -33,9 +33,9 @@ Kokoro 82M is a breakthrough in compact text-to-speech - at just 86MB, it genera
 
 With **29 English voices** (American & British English), Kokoro covers a range of voice styles from a single 86MB model. Each voice has distinct characteristics (pitch, cadence, style), and **speed control from 0.5x to 2.0x** lets applications generate slow narration for accessibility or fast playback for productivity tools, all at generation time rather than post-processing.
 
-For browser applications, Kokoro enables entirely private audio generation. Audiobook generation from text content, accessibility features that read page content aloud, language learning tools with pronunciation examples - all without sending user text to a server. The synthesizeSpeech() function accepts text, an optional voice ID, and speed parameter, returning a Blob containing the audio data ready to play via the Web Audio API. The **Voice Studio** showcase app demonstrates the full range of voices and speed settings with a live interactive interface.
+For browser applications, Kokoro enables entirely private audio generation. Audiobook generation from text content, accessibility features that read page content aloud, language learning tools with pronunciation examples - all without sending user text to a server. The synthesizeSpeech() function accepts text, an optional voice ID, and speed parameter, returning a Blob containing the audio data ready to play via the Web Audio API. The **[Voice Explorer](https://localmode.ai/blocks/audio/voice-explorer)** block demonstrates the full range of voices and speed settings with a live interactive interface.
 
-Kokoro runs through Transformers.js on WASM and works in all supported browsers. The 86MB download is comparable to a high-resolution image - acceptable for applications where TTS is a core feature. Since the model is cached in IndexedDB after first download, subsequent uses start instantly. Combined with Moonshine for speech-to-text, you can build complete voice-in-voice-out applications that work offline.
+Kokoro runs through Transformers.js on WASM and works in all supported browsers. The 86MB download is comparable to a high-resolution image - acceptable for applications where TTS is a core feature. Since the model is cached in the browser's Cache API after first download, subsequent uses start instantly. Combined with Moonshine for speech-to-text, you can build complete voice-in-voice-out applications that work offline.
 
 The economics of local TTS are compelling for content-heavy applications. Google Cloud TTS charges $4-16 per million characters. A blog-to-podcast tool converting 50 articles per month (averaging 5,000 characters each) would cost $1-4/month on cloud APIs - modest individually but significant at scale. With Kokoro, the cost is permanently $0. For audiobook generation from longer texts (50,000+ characters per book), the savings compound to hundreds of dollars annually. The quality - especially with the phonemizer pipeline - is competitive with standard cloud TTS voices, though not yet matching the most premium neural voices from ElevenLabs or Google's Neural2 and Studio tiers.
 
@@ -98,7 +98,7 @@ Kokoro Text-to-Speech models are a strong choice when:
 - **Speed control is required** - Generate audio at 0.5x to 2.0x speed at synthesis time, without post-processing artifacts.
 - **Browser compatibility matters** - Available through Transformers.js, ensuring coverage across Chrome, Firefox, Safari, and Edge.
 - **Size flexibility is important** - The 86MB range means you can target everything from mobile devices to high-end desktops with the same model family.
-- **You want a demo** - The **Voice Studio** showcase app provides a live interactive interface to explore all 29 voices and speed settings.
+- **You want a demo** - The **[Voice Explorer](https://localmode.ai/blocks/audio/voice-explorer)** block provides a live interactive interface to explore all 29 voices and speed settings.
 
 
 ## HuggingFace Model Cards

@@ -3,7 +3,7 @@ title: "Choosing the Right Model: Device-Aware Recommendations With recommendMod
 description: "Stop guessing which model to use. LocalMode's recommendation engine detects your user's device capabilities - GPU, memory, storage, browser features - and ranks every model in its curated registry by suitability score. Three function calls replace hours of benchmarking across devices."
 author: LocalMode
 date: 2026-01-28
-dateModified: "2026-05-29"
+dateModified: "2026-07-04"
 faq:
   - question: "How does LocalMode's recommendModels() pick the best AI model for a user's device?"
     answer: "It runs a three-step pipeline: detectCapabilities() probes the browser for hardware specs, features, and storage; recommendModels() scores every model in a 35+ entry registry using device fit (50% weight), quality tier (30%), and speed tier (20%); then computeOptimalBatchSize() calculates throughput. The entire flow is three synchronous-after-detection function calls."
@@ -17,7 +17,7 @@ faq:
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-You have 35+ curated models across four providers, 21 task categories, and a user base that spans everything from a 2019 Android phone with 3 GB of RAM to a MacBook Pro with 96 GB and an M3 Max. The embedding model that flies on the MacBook will crash the phone's browser tab. The tiny model that loads instantly on mobile wastes the desktop's GPU.
+You have 47 curated models across four providers, 21 task categories, and a user base that spans everything from a 2019 Android phone with 3 GB of RAM to a MacBook Pro with 96 GB and an M3 Max. The embedding model that flies on the MacBook will crash the phone's browser tab. The tiny model that loads instantly on mobile wastes the desktop's GPU.
 
 Picking the right model is not a one-time decision. It is a per-device, per-task decision that changes with every user who opens your app.
 
@@ -426,7 +426,7 @@ function ModelPicker() {
 `useAdaptiveBatchSize` is synchronous - no loading or error states. It re-computes when options change.
 
 <Callout type="info" title="See It Live">
-  The [Model Advisor](https://localmode.ai/model-advisor) showcase app implements this exact pattern. Select any of the 21 task categories from the dropdown, and it shows ranked recommendations for your device, complete with scores, reasons, and batch size computation. You can also register custom models through the UI and see them appear in the rankings.
+  The [Device & Model Lab block](https://localmode.ai/blocks/device/model-advisor) implements this exact pattern. Select any of the 21 task categories from the dropdown, and it shows ranked recommendations for your device, complete with scores, reasons, and batch size computation. You can also register custom models through the UI and see them appear in the rankings.
 </Callout>
 
 ---

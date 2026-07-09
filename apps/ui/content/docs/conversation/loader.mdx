@@ -1,0 +1,57 @@
+---
+title: "Loader"
+description: "Busy indicators (dots / pulse / typing / spinner) plus a Shimmer skeleton-text variant for pending assistant content."
+icon: LoaderCircle
+---
+
+# Loader
+
+The **Loader** is a small family of busy visuals shown while a local model warms up or streams its first token. Pick a `variant` (dots / pulse / typing / spinner), or use `Shimmer` to render skeleton-text lines for content that is expected but not yet arrived.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/loader" />
+
+<OpenInV0 name="ui/conversation/loader" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/loader" />
+
+### Dependencies
+
+- _None_ — pure presentational component
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `loader.tsx` — `Loader` + `Shimmer`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/loader/loader.tsx" name="LoaderProps" />
+
+## Examples
+
+### Typing indicator while pending
+
+```tsx
+import { Loader } from '@/components/loader';
+
+{isStreaming && lastMessage.content === '' && <Loader variant="typing" label="Thinking…" />}
+```
+
+### Shimmer skeleton
+
+```tsx
+import { Shimmer } from '@/components/loader';
+
+<Shimmer lines={4} />
+```
+
+## Customization
+
+The dot animation uses an inline `@keyframes` block so the component is self-contained. Swap the `bg-current`/`bg-muted` tokens or the variant set to match your design system.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

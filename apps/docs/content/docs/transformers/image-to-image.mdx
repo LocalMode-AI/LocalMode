@@ -14,7 +14,8 @@ Enhance images using super resolution models. Upscale low-resolution images to h
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [Photo Enhancer](https://localmode.ai/photo-enhancer) for a working demo.
+  Run it in the [Image Enhancer block](https://localmode.ai/blocks/image-studio/image-enhancer) — an
+  installable, registry-composed version with 2x, 4x, and real-world Restore modes.
 </Callout>
 
 ## Recommended Models
@@ -26,7 +27,7 @@ Enhance images using super resolution models. Upscale low-resolution images to h
 
 ## Photo Enhancer Example
 
-Based on the [Photo Enhancer](https://localmode.ai/photo-enhancer) showcase app:
+Based on the [Image Enhancer block](https://localmode.ai/blocks/image-studio/image-enhancer):
 
 ```typescript
 import { transformers } from '@localmode/transformers';
@@ -64,11 +65,11 @@ async function enhancePhoto(imageDataUrl: string) {
   For best results, keep input images under 1024x1024 pixels.
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| Photo Enhancer | Upscale and enhance photos | [Demo](https://localmode.ai/photo-enhancer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/photo-enhancer) |
+| Image Enhancer | Swin2SR super-resolution with 2x, 4x, and real-world Restore modes | [Live](https://localmode.ai/blocks/image-studio/image-enhancer) · Install: `npx shadcn add @localmode/ui/blocks/image-studio/image-enhancer` |
 
 ## Next Steps
 

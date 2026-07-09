@@ -1,0 +1,10 @@
+{
+  "title": "Security & Privacy",
+  "pages": [
+    "password-strength-bar",
+    "differential-privacy-controls",
+    "passphrase-gate",
+    "vault-item-card",
+    "lock-status-badge"
+  ]
+}

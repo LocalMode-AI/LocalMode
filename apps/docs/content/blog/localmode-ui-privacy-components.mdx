@@ -1,0 +1,167 @@
+---
+title: "Privacy UI You Can Trust: Password Strength and Differential-Privacy Controls That Never Lie"
+description: "Two copy-owned shadcn components for the privacy surfaces of a local-first app — a PasswordStrengthBar driven by a caller-computed score, and DifferentialPrivacyControls with an honest 'DP Applied' provenance badge. Install from @localmode/ui with the shadcn CLI, own the code, and wire them to @localmode/core's Web Crypto and DP middleware. No server, no fake reassurance."
+author: LocalMode
+date: 2026-05-31
+dateModified: "2026-05-31"
+faq:
+  - question: "What are the @localmode/ui security & privacy components?"
+    answer: "Two copy-owned React components for the privacy surfaces of a local-first app: PasswordStrengthBar (a strength meter driven by a 0–100 score the app computes) and DifferentialPrivacyControls (a collapsible DP settings panel plus a 'DP Applied' provenance badge). You install them with the shadcn CLI and pair them with @localmode/core's Web Crypto key derivation and differential-privacy middleware — there is no ML model involved."
+  - question: "Does the PasswordStrengthBar estimate password strength for me?"
+    answer: "No, and that is deliberate. PasswordStrengthBar is presentational only — it has no estimator and no @localmode/react hook behind it. Your app computes the strength (0–100), the label, and a semantic color token (typically from length and character-class entropy, or a zxcvbn-style estimator), then passes them in. Keeping the thresholds in your code means the meter never silently disagrees with your real password policy."
+  - question: "When should I show the 'DP Applied' provenance badge?"
+    answer: "Only when differential privacy was actually applied to that output, and only with the real epsilon used and the embedding model's real dimensionality. The DpAppliedBadge fields must match the values emitted by the DP middleware run (DPEmbeddingConfig.epsilon and the model's dimensions) — never placeholder values. When DP is disabled you must not render the badge, because showing provenance for protection that did not happen would mislead the user."
+  - question: "How does differential privacy work in the browser with LocalMode?"
+    answer: "LocalMode's @localmode/core ships dpEmbeddingMiddleware and dpClassificationMiddleware that add calibrated noise to embeddings or classification results, plus a createPrivacyBudget tracker that accounts for cumulative epsilon spend. It all runs on-device — no data leaves the browser. The DifferentialPrivacyControls component renders that state (the enable toggle, the epsilon slider, the live budget bar) and reports the user's intent back through change callbacks; the DP math lives in core, not the component."
+  - question: "Do these privacy components require a server or send anything to the cloud?"
+    answer: "No. Both components are presentational and run entirely in the browser. Password key derivation uses the Web Crypto API via @localmode/core's deriveKey, and the differential-privacy noise is added by core's DP middleware on-device. Neither the password, the derived key, nor the DP-protected embeddings ever leave the user's machine."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Privacy UI has a credibility problem. A strength meter that turns green for `Password1!` teaches users to trust a number that means nothing. A "your data is encrypted" badge that renders whether or not encryption ran is worse than no badge at all — it manufactures confidence the system has not earned. For a local-first, privacy-first library, that is not a cosmetic flaw. It is a betrayal of the entire premise.
+
+The **security & privacy** family of `@localmode/ui` is two small components built on the opposite principle: they render only the state the app actually computed, and they refuse to invent reassurance. A [`PasswordStrengthBar`](https://localmode.ai/docs/security-privacy/password-strength-bar) that does no estimation of its own, and [`DifferentialPrivacyControls`](https://localmode.ai/docs/security-privacy/differential-privacy-controls) whose provenance badge is wired to the real epsilon from the real middleware run. They pair with [`@localmode/core`](https://localmode.dev/docs/core)'s Web Crypto helpers and differential-privacy middleware — both of which run entirely in the browser.
+
+<Callout type="info" title="Copy-owned, and honest by construction">
+  `@localmode/ui` is a [shadcn registry](https://localmode.ai), not a package. You install a component with the shadcn CLI, the code lands in your repo, and you own it. These two carry no `@localmode/react` ML hook — there is no model — so the app is always the source of truth.
+</Callout>
+
+Install both with one command:
+
+```bash
+npx shadcn@latest add @localmode/ui/security-privacy
+```
+
+Or one at a time:
+
+```bash
+npx shadcn@latest add @localmode/ui/security-privacy/password-strength-bar
+npx shadcn@latest add @localmode/ui/security-privacy/differential-privacy-controls
+```
+
+---
+
+## PasswordStrengthBar: the meter that doesn't pretend to know
+
+The [`PasswordStrengthBar`](https://localmode.ai/docs/security-privacy/password-strength-bar) renders a themed horizontal bar and a label that visualize how strong a password or passphrase is. The crucial design decision is what it does *not* do: it does no strength estimation, and there is no hook behind it. Your app computes the strength as a `0`–`100` value, the label string, and a semantic color token, then passes them in. The component only renders the state you give it.
+
+That sounds like a limitation. It is the feature. Strength estimation is a policy decision — how much do you weight length versus character classes, do you run a zxcvbn-style dictionary check, where do "Weak", "Good", and "Strong" fall. If the meter owned its own estimator, it could quietly disagree with the policy your backend (or your key-derivation parameters) actually enforce, and the user would trust the bar over the truth. Keeping the thresholds in your code keeps the meter and the policy in lockstep.
+
+```tsx
+import { PasswordStrengthBar, type StrengthColor } from '@/components/password-strength-bar';
+
+function estimate(password: string) {
+  const classes =
+    (/[a-z]/.test(password) ? 1 : 0) +
+    (/[A-Z]/.test(password) ? 1 : 0) +
+    (/[0-9]/.test(password) ? 1 : 0) +
+    (/[^a-zA-Z0-9]/.test(password) ? 1 : 0);
+  const lengthScore = Math.min(password.length, 16) / 16;
+  return Math.round(lengthScore * 60 + (classes / 4) * 40);
+}
+
+export function PasswordField({ password }: { password: string }) {
+  const value = estimate(password);
+  const color: StrengthColor = value < 40 ? 'error' : value < 70 ? 'warning' : 'success';
+  const label = value < 40 ? 'Weak' : value < 70 ? 'Good' : 'Strong';
+  return <PasswordStrengthBar value={value} label={label} color={color} />;
+}
+```
+
+### Pairing with on-device key derivation
+
+The meter is the front end of a key-derivation flow. In LocalMode, that flow runs through the Web Crypto API — no external crypto libraries, no server round-trip. You estimate strength as the user types, then derive an encryption key with `@localmode/core`'s `deriveKey` on submit:
+
+```tsx
+import { deriveKey } from '@localmode/core';
+import { PasswordStrengthBar } from '@/components/password-strength-bar';
+
+// 1. Surface strength as the user types
+<PasswordStrengthBar value={strength} label={label} color={color} />
+
+// 2. On submit, derive the key (Web Crypto, never leaves the device)
+const key = await deriveKey({ password, salt });
+```
+
+The derived `CryptoKey` is non-extractable — its raw bytes never enter JavaScript memory — and it powers the AES-256-GCM encryption stack described in [The LocalMode Encryption Stack](/blog/localmode-encryption-stack). The strength bar is the human-facing edge of that pipeline, and because you own the file you can refine the thresholds, add granular labels like "Very weak" or "Fair", or wire the colors to your own design tokens without ever changing how `color` maps to a fill.
+
+---
+
+## DifferentialPrivacyControls: the panel and the badge that tell the truth
+
+Differential privacy lets a local-first app perturb embeddings or classification results with calibrated noise, trading a measurable amount of accuracy for a measurable privacy guarantee. The hard parts are the math and the *accounting* — every protected query spends from a finite privacy budget, and the user deserves to see how much is left and what guarantee they are getting.
+
+The [`DifferentialPrivacyControls`](https://localmode.ai/docs/security-privacy/differential-privacy-controls) is a collapsible settings panel that surfaces exactly that: an enable toggle, an epsilon slider with a derived privacy-level label (High / Balanced / Low), and a privacy-budget bar that turns warning, then error, as the budget is consumed. Like the strength bar, it does no DP math itself. The app owns the state — wiring `dpEmbeddingMiddleware` or `dpClassificationMiddleware` and a `createPrivacyBudget` tracker from `@localmode/core` — and the component renders it and reports user intent through change callbacks.
+
+```tsx
+import { createPrivacyBudget } from '@localmode/core';
+import { DifferentialPrivacyControls } from '@/components/differential-privacy-controls';
+
+const budget = await createPrivacyBudget({ maxEpsilon: 10, persistKey: 'my-app' });
+
+export function Settings() {
+  const [enabled, setEnabled] = useState(true);
+  const [epsilon, setEpsilon] = useState(1.0);
+  const [consumed, setConsumed] = useState(budget.consumed());
+
+  return (
+    <DifferentialPrivacyControls
+      enabled={enabled}
+      onEnabledChange={setEnabled}
+      epsilon={epsilon}
+      onEpsilonChange={setEpsilon}
+      budget={{ consumed, maxEpsilon: 10 }}
+    />
+  );
+}
+```
+
+Each protected query spends epsilon from the real tracker. Reflect that back into the `budget` prop and the bar transitions ok → warning → error as the user approaches the cap:
+
+```tsx
+// after a DP-protected embedding/classification runs
+budget.consume(epsilon);
+setConsumed(budget.consumed());
+```
+
+### The "DP Applied" badge: provenance, not decoration
+
+The component also ships a compact `DpAppliedBadge` — a lock icon, the epsilon used, and the embedding dimensionality — for rendering beneath protected output. This is where the honesty principle gets concrete. The badge is provenance, not decoration, so it carries two hard rules.
+
+First, **render it only when DP was actually applied**, with the real values from the middleware run — `DPEmbeddingConfig.epsilon` and the embedding model's `dimensions`, never placeholders:
+
+```tsx
+import { DpAppliedBadge } from '@/components/differential-privacy-controls';
+
+{dpEnabled && <DpAppliedBadge epsilon={epsilon} dimensions={model.dimensions} />}
+```
+
+Second, **when DP is disabled, do not render the badge at all**. The slider and budget bar dim to signal the off state, and the absence of the badge tells the user the truth: no noise was added to this result.
+
+```tsx
+<DifferentialPrivacyControls enabled={false} /* … */ />
+{/* no DpAppliedBadge while disabled */}
+```
+
+A badge that always renders is a lie waiting to happen. A badge that renders only on a real, accounted-for DP run is a guarantee the user can actually rely on — the difference between a privacy feature and privacy theater.
+
+---
+
+## Why these are presentational on purpose
+
+Most of the `@localmode/ui` catalog pairs with a React ML hook — `useFillMask`, `useTranslate`, `useGenerateText`. These two do not, and the proposal for the family is explicit about why: they map to **core functions, not ML hooks**. Password strength is a function of your policy plus Web Crypto key derivation; differential privacy is a function of `@localmode/core`'s DP middleware plus a budget tracker. There is no model to load and no inference to run, so the components stay presentational and provider-agnostic.
+
+That keeps the trust boundary clean. The app computes the privacy-relevant facts — the strength score, the epsilon spent, whether DP ran — and the components render exactly those facts and nothing more. There is no hidden estimator to disagree with your policy and no default badge to overstate your protection.
+
+Both run entirely in the browser. The password, the derived key, and the DP-protected embeddings never leave the device — which is the only place a privacy-first claim can actually be kept.
+
+---
+
+## Where this fits
+
+These two components are the UI edge of LocalMode's broader privacy stack. For the cryptography behind the strength bar, read [The LocalMode Encryption Stack](/blog/localmode-encryption-stack). For the compliance story that on-device differential privacy supports, see [GDPR-Compliant AI with No User Data](/blog/gdpr-compliant-ai-no-user-data). And for the rest of the registry — chat surfaces, data ingestion, input controls — start at [localmode.ai](https://localmode.ai).
+
+<Callout type="info" title="Browse the components">
+  Both components have live previews and full prop tables at [localmode.ai](https://localmode.ai/docs/security-privacy/password-strength-bar). Install one with the shadcn CLI and own the copy — including where your thresholds and provenance rules live.
+</Callout>

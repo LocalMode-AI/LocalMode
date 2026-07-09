@@ -1,0 +1,69 @@
+---
+title: "Evaluation Metrics Dashboard"
+description: "A KPI stat-tile row, metric cards, a color-scaled confusion matrix, a radar sub-view, and a threshold-calibration panel — all in-component SVG, no chart library."
+icon: ChartBar
+---
+
+# Evaluation Metrics Dashboard
+
+The **Evaluation Metrics Dashboard** composes the displays that co-occur in a model-evaluation flow: a labeled KPI/stat-tile row (value + delta indicator), a responsive grid of metric cards (accuracy / precision / recall / F1), a color-coded N×N confusion matrix (diagonal success-tinted, off-diagonal error-tinted, intensity scaled to the max cell, with legend), a radar/spider sub-view, and a threshold-calibration panel. Every chart is a minimal in-component SVG implementation — no external chart library.
+
+**When to use it:** rendering the output of `useEvaluateModel` together with `useCalibrateThreshold`. Each section is optional; pass only the data you have.
+
+## Preview
+
+<ComponentPreview name="ui/results/evaluation-metrics-dashboard" note="A full evaluation run rendered from sample data — runs locally." />
+
+<OpenInV0 name="ui/results/evaluation-metrics-dashboard" />
+
+## Installation
+
+<InstallTabs name="ui/results/evaluation-metrics-dashboard" />
+
+### Dependencies
+
+- **Data source:** renders the `stats` / `metrics` / `confusionMatrix` / `calibration` props you pass (each section optional) — works with any backend. Recommended producers: `useEvaluateModel` and `useCalibrateThreshold` from `@localmode/react` (optional). See [Bring your own data](/docs/bring-your-own-data#results--insights).
+
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+
+### Files installed
+
+- `evaluation-metrics-dashboard.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/results/evaluation-metrics-dashboard/evaluation-metrics-dashboard.tsx" name="EvaluationMetricsDashboardProps" />
+
+## Examples
+
+### From an evaluation run
+
+`useEvaluateModel` returns `{ score, predictions, datasetSize, durationMs }` — one metric. Compose the rest from the `@localmode/core` evaluation helpers (`f1Score`, `confusionMatrix`, which returns `{ labels, matrix }`) over the same `predictions` and the expected labels.
+
+```tsx
+import { EvaluationMetricsDashboard } from '@/components/evaluation-metrics-dashboard';
+import { f1Score, confusionMatrix } from '@localmode/core';
+
+export function Example({ evaluation, expected, calibration }) {
+  const cm = confusionMatrix(evaluation.predictions, expected);
+  return (
+    <EvaluationMetricsDashboard
+      stats={[
+        { label: 'Dataset', value: evaluation.datasetSize },
+        { label: 'Duration', value: `${(evaluation.durationMs / 1000).toFixed(2)}s` },
+      ]}
+      metrics={[
+        { label: 'Accuracy', value: evaluation.score },
+        { label: 'F1', value: f1Score(evaluation.predictions, expected) },
+      ]}
+      confusionMatrix={{ labels: cm.labels, matrix: cm.matrix }}
+      calibration={{ threshold: calibration.threshold, percentile: calibration.percentile, distribution: calibration.distribution }}
+    />
+  );
+}
+```
+
+## Customization
+
+Cell coloring uses `color-mix` over CSS-variable tokens (`--color-emerald-500` for the diagonal, `--color-rose-500` for off-diagonal), with opacity scaled to each cell relative to the matrix max. The radar polygon fills with `color-mix(... var(--color-primary) ...)`. Everything inherits your theme; adjust the section components in the copied file to add or reorder displays.

@@ -1,6 +1,6 @@
 ---
 title: 'Audio'
-description: Hooks for speech-to-text and text-to-speech.
+description: 'Hooks for speech-to-text, text-to-speech, streaming speech, live transcription, and voice turn-taking.'
 icon: AudioLines
 ---
 
@@ -9,12 +9,12 @@ import { Callout } from 'fumadocs-ui/components/callout';
 # Audio Hooks
 
 <Callout type="info" title="See it in action">
-  Try [Voice Notes](https://localmode.ai/voice-notes) and [Meeting Assistant](https://localmode.ai/meeting-assistant) for working demos of these hooks.
+  Try the [Audio Studio block](https://localmode.ai/blocks/audio) for a working demo of these hooks.
 </Callout>
 
 ## useTranscribe
 
-Transcribe audio to text (speech-to-text).
+Transcribe audio to text (speech-to-text). `language`, `task`, and `returnTimestamps` can be set once at the hook level and overridden per call via `execute(audio, { language, task, returnTimestamps })`.
 
 ```tsx
 import { useTranscribe } from '@localmode/react';
@@ -23,7 +23,7 @@ import { transformers } from '@localmode/transformers';
 const model = transformers.speechToText('onnx-community/whisper-tiny.en');
 
 function Demo() {
-  const { data, isLoading, execute } = useTranscribe({ model });
+  const { data, isLoading, execute } = useTranscribe({ model, returnTimestamps: true });
 
   const handleFile = (file: File) => execute(file);
 
@@ -34,31 +34,188 @@ function Demo() {
       }} />
       {isLoading && <p>Transcribing...</p>}
       {data && <p>{data.text}</p>}
+      {data?.segments?.map((seg, i) => (
+        <p key={i}>[{seg.start}s] {seg.text}</p>
+      ))}
     </div>
   );
 }
 ```
 
+### Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `model` | `SpeechToTextModel` | The speech-to-text model to use (required) |
+| `language` | `string` | Language code (ISO 639-1) applied to every `execute()` call |
+| `task` | `'transcribe' \| 'translate'` | Task type applied to every `execute()` call |
+| `returnTimestamps` | `boolean \| 'word'` | Return timestamps — segments arrive on `data.segments` |
+
+Per-call overrides win over hook-level options. `language`/`task` hints require a multilingual model — English-only checkpoints like `whisper-tiny.en` reject them:
+
+```tsx
+const whisper = transformers.speechToText('Xenova/whisper-tiny'); // multilingual
+const { execute } = useTranscribe({ model: whisper });
+
+await execute(audioBlob, { language: 'fr', task: 'translate' });
+```
+
 ## useSynthesizeSpeech
 
-Generate speech audio from text (text-to-speech).
+Generate speech audio from text (text-to-speech). `voice`, `speed`, and `pitch` can be set once at the hook level and overridden per call via `execute(text, { voice, speed, pitch })`.
 
 ```tsx
 import { useSynthesizeSpeech } from '@localmode/react';
 
-const { data, isLoading, execute } = useSynthesizeSpeech({ model });
-await execute('Hello world');
+const { data, isLoading, execute } = useSynthesizeSpeech({ model, voice: 'af_heart' });
+
+await execute('Hello world');                                 // uses af_heart
+await execute('Bonjour', { voice: 'bf_emma', speed: 1.2 });   // per-call override
 // data.audio = Float32Array, data.sampleRate = 16000
 ```
 
+### Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `model` | `TextToSpeechModel` | The text-to-speech model to use (required) |
+| `voice` | `string` | Voice ID applied to every `execute()` call |
+| `speed` | `number` | Speech rate (0.5–2.0, default: 1.0) applied to every `execute()` call |
+| `pitch` | `number` | Pitch adjustment applied to every `execute()` call |
+
 <Callout type="tip">
-For model recommendations, see the [Transformers Audio](/docs/transformers) guide.
+To record microphone input for transcription, pair with [`useVoiceRecorder`](/docs/react/utilities#usevoicerecorder) (device selection via `deviceId`, live `stream`, `getVolume()` metering), and render recorded blobs with [`useObjectUrl`](/docs/react/utilities#useobjecturl).
 </Callout>
 
-## Showcase Apps
+## useStreamSpeech
+
+Streaming text-to-speech: composes `streamSynthesizeSpeech()` (clause-by-clause synthesis) with `playStreamedSpeech()` (gap-free Web Audio playback) into a single speak/pause/resume/stop primitive.
+
+```tsx
+import { useStreamSpeech } from '@localmode/react';
+
+function Speaker({ reply }: { reply: string }) {
+  const { speak, pause, resume, stop, reset, isSynthesizing, isPlaying, currentClause, clauses, error } =
+    useStreamSpeech({ model, voice: 'af_heart' });
+
+  return (
+    <div>
+      <button onClick={() => speak(reply)}>Speak</button>
+      <button onClick={isPlaying ? pause : resume}>{isPlaying ? 'Pause' : 'Resume'}</button>
+      <button onClick={stop}>Stop</button>
+      {currentClause && <p>Now playing: {currentClause.text}</p>}
+    </div>
+  );
+}
+```
+
+### Return Value
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `speak` | `(text: string) => Promise<void>` | Start synthesizing and playing; resolves when playback ends |
+| `pause` / `resume` | `() => void` | Suspend / resume the underlying AudioContext |
+| `stop` | `() => void` | Stop playback and halt upstream synthesis |
+| `reset` | `() => void` | Clear `clauses`, `currentClause`, and `error` from the previous `speak()` call. No-op while synthesis or playback is in progress — call `stop()` first |
+| `isSynthesizing` | `boolean` | True while a `speak()` operation is producing audio |
+| `isPlaying` | `boolean` | True while scheduled clauses are actively playing |
+| `currentClause` | `SynthesizedClause \| null` | The clause currently being played |
+| `clauses` | `SynthesizedClause[]` | All clauses observed so far during the active `speak()` call |
+| `error` | `Error \| null` | The last error thrown by `speak()` |
+
+<Callout type="info">
+Safari and mobile browsers require the `AudioContext` to be created or resumed inside a user-gesture handler. Pass your own `audioContext` option for full control; otherwise the hook lazily creates one on the first `speak()` call. See [Streaming Speech](/docs/core/streaming-speech) for the underlying core API.
+</Callout>
+
+## useLiveTranscribe
+
+Streaming microphone-driven speech-to-text with VAD. Wraps `createLiveTranscriber()` — lazily constructed on the first `start()` call so the `getUserMedia` permission prompt happens during a user gesture, and auto-disposed on unmount. Options mirror `LiveTranscriberOptions` (minus `abortSignal`, which the hook owns) plus an `onBargeIn` callback.
+
+```tsx
+import { useLiveTranscribe } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+function PushToTalk() {
+  const { state, currentUtterance, utterances, lastBargeIn, start, stop, clearUtterances } =
+    useLiveTranscribe({
+      model: transformers.speechToText('onnx-community/moonshine-tiny-ONNX'),
+      mode: 'push-to-talk',
+      onBargeIn: () => stopPlayback(), // user spoke over external playback
+    });
+
+  return (
+    <>
+      <button onMouseDown={start} onMouseUp={stop}>Hold to talk</button>
+      {state === 'listening' && <p>{currentUtterance}</p>}
+      <ul>{utterances.map((u) => <li key={u.utteranceId}>{u.text}</li>)}</ul>
+      <button onClick={clearUtterances}>Clear transcript</button>
+    </>
+  );
+}
+```
+
+### Return Value
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `state` | `LiveTranscriberState` | Current state of the underlying controller |
+| `isListening` | `boolean` | True when `state === 'listening'` |
+| `currentChunks` | `LiveChunk[]` | Chunks emitted for the current utterance (cleared at each utterance start) |
+| `currentUtterance` | `string` | The in-progress utterance text (last partial chunk's text) |
+| `lastUtterance` | `LiveUtterance \| null` | The most recent completed utterance |
+| `utterances` | `LiveUtterance[]` | All completed utterances accumulated this session (oldest first) |
+| `lastBargeIn` | `BargeInEvent \| null` | The most recent barge-in event (only fires when `bargeInWhilePlaying` is configured; also delivered to `onBargeIn`) |
+| `error` | `Error \| null` | Latest error |
+| `start` / `stop` | `() => Promise<void>` | Begin / stop listening (the controller stays alive and re-startable after `stop`) |
+| `dispose` | `() => Promise<void>` | Dispose the controller and release all resources |
+| `clearUtterances` | `() => void` | Clear the accumulated `utterances` list (does not touch `lastUtterance`) |
+
+## useTurnTaker
+
+Full voice-loop orchestration (listen → plan → speak) wrapping `createTurnTaker()`. Accumulates both sides of the conversation in `turns` for transcript rendering. Options mirror `TurnTakerOptions` (minus `abortSignal`) plus an `onBargeIn` callback.
+
+```tsx
+import { useTurnTaker } from '@localmode/react';
+
+function VoiceAssistant() {
+  const turn = useTurnTaker({ transcriber, planner, voice, systemPrompt: 'Be concise.' });
+
+  return (
+    <>
+      <button onClick={turn.start}>
+        {turn.isListening ? 'Listening…' : turn.isSpeaking ? 'Speaking…' : 'Start'}
+      </button>
+      <button onClick={turn.interrupt}>Interrupt</button>
+      <ul>{turn.turns.map((t, i) => <li key={i}>{t.role}: {t.text}</li>)}</ul>
+    </>
+  );
+}
+```
+
+### Return Value
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `state` | `TurnTakerState` | Current state of the orchestrator |
+| `isListening` / `isPlanning` / `isSpeaking` | `boolean` | Convenience flags for the corresponding states |
+| `turns` | `TurnEntry[]` | Accumulated conversation turns — `{ role: 'user' \| 'agent', text, timestamp }`, oldest first |
+| `lastUserUtterance` | `string \| null` | The most recent user utterance text |
+| `lastAgentResponse` | `string \| null` | The most recent agent response text |
+| `lastBargeIn` | `Date \| null` | When the most recent barge-in fired (voice or programmatic; also delivered to `onBargeIn`) |
+| `error` | `Error \| null` | Latest error |
+| `start` / `stop` | `() => Promise<void>` | Begin / stop the voice loop |
+| `interrupt` | `() => void` | Programmatic barge-in |
+| `dispose` | `() => Promise<void>` | Dispose and release all resources |
+| `clearTurns` | `() => void` | Clear the accumulated `turns` list |
+
+<Callout type="tip">
+For model recommendations, see the [Transformers Audio](/docs/transformers) guide. For the underlying core APIs, see [Live Transcription](/docs/core/live-transcribe) and [Streaming Speech](/docs/core/streaming-speech).
+</Callout>
+
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Voice Notes | Record and transcribe with useTranscribe | [Demo](https://localmode.ai/voice-notes) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/voice-notes) |
-| Meeting Assistant | Transcribe and summarize with useTranscribe + useSummarize | [Demo](https://localmode.ai/meeting-assistant) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/meeting-assistant) |
-| Audiobook Creator | Text-to-speech with useSynthesizeSpeech | [Demo](https://localmode.ai/audiobook-creator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/audiobook-creator) |
+| Audio Studio (Voice Notes) | Record and transcribe with useTranscribe | [Live block](https://localmode.ai/blocks/audio) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/audio) |
+| Audio Studio (Meeting Assistant) | Transcribe and summarize with useTranscribe + useSummarize | [Live block](https://localmode.ai/blocks/audio) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/audio) |
+| Audio Studio (Audiobook Creator) | Text-to-speech with useSynthesizeSpeech | [Live block](https://localmode.ai/blocks/audio) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/audio) |

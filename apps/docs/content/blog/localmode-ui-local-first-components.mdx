@@ -1,0 +1,205 @@
+---
+title: "The UI Cloud AI Can't Build: @localmode/ui Local-First Components"
+description: "Model download progress, device-capability gates, storage quota, GGUF metadata, vector-store observability -- the surfaces a user sees because the model runs on THEIR device. @localmode/ui ships 21 copy-owned, shadcn-styled local-first primitives that cloud AI UI libraries structurally cannot have."
+author: LocalMode
+date: "2026-05-31"
+dateModified: "2026-05-31"
+faq:
+  - question: "What are the @localmode/ui local-first components?"
+    answer: "They are 21 copy-owned, shadcn/ui-styled React primitives for the surfaces a user sees because the model runs on their own device: ModelDownloader, ModelSelector, DeviceBadge, CapabilityGate, StorageMeter, ContextUsageMeter, GGUFMetadataCard, ModelRecommendationCard, VectorStorageObservability, and more. They render the state of @localmode/react hooks like useModelLoader, useCapabilities, and useStorageQuota."
+  - question: "Why can't cloud AI UI libraries ship these components?"
+    answer: "Cloud AI UI libraries assume a server route streaming from a hosted model, so there is no download progress, no device-capability gate, no on-device storage quota, and no GGUF inspection to show -- those moments only exist when the model runs on the user's machine. The local-first family is the surface that becomes possible precisely because LocalMode runs models in the browser."
+  - question: "How do I install the local-first components?"
+    answer: "Use the shadcn CLI. Run npx shadcn@latest add @localmode/ui/local-first/model-downloader for a single primitive, or npx shadcn@latest add @localmode/ui/local-first to install the family. The command copies the .tsx files into your project so you own the code -- no @localmode/* package is installed. Pair them with the recommended @localmode/react hooks, or any backend."
+  - question: "Do these components fetch or download models themselves?"
+    answer: "No. They are presentational and hook-driven -- they render the state of @localmode/react hooks and emit callbacks, but they do not initiate downloads or own orchestration state. You bind ModelDownloader's progress to useModelLoader's totalProgress, ModelSelector to your useModelRecommendations data, and StorageMeter to useStorageQuota."
+  - question: "What is the ContextUsageMeter and why is there no cost field?"
+    answer: "ContextUsageMeter is a token / context-window budget gauge that breaks down input, output, reasoning, and cache tokens against a model's context-window limit -- a hard local KV-cache constraint. It deliberately has no cost field because local inference has no per-token billing. It complements StorageMeter (disk) with a token-budget view."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Open any cloud AI app and you will never see a model download bar, a "Requires WebGPU" gate, a storage-quota meter, or a card inspecting a GGUF file's metadata. Not because nobody wants them -- because they cannot exist. A cloud chat UI is a view over a server stream; the model lives somewhere else. There is nothing local to download, gate, measure, or inspect.
+
+When the model runs in the **browser**, an entire category of UI appears. The `@localmode/ui` **local-first** family is 21 copy-owned, shadcn-styled primitives for exactly those surfaces -- the moments a user actually feels "this runs on my machine." They are LocalMode's headline differentiator, and there is no off-the-shelf equivalent anywhere.
+
+<Callout type="info" title="The structural gap, made visible">
+  Every Vercel AI Elements component assumes a hosted model behind a server route. The local-first
+  family is the UI that becomes possible precisely *because* the model is on the user's device.
+</Callout>
+
+---
+
+## The logic already shipped -- this is the missing view layer
+
+The hard parts -- chunked resumable downloads, capability detection, quota accounting, device-aware recommendations, vector-store stats -- already live in `@localmode/react` hooks: `useModelLoader`, `useModelStatus`, `useCapabilities`, `useStorageQuota`, `useNetworkStatus`, `useModelRecommendations`, `useSemanticCache`. What was missing was a copy-owned, shadcn-styled presentational layer to render that state.
+
+Every primitive in this family is **presentational and hook-driven**: it renders the corresponding hook's state and emits callbacks. It owns no orchestration state and never starts a download itself -- you wire the hook.
+
+---
+
+## Install
+
+With [shadcn/ui set up](https://ui.shadcn.com/docs/installation) and the `@localmode` namespace mapped in your `components.json`:
+
+```bash
+# One primitive
+npx shadcn@latest add @localmode/ui/local-first/model-downloader
+
+# The whole local-first family (21 primitives)
+npx shadcn@latest add @localmode/ui/local-first
+```
+
+The command copies the `.tsx` into your project -- no `@localmode/*` package is installed; pair them with the recommended `@localmode/react` hooks, or any backend. You own and restyle the code.
+
+---
+
+## The headline surface: ModelDownloader
+
+The single most defining LocalMode UI is the card a user sees while a multi-gigabyte model loads on **their** device. [`ModelDownloader`](https://localmode.ai/docs/local-first/model-downloader) renders the model name, size, context length, and category alongside a live progress bar, and clearly distinguishes a first-time download ("Downloading...") from a cache load ("Loading from cache...") and a ready state. Bind `progress` to `useModelLoader`'s `totalProgress`:
+
+```tsx
+import { useModelLoader } from '@localmode/react';
+import { ModelDownloader } from '@/components/model-downloader';
+
+export function Loading() {
+  const { totalProgress, isDownloading } = useModelLoader();
+  return (
+    <ModelDownloader
+      name="Llama 3.2 1B Instruct"
+      size="1.2 GB"
+      contextLength={8192}
+      category="Chat"
+      progress={totalProgress}
+      ready={!isDownloading}
+    />
+  );
+}
+```
+
+The progress shape accepts either a `0-1` fraction or a `{ loaded, total, percent, cached }` object, so it adapts to any provider's `onProgress`. In a chat, this *is* the empty state -- it was literally lifted out of the LocalMode Chat block's empty state.
+
+---
+
+## Picking a model the device can actually run
+
+[`ModelSelector`](https://localmode.ai/docs/local-first/model-selector) is a device-aware picker. It groups models by category, shows backend filter chips (WebGPU / ONNX / WASM / LiteRT) with live counts, per-model badges (vision, tool-calling, cached), a download affordance for uncached models, and a delete-from-cache affordance for cached ones. Crucially, a model that cannot run on the current device -- say a WebGPU-only model on a machine without WebGPU -- is visibly de-emphasized and labeled "Requires WebGPU" before the user wastes a multi-gigabyte download.
+
+```tsx
+import { useCapabilities } from '@localmode/react';
+import { ModelSelector } from '@/components/model-selector';
+
+export function Picker({ models, onSelect }) {
+  const { capabilities } = useCapabilities();
+  return (
+    <ModelSelector
+      models={models}
+      hasWebGPU={Boolean(capabilities?.features.webgpu)}
+      onSelect={onSelect}
+    />
+  );
+}
+```
+
+For scored guidance, [`ModelRecommendationCard`](https://localmode.ai/docs/local-first/model-recommendation-card) renders a single recommendation with a radial score dial (0-100), tier/device badges with a stable color mapping, reason chips, and a compare toggle -- bound to `useModelRecommendations`. [`ModelComparisonPanel`](https://localmode.ai/docs/local-first/model-comparison-panel) puts two candidates side by side.
+
+---
+
+## Runtime awareness: gates, badges, and budgets
+
+These primitives tell the user -- and your code -- what the current device and runtime can do.
+
+[`DeviceBadge`](https://localmode.ai/docs/device-badge) and [`CapabilityGate`](https://localmode.ai/docs/local-first/capability-gate) read `useCapabilities` to detect WebGPU / WASM / RAM and can gate children until support exists. [`StorageMeter`](https://localmode.ai/docs/local-first/storage-meter) shows IndexedDB quota from `useStorageQuota`. [`NetworkBadge`](https://localmode.ai/docs/local-first/network-badge) surfaces offline-ready status. [`CacheBadge`](https://localmode.ai/docs/local-first/cache-badge) annotates a semantic-cache hit, e.g. "cached - 12ms". [`ProviderFallbackBadge`](https://localmode.ai/docs/local-first/provider-fallback-badge) shows the active provider and threading tier after a WebGPU-to-WASM fallback.
+
+A standout is [`ContextUsageMeter`](https://localmode.ai/docs/local-first/context-usage-meter) -- a token / context-window budget gauge:
+
+```tsx
+<ContextUsageMeter inputTokens={1200} outputTokens={300} contextWindow={8192} />
+```
+
+It breaks down input / output / reasoning / cache tokens against the model's context-window limit (a hard local KV-cache constraint) and warns as it approaches the ceiling. There is deliberately **no cost field** -- local inference has no per-token billing. It complements `StorageMeter` (disk) with a token-budget view that cloud UIs render as a dollar amount and local-first UIs render as the only constraint that actually applies: the context window.
+
+---
+
+## Inspecting models and the vector store
+
+Local-first also means you can *see inside* the artifacts on the device.
+
+[`ModelMetadataCard`](https://localmode.ai/docs/local-first/model-metadata-card) and the GGUF metadata view inspect a model's architecture, quantization, and tokenizer straight from the file. [`DeviceCapabilityGrid`](https://localmode.ai/docs/local-first/device-capability-grid) and [`BrowserCompatCard`](https://localmode.ai/docs/local-first/browser-compat-card) give full capability diagnostics and per-model RAM/run-feasibility before a download. [`AdaptiveBatchCard`](https://localmode.ai/docs/local-first/adaptive-batch-card) surfaces device-aware batch sizing.
+
+For the vector store, [`VectorStorageObservability`](https://localmode.ai/docs/local-first/vector-storage-observability) shows a compression-stats badge (SQ8 ratio + before/after size, e.g. "4.0x - 15KB->3.7KB"), a three-tier storage estimate (Raw Float32 / SQ8 4x / PQ 8-32x with the active tier highlighted), and a GPU-aware search-latency badge:
+
+```tsx
+import { getCompressionStats } from '@localmode/core';
+
+<VectorStorageObservability
+  stats={getCompressionStats(db)}
+  tier="sq8"
+  searchLatencyMs={searchMs}
+  webgpuAccelerated={usedGpu}
+/>
+```
+
+Rounding out the family: [`EmbeddingDriftBanner`](https://localmode.ai/docs/local-first/embedding-drift-banner) flags when an embedding-model change requires a reindex, [`VectorImportFlow`](https://localmode.ai/docs/local-first/vector-import-flow) handles Pinecone / Chroma / CSV / JSONL migration, and [`SemanticCacheStatusBar`](https://localmode.ai/docs/local-first/semantic-cache-status-bar) shows cache stats with a clear action.
+
+---
+
+## How they compose with the rest of `@localmode/ui`
+
+The local-first family is the foundation the other two families stand on. A chat's empty state is a `ModelDownloader`; its sidebar is a `ModelSelector`; a cached reply carries a `CacheBadge` -- all wired into the **conversation** family. And a `VectorStorageObservability` panel or a model-catalog table can dock into the **artifacts** family's canvas. Build the model lifecycle once with these primitives and the chat and artifact surfaces inherit it.
+
+---
+
+## FAQ
+
+### What are the `@localmode/ui` local-first components?
+
+They are 21 copy-owned, shadcn/ui-styled React primitives for the surfaces a user sees because the model runs on their own device: `ModelDownloader`, `ModelSelector`, `DeviceBadge`, `CapabilityGate`, `StorageMeter`, `ContextUsageMeter`, `ModelMetadataCard`, `ModelRecommendationCard`, `VectorStorageObservability`, and more. They render the state of `@localmode/react` hooks like `useModelLoader`, `useCapabilities`, and `useStorageQuota`.
+
+### Why can't cloud AI UI libraries ship these components?
+
+Cloud AI UI libraries assume a server route streaming from a hosted model, so there is no download progress, no device-capability gate, no on-device storage quota, and no GGUF inspection to show -- those moments only exist when the model runs on the user's machine.
+
+### How do I install the local-first components?
+
+Use the shadcn CLI: `npx shadcn@latest add @localmode/ui/local-first/model-downloader` for a single primitive, or `npx shadcn@latest add @localmode/ui/local-first` for the family. The command copies the `.tsx` files into your project -- no `@localmode/*` package is installed. Pair them with the recommended `@localmode/react` hooks, or any backend.
+
+### Do these components fetch or download models themselves?
+
+No. They are presentational and hook-driven -- they render hook state and emit callbacks, but they do not initiate downloads or own orchestration state. You bind `ModelDownloader`'s progress to `useModelLoader`'s `totalProgress`, `ModelSelector` to your `useModelRecommendations` data, and `StorageMeter` to `useStorageQuota`.
+
+### What is the ContextUsageMeter and why is there no cost field?
+
+`ContextUsageMeter` is a token / context-window budget gauge that breaks down input, output, reasoning, and cache tokens against a model's context-window limit -- a hard local KV-cache constraint. It deliberately has no cost field because local inference has no per-token billing.
+
+---
+
+## Methodology
+
+Every component name, count, prop, and code example in this post was verified directly against the `@localmode/ui` source. The "21 components" figure is the count of `local-first`-categorized items in `apps/ui/registry.json` (20 under `ui/local-first/*` plus the top-level `ui/device-badge` seed). Component names and props were read from the `.tsx` source under `apps/ui/registry/localmode/local-first/**` and `apps/ui/registry/localmode/device-badge/`. The hooks they render (`useModelLoader`, `useModelStatus`, `useCapabilities`, `useStorageQuota`, `useNetworkStatus`, `useModelRecommendations`, `useSemanticCache`, `useAdaptiveBatchSize`) are exported from `packages/react/src/index.ts`; `getCompressionStats` is exported from `packages/core/src/index.ts`. The `ModelDownloader`, `ModelSelector`, `ContextUsageMeter`, and `VectorStorageObservability` code examples mirror each component's own props and demo bindings.
+
+Two install-correctness facts were verified against the real install path rather than asserted. First, **no local-first item declares an `@localmode/*` npm dependency** — confirmed by inspecting the `dependencies` array of every local-first entry in `apps/ui/registry.json` (each lists only `lucide-react` or nothing). Second, the environment-fed components (`DeviceBadge`, `CapabilityGate`, `DeviceCapabilityGrid`, `StorageMeter`, `NetworkBadge`, `ProviderFallbackBadge`) import `useCapabilities` / `useStorageQuota` / `useNetworkStatus` from the **copy-owned** `@/lib/use-environment` (`apps/ui/registry/localmode/lib/use-environment.ts`), not from `@localmode/react` at runtime — so the family installs and runs with zero `@localmode/*` packages. The `@localmode/react` imports that appear in this post's examples are *consumer-app binding code* (your app's choice), not the components' own imports. The zero-`@localmode` guarantee is enforced by an automated test that performs a real `shadcn add` into a scratch project and asserts no `@localmode/*` import statements and no `@localmode/*` package.json entries (`apps/ui/consumer-tests/portability-test.mjs`).
+
+`ModelDownloader`'s "Downloading…" / "Loading from cache…" copy and its origin as a chat empty-state are documented in the component source; the [Chat block](https://localmode.ai/blocks/chat) wires it as its empty state (`apps/ui/src/app/blocks/chat/`). The `GGUFMetadataCard` / `ModelMetadataCard` pair is one component file exporting both names (the latter is an alias). Cosmetic separators in the prose (e.g. "cached - 12ms", "4.0x - 15KB->3.7KB") use ASCII hyphens for the component's middot/em-dash glyphs. `getCompressionStats()` is `async`; the inline example mirrors the component's own JSDoc shorthand and elides the `await` for brevity — in real code, `await` it (or wire it through state).
+
+Sources:
+- `apps/ui/registry.json` — catalog; local-first item count and per-item dependencies
+- `apps/ui/registry/localmode/local-first/**`, `apps/ui/registry/localmode/device-badge/device-badge.tsx` — component source and props
+- `apps/ui/registry/localmode/lib/use-environment.ts` — copy-owned `useCapabilities` / `useStorageQuota` / `useNetworkStatus`
+- `apps/ui/consumer-tests/portability-test.mjs` — real-install zero-`@localmode` portability test
+- `packages/react/src/index.ts`, `packages/react/src/utilities/use-model-loader.ts` — hook exports and `useModelLoader` return (`totalProgress`, `isDownloading`)
+- `packages/core/src/storage/compression.ts` — `getCompressionStats()` signature and `CompressionStats`
+- `apps/ui/src/app/blocks/chat/` — Chat block empty-state wiring
+- [shadcn/ui installation docs](https://ui.shadcn.com/docs/installation), [shadcn registry docs](https://ui.shadcn.com/docs/registry)
+
+---
+
+## Get started
+
+Install the family and wire your first card to a hook:
+
+```bash
+npx shadcn@latest add @localmode/ui/local-first
+```
+
+Browse every primitive -- props, live previews, and examples -- in the [local-first docs](https://localmode.ai/docs/components). For the chat surfaces these compose with, see the [conversation components post](/blog/localmode-ui-conversation-components); for docked output canvases, the [artifacts post](/blog/localmode-ui-artifacts).

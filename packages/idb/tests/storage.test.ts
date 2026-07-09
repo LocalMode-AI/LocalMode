@@ -170,6 +170,65 @@ describe('IDBStorage', () => {
     });
   });
 
+  describe('vector payload types (SQ8/PQ compression)', () => {
+    it('preserves Uint8Array payloads through addVector/getVector/getAllVectors', async () => {
+      // 5 bytes — deliberately NOT divisible by 4, so any f32 reinterpretation
+      // throws or corrupts instead of passing accidentally.
+      const compressed = new Uint8Array([7, 0, 255, 128, 3]);
+      await storage.addVector({ id: 'v-u8', collectionId: 'default', vector: compressed });
+      await storage.addVector({ id: 'v-f32', collectionId: 'default', vector: new Float32Array([1.5, -2.5]) });
+
+      const u8 = await storage.getVector('v-u8');
+      expect(u8).toBeInstanceOf(Uint8Array);
+      expect(Array.from(u8 as Uint8Array)).toEqual([7, 0, 255, 128, 3]);
+
+      const f32 = await storage.getVector('v-f32');
+      expect(f32).toBeInstanceOf(Float32Array);
+      expect(Array.from(f32 as Float32Array)).toEqual([1.5, -2.5]);
+
+      const all = await storage.getAllVectors('default');
+      expect(all.get('v-u8')).toBeInstanceOf(Uint8Array);
+      expect(Array.from(all.get('v-u8') as Uint8Array)).toEqual([7, 0, 255, 128, 3]);
+      expect(all.get('v-f32')).toBeInstanceOf(Float32Array);
+    });
+
+    it('mutating the input after addVector does not affect the stored copy', async () => {
+      const compressed = new Uint8Array([1, 2, 3, 4, 5]);
+      await storage.addVector({ id: 'v-mut', collectionId: 'default', vector: compressed });
+      compressed[0] = 99;
+
+      const stored = await storage.getVector('v-mut');
+      expect(Array.from(stored as Uint8Array)).toEqual([1, 2, 3, 4, 5]);
+    });
+
+    it('reads legacy records (raw ArrayBuffer of f32 data) as Float32Array', async () => {
+      // Simulate a database written by a previous version of this package,
+      // which stored vectors as raw ArrayBuffers of f32 data. The fixture is
+      // injected at the IDB store level (no public API can produce a legacy
+      // record); the assertions go through the public getVector()/
+      // getAllVectors() API.
+      const legacy = new Float32Array([4.5, -1.25]);
+      const internalDb = (
+        storage as unknown as {
+          db: { put(store: string, record: unknown): Promise<unknown> };
+        }
+      ).db;
+      await internalDb.put('vectors', {
+        id: 'v-legacy',
+        collectionId: 'default',
+        vector: legacy.buffer.slice(0),
+      });
+
+      const result = await storage.getVector('v-legacy');
+      expect(result).toBeInstanceOf(Float32Array);
+      expect(Array.from(result as Float32Array)).toEqual([4.5, -1.25]);
+
+      const all = await storage.getAllVectors('default');
+      expect(all.get('v-legacy')).toBeInstanceOf(Float32Array);
+      expect(Array.from(all.get('v-legacy') as Float32Array)).toEqual([4.5, -1.25]);
+    });
+  });
+
   describe('saveIndex() and loadIndex()', () => {
     const mockIndex = {
       version: 1,
@@ -311,6 +370,50 @@ describe('IDBStorage', () => {
       const result = await db.get('doc1');
       expect(result).not.toBeNull();
       expect(result!.metadata?.title).toBe('Test');
+
+      await db.close();
+    });
+
+    it('round-trips SQ8-compressed vectors (Uint8Array payloads) through this adapter', async () => {
+      const { createVectorDB } = await import('@localmode/core');
+      const customStorage = new IDBStorage({ name: `integration-sq8-${Date.now()}-${testCounter++}` });
+
+      const db = await createVectorDB({
+        name: 'integration-sq8',
+        dimensions: 32,
+        storage: customStorage,
+        compression: { type: 'sq8' },
+      });
+
+      const original = new Float32Array(Array.from({ length: 32 }, (_, j) => Math.sin(j * 0.7)));
+      await db.addMany(
+        Array.from({ length: 20 }, (_, i) => ({
+          id: `doc${i}`,
+          vector: new Float32Array(Array.from({ length: 32 }, (_, j) => Math.sin(i + j * 0.7))),
+        }))
+      );
+      await db.add({ id: 'probe', vector: original });
+
+      // Witness 1 (public API): the vector decompresses back to floats with
+      // high fidelity.
+      const result = await db.get('probe');
+      expect(result).not.toBeNull();
+      expect(result!.vector).toBeInstanceOf(Float32Array);
+      let dot = 0;
+      let na = 0;
+      let nb = 0;
+      for (let j = 0; j < 32; j++) {
+        dot += original[j] * result!.vector[j];
+        na += original[j] ** 2;
+        nb += result!.vector[j] ** 2;
+      }
+      expect(dot / Math.sqrt(na * nb)).toBeGreaterThan(0.99);
+
+      // Witness 2 (storage level): the adapter actually persisted a
+      // compressed Uint8Array payload — compression really engaged through
+      // this adapter rather than silently writing floats.
+      const stored = await customStorage.getVector('probe');
+      expect(stored).toBeInstanceOf(Uint8Array);
 
       await db.close();
     });

@@ -12,7 +12,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 LocalMode provides utilities to detect device capabilities and choose appropriate fallbacks.
 
 <Callout type="info" title="See it in action">
-  Try [LLM Chat](https://localmode.ai/llm-chat) and [PDF Search](https://localmode.ai/pdf-search) for working demos of these APIs.
+  Try the [Chat block](https://localmode.ai/blocks/chat) and [Knowledge Base block](https://localmode.ai/blocks/knowledge) for working demos of these APIs.
 </Callout>
 
 ## Full Capability Report
@@ -360,7 +360,7 @@ if (memory) {
 
 ## Adaptive Batch Size
 
-Compute an optimal batch size for `streamEmbedMany()` or `ingest()` based on device hardware:
+Compute an optimal batch size for `streamEmbedMany()`, `streamEmbedManyImages()`, or `ingest()` based on device hardware:
 
 ```typescript
 import { computeOptimalBatchSize } from '@localmode/core';
@@ -489,6 +489,10 @@ function BatchConfig() {
 ## Model Registry
 
 The model registry is a curated catalog of popular models across all providers (transformers, webllm, wllama, chrome-ai). Use `recommendModels()` to get ranked model suggestions for any task based on what the device can actually run.
+
+<Callout type="info" title="See it live">
+  The [Device & Model Lab block](https://localmode.ai/blocks/device) runs `detectCapabilities()` and `recommendModels()` in your browser — a live device capability report with ranked model recommendations, no model download required.
+</Callout>
 
 ### Get Recommendations
 
@@ -680,9 +684,9 @@ All supported task categories:
   />
 </Cards>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| LLM Chat | WebGPU detection for optimal model backend selection | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |
-| PDF Search | Feature detection for WebGPU-accelerated search | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |
+| Chat (LLM Chat) | WebGPU detection for optimal model backend selection | [Live block](https://localmode.ai/blocks/chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/chat) |
+| Knowledge Base (PDF Search) | Feature detection for WebGPU-accelerated search | [Live block](https://localmode.ai/blocks/knowledge/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/semantic-search) |

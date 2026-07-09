@@ -1,0 +1,64 @@
+---
+title: "Installation"
+description: "Configure the @localmode namespace in your shadcn project and install LocalMode UI components."
+icon: Download
+---
+
+# Installation
+
+LocalMode UI components are distributed through a [shadcn registry](https://ui.shadcn.com/docs/registry). You install them with the shadcn CLI and own the copied code.
+
+## Prerequisites
+
+You need a project with [shadcn/ui set up](https://ui.shadcn.com/docs/installation) (Tailwind CSS 4 with CSS variables and a `components.json`). LocalMode UI components are styled with the same CSS-variable tokens, so they inherit your theme.
+
+## 1. Add the `@localmode` namespace
+
+Map the single-token `@localmode` namespace to the registry in your project's `components.json`:
+
+```json title="components.json"
+{
+  "registries": {
+    "@localmode": "https://localmode.ai/r/{name}.json"
+  }
+}
+```
+
+For private/premium items (future), use the object form with a token:
+
+```json title="components.json"
+{
+  "registries": {
+    "@localmode": {
+      "url": "https://localmode.ai/r/{name}.json",
+      "headers": { "Authorization": "Bearer ${LOCALMODE_TOKEN}" }
+    }
+  }
+}
+```
+
+## 2. Install a component
+
+<InstallTabs name="ui/device-badge" />
+
+This copies the component's files into your project and installs any npm dependencies it declares (many components — like `device-badge` — declare none; others pull only small libraries such as `lucide-react`). No `@localmode/*` package is installed. Cross-namespace `registryDependencies` (like the shared `cn()` util) are resolved automatically.
+
+## 3. Install a whole family or everything
+
+The registry ships aggregate items so you can install in bulk:
+
+```bash
+# A single component
+npx shadcn@latest add @localmode/ui/device-badge
+
+# An entire family (e.g. once the conversation family ships)
+npx shadcn@latest add @localmode/ui/conversation
+
+# The whole catalog
+npx shadcn@latest add @localmode/ui/all
+```
+
+<Callout type="warn" title="These components run models in the browser">
+  LocalMode UI components perform on-device inference. The first time a component loads its model,
+  it downloads from a model host (e.g. HuggingFace) and caches it. After that it works offline.
+</Callout>

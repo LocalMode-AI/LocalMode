@@ -14,7 +14,8 @@ Extract text from images using OCR models — from lightweight line-level TrOCR 
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [OCR Scanner](https://localmode.ai/ocr-scanner) for a working demo with model selection.
+  Try the [Knowledge Base block](https://localmode.ai/blocks/knowledge/semantic-search) — its ingest
+  pipeline runs OCR on scanned documents before embedding and search.
 </Callout>
 
 ## Recommended Models
@@ -32,7 +33,7 @@ Extract text from images using OCR models — from lightweight line-level TrOCR 
 
 ## Document Scanner Example
 
-Based on the [OCR Scanner](https://localmode.ai/ocr-scanner) showcase app:
+Based on the [Knowledge Base block](https://localmode.ai/blocks/knowledge/semantic-search):
 
 ```typescript
 import { transformers } from '@localmode/transformers';
@@ -91,11 +92,11 @@ The `image` parameter accepts:
   structure without OCR. Use OCR only for scanned documents or images of text.
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| OCR Scanner | Extract text from images and scanned documents | [Demo](https://localmode.ai/ocr-scanner) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/ocr-scanner) |
+| Semantic Search | Text/PDF/OCR ingest with chunking, then reranked vector search with category facets and calibrated thresholds | [Live](https://localmode.ai/blocks/knowledge/semantic-search) · Install: `npx shadcn add @localmode/ui/blocks/knowledge/semantic-search` |
 
 ## Next Steps
 

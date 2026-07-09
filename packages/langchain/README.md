@@ -8,6 +8,8 @@
 
 LangChain.js adapters for [LocalMode](https://localmode.dev) — drop-in local inference for existing LangChain applications. Swap 3 imports and go fully local.
 
+> **See it live:** the [RAG Chat block](https://localmode.ai/blocks/knowledge/rag-chat) at localmode.ai has a LangChain engine toggle that runs `LocalModeEmbeddings`, `LocalModeVectorStore`, and `ChatLocalMode` end-to-end in the browser — ingest, semantic search, and grounded answers through the real adapters, behind the same UI as the core pipeline.
+
 ## Installation
 
 ```bash
@@ -65,6 +67,28 @@ const reranker = new LocalModeReranker({
 });
 
 const reranked = await reranker.compressDocuments(documents, 'search query');
+```
+
+### Knowledge Base Engine
+
+`createLangChainKnowledgeBaseEngine()` returns a `kind: 'langchain'` engine implementing the frozen `KnowledgeBaseEngine` contract from `@localmode/core` (chunk → embed → store, vector search, grounded `ask`) through the `LocalModeEmbeddings` / `LocalModeVectorStore` / `ChatLocalMode` adapters. It is result-equivalent to `@localmode/core`'s `createKnowledgeBaseEngine`, so a knowledge base UI can toggle engines over one shared corpus. Because the models are injected, apps that never toggle the LangChain engine never pull this package.
+
+```typescript
+import { createLangChainKnowledgeBaseEngine, ChatLocalMode } from '@localmode/langchain';
+import { transformers } from '@localmode/transformers';
+
+const engine = createLangChainKnowledgeBaseEngine({
+  embeddingModel: transformers.embedding('Xenova/bge-small-en-v1.5'),
+  getChatModel: () =>
+    new ChatLocalMode({
+      model: transformers.languageModel('onnx-community/granite-4.0-350m-ONNX-web'),
+      maxTokens: 512,
+    }),
+});
+
+await engine.ingest(docs, { chunking: 'recursive', chunkSize: 500 });
+const hits = await engine.search('privacy and encryption', { topK: 10 });
+const { answer, sources } = await engine.ask('How is data encrypted?');
 ```
 
 ## Migration from Cloud

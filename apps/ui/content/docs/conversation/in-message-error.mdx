@@ -1,0 +1,56 @@
+---
+title: "In-Message Error"
+description: "A per-message inline error/retry block with auto-extracted error text and a classified hint for local inference failures."
+icon: CircleAlert
+---
+
+# In-Message Error
+
+The **InMessageError** is an accessible per-message error/retry block rendered inline on a failed assistant message — not a global toast. It auto-extracts a readable message from the error and classifies common local-inference failures (OOM, WebGPU lost, model load) into a short hint, with a retry action that re-invokes generation. Data source: `useChat` (error state).
+
+## Preview
+
+<ComponentPreview name="ui/conversation/in-message-error" />
+
+<OpenInV0 name="ui/conversation/in-message-error" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/in-message-error" />
+
+### Data source & dependencies
+
+**Data source:** renders the error + retry callback you pass — works with any backend. Recommended producer: `useChat().error` and `useChat().regenerate()` from `@localmode/react` (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `in-message-error.tsx` — `InMessageError` + `extractErrorMessage`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/in-message-error/in-message-error.tsx" name="InMessageErrorProps" />
+
+## Examples
+
+### Inline error on a failed turn
+
+```tsx
+import { useChat } from '@localmode/react';
+import { InMessageError } from '@/components/in-message-error';
+
+const { status, error, regenerate } = useChat({ model });
+
+{status === 'error' && error && (
+  <InMessageError error={error} onRetry={() => regenerate()} />
+)}
+```
+
+`useChat().regenerate()` re-runs the last turn in place — on failure it restores the previous reply, so retry is safe to wire directly.
+
+## Customization
+
+The `classify()` helper maps error text to friendly hints — extend it for your provider’s error strings. `extractErrorMessage` is exported for reuse elsewhere.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useChat`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

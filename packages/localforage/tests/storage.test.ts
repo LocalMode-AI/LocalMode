@@ -4,6 +4,7 @@
 
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import localforage from 'localforage';
 import { LocalForageStorage } from '../src/index.js';
 import type { StorageAdapter } from '@localmode/core';
 
@@ -11,9 +12,11 @@ let testCounter = 0;
 
 describe('LocalForageStorage', () => {
   let storage: LocalForageStorage;
+  let storeName: string;
 
   beforeEach(async () => {
-    storage = new LocalForageStorage({ name: `test-${Date.now()}-${testCounter++}` });
+    storeName = `test-${Date.now()}-${testCounter++}`;
+    storage = new LocalForageStorage({ name: storeName });
     await storage.open();
   });
 
@@ -170,6 +173,50 @@ describe('LocalForageStorage', () => {
     });
   });
 
+  describe('vector payload types (SQ8/PQ compression)', () => {
+    it('preserves Uint8Array payloads through addVector/getVector/getAllVectors', async () => {
+      // Byte values above 1.0 and a length not divisible by 4 — a silent
+      // f32 coercion would change both the type and the values.
+      const compressed = new Uint8Array([7, 0, 255, 128, 3]);
+      await storage.addVector({ id: 'v-u8', collectionId: 'default', vector: compressed });
+      await storage.addVector({ id: 'v-f32', collectionId: 'default', vector: new Float32Array([1.5, -2.5]) });
+
+      const u8 = await storage.getVector('v-u8');
+      expect(u8).toBeInstanceOf(Uint8Array);
+      expect(Array.from(u8 as Uint8Array)).toEqual([7, 0, 255, 128, 3]);
+
+      const f32 = await storage.getVector('v-f32');
+      expect(f32).toBeInstanceOf(Float32Array);
+      expect(Array.from(f32 as Float32Array)).toEqual([1.5, -2.5]);
+
+      const all = await storage.getAllVectors('default');
+      expect(all.get('v-u8')).toBeInstanceOf(Uint8Array);
+      expect(Array.from(all.get('v-u8') as Uint8Array)).toEqual([7, 0, 255, 128, 3]);
+      expect(all.get('v-f32')).toBeInstanceOf(Float32Array);
+    });
+
+    it('reads legacy records (number[] without dtype) as Float32Array', async () => {
+      // Simulate a record written by a previous version of this package
+      // (no dtype field), injected via a sibling localforage instance
+      // pointing at the same backing store. Assertions go through the
+      // public getVector()/getAllVectors() API.
+      const legacyStore = localforage.createInstance({ name: `${storeName}_vectors` });
+      await legacyStore.setItem('v-legacy', {
+        id: 'v-legacy',
+        collectionId: 'default',
+        vector: [4.5, -1.25],
+      });
+
+      const result = await storage.getVector('v-legacy');
+      expect(result).toBeInstanceOf(Float32Array);
+      expect(Array.from(result as Float32Array)).toEqual([4.5, -1.25]);
+
+      const all = await storage.getAllVectors('default');
+      expect(all.get('v-legacy')).toBeInstanceOf(Float32Array);
+      expect(Array.from(all.get('v-legacy') as Float32Array)).toEqual([4.5, -1.25]);
+    });
+  });
+
   describe('saveIndex() and loadIndex()', () => {
     const mockIndex = {
       version: 1,
@@ -311,6 +358,50 @@ describe('LocalForageStorage', () => {
       const result = await db.get('doc1');
       expect(result).not.toBeNull();
       expect(result!.metadata?.title).toBe('Test');
+
+      await db.close();
+    });
+
+    it('round-trips SQ8-compressed vectors (Uint8Array payloads) through this adapter', async () => {
+      const { createVectorDB } = await import('@localmode/core');
+      const customStorage = new LocalForageStorage({ name: `integration-sq8-${Date.now()}-${testCounter++}` });
+
+      const db = await createVectorDB({
+        name: 'integration-sq8',
+        dimensions: 32,
+        storage: customStorage,
+        compression: { type: 'sq8' },
+      });
+
+      const original = new Float32Array(Array.from({ length: 32 }, (_, j) => Math.sin(j * 0.7)));
+      await db.addMany(
+        Array.from({ length: 20 }, (_, i) => ({
+          id: `doc${i}`,
+          vector: new Float32Array(Array.from({ length: 32 }, (_, j) => Math.sin(i + j * 0.7))),
+        }))
+      );
+      await db.add({ id: 'probe', vector: original });
+
+      // Witness 1 (public API): the vector decompresses back to floats with
+      // high fidelity.
+      const result = await db.get('probe');
+      expect(result).not.toBeNull();
+      expect(result!.vector).toBeInstanceOf(Float32Array);
+      let dot = 0;
+      let na = 0;
+      let nb = 0;
+      for (let j = 0; j < 32; j++) {
+        dot += original[j] * result!.vector[j];
+        na += original[j] ** 2;
+        nb += result!.vector[j] ** 2;
+      }
+      expect(dot / Math.sqrt(na * nb)).toBeGreaterThan(0.99);
+
+      // Witness 2 (storage level): the adapter actually persisted a
+      // compressed Uint8Array payload — compression really engaged through
+      // this adapter rather than silently writing floats.
+      const stored = await customStorage.getVector('probe');
+      expect(stored).toBeInstanceOf(Uint8Array);
 
       await db.close();
     });

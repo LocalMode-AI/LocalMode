@@ -1,0 +1,62 @@
+---
+title: "Chain of Thought"
+description: "A structured step-by-step reasoning timeline with per-step status, custom icons, and nested source/image slots, collapsing on completion."
+icon: Workflow
+---
+
+# Chain of Thought
+
+The **ChainOfThought** primitives render a structured step-by-step reasoning timeline (distinct from free-text `Reasoning`): discrete labeled steps with per-step status (complete / active / pending), custom icons, and nested content slots for embedded retrieved sources (`ChainOfThoughtSearchResults`) and images (`ChainOfThoughtImage`). It collapses to a single line on completion. It is presentational — you build the labeled steps and pass them in. A common producer is reasoning-mode generation (`<think>` content parsed from `useGenerateText`'s `text`) plus local RAG retrieval.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/chain-of-thought" />
+
+<OpenInV0 name="ui/conversation/chain-of-thought" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/chain-of-thought" />
+
+### Data source & dependencies
+
+**Data source:** renders the labeled steps you pass — works with any backend. Recommended producer: reasoning-mode `<think>` content parsed from `useGenerateText`'s `text` in `@localmode/react`, mapped into steps yourself (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `chain-of-thought.tsx` — `ChainOfThought`, `ChainOfThoughtHeader`, `ChainOfThoughtContent`, `ChainOfThoughtStep`, `ChainOfThoughtSearchResults`, `ChainOfThoughtSearchResult`, `ChainOfThoughtImage`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/chain-of-thought/chain-of-thought.tsx" name="ChainOfThoughtStepProps" />
+
+## Examples
+
+### Itemized reasoning with sources
+
+```tsx
+import {
+  ChainOfThought, ChainOfThoughtContent, ChainOfThoughtHeader,
+  ChainOfThoughtSearchResult, ChainOfThoughtSearchResults, ChainOfThoughtStep,
+} from '@/components/chain-of-thought';
+
+<ChainOfThought done={!isStreaming}>
+  <ChainOfThoughtHeader />
+  <ChainOfThoughtContent>
+    <ChainOfThoughtStep label="Search local docs" status="complete">
+      <ChainOfThoughtSearchResults>
+        <ChainOfThoughtSearchResult>handbook.pdf</ChainOfThoughtSearchResult>
+      </ChainOfThoughtSearchResults>
+    </ChainOfThoughtStep>
+    <ChainOfThoughtStep label="Synthesize answer" status="active" />
+  </ChainOfThoughtContent>
+</ChainOfThought>
+```
+
+## Customization
+
+Pass a custom `icon` per step to override the status glyph. Use `ChainOfThoughtImage` to embed a local image (e.g. a retrieved figure) inside a step. For free-text think tokens, use [Reasoning](/docs/conversation/reasoning) instead.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useGenerateText`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

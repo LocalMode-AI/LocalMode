@@ -12,7 +12,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 Multimodal embeddings map both text and images into the same vector space. This enables cross-modal search: find images using text queries, or find text descriptions that match an image.
 
 <Callout type="info" title="See it in action">
-  Try [Cross-Modal Search](https://localmode.ai/cross-modal-search) for a working demo of these APIs.
+  Try the [Photo Search block](https://localmode.ai/blocks/photo/image-search) for a working demo of these APIs — its Search tab runs text-to-image and image-to-image queries over one shared CLIP vector space, entirely in the browser.
 </Callout>
 
 <Callout type="info" title="Provider Required">
@@ -176,6 +176,68 @@ console.log(embeddings[0].length); // 512
   }}
 />
 
+## streamEmbedManyImages()
+
+Stream image embeddings as they're generated, with per-batch progress — the multimodal counterpart of [`streamEmbedMany()`](/docs/core/embeddings#streamembedmany):
+
+```ts
+import { streamEmbedManyImages } from '@localmode/core';
+
+for await (const { embedding, index } of streamEmbedManyImages({
+  model,
+  images: photoBlobs,
+  batchSize: 8,
+  onBatch: ({ index, count, total }) => {
+    console.log(`Progress: ${index + count}/${total}`);
+  },
+})) {
+  await db.add({ id: `img-${index}`, vector: embedding });
+}
+```
+
+### StreamEmbedManyImagesOptions
+
+<TypeTable
+  type={{
+    model: {
+      description: 'The multimodal embedding model to use',
+      type: 'MultimodalEmbeddingModel | string',
+      required: true,
+    },
+    images: {
+      description: 'The images to embed',
+      type: 'ImageInput[]',
+      required: true,
+    },
+    batchSize: {
+      description: 'Batch size for processing',
+      type: 'number',
+      default: '32',
+    },
+    adaptiveBatching: {
+      description:
+        'Compute the batch size from device capabilities when no explicit batchSize is set',
+      type: 'boolean',
+      default: 'false',
+    },
+    abortSignal: {
+      description: 'AbortSignal for cancellation (checked before every batch)',
+      type: 'AbortSignal',
+    },
+    maxRetries: {
+      description: 'Maximum retry attempts per batch',
+      type: 'number',
+      default: '2',
+    },
+    onBatch: {
+      description: 'Callback after each batch with { index, count, total, usage }',
+      type: '(progress: EmbedProgress) => void',
+    },
+  }}
+/>
+
+Each yielded item is a `StreamEmbedImageResult`: `{ embedding: Float32Array, index: number }`, where `index` is the position of the source image in the input array.
+
 ## MultimodalEmbeddingModel Interface
 
 The `MultimodalEmbeddingModel` interface extends `EmbeddingModel<string>`, meaning it works as a standard text embedding model everywhere `embed()` is used. It adds image (and optionally audio) embedding capabilities.
@@ -265,8 +327,8 @@ expect(embedding.length).toBe(512);
   For recommended models, provider-specific options, and practical recipes, see the [Transformers Multimodal Embeddings](/docs/transformers/multimodal-embeddings) guide.
 </Callout>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Cross-Modal Search | Text-to-image and image-to-image search with CLIP | [Demo](https://localmode.ai/cross-modal-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/cross-modal-search) |
+| Photo Search (Cross-Modal Search) | Text-to-image and image-to-image search with CLIP | [Live block](https://localmode.ai/blocks/photo/image-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/photo/image-search) |

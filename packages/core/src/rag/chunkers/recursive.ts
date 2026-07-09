@@ -172,7 +172,7 @@ function splitBySeparator(text: string, separator: string, keepSeparators: boole
   if (keepSeparators) {
     // Keep separators at the end of each split
     const parts: string[] = [];
-    let remaining = text;
+    const remaining = text;
     let lastIndex = 0;
 
     while (true) {

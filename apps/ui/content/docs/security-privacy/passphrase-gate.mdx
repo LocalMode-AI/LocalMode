@@ -1,0 +1,102 @@
+---
+title: "Passphrase Gate"
+description: "A controlled passphrase screen with create and unlock modes — composes the password strength bar and surfaces errors, performing no crypto itself."
+icon: KeyRound
+---
+
+# Passphrase Gate
+
+The **Passphrase Gate** is a controlled, presentational unlock/create screen for
+a passphrase-protected surface. **Create** mode renders passphrase + confirmation
+fields, enforces a minimum length, and shows strength by composing the
+[Password Strength Bar](/docs/security-privacy/password-strength-bar) from
+caller-computed props. **Unlock** mode renders a single field with a
+caller-provided error surface (e.g. "Incorrect passphrase"). Submission emits the
+passphrase via `onSubmit`.
+
+> **Backend-agnostic.** The gate performs no crypto, no storage access, and holds
+> no passphrase beyond its controlled field state — the app derives the key and
+> drives the vault. Works with any backend; the recommended LocalMode hook is
+> `useEncryptedVault` from `@localmode/react` (`unlock(passphrase)`, `status`,
+> `error`) — a recommendation, never a requirement.
+
+**When to use it:** any vault, encrypted-store, or key-derivation form that needs
+a create-vs-unlock passphrase screen with strength feedback and error handling.
+
+## Preview
+
+<ComponentPreview name="ui/security-privacy/passphrase-gate" note="Toggle create/unlock. The demo estimates strength locally and rejects a wrong unlock passphrase. No crypto, no model." />
+
+<OpenInV0 name="ui/security-privacy/passphrase-gate" />
+
+## Installation
+
+<InstallTabs name="ui/security-privacy/passphrase-gate" />
+
+### Dependencies
+
+- **Data source:** controlled and presentational — emits `onSubmit(passphrase)` and `onPassphraseChange(value)`; it never estimates strength or touches crypto. Recommended LocalMode hook: `useEncryptedVault` (optional).
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+- Composes `@localmode/ui/security-privacy/password-strength-bar` (installed automatically as a registry dependency)
+
+### Files installed
+
+- `passphrase-gate.tsx` — the component
+- `password-strength-bar.tsx` — the composed strength meter
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/security-privacy/passphrase-gate/passphrase-gate.tsx" name="PassphraseGateProps" />
+
+<AutoTypeTable path="registry/localmode/security-privacy/passphrase-gate/passphrase-gate.tsx" name="PassphraseStrength" />
+
+## Examples
+
+### Wiring to an encrypted vault
+
+The app owns the estimator and the vault; the gate only renders and reports intent:
+
+```tsx
+import { useEncryptedVault } from '@localmode/react';
+import { PassphraseGate } from '@/components/passphrase-gate';
+
+function estimate(value: string) {
+  const classes =
+    (/[a-z]/.test(value) ? 1 : 0) + (/[A-Z]/.test(value) ? 1 : 0) +
+    (/[0-9]/.test(value) ? 1 : 0) + (/[^a-zA-Z0-9]/.test(value) ? 1 : 0);
+  const score = Math.round((Math.min(value.length, 16) / 16) * 60 + (classes / 4) * 40);
+  return { value: score, label: score < 40 ? 'Weak' : score < 70 ? 'Good' : 'Strong',
+    color: score < 40 ? 'error' : score < 70 ? 'warning' : 'success' } as const;
+}
+
+export function VaultGate() {
+  const { status, error, unlock } = useEncryptedVault({ name: 'notes' });
+  const [strength, setStrength] = useState({ value: 0 });
+  return (
+    <PassphraseGate
+      mode={status === 'uninitialized' ? 'create' : 'unlock'}
+      onSubmit={unlock}
+      onPassphraseChange={(v) => setStrength(estimate(v))}
+      strength={strength}
+      error={error?.name === 'VaultPassphraseError' ? 'Incorrect passphrase' : undefined}
+    />
+  );
+}
+```
+
+### Unlock mode with a busy state
+
+```tsx
+<PassphraseGate mode="unlock" isBusy={isDeriving} onSubmit={unlock} error={lastError} />
+```
+
+## Customization
+
+Create mode gates submission until the passphrase reaches `minLength` (default 8)
+and the confirmation matches; the strength bar renders only when you pass
+`strength`. Unlock mode shows a single field plus the `error` surface. Because you
+own the copied file, every threshold, label, and class is yours to change — swap
+the composed strength bar, add a "show passphrase" toggle, or wire your own
+key-derivation flow.

@@ -1,0 +1,74 @@
+---
+title: "Conversation"
+description: "A scrollable chat surface with first-class scroll-anchoring — auto-pins while streaming, releases on scroll-up, and re-pins on return."
+icon: MessagesSquare
+---
+
+# Conversation
+
+The **Conversation** primitive is the scrollable message-display surface for a chat. It auto-pins to the newest content while local tokens stream, releases the pin when the user scrolls up (surfacing a scroll-to-bottom control), and re-pins when the user returns to the bottom. It is presentational — it renders the children/messages you pass in and owns no message state. Wire it to [`useChat().messages`](https://localmode.dev/docs/react) from `@localmode/react`.
+
+It ships five parts: `Conversation` (the container), `ConversationContent` (padded column), `ConversationScrollAnchor` (the pin point, rendered last), `ConversationScrollButton` (the floating control), and `ConversationEmptyState` (the no-messages slot).
+
+## Preview
+
+<ComponentPreview name="ui/conversation/conversation" note="Static messages — scroll up to release the pin and reveal the scroll-to-bottom control. No model download." />
+
+<OpenInV0 name="ui/conversation/conversation" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/conversation" />
+
+### Data source & dependencies
+
+**Data source:** renders plain props — works with any backend. Recommended producer: `useChat` from `@localmode/react` (on-device). For a cloud example, see [Use with the Vercel AI SDK](/docs/use-with-ai-sdk).
+- `button` (shadcn/ui) — the scroll-to-bottom control
+
+### Files installed
+
+- `conversation.tsx` — the container + sub-parts
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/conversation/conversation.tsx" name="ConversationProps" />
+
+## Examples
+
+### Wire to `useChat`
+
+```tsx
+import { useChat } from '@localmode/react';
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollAnchor,
+  ConversationScrollButton,
+} from '@/components/conversation';
+import { Message, MessageContent } from '@/components/message';
+
+export function Chat({ model }) {
+  const { messages, isStreaming } = useChat({ model });
+
+  return (
+    <Conversation streaming={isStreaming}>
+      <ConversationContent>
+        {messages.length === 0 && <ConversationEmptyState />}
+        {messages.map((m) => (
+          <Message key={m.id} role={m.role}>
+            <MessageContent role={m.role} content={m.content} />
+          </Message>
+        ))}
+        <ConversationScrollAnchor />
+      </ConversationContent>
+      <ConversationScrollButton />
+    </Conversation>
+  );
+}
+```
+
+## Customization
+
+You own the copied `conversation.tsx`, so you can change the max width of `ConversationContent`, the pin threshold in the scroll handler, or the position of `ConversationScrollButton`. All surfaces are styled with shadcn/ui CSS-variable utilities so they inherit your theme.

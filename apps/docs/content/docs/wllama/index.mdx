@@ -15,7 +15,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 Run any GGUF model in the browser using llama.cpp compiled to WebAssembly. Access 160,000+ models from HuggingFace without WebGPU.
 
 <Callout type="info" title="See it in action">
-  Try [GGUF Explorer](https://localmode.ai/gguf-explorer) and [LLM Chat](https://localmode.ai/llm-chat) for working demos.
+  Try the [Chat block](https://localmode.ai/blocks/chat) — a flagship multi-provider chat where you can run the wllama catalog or load any GGUF by URL, with vision attachments, reasoning display, semantic cache, and agent mode.
 </Callout>
 
 ## Features
@@ -585,7 +585,7 @@ const { text: structured } = await generateText({
 
 ## Reranking
 
-Use `wllama.reranker()` with cross-encoder models to rerank search results by relevance. The catalog ships two reranker models (Jina Reranker v2 and BGE Reranker v2 M3):
+Use `wllama.reranker()` with cross-encoder models to rerank search results by relevance. The catalog ships two reranker models (Jina Reranker v2 and BGE Reranker v2 M3); both are selectable live in the [Knowledge Base block](https://localmode.ai/blocks/knowledge/semantic-search)'s reranked search:
 
 ```typescript
 import { rerank } from '@localmode/core';
@@ -885,9 +885,9 @@ try {
   />
 </Cards>
 
-## Showcase Apps
+## Composed Blocks
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| GGUF Explorer | Browse, load, and chat with GGUF models via wllama | [Demo](https://localmode.ai/gguf-explorer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/gguf-explorer) |
-| LLM Chat | Chat with wllama GGUF models alongside the WebLLM, ONNX, and LiteRT backends | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |
+| GGUF Explorer | Browse 160K+ HuggingFace GGUF models with Range-only metadata inspection, browser-compat verdicts, and a chat handoff | [Live](https://localmode.ai/blocks/device/gguf-explorer) · Install: `npx shadcn add @localmode/ui/blocks/device/gguf-explorer` |
+| Chat | Multi-provider LLM chat (transformers, WebLLM, wllama, LiteRT) with vision, reasoning, semantic cache, and agent mode | [Live](https://localmode.ai/blocks/chat) · Install: `npx shadcn add @localmode/ui/blocks/chat` |

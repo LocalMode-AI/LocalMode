@@ -58,6 +58,13 @@ export interface UseStreamSpeechReturn {
   /** Stop playback and halt upstream synthesis. */
   stop: () => void;
 
+  /**
+   * Clear `clauses`, `currentClause`, and `error` from the previous
+   * `speak()` call. No-op while synthesis or playback is in progress —
+   * call `stop()` first to interrupt an active utterance.
+   */
+  reset: () => void;
+
   /** True while a `speak()` operation is producing audio. */
   isSynthesizing: boolean;
 
@@ -153,6 +160,15 @@ export function useStreamSpeech(options: UseStreamSpeechOptions): UseStreamSpeec
     handleRef.current?.resume();
     if (mountedRef.current) setIsPlaying(true);
   }, []);
+
+  const reset = useCallback(() => {
+    // Only clear when nothing is speaking — an active utterance keeps its
+    // state until stop() or natural completion.
+    if (isSynthesizing || isPlaying) return;
+    setClauses([]);
+    setCurrentClause(null);
+    setError(null);
+  }, [isSynthesizing, isPlaying]);
 
   const speak = useCallback(
     async (text: string): Promise<void> => {
@@ -265,11 +281,27 @@ export function useStreamSpeech(options: UseStreamSpeechOptions): UseStreamSpeec
     [model, voice, speed, pitch, splitOptions, audioContext]
   );
 
+  if (IS_SERVER) {
+    return {
+      speak: async () => {},
+      pause: () => {},
+      resume: () => {},
+      stop: () => {},
+      reset: () => {},
+      isSynthesizing: false,
+      isPlaying: false,
+      currentClause: null,
+      clauses: [],
+      error: null,
+    };
+  }
+
   return {
     speak,
     pause,
     resume,
     stop,
+    reset,
     isSynthesizing,
     isPlaying,
     currentClause,

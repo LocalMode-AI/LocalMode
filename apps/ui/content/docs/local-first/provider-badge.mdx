@@ -1,0 +1,91 @@
+---
+title: "Provider Badge"
+description: "Shows the RESOLVED provider identity plus the served model id — composes Provider Fallback Badge and adds a Resolving state."
+icon: BadgeCheck
+---
+
+# Provider Badge
+
+The **Provider Badge** displays the **resolved** provider identity — composing the
+[Provider Fallback Badge](/docs/local-first/provider-fallback-badge) for the tier
+and name — alongside the **model id that actually served** the request. While
+`providerName` is `null` it shows a "Resolving provider…" placeholder, so the
+badge never claims a provider before one has resolved.
+
+> **How it differs from Provider Fallback Badge.** The
+> [Provider Fallback Badge](/docs/local-first/provider-fallback-badge) is the
+> lower-level **tier chip** (built-in vs download, plus the WASM threading
+> variant). The Provider Badge **composes it** and adds two things the fallback
+> badge does not: the **resolved provider identity** (with a Resolving state) and
+> the **served model id**. Use the fallback badge when you only want the tier
+> chip; use the Provider Badge when you want to surface which provider + model
+> actually answered.
+
+> **Presentational.** It takes generic display props (`providerName`, `tier`,
+> `modelId`, `note`) — no block-local provider types. Feed it from your provider
+> resolution (recommended: a provider-fallback resolver such as
+> `useProviderFallback` from `@localmode/react`).
+
+**When to use it:** a Chrome-AI ⇄ Transformers.js (or any two-tier) surface where
+the user should see which provider and model actually served the last result.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/provider-badge" note="Pure UI — toggle the Resolving state; the second badge shows a download-tier provider with a served model id. No model download." />
+
+<OpenInV0 name="ui/local-first/provider-badge" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/provider-badge" />
+
+### Dependencies
+
+- **Data source:** renders the resolved provenance you pass — works with any backend. Recommended LocalMode source: `useProviderFallback().resolution` (optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+- Composes `@localmode/ui/local-first/provider-fallback-badge` (installed automatically as a registry dependency)
+
+### Files installed
+
+- `provider-badge.tsx` — the component
+- `provider-fallback-badge.tsx` — the composed tier chip
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/provider-badge/provider-badge.tsx" name="ProviderBadgeProps" />
+
+## Examples
+
+### Show a resolved provider + served model
+
+```tsx
+import { ProviderBadge } from '@/components/provider-badge';
+
+<ProviderBadge providerName="Chrome AI" tier="built-in" modelId="gemini-nano" />
+```
+
+### Drive it from a provider-fallback resolver
+
+```tsx
+import { useProviderFallback } from '@localmode/react';
+import { ProviderBadge } from '@/components/provider-badge';
+
+function SummarizerBadge() {
+  const { resolution } = useProviderFallback();
+  return (
+    <ProviderBadge
+      providerName={resolution?.provider === 'chrome-ai' ? 'Chrome AI' : resolution ? 'Transformers.js' : null}
+      tier={resolution?.tier ?? 'download'}
+      modelId={resolution?.modelId ?? null}
+    />
+  );
+}
+```
+
+## Customization
+
+The badge never estimates or probes — it reflects exactly the `providerName` /
+`tier` / `modelId` you pass, so it can never claim a provider that did not serve
+the request. Because you own the copied file, restyle the served-model line, add
+a copy button, or change the "Resolving…" copy.

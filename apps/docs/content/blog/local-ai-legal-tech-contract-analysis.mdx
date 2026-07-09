@@ -3,7 +3,7 @@ title: "Local AI for Legal Tech: Contract Analysis Without Data Leaving Your Fir
 description: "Build contract analysis, clause classification, entity extraction, semantic search, PII redaction, and encrypted storage that runs entirely in the browser. No cloud APIs, no data processor agreements, no privilege risk."
 author: LocalMode
 date: 2026-02-22
-dateModified: "2026-05-25"
+dateModified: "2026-07-04"
 faq:
   - question: "Can AI analyze legal contracts without sending data to the cloud?"
     answer: "Yes. LocalMode runs all contract analysis workflows entirely in the browser via WebAssembly -- clause classification, entity extraction, semantic search, PII redaction, and encrypted storage -- with no data transmitted to external servers. The total model footprint is approximately 158MB."
@@ -141,7 +141,7 @@ console.log('Locations:', grouped.LOC?.map((e) => e.text));
 console.log(`Extracted ${entities.length} entities in ${usage.durationMs}ms`);
 ```
 
-The NER model is approximately 110MB. Each entity includes character-level `start` and `end` offsets, which enables highlighting entities directly in a document viewer. The showcase [Document Redactor](/docs/core/classification) app demonstrates this pattern with interactive entity highlighting.
+The NER model is approximately 110MB. Each entity includes character-level `start` and `end` offsets, which enables highlighting entities directly in a document viewer. The [PII Redactor block](https://localmode.ai/blocks/privacy/pii-redactor) demonstrates this pattern with interactive entity highlighting.
 
 ### 3. Semantic Search Across a Contract Corpus
 
@@ -192,7 +192,7 @@ for (const result of results) {
 }
 ```
 
-The `Xenova/bge-small-en-v1.5` embedding model is approximately 23MB and produces 384-dimensional vectors. With SQ8 compression enabled, a corpus of 10,000 contract chunks occupies roughly 3.7MB in IndexedDB -- well within browser storage limits. The [PDF Search](/docs/core/rag) showcase app demonstrates this full pipeline with drag-and-drop PDF upload, semantic chunking, and reranking.
+The `Xenova/bge-small-en-v1.5` embedding model is approximately 23MB and produces 384-dimensional vectors. With SQ8 compression enabled, a corpus of 10,000 contract chunks occupies roughly 3.7MB in IndexedDB -- well within browser storage limits. The [Semantic Search block](https://localmode.ai/blocks/knowledge/semantic-search) demonstrates this full pipeline with drag-and-drop PDF upload, semantic chunking, and reranking.
 
 ### 4. PII Redaction Before Sharing
 
@@ -244,7 +244,7 @@ const safeModel = wrapEmbeddingModel({
 });
 ```
 
-The PII redaction runs entirely via regex pattern matching in the core package -- zero dependencies, zero network calls. The `piiRedactionMiddleware` can be applied to any embedding model so that PII is stripped before text is converted to vectors, ensuring that even the mathematical representations of your documents contain no personal data. The showcase [Document Redactor](https://localmode.ai/document-redactor) app combines NER-based entity detection with PII redaction in a single interface.
+The PII redaction runs entirely via regex pattern matching in the core package -- zero dependencies, zero network calls. The `piiRedactionMiddleware` can be applied to any embedding model so that PII is stripped before text is converted to vectors, ensuring that even the mathematical representations of your documents contain no personal data. The [PII Redactor block](https://localmode.ai/blocks/privacy/pii-redactor) combines NER-based entity detection with PII redaction in a single interface.
 
 ### 5. Encrypted Document Storage
 
@@ -270,7 +270,7 @@ const decrypted = await decryptString(stored, passphrase);
 console.log(decrypted === contractText); // true
 ```
 
-For a full vault pattern with passphrase-based unlock, entry management, and automatic locking, see the [Encrypted Vault](https://localmode.ai/encrypted-vault) showcase app. It derives a `CryptoKey` via `deriveEncryptionKey()`, stores only the salt in localStorage, and clears the in-memory key on lock -- so even if someone inspects browser storage, they see only ciphertext.
+For a full vault pattern with passphrase-based unlock, entry management, and automatic locking, see the [Encrypted Vault block](https://localmode.ai/blocks/privacy/encrypted-vault). It derives a `CryptoKey` via `deriveEncryptionKey()`, stores only the salt in localStorage, and clears the in-memory key on lock -- so even if someone inspects browser storage, they see only ciphertext.
 
 ---
 
@@ -332,7 +332,7 @@ Research and technical claims in this post are based on the following sources:
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

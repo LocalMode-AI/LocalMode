@@ -17,6 +17,7 @@ import type {
 } from './types.js';
 import type { VectorDB, Collection } from '../types.js';
 import { embedMany } from './embed.js';
+import { TEXT_METADATA_FIELD } from '../rag/types.js';
 import { globalEventBus } from '../events/index.js';
 import { LockManager } from '../sync/locks.js';
 
@@ -66,7 +67,7 @@ export function fingerprintsMatch(a: ModelFingerprint, b: ModelFingerprint): boo
 // ═══════════════════════════════════════════════════════════════
 
 /** Default metadata fields to search for source text, in priority order */
-const DEFAULT_TEXT_FIELDS = ['_text', 'text', 'content', 'body', '__text', 'pageContent'];
+const DEFAULT_TEXT_FIELDS = [TEXT_METADATA_FIELD, 'text', 'content', 'body', '__text', 'pageContent'];
 
 /**
  * Extract text from document metadata using the default field lookup strategy.

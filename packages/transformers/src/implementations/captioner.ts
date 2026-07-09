@@ -8,6 +8,7 @@
 
 import type { ImageCaptionModel, ImageInput, VisionUsage } from '@localmode/core';
 import type { ModelSettings, TransformersDevice, ModelLoadProgress } from '../types.js';
+import { installResilientModelCache } from '../resilient-cache.js';
 
 // Use a generic callable type since we may use 'image-to-text' or 'image-text-to-text' pipeline
 // depending on the model architecture (BLIP vs Florence-2)
@@ -48,6 +49,7 @@ export class TransformersCaptionModel implements ImageCaptionModel {
 
       // Suppress ONNX runtime warnings about node execution providers
       env.backends.onnx.logLevel = 'error';
+      installResilientModelCache(env);
 
       // Florence-2 and similar models use 'image-text-to-text' pipeline
       // while traditional models (BLIP, ViT-GPT2) use 'image-to-text'

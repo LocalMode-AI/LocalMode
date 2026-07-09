@@ -1,0 +1,68 @@
+---
+title: "Copy Button"
+description: "A copy-to-clipboard button with a 2-second Copied confirmation that disables when there is nothing to copy and no-ops on an unavailable clipboard."
+icon: Copy
+---
+
+# Copy Button
+
+The **Copy Button** copies its `value` to the clipboard and shows a 2-second
+"Copied" confirmation before reverting. It disables itself when there is nothing
+to copy, and treats an unavailable clipboard (insecure context or denied
+permission) as a silent no-op — so it never throws in a hostile environment.
+
+> **Presentational + controlled.** Pass the text via `value`; the button owns
+> only its transient "Copied" state. Use it beside any generated text, code
+> block, or result.
+
+**When to use it:** anywhere the user should be able to copy a value with clear
+visual confirmation — generated answers, model ids, export payloads, snippets.
+
+## Preview
+
+<ComponentPreview name="ui/input-controls/copy-button" note="Pure UI — click to copy; the label flips to Copied for two seconds. The empty-value button stays disabled. No model download." />
+
+<OpenInV0 name="ui/input-controls/copy-button" />
+
+## Installation
+
+<InstallTabs name="ui/input-controls/copy-button" />
+
+### Dependencies
+
+- **Data source:** copies the `value` string you pass — works with any backend.
+- `lucide-react` — the copy / check icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `copy-button.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/input-controls/copy-button/copy-button.tsx" name="CopyButtonProps" />
+
+## Examples
+
+### Copy a generated result
+
+```tsx
+import { CopyButton } from '@/components/copy-button';
+
+export function ResultToolbar({ text }) {
+  return <CopyButton value={text} />;
+}
+```
+
+### Force-disable while streaming
+
+```tsx
+<CopyButton value={partial} disabled={isStreaming} />
+```
+
+## Customization
+
+The button uses `border-border` / `hover:bg-muted` token utilities and merges
+your `className`. Because you own the copied file, you can change the confirmation
+duration (the `2000` ms timeout), swap the icons, or make it icon-only.

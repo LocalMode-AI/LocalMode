@@ -1,0 +1,68 @@
+---
+title: "Use with an AI agent (MCP)"
+description: "Point the shadcn MCP server at the @localmode/ui registry so an AI coding agent (Claude Code, Cursor, VS Code, Codex) can browse and install LocalMode Elements for you — by name or by description."
+icon: Bot
+---
+
+# Use with an AI agent (MCP)
+
+LocalMode UI is a standard shadcn registry, so it works with the **shadcn MCP server out of the box** — no LocalMode-specific server to run. Once configured, an AI coding agent can search the catalog, read component descriptions, and install items into your project on request.
+
+<Callout type="info" title="Why this works with zero extra setup">
+  The shadcn MCP server reads any registry that exposes a root `registry.json`. LocalMode UI serves
+  its catalog at <code>https://localmode.ai/registry.json</code> and each item at
+  <code>/r/&lt;name&gt;.json</code>, so the MCP can discover and install everything under the
+  `@localmode` namespace.
+</Callout>
+
+## 1. Add the registry to your project
+
+In your project's `components.json`, map the single-token `@localmode` namespace to the registry endpoint:
+
+```json
+{
+  "registries": {
+    "@localmode": "https://localmode.ai/r/{name}.json"
+  }
+}
+```
+
+## 2. Initialize the shadcn MCP for your client
+
+```bash
+npx shadcn@latest mcp init --client claude
+```
+
+Swap `claude` for `cursor`, `vscode`, or `codex` as needed. This registers the shadcn MCP server with your agent; it can now read every registry configured in `components.json`, including `@localmode`.
+
+## 3. Ask the agent
+
+With the MCP connected, prompt your agent in natural language. Because every item ships a precise description, the agent can resolve components by intent, not just by exact name:
+
+- *"Add the model-download-progress component from @localmode/ui."*
+- *"Install the @localmode/ui conversation family so I can build a chat."*
+- *"Find a LocalMode UI component that shows a confidence score and add it."*
+- *"Scaffold a local-first chat using @localmode/ui components."*
+- *"Install the @localmode/ui chat block."* — composed, ready-to-run blocks live in the same catalog and install the same way (e.g. `@localmode/ui/blocks/knowledge/semantic-search`).
+
+The agent searches the catalog, picks the matching item(s), and runs the install — copying the owned `.tsx` into your project exactly as a manual `shadcn add` would.
+
+## What the agent sees
+
+- **The catalog**: [`/registry.json`](/registry.json) — every item with its title, description, dependencies, and `registryDependencies`.
+- **Per-item JSON**: `/r/ui/<family>/<component>.json` — the files and metadata the CLI installs.
+- **Aggregates**: `@localmode/ui/all` and `@localmode/ui/<family>` for bulk installs.
+- **Composed blocks**: `@localmode/ui/blocks/<category>/<block>` (e.g. `blocks/chat`, `blocks/knowledge/rag-chat`, `blocks/vision/object-detector`) — full, wired mini-apps in the same catalog. They're excluded from the aggregates by design, so an agent only installs one when asked for it by name.
+
+## Other agent-readable resources
+
+Beyond MCP, the site publishes plain-text indexes agents can ingest directly:
+
+- [`llms.txt`](/llms.txt) — the catalog as a markdown index.
+- [`llms-full.txt`](/llms-full.txt) — the full component reference.
+- Every docs page is available as raw markdown via its **View as Markdown** action.
+
+## See also
+
+- [Installation](/docs/installation) — manual setup and `components.json`.
+- [Bring your own data](/docs/bring-your-own-data) — the prop contracts an agent-installed component renders.

@@ -52,7 +52,13 @@ export type TransformersDevice = 'webgpu' | 'wasm' | 'cpu' | 'auto';
  * Status types include all possible states from the underlying transformers library.
  */
 export interface ModelLoadProgress {
-  /** Current status */
+  /**
+   * Current status.
+   *
+   * `'progress_total'` is never emitted — Transformers.js reports only
+   * `initiate`/`download`/`progress`/`done`/`ready`. It remains in the union
+   * for backward type compatibility only; do not branch on it.
+   */
   status: 'initiate' | 'download' | 'progress' | 'progress_total' | 'done' | 'ready';
 
   /** Model name being loaded */
@@ -103,6 +109,29 @@ export interface TransformersProviderSettings {
    * @default true
    */
   quantized?: boolean;
+
+  /**
+   * Whether to install the resilient model-file cache into the Transformers.js
+   * environment when models load.
+   *
+   * When enabled (the default), model files are cached through a wrapper over
+   * the same browser Cache API cache Transformers.js uses by default
+   * (`'transformers-cache'`, same request keys — previously cached models keep
+   * hitting) whose write path can never fail a model load: if a cache write
+   * fails (e.g. the intermittent `NetworkError` some browsers throw mid-write),
+   * the already-fetched network response still serves the load, one warning per
+   * file per session is logged, and caching is retried on the next load.
+   * Environments without the Cache API (Node.js, some private-browsing modes)
+   * keep stock Transformers.js caching — the wrapper is not installed there.
+   *
+   * The Transformers.js environment is a global singleton, so this setting is
+   * global: `createTransformers({ resilientCache: false })` restores stock
+   * Transformers.js caching for all subsequently loaded models (and uninstalls
+   * the wrapper if it was already installed).
+   *
+   * @default true
+   */
+  resilientCache?: boolean;
 }
 
 /**

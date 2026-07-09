@@ -1,0 +1,237 @@
+---
+title: "Local-First Chat UI: The @localmode/ui Conversation Components"
+description: "@localmode/ui ships 24 copy-owned, shadcn-styled conversation primitives -- Conversation, Message, PromptInput, Reasoning, Tool, AgentStepTimeline, InlineCitation and more -- that render the state of @localmode/react hooks. Build a streaming chat, agent, or RAG UI where the model runs in the browser, not in the cloud."
+author: LocalMode
+date: "2026-05-31"
+dateModified: "2026-05-31"
+faq:
+  - question: "What are the @localmode/ui conversation components?"
+    answer: "They are 24 copy-owned, shadcn/ui-styled React primitives for building chat, agent, and RAG interfaces -- Conversation, Message, Response, PromptInput, Reasoning, Sources, Tool, Task, Branch, InlineCitation, AgentStepTimeline, ChainOfThought, and more. They are purely presentational: they render the state of @localmode/react hooks like useChat, useAgent, and useSemanticSearch, and the model runs entirely in the browser."
+  - question: "How do I install the conversation components?"
+    answer: "Use the shadcn CLI. Run npx shadcn@latest add @localmode/ui/conversation/conversation for a single primitive, or npx shadcn@latest add @localmode/ui/conversation to install the whole family. The command copies the .tsx files into your project so you own and can edit the code -- there is no runtime npm dependency on the UI library itself."
+  - question: "Are the conversation components tied to a specific LLM provider?"
+    answer: "No. They render hook state, not provider state. You wire them to useChat, useAgent, or useSemanticSearch from @localmode/react, and you choose the provider that backs those hooks -- @localmode/webllm, @localmode/wllama, @localmode/transformers, or @localmode/litert. Swapping providers does not change the UI code."
+  - question: "Do the conversation components work offline?"
+    answer: "Yes. Because inference happens on-device through @localmode providers, a chat built with these primitives works offline after the model is cached. There is no server route streaming tokens -- the Response component renders tokens straight from the in-browser model, and reasoning, tool calls, and citations all reference local state."
+  - question: "How are these different from Vercel AI Elements?"
+    answer: "The component vocabulary is intentionally similar -- Conversation, Message, PromptInput, Reasoning, Sources, Tool -- so the mental model transfers. The difference is the runtime: AI Elements assume a server route streaming from a hosted model, while @localmode/ui primitives render the state of in-browser models. There is no API key, no server, and no token bill."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Every LLM app reinvents the same surface: a scrolling message list that sticks to the bottom while tokens stream, a composer that submits on Enter and stops mid-stream, a collapsible block of model "thinking," cards for tool calls, and citations back to retrieved chunks. You can hand-build all of it, or you can copy primitives that already do it.
+
+`@localmode/ui` is a shadcn-style registry of copy-owned AI UI components. The **conversation** family is 24 of them -- the AI-native chat surface every assistant, agent, and RAG app reuses. The twist: they are local-first. They render the state of [`@localmode/react`](https://localmode.dev/docs/react) hooks whose models run **in the browser**, so there is no server route streaming tokens, no API key, and no per-token bill.
+
+<Callout type="info" title="Copy-owned, not an npm dependency">
+  Like shadcn/ui, you install these with the shadcn CLI and own the copied `.tsx` files. There is no
+  runtime dependency on a UI package -- the code lives in your repo and inherits your theme.
+</Callout>
+
+---
+
+## Why local-first changes the UI, not just the runtime
+
+A cloud chat UI is, structurally, a view over a network stream. A local-first chat UI is a view over **device state** -- and that surfaces things a cloud library structurally cannot show. The conversation family leans into that:
+
+- `Reasoning` renders DeepSeek-R1-style thinking tokens that come straight off the in-browser decoder.
+- `Tool` reflects a tool-call status taxonomy from a local agent loop, not a remote function-calling API.
+- `InlineCitation` and `SourceCitationList` reference chunks stored in IndexedDB by local vector search -- there is no remote URL to unfurl.
+- `SystemNoticeBanner` reads `useNetworkStatus` and `useCapabilities` to show offline, fallback, and eviction notices that only exist when the model is on the user's machine.
+
+Everything is **presentational and hook-driven**: the primitives render props and emit callbacks; the orchestration state (`useChat`, `useAgent`) lives in your app. That is the same decomposition the LocalMode Chat block validated.
+
+---
+
+## Install
+
+The registry uses the single-token `@localmode` namespace, mapped in your `components.json`. With [shadcn/ui set up](https://ui.shadcn.com/docs/installation), install a single primitive or the whole family:
+
+```bash
+# One primitive
+npx shadcn@latest add @localmode/ui/conversation/conversation
+
+# The whole conversation family (24 primitives)
+npx shadcn@latest add @localmode/ui/conversation
+```
+
+Each command copies the component's `.tsx` into your project -- no `@localmode/*` package is installed; the primitives render plain props and work with any backend. To pair them with the recommended local-first hooks, add `@localmode/react` and pick a provider -- `@localmode/webllm`, `@localmode/wllama`, `@localmode/transformers`, or `@localmode/litert` -- to back them.
+
+---
+
+## The shell: Conversation, Message, Response, Loader
+
+The four shell primitives are the message-display surface. [`Conversation`](https://localmode.ai/docs/conversation/conversation) is a scroll container with first-class scroll-anchoring: it auto-pins to the newest token while streaming, releases the pin when the user scrolls up (revealing a scroll-to-bottom control), and re-pins on return. [`Message`](https://localmode.ai/docs/conversation/message) is role-aware and renders `ContentPart[]` (text + image), matching the `@localmode/react` message model. [`Response`](https://localmode.ai/docs/conversation/response) streams partial-token-safe markdown with a cursor.
+
+```tsx
+import { useChat } from '@localmode/react';
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollAnchor,
+  ConversationScrollButton,
+} from '@/components/conversation';
+import { Message, MessageContent } from '@/components/message';
+
+export function Chat({ model }) {
+  const { messages, isStreaming } = useChat({ model });
+
+  return (
+    <Conversation streaming={isStreaming}>
+      <ConversationContent>
+        {messages.length === 0 && <ConversationEmptyState />}
+        {messages.map((m) => (
+          <Message key={m.id} role={m.role}>
+            <MessageContent role={m.role} content={m.content} />
+          </Message>
+        ))}
+        <ConversationScrollAnchor />
+      </ConversationContent>
+      <ConversationScrollButton />
+    </Conversation>
+  );
+}
+```
+
+Note what is *not* here: no `fetch`, no streaming endpoint. `useChat({ model })` runs the model on-device; `messages` is local state.
+
+---
+
+## The composer: PromptInput
+
+[`PromptInput`](https://localmode.ai/docs/conversation/prompt-input) is a form-based, auto-resizing textarea: Enter submits, Shift+Enter newlines, and the submit control swaps to a stop control while streaming. It can be controlled or uncontrolled, supports paste/drop image attachments via `PromptInputAttachments`, and even ships a `PromptInputMic` for local Whisper dictation.
+
+```tsx
+import { useChat } from '@localmode/react';
+import {
+  PromptInput,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from '@/components/prompt-input';
+
+export function Composer({ model }) {
+  const { send, cancel, isStreaming } = useChat({ model });
+  return (
+    <PromptInput streaming={isStreaming} onStop={cancel} onSubmit={(text) => send(text)}>
+      <PromptInputTextarea placeholder="Ask anything..." />
+      <PromptInputTools>
+        <span />
+        <PromptInputSubmit />
+      </PromptInputTools>
+    </PromptInput>
+  );
+}
+```
+
+`onStop` wires straight to `cancel` -- because the model is local, cancelling actually halts decoding on the user's device, not a billable request you have already paid for.
+
+---
+
+## AI-native parts: Reasoning, Tool, Sources
+
+Three primitives render the parts a modern assistant emits beyond plain text.
+
+[`Reasoning`](https://localmode.ai/docs/conversation/reasoning) shows the model's thinking tokens in a collapsible region that auto-expands while streaming (with an elapsed timer) and auto-collapses on the final answer. A compact `ThinkingBar` variant is a one-line status strip:
+
+```tsx
+import { Reasoning, ReasoningContent, ReasoningTrigger } from '@/components/reasoning';
+
+<Reasoning streaming={isThinking}>
+  <ReasoningTrigger />
+  <ReasoningContent>{thinkTokens}</ReasoningContent>
+</Reasoning>
+```
+
+[`Tool`](https://localmode.ai/docs/conversation/tool) renders a single tool invocation with a status taxonomy (pending / running / streaming / completed / error) and expandable input/output:
+
+```tsx
+import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from '@/components/tool';
+
+<Tool defaultOpen>
+  <ToolHeader name={call.name} status={call.status} />
+  <ToolContent>
+    <ToolInput input={call.input} />
+    <ToolOutput output={call.output} error={call.error} />
+  </ToolContent>
+</Tool>
+```
+
+[`Sources`](https://localmode.ai/docs/conversation/sources) (and the richer `SourceCitationList`) attach RAG citations from local vector search -- the chunks your `useSemanticSearch` retrieved from IndexedDB.
+
+---
+
+## Agent and RAG surfaces
+
+The family goes past basic chat into the surfaces agent and retrieval apps need.
+
+[`AgentStepTimeline`](https://localmode.ai/docs/conversation/agent-step-timeline) is a vertical ReAct timeline: each step is a collapsible card with a color-coded tool badge, formatted args, an observation, an index, and elapsed-ms. It auto-scrolls, shows a "Thinking..." row while running, and renders a terminal finish-reason badge (`max_steps` / `timeout` / `loop_detected` / `error`). It even supports nested sub-agent handoffs -- driven entirely by `useAgent().steps`.
+
+[`InlineCitation`](https://localmode.ai/docs/conversation/inline-citation) embeds numbered superscript markers in prose that open a hovercard showing the cited local chunk, with a carousel paging multiple sources for one claim. Because citations reference locally-stored chunks, there is no remote unfurl -- the provenance is fully on-device.
+
+Rounding out the family: [`ChainOfThought`](https://localmode.ai/docs/conversation/chain-of-thought) for itemized reasoning steps, [`Branch`](https://localmode.ai/docs/conversation/branch) for message versioning and regenerate variants, [`ToolApproval`](https://localmode.ai/docs/conversation/tool-approval) for a human-in-the-loop tool-call gate, [`StructuredOutputViewer`](https://localmode.ai/docs/conversation/structured-output-viewer) for `useGenerateObject` JSON with an inference-stats footer, and [`MultiStepPipelineTracker`](https://localmode.ai/docs/conversation/pipeline-tracker) for `usePipeline` RAG ingest/answer progress.
+
+---
+
+## How they compose with the rest of `@localmode/ui`
+
+A chat is not just messages. Its empty state is a model download, its sidebar is a model picker, and a cached reply carries a "cached" annotation. Those belong to the **local-first** family -- `ModelDownloader`, `ModelSelector`, `CacheBadge`, `ContextUsageMeter` -- which the conversation primitives compose with directly. A generated file or chart can pop into the **artifacts** family's docked `Artifact` canvas beside the stream. The three families are designed to click together.
+
+---
+
+## FAQ
+
+### What are the `@localmode/ui` conversation components?
+
+They are 24 copy-owned, shadcn/ui-styled React primitives for building chat, agent, and RAG interfaces: `Conversation`, `Message`, `Response`, `PromptInput`, `Reasoning`, `Sources`, `Tool`, `Task`, `Branch`, `InlineCitation`, `AgentStepTimeline`, `ChainOfThought`, and more. They are purely presentational -- they render the state of `@localmode/react` hooks like `useChat`, `useAgent`, and `useSemanticSearch`, and the model runs entirely in the browser.
+
+### How do I install the conversation components?
+
+Use the shadcn CLI: `npx shadcn@latest add @localmode/ui/conversation/conversation` for a single primitive, or `npx shadcn@latest add @localmode/ui/conversation` for the whole family. The command copies the `.tsx` files into your project, so you own and can edit the code.
+
+### Are the conversation components tied to a specific LLM provider?
+
+No. They render hook state, not provider state. Wire them to `useChat`, `useAgent`, or `useSemanticSearch` and choose the provider that backs those hooks -- `@localmode/webllm`, `@localmode/wllama`, `@localmode/transformers`, or `@localmode/litert`. Swapping providers does not change the UI code.
+
+### Do the conversation components work offline?
+
+Yes. Because inference happens on-device, a chat built with these primitives works offline after the model is cached. `Response` renders tokens straight from the in-browser model, and reasoning, tool calls, and citations all reference local state.
+
+### How are these different from Vercel AI Elements?
+
+The component vocabulary is intentionally similar so the mental model transfers, but the runtime differs: AI Elements assume a server route streaming from a hosted model, while `@localmode/ui` primitives render the state of in-browser models. No API key, no server, no token bill.
+
+---
+
+## Get started
+
+Install one primitive and wire it to a hook:
+
+```bash
+npx shadcn@latest add @localmode/ui/conversation
+```
+
+Then browse the full family -- props, live previews, and per-component examples -- in the [conversation docs](https://localmode.ai/docs/components). For the model-download and device surfaces that compose with these, see the [local-first components post](/blog/localmode-ui-local-first-components), and for docked output canvases, the [artifacts post](/blog/localmode-ui-artifacts).
+
+---
+
+## Methodology
+
+Every component count, name, prop, and code example in this post was verified directly against the LocalMode source code, which is the source of truth.
+
+- **The "24" conversation count** and every component/sub-part name were verified against the catalog in `apps/ui/registry.json` (24 items named `ui/conversation/*`) and the component sources in `apps/ui/registry/localmode/conversation/`. The family count also matches `AGENTS.md`.
+- **API accuracy** was checked against the actual `.tsx`: `MessageContent` takes a `content` prop typed `string | MessagePart[]` (`message.tsx`), and `Response` is a standalone streaming markdown renderer whose `children` is a `string` (`response.tsx`). The `Tool` status taxonomy (`pending / running / streaming / completed / error`), the `Reasoning` / `ThinkingBar` / `ChainOfThought` tiers, the `AgentStepTimeline` finish-reason badges (`max_steps / timeout / loop_detected / error`) and sub-agent handoffs, and the `InlineCitation` hovercard + carousel were all read from their respective component files.
+- **Hook references** (`useChat`, `useAgent`, `useSemanticSearch`, `useGenerateObject`, `usePipeline`, `useNetworkStatus`, `useCapabilities`) were confirmed to exist as exports in `packages/react/src/`, and the `useChat` surface used in the examples (`messages`, `isStreaming`, `send`, `cancel`) and `useAgent().steps` were verified against `packages/react/src/hooks/`.
+- **The zero-dependency portability claim** ("no `@localmode/*` package is installed") was verified two ways: every `ui/conversation/*` item declares zero `@localmode/*` npm dependencies in `apps/ui/registry.json`, and the consumer portability test (`apps/ui/consumer-tests/portability-test.mjs`) installs conversation items through the real `shadcn` CLI into a project with no `@localmode/*` packages and asserts no `@localmode/*` import or package is introduced.
+- **The Vercel AI Elements comparison** was checked against the official AI Elements documentation, which describes a shadcn-based registry with a similar component vocabulary (Conversation, Message, PromptInput, Reasoning, Sources, Tool) and "deep integration with the AI SDK" for streaming -- i.e. a server/AI-SDK-backed runtime.
+
+## Sources
+
+- LocalMode registry catalog: `apps/ui/registry.json` (24 `ui/conversation/*` items, all with zero `@localmode/*` dependencies)
+- Conversation component sources: `apps/ui/registry/localmode/conversation/` (`conversation.tsx`, `message.tsx`, `response.tsx`, `prompt-input.tsx`, `reasoning.tsx`, `tool.tsx`, `agent-step-timeline.tsx`, `inline-citation.tsx`, `structured-output-viewer.tsx`, `pipeline-tracker.tsx`, `system-notice-banner.tsx`, and others)
+- React hooks: `packages/react/src/hooks/use-chat.ts`, `use-agent.ts`, `use-generate-object.ts`, `use-semantic-search.ts`, `use-pipeline.ts`, and `packages/react/src/utilities/use-network-status.ts`, `use-capabilities.ts`
+- Portability test: `apps/ui/consumer-tests/portability-test.mjs`
+- Catalog overview: `AGENTS.md` (UI Registry Standards -- 100+ components across 10 families; conversation = 24)
+- [Vercel AI Elements documentation](https://elements.ai-sdk.dev/overview)
+- [shadcn/ui registry docs](https://ui.shadcn.com/docs/registry)

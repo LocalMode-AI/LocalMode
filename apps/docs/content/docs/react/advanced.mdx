@@ -9,12 +9,12 @@ import { Callout } from 'fumadocs-ui/components/callout';
 # Advanced Patterns
 
 <Callout type="info" title="See it in action">
-  Try [Email Classifier](https://localmode.ai/email-classifier), [Duplicate Finder](https://localmode.ai/duplicate-finder), and [Cross-Modal Search](https://localmode.ai/cross-modal-search) for working demos of these advanced hooks.
+  Try the [Text Insights blocks](https://localmode.ai/blocks/text-insights) and [Photo Search block](https://localmode.ai/blocks/photo/smart-gallery) for working demos of these advanced hooks — Photo Search's adaptive-batch ingest drives batched image embedding across a whole photo library.
 </Callout>
 
 ## usePipeline
 
-Compose multi-step workflows with unified progress and cancellation.
+Compose multi-step workflows with unified progress and cancellation. Completed runs also report metrics (`durationMs`, `stepsCompleted`) — see the [Pipelines](/docs/react/pipelines) page for the full return value.
 
 ```tsx
 import { usePipeline, embedStep, searchStep, chunkStep } from '@localmode/react';
@@ -187,7 +187,7 @@ Use `useOperationList` when your UI shows a growing list of results (Q&A entries
 
 ## useSequentialBatch
 
-Process an array of inputs one at a time with progress tracking and cancellation. Unlike `useBatchOperation` (concurrent), this processes items sequentially in order.
+Process an array of inputs one at a time with progress tracking and cancellation. Unlike `useBatchOperation` (concurrent), this processes items sequentially in order. `results` and `itemErrors` are published incrementally as each item completes — not only at batch end — so consumers see results as they arrive.
 
 ```tsx
 import { useSequentialBatch, toAppError } from '@localmode/react';
@@ -221,16 +221,26 @@ function useSentiment(model) {
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `results` | `(TOutput \| null)[]` | Results array (null for failed items) |
+| `results` | `(TOutput \| null)[]` | Results array (null for failed items), published incrementally as items complete |
+| `itemErrors` | `(Error \| null)[]` | Per-item errors, index-aligned with `results`: `itemErrors[i]` is the Error that made `results[i]` null, or null if item `i` succeeded |
 | `progress` | `{ current, total }` | Items completed / total items |
 | `isRunning` | `boolean` | Whether the batch is running |
-| `error` | `Error \| null` | Batch-level error |
+| `error` | `Error \| null` | Batch-level error (not per-item) |
 | `execute` | `(inputs) => Promise` | Process all inputs sequentially |
 | `cancel` | `() => void` | Stop after current item |
 | `reset` | `() => void` | Clear all state |
 
+```tsx
+// Surface per-item failures alongside successes:
+{batch.results.map((r, i) => (
+  <div key={i}>
+    {r ? r.label : `Failed: ${batch.itemErrors[i]?.message}`}
+  </div>
+))}
+```
+
 <Callout type="tip">
-Use `useSequentialBatch` for batch processing where order matters or you need simple `{current, total}` progress. Use `useBatchOperation` for concurrent processing with per-item error tracking.
+Use `useSequentialBatch` for batch processing where order matters or you need simple `{current, total}` progress. Use `useBatchOperation` for concurrent processing.
 </Callout>
 
 ## toAppError
@@ -248,7 +258,7 @@ return {
 };
 ```
 
-All `@localmode/react` hooks return `Error | null`. Components typically expect `{ message, recoverable }`. `toAppError` bridges the gap in one call.
+All `@localmode/react` hooks return `Error | null`. Components typically expect `{ message, recoverable }`. `toAppError` bridges the gap in one call. Core `LocalModeError`s keep their `code` (on `AppError.code`) and have their `hint` appended to the message (`'Model failed — Check your network'`).
 
 ## Composing Multiple Hooks
 
@@ -314,15 +324,15 @@ All hooks are SSR-safe. During server rendering they return inert default state:
 
 No `useEffect` or browser APIs are called during SSR. Hooks activate on client hydration.
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Email Classifier | useOperationList for building a growing list of classified emails | [Demo](https://localmode.ai/email-classifier) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/email-classifier) |
-| Voice Notes | useOperationList for accumulating transcription results | [Demo](https://localmode.ai/voice-notes) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/voice-notes) |
-| QA Bot | useOperationList for question-answer entry accumulation | [Demo](https://localmode.ai/qa-bot) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/qa-bot) |
-| Sentiment Analyzer | useSequentialBatch for ordered batch sentiment analysis | [Demo](https://localmode.ai/sentiment-analyzer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/sentiment-analyzer) |
-| Duplicate Finder | useSequentialBatch for sequential image feature extraction | [Demo](https://localmode.ai/duplicate-finder) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/duplicate-finder) |
-| Cross-Modal Search | useBatchOperation for concurrent image embedding | [Demo](https://localmode.ai/cross-modal-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/cross-modal-search) |
-| Smart Gallery | useBatchOperation for parallel image processing | [Demo](https://localmode.ai/smart-gallery) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-gallery) |
-| Product Search | useBatchOperation for batch product catalog indexing | [Demo](https://localmode.ai/product-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/product-search) |
+| Text Insights (Email Classifier) | useOperationList for building a growing list of classified emails | [Live block](https://localmode.ai/blocks/text-insights/text-classifier) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/text-insights/text-classifier) |
+| Audio Studio (Voice Notes) | useOperationList for accumulating transcription results | [Live block](https://localmode.ai/blocks/audio) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/audio) |
+| Knowledge Base (QA Bot) | useOperationList for question-answer entry accumulation | [Live block](https://localmode.ai/blocks/knowledge/document-qa) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/document-qa) |
+| Text Insights (Sentiment Analyzer) | useSequentialBatch for ordered batch sentiment analysis | [Live block](https://localmode.ai/blocks/text-insights/sentiment-analyzer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/text-insights/sentiment-analyzer) |
+| Photo Search (Duplicate Finder) | useSequentialBatch for sequential image feature extraction | [Live block](https://localmode.ai/blocks/photo/duplicate-finder) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/photo/duplicate-finder) |
+| Photo Search (Cross-Modal Search) | useBatchOperation for concurrent image embedding | [Live block](https://localmode.ai/blocks/photo/image-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/photo/image-search) |
+| Photo Search (Smart Gallery) | useBatchOperation for parallel image processing | [Live block](https://localmode.ai/blocks/photo/smart-gallery) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/photo/smart-gallery) |
+| Photo Search (Product Search) | useBatchOperation for batch product catalog indexing | [Live block](https://localmode.ai/blocks/photo/image-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/photo/image-search) |

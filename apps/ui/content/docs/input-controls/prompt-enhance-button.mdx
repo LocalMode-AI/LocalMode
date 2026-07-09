@@ -1,0 +1,79 @@
+---
+title: "Prompt Enhance Button"
+description: "A one-click \"enhance my prompt\" control that rewrites the user's draft with a local model — fully offline — with an optional few-shot example editor."
+icon: Sparkles
+---
+
+# Prompt Enhance Button
+
+The **Prompt Enhance Button** is a one-click "enhance my prompt" control for a composer. It hands the user's draft to your rewrite backend via the `onEnhance` callback — optionally wired to [`useGenerateText()`](https://localmode.dev/docs/react) for a fully offline local rewrite — and applies the result. An optional few-shot example editor lets users teach the rewrite by example.
+
+It is presentational + callback-driven; the rewrite runs on a local model in your app.
+
+**When to use it:** a chat or generation composer where users want a quick, private way to sharpen a rough prompt.
+
+## Preview
+
+<ComponentPreview name="ui/input-controls/prompt-enhance-button" note="Enhancing downloads a small local LLM (Qwen3 0.6B) on first run, then rewrites the draft offline." />
+
+<OpenInV0 name="ui/input-controls/prompt-enhance-button" />
+
+## Installation
+
+<InstallTabs name="ui/input-controls/prompt-enhance-button" />
+
+### Dependencies
+
+- **Data source:** runs the rewrite through the `onEnhance` callback you supply and applies it via `onApply` — works with any backend. Recommended LocalMode producer: `useGenerateText` (optional).
+- `lucide-react` — icons
+
+### Files installed
+
+- `prompt-enhance-button.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/input-controls/prompt-enhance-button/prompt-enhance-button.tsx" name="PromptEnhanceButtonProps" />
+
+## Examples
+
+### Enhance a draft locally
+
+```tsx
+import { useState } from 'react';
+import { useGenerateText } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+import { PromptEnhanceButton } from '@/components/prompt-enhance-button';
+
+export function Composer() {
+  const [prompt, setPrompt] = useState('write about dogs');
+  const { execute } = useGenerateText({
+    model: transformers.languageModel('onnx-community/Qwen3-0.6B-ONNX'),
+    maxTokens: 120,
+  });
+
+  return (
+    <PromptEnhanceButton
+      draft={prompt}
+      onApply={setPrompt}
+      onEnhance={async (draft) => {
+        const r = await execute(
+          `Rewrite this prompt to be clearer. Return only the improved prompt:\n${draft}`,
+        );
+        return r?.text.trim() ?? null;
+      }}
+    />
+  );
+}
+```
+
+### With the few-shot editor
+
+```tsx
+<PromptEnhanceButton draft={prompt} onApply={setPrompt} onEnhance={enhance} showExampleEditor />
+```
+
+## Customization
+
+The button surfaces its own loading + error state; you only supply `onEnhance` (returning the improved string) and `onApply`. The optional few-shot editor collects `draft → improved` pairs and passes them to `onEnhance` so you can include them in the local generation instruction. Everything is theme-driven via shadcn/ui CSS variables.

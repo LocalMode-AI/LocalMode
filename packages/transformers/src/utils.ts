@@ -8,6 +8,7 @@
 
 import type { ModelLoadProgress } from './types.js';
 import { TRANSFORMERS_LLM_MODELS } from './models.js';
+import { installResilientModelCache } from './resilient-cache.js';
 
 /**
  * Check if WebGPU is available in the current environment.
@@ -108,7 +109,8 @@ export async function preloadModel(
     quantized?: boolean;
   }
 ): Promise<void> {
-  const { pipeline } = await import('@huggingface/transformers');
+  const { pipeline, env } = await import('@huggingface/transformers');
+  installResilientModelCache(env);
 
   // Determine the task type from the model ID
   // This is a heuristic - in practice, users should know which task they need

@@ -3,7 +3,7 @@ title: "Your First AI App: Build a Sentiment Analyzer in 15 Minutes (No Python, 
 description: "A step-by-step tutorial for JavaScript developers who have never built an AI feature. Install two packages, write five lines of classification code, and ship a working sentiment analyzer that runs entirely in the browser."
 author: LocalMode
 date: 2026-03-12
-dateModified: "2026-05-27"
+dateModified: "2026-07-04"
 faq:
   - question: "How do I build a sentiment analyzer in JavaScript without Python or a server?"
     answer: "Install two packages (@localmode/core and @localmode/transformers), create a classifier model with transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english'), and call classify({ model, text }). The 67 MB model downloads once, caches in the browser, and returns a label (POSITIVE/NEGATIVE) with a confidence score."
@@ -210,7 +210,7 @@ Notice the third example: the model is less confident because the text is genuin
 
 Here is what happened behind the scenes when you clicked "Analyze":
 
-1. **Model download** -- The `transformers.classifier()` call triggered a one-time download of the DistilBERT ONNX model (~67 MB) from HuggingFace Hub. The browser cached it in IndexedDB so future visits skip this step entirely.
+1. **Model download** -- The `transformers.classifier()` call triggered a one-time download of the DistilBERT ONNX model (~67 MB) from HuggingFace Hub. The browser cached it in the Cache API so future visits skip this step entirely.
 
 2. **Tokenization** -- Your sentence was split into tokens (subword pieces) that the model understands. "I love this product!" becomes something like `["i", "love", "this", "product", "!"]` with numeric IDs.
 
@@ -298,20 +298,20 @@ await execute('I love this product!');
 // data.score === 0.9998
 ```
 
-<Callout type="info" title="See the full showcase">
-  The [Sentiment Analyzer demo](https://localmode.ai/sentiment-analyzer) on localmode.ai uses batch analysis, progress tracking, and a polished dashboard UI -- all built with the same `classify()` function you just learned.
+<Callout type="info" title="See the installable block">
+  The [Sentiment Analyzer block](https://localmode.ai/blocks/text-insights/sentiment-analyzer) brings batch analysis, progress tracking, and a polished dashboard UI -- all built with the same `classify()` function you just learned. It runs single and large-batch sentiment with throughput. Install it with `npx shadcn add @localmode/ui/blocks/text-insights/sentiment-analyzer`.
 </Callout>
 
 ---
 
 ## Methodology
 
-This tutorial uses the [distilbert-base-uncased-finetuned-sst-2-english](https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english) model, a distilled version of BERT fine-tuned on the Stanford Sentiment Treebank (SST-2). It achieves 91.3% accuracy on the SST-2 dev set while being 60% faster than BERT-base. The [Xenova/distilbert-base-uncased-finetuned-sst-2-english](https://huggingface.co/Xenova/distilbert-base-uncased-finetuned-sst-2-english) variant provides ONNX weights optimized for browser inference via Transformers.js. All code examples use real API signatures from `@localmode/core` and `@localmode/transformers`. Model size (~67 MB) is sourced from the LocalMode showcase app constants and HuggingFace model card.
+This tutorial uses the [distilbert-base-uncased-finetuned-sst-2-english](https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english) model, a distilled version of BERT fine-tuned on the Stanford Sentiment Treebank (SST-2). It achieves 91.3% accuracy on the SST-2 dev set while being 60% faster than BERT-base. The [Xenova/distilbert-base-uncased-finetuned-sst-2-english](https://huggingface.co/Xenova/distilbert-base-uncased-finetuned-sst-2-english) variant provides ONNX weights optimized for browser inference via Transformers.js. All code examples use real API signatures from `@localmode/core` and `@localmode/transformers`. Model size (~67 MB) is sourced from the LocalMode model catalog and HuggingFace model card.
 
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

@@ -1,0 +1,56 @@
+---
+title: "Agent Step Timeline"
+description: "A vertical ReAct timeline with per-step timing, observations, finish-reason badges, auto-scroll, and nested sub-agent handoffs."
+icon: GitBranch
+---
+
+# Agent Step Timeline
+
+The **AgentStepTimeline** is a vertical timeline of ReAct agent steps. Each step is a collapsible card (color-coded tool badge via an optional `toolColorMap`, formatted args, observation with show-more, index, elapsed-ms). A `finish` step renders a success-styled final-answer card; the timeline auto-scrolls, shows a "Thinking…" row while running, and a terminal finish-reason badge (`max_steps` / `timeout` / `loop_detected` / `error`). It supports nested sub-agent/handoff rendering. Data source: `useAgent`.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/agent-step-timeline" />
+
+<OpenInV0 name="ui/conversation/agent-step-timeline" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/agent-step-timeline" />
+
+### Data source & dependencies
+
+**Data source:** renders the agent-step shape (`steps`, `isRunning`, run result) you pass — works with any backend. Recommended producer: `useAgent` from `@localmode/react` (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `agent-step-timeline.tsx` — `AgentStepTimeline` + `AgentStepCard`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/agent-step-timeline/agent-step-timeline.tsx" name="AgentStepTimelineProps" />
+
+## Examples
+
+### Drive a live ReAct loop
+
+```tsx
+import { useAgent } from '@localmode/react';
+import { AgentStepTimeline } from '@/components/agent-step-timeline';
+
+const { steps, isRunning, result } = useAgent({ model, tools });
+
+<AgentStepTimeline steps={steps} isRunning={isRunning} finishReason={result?.finishReason} />
+```
+
+## Customization
+
+Pass a `toolColorMap` (`{ toolName: "tailwind classes" }`) to color tool badges. Each step may carry `subSteps` for nested sub-agent runs, which render indented inside the parent step.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useAgent`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.
+
+## Accessibility
+
+Each expandable step is a real disclosure: the toggle carries `aria-expanded` (reflecting open/closed) and, when open, `aria-controls` pointing at the revealed detail region's id, so assistive tech announces the collapse state and the relationship. Finish steps that have no collapsible body omit `aria-expanded` rather than exposing an inert toggle.

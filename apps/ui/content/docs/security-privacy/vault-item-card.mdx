@@ -1,0 +1,88 @@
+---
+title: "Vault Item Card"
+description: "A lock-state-aware card for an encrypted note or document — masked while locked, decrypt-on-view when unlocked. Never receives ciphertext or keys."
+icon: Vault
+---
+
+# Vault Item Card
+
+The **Vault Item Card** renders a single encrypted vault item (a note or a text
+document). When **locked**, it shows a masked placeholder body with the
+reveal/delete actions disabled — no decrypted content is present in the DOM. When
+**unlocked**, it shows the title/timestamp with a reveal/hide toggle over the
+caller-supplied decrypted `content` and a delete action, all via callbacks.
+
+> **Backend-agnostic and key-safe.** The card never receives or renders ciphertext
+> or key material — the consuming app decrypts and passes plaintext in `content`
+> only when `revealed` is true. Recommended LocalMode source: the `items`,
+> `readItem`, and `deleteItem` of `useEncryptedVault` from `@localmode/react` — a
+> recommendation, never a requirement.
+
+**When to use it:** any encrypted-store UI listing items whose plaintext is
+revealed on demand — password managers, secure notes, encrypted document vaults.
+
+## Preview
+
+<ComponentPreview name="ui/security-privacy/vault-item-card" note="Toggle the vault lock. Locked cards mask their body; unlocked cards reveal fixture 'decrypted' content on demand. No crypto, no storage." />
+
+<OpenInV0 name="ui/security-privacy/vault-item-card" />
+
+## Installation
+
+<InstallTabs name="ui/security-privacy/vault-item-card" />
+
+### Dependencies
+
+- **Data source:** renders the lock state, title/timestamp, and (only when revealed) the decrypted `content` you pass; emits `onReveal`/`onHide`/`onDelete`. Works with any backend. Recommended LocalMode hook: `useEncryptedVault` (optional).
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `vault-item-card.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/security-privacy/vault-item-card/vault-item-card.tsx" name="VaultItemCardProps" />
+
+## Examples
+
+### Decrypt-on-view from an encrypted vault
+
+Pass plaintext only while the item is revealed — the vault decrypts on demand:
+
+```tsx
+import { useEncryptedVault } from '@localmode/react';
+import { VaultItemCard } from '@/components/vault-item-card';
+
+export function VaultList() {
+  const { status, items, deleteItem } = useEncryptedVault<{ title: string; body: string }>({ name: 'notes' });
+  const [openId, setOpenId] = useState<string | null>(null);
+  return items.map((item) => (
+    <VaultItemCard
+      key={item.id}
+      title={item.data.title}
+      locked={status !== 'unlocked'}
+      revealed={openId === item.id}
+      content={openId === item.id ? item.data.body : undefined}
+      onReveal={() => setOpenId(item.id)}
+      onHide={() => setOpenId(null)}
+      onDelete={() => deleteItem(item.id)}
+    />
+  ));
+}
+```
+
+### Document variant
+
+```tsx
+<VaultItemCard title="recovery-codes.txt" kind="document" locked={false} content={text} revealed />
+```
+
+## Customization
+
+The masked body, the reveal/hide toggle, and the delete affordance are all styled
+with shadcn/ui CSS-variable utilities so they inherit your theme. Because you own
+the copied file, you can change the mask rendering, add a copy-to-clipboard
+action, or render a richer preview for the document `kind`.

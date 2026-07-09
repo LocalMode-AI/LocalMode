@@ -9,7 +9,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 # Generation & Text Processing Hooks
 
 <Callout type="info" title="See it in action">
-  Try [LLM Chat](https://localmode.ai/llm-chat) and [Data Extractor](https://localmode.ai/data-extractor) for working demos of these hooks.
+  Try the [Chat block](https://localmode.ai/blocks/chat) and [Agent & Structured Data block](https://localmode.ai/blocks/agents) for working demos of these hooks.
 </Callout>
 
 ## useGenerateText
@@ -23,7 +23,13 @@ import { webllm } from '@localmode/webllm';
 const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
 
 function Demo() {
-  const { data, isLoading, execute } = useGenerateText({ model, maxTokens: 200 });
+  const { data, isLoading, execute } = useGenerateText({
+    model,
+    systemPrompt: 'You are concise.',
+    maxTokens: 200,
+    topP: 0.9,
+    stopSequences: ['\n\n'],
+  });
 
   return (
     <div>
@@ -32,6 +38,28 @@ function Demo() {
     </div>
   );
 }
+```
+
+### Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `model` | `LanguageModel` | The language model to use (required) |
+| `systemPrompt` | `string` | System prompt included in all requests |
+| `maxTokens` | `number` | Maximum tokens to generate |
+| `temperature` | `number` | Sampling temperature |
+| `topP` | `number` | Top-p (nucleus) sampling |
+| `stopSequences` | `string[]` | Sequences that stop generation |
+
+### Chat-Style Generation
+
+`execute(prompt, options?)` accepts per-call `messages` for multi-turn, chat-style generation — they are passed through to `generateText()`:
+
+```tsx
+const { execute } = useGenerateText({ model, systemPrompt: 'You are concise.' });
+
+await execute('Summarize this');
+await execute('Follow-up question', { messages: priorMessages });
 ```
 
 <Callout type="info">
@@ -129,10 +157,10 @@ await execute(imageDataUrl);
 For full API reference on these functions, see the [Core](/docs/core) docs.
 </Callout>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| LLM Chat | Stream text generation with useChat (supports vision image input) | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |
-| Data Extractor | Structured output extraction with useGenerateObject | [Demo](https://localmode.ai/data-extractor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/data-extractor) |
-| LangChain RAG | Generate RAG answers with useGenerateText | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |
+| Chat (LLM Chat) | Stream text generation with useChat (supports vision image input) | [Live block](https://localmode.ai/blocks/chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/chat) |
+| Agent & Structured Data (Data Extractor) | Structured output extraction with useGenerateObject | [Live block](https://localmode.ai/blocks/agents/data-extractor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/agents/data-extractor) |
+| Knowledge Base (LangChain RAG) | Generate RAG answers with useGenerateText | [Live block](https://localmode.ai/blocks/knowledge/rag-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/rag-chat) |

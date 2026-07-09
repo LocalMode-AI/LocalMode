@@ -15,7 +15,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 RAG (Retrieval-Augmented Generation) combines vector search with language models to answer questions from your documents. LocalMode provides all the building blocks: chunking, ingestion, semantic search, reranking, and hybrid search.
 
 <Callout type="info" title="See it in action">
-  Try [Semantic Search](https://localmode.ai/semantic-search) and [PDF Search](https://localmode.ai/pdf-search) for working demos of these APIs.
+  Try the [Knowledge Base block](https://localmode.ai/blocks/knowledge/rag-chat) for a working demo of these APIs.
 </Callout>
 
 ## RAG Pipeline Overview
@@ -48,7 +48,11 @@ Create embeddings and store in a vector database.
 import { ingest, createVectorDB } from '@localmode/core';
 
 const db = await createVectorDB({ name: 'docs', dimensions: 384 });
-await ingest({ db, model: embeddingModel, documents: chunks });
+await ingest({
+  db,
+  model: embeddingModel,
+  documents: chunks.map((c) => ({ text: c.text })),
+});
 ```
 
 </Step>
@@ -61,12 +65,14 @@ Find relevant chunks using semantic search.
 ```ts
 import { semanticSearch } from '@localmode/core';
 
-const results = await semanticSearch({
+const { results } = await semanticSearch({
   db,
   model: embeddingModel,
   query: userQuestion,
   k: 10,
 });
+// Each result carries the chunk text stored by ingest()
+// on results[].text — see "Text round-trip" below.
 ```
 
 </Step>
@@ -82,7 +88,7 @@ import { rerank } from '@localmode/core';
 const reranked = await rerank({
   model: rerankerModel,
   query: userQuestion,
-  documents: results.map((r) => r.metadata.text),
+  documents: results.map((r) => r.text ?? ''),
   topK: 5,
 });
 ```
@@ -392,7 +398,10 @@ function SemanticChunker() {
 
 ## Ingestion
 
-Ingest documents into a vector database:
+`ingest()` chunks, embeds, and stores documents in a single call. It is callable in **two equivalent forms**:
+
+- **Object form** — `ingest({ db, documents, model?, ...options })`. Pass an `EmbeddingModel` as `model` and embeddings are generated internally via `embedMany()`; `generateEmbeddings` defaults to `true` when `model` is set.
+- **Positional form** — `ingest(db, documents, options?)`, typically with `generateEmbeddings: true` and a custom `embedder` callback (see [Batch Processing](#batch-processing--ingestion-pipeline) below).
 
 ```typescript
 import { createVectorDB, ingest } from '@localmode/core';
@@ -411,6 +420,28 @@ await ingest({
 });
 ```
 
+<Callout type="warn">
+  `model` and `embedder` are mutually exclusive ways to generate embeddings — pass exactly one. Providing both throws. To chunk and index without embedding, pass an explicit `generateEmbeddings: false` (it wins over the `model` default).
+</Callout>
+
+### Text Round-Trip with semanticSearch
+
+`ingest()` stores each chunk's text on the document's metadata under the exported constant `TEXT_METADATA_FIELD` (`'_text'`). `semanticSearch()` resolves that key onto `results[].text`, so an ingest → search round-trip returns the chunk text out of the box:
+
+```typescript
+import { ingest, semanticSearch, TEXT_METADATA_FIELD } from '@localmode/core';
+
+await ingest({
+  db,
+  model,
+  documents: [{ text: 'The reactor codename is Firefly.' }],
+});
+
+const { results } = await semanticSearch({ db, model, query: 'reactor codename', k: 3 });
+console.log(results[0].text); // 'The reactor codename is Firefly.'
+console.log(results[0].metadata?.[TEXT_METADATA_FIELD]); // same chunk text
+```
+
 ### With Automatic Chunking
 
 ```typescript
@@ -418,7 +449,7 @@ await ingest({
   db,
   model,
   documents: [{ text: longDocument, metadata: { source: 'book.txt' } }],
-  chunkOptions: {
+  chunking: {
     strategy: 'recursive',
     size: 512,
     overlap: 50,
@@ -434,10 +465,33 @@ await ingest({
   model,
   documents: largeDocumentArray,
   onProgress: (progress) => {
-    console.log(`Ingested ${progress.completed}/${progress.total} documents`);
+    console.log(`${progress.phase}: ${progress.chunksProcessed}/${progress.totalChunks} chunks`);
   },
 });
 ```
+
+The `onProgress` callback reports four phases — `chunking`, `embedding`, `indexing`, `complete` — with `documentsProcessed`/`totalDocuments`, `chunksProcessed`/`totalChunks`, and `currentBatch`/`totalBatches` counters.
+
+### Cancellation
+
+Both call forms accept an `abortSignal`, checked before chunking and between each embedding/indexing batch:
+
+```typescript
+const controller = new AbortController();
+
+await ingest({
+  db,
+  model,
+  documents: largeDocumentArray,
+  abortSignal: controller.signal,
+});
+
+// Elsewhere: controller.abort();
+```
+
+<Callout type="info">
+  Documents already added to the database before an abort are **not** rolled back — the promise rejects with the abort reason and no further batches are embedded or indexed.
+</Callout>
 
 ## Semantic Search
 
@@ -446,7 +500,7 @@ Search for relevant chunks:
 ```typescript
 import { semanticSearch } from '@localmode/core';
 
-const results = await semanticSearch({
+const { results } = await semanticSearch({
   db,
   model,
   query: 'What are the benefits of machine learning?',
@@ -455,9 +509,11 @@ const results = await semanticSearch({
 
 results.forEach((r) => {
   console.log(`Score: ${r.score.toFixed(3)}`);
-  console.log(`Text: ${r.metadata.text}`);
+  console.log(`Text: ${r.text}`);
 });
 ```
+
+Each result's `text` is extracted from its metadata (checking `text`, then `content`, `body`, `_text` — the `TEXT_METADATA_FIELD` key written by `ingest()` — `__text`, and `pageContent`), so ingested chunks round-trip their text automatically. For the full API reference, options, and extraction details, see [semanticSearch()](/docs/core/embeddings#semanticsearch).
 
 ## Reranking
 
@@ -470,13 +526,13 @@ import { transformers } from '@localmode/transformers';
 const rerankerModel = transformers.reranker('Xenova/ms-marco-MiniLM-L-6-v2');
 
 // Get initial results
-const results = await semanticSearch({ db, model, query, k: 20 });
+const { results } = await semanticSearch({ db, model, query, k: 20 });
 
 // Rerank for better accuracy
 const { results: reranked } = await rerank({
   model: rerankerModel,
   query,
-  documents: results.map((r) => r.metadata.text as string),
+  documents: results.map((r) => r.text ?? ''),
   topK: 5,
 });
 
@@ -515,7 +571,7 @@ Combine semantic and keyword search:
 import { semanticSearch, createBM25, hybridFuse } from '@localmode/core';
 
 // Semantic search
-const semanticResults = await semanticSearch({ db, model, query, k: 20 });
+const { results: semanticResults } = await semanticSearch({ db, model, query, k: 20 });
 
 // BM25 keyword search
 const bm25 = createBM25(documents.map((d) => d.text));
@@ -594,7 +650,7 @@ async function ingestDocuments(documents: Array<{ text: string; source: string }
 // 4. Query function
 async function query(question: string) {
   // Retrieve
-  const results = await semanticSearch({
+  const { results } = await semanticSearch({
     db,
     model: embeddingModel,
     query: question,
@@ -605,7 +661,7 @@ async function query(question: string) {
   const { results: reranked } = await rerank({
     model: rerankerModel,
     query: question,
-    documents: results.map((r) => r.metadata.text as string),
+    documents: results.map((r) => r.text ?? ''),
     topK: 3,
   });
 
@@ -686,7 +742,7 @@ for await (const result of streamSemanticSearch({
 }
 ```
 
-`streamSemanticSearch()` accepts the same options as `semanticSearch()` but returns an `AsyncGenerator` that yields results one at a time.
+`streamSemanticSearch()` accepts the same options as `semanticSearch()` but returns an `AsyncGenerator` that yields results one at a time. Each yielded item has the same shape (and the same `text` extraction) as `semanticSearch()` results.
 
 ## Chunker Factories
 
@@ -751,7 +807,7 @@ const chunks = chunkDocuments(documents, {
 
 ### ingest
 
-Full ingestion pipeline — chunk, embed, and store in one call:
+Full ingestion pipeline — chunk, embed, and store in one call. Here in the **positional form** (`ingest(db, documents, options?)`) with a custom `embedder` callback, equivalent to the object form shown in [Ingestion](#ingestion):
 
 ```typescript
 import { ingest } from '@localmode/core';
@@ -832,10 +888,10 @@ console.log(`Avg chunk size: ${estimate.avgChunkSize} chars`);
   <Card title="WebLLM" href="/docs/webllm" description="Run LLMs locally in the browser." />
 </Cards>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Semantic Search | Recursive and semantic chunking for document search | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
-| PDF Search | Semantic chunking of PDF content for Q&A | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |
-| LangChain RAG | End-to-end RAG with chunking and retrieval | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |
+| Knowledge Base (Semantic Search) | Recursive and semantic chunking for document search | [Live block](https://localmode.ai/blocks/knowledge/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/semantic-search) |
+| Knowledge Base (PDF Search) | Semantic chunking of PDF content for Q&A | [Live block](https://localmode.ai/blocks/knowledge/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/semantic-search) |
+| Knowledge Base (LangChain RAG) | End-to-end RAG with chunking and retrieval | [Live block](https://localmode.ai/blocks/knowledge/rag-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/rag-chat) |

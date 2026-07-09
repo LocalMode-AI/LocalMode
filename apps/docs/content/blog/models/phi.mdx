@@ -14,7 +14,7 @@ faq:
   - question: "How does Phi compare to Llama for browser inference?"
     answer: "At 3.8B parameters, Phi models punch above their weight in reasoning, math, and coding tasks. They tend to produce more concise, structured outputs compared to Llama or Qwen, making them excellent for applications needing focused, information-dense responses."
   - question: "Can I run Phi models offline?"
-    answer: "Yes. All Phi variants work offline after the initial download (1.2-2.4GB depending on variant). Models are cached in IndexedDB and require no API keys or network connection for inference."
+    answer: "Yes. All Phi variants work offline after the initial download (1.2-2.4GB depending on variant). Models are cached by the browser and require no API keys or network connection for inference."
 ---
 
 # Phi Models in the Browser
@@ -148,7 +148,7 @@ Phi models are a strong choice when:
 - **You need text generation** - Phi is optimized for generation tasks with models across multiple size tiers.
 - **Browser compatibility matters** - Available through 3 providers (webllm, wllama, transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
 - **Size flexibility is important** - The 1.2GB–2.4GB range means you can target everything from mobile devices to high-end desktops with the same model family.
-- **Offline functionality is required** - All variants work offline after the initial download, cached in IndexedDB via LocalMode's model caching system.
+- **Offline functionality is required** - All variants work offline after the initial download, cached by the browser via LocalMode's model caching system.
 
 ## HuggingFace Model Cards
 

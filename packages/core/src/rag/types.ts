@@ -7,8 +7,29 @@
  * @packageDocumentation
  */
 
-import type { TypedFilterQuery } from '../types.js';
+import type { TypedFilterQuery, VectorDB } from '../types.js';
 import type { EmbeddingModel } from '../embeddings/types.js';
+
+// ═══════════════════════════════════════════════════════════════
+// SHARED METADATA KEYS
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Metadata key under which ingestion stores each chunk's source text.
+ *
+ * Written by {@link ingest}, {@link ingestChunks}, and `HybridSearch`;
+ * resolved by `semanticSearch()`'s text extraction and `reindex()`'s
+ * default text lookup. Use this constant when reading chunk text straight
+ * from search-result metadata.
+ *
+ * @example
+ * ```typescript
+ * import { TEXT_METADATA_FIELD } from '@localmode/core';
+ *
+ * const chunkText = result.metadata?.[TEXT_METADATA_FIELD];
+ * ```
+ */
+export const TEXT_METADATA_FIELD = '_text';
 
 // ═══════════════════════════════════════════════════════════════
 // CHUNKING TYPES
@@ -480,6 +501,33 @@ export interface IngestOptions {
 
   /** AbortSignal for cancellation */
   abortSignal?: AbortSignal;
+}
+
+/**
+ * Options for the object call form of {@link ingest}.
+ *
+ * Extends {@link IngestOptions} with the database, the documents, and an
+ * optional embedding model. When `model` is provided (and `embedder` is not),
+ * embeddings are generated through `embedMany({ model, values })` and
+ * `generateEmbeddings` defaults to `true`.
+ *
+ * @example
+ * ```typescript
+ * await ingest({ db, model: embeddingModel, documents });
+ * ```
+ */
+export interface IngestObjectOptions extends IngestOptions {
+  /** Vector database to ingest into */
+  db: VectorDB;
+
+  /** Source documents to ingest */
+  documents: SourceDocument[];
+
+  /**
+   * Embedding model used to generate chunk embeddings via `embedMany()`.
+   * Mutually exclusive with `embedder` — providing both throws.
+   */
+  model?: EmbeddingModel;
 }
 
 /**

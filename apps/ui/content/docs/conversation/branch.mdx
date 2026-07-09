@@ -1,0 +1,75 @@
+---
+title: "Branch"
+description: "A message-versioning navigator that pages between regenerated variants for one turn, with an X of N indicator hidden at N=1."
+icon: Split
+---
+
+# Branch
+
+The **Branch** primitives page between alternative regenerated/edited assistant responses for a single turn. `Branch` holds the active index; `BranchMessages` shows only the active variant; `BranchSelector` groups `BranchPrevious` / `BranchPage` / `BranchNext` and hides itself when only one variant exists. It wraps an existing `Message` non-intrusively and is pure client state. Data source: `useChat` — `regenerate()` produces the variants, and `variants` / `variantIndex` / `setVariantIndex` drive the navigator directly.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/branch" />
+
+<OpenInV0 name="ui/conversation/branch" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/branch" />
+
+### Data source & dependencies
+
+**Data source:** renders the variants/index you pass and emits index changes — works with any backend. Recommended producer: `useChat`'s `regenerate()` / `variants` / `variantIndex` / `setVariantIndex` from `@localmode/react` (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `branch.tsx` — `Branch`, `BranchMessages`, `BranchSelector`, `BranchPrevious`, `BranchNext`, `BranchPage`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/branch/branch.tsx" name="BranchProps" />
+
+## Examples
+
+### Page between `useChat` variants
+
+```tsx
+import { useChat } from '@localmode/react';
+import {
+  Branch, BranchMessages, BranchNext, BranchPage, BranchPrevious, BranchSelector,
+} from '@/components/branch';
+import { Message, MessageContent } from '@/components/message';
+
+export function LastTurn({ model }) {
+  const { regenerate, variants, variantIndex, setVariantIndex } = useChat({ model });
+
+  return (
+    <Branch
+      count={variants.length}
+      index={variantIndex}
+      onIndexChange={setVariantIndex}
+    >
+      <BranchMessages>
+        {variants.map((text, i) => (
+          <Message key={i} role="assistant"><MessageContent content={text} /></Message>
+        ))}
+      </BranchMessages>
+      <BranchSelector>
+        <BranchPrevious /><BranchPage /><BranchNext />
+      </BranchSelector>
+      <button onClick={() => regenerate()}>Regenerate</button>
+    </Branch>
+  );
+}
+```
+
+`useChat().regenerate()` re-runs the last turn and appends the new reply to `variants` (the original reply is frozen as `variants[0]` on first regeneration). Controlled `index={variantIndex}` / `onIndexChange={setVariantIndex}` keeps the navigator and the hook in sync — `setVariantIndex` also swaps the last assistant message's content, so the rest of your thread renders the active variant with zero changes.
+
+## Customization
+
+Branch state is local by default; pass controlled `index`/`onIndexChange` (e.g. `useChat`'s `variantIndex` / `setVariantIndex`) to persist the active variant alongside your thread state.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useChat`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

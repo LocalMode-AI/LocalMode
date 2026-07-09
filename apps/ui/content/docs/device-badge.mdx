@@ -1,0 +1,81 @@
+---
+title: "Device Badge"
+description: "A local-first capability badge that detects WebGPU / WASM / IndexedDB support and renders a themed status pill."
+icon: Cpu
+---
+
+# Device Badge
+
+The **Device Badge** surfaces a browser AI capability — WebGPU, WASM, or IndexedDB storage — as a themed status pill. It reads the device's capabilities via the copy-owned `useCapabilities()` hook (from the `@localmode/ui/lib/use-environment` lib, installed automatically) and shows green when the capability is available, amber when it is not, and a pulsing muted dot while detection is in flight.
+
+**When to use it:** gate a model-download UI behind device support (e.g. "WebGPU available → offer the fast WebGPU model; otherwise fall back to WASM"), or show users why a feature is or isn't available on their device.
+
+## Preview
+
+<ComponentPreview name="ui/device-badge" note="Detects your browser's WebGPU / WASM / storage support — runs locally, no model download." />
+
+<OpenInV0 name="ui/device-badge" />
+
+## Installation
+
+<InstallTabs name="ui/device-badge" />
+
+### Dependencies
+
+**Data source:** detects capabilities entirely in the browser — no backend, no model download. Capability detection is provided by the copy-owned `@localmode/ui/lib/use-environment` lib (`useCapabilities`, `detectCapabilities`), installed automatically as a registry dependency, so the component is portable to any React app.
+
+- `@localmode/ui/lib/use-environment` — the copy-owned `useCapabilities()` hook + `detectCapabilities()` (installed automatically as a registry dependency)
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `device-badge.tsx` — the component
+- `lib/use-environment.ts` — the copy-owned capability hooks (if not already present)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/device-badge/device-badge.tsx" name="DeviceBadgeProps" />
+
+## Examples
+
+### Default (WebGPU)
+
+```tsx
+import { DeviceBadge } from '@/components/device-badge';
+
+export function Example() {
+  return <DeviceBadge />;
+}
+```
+
+### Gate a model choice
+
+```tsx
+import { DeviceBadge } from '@/components/device-badge';
+import { useCapabilities } from '@/lib/use-environment';
+
+export function ModelPicker() {
+  const { capabilities } = useCapabilities();
+  const hasWebGPU = Boolean(capabilities?.features.webgpu);
+
+  return (
+    <div className="flex items-center gap-3">
+      <DeviceBadge capability="webgpu" />
+      <button disabled={!hasWebGPU}>Load WebGPU model</button>
+    </div>
+  );
+}
+```
+
+### Compact (dot only)
+
+```tsx
+<DeviceBadge capability="storage" compact />
+```
+
+## Customization
+
+The badge is styled entirely with shadcn/ui CSS-variable utilities (`border-border`, `bg-card`, `text-card-foreground`, `text-muted-foreground`), so it inherits your theme. The status colors use Tailwind's `emerald` / `amber` palettes directly — swap those classes in the copied `device-badge.tsx` to match your design system, or wire them to your own tokens.
+
+Because you own the file, you can also extend `DeviceBadgeProps` to surface any capability returned by `detectCapabilities()` (e.g. `sharedarraybuffer`, `webworkers`) by adding an entry to the internal capability map.

@@ -1,0 +1,70 @@
+---
+title: "Editable Label Set"
+description: "An editable set of color-cycling removable chips for managing candidate labels — controlled via labels / onAdd / onRemove."
+icon: Tags
+---
+
+# Editable Label Set
+
+The **Editable Label Set** is an editable collection of color-cycling removable chips for managing a candidate-label list. Chips reveal a remove control; an inline input adds new labels (Enter to commit, Backspace on empty to remove the last). It is fully controlled via `labels` / `onAdd` / `onRemove`, cycling a fixed color palette by index.
+
+**When to use it:** editing the candidate labels you feed to `useClassifyZeroShot`, or any string-tag collection.
+
+## Preview
+
+<ComponentPreview name="ui/results/editable-label-set" note="Add a label via the input, remove via the chip's × — runs locally." />
+
+<OpenInV0 name="ui/results/editable-label-set" />
+
+## Installation
+
+<InstallTabs name="ui/results/editable-label-set" />
+
+### Dependencies
+
+- **Data source:** fully controlled via the `labels` / `onAdd` / `onRemove` props you wire — works with any backend or local state. Recommended consumer: feed the labels to `useClassifyZeroShot` from `@localmode/react` (optional). See [Bring your own data](/docs/bring-your-own-data#results--insights).
+
+- `lucide-react` — the remove (×) icon
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+
+### Files installed
+
+- `editable-label-set.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/results/editable-label-set/editable-label-set.tsx" name="EditableLabelSetProps" />
+
+## Examples
+
+### Feeding zero-shot candidate labels
+
+```tsx
+import { useState } from 'react';
+import { EditableLabelSet } from '@/components/editable-label-set';
+import { useClassifyZeroShot } from '@localmode/react';
+
+export function Example({ model }) {
+  const [labels, setLabels] = useState(['positive', 'negative', 'neutral']);
+  const { execute } = useClassifyZeroShot({ model });
+
+  return (
+    <EditableLabelSet
+      labels={labels}
+      onAdd={(l) => setLabels((p) => [...p, l])}
+      onRemove={(_, i) => setLabels((p) => p.filter((__, j) => j !== i))}
+    />
+  );
+}
+```
+
+### Cap the number of labels
+
+```tsx
+<EditableLabelSet labels={labels} onAdd={add} onRemove={remove} maxLabels={6} />
+```
+
+## Customization
+
+Chips use a CSS-variable color palette cycled by index — pass your own `palette` to match your design system. Each chip carries its hue on the dot, border, and a subtle background tint, while the **label text stays `text-foreground`** so it clears WCAG AA (4.5:1) in both light and dark themes regardless of the palette hue. The container and input use shadcn/ui tokens (`bg-card`, `border-border`, `text-foreground`). Because the set is fully controlled, dedup and validation live in your `onAdd` handler.

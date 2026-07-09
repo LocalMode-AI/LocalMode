@@ -1,0 +1,56 @@
+---
+title: "Multi-Step Pipeline Tracker"
+description: "Numbered-step progress, a stage+percentage variant, a Steps/Plan outline, and an inference-queue surface for local workflows."
+icon: Workflow
+---
+
+# Multi-Step Pipeline Tracker
+
+The **MultiStepPipelineTracker** is a horizontal numbered-step progress indicator (active / completed / pending) that maps directly to `usePipeline`'s `onProgress` (`{ currentStep, completed, total }`). `StagePipelineTracker` is a single-stage label + 0–100 bar for ingest; `StepsPlan` is a vertical connector-bar outline with expandable per-step detail; and `InferenceQueueSurface` visualizes pending tasks grouped by priority (interactive / background) over `useInferenceQueue`.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/pipeline-tracker" />
+
+<OpenInV0 name="ui/conversation/pipeline-tracker" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/pipeline-tracker" />
+
+### Data source & dependencies
+
+**Data source:** renders the step/progress shape you pass — works with any backend. Recommended producer: `usePipeline` progress and `useInferenceQueue` from `@localmode/react` (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `pipeline-tracker.tsx` — `MultiStepPipelineTracker`, `StagePipelineTracker`, `StepsPlan`, `InferenceQueueSurface`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/pipeline-tracker/pipeline-tracker.tsx" name="MultiStepPipelineTrackerProps" />
+
+## Examples
+
+### Track pipeline progress
+
+```tsx
+import { usePipeline } from '@localmode/react';
+import { MultiStepPipelineTracker } from '@/components/pipeline-tracker';
+
+const { progress } = usePipeline(steps);
+
+<MultiStepPipelineTracker
+  steps={['Chunk', 'Embed', 'Index']}
+  completed={progress?.completed ?? 0}
+  currentStep={progress?.currentStep}
+/>
+```
+
+## Customization
+
+Use `StagePipelineTracker` for single-stage ingest with a percentage bar, or `StepsPlan` for an editable plan outline. The queue surface is presentational over `useInferenceQueue` — map your pending tasks into `QueuedTask[]`.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `usePipeline`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

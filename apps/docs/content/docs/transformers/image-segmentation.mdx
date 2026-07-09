@@ -14,7 +14,9 @@ Segment images into labeled regions using semantic segmentation models. Useful f
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [Background Remover](https://localmode.ai/background-remover) for a working demo.
+  Run it in the [Background Remover block](https://localmode.ai/blocks/image-studio/background-remover) — an
+  installable, registry-composed version that runs segmentation entirely in the
+  browser.
 </Callout>
 
 ## Recommended Models
@@ -26,7 +28,7 @@ Segment images into labeled regions using semantic segmentation models. Useful f
 
 ## Background Removal Example
 
-Based on the [Background Remover](https://localmode.ai/background-remover) showcase app:
+Based on the [Background Remover block](https://localmode.ai/blocks/image-studio/background-remover):
 
 ```typescript
 import { transformers } from '@localmode/transformers';
@@ -57,11 +59,11 @@ async function removeBackground(imageDataUrl: string) {
   5. **Canvas processing** — Use Canvas API to apply masks for transparency effects
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| Background Remover | Segment and remove image backgrounds | [Demo](https://localmode.ai/background-remover) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/background-remover) |
+| Background Remover | SegFormer segmentation to a transparent-background PNG | [Live](https://localmode.ai/blocks/image-studio/background-remover) · Install: `npx shadcn add @localmode/ui/blocks/image-studio/background-remover` |
 
 ## Next Steps
 

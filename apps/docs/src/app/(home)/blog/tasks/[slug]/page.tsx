@@ -4,6 +4,7 @@ import { InlineTOC } from 'fumadocs-ui/components/inline-toc';
 import { getMDXComponents } from '@/mdx-components';
 import { tasks } from '@/lib/source';
 import type { Metadata } from 'next';
+import { ogImageUrl } from '@/lib/og';
 
 const baseUrl =
   process.env.NEXT_PUBLIC_SITE_URL ?? 'https://localmode.dev';
@@ -161,7 +162,7 @@ export async function generateMetadata(props: {
 
   if (!page) notFound();
 
-  const ogImage = `${baseUrl}/og/blog/tasks/${page.slugs[0]}`;
+  const ogImage = ogImageUrl({ title: page.data.title, description: page.data.description });
   const dateISO = new Date(page.data.date as string).toISOString();
   const modifiedISO = page.data.dateModified
     ? new Date(page.data.dateModified as string).toISOString()

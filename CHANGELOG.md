@@ -5,6 +5,136 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-07-09
+
+Launches the `@localmode/ui` registry platform at localmode.ai — a copy-owned catalog of 106 AI UI components across 10 families, plus 37 composed blocks across 12 gallery categories that wire those primitives to real on-device models. The `apps/showcase-nextjs` demo app is retired (absorbed into the blocks at parity) and the built-in DevTools widget is removed. Alongside the platform: a `@localmode/core` RAG ingest ⇄ search round-trip fix, agent tool approval, a StorageAdapter conformance suite, cross-session persistence fixes across all three storage adapters, a resilient model-file cache, and provider load fixes for WASM VLMs, long-context wllama, and LiteRT.
+
+**Released:** `@localmode/core` 2.3.0 · `@localmode/react` 2.2.0 · `@localmode/transformers` 4.1.0 · `@localmode/wllama` 3.1.0 · `@localmode/langchain` 2.1.0 · `@localmode/devtools` 3.0.0 (breaking) · `@localmode/litert`, `@localmode/dexie`, `@localmode/idb`, `@localmode/localforage` 2.0.1.
+
+### Added — @localmode/core
+
+- **`ingest()` object call form + `abortSignal`** — `ingest({ db, documents, model?, embedder?, ...options })` joins the positional `ingest(db, documents, options?)` as a TypeScript overload; passing an `EmbeddingModel` as `model` generates chunk embeddings via `embedMany()`. `IngestOptions` gains `abortSignal`, and both forms throw actionable errors on a missing `db` or non-array `documents`. New type: `IngestObjectOptions`.
+- **`TEXT_METADATA_FIELD`** — the metadata key (`'_text'`) under which ingestion stores chunk text, now a shared constant consumed by both the write side and `semanticSearch()`'s read side so the two cannot drift.
+- **`defineTool()`** — identity helper anchoring `ToolDefinition<TParams, TResult>` generics so `parameters` and `execute(params)` type-check against each other, letting typed tools fit `ToolDefinition[]` without casts.
+- **Agent tool approval** — opt-in human-in-the-loop gate for the ReAct loop: flag a tool `requiresApproval` and supply `onToolApproval` (on `AgentConfig`, per-run override on `AgentRunOptions`). Denials skip execution and feed the reason back as the step observation; decisions are recorded on `AgentStep.approval`, and a flagged tool with no callback fails fast. New types: `ToolApprovalRequest`, `ToolApprovalDecision`.
+- **`createKnowledgeBaseEngine()`** — a `kind: 'core'` engine implementing the new frozen `KnowledgeBaseEngine` contract: chunk (off/recursive/semantic) → embed → typed-metadata VectorDB, vector `search`, and grounded streaming `ask` with reasoning stripped and PDF page attribution. Models are injected, so core gains a RAG engine with no new dependency.
+- **`streamEmbedManyImages()`** — streaming batch image embedding mirroring `streamEmbedMany()`: per-image yields, `onBatch` progress, `batchSize`/`adaptiveBatching`, per-batch AbortSignal checks and retry.
+- **`createStorageAdapterConformanceSuite()`** — a framework-agnostic, dependency-free StorageAdapter contract suite (21 cases: full-`Collection` fidelity, document/vector/index ops, close→reopen persistence, SQ8 cross-session fidelity). The factory supplies a `reopen()` handle, so the suite catches adapters that look fine in-session and corrupt on reopen. Adopted by all three external adapters.
+- **`createMockRerankerModel()`** — deterministic mock `RerankerModel` (configurable `scores`/`scoreFn`, honors `topK`, abortable `delayMs`, recorded `calls`).
+- **`KMeansOptions.random`** — injectable random source for deterministic `kMeansCluster()` runs (default `Math.random`, behavior unchanged).
+
+### Added — @localmode/react
+
+- **8 new hooks (56 → 64)**: `useModelLoad` (provider load lifecycle with normalized 0–1 progress and a warmup-driven status registry), `useRerank`, `useEncryptedVault` (passphrase-locked AES-GCM CRUD over a core `StorageAdapter`, key in memory only), `useProviderFallback` (per-capability Chrome Built-in AI ⇄ Transformers.js resolution), `usePhotoLibrary`, `useKnowledgeBase`, `useObjectUrl`, and `useStreamingTracker` (experimental). All resolve providers by injection or dynamic `import()`, so `packages/react` gained no provider dependency.
+- **`useAgent` tool-approval surface** — returns `pendingApproval` plus `approve()`/`deny(reason?)` while the ReAct loop is paused on a gated tool. Ungated runs never surface one.
+- **`useChat` additions** — per-turn `usage` + cumulative `totalUsage`, lifecycle `status`, `streamingMessageId`, `setMessages()`, and `regenerate()` with selectable reply variants.
+- **`useEmbedManyImages` progress parity** — now streams via `streamEmbedManyImages()`, exposing `progress: { completed, total }` and a `batchSize` option.
+- **Additive options and richer returns across existing hooks** — `useSemanticSearch`, `useGenerateText`, `useSynthesizeSpeech`, `useTranscribe`, `useClassifyZeroShot`, `useLiveTranscribe`, `useTurnTaker`, `useStreamSpeech`, `usePipeline`, `useReindex`, `useAuditLog`, `useSemanticCache`, `useVoiceRecorder`, `useCapabilities`, `useStorageQuota`; `useSequentialBatch`/`useBatchOperation` publish results incrementally with per-item errors. Re-exports `getTextContent`/`normalizeContent` from core.
+
+### Added — @localmode/transformers
+
+- **Resilient model-file cache (default on)** — a custom Transformers.js cache over the browser Cache API storage the provider already uses (`transformers-cache`) whose write path can never fail a model load: a failed write serves the fetched response and warns once per URL, and no-`caches` environments keep stock behavior. Kills the intermittent `NetworkError: Cache.add() encountered a network error` failure class. Opt out with `createTransformers({ resilientCache: false })`.
+
+### Added — @localmode/wllama
+
+- **GGUF model discovery** — `searchGGUFModels()` and `listGGUFFiles()` browse the 160,000+ GGUF repos on the anonymous HuggingFace API and list a repo's `.gguf` files with parsed quant labels. Failures surface as a typed `HFApiError` (`rate-limit` / `network` / `not-found`).
+
+### Added — @localmode/langchain
+
+- **`createLangChainKnowledgeBaseEngine()`** — a `kind: 'langchain'` engine implementing the same core `KnowledgeBaseEngine` contract via the real `LocalModeEmbeddings`/`LocalModeVectorStore`/`ChatLocalMode` adapters, result-equivalent to core's engine. Models are injected, so consumers who never toggle LangChain never pull it.
+
+### Added — @localmode/devtools
+
+- **`/react` hooks subpath** — 9 hooks over the bridge snapshots (`useDevToolsBridge`, `useDevToolsStatus`, `useDevToolsQueueStats`, `useDevToolsEvents`, `useDevToolsModelCache`, `useDevToolsPipelineRuns`, `useDevToolsVectorDBs`, `useDevToolsStorage`, `useDevToolsCapabilities`), built on `useSyncExternalStore` with SSR-safe inert values, preserved snapshots after `disableDevTools()`, and late-enable attachment. The main entry stays React-free.
+
+### Added — @localmode/ui
+
+- **`@localmode/ui` registry platform (localmode.ai)** — a single Next.js 16 / React 19 app that is BOTH a shadcn registry endpoint AND a Fumadocs docs site, distributing copy-owned, composable AI UI primitives ("LocalMode Elements"). Not an npm package: components install with the shadcn CLI (`npx shadcn add @localmode/ui/<item>`) and the consumer owns the copied `.tsx`. shadcn/ui CSS-variable theming (Tailwind 4), generated `ui/all` + per-family aggregates, an MCP-readable `/registry.json` catalog, optional token-gating, and a Run-gated `<ComponentPreview>` that downloads no model until clicked.
+- **146 registry items** — 106 copy-owned components across 10 families (Conversation 24, Local-First 24, Results & Insights 12, Input Controls 11, Audio 10, Media & Vision 7, Data & Documents 5, Security & Privacy 5, Artifacts & Canvas 4, DevTools 4), 3 internal `ui/lib/*` items (`utils`, `browser-utils`, `use-environment`), and 37 blocks. Primitives are presentational and hook-driven, and install with **zero `@localmode/*` packages**: generic browser helpers come from the copy-owned `ui/lib/browser-utils` item and the navigator-reading hooks from `ui/lib/use-environment`. A consumer-test lane guards the invariant; blocks are the sole carve-out, guarded by an inverse lane.
+- **37 composed blocks across 12 route-served gallery categories** — live, full experiences that wire the primitives to real on-device models, served at the public `/blocks` gallery and installable as `registry:block` items. Categories: `chat`, `knowledge` (4), `audio` (6), `vision` (2), `text` (1), `device` (3), `writing-tools` (4), `text-insights` (4), `photo` (4), `image-studio` (3), `privacy` (2), `agents` (2), plus the `devtools-drawer` layout chrome. Blocks are the wiring layer and the ONLY registry items allowed `@localmode/*` dependencies; each gallery block ships as a single self-contained, copy-paste-ready file, and every model load is gated behind an explicit in-block action.
+- **Accessibility floor across every block and primitive** — correct roles, accessible names, keyboard operability, WCAG-AA contrast, visible `focus-visible` rings, an ARIA tablist for the Preview/Code tabs, `role="status"` live regions, and `role="alertdialog"` destructive confirms. Block sources are testid-free (E2E selects via role/label/text), and a shared `stripSnippet()` AST transform guarantees every shipped block file has zero `data-testid`, zero QA comments, and a ≤3-line header.
+- **Registry dependencies ship as absolute URLs, so "Open in v0" resolves them.** Items are authored with namespaced `registryDependencies` (`@localmode/ui/lib/utils`), which resolve only through a consumer's `components.json` registries map — the shadcn CLI has that map, v0 does not. The final `registry:build` step rewrites every namespaced dependency in the emitted `public/r/**.json` into an absolute `<origin>/r/ui/<item>.json` URL (618 across 153 items); bare shadcn names pass through and the step is idempotent. The origin comes from `NEXT_PUBLIC_REGISTRY_ORIGIN ?? NEXT_PUBLIC_SITE_URL`, so **a deploy must set one at build time**.
+
+### Added — apps/ui
+
+- **Block-page chrome** — a persistent category sidebar (with a mobile disclosure), a breadcrumb, and per-page "Copy page" / "View as Markdown" actions.
+- **Markdown export** — docs pages expand previews, type tables, and install tabs into markdown; block pages expose an `/api/blocks-md/<slug>` route with the full block source.
+- **PWA (installable + offline)** — a manifest, a Serwist service worker built postbuild (app-shell precache, model/CDN hosts NetworkOnly, `/offline` fallback), an `SWRegistrar`, and generated icons.
+- **Cross-origin isolation** — COOP `same-origin` + COEP `credentialless`, unlocking threaded WASM while keeping cross-origin model downloads working.
+- **Other chrome** — a `/capabilities` browser-support page, a live NetworkStatus pill on `/blocks`, a console suppressor for known WASM-runtime noise, custom `not-found`/`error` pages, and a new favicon.
+- **New env vars** — `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_REGISTRY_ORIGIN`, and optional verification / IndexNow / social vars (inert until set).
+
+### Added — docs
+
+- **New guides** — a Next.js integration guide; "Model Caching & Reliability" (transformers) and "Model Caching & Offline" (LiteRT) sections; `use-with-ai-sdk.mdx` and `bring-your-own-data.mdx`; and launch content for `@localmode/ui`.
+
+### Added — repo tooling
+
+- **ESLint works again** — the repo had no ESLint config and the root `pnpm lint` used the removed `--ext` flag. A flat `eslint.config.mjs` now lints `packages/**` (apps keep their own Next.js configs) with `eslint-plugin-react-hooks` registered. New `pnpm lint:fix`.
+- **`pnpm test:types`** — compiles the type-level contracts in `packages/core/tests/**/*.test-d.ts` (Vitest does not run them), guarding `jsonSchema<T>` inference and `ToolDefinition[]` assignability.
+
+### Changed — @localmode/react
+
+- `useModelStatus` de-stubbed — backed by the `useModelLoad` registry and reflecting the real load lifecycle, instead of optimistically reporting `isReady: true` as soon as an instance existed.
+- Published load progress is non-decreasing within a load attempt (high-water clamp, reset per `load()`); raw per-file byte counts are unaffected.
+- `toAppError()` carries a core `LocalModeError`'s `code` to `AppError.code` and appends its `hint` to the message.
+- `useReindex`, `useCalibrateThreshold`, and `useModelRecommendations` expose `error` as `Error | null` (was `{ message: string } | null`).
+
+### Changed — docs
+
+- **Ingest/search examples normalized to the real API** across the core RAG and embeddings guides, getting-started, the adapter quick starts, and blog posts: object-form `ingest()` examples are now valid against the shipped overload, option names are corrected, and `semanticSearch` results read text from `results[].text`.
+- **Blocks-world sweep** — the 436 legacy `localmode.ai/<slug>` deep links across 99 content files were rewritten to their absorbing `localmode.ai/blocks/<name>` URLs, and repo guidance updated to describe the blocks world.
+
+### Fixed — @localmode/core
+
+- **`ingest()` → `semanticSearch()` text round-trip** — text extraction never checked the `_text` metadata key `ingest()` writes, so every ingested chunk came back with `text: undefined` and RAG flows building context from `results[].text` injected empty strings (a HIGH-severity real-consumer bug; search itself was never broken). Precedence is now `text`, `content`, `body`, `_text`, `__text`, `pageContent`; `streamSemanticSearch()` inherits the fix.
+- **`jsonSchema()` type inference** — `jsonSchema<T>(schema)` now actually infers `T` from the Zod schema instead of collapsing to `unknown`, and `ToolDefinition.execute` uses method syntax so typed tools are assignable to `ToolDefinition[]`.
+- **Semantic cache never cached on the streaming path** — `semanticCacheMiddleware()` stored the response only after its `for await` loop, which never completes for consumers that stop at the `done` chunk (every `streamText()`/`useChat` turn), so streaming lookups always missed. The store now fires on `done`; a turn cancelled mid-stream still stores nothing.
+- **Agent runs no longer fail on reasoning models** (`Failed to generate valid object after 3 attempts`) — `generateObject()` appends the Qwen3 `/no_think` switch to the user prompt as well as the system prompt, ReAct action generations get an explicit 2048-token budget, and the action parser unwraps a schema-parroted single-element `oneOf`/`anyOf` wrapper.
+- `ModelLoadError`'s default message generalized to `Failed to load model: {modelId}` — the class is shared by every model domain, not just embeddings.
+- `StorageAdapter.getVector()`/`getAllVectors()` types now match the implementations (`Float32Array | Uint8Array`, the latter for SQ8/PQ payloads).
+
+### Fixed — @localmode/react
+
+- Mid-flight cancellation is now silent for every `useOperation`-based hook, even when the wrapped core function turns an abort into a plain `Error` (e.g. `rerank()`/`classify()` "was cancelled").
+- `cancel()` returns a hook to idle immediately — previously the loading state reset only when the promise settled, so a cancelled but non-interruptible in-worker call left the hook stuck loading.
+- `useVoiceRecorder` ignored microphone selection — new `deviceId`/`constraints` options are forwarded to `getUserMedia`, and recording now errors when the requested device is unavailable instead of silently falling back.
+
+### Fixed — @localmode/transformers
+
+- **Cross-encoder reranking produced no ranking signal** — `doRerank` scored query and document independently, so the document never influenced the score and single-logit models collapsed to a constant `0`. It now encodes real (query, document) pairs via `AutoTokenizer` `text_pair` + `AutoModelForSequenceClassification`, with sigmoid on single-logit heads.
+- **Vision-language models failed to load on WASM** (`ERROR_CODE: 9`) — the hardcoded q4/fp16 multimodal dtype default uses ops onnxruntime-web only implements on WebGPU. The default is now device-aware: WebGPU keeps the q4/fp16 mix, WASM uses fp32 embed/vision with a q4 decoder. An explicit `settings.dtype` still overrides.
+- **English-only Whisper checkpoints (`*.en`) failed every transcription** — the force-injected `language: 'en'` / `task: 'transcribe'` defaults now apply only to multilingual checkpoints.
+
+### Fixed — @localmode/wllama
+
+- **Long-context models no longer abort the wasm32 load** — the context length inferred from the catalog or GGUF metadata is capped at 8192 before `n_ctx`; models advertising native windows like 131072 requested a multi-GiB KV cache that cannot fit the wasm32 4GiB heap. An explicit `settings.contextLength` is never capped.
+- **Reranking works** — the pinned `@wllama/wllama@3.2.3` ships no rerank API, so every `WllamaRerankerModel` call failed with `createRerank is not a function` after the download. Bumped to `^3.5.1`, and the reranker loads in reranking mode.
+
+### Fixed — @localmode/litert
+
+- `doGenerate()` no longer freezes the tab for the whole generation — it drains `sendMessageStreaming()` (per-token main-thread yields) instead of the synchronous `sendMessage()`.
+- CPU-capable models no longer fail to load in WebGPU-less browsers — the provider probes actual device usability and pins the CPU backend when `navigator.gpu` exposes no usable device.
+
+### Fixed — @localmode/dexie, @localmode/idb, @localmode/localforage
+
+- **Full `Collection` persistence — quantization calibration, compression calibration, and drift fingerprints now survive a reopen.** All three adapters cherry-picked `{ id, name, dimensions, createdAt }` on collection write AND read, silently dropping the extended fields core stores, so quantized or compressed vectors round-tripped in-session but decoded as raw bytes after a close→reopen, and drift detection never fired. Collections now round-trip as the full object, and each adapter adopted the conformance suite. Data written with quantization/compression by earlier adapter versions is unrecoverable — clear and re-ingest.
+- **SQ8/PQ-compressed vectors now round-trip correctly.** The adapters coerced core's `Uint8Array` payloads to f32 (dexie/idb threw a `RangeError`; localforage returned a `Float32Array` of byte-values). Dexie/idb now persist the typed array itself, localforage adds a `dtype` discriminator, and legacy records keep reading as `Float32Array` (no migration).
+
+### Removed
+
+- **`apps/showcase-nextjs`** — the 34-app Next.js demo showcase, retired and removed from the pnpm workspace. Its user-facing capabilities were absorbed at parity into the `/blocks` gallery, `localmode.ai` now serves the registry + gallery in its place, and all 34 legacy `localmode.ai/<slug>` URLs permanently redirect to their successor blocks. The source remains in git history and can be restored from the last commit that contained it (`git checkout <sha> -- apps/showcase-nextjs`).
+- **`@localmode/devtools/widget`** — the built-in DevTools widget UI. The data layer (collectors + bridge) and the `/react` hooks are unchanged; the successor UI is the `ui/devtools` registry family plus the composed `ui/blocks/devtools-drawer`.
+
+### Breaking Changes
+
+- **`@localmode/devtools` 3.0.0** — `import { DevToolsWidget } from '@localmode/devtools/widget'` no longer resolves. The data layer and `/react` hooks are unchanged; migrate to the `ui/devtools` primitives or `ui/blocks/devtools-drawer`.
+
+### Backward Compatibility
+
+- Runtime behavior is unchanged, but two `@localmode/core` **type** signatures moved (hence the 2.3.0 minor, not a major): `StorageAdapter.getVector()`/`getAllVectors()` now return `Float32Array | Uint8Array` (callers assigning straight to `Float32Array` must narrow), and `jsonSchema<T, S>` lost its second type parameter (it never inferred).
+- Agent tool approval, the `useAgent` approval surface, `useEncryptedVault`, and the storage-adapter compressed-vector fixes are additive with no migration. `@localmode/ui` is a first release, so it has no prior install commands or routes to preserve — only the retired showcase app's URLs, which redirect.
+
 ## [@localmode/wllama@3.0.0] - 2026-05-28
 
 ### Added

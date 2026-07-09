@@ -12,7 +12,7 @@ import { Steps } from 'fumadocs-ui/components/steps';
 Migrate vector data from cloud vector databases (Pinecone, ChromaDB) to LocalMode's in-browser VectorDB. Parse, preview, import, and export vector data in multiple formats — all offline.
 
 <Callout type="info" title="See it in action">
-  Try [Semantic Search](https://localmode.ai/semantic-search) and [Data Migrator](https://localmode.ai/data-migrator) for working demos of these APIs.
+  Try the [Knowledge Base block](https://localmode.ai/blocks/knowledge/vector-data-manager) for a working demo of these APIs — its Data tab runs Pinecone/CSV/JSONL import and export against a live in-browser corpus.
 </Callout>
 
 <Callout type="info">
@@ -248,9 +248,9 @@ const stats = await importFrom({
 Your data now lives entirely in the browser. No servers, no API keys, no monthly bill.
 </Steps>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Semantic Search | Export and import vector indexes | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
-| Data Migrator | Migrate vectors between Pinecone, ChromaDB, CSV, JSONL | [Demo](https://localmode.ai/data-migrator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/data-migrator) |
+| Knowledge Base (Semantic Search) | Export and import vector indexes | [Live block](https://localmode.ai/blocks/knowledge/vector-data-manager) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/vector-data-manager) |
+| Knowledge Base (Data Migrator) | Migrate vectors between Pinecone, ChromaDB, CSV, JSONL | [Live block](https://localmode.ai/blocks/knowledge/vector-data-manager) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/vector-data-manager) |

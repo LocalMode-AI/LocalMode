@@ -1,0 +1,187 @@
+---
+title: '@localmode/ui'
+description: 'Getting started with @localmode/ui — a shadcn registry of 100+ copy-owned, local-first AI UI components across 10 families. Install with the shadcn CLI and own the code.'
+icon: Blocks
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Steps } from 'fumadocs-ui/components/steps';
+
+# @localmode/ui
+
+**LocalMode UI** is a [shadcn registry](https://ui.shadcn.com/docs/registry) of **100+ copy-owned, composable AI UI components across 10 families** — chat surfaces, model-download progress, device-capability gates, scored-result displays, audio I/O, vision overlays, and docked artifact canvases. They are portable to any React AI app — local-first by design, cloud-compatible by contract — and pair naturally with the recommended (optional) [`@localmode/core`](/docs/core) and [`@localmode/react`](/docs/react) hooks.
+
+It is **not** an npm package. Like shadcn/ui, you install components with the shadcn CLI and **own the copied code**. Components are styled with shadcn/ui CSS variables, so they drop into your shadcn project and inherit your theme. The full registry and docs live at [**localmode.ai**](https://localmode.ai).
+
+<Callout type="info" title="Local-first by design">
+  Paired with the recommended on-device `@localmode/react` hooks, every component renders local model state — no server route, no API key, no data leaving the browser. The only network request is the one-time model download, which the components surface and gate behind an explicit action.
+</Callout>
+
+<Callout type="info" title="…and cloud-compatible by contract">
+  The components are presentational — they render plain props and own no orchestration state — so they install with **zero `@localmode/*` packages** and work with any React AI app. Drive them from the LocalMode hooks (recommended), the [Vercel AI SDK](https://localmode.ai/docs/use-with-ai-sdk), or [your own data](https://localmode.ai/docs/bring-your-own-data). Local-first by design, cloud-compatible by contract.
+</Callout>
+
+## Why a registry, not a package
+
+LocalMode's `@localmode/*` npm packages give you the *engine* — embeddings, vector search, LLM chat, vision, audio, agents. `@localmode/ui` gives you the *surface*. Because AI UI is something you almost always want to customize (your own theme, your own copy, your own layout), the components ship as source you copy into your project rather than a black-box dependency. This is the shadcn model: you get the code, you keep the code.
+
+## Install
+
+<Steps>
+
+### Add the `@localmode` namespace
+
+You need a project with [shadcn/ui set up](https://ui.shadcn.com/docs/installation) (Tailwind CSS 4 with CSS variables and a `components.json`). Map the single-token `@localmode` namespace to the registry:
+
+```json title="components.json"
+{
+  "registries": {
+    "@localmode": "https://localmode.ai/r/{name}.json"
+  }
+}
+```
+
+### Install components
+
+Install a single component, an entire family, or the whole catalog. Cross-namespace dependencies (the shared `cn()` util, cross-component references) resolve automatically.
+
+```bash
+# A single component
+npx shadcn@latest add @localmode/ui/conversation/message
+
+# An entire family
+npx shadcn@latest add @localmode/ui/conversation
+
+# The whole catalog (92 components)
+npx shadcn@latest add @localmode/ui/all
+```
+
+This copies the component's `.tsx` into your project. Components install with **zero `@localmode/*` packages** — generic helpers are copy-owned (`@localmode/ui/lib/browser-utils`, `@localmode/ui/lib/use-environment`) — so any npm dependencies are just the component's own (e.g. `lucide-react`).
+
+### Wire a data source
+
+Components are presentational — they render plain props and emit callbacks, so you can drive them from any source: the recommended on-device `@localmode/react` hooks, the [Vercel AI SDK](https://localmode.ai/docs/use-with-ai-sdk), or [your own data](https://localmode.ai/docs/bring-your-own-data). The recommended local-first pairing wires the matching `@localmode/react` hook and passes its state in:
+
+```tsx title="chat.tsx"
+'use client';
+
+import { useChat } from '@localmode/react';
+import { webllm } from '@localmode/webllm';
+import { Conversation } from '@/components/ui/conversation';
+import { Message } from '@/components/ui/message';
+import { PromptInput } from '@/components/ui/prompt-input';
+
+const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+
+export function Chat() {
+  const { messages, send, isStreaming } = useChat({ model });
+
+  return (
+    <Conversation>
+      {messages.map((m) => (
+        <Message key={m.id} role={m.role} content={m.content} />
+      ))}
+      <PromptInput onSubmit={send} disabled={isStreaming} />
+    </Conversation>
+  );
+}
+```
+
+</Steps>
+
+## The 10 families
+
+<Cards>
+  <Card
+    title="Conversation (24)"
+    href="https://localmode.ai/docs/conversation"
+    description="Chat shell, streaming prompt input, reasoning, sources, tools, agent timelines, branches, and citations — the AI-native chat surface."
+  />
+  <Card
+    title="Local-First (24)"
+    href="https://localmode.ai/docs/local-first"
+    description="Model download/selection, a 160K-model Hub search browser, device-capability gates, storage quota, offline/cache status, VectorDB observability, and vector import/export panels — surfaces that exist because the model runs on-device."
+  />
+  <Card
+    title="Audio (10)"
+    href="https://localmode.ai/docs/audio"
+    description="Voice buttons and orbs, waveform bars, TTS voice pickers, streaming-speech panels, and synced transcript viewers — STT/TTS surfaces."
+  />
+  <Card
+    title="Results & Insights (12)"
+    href="https://localmode.ai/docs/results"
+    description="Confidence badges, scored result bars, similarity meters, evaluation dashboards, and entity/NER displays — scored-output primitives."
+  />
+  <Card
+    title="Input Controls (11)"
+    href="https://localmode.ai/docs/input-controls"
+    description="Char-limit rings, fill-mask inputs, mode pickers, language-pair selectors, parameter sliders, and slash-command palettes."
+  />
+  <Card
+    title="Media & Vision (6)"
+    href="https://localmode.ai/docs/media-vision"
+    description="Image dropzones, bounding-box overlays, before/after viewers, a webcam video canvas, and result galleries — image and video I/O."
+  />
+  <Card
+    title="Data & Documents (5)"
+    href="https://localmode.ai/docs/data-documents"
+    description="File dropzones, indexed-document cards, format-detection badges, category facets, and chunk-boundary visualizers — RAG and document surfaces."
+  />
+  <Card
+    title="Artifacts & Canvas (4)"
+    href="https://localmode.ai/docs/artifacts"
+    description="A Claude-style docked canvas, sortable data tables, charts, and code diffs — generated output rendered beside the chat."
+  />
+  <Card
+    title="Security & Privacy (5)"
+    href="https://localmode.ai/docs/security-privacy"
+    description="Password-strength bars, differential-privacy controls with provenance, a passphrase gate, a lock-aware vault item card, and a lock-status badge."
+  />
+  <Card
+    title="DevTools (4)"
+    href="https://localmode.ai/docs/devtools"
+    description="Inference-queue monitor, event-log viewer, pipeline-run inspector, and model-cache table — observability primitives that render @localmode/devtools bridge snapshots."
+  />
+</Cards>
+
+## How it composes with the packages
+
+Each component maps to a hook you already use:
+
+| You use… | …to render with |
+| -------- | --------------- |
+| [`useChat`](/docs/react) | `Conversation`, `Message`, `Response`, `PromptInput`, `Branch` |
+| [`useAgent`](/docs/react) | `AgentStepTimeline`, `Task`, `Tool`, `ToolApproval` |
+| [`useSemanticSearch`](/docs/react) | `Sources`, `SourceCitationList`, `InlineCitation`, `CategoryFacetList` |
+| [`useModelStatus` / `useModelLoader`](/docs/react) | `ModelDownloader`, `ModelLoadingPanel`, `ModelSelector` |
+| [`useCapabilities` / `useStorageQuota`](/docs/react) | `DeviceBadge`, `CapabilityGate`, `DeviceCapabilityGrid`, `StorageMeter` |
+| [`useTranscribe` / `useSynthesizeSpeech`](/docs/react) | `VoiceButton`, `WaveformActivityBars`, `VoicePicker`, `SyncedTranscriptViewer` |
+| [`useClassify` / `useRerank`](/docs/react) | `ConfidenceScoreBadge`, `ScoredResultBarList`, `TopResultCard` |
+| [`useDetectObjects` / `useDetectHands`](/docs/react) | `MediaDropzone`, `BoundingBoxOverlay`, `VideoCanvas`, `ImageResultGallery` |
+| [`useGenerateText` / `useGenerateObject`](/docs/react) | `Artifact`, `DataTableArtifact`, `ChartArtifact`, `StructuredOutputViewer` |
+
+## Next steps
+
+<Cards>
+  <Card
+    title="Browse all components"
+    href="https://localmode.ai/docs/components"
+    description="The full component index at localmode.ai, with live previews, prop tables, and install tabs."
+  />
+  <Card
+    title="Blocks gallery"
+    href="https://localmode.ai/blocks"
+    description="Installable blocks (ui/blocks/*) — chat, knowledge base, audio studio, vision lab, device & model lab, agent & structured data, writing tools, text insights, photo search, image studio (background removal to transparent PNG, Swin2SR 2x/4x/Restore enhancement, and caption generation), privacy vault, and the devtools drawer — complete experiences composed from the primitives, running real models live."
+  />
+  <Card
+    title="@localmode/react hooks"
+    href="/docs/react"
+    description="The 61 hooks that drive the UI components — useChat, useAgent, useTranscribe, useModelLoader, and more."
+  />
+  <Card
+    title="Getting Started"
+    href="/docs/getting-started"
+    description="Install LocalMode and build your first local-first AI app — the engine behind the UI."
+  />
+</Cards>

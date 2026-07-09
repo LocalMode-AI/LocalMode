@@ -1,0 +1,259 @@
+---
+title: "Local-First Artifacts: A Docked Canvas Driven by an In-Browser Model"
+description: "@localmode/ui adds the Artifacts family -- a Claude-style docked canvas (Artifact), a sortable DataTableArtifact, a dependency-free ChartArtifact, and a CodeDiffViewer. All four render generated output beside the chat, driven entirely by a model running in the browser. No server, no sandbox, no remote execution."
+author: LocalMode
+date: "2026-05-31"
+dateModified: "2026-05-31"
+faq:
+  - question: "What is an artifact in a chat UI?"
+    answer: "An artifact is a docked side-panel or canvas that renders generated output -- code, a document, a table, a chart, a diff -- beside the chat rather than inline in the message stream. The @localmode/ui Artifacts family ships four: Artifact (a Claude-style canvas shell), DataTableArtifact (a sortable table), ChartArtifact (a dependency-free SVG chart), and CodeDiffViewer (a line-level text diff)."
+  - question: "How are @localmode/ui artifacts local-first?"
+    answer: "The artifact shell is purely presentational and the content comes from a model running in the browser via useGenerateText or useGenerateObject. There is no server, no sandbox, and no remote execution. Copy writes to the clipboard, download produces a real Blob, refresh re-runs your local generation, and charts and diffs are computed in-component from local data."
+  - question: "How do I install the artifacts components?"
+    answer: "Use the shadcn CLI. Run npx shadcn@latest add @localmode/ui/artifacts/artifact for a single primitive, or npx shadcn@latest add @localmode/ui/artifacts to install all four. The command copies the .tsx files into your project so you own the code -- no @localmode/* package is installed. Pair them with the recommended @localmode/react hooks, or any backend."
+  - question: "Do ChartArtifact and CodeDiffViewer require a charting or diff library?"
+    answer: "No. ChartArtifact renders six chart types -- line, bar, area, scatter, radar, gauge -- with minimal inline SVG and no charting library, so the copied component stays small and tree-shakeable. CodeDiffViewer computes a line-level diff in-component with a dependency-free longest-common-subsequence algorithm. Neither adds an external dependency."
+  - question: "What artifact types does LocalMode deliberately not ship?"
+    answer: "LocalMode refuses the server- and IDE-centric members of external artifact catalogs -- Sandbox, Web Preview, Terminal, Test Results, Stack Trace, Commit, Package Info, File Tree, and Env Vars -- because they require remote code execution, deploys, or CI/VCS tooling and would reintroduce a server dependency. A live JSX/generative-UI preview is deferred, not refused, pending a safe sandbox design."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+When a model generates a whole file, a table of records, a chart, or a rewritten paragraph, cramming it into a chat bubble is the wrong shape. Every modern AI UI library solves this with an **artifact**: a docked canvas that renders generated output *beside* the conversation, where the user can copy it, download it, sort it, or regenerate it.
+
+An audit of eight external AI UI libraries found that every one of them ships an artifact surface -- and `@localmode/ui` had none. It was the single biggest structural gap. The **Artifacts** family closes it with four copy-owned, shadcn-styled primitives, and they are fully local-first: a model running in the browser drives the content, and the shell never touches a server.
+
+<Callout type="info" title="Local content only">
+  The artifact shell is purely presentational. A local model -- via `useGenerateText()` /
+  `useGenerateObject()` -- supplies the content. No server, no sandbox, no remote execution.
+</Callout>
+
+---
+
+## Install
+
+With [shadcn/ui set up](https://ui.shadcn.com/docs/installation) and the `@localmode` namespace mapped in `components.json`:
+
+```bash
+# One primitive
+npx shadcn@latest add @localmode/ui/artifacts/artifact
+
+# All four artifact primitives
+npx shadcn@latest add @localmode/ui/artifacts
+```
+
+The command copies the `.tsx` into your project -- no `@localmode/*` package is installed; pair them with the recommended `@localmode/react` hooks, or any backend. `ChartArtifact` and `CodeDiffViewer` add **no** charting or diff library -- the rendering is in-component.
+
+---
+
+## Artifact: a Claude-style docked canvas
+
+[`Artifact`](https://localmode.ai/docs/artifacts/artifact) is the canvas shell: a vertical surface with a header (title + description), an action toolbar (copy / download / refresh / close), and a scrollable content region. It renders generated output -- code, a markdown doc, an SVG, raw HTML -- beside the chat instead of inline.
+
+It composes from sub-parts: `Artifact` (root), `ArtifactHeader`, `ArtifactTitle`, `ArtifactDescription`, `ArtifactActions`, `ArtifactAction`, `ArtifactClose`, and `ArtifactContent`. The toolbar behaviors are all client-side: `ArtifactAction` with `content` only copies to the clipboard, `content` + `fileName` downloads a real `Blob`, and `onClick` runs your callback (e.g. re-run generation).
+
+```tsx
+import { useGenerateText } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+import {
+  Artifact,
+  ArtifactHeader,
+  ArtifactTitle,
+  ArtifactDescription,
+  ArtifactActions,
+  ArtifactAction,
+  ArtifactClose,
+  ArtifactContent,
+} from '@/components/artifacts/artifact';
+
+export function GeneratedCodeCanvas({ close }) {
+  const model = transformers.languageModel('onnx-community/granite-4.0-350m-ONNX-web');
+  const { data, isLoading, execute } = useGenerateText({ model, maxTokens: 200 });
+  const code = data?.text ?? '';
+
+  return (
+    <Artifact className="h-96 w-[28rem]">
+      <ArtifactHeader>
+        <div>
+          <ArtifactTitle>generated.ts</ArtifactTitle>
+          <ArtifactDescription>From a local model run</ArtifactDescription>
+        </div>
+        <ArtifactActions>
+          <ArtifactAction content={code} label="Copy" />
+          <ArtifactAction content={code} fileName="generated.ts" label="Download" />
+          <ArtifactAction onClick={() => execute('Write a slugify function')} label="Refresh" />
+          <ArtifactClose onClick={close} />
+        </ArtifactActions>
+      </ArtifactHeader>
+      <ArtifactContent>
+        {isLoading ? <p>Generating...</p> : <pre>{code}</pre>}
+      </ArtifactContent>
+    </Artifact>
+  );
+}
+```
+
+Refresh re-runs the model on the user's device. Download produces a `Blob` in the browser. Nothing leaves the machine.
+
+---
+
+## DataTableArtifact: a sortable table for local rows
+
+[`DataTableArtifact`](https://localmode.ai/docs/artifacts/data-table-artifact) is a docked, sortable table for any **local** row data -- VectorDB search results, a model catalog, evaluation rows, or the array output of `generateObject()`. Click a column header to sort ascending -> descending -> unsorted, all computed in-browser. Sorting reorders a copy of your rows; the input array is untouched.
+
+```tsx
+import { useGenerateObject, jsonSchema } from '@localmode/react';
+import { z } from 'zod';
+import { DataTableArtifact } from '@/components/artifacts/data-table-artifact';
+
+const schema = jsonSchema(
+  z.object({ records: z.array(z.object({ name: z.string(), score: z.number() })) })
+);
+
+export function RecordsTable({ model }) {
+  const { data } = useGenerateObject({ model, schema });
+  return (
+    <DataTableArtifact
+      rows={data?.records ?? []}
+      columns={[
+        { key: 'name', header: 'Name' },
+        { key: 'score', header: 'Score' },
+      ]}
+    />
+  );
+}
+```
+
+It is distinct from the inline `ScoredResultBarList` -- this is a docked canvas you scan and re-sort, not a message-stream atom.
+
+---
+
+## ChartArtifact: dependency-free local data-viz
+
+[`ChartArtifact`](https://localmode.ai/docs/artifacts/chart-artifact) renders six chart types -- `line`, `bar`, `area`, `scatter`, `radar`, `gauge` -- with **minimal inline SVG and no charting library**. It targets genuinely on-device metrics:
+
+- **radar** -- evaluation curves (precision / recall / F1 / accuracy) from `useEvaluateModel()`.
+- **scatter** -- 2D embedding projections (PCA / UMAP).
+- **line / area** -- drift-over-time from `useReindex()`, latency or tokens-per-second trends.
+- **bar** -- embedding-similarity distributions, per-class counts.
+- **gauge** -- a single normalized score, e.g. overall F1.
+
+```tsx
+import { ChartArtifact } from '@/components/artifacts/chart-artifact';
+
+<ChartArtifact
+  type="radar"
+  data={[
+    { label: 'Precision', value: 0.91 },
+    { label: 'Recall', value: 0.87 },
+    { label: 'F1', value: 0.89 },
+    { label: 'Accuracy', value: 0.93 },
+  ]}
+/>
+```
+
+Because colors come from `currentColor` plus shadcn/ui tokens, every chart inherits your theme. It is not a generic BI widget -- its value is visualizing exactly what runs in the browser.
+
+---
+
+## CodeDiffViewer: see what your local pipeline changed
+
+[`CodeDiffViewer`](https://localmode.ai/docs/artifacts/code-diff-viewer) shows a line-level diff of two **local** strings -- additions in green, deletions in red -- in a unified (single-column) or split (side-by-side) layout. The diff is computed in-browser with a dependency-free longest-common-subsequence algorithm; there is no ML hook and no server. It is the text/code analog of an image before/after viewer.
+
+```tsx
+import { redactPII } from '@localmode/core';
+import { CodeDiffViewer } from '@/components/artifacts/code-diff-viewer';
+
+export function RedactionDiff({ raw }) {
+  const redacted = redactPII(raw);
+  return <CodeDiffViewer original={raw} modified={redacted} mode="split" />;
+}
+```
+
+Use it to make any local transform legible: PII redaction (raw -> redacted), translation (source -> target), or prompt and formatting edits.
+
+---
+
+## What LocalMode deliberately leaves out
+
+External artifact catalogs include members that only make sense with a server behind them. LocalMode **refuses** those because they would reintroduce a cloud dependency:
+
+- **Sandbox** / **Terminal** -- remote code execution.
+- **Web Preview** -- a deployed-app iframe.
+- **Test Results** / **Stack Trace** / **Commit** / **Package Info** / **File Tree** / **Env Vars** -- CI / VCS / IDE tooling.
+
+A live **JSX preview** (generative UI -- rendering model-emitted JSX/JSON) is **deferred, not refused**: it is local-first-capable and high-interest, but rendering arbitrary model-emitted UI carries arbitrary-code-execution risk and needs a safe allowlist/sandbox design first. It is tracked as a future change.
+
+---
+
+## How artifacts fit the rest of `@localmode/ui`
+
+Artifacts are the output canvas for content generated by the **conversation** family -- a `Response` or `StructuredOutputViewer` produces text or JSON, and a button promotes it into a docked `Artifact`, `DataTableArtifact`, or `ChartArtifact` beside the stream. And the data they render often comes from the **local-first** family: a `VectorStorageObservability` metric becomes a `ChartArtifact` line, a model catalog becomes a `DataTableArtifact`. The three families are designed to click together into one local-first app.
+
+---
+
+## FAQ
+
+### What is an artifact in a chat UI?
+
+An artifact is a docked side-panel or canvas that renders generated output -- code, a document, a table, a chart, a diff -- beside the chat rather than inline. The `@localmode/ui` Artifacts family ships four: `Artifact` (a Claude-style canvas shell), `DataTableArtifact` (a sortable table), `ChartArtifact` (a dependency-free SVG chart), and `CodeDiffViewer` (a line-level text diff).
+
+### How are `@localmode/ui` artifacts local-first?
+
+The shell is purely presentational and the content comes from a model running in the browser via `useGenerateText` or `useGenerateObject`. There is no server, no sandbox, and no remote execution -- copy writes to the clipboard, download produces a real `Blob`, refresh re-runs local generation, and charts and diffs are computed in-component from local data.
+
+### How do I install the artifacts components?
+
+Use the shadcn CLI: `npx shadcn@latest add @localmode/ui/artifacts/artifact` for a single primitive, or `npx shadcn@latest add @localmode/ui/artifacts` for all four. The command copies the `.tsx` files into your project -- no `@localmode/*` package is installed. Pair them with the recommended `@localmode/react` hooks, or any backend.
+
+### Do ChartArtifact and CodeDiffViewer require a charting or diff library?
+
+No. `ChartArtifact` renders six chart types with minimal inline SVG and no charting library, and `CodeDiffViewer` computes its line-level diff in-component with a dependency-free LCS algorithm. Neither adds an external dependency.
+
+### What artifact types does LocalMode deliberately not ship?
+
+LocalMode refuses the server- and IDE-centric members of external catalogs -- Sandbox, Web Preview, Terminal, Test Results, Stack Trace, Commit, Package Info, File Tree, and Env Vars -- because they require remote execution, deploys, or CI/VCS tooling. A live JSX/generative-UI preview is deferred, not refused, pending a safe sandbox design.
+
+---
+
+## Methodology
+
+Every LocalMode-specific claim in this post was verified directly against the repository, which is the source of truth:
+
+- **Family count and membership** (four artifacts: `Artifact`, `DataTableArtifact`, `ChartArtifact`, `CodeDiffViewer`) — confirmed in `apps/ui/registry.json` (four items under the `artifacts` category) and the catalog summary in `AGENTS.md` ("Artifacts & Canvas", 4).
+- **Sub-parts, props, and behaviors** — read from the actual component source. `Artifact` composes from `ArtifactHeader`, `ArtifactTitle`, `ArtifactDescription`, `ArtifactActions`, `ArtifactAction`, `ArtifactClose`, and `ArtifactContent`; `ArtifactAction` copies on `content`, downloads on `content` + `fileName`, and runs your callback on `onClick` (`registry/localmode/artifacts/artifact/artifact.tsx`). `CodeDiffViewer`'s real props are `original` / `modified` / `mode` (the prior draft's `before` / `after` / `view` example was corrected). `DataTableArtifact` sorts a copy of the rows ascending → descending → unsorted (`data-table-artifact.tsx`).
+- **"Dependency-free" chart and diff** — verified by inspection: `chart-artifact.tsx` renders six chart types (`line`, `bar`, `area`, `scatter`, `radar`, `gauge`) with inline SVG and no charting import; `code-diff-viewer.tsx` computes a line-level diff with an in-component longest-common-subsequence algorithm. The registry entries for both list zero npm `dependencies`.
+- **Install footprint** ("no `@localmode/*` package is installed") — confirmed against `apps/ui/registry.json` (the artifacts items declare only `lucide-react` or nothing as npm dependencies; their `registryDependencies` are copy-owned `@localmode/ui/...` files, not packages) and the real-`shadcn`-CLI portability test in `apps/ui/consumer-tests/portability-test.mjs`, which proves an installed component contains zero `@localmode/*` import statements and zero `@localmode/*` packages.
+- **Hooks and helpers in code examples** — `useGenerateText`, `useGenerateObject`, `jsonSchema`, `useEvaluateModel`, and `useReindex` are exported from `@localmode/react` (`packages/react/src/index.ts`); `redactPII` is exported from `@localmode/core` and returns a `string` (`packages/core/src/security/pii.ts`); `transformers.languageModel('onnx-community/granite-4.0-350m-ONNX-web')` is a real catalog model (`packages/transformers/src/models.ts`). The `@/components/artifacts/<component>` import path matches the official docs pages under `apps/ui/content/docs/artifacts/`.
+- **"Audit of eight external AI UI libraries"** and the deliberately-excluded members (Sandbox, Web Preview, Terminal, Test Results, Stack Trace, Commit, Package Info, File Tree, Env Vars) plus the deferred generative-UI JSX preview — grounded in the change record `openspec/changes/ui-elements-artifacts/proposal.md` (which names all eight: AI Elements, assistant-ui, AI SDK Agents, ElevenLabs UI, HeyGaia, prompt-kit, tool-ui, shadcn.io/ai) and `design.md`.
+- **Cross-family references** (`ScoredResultBarList`, `Response`, `StructuredOutputViewer`, `VectorStorageObservability`, `BeforeAfterImageViewer`) — confirmed present in `apps/ui/registry.json`.
+
+External claims (shadcn CLI / registry mechanics) were checked against the official shadcn/ui documentation linked below.
+
+## Sources
+
+- LocalMode artifacts registry entries — `apps/ui/registry.json`
+- LocalMode artifacts component source — `apps/ui/registry/localmode/artifacts/` (`artifact/artifact.tsx`, `data-table-artifact/data-table-artifact.tsx`, `chart-artifact/chart-artifact.tsx`, `code-diff-viewer/code-diff-viewer.tsx`)
+- LocalMode artifacts docs pages — `apps/ui/content/docs/artifacts/`
+- Portability test (zero-`@localmode`-dependency proof) — `apps/ui/consumer-tests/portability-test.mjs`
+- `@localmode/react` hook exports — `packages/react/src/index.ts`
+- `redactPII` signature — `packages/core/src/security/pii.ts`
+- Transformers model catalog — `packages/transformers/src/models.ts`
+- Artifacts change record (eight-library audit, refused/deferred members) — `openspec/changes/ui-elements-artifacts/{proposal,design,tasks}.md`
+- UI catalog summary — `AGENTS.md`
+- [shadcn/ui Installation](https://ui.shadcn.com/docs/installation)
+- [shadcn/ui Registry](https://ui.shadcn.com/docs/registry)
+
+---
+
+## Get started
+
+Install all four and dock your first canvas:
+
+```bash
+npx shadcn@latest add @localmode/ui/artifacts
+```
+
+See all three in action in the [**Agent & Structured Data block**](https://localmode.ai/blocks/agents/data-extractor) — the artifacts family's home block, where a schema-validated on-device extraction docks into an `artifact` canvas as a sortable `data-table-artifact` and a `chart-artifact` built from the extraction's real numbers (never fixtures).
+
+Browse props, live previews, and examples in the [artifacts docs](https://localmode.ai/docs/components). For the chat surfaces that drive artifact content, see the [conversation components post](/blog/localmode-ui-conversation-components); for the model and device surfaces underneath, the [local-first components post](/blog/localmode-ui-local-first-components).

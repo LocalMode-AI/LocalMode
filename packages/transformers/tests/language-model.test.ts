@@ -15,7 +15,7 @@ import {
   TRANSFORMERS_LLM_MODELS,
   getLLMModelCategory,
 } from '../src/index.js';
-import { createLanguageModel } from '../src/implementations/language-model.js';
+import { createLanguageModel, defaultMultimodalDtype } from '../src/implementations/language-model.js';
 import type { LanguageModel } from '@localmode/core';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -261,6 +261,56 @@ describe('Gemma 4 ONNX model support', () => {
 
       expect(e4b.sizeBytes).toBeGreaterThan(e2b.sizeBytes);
     });
+  });
+});
+
+describe('defaultMultimodalDtype()', () => {
+  // Regression: loading a split-architecture VLM (e.g.
+  // onnx-community/Qwen3.5-0.8B-ONNX) on the WASM device failed session
+  // creation with "Could not find an implementation for GatherBlockQuantized"
+  // because the q4 embed_tokens variant is encoded with an op that
+  // onnxruntime-web only implements in the WebGPU (JSEP) EP. fp16 kernels are
+  // likewise WebGPU-only. The default dtype map must therefore be device-aware.
+
+  it('keeps the q4/fp16 component mix on webgpu', () => {
+    expect(defaultMultimodalDtype('webgpu')).toEqual({
+      embed_tokens: 'q4',
+      vision_encoder: 'fp16',
+      decoder_model_merged: 'q4',
+    });
+  });
+
+  it('uses the only WASM-executable component mix on wasm (fp32 embeddings, q4 decoder)', () => {
+    // Every quantized embed_tokens/vision_encoder variant of the Qwen3.5 ONNX
+    // exports (q4, q4f16 AND q8 "_quantized" — incl. the ViT's learned
+    // pos_embed) is GatherBlockQuantized-encoded, a WebGPU-only op; fp16 is
+    // WebGPU-only too. Only the fp32 embedding components can execute on the
+    // WASM EP. The q4 decoder is fine: its weights are MatMulNBits (the op
+    // the q4 text pipelines already run on WASM) and its graph carries zero
+    // GatherBlockQuantized nodes.
+    expect(defaultMultimodalDtype('wasm')).toEqual({
+      embed_tokens: 'fp32',
+      vision_encoder: 'fp32',
+      decoder_model_merged: 'q4',
+    });
+  });
+
+  it('never selects a quantized/fp16 embedding component (all GatherBlockQuantized-encoded) off webgpu', () => {
+    for (const device of ['wasm', 'cpu', 'auto', '']) {
+      const dtype = defaultMultimodalDtype(device);
+      expect(dtype.embed_tokens, `embed_tokens for device "${device}"`).toBe('fp32');
+      expect(dtype.vision_encoder, `vision_encoder for device "${device}"`).toBe('fp32');
+    }
+  });
+
+  it('both load paths (VLM + image-text-to-text) defer to it when settings.dtype is unset', () => {
+    // Structural witness: the hardcoded per-component q4/fp16 literal must not
+    // reappear in loadVLM/loadImageTextToText — the device-aware helper is the
+    // single source of the default.
+    const filePath = path.resolve(__dirname, '../src/implementations/language-model.ts');
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const usages = content.match(/this\.settings\.dtype \?\? defaultMultimodalDtype\(device\)/g);
+    expect(usages?.length).toBe(2);
   });
 });
 

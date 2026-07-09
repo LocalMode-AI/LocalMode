@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
+  BargeInEvent,
   LiveChunk,
   LiveTranscriber,
   LiveTranscriberOptions,
@@ -20,7 +21,14 @@ const IS_SERVER = typeof window === 'undefined';
  * Mirrors {@link LiveTranscriberOptions} but excludes `abortSignal` — the
  * hook owns abort lifecycle through unmount cleanup.
  */
-export interface UseLiveTranscribeOptions extends Omit<LiveTranscriberOptions, 'abortSignal'> {}
+export interface UseLiveTranscribeOptions extends Omit<LiveTranscriberOptions, 'abortSignal'> {
+  /**
+   * Fired when the user barges in over external playback. Only fires when
+   * {@link LiveTranscriberOptions.bargeInWhilePlaying} is provided. Also
+   * mirrored on the `lastBargeIn` state field.
+   */
+  onBargeIn?: (event: BargeInEvent) => void;
+}
 
 /**
  * Return shape of {@link useLiveTranscribe}.
@@ -34,6 +42,10 @@ export interface UseLiveTranscribeReturn {
   currentUtterance: string;
   /** The most recent completed utterance, or null. */
   lastUtterance: LiveUtterance | null;
+  /** All completed utterances accumulated this session (oldest first). */
+  utterances: LiveUtterance[];
+  /** The most recent barge-in event, or null. */
+  lastBargeIn: BargeInEvent | null;
   /** Latest error, or null. */
   error: Error | null;
   /** True when state === 'listening'. */
@@ -44,6 +56,8 @@ export interface UseLiveTranscribeReturn {
   stop: () => Promise<void>;
   /** Dispose the controller and release all resources. */
   dispose: () => Promise<void>;
+  /** Clear the accumulated `utterances` list (does not touch `lastUtterance`). */
+  clearUtterances: () => void;
 }
 
 /**
@@ -55,7 +69,7 @@ export interface UseLiveTranscribeReturn {
  *
  * @example
  * ```tsx
- * const { state, currentUtterance, lastUtterance, start, stop } = useLiveTranscribe({
+ * const { state, currentUtterance, utterances, start, stop } = useLiveTranscribe({
  *   model: transformers.speechToText('onnx-community/moonshine-tiny-ONNX'),
  *   mode: 'push-to-talk',
  * });
@@ -64,7 +78,7 @@ export interface UseLiveTranscribeReturn {
  *   <>
  *     <button onMouseDown={start} onMouseUp={stop}>Hold to talk</button>
  *     {state === 'listening' && <p>{currentUtterance}</p>}
- *     {lastUtterance && <p>You said: {lastUtterance.text}</p>}
+ *     <ul>{utterances.map(u => <li key={u.utteranceId}>{u.text}</li>)}</ul>
  *   </>
  * );
  * ```
@@ -73,6 +87,8 @@ export function useLiveTranscribe(options: UseLiveTranscribeOptions): UseLiveTra
   const [state, setState] = useState<LiveTranscriberState>('idle');
   const [currentChunks, setCurrentChunks] = useState<LiveChunk[]>([]);
   const [lastUtterance, setLastUtterance] = useState<LiveUtterance | null>(null);
+  const [utterances, setUtterances] = useState<LiveUtterance[]>([]);
+  const [lastBargeIn, setLastBargeIn] = useState<BargeInEvent | null>(null);
   const [error, setError] = useState<Error | null>(null);
 
   const controllerRef = useRef<LiveTranscriber | null>(null);
@@ -98,7 +114,10 @@ export function useLiveTranscribe(options: UseLiveTranscribeOptions): UseLiveTra
     if (controllerRef.current) return controllerRef.current;
 
     const { createLiveTranscriber } = await import('@localmode/core');
-    const controller = await createLiveTranscriber(optionsRef.current);
+    // Strip the hook-level onBargeIn callback — it is wired through the
+    // controller's listener below, not through the core options.
+    const { onBargeIn, ...coreOptions } = optionsRef.current;
+    const controller = await createLiveTranscriber(coreOptions);
 
     if (!mountedRef.current) {
       // Component unmounted during construction; clean up.
@@ -126,7 +145,15 @@ export function useLiveTranscribe(options: UseLiveTranscribeOptions): UseLiveTra
     controller.onUtteranceEnd((utterance) => {
       if (!mountedRef.current) return;
       setLastUtterance(utterance);
+      setUtterances((prev) => [...prev, utterance]);
       setCurrentChunks([]);
+    });
+
+    controller.onBargeIn((event) => {
+      if (!mountedRef.current) return;
+      setLastBargeIn(event);
+      // Read through the ref so callers can pass inline lambdas.
+      optionsRef.current.onBargeIn?.(event);
     });
 
     controller.onError((err) => {
@@ -157,17 +184,24 @@ export function useLiveTranscribe(options: UseLiveTranscribeOptions): UseLiveTra
     await c.dispose();
   }, []);
 
+  const clearUtterances = useCallback(() => {
+    setUtterances([]);
+  }, []);
+
   if (IS_SERVER) {
     return {
       state: 'idle',
       currentChunks: [],
       currentUtterance: '',
       lastUtterance: null,
+      utterances: [],
+      lastBargeIn: null,
       error: null,
       isListening: false,
       start: async () => {},
       stop: async () => {},
       dispose: async () => {},
+      clearUtterances: () => {},
     };
   }
 
@@ -179,10 +213,13 @@ export function useLiveTranscribe(options: UseLiveTranscribeOptions): UseLiveTra
     currentChunks,
     currentUtterance,
     lastUtterance,
+    utterances,
+    lastBargeIn,
     error,
     isListening: state === 'listening',
     start,
     stop,
     dispose,
+    clearUtterances,
   };
 }

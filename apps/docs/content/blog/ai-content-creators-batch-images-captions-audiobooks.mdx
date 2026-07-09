@@ -3,7 +3,7 @@ title: "AI for Content Creators: Batch Process Images, Generate Captions, and Cr
 description: "Three complete workflows for content creators using free, private AI tools that run in your browser. Auto-caption product photos, summarize and translate blog posts, and turn text into audiobooks - no sign-up, no uploads, no monthly fees."
 author: LocalMode
 date: 2026-03-14
-dateModified: "2026-05-25"
+dateModified: "2026-07-04"
 faq:
   - question: "How much can content creators save by using local AI tools instead of paid subscriptions?"
     answer: "A solo content creator using Canva Pro, Adobe Firefly, ElevenLabs, and DeepL Pro typically spends $69-76 per month ($830-910 annually). The equivalent local AI tools at localmode.ai perform the same tasks -- image captioning, background removal, summarization, translation, and text-to-speech -- at zero cost after a one-time model download."
@@ -12,7 +12,7 @@ faq:
   - question: "What models power the content creator workflows and how large are they?"
     answer: "ViT-GPT2 (230 MB) generates image captions, RMBG-1.4 (170 MB) removes backgrounds, Swin2SR (50 MB) upscales images, DistilBART (300 MB) summarizes text, OPUS-MT (100 MB per language pair) translates, and MMS-TTS (~38 MB) generates speech. All download once and cache in the browser."
   - question: "What are the trade-offs of using local AI tools compared to cloud services for content creation?"
-    answer: "Local tools offer one voice for TTS versus dozens from ElevenLabs, slightly lower translation quality on idiomatic expressions, one-at-a-time browser processing versus bulk API queues, and slower performance on older devices. For mainstream content creation workflows with clear prose, these trade-offs are generally acceptable."
+    answer: "Local TTS now offers 29 English voices via the Kokoro model (the lightweight MMS-TTS option is single-voice), versus ElevenLabs's larger multilingual catalog and voice cloning. Other trade-offs: slightly lower translation quality on idiomatic expressions, one-at-a-time browser processing versus bulk API queues, and slower performance on older devices. For mainstream content creation workflows with clear prose, these trade-offs are generally acceptable."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
@@ -37,7 +37,7 @@ This post walks through three real workflows, step by step, using tools you can 
 
 ### Step 1: Auto-Caption Your Photos
 
-Open the [Image Captioner](https://localmode.ai/image-captioner) tool.
+Open the [Image Captioner block](https://localmode.ai/blocks/image-studio/image-captioner).
 
 The first time you visit, your browser downloads a vision model called ViT-GPT2 (~230MB). This is a one-time download - the model caches itself in your browser's storage and loads instantly on future visits.
 
@@ -53,7 +53,7 @@ These captions are ready to use as image alt text for accessibility and SEO, as 
 
 ### Step 2: Remove Backgrounds
 
-Open the [Background Remover](https://localmode.ai/background-remover) tool.
+Open the [Background Remover block](https://localmode.ai/blocks/image-studio/background-remover).
 
 This tool uses RMBG-1.4 (~170MB download, also one-time). Drop in the same product photo. The model identifies the foreground subject - your product - and strips away the background, leaving a clean transparent PNG.
 
@@ -63,7 +63,7 @@ The results are remarkably precise. Hair, thin straps, transparent elements like
 
 ### Step 3: Upscale for Thumbnails
 
-Open the [Photo Enhancer](https://localmode.ai/photo-enhancer) tool.
+Open the [Image Enhancer block](https://localmode.ai/blocks/image-studio/image-enhancer).
 
 This one uses Swin2SR (~50MB), a super-resolution model that doubles image dimensions while adding realistic detail. Upload a cropped product thumbnail, and the model outputs a version at 2x resolution - sharpening edges, recovering texture detail, and reducing compression artifacts.
 
@@ -75,9 +75,9 @@ This is especially useful when you need to crop a small section of a larger phot
 
 | Step | Tool | Model | Download (one-time) | Time per image | Output |
 |------|------|-------|---------------------|----------------|--------|
-| Caption | [Image Captioner](https://localmode.ai/image-captioner) | ViT-GPT2 | ~230MB | 3–8 sec | Text description |
-| Background | [Background Remover](https://localmode.ai/background-remover) | RMBG-1.4 | ~170MB | 2–5 sec | Transparent PNG |
-| Upscale | [Photo Enhancer](https://localmode.ai/photo-enhancer) | Swin2SR | ~50MB | 3–6 sec | 2x resolution image |
+| Caption | [Image Captioner](https://localmode.ai/blocks/image-studio/image-captioner) | ViT-GPT2 | ~230MB | 3–8 sec | Text description |
+| Background | [Background Remover](https://localmode.ai/blocks/image-studio/background-remover) | RMBG-1.4 | ~170MB | 2–5 sec | Transparent PNG |
+| Upscale | [Image Enhancer](https://localmode.ai/blocks/image-studio/image-enhancer) | Swin2SR | ~50MB | 3–6 sec | 2x resolution image |
 
 For a batch of 20 product photos, the entire pipeline takes roughly 10–15 minutes of hands-on time. After the first run, the models are cached and load in under a second on your next visit.
 
@@ -89,7 +89,7 @@ For a batch of 20 product photos, the entire pipeline takes roughly 10–15 minu
 
 ### Step 1: Summarize for Social Media
 
-Open the [Text Summarizer](https://localmode.ai/text-summarizer) tool.
+Open the [Summarize block](https://localmode.ai/blocks/writing-tools/summarize).
 
 The summarization model is DistilBART (~300MB, one-time download) - a distilled version of the BART model that Facebook AI Research originally trained on CNN/DailyMail articles. It is designed to condense long text into short, coherent summaries while preserving the key points.
 
@@ -103,7 +103,7 @@ Hit "Summarize." Within a few seconds, you get a clean summary that captures the
 
 ### Step 2: Translate into Multiple Languages
 
-Open the [Translator](https://localmode.ai/translator) tool.
+Open the [Translate block](https://localmode.ai/blocks/writing-tools/translate).
 
 The translator uses Helsinki-NLP's OPUS-MT models (~100MB per language pair). These are the same models used in academic machine translation research, trained on millions of parallel sentence pairs from the OPUS corpus - one of the largest collections of translated text in the world.
 
@@ -119,10 +119,10 @@ The quality is strong for content that uses clear, direct language - which is ex
 
 | Step | Tool | Model | Download (one-time) | Time | Output |
 |------|------|-------|---------------------|------|--------|
-| Summarize | [Text Summarizer](https://localmode.ai/text-summarizer) | DistilBART | ~300MB | 2–5 sec | Short/medium/long summary |
-| Translate (FR) | [Translator](https://localmode.ai/translator) | OPUS-MT en-fr | ~100MB | 3–8 sec | French text |
-| Translate (DE) | [Translator](https://localmode.ai/translator) | OPUS-MT en-de | ~100MB | 3–8 sec | German text |
-| Translate (ES) | [Translator](https://localmode.ai/translator) | OPUS-MT en-es | ~100MB | 3–8 sec | Spanish text |
+| Summarize | [Summarize](https://localmode.ai/blocks/writing-tools/summarize) | DistilBART | ~300MB | 2–5 sec | Short/medium/long summary |
+| Translate (FR) | [Translate](https://localmode.ai/blocks/writing-tools/translate) | OPUS-MT en-fr | ~100MB | 3–8 sec | French text |
+| Translate (DE) | [Translate](https://localmode.ai/blocks/writing-tools/translate) | OPUS-MT en-de | ~100MB | 3–8 sec | German text |
+| Translate (ES) | [Translate](https://localmode.ai/blocks/writing-tools/translate) | OPUS-MT en-es | ~100MB | 3–8 sec | Spanish text |
 
 For a single blog post repurposed into a summary and three translations, you are looking at under two minutes of processing time. Each language pair model downloads once and caches for future use.
 
@@ -134,7 +134,7 @@ For a single blog post repurposed into a summary and three translations, you are
 
 ### Step 1: Generate Speech
 
-Open the [Audiobook Creator](https://localmode.ai/audiobook-creator) tool.
+Open the [Audiobook Reader block](https://localmode.ai/blocks/audio/audiobook-reader) and use its text-to-speech (audiobook) tool.
 
 The text-to-speech model is MMS-TTS (~38MB) - by far the smallest download in any of these workflows. MMS-TTS (Massively Multilingual Speech) is a VITS-based model developed by Meta AI, trained to produce natural-sounding English speech from text input.
 
@@ -157,7 +157,7 @@ Once generation finishes, click the download button. The tool exports a standard
 
 | Step | Tool | Model | Download (one-time) | Time | Output |
 |------|------|-------|---------------------|------|--------|
-| Generate speech | [Audiobook Creator](https://localmode.ai/audiobook-creator) | MMS-TTS | ~38MB | 5–15 sec per 5K chars | WAV audio |
+| Generate speech | [Audiobook Reader](https://localmode.ai/blocks/audio/audiobook-reader) | MMS-TTS | ~38MB | 5–15 sec per 5K chars | WAV audio |
 | Export | Same tool | - | - | Instant | Downloadable WAV file |
 
 For a full whitepaper, budget about 2 minutes from paste to finished audio file.
@@ -188,7 +188,7 @@ For a marketing team processing hundreds of images and documents per month, the 
 
 Honesty matters, so here is what you give up:
 
-- **Voice variety**: ElevenLabs offers dozens of voices and voice cloning. The local MMS-TTS model produces one English voice. It is clear and natural, but it is one voice.
+- **Voice variety**: ElevenLabs offers a large multilingual voice catalog plus voice cloning. Locally, the Kokoro model (via `@localmode/transformers`) ships 29 English voices with speed control, while the lighter MMS-TTS model produces a single English voice — both clear and natural, but English-only and no cloning.
 - **Translation quality at the margins**: DeepL and Google Translate occasionally handle idiomatic expressions and rare language pairs better. For mainstream language pairs (English to French, German, Spanish) with clear prose, the difference is small.
 - **Batch automation**: Paid tools often have APIs and bulk processing queues. The localmode.ai tools currently process one item at a time through the browser interface. (The underlying LocalMode packages do support batch processing for developers building custom workflows.)
 - **Processing speed on older devices**: Cloud tools run on high-end servers. Local models run on your hardware. A 2024 laptop handles everything smoothly. A 2018 tablet will be noticeably slower.
@@ -225,13 +225,13 @@ That is it. No account creation. No credit card. No trial period that expires in
 
 ## What Else Is Available
 
-The three workflows above use six of the 30+ tools available at [localmode.ai](https://localmode.ai). Other tools that content creators may find useful include:
+The three workflows above draw on tools from three of the 11 blocks in the [/blocks gallery](https://localmode.ai/blocks). Other blocks that content creators may find useful include:
 
-- **[Sentiment Analyzer](https://localmode.ai/sentiment-analyzer)** - Check the tone of your copy before publishing
-- **[Object Detector](https://localmode.ai/object-detector)** - Identify and label objects in photos automatically
-- **[Smart Writer](https://localmode.ai/smart-writer)** - Summarize and translate text in a combined workflow
-- **[OCR Scanner](https://localmode.ai/ocr-scanner)** - Extract text from images and scanned documents
-- **[Voice Notes](https://localmode.ai/voice-notes)** - Transcribe recorded audio to text, entirely offline
+- **[Text Insights block](https://localmode.ai/blocks/text-insights)** - Check the tone of your copy before publishing
+- **[Vision block](https://localmode.ai/blocks/vision)** - Identify and label objects in photos automatically
+- **[Writing Tools block](https://localmode.ai/blocks/writing-tools)** - Summarize and translate text in a combined workflow
+- **[Knowledge Base block](https://localmode.ai/blocks/knowledge/semantic-search)** - Extract text from images and scanned documents
+- **[Voice Notes block](https://localmode.ai/blocks/audio/voice-notes)** - Transcribe recorded audio to text, entirely offline
 
 Every tool follows the same pattern: open it, wait for the one-time model download, and use it forever at no cost.
 
@@ -253,7 +253,7 @@ All model sizes, names, and processing descriptions in this post are based on th
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI tools running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try LocalMode's AI tools as installable blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   If you are a developer and want to build these features into your own application, read the [Getting Started guide](/docs/getting-started) to add local AI in under 5 minutes.
 </Callout>

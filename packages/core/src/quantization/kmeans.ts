@@ -22,6 +22,15 @@ export interface KMeansOptions {
    */
   threshold?: number;
 
+  /**
+   * Random source for centroid initialization and empty-cluster
+   * re-initialization. Inject a seeded generator (e.g.
+   * `createSeededRandom(42)`) for deterministic clustering — k-means with an
+   * unseeded random init can converge to different local optima run-to-run.
+   * Default: `Math.random`.
+   */
+  random?: () => number;
+
   /** AbortSignal to cancel the operation. */
   abortSignal?: AbortSignal;
 }
@@ -94,7 +103,8 @@ function computeCentroids(
   data: Float32Array[],
   assignments: Uint32Array,
   k: number,
-  dim: number
+  dim: number,
+  random: () => number
 ): Float32Array[] {
   const sums = new Array<Float64Array>(k);
   const counts = new Uint32Array(k);
@@ -126,7 +136,7 @@ function computeCentroids(
       }
     } else {
       // Empty cluster -- re-initialize from a random data point
-      const randomIdx = Math.floor(Math.random() * data.length);
+      const randomIdx = Math.floor(random() * data.length);
       centroids[c].set(data[randomIdx]);
     }
   }
@@ -222,13 +232,14 @@ export function kMeansCluster(
 
   const maxIterations = options?.maxIterations ?? 20;
   const threshold = options?.threshold ?? 1e-6;
+  const random = options?.random ?? Math.random;
   const abortSignal = options?.abortSignal;
 
   // ── Initialize centroids by random sampling ─────────────────
   // Fisher-Yates shuffle to pick k distinct indices
   const indices = Array.from({ length: data.length }, (_, i) => i);
   for (let i = indices.length - 1; i > 0 && i >= indices.length - k; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(random() * (i + 1));
     [indices[i], indices[j]] = [indices[j], indices[i]];
   }
 
@@ -252,7 +263,7 @@ export function kMeansCluster(
     const newAssignments = assignToClusters(data, centroids);
 
     // Compute new centroids
-    const newCentroids = computeCentroids(data, newAssignments, k, dim);
+    const newCentroids = computeCentroids(data, newAssignments, k, dim, random);
 
     // Check convergence
     const movement = maxCentroidMovement(centroids, newCentroids);

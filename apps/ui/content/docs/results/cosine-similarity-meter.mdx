@@ -1,0 +1,70 @@
+---
+title: "Cosine Similarity Meter"
+description: "Shows a cosine similarity (0–1) as a large numeric value with a human-readable bucket label and a proportional arc gauge."
+icon: Ruler
+---
+
+# Cosine Similarity Meter
+
+The **Cosine Similarity Meter** displays a cosine similarity score (0–1) as a large numeric value with a human-readable bucket label (e.g. "Very similar", "Unrelated") using configurable thresholds, plus a proportional half-ring arc gauge.
+
+**When to use it:** when you compute the cosine similarity of two embeddings yourself (from `useEmbed` / `useEmbedImage`) and want to present it — semantic search relevance, duplicate detection, or cross-modal matching.
+
+## Preview
+
+<ComponentPreview name="ui/results/cosine-similarity-meter" note="Several similarities mapping to their bucket labels — runs locally." />
+
+<OpenInV0 name="ui/results/cosine-similarity-meter" />
+
+## Installation
+
+<InstallTabs name="ui/results/cosine-similarity-meter" />
+
+### Dependencies
+
+- **Data source:** renders a single `similarity` (0–1) you pass — works with any backend. Recommended producer: compute cosine yourself from embeddings (e.g. via `useEmbed` / `useEmbedImage` from `@localmode/react`, optional). See [Bring your own data](/docs/bring-your-own-data#results--insights).
+
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+
+### Files installed
+
+- `cosine-similarity-meter.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/results/cosine-similarity-meter/cosine-similarity-meter.tsx" name="CosineSimilarityMeterProps" />
+
+## Examples
+
+### From two embeddings
+
+```tsx
+import { CosineSimilarityMeter } from '@/components/cosine-similarity-meter';
+
+function cosine(a: Float32Array, b: Float32Array) {
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] ** 2; nb += b[i] ** 2; }
+  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+
+export function Example({ queryVec, docVec }) {
+  return <CosineSimilarityMeter similarity={cosine(queryVec, docVec)} caption="query ↔ document" />;
+}
+```
+
+### Custom buckets
+
+```tsx
+<CosineSimilarityMeter
+  similarity={0.74}
+  buckets={[
+    { min: 0.7, label: 'Match', color: 'var(--color-emerald-500)' },
+    { min: 0, label: 'No match', color: 'var(--color-muted-foreground)' },
+  ]}
+/>
+```
+
+## Customization
+
+The arc gauge is a two-path SVG semicircle; the active arc's color comes from the resolved bucket and its length from the score. Bucket colors are wired to CSS variables so the meter themes via your tokens. The exported `resolveBucket()` helper lets you reuse the exact bucketing logic elsewhere.

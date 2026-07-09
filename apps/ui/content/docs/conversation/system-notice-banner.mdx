@@ -1,0 +1,52 @@
+---
+title: "System Notice Banner"
+description: "An inline info/warning banner for local-first state changes — offline, fallback, capability-unavailable, eviction, download-required."
+icon: TriangleAlert
+---
+
+# System Notice Banner
+
+The **SystemNoticeBanner** is an in-conversation banner notice rendered inside the chat surface (not as a message bubble) for local-first state changes: offline/online transitions, model switch, capability-unavailable, WebGPU→WASM fallback, cache eviction, or download-required notices. The `kind` sets the icon, tone, and default copy. Data source: `useNetworkStatus` / `useCapabilities`.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/system-notice-banner" />
+
+<OpenInV0 name="ui/conversation/system-notice-banner" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/system-notice-banner" />
+
+### Data source & dependencies
+
+**Data source:** renders the `kind` + copy you pass — works with any backend. Recommended producer: `useNetworkStatus` / `useCapabilities` from `@localmode/react` (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `system-notice-banner.tsx` — `SystemNoticeBanner`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/system-notice-banner/system-notice-banner.tsx" name="SystemNoticeBannerProps" />
+
+## Examples
+
+### Surface offline state inline
+
+```tsx
+import { useNetworkStatus } from '@localmode/react';
+import { SystemNoticeBanner } from '@/components/system-notice-banner';
+
+const { isOnline } = useNetworkStatus();
+
+{!isOnline && <SystemNoticeBanner kind="offline" />}
+```
+
+## Customization
+
+Override the `message`, `tone`, or `action` per notice. The default copy lives in `KIND_META` — edit it or add new `NoticeKind`s for your app’s own states.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useNetworkStatus`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

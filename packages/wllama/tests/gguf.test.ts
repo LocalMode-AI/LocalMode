@@ -42,8 +42,16 @@ vi.mock('@huggingface/gguf', () => ({
 }));
 
 // Mock @wllama/wllama v3 for context length auto-detection tests
-vi.mock('@wllama/wllama', () => ({
-  Wllama: function Wllama() {
+// Mock OUR loader seam (src/wllama-loader.ts) — the runtime imports @wllama/wllama
+// from a CDN via a bundler-invisible dynamic import that vi.mock('@wllama/wllama')
+// can never intercept (the root cause of 23 long-standing failures).
+vi.mock('../src/wllama-loader.js', () => ({
+  WLLAMA_CDN_ESM: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.5.1/esm/index.js',
+  WLLAMA_CDN_WASM: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.5.1/src/wasm/wllama.wasm',
+  importWllama: async () => ({ Wllama: MockWllama }),
+}));
+
+function MockWllama() {
     return {
       loadModelFromUrl: vi.fn().mockResolvedValue(undefined),
       createChatCompletion: vi.fn().mockResolvedValue({
@@ -57,8 +65,7 @@ vi.mock('@wllama/wllama', () => ({
       exit: vi.fn().mockResolvedValue(undefined),
       cacheManager: { open: vi.fn().mockResolvedValue(null), list: vi.fn().mockResolvedValue([]) },
     };
-  },
-}));
+}
 
 // ═══════════════════════════════════════════════════════════════
 // IMPORTS (after mocks)
@@ -381,17 +388,21 @@ describe('GGUF Browser Compatibility', () => {
   // 9.10: Context length auto-detection
   // ─────────────────────────────────────────────────────────────
   describe('Context length auto-detection', () => {
-    it('should use context length from GGUF metadata when not set in settings', async () => {
+    it('should use context length from GGUF metadata when not set in settings, capped at 8192', async () => {
       const { WllamaLanguageModel } = await import('../src/model.js');
       const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
 
       // Before loading, should be default
       expect(model.contextLength).toBe(4096);
 
-      // After doGenerate triggers load, contextLength should be updated from GGUF metadata
-      // The mocked gguf returns llama.context_length: 131072
+      // After doGenerate triggers load, contextLength is updated from GGUF
+      // metadata — but the auto-detected value is capped at 8192: the mocked
+      // gguf advertises llama.context_length 131072, and passing a native
+      // long-context window straight to n_ctx requests a multi-GiB KV cache
+      // that aborts the wasm32 load ("ggml_aligned_malloc: insufficient
+      // memory"). Explicit settings.contextLength is never capped (next test).
       await model.doGenerate({ prompt: 'Hello' });
-      expect(model.contextLength).toBe(131072);
+      expect(model.contextLength).toBe(8192);
     });
 
     it('should use explicit contextLength setting over auto-detection', async () => {

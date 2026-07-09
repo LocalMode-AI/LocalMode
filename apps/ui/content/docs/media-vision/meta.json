@@ -1,0 +1,12 @@
+{
+  "title": "Media & Vision",
+  "pages": [
+    "media-dropzone",
+    "bounding-box-overlay",
+    "before-after-image-viewer",
+    "image-processing-overlay",
+    "video-canvas",
+    "image-result-gallery",
+    "use-webcam"
+  ]
+}

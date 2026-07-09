@@ -3,7 +3,7 @@ title: "Semantic Caching: Instant LLM Responses for Similar Questions at Zero Co
 description: "Stop waiting seconds for answers your app has already generated. Semantic caching uses embedding similarity to return cached LLM responses for rephrased questions in under 50ms - entirely in the browser, with no server and no API costs."
 author: LocalMode
 date: 2026-03-04
-dateModified: "2026-05-28"
+dateModified: "2026-07-04"
 faq:
   - question: "What is semantic caching for LLM responses?"
     answer: "Semantic caching uses embedding similarity to match rephrased questions to previously generated answers. Instead of exact string matching, it embeds the new prompt and searches a vector database for semantically similar cached prompts. If similarity exceeds a threshold, the cached response is returned in under 50ms."
@@ -26,7 +26,7 @@ Semantic caching solves this. Instead of comparing strings character by characte
 This post walks through building a semantic cache with LocalMode that runs entirely in the browser. No server, no API keys, no data leaving the device.
 
 <Callout type="info" title="Working demos">
-  The [LLM Chat](https://localmode.ai/llm-chat) and [PDF Search](https://localmode.ai/pdf-search) showcase apps both use semantic caching. Ask a question, then rephrase it - the second answer arrives instantly.
+  The [Chat block](https://localmode.ai/blocks/chat) and [Knowledge Base block](https://localmode.ai/blocks/knowledge/rag-chat) both use semantic caching. Ask a question, then rephrase it - the second answer arrives instantly.
 </Callout>
 
 ---
@@ -361,7 +361,7 @@ All code examples were verified against the LocalMode codebase (packages/core/sr
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

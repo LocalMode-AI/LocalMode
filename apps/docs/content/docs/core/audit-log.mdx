@@ -241,7 +241,7 @@ function AuditPanel({ log }: { log: AuditLog }) {
 }
 ```
 
-The hook returns `{ entries, isLoading, error, append, verify, refresh }`.
+The hook returns `{ entries, isLoading, error, append, verify, lastVerification, refresh }`.
 There is intentionally **no `clear`** — append-only is part of the contract.
 
 ## Rotation

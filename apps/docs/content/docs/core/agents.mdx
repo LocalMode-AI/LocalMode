@@ -12,7 +12,7 @@ import { Steps, Step } from 'fumadocs-ui/components/steps';
 Build AI agents that use tools step-by-step to solve complex tasks — entirely in the browser. The agent framework uses the **ReAct pattern** (Reason-Act-Observe) with `generateObject()` for reliable, model-agnostic tool calling.
 
 <Callout type="info" title="See it in action">
-  Try [Research Agent](https://localmode.ai/research-agent) and [LLM Chat](https://localmode.ai/llm-chat) for working demos of these APIs.
+  Try the [Agent & Structured Data block](https://localmode.ai/blocks/agents/research-agent) and [Chat block](https://localmode.ai/blocks/chat) for working demos of these APIs.
 </Callout>
 
 <Callout title="Provider-agnostic">
@@ -98,6 +98,30 @@ const calculatorTool = {
 };
 ```
 
+### defineTool()
+
+For fully typed tools, wrap the definition in `defineTool()`. It anchors the `ToolDefinition<TParams, TResult>` generics so the parameter type inferred from `parameters` (e.g. via `jsonSchema(z.object(...))`) and the `params` argument of `execute()` are type-checked against each other — no annotations needed:
+
+```ts
+import { defineTool, jsonSchema } from '@localmode/core';
+import { z } from 'zod';
+
+const searchTool = defineTool({
+  name: 'search',
+  description: 'Search a knowledge base for relevant information',
+  parameters: jsonSchema(z.object({
+    query: z.string().describe('The search query'),
+    maxResults: z.number().default(5),
+  })),
+  execute: async ({ query, maxResults }) => {
+    // query: string, maxResults: number — inferred from the schema
+    return `Found ${maxResults} results for: ${query}`;
+  },
+});
+```
+
+At runtime `defineTool(tool)` returns its argument unchanged — it exists purely for type inference. Tools typed this way are directly assignable to `ToolDefinition[]` (agent `tools`, `createToolRegistry()`), so mixed arrays of differently-typed tools need no `as ToolDefinition` casts.
+
 ### ToolExecutionContext
 
 Every tool receives a context with:
@@ -138,6 +162,7 @@ const result2 = await agent.run({ prompt: 'Research machine learning' });
 | `temperature` | `number` | `0` | Sampling temperature |
 | `memory` | `AgentMemory` | — | Optional conversation memory |
 | `onStep` | `(step) => void` | — | Callback after each step |
+| `onToolApproval` | `(request) => ToolApprovalDecision \| Promise` | — | Human-in-the-loop callback for tools flagged `requiresApproval` |
 
 ### AgentRunOptions
 
@@ -146,6 +171,7 @@ const result2 = await agent.run({ prompt: 'Research machine learning' });
 | `prompt` | `string` | The user's task/question |
 | `abortSignal` | `AbortSignal` | For cancellation |
 | `onStep` | `(step) => void` | Per-run callback (overrides config) |
+| `onToolApproval` | `(request) => ToolApprovalDecision \| Promise` | Per-run approval callback (overrides config) |
 | `context` | `string` | Additional context for the prompt |
 
 ## runAgent()
@@ -161,6 +187,52 @@ const result = await runAgent({
   onStep: (step) => console.log(`Step ${step.index}: ${step.type}`),
 });
 ```
+
+## Human-in-the-Loop Tool Approval
+
+Flag sensitive tools with `requiresApproval: true` and supply an `onToolApproval` callback — at config level or per-run (run-level wins, mirroring `onStep`). The ReAct loop pauses **before** executing a flagged tool, invokes the callback with the pending call, and awaits the decision (sync or Promise). Tools without the flag never consult the callback.
+
+```ts
+const result = await runAgent({
+  model,
+  tools: [{ ...deleteFileTool, requiresApproval: true }],
+  prompt: 'Clean up temp files',
+  onToolApproval: async ({ toolName, args, stepIndex }) => {
+    const ok = await showConfirmDialog(`Allow ${toolName}?`, args);
+    return ok
+      ? { approved: true }
+      : { approved: false, reason: 'User rejected' };
+  },
+});
+```
+
+### ToolApprovalRequest
+
+The callback receives the pending call:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `toolName` | `string` | Name of the tool the model wants to call |
+| `args` | `Record<string, unknown>` | Arguments proposed by the model (schema validation happens at execution, as for ungated calls) |
+| `stepIndex` | `number` | Zero-based step index of the pending tool call |
+
+### ToolApprovalDecision
+
+| Decision | Effect |
+|----------|--------|
+| `{ approved: true }` | The loop resumes and executes the tool exactly like an ungated call |
+| `{ approved: false, reason? }` | The tool is **not** executed — the loop records a denial observation (including the optional reason) and continues, so the model can adapt. Denial is an observation, not an error |
+
+### Approval Semantics
+
+- **Fail-fast** — a run that includes a tool with `requiresApproval: true` but no effective `onToolApproval` callback throws an `AgentError` before any model call.
+- **Recorded on the step** — gated steps carry `AgentStep.approval` (`{ decision: 'approved' | 'denied', reason? }`); the field is absent on ungated steps.
+- **No built-in approval timeout** — the loop waits indefinitely for the decision. The escape hatch is the run's `abortSignal`: a pending decision races the signal, and aborting rejects the run immediately without executing the tool.
+- **Timing** — approval wait time does not count toward `maxDurationMs` (human decision latency is unbounded), but it *is* included in `AgentStep.durationMs` and `AgentResult.totalDurationMs`, which report wall-clock reality.
+
+<Callout type="info" title="React">
+  The `useAgent()` hook from `@localmode/react` installs `onToolApproval` internally and exposes a `pendingApproval` / `approve()` / `deny()` surface — see the [React Agents guide](/docs/react/agents#human-in-the-loop-tool-approval).
+</Callout>
 
 ## Safety Guards
 
@@ -237,8 +309,9 @@ Every agent run returns a structured result:
 | `toolArgs` | `Record?` | Tool arguments |
 | `observation` | `string?` | Tool result or error |
 | `result` | `string?` | Final answer (finish only) |
-| `durationMs` | `number` | Step duration (ms) |
+| `durationMs` | `number` | Step duration (ms) — includes approval wait on gated steps |
 | `usage` | `GenerationUsage?` | Token usage |
+| `approval` | `{ decision: 'approved' \| 'denied'; reason?: string }?` | Approval decision for gated tool calls; absent on ungated steps |
 
 ## Step Callbacks
 
@@ -357,9 +430,14 @@ function ResearchAgent() {
 | `result` | `AgentResult \| null` | Final result |
 | `isRunning` | `boolean` | Whether agent is executing |
 | `error` | `Error \| null` | Error if failed |
+| `pendingApproval` | `ToolApprovalRequest \| null` | Tool call awaiting a human decision (gated tools only) |
+| `approve` | `() => void` | Approve the pending tool call |
+| `deny` | `(reason?) => void` | Deny the pending tool call |
 | `run` | `(prompt, context?) => Promise` | Start the agent |
-| `cancel` | `() => void` | Abort current run |
+| `cancel` | `() => void` | Abort current run (also clears any pending approval) |
 | `reset` | `() => void` | Clear all state |
+
+For the hook's approval surface (`pendingApproval` / `approve()` / `deny()`) with a full example, see the [React Agents guide](/docs/react/agents#human-in-the-loop-tool-approval).
 
 ## Error Handling
 
@@ -428,9 +506,9 @@ const validated = registry.validate('search', { query: 'test' });
 const result = await registry.execute('search', { query: 'test' }, context);
 ```
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Research Agent | Multi-step ReAct agent with tool use | [Demo](https://localmode.ai/research-agent) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/research-agent) |
-| LLM Chat | Agent mode with tool calling in chat interface | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |
+| Agent & Structured Data (Research Agent) | Multi-step ReAct agent with tool use | [Live block](https://localmode.ai/blocks/agents/research-agent) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/agents/research-agent) |
+| Chat (LLM Chat) | Agent mode with tool calling in chat interface | [Live block](https://localmode.ai/blocks/chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/chat) |

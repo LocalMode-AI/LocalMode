@@ -390,7 +390,7 @@ describe('@localmode/litert', () => {
       ]);
     });
 
-    it('sends the final turn (not the preface) via sendMessage', async () => {
+    it('sends the final turn (not the preface) via the streaming API', async () => {
       const model = new LiteRTLanguageModel('gemma-4-E2B');
       await model.doGenerate({
         prompt: 'fallback',
@@ -399,7 +399,22 @@ describe('@localmode/litert', () => {
           { role: 'user', content: 'the actual question' },
         ],
       });
-      expect(mockState.sendMessage).toHaveBeenCalledWith('the actual question');
+      expect(mockState.sendMessageStreaming).toHaveBeenCalledWith('the actual question');
+    });
+
+    it('never uses the blocking sendMessage API (main-thread freeze)', async () => {
+      // Regression: LiteRT-LM's non-streaming sendMessage() runs the entire
+      // prefill+decode in ONE synchronous WASM call on the browser main
+      // thread (no cross-origin isolation → no worker threads), freezing the
+      // tab for the whole generation. doGenerate must drain the streaming
+      // API instead. Found by the blocks-chat agent E2E lane.
+      const model = new LiteRTLanguageModel('gemma-4-E2B');
+      const result = await model.doGenerate({ prompt: 'Hi' });
+      expect(mockState.sendMessage).not.toHaveBeenCalled();
+      expect(mockState.sendMessageStreaming).toHaveBeenCalledTimes(1);
+      expect(result.text.length).toBeGreaterThan(0);
+      expect(result.finishReason).toBe('stop');
+      expect(result.usage.totalTokens).toBeGreaterThan(0);
     });
 
     it('maps temperature and topP to sampler params, maxTokens to maxOutputTokens', async () => {
@@ -421,7 +436,7 @@ describe('@localmode/litert', () => {
           { role: 'user', content: [{ type: 'text', text: 'structured question' }] },
         ],
       });
-      expect(mockState.sendMessage).toHaveBeenCalledWith('structured question');
+      expect(mockState.sendMessageStreaming).toHaveBeenCalledWith('structured question');
     });
 
     it('rejects when the AbortSignal is already aborted', async () => {

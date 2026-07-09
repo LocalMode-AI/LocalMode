@@ -1,0 +1,275 @@
+---
+title: "Nine Input Control Components for Local-First AI Apps: A Copy-Owned shadcn Registry"
+description: "The text-input adornments and task shells every browser AI app rebuilds — char-limit rings, mask-token inputs, mode pickers, language-pair selectors, parameter sliders, slash-command palettes, and a two-column NLP panel. Install them from @localmode/ui with the shadcn CLI, own the code, and wire them to local hooks. No server, no API keys."
+author: LocalMode
+date: 2026-05-31
+dateModified: "2026-05-31"
+faq:
+  - question: "What are the @localmode/ui input control components?"
+    answer: "They are nine copy-owned React components for the input surfaces of a local-first AI app: CharLimitIndicator, MaskTokenInput, SegmentedModePicker (with a TabBar variant), LanguagePairSelector, TextProcessingPanel, ParameterSlider, SlashCommandPalette, OptionList, and PromptEnhanceButton. You install them with the shadcn CLI and they pair with browser-only hooks like useFillMask, useTranslate, useSummarize, useGenerateText, and useAgent."
+  - question: "How do I install the input controls family?"
+    answer: "Run npx shadcn add @localmode/ui/input-controls to install all nine components plus the shared cn() utility in one command, or npx shadcn add @localmode/ui/input-controls/<component> for a single one. The code is copied into your project — you own and edit it like any shadcn/ui component."
+  - question: "What does the TextProcessingPanel do?"
+    answer: "TextProcessingPanel is a two-column input-to-output NLP shell: a labeled textarea with a live word count and optional CharLimitIndicator on the left, a result pane with a copy button on the right, and a run/cancel/clear toolbar. It is layout-only — you wire the toolbar to any text-in/text-out hook (useSummarize, useTranslate, useFillMask, useAnswerQuestion, useGenerateText) and pass the result and processing state back in. It folds several one-off result panels into one reusable shell."
+  - question: "Does the PromptEnhanceButton send my prompt to a cloud API?"
+    answer: "No. The PromptEnhanceButton hands the user's draft to a local model through an onEnhance callback you wire to useGenerateText — the rewrite runs entirely on-device, for example with Qwen3 0.6B via Transformers.js. The draft never leaves the browser. An optional few-shot example editor lets users teach the rewrite by example, all locally."
+  - question: "Are the input control components tied to a specific model?"
+    answer: "No. The presentational components (CharLimitIndicator, SegmentedModePicker, ParameterSlider, SlashCommandPalette, OptionList) have no model dependency at all. The hook-driven ones (MaskTokenInput, LanguagePairSelector, TextProcessingPanel, PromptEnhanceButton) take whatever model you pass to the LocalMode hook, so you choose the embedding, translation, fill-mask, or LLM model that fits your app."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+The interesting part of an AI app is the inference. The tedious part is everything around the input box: the character counter that turns red, the mode picker for summary length, the language-pair toggle with a swap button, the temperature slider, the slash-command menu, the panel that holds a textarea on the left and a result on the right. Every NLP and utility app rebuilds these, and they are never quite reusable enough to lift from the last project.
+
+The **input controls** family of `@localmode/ui` packages those nine surfaces as copy-owned shadcn components. You install them with the shadcn CLI, the source lands in your repo, and you wire them to the browser-only hooks from [`@localmode/react`](https://localmode.dev/docs/react). The inference runs on-device. No API keys, no backend, no data leaving the browser.
+
+<Callout type="info" title="Copy-owned components">
+  Like shadcn/ui, `@localmode/ui` is a [registry](https://localmode.ai), not a package. One CLI command copies the component into your project. There is no runtime dependency to version-lock, and everything is styled with shadcn CSS variables so it inherits your theme.
+</Callout>
+
+---
+
+## The nine components
+
+| Component | What it does | Backing hook |
+| --------- | ------------ | ------------ |
+| `CharLimitIndicator` | Radial progress ring + `n/MAX` counter that turns error-colored over the limit | local |
+| `MaskTokenInput` | Cloze textarea that detects a mask token, highlights it inline, and submits on Cmd+Enter | `useFillMask` |
+| `SegmentedModePicker` | Pill toggle for 2–4 mutually-exclusive modes (+ a typed `TabBar` variant) | local |
+| `LanguagePairSelector` | Source/target language picker with swap, or a compact select | `useTranslate` |
+| `TextProcessingPanel` | A two-column input→output NLP shell with copy + run/cancel/clear | any text hook |
+| `ParameterSlider` | Inline range slider + live readout for generation params | `useGenerateText` |
+| `SlashCommandPalette` | A "/"-triggered command palette over a local tool list | local |
+| `OptionList` | Inline multi-choice list for human-in-the-loop agent inquiries | `useAgent` |
+| `PromptEnhanceButton` | One-click local prompt rewrite, optionally few-shot | `useGenerateText` |
+
+Install the whole family at once:
+
+```bash
+npx shadcn@latest add @localmode/ui/input-controls
+```
+
+Or one component:
+
+```bash
+npx shadcn@latest add @localmode/ui/input-controls/text-processing-panel
+```
+
+---
+
+## Input adornments: the small things that recur
+
+### CharLimitIndicator
+
+The [`CharLimitIndicator`](https://localmode.ai/docs/input-controls/char-limit-indicator) is a compact character-count display — a radial SVG progress ring paired with an `n/MAX` monospace counter. When `charCount` exceeds `maxLength`, the counter and ring switch to the error color. It is self-contained: pass `charCount` and `maxLength` and it derives the percentage internally, so it drops in beside any length-bounded textarea.
+
+```tsx
+<div className="flex justify-end">
+  <CharLimitIndicator charCount={value.length} maxLength={280} />
+</div>
+```
+
+The ring colors come straight from shadcn CSS variables — `text-primary` under the limit, `text-destructive` over it — so it matches your theme with no configuration.
+
+### MaskTokenInput
+
+The [`MaskTokenInput`](https://localmode.ai/docs/input-controls/mask-token-input) is a textarea for fill-mask / cloze input. It detects a configurable mask token (default `[MASK]`), renders an inline highlighted preview with the mask span accented, shows a validation hint, offers a randomize button that inserts a valid sample, and surfaces a Cmd+Enter badge for one-key submit. Pair its `value` and `onSubmit` with [`useFillMask()`](https://localmode.dev/docs/react):
+
+```tsx
+import { useFillMask } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+import { MaskTokenInput } from '@/components/mask-token-input';
+
+export function ClozeBox() {
+  const [text, setText] = useState('The capital of France is [MASK].');
+  const { data, isLoading, execute } = useFillMask({
+    model: transformers.fillMask('Xenova/bert-base-uncased'),
+    topK: 5,
+  });
+
+  return (
+    <div className="flex flex-col gap-3">
+      <MaskTokenInput value={text} onChange={setText} onSubmit={execute} disabled={isLoading} />
+      {data?.predictions.map((p) => (
+        <div key={p.token}>{p.token} — {(p.score * 100).toFixed(1)}%</div>
+      ))}
+    </div>
+  );
+}
+```
+
+The prediction runs a small BERT model in the browser on first use, then caches it for offline runs.
+
+---
+
+## Mode and direction: the controls that change how a task runs
+
+### SegmentedModePicker
+
+The [`SegmentedModePicker`](https://localmode.ai/docs/input-controls/segmented-mode-picker) is a pill toggle for 2–4 mutually-exclusive modes — OCR content-type, summary length, translation formality. It ships a typed `TabBar` variant: an underline tab bar with `disabledTabs` gating, so you can keep an "Inspect" tab disabled until a model is selected. Both are generic over the id type, so `onSelect` is typed to your union:
+
+```tsx
+const [mode, setMode] = useState<'short' | 'medium' | 'long'>('medium');
+
+<SegmentedModePicker
+  items={[
+    { id: 'short', label: 'Short' },
+    { id: 'medium', label: 'Medium' },
+    { id: 'long', label: 'Long' },
+  ]}
+  selectedId={mode}
+  onSelect={setMode}
+/>
+```
+
+### LanguagePairSelector
+
+The [`LanguagePairSelector`](https://localmode.ai/docs/input-controls/language-pair-selector) is a paired source/target language picker. The `pills` variant renders From/To toggles (flag + name) with a swap-languages button; the `compact` variant renders a grouped source-to-target pair of selects. Feed the selected codes to [`useTranslate()`](https://localmode.dev/docs/react), and compose with [`useDetectLanguage()`](https://localmode.dev/docs/react) to auto-fill the source:
+
+```tsx
+const [src, setSrc] = useState('en');
+const [tgt, setTgt] = useState('fr');
+const { execute, data } = useTranslate({
+  model: transformers.translator(`Xenova/opus-mt-${src}-${tgt}`),
+});
+
+<LanguagePairSelector
+  languages={LANGS}
+  sourceCode={src}
+  targetCode={tgt}
+  onSelectSource={setSrc}
+  onSelectTarget={setTgt}
+  onSwap={() => { setSrc(tgt); setTgt(src); }}
+/>
+```
+
+The Opus-MT model for the chosen pair downloads on first run, then runs translations entirely offline.
+
+---
+
+## The task shell: TextProcessingPanel
+
+The same layout recurs across summarization, translation, QA-context, and generation utilities: paste text on the left, run it, copy the result on the right. The [`TextProcessingPanel`](https://localmode.ai/docs/input-controls/text-processing-panel) is that shell, done once. The left column is a labeled textarea with a live word count and an optional `CharLimitIndicator`; the right column is a result pane (spinner while processing, pre-wrap text otherwise) with a copy-with-feedback button. A run / cancel / clear toolbar sits below, and an optional `header` slot above both columns takes a `SegmentedModePicker` or `LanguagePairSelector`.
+
+It is layout-only. Own the inference by wiring the toolbar to any text-in/text-out hook and passing `result` and `isProcessing` back:
+
+```tsx
+import { useSummarize } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+import { TextProcessingPanel } from '@/components/text-processing-panel';
+
+export function Summarizer() {
+  const [text, setText] = useState('');
+  const { data, isLoading, execute, cancel, reset } = useSummarize({
+    model: transformers.summarizer('Xenova/distilbart-cnn-6-6'),
+  });
+
+  return (
+    <TextProcessingPanel
+      value={text}
+      onChange={setText}
+      result={data?.summary}
+      isProcessing={isLoading}
+      onRun={() => execute({ text })}
+      onCancel={cancel}
+      onClear={reset}
+      inputLabel="Article"
+      resultLabel="Summary"
+      runLabel="Summarize"
+    />
+  );
+}
+```
+
+Swap `useSummarize` for `useTranslate`, `useFillMask`, `useAnswerQuestion`, or `useGenerateText` and the shell stays identical. That is the point — one panel folds the half-dozen near-duplicate result panes a typical app accumulates into a single component you maintain in one place.
+
+---
+
+## Generation controls: tuning the local model
+
+### ParameterSlider
+
+Local generation has knobs — temperature, top-k, top-p, max tokens, GPU layers, KV-cache quantization. The [`ParameterSlider`](https://localmode.ai/docs/input-controls/parameter-slider) is an inline range slider with a live value readout, built on the shadcn `Slider` primitive. Wire `value` and `onChange` into the options you pass to [`useGenerateText()`](https://localmode.dev/docs/react):
+
+```tsx
+const [temp, setTemp] = useState(0.7);
+const { execute } = useGenerateText({ model, temperature: temp });
+
+<ParameterSlider label="Temperature" value={temp} onChange={setTemp} min={0} max={2} step={0.1} precision={1} />
+```
+
+Set `precision` for decimal readouts and `unit` for a suffix like `tokens`.
+
+### SlashCommandPalette
+
+The [`SlashCommandPalette`](https://localmode.ai/docs/input-controls/slash-command-palette) is a command-palette dropdown triggered by "/" in the composer, built on the shadcn `Command` (cmdk) primitive for fuzzy filtering and keyboard navigation. The consumer decides when to open it — typically when the composer value starts with "/" — and what query to pass:
+
+```tsx
+const open = value.startsWith('/');
+
+{open && (
+  <SlashCommandPalette
+    commands={COMMANDS}
+    open={open}
+    query={value.slice(1)}
+    onSelect={(cmd) => setValue(`/${cmd.name} `)}
+    onDismiss={() => setValue('')}
+  />
+)}
+```
+
+### PromptEnhanceButton
+
+The [`PromptEnhanceButton`](https://localmode.ai/docs/input-controls/prompt-enhance-button) is a one-click "enhance my prompt" control. It hands the user's draft to a local model through an `onEnhance` callback you wire to `useGenerateText`, then applies the rewritten prompt — all offline. An optional few-shot editor lets users teach the rewrite by example:
+
+```tsx
+const { execute } = useGenerateText({
+  model: transformers.languageModel('onnx-community/Qwen3-0.6B-ONNX'),
+  maxTokens: 120,
+});
+
+<PromptEnhanceButton
+  draft={prompt}
+  onApply={setPrompt}
+  onEnhance={async (draft) => {
+    const r = await execute(`Rewrite this prompt to be clearer. Return only the improved prompt:\n${draft}`);
+    return r?.text.trim() ?? null;
+  }}
+/>
+```
+
+Because the rewrite runs on a small in-browser LLM, the draft never touches a network. The button surfaces its own loading and error state, so you only supply `onEnhance` and `onApply`.
+
+---
+
+## Agent disambiguation: OptionList
+
+When a local agent needs the user to pick among several candidates before continuing — "Which file did you mean?" — the [`OptionList`](https://localmode.ai/docs/input-controls/option-list) is the inline multi-choice list for that human-in-the-loop turn. It shows up to `pageSize` (5–7) options at a time and paginates longer lists, and the chosen option feeds back into the [`useAgent`](https://localmode.dev/docs/react) inquiry loop:
+
+```tsx
+<OptionList
+  prompt="Which file did you mean?"
+  options={candidates}
+  onSelect={(opt) => onPick(opt.id)}
+/>
+```
+
+It is distinct from quick-reply suggestion chips: this is a deliberate, paginated choice the agent is blocked on, not a set of shortcuts.
+
+---
+
+## Why a copy-owned registry
+
+These nine components are not exotic. They are exactly the surfaces you would build by hand on day three of any AI utility app — and exactly the ones that drift out of sync across projects. Shipping them as copy-owned shadcn components solves both problems. You get a tested starting point, and you keep full control: when you need a snap-to-presets `ParameterSlider`, a multi-mask `MaskTokenInput`, or keyboard navigation in `OptionList`, you edit the TSX in your own repo. No upstream release to wait on, no abstraction to fight.
+
+The presentational components carry no model dependency at all. The hook-driven ones take whatever model you pass to the LocalMode hook, so the same `TextProcessingPanel` serves a 33 MB summarizer or a 600 MB LLM with no change to the UI.
+
+---
+
+## Where to go next
+
+Pair the input controls with the [data & document components](/blog/localmode-ui-data-document-components) for a complete local-first RAG surface, or read [Add AI Search to Any React App in 10 Minutes](/blog/ai-search-react-10-minutes) for the search side. For the LLM side, [WebGPU + WebLLM: Running a Full LLM in the Browser](/blog/webgpu-webllm-browser-llm) shows what the `ParameterSlider` and `PromptEnhanceButton` are tuning under the hood.
+
+<Callout type="info" title="Browse the components">
+  Every component here has a live preview and full prop tables at [localmode.ai](https://localmode.ai/docs/input-controls/text-processing-panel). Install one with the shadcn CLI and edit the copy in your own project.
+</Callout>

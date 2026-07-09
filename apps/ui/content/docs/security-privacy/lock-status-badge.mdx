@@ -1,0 +1,73 @@
+---
+title: "Lock Status Badge"
+description: "A compact session-lock indicator — locked, unlocked, or no-vault — with distinct iconography and an accessible text label."
+icon: Lock
+---
+
+# Lock Status Badge
+
+The **Lock Status Badge** is a compact chip that shows the session-lock state of
+an encrypted vault: `locked`, `unlocked`, or `no-vault`. Each state has distinct
+iconography and an accessible text label (state is announced as text, never color
+alone).
+
+> **Presentational and key-safe.** The badge holds no key material and performs no
+> crypto — pass the current lock state in. Recommended LocalMode source: the
+> `status` field of `useEncryptedVault` from `@localmode/react` (map its
+> `'uninitialized' | 'locked' | 'unlocked'` onto `'no-vault' | 'locked' |
+> 'unlocked'`) — a recommendation, never a requirement.
+
+**When to use it:** any header, toolbar, or item list that needs to surface
+whether an encrypted vault is currently locked.
+
+## Preview
+
+<ComponentPreview name="ui/security-privacy/lock-status-badge" note="Cycle through the three lock states. Purely presentational — no crypto, no model." />
+
+<OpenInV0 name="ui/security-privacy/lock-status-badge" />
+
+## Installation
+
+<InstallTabs name="ui/security-privacy/lock-status-badge" />
+
+### Dependencies
+
+- **Data source:** renders the `status` you pass. Works with any backend. Recommended LocalMode hook: `useEncryptedVault` (optional).
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `lock-status-badge.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/security-privacy/lock-status-badge/lock-status-badge.tsx" name="LockStatusBadgeProps" />
+
+## Examples
+
+### Reflect the vault's lock state
+
+```tsx
+import { useEncryptedVault } from '@localmode/react';
+import { LockStatusBadge } from '@/components/lock-status-badge';
+
+export function VaultHeader() {
+  const { status } = useEncryptedVault({ name: 'notes' });
+  return <LockStatusBadge status={status === 'uninitialized' ? 'no-vault' : status} />;
+}
+```
+
+### Custom label
+
+```tsx
+<LockStatusBadge status="unlocked" label="Session open" />
+```
+
+## Customization
+
+Each state's icon and semantic token classes live in a small `STATUS_CONFIG` map
+in the copied file — swap the icons, retune the colors, or change the default
+labels to match your design system. Because you own the file, the state-to-token
+mapping is yours to change.

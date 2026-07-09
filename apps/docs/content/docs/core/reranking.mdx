@@ -134,6 +134,11 @@ Reranks documents by relevance to a query.
   [Transformers Reranking](/docs/transformers/reranking) guide.
 </Callout>
 
+<Callout type="info">
+  In React, the [`useRerank`](/docs/react/classification#usererank) hook wraps `rerank()` with
+  built-in loading, error, and cancellation state.
+</Callout>
+
 ## Cancellation Support
 
 All reranking operations support `AbortSignal` for cancellation:

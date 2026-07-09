@@ -3,7 +3,7 @@ title: "Extractive Question Answering in the Browser"
 description: "Answer questions by finding the exact answer span in a given context passage - fast, accurate, hallucination-free."
 author: "LocalMode"
 date: "2026-05-13"
-dateModified: "2026-05-29"
+dateModified: "2026-07-04"
 faq:
   - question: "What is the best model for question answering in the browser?"
     answer: "Xenova/distilbert-base-cased-distilled-squad (~65MB quantized) is recommended. It achieves F1 87.1 on SQuAD v1.1 and handles proper nouns well. The uncased variant is useful when input text is lowercased or mixed case."
@@ -142,4 +142,4 @@ This guide is verified against LocalMode's source code in `packages/core/src/que
 - [Xenova/distilbert-base-cased-distilled-squad on HuggingFace](https://huggingface.co/Xenova/distilbert-base-cased-distilled-squad) - ONNX model card, quantized file ~65.8MB
 - [distilbert/distilbert-base-cased-distilled-squad on HuggingFace](https://huggingface.co/distilbert/distilbert-base-cased-distilled-squad) - original model card: F1 87.1, EM 79.6 on SQuAD v1.1, 65.2M parameters
 - [Xenova/distilbert-base-uncased-distilled-squad on HuggingFace](https://huggingface.co/Xenova/distilbert-base-uncased-distilled-squad) - uncased variant ONNX model card
-- [LocalMode QA Bot showcase app](https://localmode.ai/qa-bot) - live demo of `answerQuestion()` using `Xenova/distilbert-base-cased-distilled-squad`
+- [Knowledge Base block](https://localmode.ai/blocks/knowledge/document-qa) - live demo of `answerQuestion()` using `Xenova/distilbert-base-cased-distilled-squad`

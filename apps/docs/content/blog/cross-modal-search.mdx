@@ -3,7 +3,7 @@ title: "Cross-Modal Search: Find Photos by Describing Them in Words"
 description: "Build a photo search engine that understands natural language. Using CLIP multimodal embeddings, you can index images and find them with text queries like 'sunset over the ocean' - all running locally in the browser with zero cloud dependencies."
 author: LocalMode
 date: 2026-03-04
-dateModified: "2026-05-28"
+dateModified: "2026-07-04"
 faq:
   - question: "How does cross-modal search allow finding photos with text descriptions?"
     answer: "CLIP maps both text and images into the same 512-dimensional vector space by training a text encoder and vision encoder jointly on 400 million image-text pairs. A photo of a beach sunset and the sentence 'sunset over the ocean' land near each other in that space, making search a nearest-neighbor lookup using cosine similarity."
@@ -322,7 +322,7 @@ export function usePhotoSearch() {
 }
 ```
 
-The component reads state from the hook and handles only UI concerns - input management and rendering. The full working implementations of this pattern are available in the [Cross-Modal Search](https://localmode.ai/cross-modal-search) and [Smart Gallery](https://localmode.ai/smart-gallery) showcase apps.
+The component reads state from the hook and handles only UI concerns - input management and rendering. A full working implementation of this pattern ships pre-assembled as the installable [Photo Search block](https://localmode.ai/blocks/photo/image-search) (`npx shadcn add @localmode/ui/blocks/photo/image-search`).
 
 ---
 
@@ -334,15 +334,15 @@ The component reads state from the hook and handles only UI concerns - input man
 
 **First-load latency.** The CLIP model downloads on first use (~340 MB for ViT-Base/Patch32). After that, the browser caches the model files. The text encoder and vision encoder load independently - if a user only searches (text queries), only the text encoder loads. The vision encoder loads when the first image is embedded.
 
-**Storage strategy.** Use `storage: 'memory'` for session-only search (the cross-modal-search showcase app does this). Use `storage: 'indexeddb'` if you want vectors to persist across page reloads. For large photo libraries, consider the [storage compression](/docs/core/storage) utilities to reduce IndexedDB usage, or [SQ8 quantization](/docs/core/vector-quantization) to cut vector storage by 4x with minimal recall impact.
+**Storage strategy.** Use `storage: 'memory'` for session-only search (the [Photo Search block](https://localmode.ai/blocks/photo/image-search) does this). Use `storage: 'indexeddb'` if you want vectors to persist across page reloads. For large photo libraries, consider the [storage compression](/docs/core/storage) utilities to reduce IndexedDB usage, or [SQ8 quantization](/docs/core/vector-quantization) to cut vector storage by 4x with minimal recall impact.
 
-**AbortSignal for cancellation.** Both `embed()` and `embedImage()` accept an `abortSignal` parameter. Use it to let users cancel long indexing operations. The showcase apps wire this through `useBatchOperation`, which provides a `cancel()` function that aborts all in-flight operations.
+**AbortSignal for cancellation.** Both `embed()` and `embedImage()` accept an `abortSignal` parameter. Use it to let users cancel long indexing operations. The [Photo Search block](https://localmode.ai/blocks/photo/image-search) wires this through a cancellable batch ingest, exposing a `cancel()` that aborts all in-flight operations.
 
 ---
 
 ## Methodology
 
-This post describes the multimodal embedding pipeline implemented in LocalMode's `@localmode/core` and `@localmode/transformers` packages. All code examples use real API signatures from the codebase. The two showcase apps referenced - Cross-Modal Search and Smart Gallery - are open-source and runnable at [localmode.ai](https://localmode.ai).
+This post describes the multimodal embedding pipeline implemented in LocalMode's `@localmode/core` and `@localmode/transformers` packages. All code examples use real API signatures from the codebase. The same text-to-image and image-to-image search ships pre-assembled as the installable [Photo Search block](https://localmode.ai/blocks/photo/image-search).
 
 Background on the models:
 
@@ -353,7 +353,7 @@ Background on the models:
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

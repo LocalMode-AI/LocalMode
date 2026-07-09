@@ -11,7 +11,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 Chrome AI provides instant text summarization via the built-in Summarizer API. No model download required.
 
 <Callout type="info" title="See it in action">
-  Try [Text Summarizer](https://localmode.ai/text-summarizer) and [Smart Writer](https://localmode.ai/smart-writer) for working demos.
+  The [Text Summarizer block](https://localmode.ai/blocks/writing-tools/summarize) runs Chrome AI summarization (with Transformers.js fallback) live in the browser.
 </Callout>
 
 ## Basic Usage
@@ -100,9 +100,8 @@ controller.abort();
   For full API reference, options, and result types, see the [Core Summarization](/docs/core/summarization) guide.
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| Text Summarizer | Summarize text using Chrome AI Summarization API | [Demo](https://localmode.ai/text-summarizer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/text-summarizer) |
-| Smart Writer | Chrome AI summarization with provider fallback | [Demo](https://localmode.ai/smart-writer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-writer) |
+| Text Summarizer | Chrome AI summarization with automatic Transformers.js fallback | [Live](https://localmode.ai/blocks/writing-tools/summarize) · Install: `npx shadcn add @localmode/ui/blocks/writing-tools/summarize` |

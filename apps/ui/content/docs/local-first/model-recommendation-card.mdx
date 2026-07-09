@@ -1,0 +1,54 @@
+---
+title: "Model Recommendation Card"
+description: "A single scored recommendation: a radial score dial, tier/device badges with a stable color mapping, reason chips, and a compare toggle."
+icon: Sparkles
+---
+
+# Model Recommendation Card
+
+The **Model Recommendation Card** renders a single scored recommendation: a radial score dial (0–100), the model name, a monospace model id, a badge row (provider, size, speed/quality tiers, recommended device with a stable tier→color mapping), a description, and reason chips. When `onToggleCompare` is supplied it exposes a compare toggle. Bind to `useModelRecommendations`.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/model-recommendation-card" note="Shows the radial dial, tier/device badges, reason chips, and a working compare toggle." />
+
+<OpenInV0 name="ui/local-first/model-recommendation-card" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/model-recommendation-card" />
+
+### Data source & dependencies
+
+**Data source:** renders the scored recommendation you pass and emits the compare toggle — works with any backend. Recommended producer: `useModelRecommendations` from `@localmode/react` (on-device, optional).
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `model-recommendation-card.tsx` — the `ModelRecommendationCard` component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/model-recommendation-card/model-recommendation-card.tsx" name="ModelRecommendationCardProps" />
+
+<AutoTypeTable path="registry/localmode/local-first/model-recommendation-card/model-recommendation-card.tsx" name="ModelRecommendation" />
+
+## Examples
+
+### Bound to recommendations
+
+```tsx
+const { recommendations } = useModelRecommendations({ task: 'embedding' });
+{recommendations.map((r) => (
+  <ModelRecommendationCard
+    key={r.entry.modelId}
+    recommendation={{ modelId: r.entry.modelId, name: r.entry.name, score: r.score, reasons: r.reasons }}
+  />
+))}
+```
+
+## Customization
+
+The score dial color steps green/amber/rose by score; tier badge colors come from the `TIER_COLOR` map. Pass `onToggleCompare` to reveal the compare control. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

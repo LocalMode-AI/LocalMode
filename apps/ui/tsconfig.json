@@ -1,0 +1,365 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "target": "ESNext",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "paths": {
+      "@/hooks/use-webcam": [
+        "./registry/localmode/media-vision/use-webcam/use-webcam"
+      ],
+      "@/components/actions": [
+        "./registry/localmode/conversation/actions/actions"
+      ],
+      "@/components/adaptive-batch-card": [
+        "./registry/localmode/local-first/adaptive-batch-card/adaptive-batch-card"
+      ],
+      "@/components/agent-step-timeline": [
+        "./registry/localmode/conversation/agent-step-timeline/agent-step-timeline"
+      ],
+      "@/components/artifact": [
+        "./registry/localmode/artifacts/artifact/artifact"
+      ],
+      "@/components/audio-scrub-player": [
+        "./registry/localmode/audio/audio-scrub-player/audio-scrub-player"
+      ],
+      "@/components/before-after-image-viewer": [
+        "./registry/localmode/media-vision/before-after-image-viewer/before-after-image-viewer"
+      ],
+      "@/components/bounding-box-overlay": [
+        "./registry/localmode/media-vision/bounding-box-overlay/bounding-box-overlay"
+      ],
+      "@/components/branch": [
+        "./registry/localmode/conversation/branch/branch"
+      ],
+      "@/components/browser-compat-card": [
+        "./registry/localmode/local-first/browser-compat-card/browser-compat-card"
+      ],
+      "@/components/cache-badge": [
+        "./registry/localmode/local-first/cache-badge/cache-badge"
+      ],
+      "@/components/capability-gate": [
+        "./registry/localmode/local-first/capability-gate/capability-gate"
+      ],
+      "@/components/category-facet-list": [
+        "./registry/localmode/data-documents/category-facet-list/category-facet-list"
+      ],
+      "@/components/chain-of-thought": [
+        "./registry/localmode/conversation/chain-of-thought/chain-of-thought"
+      ],
+      "@/components/char-limit-indicator": [
+        "./registry/localmode/input-controls/char-limit-indicator/char-limit-indicator"
+      ],
+      "@/components/chart-artifact": [
+        "./registry/localmode/artifacts/chart-artifact/chart-artifact"
+      ],
+      "@/components/chunk-boundary-visualizer": [
+        "./registry/localmode/data-documents/chunk-boundary-visualizer/chunk-boundary-visualizer"
+      ],
+      "@/components/code-diff-viewer": [
+        "./registry/localmode/artifacts/code-diff-viewer/code-diff-viewer"
+      ],
+      "@/components/confidence-score-badge": [
+        "./registry/localmode/results/confidence-score-badge/confidence-score-badge"
+      ],
+      "@/components/context-usage-meter": [
+        "./registry/localmode/local-first/context-usage-meter/context-usage-meter"
+      ],
+      "@/components/conversation": [
+        "./registry/localmode/conversation/conversation/conversation"
+      ],
+      "@/components/cosine-similarity-meter": [
+        "./registry/localmode/results/cosine-similarity-meter/cosine-similarity-meter"
+      ],
+      "@/components/data-table-artifact": [
+        "./registry/localmode/artifacts/data-table-artifact/data-table-artifact"
+      ],
+      "@/components/device-badge": [
+        "./registry/localmode/device-badge/device-badge"
+      ],
+      "@/components/device-capability-grid": [
+        "./registry/localmode/local-first/device-capability-grid/device-capability-grid"
+      ],
+      "@/components/differential-privacy-controls": [
+        "./registry/localmode/security-privacy/differential-privacy-controls/differential-privacy-controls"
+      ],
+      "@/components/editable-label-set": [
+        "./registry/localmode/results/editable-label-set/editable-label-set"
+      ],
+      "@/components/embedding-drift-banner": [
+        "./registry/localmode/local-first/embedding-drift-banner/embedding-drift-banner"
+      ],
+      "@/components/entity-relationship-graph": [
+        "./registry/localmode/results/entity-relationship-graph/entity-relationship-graph"
+      ],
+      "@/components/entity-stats-bar": [
+        "./registry/localmode/results/entity-stats-bar/entity-stats-bar"
+      ],
+      "@/components/evaluation-metrics-dashboard": [
+        "./registry/localmode/results/evaluation-metrics-dashboard/evaluation-metrics-dashboard"
+      ],
+      "@/components/event-log-viewer": [
+        "./registry/localmode/devtools/event-log-viewer/event-log-viewer"
+      ],
+      "@/components/file-dropzone": [
+        "./registry/localmode/data-documents/file-dropzone/file-dropzone"
+      ],
+      "@/components/format-detection-badge": [
+        "./registry/localmode/data-documents/format-detection-badge/format-detection-badge"
+      ],
+      "@/components/image-processing-overlay": [
+        "./registry/localmode/media-vision/image-processing-overlay/image-processing-overlay"
+      ],
+      "@/components/image-result-gallery": [
+        "./registry/localmode/media-vision/image-result-gallery/image-result-gallery"
+      ],
+      "@/components/in-message-error": [
+        "./registry/localmode/conversation/in-message-error/in-message-error"
+      ],
+      "@/components/indexed-document-card": [
+        "./registry/localmode/data-documents/indexed-document-card/indexed-document-card"
+      ],
+      "@/components/inference-queue-monitor": [
+        "./registry/localmode/devtools/inference-queue-monitor/inference-queue-monitor"
+      ],
+      "@/components/inline-citation": [
+        "./registry/localmode/conversation/inline-citation/inline-citation"
+      ],
+      "@/components/language-pair-selector": [
+        "./registry/localmode/input-controls/language-pair-selector/language-pair-selector"
+      ],
+      "@/components/lock-status-badge": [
+        "./registry/localmode/security-privacy/lock-status-badge/lock-status-badge"
+      ],
+      "@/components/mask-token-input": [
+        "./registry/localmode/input-controls/mask-token-input/mask-token-input"
+      ],
+      "@/components/media-dropzone": [
+        "./registry/localmode/media-vision/media-dropzone/media-dropzone"
+      ],
+      "@/components/message": [
+        "./registry/localmode/conversation/message/message"
+      ],
+      "@/components/mic-selector": [
+        "./registry/localmode/audio/mic-selector/mic-selector"
+      ],
+      "@/components/model-cache-table": [
+        "./registry/localmode/devtools/model-cache-table/model-cache-table"
+      ],
+      "@/components/model-catalog-card": [
+        "./registry/localmode/local-first/model-catalog-card/model-catalog-card"
+      ],
+      "@/components/model-comparison-panel": [
+        "./registry/localmode/local-first/model-comparison-panel/model-comparison-panel"
+      ],
+      "@/components/model-downloader": [
+        "./registry/localmode/local-first/model-downloader/model-downloader"
+      ],
+      "@/components/model-loading-panel": [
+        "./registry/localmode/local-first/model-loading-panel/model-loading-panel"
+      ],
+      "@/components/model-metadata-card": [
+        "./registry/localmode/local-first/model-metadata-card/model-metadata-card"
+      ],
+      "@/components/model-recommendation-card": [
+        "./registry/localmode/local-first/model-recommendation-card/model-recommendation-card"
+      ],
+      "@/components/model-search-browser": [
+        "./registry/localmode/local-first/model-search-browser/model-search-browser"
+      ],
+      "@/components/model-selector": [
+        "./registry/localmode/local-first/model-selector/model-selector"
+      ],
+      "@/components/network-badge": [
+        "./registry/localmode/local-first/network-badge/network-badge"
+      ],
+      "@/components/option-list": [
+        "./registry/localmode/input-controls/option-list/option-list"
+      ],
+      "@/components/parameter-slider": [
+        "./registry/localmode/input-controls/parameter-slider/parameter-slider"
+      ],
+      "@/components/passphrase-gate": [
+        "./registry/localmode/security-privacy/passphrase-gate/passphrase-gate"
+      ],
+      "@/components/password-strength-bar": [
+        "./registry/localmode/security-privacy/password-strength-bar/password-strength-bar"
+      ],
+      "@/components/pipeline-run-inspector": [
+        "./registry/localmode/devtools/pipeline-run-inspector/pipeline-run-inspector"
+      ],
+      "@/components/pipeline-tracker": [
+        "./registry/localmode/conversation/pipeline-tracker/pipeline-tracker"
+      ],
+      "@/components/prompt-enhance-button": [
+        "./registry/localmode/input-controls/prompt-enhance-button/prompt-enhance-button"
+      ],
+      "@/components/prompt-input": [
+        "./registry/localmode/conversation/prompt-input/prompt-input"
+      ],
+      "@/components/prompt-input-attachments": [
+        "./registry/localmode/conversation/prompt-input-attachments/prompt-input-attachments"
+      ],
+      "@/components/provider-fallback-badge": [
+        "./registry/localmode/local-first/provider-fallback-badge/provider-fallback-badge"
+      ],
+      "@/components/reasoning": [
+        "./registry/localmode/conversation/reasoning/reasoning"
+      ],
+      "@/components/redacted-text-display": [
+        "./registry/localmode/results/redacted-text-display/redacted-text-display"
+      ],
+      "@/components/response": [
+        "./registry/localmode/conversation/response/response"
+      ],
+      "@/components/scored-result-bar-list": [
+        "./registry/localmode/results/scored-result-bar-list/scored-result-bar-list"
+      ],
+      "@/components/segmented-mode-picker": [
+        "./registry/localmode/input-controls/segmented-mode-picker/segmented-mode-picker"
+      ],
+      "@/components/semantic-cache-status-bar": [
+        "./registry/localmode/local-first/semantic-cache-status-bar/semantic-cache-status-bar"
+      ],
+      "@/components/slash-command-palette": [
+        "./registry/localmode/input-controls/slash-command-palette/slash-command-palette"
+      ],
+      "@/components/source-citation-list": [
+        "./registry/localmode/conversation/source-citation-list/source-citation-list"
+      ],
+      "@/components/sources": [
+        "./registry/localmode/conversation/sources/sources"
+      ],
+      "@/components/storage-meter": [
+        "./registry/localmode/local-first/storage-meter/storage-meter"
+      ],
+      "@/components/streaming-speech-panel": [
+        "./registry/localmode/audio/streaming-speech-panel/streaming-speech-panel"
+      ],
+      "@/components/structured-output-viewer": [
+        "./registry/localmode/conversation/structured-output-viewer/structured-output-viewer"
+      ],
+      "@/components/suggestions": [
+        "./registry/localmode/conversation/suggestions/suggestions"
+      ],
+      "@/components/synced-transcript-viewer": [
+        "./registry/localmode/audio/synced-transcript-viewer/synced-transcript-viewer"
+      ],
+      "@/components/task": [
+        "./registry/localmode/conversation/task/task"
+      ],
+      "@/components/text-processing-panel": [
+        "./registry/localmode/input-controls/text-processing-panel/text-processing-panel"
+      ],
+      "@/components/threshold-calibration-panel": [
+        "./registry/localmode/results/threshold-calibration-panel/threshold-calibration-panel"
+      ],
+      "@/components/tool": [
+        "./registry/localmode/conversation/tool/tool"
+      ],
+      "@/components/tool-approval": [
+        "./registry/localmode/conversation/tool-approval/tool-approval"
+      ],
+      "@/components/top-result-card": [
+        "./registry/localmode/results/top-result-card/top-result-card"
+      ],
+      "@/components/transcribed-note-card": [
+        "./registry/localmode/audio/transcribed-note-card/transcribed-note-card"
+      ],
+      "@/components/vault-item-card": [
+        "./registry/localmode/security-privacy/vault-item-card/vault-item-card"
+      ],
+      "@/components/vector-export-panel": [
+        "./registry/localmode/local-first/vector-export-panel/vector-export-panel"
+      ],
+      "@/components/vector-import-flow": [
+        "./registry/localmode/local-first/vector-import-flow/vector-import-flow"
+      ],
+      "@/components/vector-storage-observability": [
+        "./registry/localmode/local-first/vector-storage-observability/vector-storage-observability"
+      ],
+      "@/components/video-canvas": [
+        "./registry/localmode/media-vision/video-canvas/video-canvas"
+      ],
+      "@/components/voice-button": [
+        "./registry/localmode/audio/voice-button/voice-button"
+      ],
+      "@/components/voice-comparison-panel": [
+        "./registry/localmode/audio/voice-comparison-panel/voice-comparison-panel"
+      ],
+      "@/components/voice-orb": [
+        "./registry/localmode/audio/voice-orb/voice-orb"
+      ],
+      "@/components/voice-picker": [
+        "./registry/localmode/audio/voice-picker/voice-picker"
+      ],
+      "@/components/waveform-activity-bars": [
+        "./registry/localmode/audio/waveform-activity-bars/waveform-activity-bars"
+      ],
+      "@/components/error-alert": [
+        "./registry/localmode/results/error-alert/error-alert"
+      ],
+      "@/components/copy-button": [
+        "./registry/localmode/input-controls/copy-button/copy-button"
+      ],
+      "@/components/provider-badge": [
+        "./registry/localmode/local-first/provider-badge/provider-badge"
+      ],
+      "@/components/mode-error-boundary": [
+        "./registry/localmode/results/mode-error-boundary/mode-error-boundary"
+      ],
+      "@/components/system-prompt-editor": [
+        "./registry/localmode/input-controls/system-prompt-editor/system-prompt-editor"
+      ],
+      "@/*": [
+        "./src/*"
+      ],
+      "@/registry/*": [
+        "./registry/*"
+      ],
+      "collections/*": [
+        ".source/*"
+      ]
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    ".next-ux/types/**/*.ts",
+    ".next-ux/dev/types/**/*.ts",
+    ".next-dev3011/types/**/*.ts",
+    ".next-dev3011/dev/types/**/*.ts",
+    ".next-verify/types/**/*.ts",
+    ".next-verify/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "e2e-artifacts",
+    ".next",
+    ".next-*",
+    "src/app/sw.ts"
+  ]
+}

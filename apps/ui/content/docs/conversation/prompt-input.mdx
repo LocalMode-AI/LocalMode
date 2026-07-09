@@ -1,0 +1,66 @@
+---
+title: "Prompt Input"
+description: "A form-based, auto-resizing chat composer: Enter submits, Shift+Enter newlines, submit/stop swap while streaming, controlled or uncontrolled, with a voice mic and slash-command picker."
+icon: SendHorizontal
+---
+
+# Prompt Input
+
+The **PromptInput** is the chat composer. It manages its own textarea state by default — auto-resize, Enter to submit, Shift+Enter for a newline — and swaps its submit control for a stop control while streaming. It exposes `onSubmit(text, attachments?)` and optional controlled `value` / `onValueChange`. A `PromptInputProvider` hoists composer state for external control, `PromptInputMic` toggles local Whisper dictation, and `PromptInputAddButton` anchors a slash-command / + picker.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/prompt-input" />
+
+<OpenInV0 name="ui/conversation/prompt-input" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/prompt-input" />
+
+### Data source & dependencies
+
+**Data source:** emits `onSubmit(text, attachments)` / `onStop` — wire to any backend. Recommended producer: `useChat` from `@localmode/react` (on-device). See [Use with the Vercel AI SDK](/docs/use-with-ai-sdk).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `prompt-input.tsx` — `PromptInput`, `PromptInputTextarea`, `PromptInputSubmit`, `PromptInputTools`, `PromptInputProvider`, `PromptInputMic`, `PromptInputAddButton`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/prompt-input/prompt-input.tsx" name="PromptInputProps" />
+
+## Examples
+
+### Wire to `useChat`
+
+```tsx
+import { useChat } from '@localmode/react';
+import {
+  PromptInput,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from '@/components/prompt-input';
+
+export function Composer({ model }) {
+  const { send, cancel, isStreaming } = useChat({ model });
+  return (
+    <PromptInput streaming={isStreaming} onStop={cancel} onSubmit={(text) => send(text)}>
+      <PromptInputTextarea placeholder="Ask anything…" />
+      <PromptInputTools>
+        <span />
+        <PromptInputSubmit />
+      </PromptInputTools>
+    </PromptInput>
+  );
+}
+```
+
+## Customization
+
+A `CharLimitIndicator` from the input-controls family slots into `PromptInputTools`; until it is installed, drop in a simple `text.length` counter. Adjust `maxHeight` on the textarea, or wire `PromptInputMic.onToggle` to a `useVoiceRecorder` + `transcribe` flow to fill the input from local speech.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useChat`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

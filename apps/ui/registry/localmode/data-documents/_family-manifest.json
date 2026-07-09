@@ -1,0 +1,125 @@
+{
+  "family": "data-documents",
+  "navLabel": "Data & Documents",
+  "docsFolder": "data-documents",
+  "npmDependencies": [
+    "@localmode/react",
+    "lucide-react"
+  ],
+  "previews": {
+    "ui/data-documents/file-dropzone": "@/registry/localmode/data-documents/file-dropzone/file-dropzone-demo",
+    "ui/data-documents/indexed-document-card": "@/registry/localmode/data-documents/indexed-document-card/indexed-document-card-demo",
+    "ui/data-documents/format-detection-badge": "@/registry/localmode/data-documents/format-detection-badge/format-detection-badge-demo",
+    "ui/data-documents/category-facet-list": "@/registry/localmode/data-documents/category-facet-list/category-facet-list-demo",
+    "ui/data-documents/chunk-boundary-visualizer": "@/registry/localmode/data-documents/chunk-boundary-visualizer/chunk-boundary-visualizer-demo"
+  },
+  "items": [
+    {
+      "name": "ui/data-documents/file-dropzone",
+      "type": "registry:component",
+      "title": "File Dropzone",
+      "description": "A generic, format-agnostic drag-and-drop + click-to-browse upload zone for non-image files (PDF/CSV/JSON/vector exports). Validates each file with a bundled validateFile helper (copy-owned — no @localmode dependency) against an accept MIME list and maxSize, emitting only valid files via onUpload; rejected files go to onReject. Disabled/processing overlay blocks input. Distinct from media-vision's MediaDropzone (no image-preview semantics).",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/lib/browser-utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/data-documents/file-dropzone/file-dropzone.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "data"
+      ]
+    },
+    {
+      "name": "ui/data-documents/indexed-document-card",
+      "type": "registry:component",
+      "title": "Indexed Document Card",
+      "description": "A card for a single locally-indexed document: truncated filename (native tooltip), chunk count, optional page count and file size, and a hover/focus-revealed delete with loading state. Presentational — page/chunk counts come from the app's ingest state (e.g. useSemanticChunk output length), not a single hook.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/data-documents/indexed-document-card/indexed-document-card.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "data"
+      ]
+    },
+    {
+      "name": "ui/data-documents/format-detection-badge",
+      "type": "registry:component",
+      "title": "Format Detection Badge",
+      "description": "A small badge displaying an auto-detected data format (PINECONE / CHROMA / CSV / JSONL or custom) with a per-format color map, used to confirm a detected source format after parsing. Fully self-contained and presentational — pass a format string and an optional colorMap; unknown formats fall back to neutral and a nullish format shows a pending state. Pairs with useImportExport (parseResult.format); also consumed by the local-first VectorImportFlow as a registry dependency.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/data-documents/format-detection-badge/format-detection-badge.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "data"
+      ]
+    },
+    {
+      "name": "ui/data-documents/category-facet-list",
+      "type": "registry:component",
+      "title": "Category Facet List",
+      "description": "A domain-decoupled, filterable category facet (vertical list or horizontal pills) with per-category count badges, single-select toggle (re-click deselects), an All/clear affordance, and active highlight. Takes categories/counts/selected/onSelect so it serves useSemanticSearch result filtering, zero-shot classification labels, and NER entity-type filters alike.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/data-documents/category-facet-list/category-facet-list.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "data"
+      ]
+    },
+    {
+      "name": "ui/data-documents/chunk-boundary-visualizer",
+      "type": "registry:component",
+      "title": "Chunk Boundary Visualizer",
+      "description": "Visualizes a document split into distinct chunks: alternating accent-background segments each with a monospace C1/C2 badge; in semantic mode, inter-chunk boundary similarity scores (e.g. sim: 0.74) render as faint labels between segments. Takes a decoupled ChunkInfo[] (text, chunkIndex, rightSimilarity) + the active mode, pairing with useSemanticChunk. Display-only — owns no chunking logic.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/data-documents/chunk-boundary-visualizer/chunk-boundary-visualizer.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "data"
+      ]
+    }
+  ]
+}

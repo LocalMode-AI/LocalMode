@@ -22,6 +22,78 @@ function createTestSetup(
 }
 
 describe('executeReActLoop()', () => {
+  it('gives each action generation a 2048-token budget (thinking-model headroom)', async () => {
+    // Regression: generateObject's 1024-token default truncated reasoning
+    // models mid-<think> under the large agent prompt — the think block never
+    // closed, no JSON was ever emitted, and at temperature 0 every retry
+    // failed identically. Found by the blocks-chat agent E2E lane (LiteRT
+    // qwen3-0.6B).
+    const captured: Array<number | undefined> = [];
+    const model = {
+      modelId: 'mock:capture-llm',
+      provider: 'mock',
+      contextLength: 4096,
+      async doGenerate({ maxTokens }: { prompt: string; maxTokens?: number }) {
+        captured.push(maxTokens);
+        return {
+          text: JSON.stringify({ type: 'finish', result: 'done' }),
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20, durationMs: 1 },
+        };
+      },
+    };
+    const { toolRegistry } = createTestSetup([]);
+
+    const result = await executeReActLoop({
+      model,
+      toolRegistry,
+      prompt: 'What is the answer?',
+      maxSteps: 10,
+      maxRetries: 3,
+      temperature: 0,
+    });
+
+    expect(result.finishReason).toBe('finish');
+    expect(captured).toEqual([2048]);
+  });
+
+  it('unwraps a schema-parroted oneOf/anyOf wrapper around the action (small models)', async () => {
+    // Regression: small models sometimes copy the displayed JSON schema's
+    // union wrapper verbatim, emitting {"oneOf": [ {action} ]} instead of the
+    // bare action. Observed verbatim from LiteRT qwen3-0.6B in the
+    // blocks-chat agent E2E lane.
+    const captured: string[] = [];
+    const wrapped = { oneOf: [{ type: 'finish', result: 'Wrapped but unambiguous.' }] };
+    const model = {
+      modelId: 'mock:wrapper-llm',
+      provider: 'mock',
+      contextLength: 4096,
+      async doGenerate({ prompt }: { prompt: string }) {
+        captured.push(prompt);
+        return {
+          text: JSON.stringify(wrapped),
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20, durationMs: 1 },
+        };
+      },
+    };
+    const { toolRegistry } = createTestSetup([]);
+
+    const result = await executeReActLoop({
+      model,
+      toolRegistry,
+      prompt: 'What is the answer?',
+      maxSteps: 10,
+      maxRetries: 3,
+      temperature: 0,
+    });
+
+    expect(result.finishReason).toBe('finish');
+    expect(result.result).toBe('Wrapped but unambiguous.');
+    // No retry was needed: the wrapper parsed on the first attempt.
+    expect(captured).toHaveLength(1);
+  });
+
   it('completes a single-step finish', async () => {
     const { model, toolRegistry } = createTestSetup([
       { type: 'finish', result: 'The answer is 42.' },

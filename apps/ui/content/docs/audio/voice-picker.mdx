@@ -1,0 +1,101 @@
+---
+title: "Voice Picker"
+description: "Language-grouped TTS voice selection — a compact grouped select plus a card/grid variant with gender badge, voice id, search, and local preview playback."
+icon: Mic
+---
+
+# Voice Picker
+
+**Voice Picker** is TTS voice selection from one data contract. Ships three pieces:
+
+- `VoicePicker` — a compact `<select>` partitioned into `<optgroup>` by language, each option showing the voice name + a gender glyph.
+- `VoiceCard` — a rich card: voice name, color-coded gender badge, monospace voice id, and a circular play/stop preview button with a loading state.
+- `VoiceGrid` — language-grouped grid of cards with a count header and a search box.
+
+All three consume one `VoiceOption[]` contract (`id`, `name`, `gender`, `languageLabel`), which matches the `KokoroVoice` shape from `@localmode/transformers` (29 English voices).
+
+**When to use it:** let users pick — and preview — a Kokoro voice before synthesizing, in either a compact (select) or rich (grid) surface.
+
+## Preview
+
+<ComponentPreview name="ui/audio/voice-picker" note="Uses a small voice fixture; the preview button simulates synth → play. Wire onPreview to useSynthesizeSpeech's execute(text, { voice }) for real local Kokoro samples." />
+
+<OpenInV0 name="ui/audio/voice-picker" />
+
+## Installation
+
+<InstallTabs name="ui/audio/voice-picker" />
+
+### Data source & dependencies
+
+**Data source:** renders the `VoiceOption[]` you pass and emits selection/preview events — works with any backend. Recommended producer: `useSynthesizeSpeech` for inline preview (`execute(text, { voice })` overrides the voice per call) with the Kokoro TTS model + `KOKORO_VOICES` catalog from `@localmode/transformers`, via `@localmode/react` (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+
+### Files installed
+
+- `voice-picker.tsx` — `VoicePicker`, `VoiceCard`, `VoiceGrid`
+- `waveform-activity-bars.tsx` — used by the preview button's loading state (registry dependency)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/audio/voice-picker/voice-picker.tsx" name="VoicePickerProps" />
+
+<AutoTypeTable path="registry/localmode/audio/voice-picker/voice-picker.tsx" name="VoiceGridProps" />
+
+<AutoTypeTable path="registry/localmode/audio/voice-picker/voice-picker.tsx" name="VoiceCardProps" />
+
+## Examples
+
+### Compact select
+
+```tsx
+import { VoicePicker } from '@/components/voice-picker';
+import { KOKORO_VOICES } from '@localmode/transformers';
+
+export function Example() {
+  const [voice, setVoice] = useState('af_heart');
+  return <VoicePicker voices={KOKORO_VOICES} value={voice} onValueChange={setVoice} />;
+}
+```
+
+### Grid with local preview
+
+```tsx
+import { VoiceGrid } from '@/components/voice-picker';
+import { useSynthesizeSpeech } from '@localmode/react';
+import { transformers, KOKORO_VOICES } from '@localmode/transformers';
+
+export function VoiceBrowser() {
+  const [voice, setVoice] = useState<string>();
+  const [previewing, setPreviewing] = useState<string | null>(null);
+  const tts = useSynthesizeSpeech({ model: transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX') });
+
+  const preview = async (id: string) => {
+    setPreviewing(id);
+    const res = await tts.execute('Hello from LocalMode.', { voice: id }); // per-call voice override
+    if (res) new Audio(URL.createObjectURL(res.audio)).play();
+    setPreviewing(null);
+  };
+
+  return (
+    <VoiceGrid
+      voices={KOKORO_VOICES}
+      value={voice}
+      onValueChange={setVoice}
+      onPreview={preview}
+      loadingVoiceId={previewing}
+    />
+  );
+}
+```
+
+`useSynthesizeSpeech` accepts `voice` / `speed` / `pitch` at the hook level and per call — `execute(text, { voice })` is what makes inline per-voice previews possible from a single hook instance.
+
+## Customization
+
+Voices are grouped by `languageLabel`, so any provider that exposes that field groups correctly. Gender badge colors use Tailwind's `pink` / `sky` palettes — swap them in the copied file to match your design system. The grid's search filters on `name` and `id`; widen the predicate in `VoiceGrid` if you add more searchable metadata.
+
+## Accessibility
+
+A `VoiceCard` exposes its preview and selection as **two distinct sibling buttons** — it never nests an interactive element inside another (no `<button>` inside a `role="button"` card), which would be an invalid, non-operable a11y tree. The optional preview button plays a locally-synthesized sample; the selection button is labelled `"Select {name}"` and announces its state with `aria-pressed`, so screen readers convey which voice is active and both actions are independently focusable and keyboard-operable.

@@ -13,7 +13,7 @@ import { TypeTable } from 'fumadocs-ui/components/type-table';
 Different embedding models produce different similarity score distributions. A cosine similarity of 0.7 might represent a strong match for one model but a weak match for another. Choosing the right `threshold` for `db.search()` or `semanticSearch()` is critical for relevance filtering.
 
 <Callout type="info" title="See it in action">
-  Try [Model Evaluator](https://localmode.ai/model-evaluator) and [Product Search](https://localmode.ai/product-search) for working demos of these APIs.
+  Try the [Threshold Calibrator block](https://localmode.ai/blocks/text-insights/threshold-calibrator) and [Photo Search block](https://localmode.ai/blocks/photo/image-search) for working demos of these APIs — the Threshold Calibrator runs `calibrateThreshold()` over a live in-browser corpus, built on the `ui/results/threshold-calibration-panel` primitive.
 </Callout>
 
 LocalMode provides two complementary features:
@@ -42,7 +42,7 @@ const { threshold } = await calibrateThreshold({
 });
 
 // Use the calibrated threshold for search
-const results = await semanticSearch({
+const { results } = await semanticSearch({
   db,
   model,
   query: 'How to configure auth?',
@@ -61,7 +61,7 @@ const model = transformers.embedding('Xenova/bge-small-en-v1.5');
 const threshold = getDefaultThreshold('Xenova/bge-small-en-v1.5');
 // 0.5
 
-const results = await semanticSearch({
+const { results } = await semanticSearch({
   db,
   model,
   query: 'How to configure auth?',
@@ -374,9 +374,9 @@ const { results: semanticResults } = await semanticSearch({
 `calibrateThreshold()` is purely additive. When no threshold is passed to `db.search()`, all top-k results are returned as before.
 </Callout>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Model Evaluator | Calibrate similarity thresholds from labeled data | [Demo](https://localmode.ai/model-evaluator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/model-evaluator) |
-| Product Search | Threshold tuning for product similarity matching | [Demo](https://localmode.ai/product-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/product-search) |
+| Text Insights (Threshold Calibrator) | Calibrate similarity thresholds from labeled data | [Live block](https://localmode.ai/blocks/text-insights/threshold-calibrator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/text-insights/threshold-calibrator) |
+| Photo Search (Product Search) | Threshold tuning for product similarity matching | [Live block](https://localmode.ai/blocks/photo/image-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/photo/image-search) |

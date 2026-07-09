@@ -53,9 +53,20 @@ function IngestPipeline() {
 | `error` | `Error \| null` | Error from the last failed run |
 | `currentStep` | `string \| null` | Name of the currently executing step |
 | `progress` | `PipelineProgress \| null` | `{ completed, total, currentStep }` |
+| `durationMs` | `number \| null` | Wall-clock duration of the last successful run in milliseconds (null until a run completes) |
+| `stepsCompleted` | `number \| null` | Number of steps executed by the last successful run (null until a run completes) |
 | `execute` | `(input) => Promise` | Start the pipeline with initial input |
 | `cancel` | `() => void` | Cancel the current run |
 | `reset` | `() => void` | Clear all state |
+
+The run metrics mirror what the core `PipelineResult` reports:
+
+```tsx
+const { durationMs, stepsCompleted, execute } = usePipeline([...steps]);
+
+await execute(input);
+// durationMs = 1284, stepsCompleted = 3
+```
 
 ## Step Factories
 

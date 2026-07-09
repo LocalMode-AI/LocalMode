@@ -1,0 +1,75 @@
+---
+title: "Audio Scrub Player"
+description: "A composable scrubbable audio player for local Blob/object-URL audio — play/pause, a draggable seek bar, and a duration readout. Ships a standalone ScrubBar."
+icon: Play
+---
+
+# Audio Scrub Player
+
+**Audio Scrub Player** is a composable scrubbable player for local `Blob` / object-URL audio such as Kokoro TTS output ([`useSynthesizeSpeech`](https://localmode.dev/docs/react)) or a recording. It provides play/pause, a draggable seek bar, and a time/duration readout, and manages its own `<audio>` element and object-URL lifecycle. The draggable `ScrubBar` is exported standalone for reuse over any time-based source.
+
+**When to use it:** play back a locally-synthesized or recorded clip with precise scrubbing — without the inconsistent look of native `<audio controls>`.
+
+## Preview
+
+<ComponentPreview name="ui/audio/audio-scrub-player" note="Plays a generated 3-second tone WAV so play/pause, scrubbing, and the duration readout work against a real audio element — no model download." />
+
+<OpenInV0 name="ui/audio/audio-scrub-player" />
+
+## Installation
+
+<InstallTabs name="ui/audio/audio-scrub-player" />
+
+### Data source & dependencies
+
+**Data source:** plays any `Blob` / object-URL you pass — works with any backend. Recommended producer: `useSynthesizeSpeech` output (local Blob) from `@localmode/react` (on-device, optional).
+- `@localmode/ui/lib/browser-utils` — `useObjectUrl` for Blob lifecycle (installed automatically as a registry dependency)
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+- No external player dependency — native `<audio>` + custom controls
+
+### Files installed
+
+- `audio-scrub-player.tsx` — `AudioScrubPlayer` + `ScrubBar`
+- `lib/browser-utils.ts` — generic browser helpers (`useObjectUrl`)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/audio/audio-scrub-player/audio-scrub-player.tsx" name="AudioScrubPlayerProps" />
+
+<AutoTypeTable path="registry/localmode/audio/audio-scrub-player/audio-scrub-player.tsx" name="ScrubBarProps" />
+
+## Examples
+
+### Play Kokoro output
+
+```tsx
+import { AudioScrubPlayer } from '@/components/audio-scrub-player';
+import { useSynthesizeSpeech } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+export function Speak({ text }: { text: string }) {
+  const { data, execute } = useSynthesizeSpeech({
+    model: transformers.textToSpeech('onnx-community/Kokoro-82M-v1.0-ONNX'),
+  });
+
+  return (
+    <>
+      <button onClick={() => execute(text)}>Synthesize</button>
+      {data && <AudioScrubPlayer audio={data.audio} />}
+    </>
+  );
+}
+```
+
+### Use the standalone ScrubBar
+
+```tsx
+import { ScrubBar } from '@/components/audio-scrub-player';
+
+<ScrubBar currentTime={time} duration={duration} onSeek={setTime} />
+```
+
+## Customization
+
+`AudioScrubPlayer` owns its `<audio>` and reads `duration` / `currentTime` from the media events, so it works with any decodable Blob or URL. `ScrubBar` is controlled (pointer + keyboard, with `ArrowLeft`/`ArrowRight` for ±5s) — drop it into your own player shell if you need a different layout. The progress fill uses `bg-primary`; the thumb uses `border-primary` / `bg-background`.

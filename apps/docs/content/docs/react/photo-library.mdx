@@ -1,0 +1,136 @@
+---
+title: 'Photo Library'
+description: React hook for a shared CLIP-family photo library — multimodal embeddings and zero-shot categorization over one injected model.
+icon: Images
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { TypeTable } from 'fumadocs-ui/components/type-table';
+
+# Photo Library Hook
+
+<Callout type="info" title="See it in action">
+  Try the [Photo Search block](https://localmode.ai/blocks/photo) for a working demo — its Gallery / Search / Duplicates / Categories tabs run over one shared photo library and one loaded CLIP model powering both embeddings and zero-shot categorization.
+</Callout>
+
+## usePhotoLibrary
+
+A shared in-memory photo library where **one** injected CLIP-family model powers **both** multimodal embeddings (text + image, one vector space → search + duplicates) and zero-shot categorization. It owns the photo entries and their embeddings, the model-load lifecycle, the active editable label set, the adaptive batch profile, and every mutation — progressive, adaptively-batched, cancellable ingest with per-batch categorization (with an `other`/`0` fallback), text and image search over the shared vector space, per-photo and bulk delete, a confirmed model-switch re-index, and label re-categorization.
+
+Provider-agnostic by injection: the embedding model, the zero-shot classifier, and the optional cache probe are supplied as factories, so `@localmode/react` gains no `@localmode/transformers` dependency. Zero model bytes move until an explicit action calls `loadModel()`, ingest, or search.
+
+```tsx
+import { usePhotoLibrary } from '@localmode/react';
+import { transformers, isModelCached } from '@localmode/transformers';
+
+const lib = usePhotoLibrary({
+  modelId: 'Xenova/clip-vit-base-patch32',
+  createEmbeddingModel: (id, onProgress) => transformers.multimodalEmbedding(id, { onProgress }),
+  createZeroShotClassifier: (id) => transformers.zeroShotImageClassifier(id),
+  isModelCached: (id) => isModelCached(id),
+  labelPresets: { photo: { labels: ['nature', 'people', 'other'] } },
+  getModelDimensions: () => 512,
+});
+```
+
+### Options
+
+<TypeTable
+  type={{
+    modelId: { description: 'Initial active model id (a CLIP-family multimodal model).', type: 'string', required: true },
+    createEmbeddingModel: { description: 'Construct the multimodal embedding model for a given id, wiring the hook-bound load-progress callback.', type: '(id: string, onProgress: (p: AnyLoadProgress) => void) => MultimodalEmbeddingModel', required: true },
+    createZeroShotClassifier: { description: 'Construct the zero-shot image classifier for a given id (shares the downloaded weights with the embedding model in the browser cache).', type: '(id: string) => ZeroShotImageClassificationModel', required: true },
+    labelPresets: { description: 'Selectable label sets, e.g. { photo: { labels: [...] }, product: { labels: [...] } }.', type: 'Record<string, { labels: string[] }>', required: true },
+    isModelCached: { description: 'Optional cache probe for the active model.', type: '(id: string) => Promise<boolean>' },
+    initialPresetId: { description: 'Preset id to start from.', type: 'string', default: 'first key of labelPresets' },
+    getModelDimensions: { description: 'Embedding dimensionality of a model id, for the adaptive batch profile.', type: '(id: string) => number | undefined' },
+    defaultTopK: { description: 'Default top-K for search.', type: 'number', default: '20' },
+    minSimilarityFallback: { description: 'Min-similarity floor used when the model has no core threshold preset.', type: 'number', default: '0.2' },
+    fallbackLabel: { description: 'Category assigned when categorization fails or omits.', type: 'string', default: "'other'" },
+    fallbackConfidence: { description: 'Confidence assigned with the fallback label.', type: 'number', default: '0' },
+  }}
+/>
+
+### Return Value
+
+The `PhotoLibrary` surface groups into model lifecycle, library, search, labels / categorization, model-switch re-index, and shared status.
+
+**Model lifecycle**
+
+<TypeTable
+  type={{
+    activeModelId: { description: 'The currently active model id.', type: 'string' },
+    modelStatus: { description: 'Model-load status from useModelLoad.', type: "'idle' | 'loading' | 'ready' | 'error'" },
+    modelProgress: { description: 'Normalized load progress 0-1.', type: 'number' },
+    modelReady: { description: 'True when modelStatus === "ready".', type: 'boolean' },
+    modelCached: { description: 'Whether the active model is cached (from the optional probe).', type: 'boolean | undefined' },
+    loadModel: { description: 'Load (or join the in-flight load of) the active model.', type: '() => Promise<void>' },
+    requestModel: { description: 'Request a model switch. Empty library → immediate; non-empty library → sets pendingModelId for confirmation.', type: '(id: string) => void' },
+    pendingModelId: { description: 'The model id awaiting confirmation, or null.', type: 'string | null' },
+    confirmModelSwitch: { description: 'Confirm the pending switch — triggers a full re-index through the new model.', type: '() => void' },
+    cancelModelSwitch: { description: 'Cancel the pending switch.', type: '() => void' },
+  }}
+/>
+
+**Library and search**
+
+<TypeTable
+  type={{
+    photos: { description: 'The library entries (each carries its own embedding, category, confidence, similar-count).', type: 'PhotoEntry[]' },
+    ingest: { description: 'Ingest files: thumbnails appear immediately, then progressive adaptively-batched embed + categorize.', type: '(files: File[]) => Promise<void>' },
+    ingestProgress: { description: 'Ingest progress (completed/total), or null.', type: 'ProcessProgress | null' },
+    cancelIngest: { description: 'Cancel the in-flight ingest (already-embedded photos stay usable).', type: '() => void' },
+    deletePhoto: { description: 'Remove one photo by id.', type: '(id: string) => void' },
+    deletePhotos: { description: 'Remove a set of photos (e.g. keep-first duplicate cleanup).', type: '(ids: Set<string>) => void' },
+    clearAll: { description: 'Clear the whole library and cancel any in-flight work.', type: '() => void' },
+    getPhoto: { description: 'Look up a photo by id.', type: '(id: string) => PhotoEntry | undefined' },
+    rejection: { description: 'A file rejected by the dropzone, surfaced as a dismissible error.', type: 'IngestRejection | null' },
+    setRejection: { description: 'Set or clear the current rejection.', type: '(r: IngestRejection | null) => void' },
+    topK: { description: 'Active search top-K.', type: 'number' },
+    setTopK: { description: 'Set the search top-K.', type: '(n: number) => void' },
+    minSimilarity: { description: 'Effective min-similarity floor (core preset or the fallback).', type: 'number' },
+    searchByText: { description: 'Text→image search over the shared vector space.', type: '(query: string) => Promise<RankedHit[]>' },
+    searchByImage: { description: 'Image→image search over the shared vector space (data URL query).', type: '(dataUrl: string) => Promise<RankedHit[]>' },
+  }}
+/>
+
+**Labels, categorization, re-index, and status**
+
+<TypeTable
+  type={{
+    labels: { description: 'The active candidate label set.', type: 'string[]' },
+    activePreset: { description: 'Active preset id, or "custom" once labels are edited.', type: 'string' },
+    addLabel: { description: 'Add a candidate label (marks the preset custom).', type: '(label: string) => void' },
+    removeLabel: { description: 'Remove a candidate label by index (marks the preset custom).', type: '(index: number) => void' },
+    applyPreset: { description: 'Replace the labels with a named preset.', type: '(id: string) => void' },
+    recategorize: { description: 'Re-run zero-shot categorization over the embedded library with the current labels.', type: '() => Promise<void>' },
+    recategorizeProgress: { description: 'Re-categorize progress, or null.', type: 'ProcessProgress | null' },
+    cancelRecategorize: { description: 'Cancel the in-flight re-categorization.', type: '() => void' },
+    switching: { description: 'True while a confirmed model switch re-indexes the library.', type: 'boolean' },
+    reindexProgress: { description: 'Re-index progress, or null.', type: 'ProcessProgress | null' },
+    batchInfo: { description: 'The adaptive batch profile (device-aware batch size) from useAdaptiveBatchSize.', type: 'ReturnType<typeof useAdaptiveBatchSize>' },
+    busy: { description: 'True while any embedding pass (ingest, re-index, or re-categorize) runs.', type: 'boolean' },
+    error: { description: 'Last error message, or null.', type: 'string | null' },
+    clearError: { description: 'Clear the current error.', type: '() => void' },
+  }}
+/>
+
+### Pure library algorithms
+
+The ranking and grouping algorithms are exported standalone — deterministic, model-free, and unit-testable. They run over the entries' cached embeddings via core's `cosineSimilarity`.
+
+| Function | Signature | Purpose |
+|----------|-----------|---------|
+| `rankByEmbedding` | `(query, entries, topK, minSimilarity) => RankedHit[]` | Rank the library against a query embedding, filtered by a min-similarity floor and capped at top-K. Powers both text→image and image→image search (the query vector lives in the same shared space). |
+| `computeSimilarCounts` | `(entries, threshold?) => Map<string, number>` | Each photo's count of OTHER embedded photos above the similarity threshold (default `0.7`). |
+| `groupDuplicates` | `(entries, threshold) => DuplicateGroup[]` | Union-find grouping over pairwise cosine similarity; groups keep 2+ members, carry the average pairwise similarity, and sort descending. Cheap to re-run on a threshold change (no re-embedding). |
+
+<Callout type="info">
+For the CLIP cross-modal embedding functions (`embedImage`, `streamEmbedManyImages`) and the shared vector space, see the [Core Multimodal Embeddings](/docs/core/multimodal-embeddings) guide.
+</Callout>
+
+## Blocks
+
+| App | Description | Links |
+|-----|-------------|-------|
+| Photo Search | Gallery / Search / Duplicates / Categories over one shared library and one CLIP model via usePhotoLibrary | [Live block](https://localmode.ai/blocks/photo) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/photo) |

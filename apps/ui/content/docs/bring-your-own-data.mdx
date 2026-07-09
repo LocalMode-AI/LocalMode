@@ -1,0 +1,128 @@
+---
+title: "Bring your own data"
+description: "Every LocalMode UI component renders plain props and emits callbacks — no orchestration state. This is the contract: the prop shapes each family expects, so you can drive any component from cloud data, your own API, or static fixtures, with no @localmode package installed."
+icon: Database
+---
+
+# Bring your own data
+
+LocalMode UI components are **presentational**. None of them load a model, run inference, or own message history — they render the props you pass and call back when the user acts. After `shadcn add`, the components have **no `@localmode/*` runtime dependency**: you supply the data.
+
+This page documents the contract — the shapes each family expects — so you can wire components to a LocalMode hook, a cloud backend, or a hard-coded fixture interchangeably.
+
+<Callout type="info" title="The mental model">
+  A LocalMode hook (e.g. `useChat`, `useClassify`, `useModelLoad`) is the *recommended* producer of
+  these shapes, but it is never required. Anything that can produce the shape below — a `fetch()`, an
+  AI-SDK part, a constant — drives the component identically.
+</Callout>
+
+## Conversation
+
+The chat surfaces render message and streaming state.
+
+| Component | Key props | Shape |
+| --- | --- | --- |
+| `Message` / `MessageContent` | `role`, `content` | `role: 'user' \| 'assistant' \| 'system'`; `content` is a markdown `string` or `MessagePart[]` (`{ type: 'text', text }` / `{ type: 'image', data, mimeType }` / `{ type: 'file', name, data, mimeType }`) |
+| `Response` | `children`, `streaming` | a markdown `string` + a `boolean` |
+| `PromptInput` | `onSubmit`, `streaming`, `onStop` | `onSubmit(text: string, attachments)`, a `boolean`, a `() => void` |
+| `Tool` / `ToolHeader` / `ToolOutput` | `name`, `status`, `input`, `output` | a `ToolCall` (`{ name, status, input?, output?, error? }`) — `status` is one of `'pending' \| 'running' \| 'streaming' \| 'completed' \| 'error'`, with arbitrary JSON in/out |
+| `Reasoning` / `ReasoningContent` | `streaming`, `children` | `streaming: boolean`; the thinking text is a `string` passed as `ReasoningContent`'s children |
+| `Sources` / `Source` | `count`, `source` | `SourcesTrigger` takes `count: number`; each `Source` takes a `SourceItem` (`{ id, title, url?, score?, excerpt? }`) |
+
+```tsx
+// Static fixture — no hook, no backend:
+<Message role="assistant">
+  <MessageAvatar role="assistant" />
+  <MessageContent role="assistant" content="Hello from **any** source." />
+</Message>
+```
+
+See [Use with the Vercel AI SDK](/docs/use-with-ai-sdk) for a full cloud-backed example.
+
+## Results & Insights
+
+Scored-output displays render plain numbers and labels.
+
+| Component | Shape |
+| --- | --- |
+| `ConfidenceScoreBadge` | `score: number` (0–1), optional `thresholds` |
+| `ScoredResultBarList` | `results: Array<{ label: string; score: number }>` |
+| `TopResultCard` | `{ label: string; score: number }` |
+| `CosineSimilarityMeter` | `similarity: number` (0–1, clamped) |
+| `EntityStatsBar` | `entities: Array<{ type: string; text?; score? }>` (counts computed internally) — or a pre-computed `counts: Record<string, number>` |
+
+```tsx
+// Any classifier, search ranker, or constant produces this:
+<ScoredResultBarList results={[
+  { label: 'positive', score: 0.92 },
+  { label: 'neutral', score: 0.06 },
+  { label: 'negative', score: 0.02 },
+]} />
+```
+
+## Input Controls
+
+| Component | Shape |
+| --- | --- |
+| `CharLimitIndicator` | `charCount: number`, `maxLength: number` |
+| `ParameterSlider` | `value: number`, `onChange`, `min`, `max` |
+| `SegmentedModePicker` | `items: Array<{ id, label }>`, `selectedId`, `onSelect` |
+| `LanguagePairSelector` | `languages`, `sourceCode`, `targetCode`, `onSwap`, `onSelectSource/Target` |
+
+## Media & Vision
+
+| Component | Shape |
+| --- | --- |
+| `BoundingBoxOverlay` | `detections: Array<{ label, score?, box: { x, y, width, height } }>` + the image's `naturalWidth`/`naturalHeight` |
+| `BeforeAfterImageViewer` | `originalSrc` + optional `processedSrc` (two image sources) |
+| `ImageResultGallery` | `cards: Array<{ id, src, label?, score? }>` |
+
+## Data & Documents
+
+| Component | Shape |
+| --- | --- |
+| `FileDropzone` / `MediaDropzone` | `accept`, `maxSize`, + the valid-files callback (`onUpload` on `FileDropzone`, `onFiles` on `MediaDropzone`) — validation is generic (no AI) |
+| `IndexedDocumentCard` | `{ filename, chunkCount, pageCount?, sizeBytes?, … }` |
+| `CategoryFacetList` | `categories: string[]` + optional `counts: Record<string, number>` + `selected`/`onSelect` |
+
+## Audio
+
+| Component | Shape |
+| --- | --- |
+| `WaveformActivityBars` | a `volume: number` (`0–1`) or a `state` agent-state string |
+| `VoicePicker` | `voices: Array<{ id, name, gender, languageLabel }>` |
+| `AudioScrubPlayer` / `TranscribedNoteCard` | `audio`: a `Blob \| string` (rendered via the copy-owned `useObjectUrl`) |
+
+## Artifacts & Canvas
+
+| Component | Shape |
+| --- | --- |
+| `DataTableArtifact` | rows + columns |
+| `ChartArtifact` | a series array |
+| `CodeDiffViewer` | two code strings |
+
+## Security & Privacy
+
+| Component | Shape |
+| --- | --- |
+| `PasswordStrengthBar` | `value: number` (0–100) — the app computes it (e.g. via `@localmode/core` `deriveKey` flow, or any estimator) |
+| `DifferentialPrivacyControls` | `enabled`/`onEnabledChange` + `epsilon`/`onEpsilonChange`, plus an optional `budget` object (`{ consumed, maxEpsilon }`) — all supplied by the app |
+
+## Local-First (the on-device tier)
+
+The local-first family is presentational too — it renders model/storage/capability state you pass — but it *describes* on-device AI, so it pairs naturally with the LocalMode hooks. A cloud app generally wouldn't install this family, with one exception:
+
+- **`ContextUsageMeter`** takes the token fields (`inputTokens`, `outputTokens`, `reasoningTokens`, `cachedTokens`) and `contextWindow` directly as flat props — usable with **any** LLM's usage data, local or cloud. (The lower-level `Context` compound root instead takes a nested `usage={{ … }}` object for `ContextTrigger` / `ContextContent` / `ContextInputUsage` / `ContextOutputUsage`.)
+
+```tsx
+<ContextUsageMeter inputTokens={1200} outputTokens={340} contextWindow={8192} />
+```
+
+## The invariant
+
+Every non-local-first component compiles and runs with **zero `@localmode/*` packages** installed. If you ever find a component that won't, it's a bug — file it. The recommended pairing is the LocalMode hooks; the requirement is only that you pass the shape.
+
+## See also
+
+- [Use with the Vercel AI SDK](/docs/use-with-ai-sdk) — a full cloud-backed chat driving these shapes from an `@ai-sdk/react` message stream.
+- Live, fully-wired reference implementations in the [`/blocks` gallery](/blocks): the [chat block](/blocks/chat) drives the Conversation shapes from on-device models, and the knowledge blocks ([semantic search](/blocks/knowledge/semantic-search), [RAG chat](/blocks/knowledge/rag-chat)) drive the Results and Data & Documents shapes from your own documents. Blocks are the wiring layer, so they *do* pull the LocalMode hooks — read them as worked examples of what a producer for each shape looks like.

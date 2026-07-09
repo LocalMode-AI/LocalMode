@@ -11,7 +11,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 Generate text using local language models with streaming support. All four LLM providers use the same `streamText()` and `generateText()` functions from `@localmode/core`.
 
 <Callout type="info" title="See it in action">
-  Try [LLM Chat](https://localmode.ai/llm-chat) and [Research Agent](https://localmode.ai/research-agent) for working demos of these APIs.
+  Try the [Chat block](https://localmode.ai/blocks/chat) and [Agent & Structured Data block](https://localmode.ai/blocks/agents) for working demos of these APIs.
 </Callout>
 
 <Callout type="info">
@@ -328,8 +328,8 @@ import { semanticSearch, streamText } from '@localmode/core';
 
 async function ragQuery(question: string) {
   // Retrieve context
-  const results = await semanticSearch({ db, model: embeddingModel, query: question, k: 3 });
-  const context = results.map((r) => r.metadata.text).join('\n\n');
+  const { results } = await semanticSearch({ db, model: embeddingModel, query: question, k: 3 });
+  const context = results.map((r) => r.text ?? '').join('\n\n');
 
   // Generate answer
   const result = await streamText({
@@ -500,12 +500,12 @@ getTextContent([
   />
 </Cards>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| LLM Chat | Stream text generation with multiple LLM backends and vision (image input) | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |
-| PDF Search | Generate answers from PDF context with streaming | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |
-| LangChain RAG | Generate answers in a retrieval-augmented pipeline | [Demo](https://localmode.ai/langchain-rag) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/langchain-rag) |
-| Data Extractor | Extract structured data with generateObject() | [Demo](https://localmode.ai/data-extractor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/data-extractor) |
-| Research Agent | Multi-step reasoning with tool-augmented generation | [Demo](https://localmode.ai/research-agent) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/research-agent) |
+| Chat (LLM Chat) | Stream text generation with multiple LLM backends and vision (image input) | [Live block](https://localmode.ai/blocks/chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/chat) |
+| Knowledge Base (PDF Search) | Generate answers from PDF context with streaming | [Live block](https://localmode.ai/blocks/knowledge/rag-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/rag-chat) |
+| Knowledge Base (LangChain RAG) | Generate answers in a retrieval-augmented pipeline | [Live block](https://localmode.ai/blocks/knowledge/rag-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/rag-chat) |
+| Agent & Structured Data (Data Extractor) | Extract structured data with generateObject() | [Live block](https://localmode.ai/blocks/agents/data-extractor) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/agents/data-extractor) |
+| Agent & Structured Data (Research Agent) | Multi-step reasoning with tool-augmented generation | [Live block](https://localmode.ai/blocks/agents/research-agent) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/agents/research-agent) |

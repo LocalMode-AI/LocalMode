@@ -3,7 +3,7 @@ title: "Tiny Models, Big Impact: Why 30MB Models Are the Sweet Spot for Browser 
 description: "Not every task needs a 4B parameter model. We profiled 10 models in the 4-100MB range that deliver 85-99% of cloud quality, load in under 3 seconds, and run on phones with 4GB of RAM. Here is the data, the code, and the reasoning behind the sweet spot."
 author: LocalMode
 date: 2026-02-22
-dateModified: "2026-05-28"
+dateModified: "2026-07-04"
 faq:
   - question: "Why are small 30MB models better for browser AI than large LLMs?"
     answer: "The relationship between model size and quality is logarithmic, not linear. Going from 5MB to 50MB buys enormous quality gains, but going from 500MB to 5GB yields diminishing returns. A 33MB embedding model matches OpenAI at 99.8% quality, and a 23MB reranker replaces a $73,000/year Cohere bill."
@@ -143,7 +143,7 @@ Half of mobile web users abandon pages that take longer than 3 seconds to load. 
 | 500MB (LLM small) | 67 min | 6.7 min | 80s | 40s |
 | 2.5GB (LLM medium) | 5.6 hrs | 33 min | 6.7 min | 3.3 min |
 
-Models under 100MB are cacheable on the first visit with a reasonable wait. Models over 500MB require a deliberate "download model" step that most users will not complete on mobile. LocalMode caches models in IndexedDB after the first download, so subsequent loads are instant -- but you only get that benefit if the user completes the initial download.
+Models under 100MB are cacheable on the first visit with a reasonable wait. Models over 500MB require a deliberate "download model" step that most users will not complete on mobile. LocalMode caches models in the browser cache after the first download, so subsequent loads are instant -- but you only get that benefit if the user completes the initial download.
 
 ### LocalMode's adaptive batching accounts for device constraints
 
@@ -236,7 +236,7 @@ const { text } = await transcribe({
 // "remind me to buy groceries at five pm"
 ```
 
-All three models cache in IndexedDB after the first download. On subsequent visits, they load from local cache in milliseconds. Total combined download: approximately 150MB. Total API cost: $0. Total data sent to external servers: zero bytes.
+All three models cache in the browser after the first download. On subsequent visits, they load from local cache in milliseconds. Total combined download: approximately 150MB. Total API cost: $0. Total data sent to external servers: zero bytes.
 
 ---
 
@@ -318,7 +318,7 @@ All benchmark scores come from published model cards, academic papers, and offic
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

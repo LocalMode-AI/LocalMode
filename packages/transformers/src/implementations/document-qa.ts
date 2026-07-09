@@ -17,6 +17,7 @@ import type {
 // Alias for internal use
 type DocumentInput = DocInput;
 import type { ModelSettings, TransformersDevice, ModelLoadProgress } from '../types.js';
+import { installResilientModelCache } from '../resilient-cache.js';
 
 // Use generic callable type since we may use different pipeline tasks (Florence-2 vs Donut)
 type DocQAPipeline = (doc: unknown, question: unknown, ...args: unknown[]) => Promise<unknown>;
@@ -58,6 +59,7 @@ export class TransformersDocumentQAModel implements DocumentQAModel, TableQAMode
 
       // Suppress ONNX runtime warnings about node execution providers
       env.backends.onnx.logLevel = 'error';
+      installResilientModelCache(env);
 
       // Florence-2 uses 'image-text-to-text' pipeline; traditional models use 'document-question-answering'
       const isFlorence = this.baseModelId.toLowerCase().includes('florence');

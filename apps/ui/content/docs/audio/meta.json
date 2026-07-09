@@ -1,0 +1,15 @@
+{
+  "title": "Audio",
+  "pages": [
+    "waveform-activity-bars",
+    "voice-picker",
+    "streaming-speech-panel",
+    "voice-comparison-panel",
+    "transcribed-note-card",
+    "voice-orb",
+    "voice-button",
+    "mic-selector",
+    "audio-scrub-player",
+    "synced-transcript-viewer"
+  ]
+}

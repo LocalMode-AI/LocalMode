@@ -1,0 +1,53 @@
+---
+title: "Suggestions"
+description: "A scrollable row of selectable prompt chips that seed the composer."
+icon: Sparkles
+---
+
+# Suggestions
+
+The **Suggestions** primitive renders a horizontal, scrollable rail of prompt chips. Each `Suggestion` invokes a callback with its text — wire it to your composer to seed the input or send directly.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/suggestions" />
+
+<OpenInV0 name="ui/conversation/suggestions" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/suggestions" />
+
+### Dependencies
+
+- _None_ — pure presentational component
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `suggestions.tsx` — `Suggestions` + `Suggestion`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/suggestions/suggestions.tsx" name="SuggestionProps" />
+
+## Examples
+
+### Seed the input
+
+```tsx
+import { Suggestion, Suggestions } from '@/components/suggestions';
+
+<Suggestions>
+  {prompts.map((p) => (
+    <Suggestion key={p} suggestion={p} onSelect={setInput} />
+  ))}
+</Suggestions>
+```
+
+## Customization
+
+Chips are `button`s under the hood, so size/variant flow through. The rail hides its scrollbar by default; remove those utilities to show it.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

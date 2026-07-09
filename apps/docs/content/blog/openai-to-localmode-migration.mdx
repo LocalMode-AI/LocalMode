@@ -3,7 +3,7 @@ title: "From OpenAI SDK to LocalMode: A Migration Guide"
 description: "A practical, side-by-side migration guide for developers moving from the OpenAI Node.js SDK to LocalMode. Covers embeddings, chat completions, streaming, structured output, and batch operations -- with code comparisons, quality benchmarks, and a step-by-step checklist."
 author: LocalMode
 date: 2026-02-21
-dateModified: "2026-05-29"
+dateModified: "2026-07-04"
 faq:
   - question: "How does LocalMode's API compare to the OpenAI SDK?"
     answer: "Both follow the same pattern: construct an options object, await the result, destructure fields. LocalMode's embed() maps to openai.embeddings.create(), streamText() maps to chat.completions.create() with streaming, and generateObject() maps to structured output. The mental model is remarkably similar."
@@ -401,7 +401,7 @@ For embeddings, yes -- bge-small-en-v1.5 scores 99.8% of OpenAI's text-embedding
 
 ### "What about the first-load download?"
 
-Embedding models are 33 MB. The smallest LLMs start at 78 MB (SmolLM2-135M). After the first download, models are cached in IndexedDB and load instantly on subsequent visits. Use `preloadModel()` to download during onboarding or show a progress indicator.
+Embedding models are 33 MB. The smallest LLMs start at 78 MB (SmolLM2-135M). After the first download, models are cached by the browser and load instantly on subsequent visits. Use `preloadModel()` to download during onboarding or show a progress indicator.
 
 ### "Which browsers are supported?"
 
@@ -464,7 +464,7 @@ This guide references the following sources for API signatures, pricing, and ben
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

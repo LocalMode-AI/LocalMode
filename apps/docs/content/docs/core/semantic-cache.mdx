@@ -11,7 +11,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 Cache LLM responses based on prompt embedding similarity. When a user asks a question that is semantically similar to a previously answered question, the cached response is returned in under 50ms instead of waiting 5-30 seconds for model inference.
 
 <Callout type="info" title="See it in action">
-  Try [PDF Search](https://localmode.ai/pdf-search) and [LLM Chat](https://localmode.ai/llm-chat) for working demos of these APIs.
+  Try the [Knowledge Base block](https://localmode.ai/blocks/knowledge/rag-chat) and [Chat block](https://localmode.ai/blocks/chat) for working demos of these APIs.
 </Callout>
 
 ## createSemanticCache()
@@ -271,9 +271,9 @@ The hook creates the cache on mount and calls `destroy()` on unmount.
   - Use `storage: 'indexeddb'` only if you need cache persistence across page reloads
 </Callout>
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| PDF Search | Cache repeated PDF queries for faster responses | [Demo](https://localmode.ai/pdf-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/pdf-search) |
-| LLM Chat | Semantic caching for LLM conversation responses | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |
+| Knowledge Base (PDF Search) | Cache repeated PDF queries for faster responses | [Live block](https://localmode.ai/blocks/knowledge/rag-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/rag-chat) |
+| Chat (LLM Chat) | Semantic caching for LLM conversation responses | [Live block](https://localmode.ai/blocks/chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/chat) |

@@ -1,0 +1,28 @@
+{
+  "title": "Local-First",
+  "pages": [
+    "model-downloader",
+    "model-selector",
+    "model-loading-panel",
+    "capability-gate",
+    "device-capability-grid",
+    "browser-compat-card",
+    "provider-fallback-badge",
+    "storage-meter",
+    "network-badge",
+    "cache-badge",
+    "context-usage-meter",
+    "model-catalog-card",
+    "model-metadata-card",
+    "model-recommendation-card",
+    "model-search-browser",
+    "model-comparison-panel",
+    "adaptive-batch-card",
+    "vector-storage-observability",
+    "embedding-drift-banner",
+    "vector-export-panel",
+    "vector-import-flow",
+    "semantic-cache-status-bar",
+    "provider-badge"
+  ]
+}

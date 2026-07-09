@@ -29,6 +29,9 @@ export interface UseModelLoaderReturn {
   /** Cache status for all known models */
   cacheStatus: Map<string, CacheEntry>;
 
+  /** Loader initialization error (e.g. IndexedDB unavailable), or null */
+  error: Error | null;
+
   /** Start downloading one or more model files */
   prefetch: (requests: ModelDownloadRequest[]) => Promise<void>;
 
@@ -80,6 +83,7 @@ export interface UseModelLoaderReturn {
 export function useModelLoader(config?: ModelLoaderConfig): UseModelLoaderReturn {
   const [downloads, setDownloads] = useState<Map<string, ModelDownloadProgress>>(new Map());
   const [cacheStatus, setCacheStatus] = useState<Map<string, CacheEntry>>(new Map());
+  const [error, setError] = useState<Error | null>(null);
 
   const loaderRef = useRef<ModelLoader | null>(null);
   const mountedRef = useRef(true);
@@ -133,8 +137,12 @@ export function useModelLoader(config?: ModelLoaderConfig): UseModelLoaderReturn
           },
         });
         loaderRef.current = loader;
-      } catch {
-        // createModelLoader may not exist yet during development
+      } catch (err) {
+        // Loader init can fail (e.g. IndexedDB blocked in private browsing).
+        // Surface the failure instead of swallowing it.
+        if (mountedRef.current) {
+          setError(err instanceof Error ? err : new Error(String(err)));
+        }
       }
     };
 
@@ -208,6 +216,7 @@ export function useModelLoader(config?: ModelLoaderConfig): UseModelLoaderReturn
       isDownloading: false,
       totalProgress: 0,
       cacheStatus: new Map(),
+      error: null,
       prefetch: async () => {},
       prefetchOne: async () => {},
       cancel: () => {},
@@ -224,6 +233,7 @@ export function useModelLoader(config?: ModelLoaderConfig): UseModelLoaderReturn
     isDownloading,
     totalProgress,
     cacheStatus,
+    error,
     prefetch,
     prefetchOne,
     cancel,

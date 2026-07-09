@@ -12,6 +12,7 @@
  */
 
 import type { TransformersDevice, ModelLoadProgress } from '../types.js';
+import { installResilientModelCache } from '../resilient-cache.js';
 import { KOKORO_VOICES, KOKORO_DEFAULT_VOICE, KOKORO_LANG_MAP } from '../kokoro-voices.js';
 
 const STYLE_DIM = 256;
@@ -48,6 +49,7 @@ async function loadKokoroInstance(
     try {
       const { StyleTextToSpeech2Model, AutoTokenizer, env } = await import('@huggingface/transformers');
       env.backends.onnx.logLevel = 'error';
+      installResilientModelCache(env);
 
       const model = await StyleTextToSpeech2Model.from_pretrained(modelId, {
         dtype,

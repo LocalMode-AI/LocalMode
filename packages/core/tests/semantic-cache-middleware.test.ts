@@ -162,6 +162,64 @@ describe('semanticCacheMiddleware()', () => {
 
       expect(chunks.join('')).toBe('Stream test result');
     });
+
+    it('stores the response when consumed through streamText() (consumer breaks on done)', async () => {
+      // Regression: streamText() stops iterating the wrapped stream as soon
+      // as it sees the done-marked chunk, which ends the middleware generator
+      // with a return at that yield — a store placed after the streaming loop
+      // never ran, so streaming consumers (e.g. useChat) could NEVER produce
+      // a cache hit. Found by the blocks-chat semantic-cache E2E lane.
+      const embeddingModel = createMockEmbeddingModel();
+      cache = await createSemanticCache({ embeddingModel });
+      const languageModel = createMockLanguageModel({
+        mockResponse: 'Paris is the capital of France.',
+      });
+
+      const middleware = semanticCacheMiddleware(cache);
+      const wrapped = wrapLanguageModel({ model: languageModel, middleware });
+
+      const first = await streamText({ model: wrapped, prompt: 'capital of France?' });
+      let firstText = '';
+      for await (const chunk of first.stream) {
+        firstText += chunk.text;
+      }
+      expect(firstText).toBe('Paris is the capital of France.');
+
+      // The store is fire-and-forget; give it a tick.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(cache.stats().entries, 'the streamed response must be stored').toBe(1);
+
+      // The same prompt through streamText again is a HIT: one done-marked
+      // chunk carrying the stored response verbatim, and a recorded hit.
+      const second = await streamText({ model: wrapped, prompt: 'capital of France?' });
+      const chunks: Array<{ text: string; done: boolean }> = [];
+      for await (const chunk of second.stream) {
+        chunks.push({ text: chunk.text, done: chunk.done });
+      }
+      expect(chunks).toHaveLength(1);
+      expect(chunks[0]).toEqual({ text: 'Paris is the capital of France.', done: true });
+      expect(cache.stats().hits).toBeGreaterThanOrEqual(1);
+    });
+
+    it('does not store a truncated response when the consumer stops mid-stream', async () => {
+      const embeddingModel = createMockEmbeddingModel();
+      cache = await createSemanticCache({ embeddingModel });
+      const languageModel = createMockLanguageModel({
+        mockResponse: 'one two three four five six',
+      });
+
+      const middleware = semanticCacheMiddleware(cache);
+      const wrapped = wrapLanguageModel({ model: languageModel, middleware });
+
+      // Break after the FIRST (non-final) chunk — a cancelled/abandoned turn.
+      for await (const chunk of wrapped.doStream!({ prompt: 'will be cancelled' })) {
+        void chunk;
+        break;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(cache.stats().entries, 'a truncated response must not be cached').toBe(0);
+    });
   });
 
   describe('cache stats tracking', () => {

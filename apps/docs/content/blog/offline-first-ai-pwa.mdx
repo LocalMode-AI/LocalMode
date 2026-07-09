@@ -3,7 +3,7 @@ title: "Building Offline-First AI Apps With Progressive Web Apps"
 description: "A complete architecture guide for shipping AI-powered PWAs that work on planes, in the field, and on unreliable networks. Covers model pre-caching, network monitoring, IndexedDB persistence, service worker configuration, and storage quota management -- all with LocalMode."
 author: LocalMode
 date: 2026-02-28
-dateModified: "2026-05-27"
+dateModified: "2026-07-04"
 faq:
   - question: "Can AI-powered web apps work completely offline?"
     answer: "Yes. With Progressive Web Apps and LocalMode, AI models run in WebAssembly or WebGPU, vectors persist in IndexedDB, and a service worker serves the app shell from cache. After the initial model download, the entire application works identically with no network connection."
@@ -432,15 +432,15 @@ LocalMode's provider packages handle the WebGPU-to-WASM fallback automatically. 
 
 ---
 
-## Real-World Offline AI: Voice Notes and Semantic Search
+## Real-World Offline AI: Audio Studio and Knowledge Base
 
-Two showcase apps on [localmode.ai](https://localmode.ai) demonstrate the complete offline-first AI pattern.
+Two blocks at [localmode.ai/blocks](https://localmode.ai/blocks) demonstrate the complete offline-first AI pattern.
 
-**Voice Notes** uses `@localmode/transformers` to run Moonshine speech-to-text entirely in the browser. After the model downloads once (28-63 MB depending on variant), voice transcription works offline indefinitely. Transcribed notes are stored locally and can be searched, exported, or analyzed without any network dependency.
+**Voice Notes** (now the [Voice Notes block](https://localmode.ai/blocks/audio/voice-notes)) uses `@localmode/transformers` to run Moonshine speech-to-text entirely in the browser. After the model downloads once (28-63 MB depending on variant), voice transcription works offline indefinitely. Transcribed notes are stored locally and can be searched, exported, or analyzed without any network dependency.
 
-**Semantic Search** builds a full vector search engine in the browser using `@localmode/core`'s VectorDB with HNSW indexing and `@localmode/transformers` for embedding generation. Users add documents, the app embeds them with bge-small-en-v1.5, and semantic search works offline across sessions. The app also demonstrates import/export for vector data portability -- you can export your entire search index as JSON and import it on another device.
+**Semantic Search** (now part of the [Knowledge Base block](https://localmode.ai/blocks/knowledge/semantic-search)) builds a full vector search engine in the browser using `@localmode/core`'s VectorDB with HNSW indexing and `@localmode/transformers` for embedding generation. Users add documents, the app embeds them with bge-small-en-v1.5, and semantic search works offline across sessions. The app also demonstrates import/export for vector data portability -- you can export your entire search index as JSON and import it on another device.
 
-Both apps work as installable PWAs. Both function identically offline. Both keep all user data on the device.
+Both function identically offline once their models are cached. Both keep all user data on the device.
 
 ---
 
@@ -477,7 +477,7 @@ Here is the complete checklist for taking an AI feature from cloud-dependent to 
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

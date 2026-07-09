@@ -1,0 +1,79 @@
+---
+title: "Slash Command Palette"
+description: "A \"/\"-triggered command palette over a local tool/command list — name, category, description, and icon — to layer onto a PromptInput Tools slot."
+icon: SquareTerminal
+---
+
+# Slash Command Palette
+
+The **Slash Command Palette** is a command-palette dropdown triggered by "/" in the composer to pick tools or commands by name, category, description, and icon — designed to layer onto a [`PromptInput`](/docs/conversation/prompt-input) Tools slot. It is purely presentational over a local list: the consumer decides when to open it (e.g. when the composer value starts with "/") and what query to pass.
+
+It is built on the shadcn/ui [`Command`](https://ui.shadcn.com/docs/components/command) (cmdk) primitive for fuzzy filtering and keyboard navigation, so it inherits your theme.
+
+**When to use it:** a composer where typing "/" should reveal a pickable list of tools or commands.
+
+## Preview
+
+<ComponentPreview name="ui/input-controls/slash-command-palette" note="Pure UI — type / to open the palette, keep typing to filter, select to insert. No model download." />
+
+<OpenInV0 name="ui/input-controls/slash-command-palette" />
+
+## Installation
+
+<InstallTabs name="ui/input-controls/slash-command-palette" />
+
+### Dependencies
+
+- **Data source:** renders the `commands` list you pass and emits `onSelect` / `onDismiss` callbacks — works with any backend. Recommended LocalMode producer: a local tool/command list (e.g. an agent's tool registry) (optional).
+- `cmdk` — the underlying command primitive
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically)
+
+### Files installed
+
+- `slash-command-palette.tsx` — the component
+- `ui/command.tsx` — the shadcn/ui command primitive (registry dependency)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/input-controls/slash-command-palette/slash-command-palette.tsx" name="SlashCommandPaletteProps" />
+
+## Examples
+
+### Open when the composer starts with "/"
+
+```tsx
+import { useState } from 'react';
+import { Search, Image } from 'lucide-react';
+import { SlashCommandPalette } from '@/components/slash-command-palette';
+
+const COMMANDS = [
+  { id: 'search', name: 'search', description: 'Search the web', category: 'Tools', icon: Search },
+  { id: 'image', name: 'image', description: 'Generate an image', category: 'Tools', icon: Image },
+];
+
+export function Composer() {
+  const [value, setValue] = useState('');
+  const open = value.startsWith('/');
+
+  return (
+    <div className="relative">
+      <input value={value} onChange={(e) => setValue(e.target.value)} />
+      {open && (
+        <SlashCommandPalette
+          commands={COMMANDS}
+          open={open}
+          query={value.slice(1)}
+          onSelect={(cmd) => setValue(`/${cmd.name} `)}
+          onDismiss={() => setValue('')}
+        />
+      )}
+    </div>
+  );
+}
+```
+
+## Customization
+
+Commands are grouped by `category` (uncategorized commands fall under "Commands"). The palette filters on name + description via cmdk. Position it yourself (e.g. absolutely below the composer). Everything is theme-driven via shadcn/ui CSS variables — edit the copied file to change the row layout or add command shortcuts.

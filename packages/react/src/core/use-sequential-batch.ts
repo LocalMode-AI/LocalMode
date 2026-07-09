@@ -23,8 +23,17 @@ export interface SequentialBatchProgress {
 
 /** Return type from useSequentialBatch */
 export interface UseSequentialBatchReturn<TInput, TOutput> {
-  /** Results from the last batch (null for failed/skipped items) */
+  /**
+   * Results from the current/last batch (null for failed/skipped items).
+   * Published incrementally as each item completes — not only at batch end.
+   */
   results: (TOutput | null)[];
+  /**
+   * Per-item errors, index-aligned with `results`: `itemErrors[i]` is the
+   * Error that made `results[i]` null, or null if item `i` succeeded.
+   * Published incrementally alongside `results`.
+   */
+  itemErrors: (Error | null)[];
   /** Progress of the current batch */
   progress: SequentialBatchProgress;
   /** Whether a batch is currently running */
@@ -43,7 +52,9 @@ export interface UseSequentialBatchReturn<TInput, TOutput> {
  * Hook for processing an array of items sequentially with progress tracking.
  *
  * Each item is processed one at a time in order. Per-item errors are captured
- * as `null` in the results array. Cancellation stops after the current item.
+ * as `null` in the results array, with the underlying Error retained in the
+ * index-aligned `itemErrors` array. Both arrays are published incrementally
+ * as items complete. Cancellation stops after the current item.
  *
  * @param config - The async function to process each item
  * @returns Batch state with execute/cancel/reset
@@ -54,13 +65,15 @@ export interface UseSequentialBatchReturn<TInput, TOutput> {
  *   fn: (text, signal) => classify({ model, text, abortSignal: signal }),
  * });
  * const results = await batch.execute(['hello', 'world']);
- * // batch.progress updates as each item completes
+ * // batch.results / batch.progress update as each item completes;
+ * // batch.itemErrors[i] holds the Error when results[i] is null
  * ```
  */
 export function useSequentialBatch<TInput, TOutput>(
   config: UseSequentialBatchConfig<TInput, TOutput>
 ): UseSequentialBatchReturn<TInput, TOutput> {
   const [results, setResults] = useState<(TOutput | null)[]>([]);
+  const [itemErrors, setItemErrors] = useState<(Error | null)[]>([]);
   const [progress, setProgress] = useState<SequentialBatchProgress>({ current: 0, total: 0 });
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -89,8 +102,10 @@ export function useSequentialBatch<TInput, TOutput>(
     setIsRunning(true);
     setProgress({ current: 0, total: inputs.length });
     setResults([]);
+    setItemErrors([]);
 
     const collected: (TOutput | null)[] = [];
+    const collectedErrors: (Error | null)[] = [];
 
     try {
       for (let i = 0; i < inputs.length; i++) {
@@ -100,18 +115,23 @@ export function useSequentialBatch<TInput, TOutput>(
           const result = await fnRef.current(inputs[i], controller.signal);
           if (!mountedRef.current) break;
           collected.push(result);
+          collectedErrors.push(null);
         } catch (err) {
           if (!mountedRef.current) break;
           // Abort = stop entire batch
           if (err instanceof Error && (err.name === 'AbortError' || (err instanceof DOMException && err.name === 'AbortError'))) {
             break;
           }
-          // Per-item error = null, continue
+          // Per-item error = null result, Error retained in itemErrors, continue
           collected.push(null);
+          collectedErrors.push(err instanceof Error ? err : new Error(String(err)));
         }
 
         if (mountedRef.current) {
           setProgress({ current: i + 1, total: inputs.length });
+          // Publish incrementally so consumers see results as they arrive
+          setResults([...collected]);
+          setItemErrors([...collectedErrors]);
         }
       }
     } catch (err) {
@@ -121,6 +141,7 @@ export function useSequentialBatch<TInput, TOutput>(
     } finally {
       if (mountedRef.current) {
         setResults(collected);
+        setItemErrors(collectedErrors);
         setIsRunning(false);
       }
     }
@@ -135,6 +156,7 @@ export function useSequentialBatch<TInput, TOutput>(
   const reset = useCallback(() => {
     abortControllerRef.current?.abort();
     setResults([]);
+    setItemErrors([]);
     setProgress({ current: 0, total: 0 });
     setIsRunning(false);
     setError(null);
@@ -143,6 +165,7 @@ export function useSequentialBatch<TInput, TOutput>(
   if (IS_SERVER) {
     return {
       results: [],
+      itemErrors: [],
       progress: { current: 0, total: 0 },
       isRunning: false,
       error: null,
@@ -152,5 +175,5 @@ export function useSequentialBatch<TInput, TOutput>(
     };
   }
 
-  return { results, progress, isRunning, error, execute, cancel, reset };
+  return { results, itemErrors, progress, isRunning, error, execute, cancel, reset };
 }

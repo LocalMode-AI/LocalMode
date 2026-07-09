@@ -13,6 +13,7 @@ import type {
   ImageInput,
 } from '@localmode/core';
 import type { ModelSettings, TransformersDevice, ModelLoadProgress } from '../types.js';
+import { installResilientModelCache } from '../resilient-cache.js';
 
 // Dynamic import types
 type ImageToTextPipeline = Awaited<
@@ -57,6 +58,7 @@ export class TransformersOCRModel implements OCRModel {
 
       // Suppress ONNX runtime warnings about node execution providers
       env.backends.onnx.logLevel = 'error';
+      installResilientModelCache(env);
 
       // TrOCR uses image-to-text pipeline
       const pipe = await pipeline('image-to-text', this.baseModelId, {

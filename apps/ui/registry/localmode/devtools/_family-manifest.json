@@ -1,0 +1,101 @@
+{
+  "family": "devtools",
+  "navLabel": "DevTools",
+  "docsFolder": "devtools",
+  "previews": {
+    "ui/devtools/inference-queue-monitor": "@/registry/localmode/devtools/inference-queue-monitor/inference-queue-monitor-demo",
+    "ui/devtools/event-log-viewer": "@/registry/localmode/devtools/event-log-viewer/event-log-viewer-demo",
+    "ui/devtools/pipeline-run-inspector": "@/registry/localmode/devtools/pipeline-run-inspector/pipeline-run-inspector-demo",
+    "ui/devtools/model-cache-table": "@/registry/localmode/devtools/model-cache-table/model-cache-table-demo"
+  },
+  "items": [
+    {
+      "name": "ui/devtools/inference-queue-monitor",
+      "type": "registry:component",
+      "title": "Inference Queue Monitor",
+      "description": "Per-queue inference observability: one card per registered queue showing pending, active, completed, failed, and average latency, with a live pulsing badge + emerald accent on active counts, amber on pending, and destructive on failures. Empty state directs users to registerQueue(). Recommended data source: useDevToolsQueueStats from @localmode/devtools/react \u2014 the hook snapshot spreads straight into the queues prop.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/devtools/inference-queue-monitor/inference-queue-monitor.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "devtools"
+      ]
+    },
+    {
+      "name": "ui/devtools/event-log-viewer",
+      "type": "registry:component",
+      "title": "Event Log Viewer",
+      "description": "Newest-first devtools event log: relative timestamps (absolute on hover), namespace-colored type badges (vectordb/embedding/model/queue/pipeline/storage), serialized payloads, a case-insensitive substring type filter, a visible cap (default 100) with an overflow line, distinct no-events and no-match empty states, and an optional Clear affordance. Recommended data source: useDevToolsEvents from @localmode/devtools/react.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/devtools/event-log-viewer/event-log-viewer.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "devtools"
+      ]
+    },
+    {
+      "name": "ui/devtools/pipeline-run-inspector",
+      "type": "registry:component",
+      "title": "Pipeline Run Inspector",
+      "description": "Per-run pipeline observability cards: status badge (running pulses on primary, completed emerald, failed destructive), a completed/total progress bar, the current step while running, total duration on completion, and optional expandable per-step timing rows. The runs record mirrors the @localmode/devtools PipelineSnapshot shape, so useDevToolsPipelineRuns() output feeds it directly; works with any backend.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/devtools/pipeline-run-inspector/pipeline-run-inspector.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "devtools"
+      ]
+    },
+    {
+      "name": "ui/devtools/model-cache-table",
+      "type": "registry:component",
+      "title": "Model Cache Table",
+      "description": "Cached-model observability table: model ID (monospace, truncated), status badge (loaded/loading/error), load duration, and relative last-used time per model \u2014 with a human-formatted size column only when entries carry sizeBytes and a per-row evict control only when onEvict is provided. Recommended producer: useDevToolsModelCache from @localmode/devtools/react.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/devtools/model-cache-table/model-cache-table.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "devtools"
+      ]
+    }
+  ]
+}

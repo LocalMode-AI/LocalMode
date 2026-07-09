@@ -8,13 +8,29 @@ import type { TurnTaker, TurnTakerOptions, TurnTakerState } from '@localmode/cor
 
 const IS_SERVER = typeof window === 'undefined';
 
+/** A single conversational turn accumulated by {@link useTurnTaker}. */
+export interface TurnEntry {
+  /** Who produced this turn. */
+  role: 'user' | 'agent';
+  /** The utterance / response text. */
+  text: string;
+  /** When the turn was observed by the hook. */
+  timestamp: Date;
+}
+
 /**
  * Options accepted by {@link useTurnTaker}.
  *
  * Mirrors {@link TurnTakerOptions} but excludes `abortSignal` — the hook
  * owns abort lifecycle via unmount cleanup.
  */
-export interface UseTurnTakerOptions extends Omit<TurnTakerOptions, 'abortSignal'> {}
+export interface UseTurnTakerOptions extends Omit<TurnTakerOptions, 'abortSignal'> {
+  /**
+   * Fired when the user barges in (by voice or programmatic `interrupt()`).
+   * Also mirrored on the `lastBargeIn` state field.
+   */
+  onBargeIn?: () => void;
+}
 
 /**
  * Return shape of {@link useTurnTaker}.
@@ -26,6 +42,10 @@ export interface UseTurnTakerReturn {
   lastUserUtterance: string | null;
   /** The most recent agent response text, or null. */
   lastAgentResponse: string | null;
+  /** Accumulated conversation turns (user + agent, oldest first). */
+  turns: TurnEntry[];
+  /** When the most recent barge-in fired, or null. */
+  lastBargeIn: Date | null;
   /** Latest error, or null. */
   error: Error | null;
   /** True when state === 'listening'. */
@@ -42,6 +62,8 @@ export interface UseTurnTakerReturn {
   interrupt: () => void;
   /** Dispose. */
   dispose: () => Promise<void>;
+  /** Clear the accumulated `turns` list. */
+  clearTurns: () => void;
 }
 
 /**
@@ -49,16 +71,20 @@ export interface UseTurnTakerReturn {
  *
  * Lazy-constructs the orchestrator on the first `start()` call so the
  * underlying transcriber's `getUserMedia` prompt happens during a user
- * gesture. Auto-disposes on unmount.
+ * gesture. Auto-disposes on unmount. Accumulates both sides of the
+ * conversation in `turns` for transcript rendering.
  *
  * @example
  * ```tsx
  * const turn = useTurnTaker({ transcriber, planner, voice, systemPrompt: 'Be concise.' });
  *
  * return (
- *   <button onClick={turn.start}>
- *     {turn.isListening ? 'Listening…' : 'Start'}
- *   </button>
+ *   <>
+ *     <button onClick={turn.start}>
+ *       {turn.isListening ? 'Listening…' : 'Start'}
+ *     </button>
+ *     <ul>{turn.turns.map((t, i) => <li key={i}>{t.role}: {t.text}</li>)}</ul>
+ *   </>
  * );
  * ```
  */
@@ -66,6 +92,8 @@ export function useTurnTaker(options: UseTurnTakerOptions): UseTurnTakerReturn {
   const [state, setState] = useState<TurnTakerState>('idle');
   const [lastUserUtterance, setLastUserUtterance] = useState<string | null>(null);
   const [lastAgentResponse, setLastAgentResponse] = useState<string | null>(null);
+  const [turns, setTurns] = useState<TurnEntry[]>([]);
+  const [lastBargeIn, setLastBargeIn] = useState<Date | null>(null);
   const [error, setError] = useState<Error | null>(null);
 
   const orchestratorRef = useRef<TurnTaker | null>(null);
@@ -90,7 +118,10 @@ export function useTurnTaker(options: UseTurnTakerOptions): UseTurnTakerReturn {
     if (orchestratorRef.current) return orchestratorRef.current;
 
     const { createTurnTaker } = await import('@localmode/core');
-    const orchestrator = await createTurnTaker(optionsRef.current);
+    // Strip the hook-level onBargeIn callback — it is wired through the
+    // orchestrator's listener below, not through the core options.
+    const { onBargeIn, ...coreOptions } = optionsRef.current;
+    const orchestrator = await createTurnTaker(coreOptions);
     if (!mountedRef.current) {
       orchestrator.dispose().catch(() => {});
       return null;
@@ -105,11 +136,20 @@ export function useTurnTaker(options: UseTurnTakerOptions): UseTurnTakerReturn {
     orchestrator.onUserUtterance((text) => {
       if (!mountedRef.current) return;
       setLastUserUtterance(text);
+      setTurns((prev) => [...prev, { role: 'user', text, timestamp: new Date() }]);
     });
 
     orchestrator.onAgentResponse((text) => {
       if (!mountedRef.current) return;
       setLastAgentResponse(text);
+      setTurns((prev) => [...prev, { role: 'agent', text, timestamp: new Date() }]);
+    });
+
+    orchestrator.onBargeIn(() => {
+      if (!mountedRef.current) return;
+      setLastBargeIn(new Date());
+      // Read through the ref so callers can pass inline lambdas.
+      optionsRef.current.onBargeIn?.();
     });
 
     orchestrator.onError((err) => {
@@ -144,11 +184,17 @@ export function useTurnTaker(options: UseTurnTakerOptions): UseTurnTakerReturn {
     await t.dispose();
   }, []);
 
+  const clearTurns = useCallback(() => {
+    setTurns([]);
+  }, []);
+
   if (IS_SERVER) {
     return {
       state: 'idle',
       lastUserUtterance: null,
       lastAgentResponse: null,
+      turns: [],
+      lastBargeIn: null,
       error: null,
       isListening: false,
       isPlanning: false,
@@ -157,6 +203,7 @@ export function useTurnTaker(options: UseTurnTakerOptions): UseTurnTakerReturn {
       stop: async () => {},
       interrupt: () => {},
       dispose: async () => {},
+      clearTurns: () => {},
     };
   }
 
@@ -164,6 +211,8 @@ export function useTurnTaker(options: UseTurnTakerOptions): UseTurnTakerReturn {
     state,
     lastUserUtterance,
     lastAgentResponse,
+    turns,
+    lastBargeIn,
     error,
     isListening: state === 'listening',
     isPlanning: state === 'planning',
@@ -172,5 +221,6 @@ export function useTurnTaker(options: UseTurnTakerOptions): UseTurnTakerReturn {
     stop,
     interrupt,
     dispose,
+    clearTurns,
   };
 }

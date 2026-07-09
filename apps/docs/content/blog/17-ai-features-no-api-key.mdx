@@ -3,12 +3,12 @@ title: "17 AI Features You Can Add to Your App Without an API Key"
 description: "A practical guide to 17 production-ready AI features that run entirely in the browser - no API keys, no servers, no recurring costs. Each includes working code, model recommendations, and a live demo you can try right now."
 author: LocalMode
 date: 2026-02-28
-dateModified: "2026-05-28"
+dateModified: "2026-07-04"
 faq:
   - question: "What AI features can run in the browser without an API key?"
     answer: "At least 17 production-ready features including semantic search, sentiment analysis, text summarization, language translation, image captioning, object detection, OCR, voice transcription, text-to-speech, and cross-modal image search. Each uses an open-weight model that downloads once and runs via WebAssembly or WebGPU."
   - question: "How large are the AI models needed for browser-based inference?"
-    answer: "Individual models range from 8 MB (photo enhancement) to 284 MB (text summarization). Most apps use 2-4 models totaling 100-500 MB. Models are quantized ONNX weights cached in IndexedDB after the first download, so subsequent loads are instant and work offline."
+    answer: "Individual models range from 8 MB (photo enhancement) to 284 MB (text summarization). Most apps use 2-4 models totaling 100-500 MB. Models are quantized ONNX weights cached in the browser's Cache API after the first download, so subsequent loads are instant and work offline."
   - question: "How does local AI quality compare to cloud APIs like OpenAI?"
     answer: "For embeddings, local models score within 0.1 points of OpenAI on the MTEB benchmark (62.2 vs 62.3). Named entity recognition reaches 93-96% of GPT-5, and zero-shot classification hits 92-95%. Summarization and translation show larger gaps at roughly 80-85% of cloud quality."
   - question: "What packages do I need to add AI features to a JavaScript app?"
@@ -21,7 +21,7 @@ Every AI feature you add to your app usually means another API key to manage, an
 
 But modern browsers are powerful enough to run real ML models - the same transformer architectures behind cloud APIs - directly on the user's device. No servers. No API keys. No per-request costs. Data never leaves the browser tab.
 
-This is not a theoretical exercise. Below are 17 features you can ship today, each with a working code snippet using real function signatures from [LocalMode](https://localmode.dev), the model that powers it, and a link to a live demo running at [localmode.ai](https://localmode.ai).
+This is not a theoretical exercise. Below are 17 features you can ship today, each with a working code snippet using real function signatures from [LocalMode](https://localmode.dev), the model that powers it, and a link to a live demo in the [/blocks gallery](https://localmode.ai/blocks).
 
 ---
 
@@ -40,7 +40,7 @@ const { embedding } = await embed({ model, value: 'budget concerns' });
 const results = await db.search(embedding, { k: 5 });
 ```
 
-**Model:** `Xenova/bge-small-en-v1.5` (33 MB) | [Try the live demo](https://localmode.ai/semantic-search)
+**Model:** `Xenova/bge-small-en-v1.5` (33 MB) | [Try the live demo](https://localmode.ai/blocks/knowledge/semantic-search)
 
 ---
 
@@ -59,7 +59,7 @@ const { label, score } = await classify({
 // label: "POSITIVE", score: 0.9998
 ```
 
-**Model:** `Xenova/distilbert-base-uncased-finetuned-sst-2-english` (67 MB) | [Try the live demo](https://localmode.ai/sentiment-analyzer)
+**Model:** `Xenova/distilbert-base-uncased-finetuned-sst-2-english` (67 MB) | [Try the live demo](https://localmode.ai/blocks/text-insights/sentiment-analyzer)
 
 ---
 
@@ -79,7 +79,7 @@ const { summary } = await summarize({
 });
 ```
 
-**Model:** `Xenova/distilbart-cnn-6-6` (~284 MB quantized) | [Try the live demo](https://localmode.ai/text-summarizer)
+**Model:** `Xenova/distilbart-cnn-6-6` (~284 MB quantized) | [Try the live demo](https://localmode.ai/blocks/writing-tools/summarize)
 
 ---
 
@@ -99,7 +99,7 @@ const { translation } = await translate({
 // translation: "Hallo, wie geht es dir?"
 ```
 
-**Model:** `Xenova/opus-mt-en-*` (~100 MB per pair) | [Try the live demo](https://localmode.ai/translator)
+**Model:** `Xenova/opus-mt-en-*` (~100 MB per pair) | [Try the live demo](https://localmode.ai/blocks/writing-tools/translate)
 
 ---
 
@@ -118,7 +118,7 @@ const { caption } = await captionImage({
 // caption: "a golden retriever playing with a ball in a park"
 ```
 
-**Model:** `onnx-community/Florence-2-base-ft` (223 MB) | [Try the live demo](https://localmode.ai/image-captioner)
+**Model:** `onnx-community/Florence-2-base-ft` (223 MB) | [Try the live demo](https://localmode.ai/blocks/image-studio/image-captioner)
 
 ---
 
@@ -141,7 +141,7 @@ for (const obj of objects) {
 }
 ```
 
-**Model:** `onnx-community/dfine_n_coco-ONNX` (15 MB) | [Try the live demo](https://localmode.ai/object-detector)
+**Model:** `onnx-community/dfine_n_coco-ONNX` (15 MB) | [Try the live demo](https://localmode.ai/blocks/vision/object-detector)
 
 ---
 
@@ -159,7 +159,7 @@ const { text } = await extractText({
 });
 ```
 
-**Model:** `Xenova/trocr-small-printed` (~64 MB quantized) | [Try the live demo](https://localmode.ai/ocr-scanner)
+**Model:** `Xenova/trocr-small-printed` (~64 MB quantized) | [Try the live demo](https://localmode.ai/blocks/knowledge/semantic-search)
 
 ---
 
@@ -177,7 +177,7 @@ const redacted = redactPII(
 // redacted: "Contact John Smith at [EMAIL_REDACTED] or [PHONE_REDACTED]"
 ```
 
-**Model:** Pattern-based (0 MB, zero-dependency) + optional NER (108 MB) | [Try the live demo](https://localmode.ai/document-redactor)
+**Model:** Pattern-based (0 MB, zero-dependency) + optional NER (108 MB) | [Try the live demo](https://localmode.ai/blocks/privacy/pii-redactor)
 
 ---
 
@@ -200,7 +200,7 @@ segments?.forEach(seg => {
 });
 ```
 
-**Model:** `onnx-community/moonshine-tiny-ONNX` (28 MB) | [Try the live demo](https://localmode.ai/voice-notes)
+**Model:** `onnx-community/moonshine-tiny-ONNX` (28 MB) | [Try the live demo](https://localmode.ai/blocks/audio/voice-notes)
 
 ---
 
@@ -218,7 +218,7 @@ const { audio, sampleRate } = await synthesizeSpeech({
 });
 ```
 
-**Model:** `Xenova/mms-tts-eng` (~38 MB quantized) | [Try the live demo](https://localmode.ai/audiobook-creator)
+**Model:** `Xenova/mms-tts-eng` (~38 MB quantized) | [Try the live demo](https://localmode.ai/blocks/audio/audiobook-reader)
 
 ---
 
@@ -238,7 +238,7 @@ const { predictions } = await fillMask({
 // predictions[0].token: "paris", predictions[0].score: 0.95
 ```
 
-**Model:** `onnx-community/ModernBERT-base-ONNX` (151 MB) | [Try the live demo](https://localmode.ai/smart-autocomplete)
+**Model:** `onnx-community/ModernBERT-base-ONNX` (151 MB) | [Try the live demo](https://localmode.ai/blocks/writing-tools/complete)
 
 ---
 
@@ -258,7 +258,7 @@ const { labels, scores } = await classifyZeroShot({
 // labels: ["account access", "billing", ...], scores: [0.72, 0.68, ...]
 ```
 
-**Model:** `Xenova/mobilebert-uncased-mnli` (27 MB) | [Try the live demo](https://localmode.ai/email-classifier)
+**Model:** `Xenova/mobilebert-uncased-mnli` (27 MB) | [Try the live demo](https://localmode.ai/blocks/text-insights/text-classifier)
 
 ---
 
@@ -281,7 +281,7 @@ const { entities } = await extractEntities({
 // ]
 ```
 
-**Model:** `Xenova/bert-base-NER` (108 MB) | [Try the live demo](https://localmode.ai/document-redactor)
+**Model:** `Xenova/bert-base-NER` (108 MB) | [Try the live demo](https://localmode.ai/blocks/privacy/pii-redactor)
 
 ---
 
@@ -301,7 +301,7 @@ const { answer, score } = await answerQuestion({
 // answer: "Paris", score: 0.98
 ```
 
-**Model:** `Xenova/distilbert-base-cased-distilled-squad` (~66 MB quantized) | [Try the live demo](https://localmode.ai/qa-bot)
+**Model:** `Xenova/distilbert-base-cased-distilled-squad` (~66 MB quantized) | [Try the live demo](https://localmode.ai/blocks/knowledge/document-qa)
 
 ---
 
@@ -319,7 +319,7 @@ const { masks } = await segmentImage({
 });
 ```
 
-**Model:** `briaai/RMBG-1.4` (176 MB) | [Try the live demo](https://localmode.ai/background-remover)
+**Model:** `briaai/RMBG-1.4` (176 MB) | [Try the live demo](https://localmode.ai/blocks/image-studio/background-remover)
 
 ---
 
@@ -338,7 +338,7 @@ const { image } = await imageToImage({
 });
 ```
 
-**Model:** `Xenova/swin2SR-lightweight-x2-64` (~8 MB) | [Try the live demo](https://localmode.ai/photo-enhancer)
+**Model:** `Xenova/swin2SR-lightweight-x2-64` (~8 MB) | [Try the live demo](https://localmode.ai/blocks/image-studio/image-enhancer)
 
 ---
 
@@ -361,7 +361,7 @@ const { embedding: queryVec } = await embed({ model, value: 'sunset over the oce
 const results = await db.search(queryVec, { k: 10 });
 ```
 
-**Model:** `Xenova/clip-vit-base-patch32` (~154 MB quantized) | [Try the live demo](https://localmode.ai/cross-modal-search)
+**Model:** `Xenova/clip-vit-base-patch32` (~154 MB quantized) | [Try the live demo](https://localmode.ai/blocks/photo/image-search)
 
 ---
 
@@ -387,7 +387,7 @@ const results = await db.search(queryVec, { k: 10 });
 | 16 | Photo Enhancement | `imageToImage()` | `Xenova/swin2SR-lightweight-x2-64` | ~8 MB | strong for structured upscaling |
 | 17 | Cross-Modal Search | `embedImage()` | `Xenova/clip-vit-base-patch32` | ~154 MB | strong for cross-modal retrieval |
 
-Total size if you use every feature: under 2 GB quantized. In practice, most apps use 2-4 models that together weigh 100-500 MB, cached in IndexedDB after the first download, and available offline forever.
+Total size if you use every feature: under 2 GB quantized. In practice, most apps use 2-4 models that together weigh 100-500 MB, cached in the browser's Cache API after the first download, and available offline forever.
 
 ---
 
@@ -423,7 +423,7 @@ For React applications, add `@localmode/react` for hooks that handle loading sta
 npm install @localmode/react
 ```
 
-Models are downloaded from HuggingFace Hub on first use and cached in IndexedDB. Subsequent loads are instant and work fully offline.
+Models are downloaded from HuggingFace Hub on first use and cached in the browser's Cache API. Subsequent loads are instant and work fully offline.
 
 ---
 
@@ -455,7 +455,7 @@ Model sizes reflect the quantized ONNX weights served by Transformers.js - speci
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try LocalMode's AI features as installable blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

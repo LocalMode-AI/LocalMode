@@ -3,7 +3,7 @@ title: "Semantic Chunking: Split Documents by Topic, Not by Token Count"
 description: "Fixed-size chunking splits documents mid-thought, mid-paragraph, mid-argument. Semantic chunking uses embeddings to detect where topics actually change and splits at those boundaries - producing chunks that are topically coherent and dramatically better for retrieval. A deep dive into the algorithm, the API, and when to use each of LocalMode's four chunking strategies."
 author: LocalMode
 date: 2026-02-20
-dateModified: "2026-05-29"
+dateModified: "2026-07-04"
 faq:
   - question: "What is semantic chunking and how does it differ from fixed-size chunking?"
     answer: "Semantic chunking uses embeddings to detect where topics actually change in a document and splits at those natural boundaries. Unlike fixed-size chunking, which splits by character or token count and often cuts mid-thought, semantic chunking produces topically coherent segments that dramatically improve retrieval quality."
@@ -504,7 +504,7 @@ for (const result of results) {
 }
 ```
 
-Every line of this runs in the browser. No servers, no API keys, no data leaving the device. The embedding model downloads once from HuggingFace and is cached in IndexedDB. Subsequent loads are instant.
+Every line of this runs in the browser. No servers, no API keys, no data leaving the device. The embedding model downloads once from HuggingFace and is cached in the browser's Cache API. Subsequent loads are instant.
 
 ---
 
@@ -545,7 +545,7 @@ This post uses the following models and techniques:
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

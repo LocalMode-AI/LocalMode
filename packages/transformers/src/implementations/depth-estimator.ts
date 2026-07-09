@@ -12,6 +12,7 @@ import type {
   VisionUsage,
 } from '@localmode/core';
 import type { ModelSettings, TransformersDevice, ModelLoadProgress } from '../types.js';
+import { installResilientModelCache } from '../resilient-cache.js';
 
 // Dynamic import types
 type DepthEstimationPipeline = Awaited<
@@ -52,6 +53,7 @@ export class TransformersDepthEstimationModel implements DepthEstimationModel {
       const { pipeline, env } = await import('@huggingface/transformers');
 
       env.backends.onnx.logLevel = 'error';
+      installResilientModelCache(env);
 
       const pipe = await pipeline('depth-estimation', this.baseModelId, {
         device: this.settings.device ?? 'auto',

@@ -15,7 +15,13 @@
  */
 
 import type { ImageInput } from '../vision/types.js';
-import type { EmbeddingModel, DoEmbedResult, EmbeddingUsage, EmbeddingResponse } from '../embeddings/types.js';
+import type {
+  EmbeddingModel,
+  DoEmbedResult,
+  EmbeddingUsage,
+  EmbeddingResponse,
+  EmbedProgress,
+} from '../embeddings/types.js';
 
 // Re-export ImageInput so consumers don't need a separate vision import
 export type { ImageInput } from '../vision/types.js';
@@ -215,6 +221,78 @@ export interface EmbedManyImagesResult {
 
   /** Response metadata */
   response: EmbeddingResponse;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STREAMING EMBED IMAGE OPTIONS & RESULTS
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Options for the streamEmbedManyImages() function.
+ *
+ * @example
+ * ```ts
+ * for await (const { embedding, index } of streamEmbedManyImages({
+ *   model: transformers.multimodalEmbedding('Xenova/clip-vit-base-patch32'),
+ *   images: photoBlobs,
+ *   batchSize: 8,
+ *   onBatch: ({ index, count, total }) => console.log(`${index + count}/${total}`),
+ * })) {
+ *   await db.add({ id: `img-${index}`, vector: embedding });
+ * }
+ * ```
+ */
+export interface StreamEmbedManyImagesOptions {
+  /** The multimodal embedding model to use */
+  model: MultimodalEmbeddingModel | string;
+
+  /** The images to embed */
+  images: ImageInput[];
+
+  /** Batch size for processing (default: 32) */
+  batchSize?: number;
+
+  /**
+   * Opt-in to adaptive batch size computation based on device capabilities.
+   *
+   * When `true` and no explicit `batchSize` is provided, the batch size is
+   * computed from the device's CPU cores, memory, and GPU availability using
+   * `computeOptimalBatchSize()`.
+   *
+   * When both `batchSize` and `adaptiveBatching` are set, the explicit
+   * `batchSize` always takes precedence.
+   *
+   * @defaultValue `false`
+   *
+   * @see {@link computeOptimalBatchSize} for the underlying computation
+   */
+  adaptiveBatching?: boolean;
+
+  /** AbortSignal for cancellation */
+  abortSignal?: AbortSignal;
+
+  /** Maximum retry attempts per batch (default: 2) */
+  maxRetries?: number;
+
+  /** Custom headers to include in requests */
+  headers?: Record<string, string>;
+
+  /** Provider-specific options */
+  providerOptions?: Record<string, Record<string, unknown>>;
+
+  /** Callback after each batch is processed */
+  onBatch?: (progress: EmbedProgress) => void;
+}
+
+/**
+ * Single image embedding result from streaming.
+ */
+export interface StreamEmbedImageResult {
+  /** The generated embedding vector */
+  embedding: Float32Array;
+
+  /** Index of the source image in the input array */
+  index: number;
 }
 
 // ═══════════════════════════════════════════════════════════════

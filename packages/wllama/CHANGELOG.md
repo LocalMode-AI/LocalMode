@@ -1,5 +1,20 @@
 # @localmode/wllama
 
+## 3.1.0
+
+### Added
+
+- **GGUF model discovery** — `searchGGUFModels({ query, sort, cursor?, abortSignal? })` and `listGGUFFiles(repoId, { abortSignal? })` browse the 160,000+ GGUF repos on the anonymous HuggingFace API and list a repo's `.gguf` files with byte sizes and quantization labels. Both are `AbortSignal`-cancellable and run no code at import time; failures surface as a typed `HFApiError` (`kind: 'rate-limit' | 'network' | 'not-found'`). New exports: `searchGGUFModels`, `listGGUFFiles`, `HFApiError`, and the `HFSort`, `HFModelSearchResult`, `HFModelFile`, `HFApiErrorKind` types.
+
+### Changed
+
+- The CDN dynamic import of `@wllama/wllama` is centralized in a single internal loader module shared by the language-model, embedding, reranker, and cache-utils paths. No public API change.
+
+### Fixed
+
+- **Long-context models no longer abort the wasm32 load.** The default context length inferred from the catalog or GGUF metadata is now capped at 8192 before reaching `n_ctx`; models advertising native windows like 131072 tokens (e.g. the DeepSeek-R1 distills) requested a multi-GiB KV cache that overflowed the wasm32 4GiB heap. An explicit `settings.contextLength` is never capped.
+- **Reranking works now.** The CDN pin and `@wllama/wllama` dependency were `3.2.3`, which ships no rerank API — every `WllamaRerankerModel` call failed with `createRerank is not a function` after the GGUF download. Both are bumped to `^3.5.1` (the first version with `createRerank`), and the reranker now loads in reranking mode.
+
 ## 3.0.0
 
 ### Major Changes

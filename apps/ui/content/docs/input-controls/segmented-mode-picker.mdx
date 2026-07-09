@@ -1,0 +1,87 @@
+---
+title: "Segmented Mode Picker"
+description: "A pill toggle for 2–4 mutually-exclusive modes, plus a typed TabBar variant with disabledTabs gating."
+icon: Rows3
+---
+
+# Segmented Mode Picker
+
+The **Segmented Mode Picker** is a pill toggle for 2–4 mutually-exclusive named modes — OCR content-type, summary length, translation formality, and the like. It renders as a classic segmented control: a muted track with the active segment raised on a `bg-background` chip. It ships a typed **`TabBar`** variant: an underline tab bar with `disabledTabs` gating (e.g. an "Inspect" tab disabled until a model is selected).
+
+Both are fully controlled and purely presentational.
+
+**When to use it:** switch between a small fixed set of options that change how a task runs (length, format, mode).
+
+## Preview
+
+<ComponentPreview name="ui/input-controls/segmented-mode-picker" note="Pure UI — click between modes; the TabBar shows a disabled tab. No model download." />
+
+<OpenInV0 name="ui/input-controls/segmented-mode-picker" />
+
+## Installation
+
+<InstallTabs name="ui/input-controls/segmented-mode-picker" />
+
+### Dependencies
+
+- **Data source:** renders the controlled `items` / `selectedId` you pass and emits `onSelect` — works with any backend. Recommended LocalMode producer: feed the selected mode into any task hook, e.g. `useSummarize` length (optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `segmented-mode-picker.tsx` — both `SegmentedModePicker` and `TabBar`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/input-controls/segmented-mode-picker/segmented-mode-picker.tsx" name="SegmentedModePickerProps" />
+
+### `TabBar`
+
+<AutoTypeTable path="registry/localmode/input-controls/segmented-mode-picker/segmented-mode-picker.tsx" name="TabBarProps" />
+
+## Examples
+
+### Summary length picker
+
+```tsx
+import { useState } from 'react';
+import { SegmentedModePicker } from '@/components/segmented-mode-picker';
+
+export function LengthPicker() {
+  const [mode, setMode] = useState<'short' | 'medium' | 'long'>('medium');
+  return (
+    <SegmentedModePicker
+      items={[
+        { id: 'short', label: 'Short' },
+        { id: 'medium', label: 'Medium' },
+        { id: 'long', label: 'Long' },
+      ]}
+      selectedId={mode}
+      onSelect={setMode}
+    />
+  );
+}
+```
+
+### Typed `TabBar` with a disabled tab
+
+```tsx
+<TabBar
+  tabs={[
+    { id: 'browse', label: 'Browse' },
+    { id: 'inspect', label: 'Inspect' },
+  ]}
+  activeId={tab}
+  onSelect={setTab}
+  disabledTabs={['inspect']}
+/>
+```
+
+## Customization
+
+The active segment is raised on a `bg-background text-foreground shadow-sm` chip over the muted track by default; pass an `accent` class string to restyle it. Both components are generic over the id type, so `onSelect` is typed to your union. Everything is theme-driven via shadcn/ui CSS variables — edit the copied file to change spacing, sizing, or the underline treatment.
+
+## Accessibility
+
+The segmented control is a `role="radiogroup"` of `role="radio"` segments that announce their selected state via `aria-checked`; the `TabBar` variant is a `role="tablist"` of `role="tab"` items. The segment row `flex-wrap`s and its labels no longer `truncate`, so a long mode/VAD label wraps inside its segment (multi-line) instead of clipping at narrow widths (down to 375px). Selection is fully keyboard-operable and `getByRole('radio', { name })` resolves each segment.

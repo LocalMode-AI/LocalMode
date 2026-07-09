@@ -23,12 +23,25 @@ import { WLLAMA_MODELS } from './models.js';
 import { isCrossOriginIsolated, resolveModelUrl } from './utils.js';
 import { parseGGUFMetadata } from './gguf.js';
 
-type WllamaInstance = InstanceType<Awaited<typeof import('@wllama/wllama')>['Wllama']>;
+import { importWllama, WLLAMA_CDN_WASM, type WllamaInstance } from './wllama-loader.js';
 
 let corsWarningEmitted = false;
 
-const WLLAMA_CDN_WASM = 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.2.3/src/wasm/wllama.wasm';
-const WLLAMA_CDN_ESM = 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.2.3/esm/index.js';
+/**
+ * Cap applied to the DEFAULT context length inferred from the model catalog
+ * or GGUF metadata (never to an explicit `settings.contextLength`).
+ *
+ * The wllama runtime is wasm32: the whole process — model weights AND the
+ * KV cache sized by `n_ctx` — must fit in a 4GiB heap. Long-context models
+ * advertise native windows like 131072 tokens, whose KV cache alone is
+ * multi-GiB (e.g. DeepSeek-R1-Distill-Qwen-1.5B: 131072 tokens ≈ 3.5GiB →
+ * `ggml_aligned_malloc: insufficient memory` abort at load). 8192 keeps the
+ * default KV cache in the low hundreds of MB for small models while staying
+ * a useful window; callers that know their memory budget can still pass any
+ * `contextLength` explicitly.
+ */
+const DEFAULT_MAX_CONTEXT = 8192;
+
 
 /**
  * Resolve the WASM asset path for the current environment.
@@ -58,6 +71,7 @@ function resolveGpuLayers(settings: WllamaModelSettings): number | undefined {
   }
   if (settings.useWebGPU === true) {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- optional peer dep probed synchronously; import() would force this sync helper async
       const { isWebGPUSupported } = require('@localmode/core') as { isWebGPUSupported: () => boolean };
       if (isWebGPUSupported()) return -1;
     } catch { /* core not available */ }
@@ -66,23 +80,13 @@ function resolveGpuLayers(settings: WllamaModelSettings): number | undefined {
   }
   if (settings.useWebGPU === 'auto') {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- optional peer dep probed synchronously; import() would force this sync helper async
       const { isWebGPUSupported } = require('@localmode/core') as { isWebGPUSupported: () => boolean };
       if (isWebGPUSupported()) return -1;
     } catch { /* core not available */ }
     return undefined;
   }
   return undefined;
-}
-
-/**
- * Import Wllama from CDN ESM. Uses `new Function` to bypass bundler
- * module resolution — bundlers (Turbopack, Webpack) break wllama's
- * Web Worker when they transpile the @wllama/wllama package.
- * @internal
- */
-async function importWllama(): Promise<{ Wllama: new (config: { default: string }) => WllamaInstance }> {
-  const dynamicImport = new Function('u', 'return import(u)') as (url: string) => Promise<{ Wllama: new (config: { default: string }) => WllamaInstance }>;
-  return dynamicImport(WLLAMA_CDN_ESM);
 }
 
 /**
@@ -144,11 +148,11 @@ export class WllamaLanguageModel implements LanguageModel {
         if (!this.settings.contextLength) {
           try {
             if (catalogEntry) {
-              this.contextLength = catalogEntry.contextLength;
+              this.contextLength = Math.min(catalogEntry.contextLength, DEFAULT_MAX_CONTEXT);
             } else {
               const metadata = await parseGGUFMetadata(modelUrl);
               if (metadata.contextLength > 0) {
-                this.contextLength = metadata.contextLength;
+                this.contextLength = Math.min(metadata.contextLength, DEFAULT_MAX_CONTEXT);
               }
             }
           } catch { /* fall back to 4096 */ }

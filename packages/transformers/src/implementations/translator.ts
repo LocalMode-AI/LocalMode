@@ -11,6 +11,7 @@ import type {
   TranslationUsage,
 } from '@localmode/core';
 import type { ModelSettings, TransformersDevice, ModelLoadProgress } from '../types.js';
+import { installResilientModelCache } from '../resilient-cache.js';
 
 // Dynamic import types
 type TranslationPipeline = Awaited<
@@ -52,6 +53,7 @@ export class TransformersTranslationModel implements TranslationModel {
 
       // Suppress ONNX runtime warnings about node execution providers
       env.backends.onnx.logLevel = 'error';
+      installResilientModelCache(env);
 
       const pipe = await pipeline('translation', this.baseModelId, {
         device: this.settings.device ?? 'auto',

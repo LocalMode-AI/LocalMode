@@ -13,7 +13,7 @@
 
 import type { VectorDB, SearchResult } from '../types.js';
 import type { HybridSearchOptions, HybridSearchResult, BM25Options } from './types.js';
-import { DEFAULT_HYBRID_OPTIONS } from './types.js';
+import { DEFAULT_HYBRID_OPTIONS, TEXT_METADATA_FIELD } from './types.js';
 import { BM25 } from './bm25.js';
 
 /**
@@ -64,7 +64,7 @@ export class HybridSearch {
     metadata?: Record<string, unknown>
   ): Promise<void> {
     // Add to vector DB
-    await this.db.add({ id, vector, metadata: { ...metadata, _text: text } });
+    await this.db.add({ id, vector, metadata: { ...metadata, [TEXT_METADATA_FIELD]: text } });
 
     // Add to BM25 index
     this.bm25.add(id, text);
@@ -89,7 +89,7 @@ export class HybridSearch {
       documents.map((doc) => ({
         id: doc.id,
         vector: doc.vector,
-        metadata: { ...doc.metadata, _text: doc.text },
+        metadata: { ...doc.metadata, [TEXT_METADATA_FIELD]: doc.text },
       }))
     );
 

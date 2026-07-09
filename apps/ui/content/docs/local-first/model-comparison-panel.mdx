@@ -1,0 +1,48 @@
+---
+title: "Model Comparison Panel"
+description: "A side-by-side comparison of two scored entries with win-highlighted rows derived purely from props, plus onClear."
+icon: GitCompare
+---
+
+# Model Comparison Panel
+
+The **Model Comparison Panel** is a side-by-side comparison of two scored entries with labeled rows (Score, Size, Speed, Quality, Device, Dimensions) where winning rows are accent-highlighted and losing rows dimmed, plus an `onClear` dismissal. Win-highlighting is derived purely from props (no orchestration state). Bind to `useModelRecommendations`.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/model-comparison-panel" note="Two recommendations side by side with winning rows highlighted; Clear dismisses." />
+
+<OpenInV0 name="ui/local-first/model-comparison-panel" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/model-comparison-panel" />
+
+### Data source & dependencies
+
+**Data source:** renders the two scored entries you pass and emits `onClear` — works with any backend. Recommended producer: `useModelRecommendations` from `@localmode/react` (on-device, optional).
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `model-comparison-panel.tsx` — the `ModelComparisonPanel` component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/model-comparison-panel/model-comparison-panel.tsx" name="ModelComparisonPanelProps" />
+
+<AutoTypeTable path="registry/localmode/local-first/model-comparison-panel/model-comparison-panel.tsx" name="ComparisonEntry" />
+
+## Examples
+
+### Compare two models
+
+```tsx
+<ModelComparisonPanel entries={[a, b]} onClear={() => setCompare(null)} />
+```
+
+## Customization
+
+"Better" is higher for Score/Speed/Quality/Dimensions and lower for Size. The win highlight uses the `emerald` palette; the loser is dimmed. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

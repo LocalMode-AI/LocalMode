@@ -1,0 +1,82 @@
+---
+title: "Vector Export Panel"
+description: "An export surface for vector data: per-format export actions, corpus counts, a busy state, and a last-export summary banner."
+icon: FileDown
+---
+
+# Vector Export Panel
+
+The **Vector Export Panel** is the counterpart to the [Vector Import Flow](/docs/local-first/vector-import-flow): a record/dimension count line, a row per export format (native JSON with vectors, CSV, JSONL — each with a label, description, and vectors-included / text-only indicator), per-format export actions emitting `onExport(formatId)`, a busy state that disables all actions (with a spinner on the active format), a zero-records disabled state, and an optional last-export banner (format, records, human-readable size, filename).
+
+## Preview
+
+<ComponentPreview name="ui/local-first/vector-export-panel" note="Fixture demo — activating a format simulates a short export, then shows the last-export banner. No network." />
+
+<OpenInV0 name="ui/local-first/vector-export-panel" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/vector-export-panel" />
+
+### Data source & dependencies
+
+**Data source:** renders the formats/counts/exporting/last-export state you pass and emits `onExport(formatId)` — works with any backend. Recommended producer: `useImportExport` (`exportCSV`, `exportJSONL`) from `@localmode/react` plus a native JSON export (on-device, optional).
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `vector-export-panel.tsx` — the `VectorExportPanel` component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/vector-export-panel/vector-export-panel.tsx" name="VectorExportPanelProps" />
+
+<AutoTypeTable path="registry/localmode/local-first/vector-export-panel/vector-export-panel.tsx" name="ExportFormat" />
+
+<AutoTypeTable path="registry/localmode/local-first/vector-export-panel/vector-export-panel.tsx" name="LastExportSummary" />
+
+## Examples
+
+### Wiring to export functions
+
+Works with any export backend — pass a busy format id while the export runs, then a summary when it completes:
+
+```tsx
+const { exportCSV, exportJSONL } = useImportExport({ db });
+const [exporting, setExporting] = useState<string | false>(false);
+const [lastExport, setLastExport] = useState<LastExportSummary | null>(null);
+
+const runExport = async (formatId: string) => {
+  setExporting(formatId);
+  try {
+    const blob = formatId === 'csv' ? await exportCSV() : await exportJSONL();
+    downloadBlob(blob, `vectors.${formatId}`);
+    setLastExport({ formatId, records: count, bytes: blob.size, filename: `vectors.${formatId}` });
+  } finally {
+    setExporting(false);
+  }
+};
+
+<VectorExportPanel
+  formats={[
+    { id: 'csv', label: 'CSV', vectors: false },
+    { id: 'jsonl', label: 'JSONL', vectors: false },
+  ]}
+  recordCount={count}
+  exporting={exporting}
+  lastExport={lastExport}
+  onExport={runExport}
+/>
+```
+
+### Disabling while other work runs
+
+```tsx
+<VectorExportPanel formats={formats} recordCount={count} disabled={isImporting} onExport={runExport} />
+```
+
+## Customization
+
+`exporting` accepts `true` (disable everything) or a format id (also spin that format's action). The vectors-included / text-only indicator renders only when a format sets `vectors`; the zero-records note and disabled state kick in at `recordCount === 0`. The size in the last-export banner is formatted by the local `formatBytes` helper — edit its thresholds or units freely. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

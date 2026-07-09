@@ -1,0 +1,75 @@
+---
+title: "Waveform Activity Bars"
+description: "A pure-CSS row of pulsing bars that doubles as an audio-processing indicator, an idle empty-state, and a volume-reactive voice-agent visualizer."
+icon: AudioLines
+---
+
+# Waveform Activity Bars
+
+**Waveform Activity Bars** render a row of narrow vertical bars with a staggered, sinusoid-derived pulse. It needs no audio data — use it as an "active processing" cue, an idle empty-state illustration, or (with an explicit `state` + a `volume` callback) a voice-agent visualizer that reacts to live microphone or output loudness.
+
+The required `@keyframes` ships inside the component (injected once into `document.head`), so it animates standalone after `shadcn add`.
+
+**When to use it:** show that STT/TTS is working (`useTranscribe` / `useStreamSpeech` / `useVoiceRecorder` activity), fill an empty audio surface, or visualize agent states (connecting / listening / thinking / speaking).
+
+## Preview
+
+<ComponentPreview name="ui/audio/waveform-activity-bars" note="Pure CSS — no model download. The volume slider simulates a live analyser." />
+
+<OpenInV0 name="ui/audio/waveform-activity-bars" />
+
+## Installation
+
+<InstallTabs name="ui/audio/waveform-activity-bars" />
+
+### Dependencies
+
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+- No external audio dependency — it is pure CSS
+
+### Files installed
+
+- `waveform-activity-bars.tsx` — the component (bundles its keyframe)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/audio/waveform-activity-bars/waveform-activity-bars.tsx" name="WaveformActivityBarsProps" />
+
+## Examples
+
+### Active processing indicator
+
+```tsx
+import { WaveformActivityBars } from '@/components/waveform-activity-bars';
+
+export function Example() {
+  return <WaveformActivityBars active />;
+}
+```
+
+### Driven by a transcription hook
+
+```tsx
+import { WaveformActivityBars } from '@/components/waveform-activity-bars';
+import { useTranscribe } from '@localmode/react';
+
+export function TranscribeIndicator({ model }) {
+  const { isLoading } = useTranscribe({ model });
+  return <WaveformActivityBars active={isLoading} />;
+}
+```
+
+### Voice-agent state + live volume
+
+```tsx
+// Feed `volume` (0..1) from useVoiceRecorder().getVolume() — sample it in a
+// requestAnimationFrame loop while recording (or use any AnalyserNode source).
+<WaveformActivityBars state="listening" volume={recorder.getVolume()} />
+```
+
+## Customization
+
+The bars are positioned with Tailwind utilities and colored via the `color` prop (defaults to `var(--primary)`), so they inherit your theme. The pulse keyframe (`lm-waveform-pulse`) is injected once; if you prefer it in your global stylesheet, move the `KEYFRAME_CSS` block into `globals.css` and delete the injection effect from the copied file.
+
+When a `volume` is supplied the component switches from time-based animation to amplitude-based scaling — the bars track measured loudness instead of wall-clock time, keeping the visual decoupled from the audio source.

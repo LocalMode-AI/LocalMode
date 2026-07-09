@@ -83,6 +83,16 @@ export interface UseChatOptions {
   initialMessages?: ReactChatMessage[];
 }
 
+/**
+ * Lifecycle status of the useChat hook.
+ *
+ * - `'ready'` — idle, no request in flight
+ * - `'submitted'` — send/regenerate called, first chunk not yet arrived
+ * - `'streaming'` — chunks are flowing
+ * - `'error'` — the last request failed
+ */
+export type ChatStatus = 'ready' | 'submitted' | 'streaming' | 'error';
+
 /** Return type for the useChat hook */
 export interface UseChatReturn {
   /** All messages in the conversation */
@@ -91,14 +101,32 @@ export interface UseChatReturn {
   isStreaming: boolean;
   /** Error from the last failed operation */
   error: Error | null;
+  /** Token usage from the last completed turn (null until a turn completes) */
+  usage: import('@localmode/core').GenerationUsage | null;
+  /** Cumulative token usage across all completed turns this session */
+  totalUsage: import('@localmode/core').GenerationUsage;
+  /** Lifecycle status of the current request */
+  status: ChatStatus;
+  /** ID of the assistant message currently being streamed (null when idle) */
+  streamingMessageId: string | null;
+  /** Text variants for the last assistant turn (index 0 is the original reply) */
+  variants: string[];
+  /** Index of the variant currently shown as the last assistant message */
+  variantIndex: number;
   /** Send a user message and stream the assistant response */
   send: (text: string, options?: { images?: ImageAttachment[]; providerOptions?: Record<string, Record<string, unknown>> }) => Promise<void>;
   /** Cancel the current streaming response */
   cancel: () => void;
   /** Clear all messages (and persisted storage) */
   clearMessages: () => void;
+  /** Replace all messages; the new state is persisted when persistence is enabled */
+  setMessages: (messages: ReactChatMessage[]) => void;
   /** Update the system prompt for future requests */
   setSystemPrompt: (prompt: string) => void;
+  /** Re-run the last user turn, appending the result as a new variant of the last assistant reply */
+  regenerate: () => Promise<void>;
+  /** Show the variant at the given index as the last assistant message (clamped to valid range) */
+  setVariantIndex: (index: number) => void;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -113,6 +141,20 @@ export interface UseSemanticSearchOptions {
   db: import('@localmode/core').SemanticSearchDB;
   /** Number of results to return (default: 10) */
   topK?: number;
+  /** Metadata filter to apply to every search */
+  filter?: Record<string, unknown>;
+  /** Minimum similarity threshold for results */
+  threshold?: number;
+}
+
+/** Per-call overrides for useSemanticSearch's search() function */
+export interface SemanticSearchCallOptions {
+  /** Metadata filter for this call (overrides the hook-level filter) */
+  filter?: Record<string, unknown>;
+  /** Minimum similarity threshold for this call (overrides the hook-level threshold) */
+  threshold?: number;
+  /** Number of results for this call (overrides the hook-level topK) */
+  topK?: number;
 }
 
 /** Return type for the useSemanticSearch hook */
@@ -123,8 +165,10 @@ export interface UseSemanticSearchReturn {
   isSearching: boolean;
   /** Error from the last failed search */
   error: Error | null;
-  /** Execute a semantic search query */
-  search: (query: string) => Promise<void>;
+  /** Usage information from the last completed search (null until a search completes) */
+  usage: import('@localmode/core').SemanticSearchUsage | null;
+  /** Execute a semantic search query, optionally overriding filter/threshold/topK for this call */
+  search: (query: string, options?: SemanticSearchCallOptions) => Promise<void>;
   /** Reset results and error state */
   reset: () => void;
 }

@@ -8,6 +8,7 @@
 
 import type { ZeroShotClassificationModel, ClassificationUsage } from '@localmode/core';
 import type { ModelSettings, TransformersDevice, ModelLoadProgress } from '../types.js';
+import { installResilientModelCache } from '../resilient-cache.js';
 
 // Dynamic import types
 type ZeroShotClassificationPipeline = Awaited<
@@ -49,6 +50,7 @@ export class TransformersZeroShotModel implements ZeroShotClassificationModel {
 
       // Suppress ONNX runtime warnings about node execution providers
       env.backends.onnx.logLevel = 'error';
+      installResilientModelCache(env);
 
       const pipe = await pipeline('zero-shot-classification', this.baseModelId, {
         device: this.settings.device ?? 'auto',

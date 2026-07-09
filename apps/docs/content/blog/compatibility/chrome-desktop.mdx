@@ -1,6 +1,6 @@
 ---
 title: "Chrome Desktop"
-description: "Full LocalMode support on Chrome Desktop - WebGPU, WASM, IndexedDB, Web Workers, and all 136 curated models."
+description: "Full LocalMode support on Chrome Desktop - WebGPU, WASM, IndexedDB, Web Workers, and all 135 curated models."
 author: "LocalMode"
 date: "2026-04-11"
 dateModified: "2026-05-29"
@@ -8,7 +8,7 @@ faq:
   - question: "Does Chrome Desktop support WebGPU for AI inference?"
     answer: "Yes. Chrome Desktop has full WebGPU support since Chrome 113 (stable since 2023). This enables GPU-accelerated LLM inference at 30-90 tokens per second via @localmode/webllm. Chrome Desktop is the recommended development target for LocalMode."
   - question: "How much storage does model caching require on Chrome Desktop?"
-    answer: "Chrome grants up to 60% of total disk size per origin for IndexedDB storage. Model sizes vary from about 33MB for embeddings (BGE-small) to several gigabytes for larger LLMs. Use navigator.storage.persist() to prevent Chrome from evicting cached models under storage pressure."
+    answer: "Chrome grants up to 60% of total disk size per origin for browser storage. Model sizes vary from about 33MB for embeddings (BGE-small) to several gigabytes for larger LLMs. Use navigator.storage.persist() to prevent Chrome from evicting cached models under storage pressure."
   - question: "Can I use SharedArrayBuffer on Chrome Desktop?"
     answer: "Yes, but it requires Cross-Origin Isolation headers (Cross-Origin-Opener-Policy: same-origin and Cross-Origin-Embedder-Policy). SharedArrayBuffer enables multi-threaded WASM inference for improved performance but is not required for basic LocalMode functionality."
   - question: "What is the minimum Chrome Desktop version needed for LocalMode?"
@@ -19,7 +19,7 @@ faq:
 
 # Chrome Desktop
 
-Full LocalMode support on Chrome Desktop - WebGPU, WASM, IndexedDB, Web Workers, and all 136 curated models.
+Full LocalMode support on Chrome Desktop - WebGPU, WASM, IndexedDB, Web Workers, and all 135 curated models.
 
 *Category: Browser Compatibility*
 

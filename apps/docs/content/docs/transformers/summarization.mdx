@@ -14,7 +14,9 @@ Generate concise summaries from long text using abstractive summarization models
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [Text Summarizer](https://localmode.ai/text-summarizer) and [Meeting Assistant](https://localmode.ai/meeting-assistant) for working demos.
+  Try the [Text Summarizer block](https://localmode.ai/blocks/writing-tools/summarize) for on-demand
+  summarization, or the [Audio Studio block](https://localmode.ai/blocks/audio) to
+  transcribe and summarize recordings.
 </Callout>
 
 ## Recommended Models
@@ -26,7 +28,7 @@ Generate concise summaries from long text using abstractive summarization models
 
 ## Configurable Length
 
-Based on the [Text Summarizer](https://localmode.ai/text-summarizer) showcase app:
+Based on the [Text Summarizer block](https://localmode.ai/blocks/writing-tools/summarize):
 
 ```typescript
 import { transformers } from '@localmode/transformers';
@@ -61,7 +63,7 @@ const { summary: detailed } = await summarize({
 
 ## Meeting Notes Example
 
-Based on the [Meeting Assistant](https://localmode.ai/meeting-assistant) showcase app — combine speech-to-text with summarization:
+Based on the [Audio Studio block](https://localmode.ai/blocks/audio) — combine speech-to-text with summarization:
 
 ```typescript
 import { transcribe, summarize } from '@localmode/core';
@@ -90,13 +92,12 @@ const { summary } = await summarize({
   4. **Use AbortSignal** — Summarization can take several seconds; support cancellation
 </Callout>
 
-## Showcase Apps
+## Composed Blocks
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| Text Summarizer | Summarize articles and long-form content | [Demo](https://localmode.ai/text-summarizer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/text-summarizer) |
-| Meeting Assistant | Transcribe and summarize meeting recordings | [Demo](https://localmode.ai/meeting-assistant) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/meeting-assistant) |
-| Smart Writer | Summarize and rewrite content for different audiences | [Demo](https://localmode.ai/smart-writer) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/smart-writer) |
+| Text Summarizer | On-device article and document summarization | [Live](https://localmode.ai/blocks/writing-tools/summarize) · Install: `npx shadcn add @localmode/ui/blocks/writing-tools/summarize` |
+| Meeting Assistant | Audio or pasted transcript → DistilBART summary → Granite action items with priorities and .txt export | [Live](https://localmode.ai/blocks/audio/meeting-assistant) · Install: `npx shadcn add @localmode/ui/blocks/audio/meeting-assistant` |
 
 ## Next Steps
 

@@ -16,18 +16,41 @@ const FALLBACK_MIME_TYPE = 'audio/webm';
 export interface UseVoiceRecorderOptions {
   /** Preferred MIME type for recording (default: 'audio/webm;codecs=opus') */
   mimeType?: string;
+  /**
+   * Specific audio input device to record from (a `deviceId` from
+   * `navigator.mediaDevices.enumerateDevices()`). Forwarded to
+   * `getUserMedia` as `{ deviceId: { exact: deviceId } }` so the selected
+   * microphone is actually used — recording fails (with `error` set) if
+   * the device is unavailable rather than silently falling back.
+   */
+  deviceId?: string;
+  /**
+   * Additional audio track constraints merged into the `getUserMedia`
+   * request (e.g. `{ echoCancellation: true }`). When `deviceId` is also
+   * provided it takes precedence over any `constraints.deviceId`.
+   */
+  constraints?: MediaTrackConstraints;
 }
 
 /** Return type from useVoiceRecorder */
 export interface UseVoiceRecorderReturn {
   /** Whether audio is currently being recorded */
   isRecording: boolean;
+  /** The live MediaStream while recording, null otherwise */
+  stream: MediaStream | null;
   /** Error from recording (e.g., permission denied) */
   error: AppError | null;
   /** Start recording audio from the microphone */
   startRecording: () => Promise<void>;
   /** Stop recording and return the audio blob */
   stopRecording: () => Promise<Blob | null>;
+  /**
+   * Current input volume as RMS in [0, 1]. Returns 0 when not recording.
+   * The backing AnalyserNode is created lazily on the first call while
+   * recording and torn down on stop/unmount — call this from a
+   * `requestAnimationFrame` loop to drive level meters.
+   */
+  getVolume: () => number;
   /** Clear the error state */
   clearError: () => void;
 }
@@ -35,10 +58,11 @@ export interface UseVoiceRecorderReturn {
 /**
  * Hook for managing MediaRecorder lifecycle.
  *
- * Handles microphone permission, MIME type negotiation, recording
- * start/stop, and cleanup on unmount. Pairs naturally with `useTranscribe`.
+ * Handles microphone permission, device selection, MIME type negotiation,
+ * recording start/stop, live volume metering, and cleanup on unmount.
+ * Pairs naturally with `useTranscribe`.
  *
- * @param options - Optional MIME type configuration
+ * @param options - Optional MIME type / device / constraint configuration
  * @returns Recording state and controls
  *
  * @example
@@ -46,7 +70,7 @@ export interface UseVoiceRecorderReturn {
  * import { useVoiceRecorder, useTranscribe } from '@localmode/react';
  *
  * function VoiceInput() {
- *   const recorder = useVoiceRecorder();
+ *   const recorder = useVoiceRecorder({ deviceId: selectedMicId });
  *   const transcriber = useTranscribe({ model });
  *
  *   const handleStop = async () => {
@@ -66,24 +90,55 @@ export function useVoiceRecorder(
   options?: UseVoiceRecorderOptions
 ): UseVoiceRecorderReturn {
   const [isRecording, setRecording] = useState(false);
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<AppError | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
   const mountedRef = useRef(true);
+
+  // Lazy volume-metering plumbing — created on first getVolume() while
+  // recording, torn down on stop/unmount.
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const volumeBufferRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
+
+  /** Tear down the analyser graph and close the owned AudioContext. */
+  const teardownAnalyser = () => {
+    try {
+      sourceRef.current?.disconnect();
+    } catch {
+      // ignore — node may already be disconnected
+    }
+    sourceRef.current = null;
+    analyserRef.current = null;
+    volumeBufferRef.current = null;
+    const ctx = audioContextRef.current;
+    audioContextRef.current = null;
+    if (ctx && ctx.state !== 'closed') {
+      void Promise.resolve(ctx.close()).catch(() => {
+        // ignore close failures during teardown
+      });
+    }
+  };
 
   // Cleanup on unmount
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      teardownAnalyser();
       const recorder = mediaRecorderRef.current;
       if (recorder && recorder.state !== 'inactive') {
         recorder.stream.getTracks().forEach(track => track.stop());
         recorder.stop();
       }
       mediaRecorderRef.current = null;
+      streamRef.current = null;
     };
+     
   }, []);
 
   const startRecording = async () => {
@@ -91,8 +146,20 @@ export function useVoiceRecorder(
 
     setError(null);
 
+    let mediaStream: MediaStream | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Build the audio constraint: explicit deviceId wins over any
+      // constraints.deviceId; without either we keep the simple `true`.
+      const { deviceId, constraints } = options ?? {};
+      const audio: MediaStreamConstraints['audio'] =
+        deviceId || constraints
+          ? {
+              ...constraints,
+              ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+            }
+          : true;
+
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio });
 
       // Determine supported MIME type
       const preferredType = options?.mimeType ?? DEFAULT_MIME_TYPE;
@@ -101,7 +168,7 @@ export function useVoiceRecorder(
           ? preferredType
           : FALLBACK_MIME_TYPE;
 
-      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      const mediaRecorder = new MediaRecorder(mediaStream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -112,8 +179,15 @@ export function useVoiceRecorder(
       };
 
       mediaRecorder.start();
-      if (mountedRef.current) setRecording(true);
+      streamRef.current = mediaStream;
+      if (mountedRef.current) {
+        setStream(mediaStream);
+        setRecording(true);
+      }
     } catch (err) {
+      // Release the microphone if we acquired it before failing.
+      mediaStream?.getTracks().forEach(track => track.stop());
+
       if (!mountedRef.current) return;
 
       const isDenied =
@@ -133,12 +207,20 @@ export function useVoiceRecorder(
     return new Promise((resolve) => {
       const mediaRecorder = mediaRecorderRef.current;
       if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-        if (mountedRef.current) setRecording(false);
+        teardownAnalyser();
+        streamRef.current = null;
+        if (mountedRef.current) {
+          setRecording(false);
+          setStream(null);
+        }
         resolve(null);
         return;
       }
 
       mediaRecorder.onstop = () => {
+        // Release the volume meter before stopping the tracks.
+        teardownAnalyser();
+
         // Stop all tracks to release the microphone
         mediaRecorder.stream.getTracks().forEach(track => track.stop());
 
@@ -149,7 +231,11 @@ export function useVoiceRecorder(
 
         chunksRef.current = [];
         mediaRecorderRef.current = null;
-        if (mountedRef.current) setRecording(false);
+        streamRef.current = null;
+        if (mountedRef.current) {
+          setRecording(false);
+          setStream(null);
+        }
         resolve(blob);
       };
 
@@ -157,17 +243,64 @@ export function useVoiceRecorder(
     });
   };
 
+  const getVolume = (): number => {
+    if (IS_SERVER) return 0;
+
+    const activeStream = streamRef.current;
+    if (!activeStream) return 0;
+
+    // Lazily build AudioContext → MediaStreamSource → AnalyserNode once
+    // per recording session.
+    let analyser = analyserRef.current;
+    if (!analyser) {
+      const Ctor =
+        (globalThis as { AudioContext?: typeof AudioContext }).AudioContext ??
+        (globalThis as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctor) return 0;
+
+      try {
+        const ctx = new Ctor();
+        const source = ctx.createMediaStreamSource(activeStream);
+        analyser = ctx.createAnalyser();
+        analyser.fftSize = 2048;
+        source.connect(analyser);
+
+        audioContextRef.current = ctx;
+        sourceRef.current = source;
+        analyserRef.current = analyser;
+        volumeBufferRef.current = new Uint8Array(analyser.fftSize);
+      } catch {
+        return 0;
+      }
+    }
+
+    const buffer = volumeBufferRef.current;
+    if (!buffer) return 0;
+
+    analyser.getByteTimeDomainData(buffer);
+
+    // RMS over the time-domain samples (0–255 centered at 128) → [0, 1].
+    let sumSquares = 0;
+    for (let i = 0; i < buffer.length; i++) {
+      const v = (buffer[i] - 128) / 128;
+      sumSquares += v * v;
+    }
+    return Math.min(1, Math.sqrt(sumSquares / buffer.length));
+  };
+
   const clearError = () => setError(null);
 
   if (IS_SERVER) {
     return {
       isRecording: false,
+      stream: null,
       error: null,
       startRecording: async () => {},
       stopRecording: async () => null,
+      getVolume: () => 0,
       clearError: () => {},
     };
   }
 
-  return { isRecording, error, startRecording, stopRecording, clearError };
+  return { isRecording, stream, error, startRecording, stopRecording, getVolume, clearError };
 }

@@ -1,0 +1,110 @@
+---
+title: "Data Table Artifact"
+description: "A generic, sortable data table for rendering local row data — VectorDB results, model catalogs, eval rows, or generateObject() arrays — entirely client-side."
+icon: Table
+---
+
+# Data Table Artifact
+
+The **Data Table Artifact** is a docked-canvas, sortable data table for any **local** row data: VectorDB search results, a model catalog, evaluation rows, or the array output of [`generateObject()`](https://localmode.dev/docs/react). Click a column header to sort the rows ascending → descending → unsorted — all computed in-browser, never on a server.
+
+It is distinct from the inline `ScoredResultBarList` (a message-stream primitive): this is a *docked canvas* table you place beside the chat.
+
+**Local content only.** No server, no sandbox. Sorting reorders a copy of your rows client-side; the input array is untouched.
+
+**When to use it:** render a structured result set the user can scan and re-sort — e.g. a model picker, retrieval results, or an extracted-records table from a `generateObject()` call.
+
+## Preview
+
+<ComponentPreview name="ui/artifacts/data-table-artifact" note="Sorts local model-catalog rows entirely in your browser — no model download." />
+
+<OpenInV0 name="ui/artifacts/data-table-artifact" />
+
+## Installation
+
+<InstallTabs name="ui/artifacts/data-table-artifact" />
+
+### Dependencies
+
+- **Data source:** renders the rows you pass and sorts them client-side — works with any backend (any in-memory array). Recommended LocalMode producers: `useGenerateObject()` from `@localmode/react` or VectorDB search results (optional).
+- `lucide-react` — sort-direction icons
+- `ui/table` — the shadcn/ui table primitive (installed automatically as a registry dependency)
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `data-table-artifact.tsx` — the component (uses the `ui/table` primitive)
+- `ui/table.tsx` — the shadcn/ui table primitive (registry dependency)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/artifacts/data-table-artifact/data-table-artifact.tsx" name="DataTableArtifactProps" />
+
+### DataTableColumn
+
+<AutoTypeTable path="registry/localmode/artifacts/data-table-artifact/data-table-artifact.tsx" name="DataTableColumn" />
+
+## Examples
+
+### From a `generateObject()` array
+
+```tsx
+import { useGenerateObject, jsonSchema } from '@localmode/react';
+import { z } from 'zod';
+import { DataTableArtifact } from '@/components/artifacts/data-table-artifact';
+
+const schema = jsonSchema(
+  z.object({ rows: z.array(z.object({ name: z.string(), score: z.number() })) }),
+);
+
+export function ExtractedTable({ model }) {
+  const { data, execute } = useGenerateObject({ model, schema });
+  const rows = data?.object.rows ?? [];
+
+  return (
+    <DataTableArtifact
+      rows={rows}
+      columns={[
+        { key: 'name', header: 'Name' },
+        { key: 'score', header: 'Score', align: 'right' },
+      ]}
+    />
+  );
+}
+```
+
+### From VectorDB search results
+
+```tsx
+<DataTableArtifact
+  rows={results.map((r) => ({ id: r.id, score: r.score, title: r.metadata.title }))}
+  initialSortKey="score"
+  initialSortDirection="desc"
+  columns={[
+    { key: 'title', header: 'Title' },
+    { key: 'score', header: 'Similarity', align: 'right', cell: (r) => r.score.toFixed(3) },
+    { key: 'id', header: 'ID' },
+  ]}
+/>
+```
+
+### Inferred columns
+
+Omit `columns` and the table infers them from the first row's keys:
+
+```tsx
+<DataTableArtifact rows={rows} />
+```
+
+## Sorting
+
+Clicking a sortable header cycles **ascending → descending → unsorted**. Numbers, strings (natural/numeric-aware), booleans, and `Date` values are compared correctly; `null`/`undefined` sort first. Set `sortable: false` on a column to disable it, and `initialSortKey` / `initialSortDirection` to start pre-sorted.
+
+## Local-first boundary
+
+This is a **local** table. It renders data your app already has in memory (VectorDB results, model catalogs, `generateObject()` output) and sorts it client-side. It does not fetch from a server or run remote queries.
+
+## Customization
+
+Styled with shadcn/ui CSS-variable utilities via the `ui/table` primitive, so it inherits your theme. Because you own the file, provide a custom `cell` renderer per column (badges, links, formatted numbers), adjust alignment, or wrap it inside an [`Artifact`](/docs/artifacts/artifact) canvas.

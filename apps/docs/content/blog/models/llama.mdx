@@ -14,7 +14,7 @@ faq:
   - question: "What is the maximum context window for Llama models in the browser?"
     answer: "The wllama GGUF variants of Llama 3.2 (1B and 3B) and Llama 3.1 8B support up to 131,072 tokens, enabling processing of entire documents without chunking. WebLLM variants use 4,096-token contexts due to browser VRAM constraints."
   - question: "Can I run Llama models offline?"
-    answer: "Yes. All Llama variants work offline after the initial download, cached in IndexedDB via LocalMode's model caching system. No API keys or network connection is needed for inference."
+    answer: "Yes. All Llama variants work offline after the initial download, cached by the browser via LocalMode's model caching system. No API keys or network connection is needed for inference."
 ---
 
 # Llama Models in the Browser
@@ -152,7 +152,7 @@ Llama models are a strong choice when:
 - **You need text generation** - Llama is optimized for generation tasks with models across multiple size tiers.
 - **Browser compatibility matters** - Available through 3 providers (webllm, wllama, transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
 - **Size flexibility is important** - The 400MB–4.92GB range means you can target everything from mobile devices to high-end desktops with the same model family.
-- **Offline functionality is required** - All variants work offline after the initial download, cached in IndexedDB via LocalMode's model caching system.
+- **Offline functionality is required** - All variants work offline after the initial download, cached by the browser via LocalMode's model caching system.
 
 ## HuggingFace Model Cards
 

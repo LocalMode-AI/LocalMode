@@ -180,13 +180,15 @@ describe('trainPQ() validation', () => {
 // ============================================================================
 
 describe('pqQuantize()', () => {
-  let codebook: PQCodebook;
-
   // Train a codebook for use in quantize tests
   const vectors = Array.from({ length: 50 }, (_, i) => createTestVector(48, i));
 
   // Only build once since it's the same for all tests
-  codebook = trainPQ(vectors, { subvectors: 6, centroids: 16, maxIterations: 5 });
+  const codebook: PQCodebook = trainPQ(vectors, {
+    subvectors: 6,
+    centroids: 16,
+    maxIterations: 5,
+  });
 
   it('produces Uint8Array of correct length', () => {
     const vector = createTestVector(48, 99);
@@ -219,10 +221,12 @@ describe('pqQuantize()', () => {
 // ============================================================================
 
 describe('pqDequantize()', () => {
-  let codebook: PQCodebook;
-
   const vectors = Array.from({ length: 50 }, (_, i) => createTestVector(48, i));
-  codebook = trainPQ(vectors, { subvectors: 6, centroids: 16, maxIterations: 5 });
+  const codebook: PQCodebook = trainPQ(vectors, {
+    subvectors: 6,
+    centroids: 16,
+    maxIterations: 5,
+  });
 
   it('produces Float32Array of correct dimensions', () => {
     const vector = createTestVector(48, 99);

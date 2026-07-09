@@ -79,6 +79,8 @@ const model = isSummarizerAPISupported()
 const { summary } = await summarize({ model, text: 'Long article...' });
 ```
 
+See this pattern running in a real app: the [Writing Tools blocks](https://localmode.ai/blocks/writing-tools) use Chrome AI with automatic Transformers.js fallback — Write (Prompt API), Translate (Translator API), and Summarize (Summarizer API) each resolve a Chrome AI capability when available and fall back to Transformers.js otherwise, the canonical end-to-end example of the fallback pattern above. (The fourth block, Complete, is Transformers.js-only — there is no Chrome AI fill-mask to fall back from.)
+
 ## API
 
 ### `chromeAI.summarizer(settings?)`

@@ -1,0 +1,59 @@
+---
+title: "Vector Storage Observability"
+description: "VectorDB observability: a compression-stats badge, a three-tier storage estimate (Raw/SQ8/PQ), and a GPU-aware search-latency badge."
+icon: Database
+---
+
+# Vector Storage Observability
+
+The **Vector Storage Observability** set complements the Storage Meter (quota) with VectorDB-specific observability: a compression-stats badge (SQ8 ratio + before/after size, e.g. "4.0× — 15KB→3.7KB"), a three-tier storage estimate (Raw Float32 / SQ8 4× / PQ 8–32× with the active tier highlighted), and a GPU-aware search-latency badge (accented when WebGPU-accelerated). Values derive from compression stats and search timing, passed in as props (recommended producer: `getCompressionStats()` / `useStorageQuota` from `@localmode/react`, on-device, optional).
+
+## Preview
+
+<ComponentPreview name="ui/local-first/vector-storage-observability" note="Renders a representative compression badge, three-tier estimate, and a GPU latency badge." />
+
+<OpenInV0 name="ui/local-first/vector-storage-observability" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/vector-storage-observability" />
+
+### Data source & dependencies
+
+**Data source:** renders the compression stats + search timing you pass — works with any backend. Recommended producer: `getCompressionStats()` and `useStorageQuota` from `@localmode/react` (on-device, optional).
+- `@localmode/ui/lib/browser-utils` — `formatBytes` for the size readouts (installed automatically as a registry dependency)
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `vector-storage-observability.tsx` — the `VectorStorageObservability` component
+- `lib/browser-utils.ts` — generic browser helpers (`formatBytes`)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/vector-storage-observability/vector-storage-observability.tsx" name="VectorStorageObservabilityProps" />
+
+<AutoTypeTable path="registry/localmode/local-first/vector-storage-observability/vector-storage-observability.tsx" name="CompressionStatsLike" />
+
+## Examples
+
+### Bound to compression stats
+
+```tsx
+import { getCompressionStats } from '@localmode/core';
+
+const stats = await getCompressionStats(db); // async — returns Promise<CompressionStats>
+
+<VectorStorageObservability
+  stats={stats}
+  tier="sq8"
+  searchLatencyMs={searchMs}
+  webgpuAccelerated={usedGpu}
+/>
+```
+
+## Customization
+
+The latency badge accents (violet) when `webgpuAccelerated` is true. The three-tier estimate highlights the `tier` prop; non-active tiers dim. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

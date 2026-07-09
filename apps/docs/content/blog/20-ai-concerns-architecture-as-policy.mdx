@@ -3,7 +3,7 @@ title: "Architecture as Policy: Why Most AI Criticism Is Really About Where the 
 description: "We mapped the 20 most common criticisms of AI from Reddit, Hacker News, and industry reports. A pattern emerged: 15 of 20 target the deployment model, not the technology. Privacy, cost, lock-in, censorship, surveillance - these are properties of the client-server architecture, not of neural networks. Move the inference to the browser and they disappear."
 author: LocalMode
 date: "2026-05-22"
-dateModified: "2026-05-29"
+dateModified: "2026-07-04"
 faq:
   - question: "How many common AI criticisms are actually about deployment architecture rather than the technology itself?"
     answer: "Of the 20 most common AI criticisms mapped from Reddit, Hacker News, and industry reports, 15 are consequences of the client-server architecture rather than properties of neural networks. Privacy, cost, vendor lock-in, censorship, and surveillance all dissolve when inference moves from a cloud server to the user's browser."
@@ -203,7 +203,7 @@ The environmental dimension is harder to dismiss than the industry would like. G
 
 ### What Changes When Compute Happens at the Edge
 
-After the initial model download (33MB-2GB depending on the task, cached in IndexedDB with resumable chunked downloads), everything runs offline. Zero network round-trip. Zero data center contribution. The model runs on hardware the user already owns and is already powering.
+After the initial model download (33MB-2GB depending on the task, cached by the browser with resumable chunked downloads), everything runs offline. Zero network round-trip. Zero data center contribution. The model runs on hardware the user already owns and is already powering.
 
 | Concern | Cloud Architecture | Browser Architecture |
 |---------|-------------------|---------------------|
@@ -361,7 +361,7 @@ But the other fifteen? Those are not AI problems. They are architecture problems
 npm install @localmode/core @localmode/transformers
 ```
 
-That installs the entire AI stack. No API key. No billing account. No backend. The first function call downloads the model from HuggingFace Hub and caches it in IndexedDB. Every subsequent call loads from cache and works offline.
+That installs the entire AI stack. No API key. No billing account. No backend. The first function call downloads the model from HuggingFace Hub and caches it in the browser cache. Every subsequent call loads from cache and works offline.
 
 For LLM chat, add `@localmode/webllm`. For React hooks, add `@localmode/react`. For the hybrid architecture (local + cloud fallback), see <a href="/blog/hybrid-ai-architecture" target="_blank">the hybrid AI guide</a>.
 
@@ -407,7 +407,7 @@ r/LocalLLaMA, r/privacy, r/ChatGPT, r/MachineLearning, r/technology, Hacker News
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

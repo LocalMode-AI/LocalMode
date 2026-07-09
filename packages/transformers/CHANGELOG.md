@@ -1,5 +1,21 @@
 # @localmode/transformers
 
+## 4.1.0
+
+### Added
+
+- **Resilient model-file cache (default on).** Installs a custom Transformers.js cache (`env.useCustomCache` + `env.customCache`) over the same browser Cache API storage the provider already uses (`transformers-cache`, honoring `env.cacheKey`, so previously cached models keep hitting) whose write path can never fail a model load: a failed write serves the fetched network response, warns once per URL per session, and retries next load — killing the intermittent `NetworkError: Cache.add() encountered a network error` failure class. Installed idempotently; no-ops when `caches` is undefined (Node/SSR keeps the stock `FileCache`) and never overwrites a user-supplied `env.customCache`. Opt out with `createTransformers({ resilientCache: false })`. New exports: `createResilientModelCache`, `installResilientModelCache`, `setResilientModelCacheEnabled`, and the `TransformersProviderSettings.resilientCache` setting (default `true`).
+
+### Changed
+
+- `ModelLoadProgress.status` JSDoc now documents that `'progress_total'` is never emitted — Transformers.js only reports `initiate`/`download`/`progress`/`done`/`ready`; the value stays in the union for backward type compatibility only.
+
+### Fixed
+
+- Cross-encoder reranking produced no ranking signal. `doRerank` fed `pipe([query, doc])` to the text-classification pipeline, which scores the two texts independently — the document never influenced the score, and single-logit models (e.g. `Xenova/ms-marco-MiniLM-L-6-v2`) collapsed to a constant `0`. Reranking now encodes real (query, document) pairs via `AutoTokenizer` (`text_pair`) + `AutoModelForSequenceClassification`, applying sigmoid to single-logit heads and softmax to multi-class heads, and observes `abortSignal` between batches.
+- Vision-language and generative-OCR models (Qwen3.5/Qwen-VL/Gemma 4, GLM-OCR, LightOnOCR-2) failed to load on the WASM device with `Could not find an implementation for GatherBlockQuantized` — the hardcoded q4/fp16 default dtype uses ops onnxruntime-web only implements on the WebGPU EP. The default is now device-aware: WebGPU keeps the q4/fp16 mix; WASM uses fp32 `embed_tokens` + `vision_encoder` with the q4 decoder. An explicit `settings.dtype` still overrides.
+- English-only Whisper checkpoints (e.g. `whisper-tiny.en`) no longer fail every transcription with "Cannot specify `task` or `language` for an English-only model." The `language: 'en'` / `task: 'transcribe'` defaults now apply only to multilingual checkpoints; English-only models drop redundant values and pass anything else through.
+
 ## 4.0.0
 
 ### Breaking Changes

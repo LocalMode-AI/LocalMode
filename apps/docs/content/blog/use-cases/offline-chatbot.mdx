@@ -6,7 +6,7 @@ date: "2026-05-05"
 dateModified: "2026-05-29"
 faq:
   - question: "How large is the model download for an offline chatbot?"
-    answer: "Qwen2.5-1.5B at Q4_K_M is 986MB. Smaller options include SmolLM2-135M (70MB) for basic responses and Qwen2.5-0.5B (386MB) for better quality. All models cache permanently in IndexedDB after download."
+    answer: "Qwen2.5-1.5B at Q4_K_M is 986MB. Smaller options include SmolLM2-135M (70MB) for basic responses and Qwen2.5-0.5B (386MB) for better quality. All models cache permanently in the browser after download."
   - question: "Can an offline chatbot access a local knowledge base?"
     answer: "Yes. Embed your knowledge base documents into a VectorDB during setup. At query time, retrieve relevant context with db.search() and include it in the LLM prompt. This RAG pattern works entirely offline since both the VectorDB and LLM are local."
   - question: "Which browsers support the offline chatbot?"
@@ -27,7 +27,7 @@ This is a common challenge for teams building modern applications. Traditional a
 
 ## The Solution
 
-Create an offline-capable chatbot using LocalMode's LLM providers. The model downloads once during setup (or on first use with onProgress feedback), caches in IndexedDB, and runs entirely in the browser from that point forward. Use streamText() for responsive streaming, generateObject() for structured data extraction, and combine with a local VectorDB for RAG-powered conversations grounded in your knowledge base. The wllama provider ensures the chatbot works in every browser, not just Chrome.
+Create an offline-capable chatbot using LocalMode's LLM providers. The model downloads once during setup (or on first use with onProgress feedback), caches on-device, and runs entirely in the browser from that point forward. Use streamText() for responsive streaming, generateObject() for structured data extraction, and combine with a local VectorDB for RAG-powered conversations grounded in your knowledge base. The wllama provider ensures the chatbot works in every browser, not just Chrome.
 
 ### Why Local-First?
 
@@ -35,7 +35,7 @@ Building this feature with on-device inference provides three structural advanta
 
 1. **Zero marginal cost** - After the initial model download, every inference operation is free. No per-token fees, no monthly API bills, no surprise invoices. This matters especially for features used frequently or by many users.
 2. **Architectural privacy** - User data never leaves the device. This is not a policy promise ("we won't look at your data") but an architectural guarantee: the data physically cannot reach any server because the processing happens in the browser tab.
-3. **Offline capability** - Once models are cached in IndexedDB, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
+3. **Offline capability** - Once models are cached by the browser, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
 
 ## Technology Stack
 

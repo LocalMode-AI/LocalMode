@@ -1,0 +1,80 @@
+---
+title: "Parameter Slider"
+description: "An inline range slider with a live value readout for tuning local generation parameters — temperature, top-k, top-p, max tokens, GPU layers, KV-cache."
+icon: SlidersHorizontal
+---
+
+# Parameter Slider
+
+The **Parameter Slider** is an inline range slider with a live value readout for reversible adjustment of a local generation parameter — temperature, top-k, top-p, max tokens, GPU layers, KV-cache quant. It is fully controlled, and the emitted value feeds straight into your next local generation call.
+
+It is built on the shadcn/ui [`Slider`](https://ui.shadcn.com/docs/components/slider) primitive, so it inherits your theme. Wire `value` / `onChange` into the options you pass to [`useGenerateText()`](https://localmode.dev/docs/react) or [`useChat()`](https://localmode.dev/docs/react).
+
+**When to use it:** a settings panel or chat composer where the user tunes how the local model generates.
+
+## Preview
+
+<ComponentPreview name="ui/input-controls/parameter-slider" note="Pure UI — drag the sliders; the readout updates live. No model download." />
+
+<OpenInV0 name="ui/input-controls/parameter-slider" />
+
+## Installation
+
+<InstallTabs name="ui/input-controls/parameter-slider" />
+
+### Dependencies
+
+- **Data source:** renders the controlled `value` you pass and emits `onChange` — works with any backend. Recommended LocalMode producer: feed the value into `useGenerateText` / `useChat` options (optional).
+- `radix-ui` — the underlying slider primitive
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically)
+
+### Files installed
+
+- `parameter-slider.tsx` — the component
+- `ui/slider.tsx` — the shadcn/ui slider primitive (registry dependency)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/input-controls/parameter-slider/parameter-slider.tsx" name="ParameterSliderProps" />
+
+## Examples
+
+### Tune temperature for `useGenerateText`
+
+```tsx
+import { useState } from 'react';
+import { useGenerateText } from '@localmode/react';
+import { ParameterSlider } from '@/components/parameter-slider';
+
+export function GenSettings({ model }) {
+  const [temp, setTemp] = useState(0.7);
+  const { execute } = useGenerateText({ model, temperature: temp });
+
+  return (
+    <ParameterSlider
+      label="Temperature"
+      value={temp}
+      onChange={setTemp}
+      min={0}
+      max={2}
+      step={0.1}
+      precision={1}
+    />
+  );
+}
+```
+
+### Integer parameter with a unit
+
+```tsx
+<ParameterSlider label="Max tokens" value={maxTokens} onChange={setMaxTokens} min={16} max={2048} step={16} unit="tokens" />
+```
+
+## Customization
+
+Set `precision` for decimal readouts (temperature, top-p) and `unit` for a suffix. The slider track and thumb use shadcn/ui CSS variables (`bg-primary`, `border-primary`), so the control matches your theme. Because you own the file, you can add tick marks or snap-to presets by editing `parameter-slider.tsx`.
+
+## Accessibility
+
+The control renders the Radix `Slider` primitive **directly** (not a wrapped `<Slider>`) because Radix ignores `aria-label` on the Root — so the accessible name and formatted readout must land on the focusable Thumb, the element that actually carries `role="slider"`. The Thumb takes its `aria-label` from `label` and an `aria-valuetext` formatted with `precision` + `unit` (e.g. `"0.7"`, `"512 tokens"`), so screen readers announce the parameter name and a human-readable value instead of the raw number, and `getByRole('slider', { name: label })` resolves it uniquely.

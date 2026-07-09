@@ -1,0 +1,76 @@
+---
+title: "Synced Transcript Viewer"
+description: "A karaoke-style transcript viewer that highlights words in lockstep with audio playback using word-level timestamps — click a word to seek."
+icon: Captions
+---
+
+# Synced Transcript Viewer
+
+**Synced Transcript Viewer** plays local audio and highlights each word in lockstep with playback using word-level alignment timestamps. The playback-time → word-index mapping is pure client-side (binary search on the `timeupdate` position). Clicking a word seeks the audio to its start.
+
+Feed `words` from [`useTranscribe`](https://localmode.dev/docs/react) with `returnTimestamps: 'word'` (segments arrive on `data.segments`) and `audio` from the same local recording / TTS Blob.
+
+**When to use it:** a read-along transcript for a meeting recording, podcast, or voice note where users want to follow — and jump around in — the audio.
+
+## Preview
+
+<ComponentPreview name="ui/audio/synced-transcript-viewer" note="Generates a tone WAV + evenly-spaced word timestamps so the karaoke highlight advances with playback and click-to-seek works — no model download." />
+
+<OpenInV0 name="ui/audio/synced-transcript-viewer" />
+
+## Installation
+
+<InstallTabs name="ui/audio/synced-transcript-viewer" />
+
+### Data source & dependencies
+
+**Data source:** renders the `words` (with timestamps) + `audio` you pass — works with any backend. Recommended producer: `useTranscribe({ returnTimestamps: 'word' })` (with the Whisper STT model from `@localmode/transformers`) from `@localmode/react` (on-device, optional).
+- `@localmode/ui/lib/browser-utils` — `useObjectUrl` for Blob lifecycle (installed automatically as a registry dependency)
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+
+### Files installed
+
+- `synced-transcript-viewer.tsx` — the component
+- `lib/browser-utils.ts` — generic browser helpers (`useObjectUrl`)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/audio/synced-transcript-viewer/synced-transcript-viewer.tsx" name="SyncedTranscriptViewerProps" />
+
+## Examples
+
+### Read-along from a transcription
+
+```tsx
+import { SyncedTranscriptViewer, type TimedWord } from '@/components/synced-transcript-viewer';
+import { useTranscribe } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+
+export function ReadAlong({ audio }: { audio: Blob }) {
+  const { data, execute } = useTranscribe({
+    model: transformers.speechToText('onnx-community/whisper-base'),
+    returnTimestamps: 'word',
+  });
+
+  // Word-level segments arrive on data.segments — map them into TimedWord[].
+  const words: TimedWord[] = (data?.segments ?? []).map((s) => ({
+    text: s.text,
+    start: s.start,
+    end: s.end,
+  }));
+
+  return (
+    <>
+      <button onClick={() => execute(audio)}>Transcribe</button>
+      {words.length > 0 && <SyncedTranscriptViewer words={words} audio={audio} />}
+    </>
+  );
+}
+```
+
+`returnTimestamps` can also be overridden per call: `execute(audio, { returnTimestamps: 'word' })`.
+
+## Customization
+
+The active-word lookup is a binary search over `start` times, so it stays cheap for long transcripts. Past / active / upcoming words get distinct classes (`text-foreground`, `bg-primary text-primary-foreground`, `text-muted-foreground`) — restyle them in the copied file. If your timestamps are segment-level rather than per-word, split each segment's text across its `[start, end]` window before passing it in.

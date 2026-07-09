@@ -1,0 +1,64 @@
+---
+title: "Prompt Input Attachments"
+description: "Image/file attachment via picker, paste, and drag-and-drop with preview thumbnails, hovercard previews, media-category detection, and removal."
+icon: Paperclip
+---
+
+# Prompt Input Attachments
+
+**PromptInputAttachments** adds image/file attachment to the composer via file picker, paste, and drag-and-drop. It renders preview thumbnails with per-item removal, a hovercard preview, media-category auto-detection (image / video / audio / document), and upload-state chips. Attachments match the standard base64 image content model, using the copy-owned `readFileAsDataUrl` helper from `lib/browser-utils`.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/prompt-input-attachments" />
+
+<OpenInV0 name="ui/conversation/prompt-input-attachments" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/prompt-input-attachments" />
+
+### Data source & dependencies
+
+**Data source:** emits attachment changes and reads local files — works with any backend. Recommended producer: `useChat` from `@localmode/react` (on-device, optional).
+- `@localmode/ui/lib/browser-utils` — `readFileAsDataUrl` for file reading (installed automatically as a registry dependency)
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `prompt-input-attachments.tsx` — `PromptInputAttachments`
+- `lib/browser-utils.ts` — generic browser helpers (`readFileAsDataUrl`)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/prompt-input-attachments/prompt-input-attachments.tsx" name="PromptInputAttachmentsProps" />
+
+## Examples
+
+### Inside a `PromptInputProvider`
+
+```tsx
+import {
+  PromptInput,
+  PromptInputProvider,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from '@/components/prompt-input';
+import { PromptInputAttachments } from '@/components/prompt-input-attachments';
+
+<PromptInputProvider>
+  <PromptInputAttachments />
+  <PromptInput onSubmit={(text, attachments) => send(text, { images: attachments })}>
+    <PromptInputTextarea />
+    <PromptInputTools><span /><PromptInputSubmit /></PromptInputTools>
+  </PromptInput>
+</PromptInputProvider>
+```
+
+## Customization
+
+Change the `accept` filter, the thumbnail size, or the `mediaCategory` mapping. The provider integration means attachments clear automatically on submit; drop the provider and use the controlled `value`/`onChange` props for fully external control.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useChat`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

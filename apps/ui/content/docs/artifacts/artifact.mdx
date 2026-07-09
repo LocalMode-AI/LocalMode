@@ -1,0 +1,134 @@
+---
+title: "Artifact"
+description: "A docked side-panel/canvas shell that renders generated code, docs, SVG, or HTML beside the chat — driven entirely by a local model."
+icon: PanelRight
+---
+
+# Artifact
+
+The **Artifact** is a Claude-style docked side-panel/canvas: a vertical surface with a header (title + description), an action toolbar (copy / download / refresh / close), and a scrollable content region. It renders generated output — code, a markdown doc, an SVG, raw HTML — *beside* the chat instead of inline in the message stream.
+
+It is composed from sub-parts: `Artifact` (root) → `ArtifactHeader` → `ArtifactTitle` / `ArtifactDescription` and `ArtifactActions` → `ArtifactAction` / `ArtifactClose`, plus `ArtifactContent` for the scrollable body.
+
+**Bring your own content.** The shell is purely presentational — it renders whatever content you pass in, from any backend. A local language model is a recommended (optional) producer: drive it with [`useGenerateText()`](https://localmode.dev/docs/react) / [`useGenerateObject()`](https://localmode.dev/docs/react) and there is **no server, no sandbox, no remote execution.** Copy writes to the clipboard, download produces a real `Blob`, and refresh re-runs your generation — all in-browser.
+
+**When to use it:** show a generated file/document in a dedicated canvas that the user can copy, download, or regenerate, separate from the conversational stream.
+
+## Preview
+
+<ComponentPreview name="ui/artifacts/artifact" note="Runs a REAL local model (transformers · Granite 4.0 350M, ~120MB) on click and renders its output in the docked canvas. First run downloads the model." />
+
+<OpenInV0 name="ui/artifacts/artifact" />
+
+## Installation
+
+<InstallTabs name="ui/artifacts/artifact" />
+
+### Dependencies
+
+- **Data source:** the canvas renders whatever content you pass it — works with any backend. Recommended LocalMode producers: `useGenerateText()` / `useGenerateObject()` from `@localmode/react` (optional).
+- `@localmode/ui/lib/browser-utils` — the copy-owned `downloadBlob` helper for artifact export (installed automatically as a registry dependency)
+- `lucide-react` — toolbar icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `artifact.tsx` — the canvas shell and all sub-parts
+- `lib/browser-utils.ts` — the copy-owned file helpers (if not already present)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/artifacts/artifact/artifact.tsx" name="ArtifactProps" />
+
+### ArtifactAction
+
+<AutoTypeTable path="registry/localmode/artifacts/artifact/artifact.tsx" name="ArtifactActionProps" />
+
+### ArtifactClose
+
+<AutoTypeTable path="registry/localmode/artifacts/artifact/artifact.tsx" name="ArtifactCloseProps" />
+
+## Examples
+
+### Drive the canvas from a local model
+
+```tsx
+import { useGenerateText } from '@localmode/react';
+import { transformers } from '@localmode/transformers';
+import {
+  Artifact,
+  ArtifactHeader,
+  ArtifactTitle,
+  ArtifactDescription,
+  ArtifactActions,
+  ArtifactAction,
+  ArtifactClose,
+  ArtifactContent,
+} from '@/components/artifacts/artifact';
+
+export function GeneratedCodeCanvas() {
+  const model = transformers.languageModel('onnx-community/granite-4.0-350m-ONNX-web');
+  const { data, isLoading, execute } = useGenerateText({ model, maxTokens: 200 });
+  const code = data?.text ?? '';
+
+  return (
+    <Artifact className="h-96 w-[28rem]">
+      <ArtifactHeader>
+        <div>
+          <ArtifactTitle>generated.ts</ArtifactTitle>
+          <ArtifactDescription>From a local model run</ArtifactDescription>
+        </div>
+        <ArtifactActions>
+          {/* content only → copy to clipboard */}
+          <ArtifactAction content={code} label="Copy" />
+          {/* content + fileName → download a Blob */}
+          <ArtifactAction content={code} fileName="generated.ts" label="Download" />
+          {/* onClick only → custom action (re-run) */}
+          <ArtifactAction onClick={() => execute('Write a slugify function')} label="Refresh" />
+          <ArtifactClose onClick={close} />
+        </ArtifactActions>
+      </ArtifactHeader>
+      <ArtifactContent>
+        {isLoading ? <p>Generating…</p> : <pre>{code}</pre>}
+      </ArtifactContent>
+    </Artifact>
+  );
+}
+```
+
+### Toggle the panel open/closed
+
+```tsx
+<Artifact open={isOpen}>{/* … */}</Artifact>
+```
+
+When `open` is `false`, the canvas renders `null`. Wire `ArtifactClose`'s `onClick` to your state setter to hide it.
+
+## Toolbar action behaviors
+
+`ArtifactAction` picks a built-in behavior from its props — all client-side:
+
+| Props | Behavior |
+| ----- | -------- |
+| `content` only | Copy `content` to the clipboard (shows a transient check) |
+| `content` + `fileName` | Download `content` as a `Blob` named `fileName` |
+| `onClick` (no `content`) | Run your callback (e.g. refresh re-runs generation) |
+
+## Local-first boundary
+
+This is a **local canvas**. It does not embed a Sandbox, a Web Preview iframe, a Terminal, Test Results, a Commit/Package-Info panel, a File Tree, or Env Vars — those members of external artifact catalogs require remote code execution, deploys, or CI/VCS tooling and are deliberately out of scope (no server / no API key / no telemetry). See [Out of scope](#out-of-scope) below.
+
+## Out of scope
+
+The following server/IDE-centric artifact members from external AI-UI libraries are **refused** in LocalMode because they reintroduce a server/cloud dependency:
+
+- **Sandbox** / **Terminal** — remote/cloud code execution.
+- **Web Preview** — deployed-app iframe.
+- **Test Results** / **Stack Trace** / **Commit** / **Package Info** / **File Tree** / **Env Vars** — CI/VCS/IDE dev tooling.
+
+A live **JSXPreview** (generative-UI: rendering model-emitted JSX/JSON) is **deferred, not refused** — it is local-first-capable and high-interest, but rendering arbitrary model-emitted UI carries arbitrary-code-execution risk and needs a safe allowlist/sandbox design first. Tracked as a future change.
+
+## Customization
+
+The shell is styled entirely with shadcn/ui CSS-variable utilities (`bg-card`, `text-card-foreground`, `border-border`, `bg-primary`, `hover:bg-accent`), so it inherits your theme. Because you own the file, swap the `lucide-react` icons, adjust the toolbar layout, or render markdown/SVG/HTML inside `ArtifactContent` however you like.

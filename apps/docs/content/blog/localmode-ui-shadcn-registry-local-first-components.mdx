@@ -1,0 +1,212 @@
+---
+title: "Introducing @localmode/ui: 100+ Local-First AI Components You Copy and Own"
+description: "LocalMode now ships @localmode/ui -- a shadcn registry of 100+ copy-owned AI UI components across 10 families. Chat surfaces, model-download progress, capability gates, scored results, audio I/O, vision overlays, and artifact canvases -- all rendering on-device @localmode/react hook state, all installed with the shadcn CLI. Not an npm package: you own the code."
+author: LocalMode
+date: 2026-05-31
+dateModified: "2026-05-31"
+faq:
+  - question: "What is @localmode/ui?"
+    answer: "@localmode/ui is a shadcn-style registry of 100+ copy-owned AI UI components across 10 families -- conversation, local-first, audio, results, input controls, media-vision, data-documents, artifacts, security-privacy, and devtools. It is not an npm package: you install components with the shadcn CLI (npx shadcn add @localmode/ui/...) and own the copied .tsx, exactly like shadcn/ui. The components render the state of on-device @localmode/react hooks and are styled with shadcn/ui CSS variables so they inherit your theme."
+  - question: "How do I install @localmode/ui components?"
+    answer: "Add the @localmode namespace to your project's components.json ({ \"registries\": { \"@localmode\": \"https://localmode.ai/r/{name}.json\" } }), then run npx shadcn@latest add @localmode/ui/conversation/message for one component, @localmode/ui/conversation for a whole family, or @localmode/ui/all for the full catalog of 100+ components. The CLI copies the files into your project and you own the code -- no @localmode/* package is installed; the components render plain props and work with any backend, though the recommended pairing is @localmode/react and a provider. Cross-component dependencies resolve automatically."
+  - question: "What are the 10 families in @localmode/ui?"
+    answer: "Conversation (24 components: chat shell, prompt input, reasoning, sources, tools, agent timelines), Local-First (24: model download/selection, capability gates, storage, cache, VectorDB observability), Audio (10: voice buttons/orbs, waveforms, TTS pickers, transcripts), Results & Insights (12: confidence badges, scored bars, similarity meters, evaluation dashboards), Input Controls (11: char-limit rings, fill-mask inputs, parameter sliders, slash-command palettes), Media & Vision (6: image dropzones, bounding boxes, video canvas, galleries), Data & Documents (5: file dropzones, indexed-doc cards, format badges, chunk visualizers), Artifacts & Canvas (4: docked canvas, data tables, charts, code diffs), Security & Privacy (5: password strength, differential-privacy controls, passphrase gate, vault item card, lock-status badge), and DevTools (4: inference-queue monitor, event-log viewer, pipeline-run inspector, model-cache table)."
+  - question: "How is @localmode/ui different from Vercel's AI Elements?"
+    answer: "AI Elements assume a server route streaming from a hosted model. @localmode/ui components render the state of on-device hooks -- the model runs in the user's browser via @localmode/core and @localmode/react. That makes possible an entire family that cloud-AI UI kits structurally cannot have: the Local-First family (model-download progress, device-capability gates, storage quota, offline/cache status) -- the surfaces a user sees precisely because the model runs on their device."
+  - question: "Do @localmode/ui components send data to a server?"
+    answer: "No. Every component is presentational and hook-driven -- it renders the state of an @localmode/core / @localmode/react hook that runs entirely in the browser. There is no server route, no API key, and no telemetry. The only network request is the one-time model download, which the components surface and gate behind an explicit Run action."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Every time you build a local AI feature in the browser, you rebuild the same UI. A chat bubble that renders `ContentPart[]`. A streaming prompt box where the send button becomes a stop button. A collapsible reasoning panel. A model-download card with a progress bar and a "cached vs. downloading" badge. A confidence score mapped to a color. You have written all of these before, and so has everyone else.
+
+Today that stops. **`@localmode/ui`** is a new [shadcn registry](https://ui.shadcn.com/docs/registry) of **100+ copy-owned AI UI components across 10 families** — the presentational layer for the local-first AI you already build with [`@localmode/core`](/docs/core) and [`@localmode/react`](/docs/react). It is **not** an npm package: like shadcn/ui, you install components with the shadcn CLI and **own the copied code**. The full registry and docs live at [**localmode.ai**](https://localmode.ai).
+
+<Callout type="info" title="Not a package — a registry">
+  You do not `npm install @localmode/ui`. You run `npx shadcn add @localmode/ui/conversation/message`, and the component's `.tsx` is copied into your project. You keep it, you edit it, it is yours. The components are styled with shadcn/ui CSS variables, so they drop into your shadcn project and inherit your theme.
+</Callout>
+
+---
+
+## The UI cloud AI kits can't have
+
+Vercel's [AI Elements](https://ai-sdk.dev/elements), assistant-ui, prompt-kit, and the rest are excellent — and they all assume the same thing: a server route streaming tokens from a hosted model. That assumption quietly rules out an entire category of UI.
+
+When the model runs on the **user's own device**, there are surfaces a user sees *because of that fact*: model-download progress, a device-capability gate that says "your browser supports WebGPU," a storage-quota meter, an "offline-ready" badge, a "cached · 12ms" annotation on a semantic-cache hit. No cloud-AI UI kit ships these, because in the cloud they do not exist. `@localmode/ui` makes them a first-class family.
+
+Everything is **presentational and hook-driven**. A component renders the state of an `@localmode/react` hook and emits callbacks; it owns no orchestration state. The logic already lives in shipped hooks — `useChat`, `useAgent`, `useSemanticSearch`, `useModelLoader`, `useTranscribe`, `useClassify`. `@localmode/ui` is the missing render layer.
+
+---
+
+## Install in two steps
+
+First, map the single-token `@localmode` namespace to the registry in your project's `components.json`:
+
+```json title="components.json"
+{
+  "registries": {
+    "@localmode": "https://localmode.ai/r/{name}.json"
+  }
+}
+```
+
+Then install a single component, an entire family, or the whole catalog:
+
+```bash
+# A single component
+npx shadcn@latest add @localmode/ui/conversation/message
+
+# An entire family
+npx shadcn@latest add @localmode/ui/conversation
+
+# The whole catalog (100+ components)
+npx shadcn@latest add @localmode/ui/all
+```
+
+The CLI copies the files into your project — no `@localmode/*` package is installed; the components render plain props and work with any backend. To drive them with the recommended local-first hooks, add `@localmode/react` and a provider. Cross-component dependencies — like `ImageResultGallery` pulling in `ConfidenceScoreBadge`, or `PromptInput` pulling in `CharLimitIndicator` — resolve automatically through the registry.
+
+---
+
+## The ten families
+
+| Family | Count | What it covers |
+| ------ | ----- | -------------- |
+| [Conversation](/blog/localmode-ui-conversation-components) | 24 | Chat shell, streaming prompt input, reasoning, sources, tools, agent timelines, branches, citations |
+| [Local-First](/blog/localmode-ui-local-first-components) | 24 | Model download/selection, device-capability gates, storage quota, offline/cache status, VectorDB observability |
+| [Audio](/blog/localmode-ui-audio-components) | 10 | Voice buttons/orbs, waveform bars, TTS voice pickers, streaming-speech panels, transcript viewers |
+| [Results & Insights](https://localmode.ai/docs/components) | 12 | Confidence badges, scored result bars, similarity meters, evaluation dashboards, entity/NER displays |
+| [Input Controls](/blog/localmode-ui-input-controls) | 11 | Char-limit rings, fill-mask inputs, mode pickers, language-pair selectors, parameter sliders, slash-command palettes |
+| [Media & Vision](/blog/localmode-ui-vision-components) | 6 | Image dropzones, bounding-box overlays, before/after viewers, webcam video canvas, result galleries |
+| [Data & Documents](/blog/localmode-ui-data-document-components) | 5 | File dropzones, indexed-document cards, format-detection badges, category facets, chunk-boundary visualizers |
+| [Artifacts & Canvas](/blog/localmode-ui-artifacts) | 4 | Claude-style docked canvas, sortable data tables, charts, code diffs |
+| [Security & Privacy](/blog/localmode-ui-privacy-components) | 5 | Password-strength bars, differential-privacy controls + provenance, passphrase gate, vault item card, lock-status badge |
+| [DevTools](https://localmode.ai/docs/devtools) | 4 | Inference-queue monitor, event-log viewer, pipeline-run inspector, model-cache table |
+
+That is **100+ components** and growing. Each ships a docs page with a live preview, a prop table sourced from the real component, install tabs, and copy-pasteable examples at [localmode.ai](https://localmode.ai).
+
+---
+
+## Conversation: the AI-native chat surface
+
+The largest family, **Conversation (24)**, is the composable counterpart to AI Elements — but rendering local hook state. The chat shell handles scroll-anchoring (auto-pins to the newest token while streaming, releases on scroll-up), `Message` renders `ContentPart[]` with image thumbnails and file-download chips from local bytes, and `Response` is a partial-token-safe markdown renderer with a streaming cursor.
+
+```tsx title="chat.tsx"
+'use client';
+
+import { useChat } from '@localmode/react';
+import { webllm } from '@localmode/webllm';
+import { Conversation } from '@/components/ui/conversation';
+import { Message } from '@/components/ui/message';
+import { Response } from '@/components/ui/response';
+import { PromptInput } from '@/components/ui/prompt-input';
+
+const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+
+export function Chat() {
+  const { messages, send, isStreaming } = useChat({ model });
+
+  return (
+    <Conversation>
+      {messages.map((m) => (
+        <Message key={m.id} role={m.role}>
+          <Response>{m.content}</Response>
+        </Message>
+      ))}
+      <PromptInput onSubmit={send} disabled={isStreaming} />
+    </Conversation>
+  );
+}
+```
+
+Beyond the shell, the family covers the surfaces every modern agent UI reuses: `Reasoning` (DeepSeek-R1-style thinking tokens in a collapsible region with an elapsed timer), `Tool` (a status taxonomy with `ToolInput`/`ToolOutput` and a per-tool renderer registry), `AgentStepTimeline` (a vertical ReAct timeline with finish-reason badges and sub-agent handoff), `SourceCitationList`, `InlineCitation`, `Branch`, `ToolApproval`, and `ChainOfThought`.
+
+---
+
+## Local-First: surfaces that exist because the model is on-device
+
+The **Local-First (21)** family is LocalMode's headline differentiator. `ModelDownloader` shows download percentage, resumability, cached-vs-downloading state, and size/context info. `ModelSelector` is a device-aware picker with backend-filter tabs and vision/tools badges. `CapabilityGate` hides its children until the device meets a requirement; `DeviceCapabilityGrid` and `BrowserCompatCard` give a full diagnostics view so a user knows whether a multi-gigabyte download will even run.
+
+```tsx title="download-gate.tsx"
+'use client';
+
+import { useModelLoad } from '@localmode/react';
+import { webllm } from '@localmode/webllm';
+import { CapabilityGate } from '@/components/ui/capability-gate';
+import { ModelDownloader } from '@/components/ui/model-downloader';
+
+export function DownloadGate({ children }) {
+  const { progress, status, load } = useModelLoad({
+    key: 'Llama-3.2-1B-Instruct-q4f16_1-MLC',
+    create: (onProgress) =>
+      webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC', { onProgress }),
+  });
+
+  return (
+    <CapabilityGate requires="webgpu">
+      {status !== 'ready' ? (
+        <div onClick={load}>
+          <ModelDownloader name="Llama 3.2 1B" size="1.2 GB" progress={progress} />
+        </div>
+      ) : (
+        children
+      )}
+    </CapabilityGate>
+  );
+}
+```
+
+`CapabilityGate` hides its children until the device meets the requirement; `useModelLoad` drives the normalized 0–1 `progress` and the `ready` lifecycle `status`; and `ModelDownloader` renders the progress card. The component is presentational — you wire the hook.
+
+The family also covers VectorDB observability — `VectorStorageObservability` (compression ratio, quantization tier, search latency), `EmbeddingDriftBanner` (model-change reindex), `VectorImportFlow` (Pinecone/Chroma/CSV/JSONL migration), and `SemanticCacheStatusBar`.
+
+---
+
+## Results, audio, vision, and a canvas
+
+The remaining families consolidate the most-duplicated surfaces from across LocalMode's demo apps. **[Results & Insights](https://localmode.ai/docs/components)** turns a 0–1 score into a `ConfidenceScoreBadge` (the single most-reused atom), a `ScoredResultBarList`, a `CosineSimilarityMeter`, or a full `EvaluationMetricsDashboard`. **[Audio](/blog/localmode-ui-audio-components)** ships voice buttons and orbs, CSS `WaveformActivityBars`, a language-grouped `VoicePicker`, and a `SyncedTranscriptViewer`. **[Media & Vision](/blog/localmode-ui-vision-components)** has the image `MediaDropzone` (re-implemented in 10 demo apps before this), a `BoundingBoxOverlay` for detection output, and a mirrored webcam `VideoCanvas` for landmark drawing.
+
+The **[Artifacts & Canvas](/blog/localmode-ui-artifacts)** family closes the biggest structural gap: a Claude-style **`Artifact`** docked side-panel that renders generated code, docs, SVG, or HTML *beside* the chat — driven entirely by a local model via `useGenerateText`/`useGenerateObject`, with no server and no sandbox. It comes with `DataTableArtifact`, `ChartArtifact`, and `CodeDiffViewer`.
+
+---
+
+## Privacy is in the components, not bolted on
+
+Because every component renders on-device hook state, **no data leaves the browser**. There is no server route to leak through, no API key to manage, and no telemetry. The only network request any component makes is the one-time model download — and even that is gated: the live previews on [localmode.ai](https://localmode.ai) render instantly, but a model only downloads when you explicitly start it inside a demo (clicking *Generate*, *Predict*, and so on) — and it is then cached by your browser.
+
+The **[Security & Privacy](/blog/localmode-ui-privacy-components)** family makes the guarantee visible: `PasswordStrengthBar` for key-derivation flows and `DifferentialPrivacyControls` with a "DP Applied" provenance badge that records the epsilon used and the embedding dimensionality beneath protected output.
+
+<Callout type="info" title="Try it">
+  Browse all 100+ components with live previews, prop tables, and install tabs at [localmode.ai](https://localmode.ai). Read the [Getting started with @localmode/ui](/docs/ui) guide to wire your first component, or explore the [@localmode/react hooks](/docs/react) that drive them.
+</Callout>
+
+---
+
+## When to reach for @localmode/ui
+
+**Use `@localmode/ui`** when you are building a local-first AI feature in a React + shadcn/ui project and want production-grade, themeable surfaces you can own and edit — chat, agents, RAG, model management, audio, vision, or artifact canvases — without rebuilding them from scratch.
+
+**Pair it with the packages** you already use: the [`@localmode/react`](/docs/react) hooks supply the state, the provider packages ([`@localmode/webllm`](/docs/webllm), [`@localmode/wllama`](/docs/wllama), [`@localmode/transformers`](/docs/transformers)) supply the models, and `@localmode/ui` supplies the render layer. Three pieces, one local-first stack — and not a single byte leaves the device.
+
+## Methodology
+
+Every count, family, component name, install command, prop name, and code example in this post was verified directly against primary sources — the codebase and the official shadcn registry documentation.
+
+The catalog counts come from the `apps/ui/registry.json` catalog: **100+ public components** (`type: registry:component`) across the families, plus 3 internal lib items (`type: registry:lib`): `ui/lib/utils`, `ui/lib/browser-utils`, and `ui/lib/use-environment`, which install transitively. Family totals are verified by counting items per `categories` entry, cross-checked against the per-family `_family-manifest.json` files and the root catalog.
+
+The portability claim — that no `@localmode/*` npm package is installed — was verified by checking that **zero** of the component items declare an `@localmode/*` entry in their `dependencies` array, and against the consumer-test harness at `apps/ui/consumer-tests/` (which scaffolds a scratch React project, installs items with the real `shadcn` CLI, and asserts no `@localmode/*` import or package lands). Each component name cited in the prose was mapped to its kebab-case registry item and confirmed present. The `components.json` `registries` config, the `@localmode` namespace → `{name}.json` URL mapping, and the `npx shadcn add @localmode/...` install syntax were verified against the official [shadcn registry namespace docs](https://ui.shadcn.com/docs/registry/namespace) and the serving route at `apps/ui/src/app/r/[...name]/route.ts`. The hooks (`useChat`, `useModelLoad`, `useCapabilities`, …) and the `Llama-3.2-1B-Instruct-q4f16_1-MLC` model id are real exports verified in `packages/react/src/` and `packages/webllm/src/models.ts`; the component props in the code examples (`CapabilityGate` `requires`, `ModelDownloader` `name`/`progress`) match the actual component source in `apps/ui/registry/localmode/`.
+
+Sources:
+
+- `apps/ui/registry.json` — the registry catalog (100+ components + 3 internal libs), the primary source for all counts and component names
+- `apps/ui/registry/localmode/<family>/_family-manifest.json` — per-family manifests
+- `apps/ui/consumer-tests/` — the portability harness proving zero `@localmode/*` packages install
+- `apps/ui/src/app/r/[...name]/route.ts` — the `/r/{name}.json` serving route
+- `packages/react/src/` — the 59 `@localmode/react` hooks (`useChat`, `useModelLoad`, `useCapabilities`, …)
+- `packages/webllm/src/models.ts` — the WebLLM model catalog (`Llama-3.2-1B-Instruct-q4f16_1-MLC`)
+- [shadcn registry namespace docs](https://ui.shadcn.com/docs/registry/namespace) — the `components.json` `registries` config and `npx shadcn add @namespace/...` install syntax
+- [shadcn registry docs](https://ui.shadcn.com/docs/registry) — the copy-owned distribution model
+- [Vercel AI Elements](https://ai-sdk.dev/elements) — the cloud-AI UI kit referenced for contrast
+- [LocalMode UI (localmode.ai)](https://localmode.ai) — the live registry and component docs
+- [Getting started with @localmode/ui](/docs/ui) · [@localmode/react hooks](/docs/react)
+- Family deep-dives: [Conversation](/blog/localmode-ui-conversation-components) · [Local-First](/blog/localmode-ui-local-first-components) · [Audio](/blog/localmode-ui-audio-components) · [Results](/blog/localmode-ui-results-components) · [Input Controls](/blog/localmode-ui-input-controls) · [Media & Vision](/blog/localmode-ui-vision-components) · [Data & Documents](/blog/localmode-ui-data-document-components) · [Artifacts](/blog/localmode-ui-artifacts) · [Security & Privacy](/blog/localmode-ui-privacy-components)

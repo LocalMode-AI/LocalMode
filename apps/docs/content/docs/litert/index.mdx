@@ -18,7 +18,7 @@ Run Google's LiteRT-LM `.litertlm` models directly in the browser via a WebGPU b
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [LLM Chat](https://localmode.ai/llm-chat) for a working demo -- LiteRT is selectable as a fourth backend alongside WebLLM, wllama, and ONNX.
+  See the [Chat block](https://localmode.ai/blocks/chat) for a working demo -- a flagship multi-provider chat that includes the LiteRT catalog alongside transformers, WebLLM, and wllama, fully on-device. LiteRT is selectable as a fourth backend.
 </Callout>
 
 ## Features
@@ -196,6 +196,22 @@ import { deleteModelCache } from '@localmode/litert';
 await deleteModelCache('gemma-4-E2B');
 ```
 
+## Model Caching & Offline
+
+Downloaded `.litertlm` weights are stored in the browser **Cache API**, in a cache named `litert-models` — not IndexedDB, and not OPFS. Each entry is keyed by the model's resolved download URL, so a catalog ID, a HuggingFace shorthand, and the full URL for the same file all resolve to the same cache entry.
+
+The management functions above map directly onto that store:
+
+- **`preloadModel(modelId)`** — downloads the weights (with progress), validates them by initializing a LiteRT engine, persists the response into the `litert-models` cache, then releases the engine. This is the call that *writes* the cache; persisting is best-effort, so a Cache API failure never fails the preload itself.
+- **`isModelCached(modelId)`** — checks `litert-models` for an entry matching the resolved model URL. Returns `false` when the Cache API is unavailable (insecure context, unsupported browser).
+- **`deleteModelCache(modelId)`** — removes the model's entry from `litert-models`. Warns on failure instead of throwing.
+
+Every model load checks `litert-models` first. Once a model is cached, `litert.languageModel(...)` streams the weights straight out of the Cache API with no network request — generation works fully offline. Note that a plain model load does **not** write the cache: only `preloadModel()` persists weights, so call it once (for example behind an explicit download button) to make a model offline-capable and instant across sessions.
+
+<Callout type="warn" title="Service workers must not cache .litertlm downloads">
+  If your app ships a service worker (e.g. a PWA), do **not** route or cache `.litertlm` model downloads through it — the provider caches weights itself under `litert-models`. Intercepting these multi-GB requests breaks download progress reporting and duplicates gigabytes of storage; treat model hosts (e.g. `huggingface.co`) as network-only pass-through routes. See [Building Offline-First AI Apps With Progressive Web Apps](/blog/offline-first-ai-pwa) for the full service-worker recipe.
+</Callout>
+
 ## Browser Compatibility
 
 Check whether the current browser can run LiteRT *before* committing to a multi-GB model download:
@@ -293,8 +309,8 @@ try {
   />
 </Cards>
 
-## Showcase Apps
+## Composed Block
 
-| App      | Description                                                            | Links                                                                                                                                       |
-| -------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| LLM Chat | Chat with LiteRT models alongside WebLLM, wllama, and ONNX backends    | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |
+| Block | Description | Links |
+|-----|-------------|-------|
+| Chat | Multi-provider LLM chat (transformers, WebLLM, wllama, LiteRT) with vision, reasoning, semantic cache, and agent mode | [Live](https://localmode.ai/blocks/chat) · Install: `npx shadcn add @localmode/ui/blocks/chat` |

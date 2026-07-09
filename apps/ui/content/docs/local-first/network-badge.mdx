@@ -1,0 +1,53 @@
+---
+title: "Network Badge"
+description: "A reactive online/offline indicator plus an OfflineReady badge that signals the app can run with no network."
+icon: Wifi
+---
+
+# Network Badge
+
+The **Network Badge** is a reactive online/offline indicator sourced from `useNetworkStatus`. Because local models keep working without a network, "offline" is informational, not an error — pair it with **Offline Ready**, which signals that the app's required model is cached on-device and can run with no connectivity.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/network-badge" note="Reflects the real online/offline state — toggle DevTools offline to watch it react." />
+
+<OpenInV0 name="ui/local-first/network-badge" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/network-badge" />
+
+### Data source & dependencies
+
+**Data source:** reads online/offline state via the bundled `useNetworkStatus` navigator hook — self-contained, works in any React app, no backend required. (It mirrors `useNetworkStatus` from `@localmode/react`.)
+- `@localmode/ui/lib/use-environment` — the bundled `useNetworkStatus` navigator hook (installed automatically as a registry dependency)
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `network-badge.tsx` — `NetworkBadge` + `OfflineReady`
+- `lib/use-environment.ts` — the bundled `useNetworkStatus` navigator hook
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/network-badge/network-badge.tsx" name="NetworkBadgeProps" />
+
+<AutoTypeTable path="registry/localmode/local-first/network-badge/network-badge.tsx" name="OfflineReadyProps" />
+
+## Examples
+
+### Online/offline + offline-ready
+
+```tsx
+import { NetworkBadge, OfflineReady } from '@/components/network-badge';
+
+<NetworkBadge />
+<OfflineReady ready={isModelCached} />
+```
+
+## Customization
+
+Both badges use shadcn/ui tokens with `emerald`/`amber` accents. `OfflineReady` takes a `ready` boolean from your cache check — when true the app can run fully offline. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

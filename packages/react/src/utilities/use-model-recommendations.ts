@@ -90,7 +90,7 @@ export interface UseModelRecommendationsReturn {
   isLoading: boolean;
 
   /** Error state */
-  error: { message: string } | null;
+  error: Error | null;
 
   /** Re-trigger detection and recommendation computation */
   refresh: () => void;
@@ -138,7 +138,7 @@ export function useModelRecommendations(
   const [recommendations, setRecommendations] = useState<UseModelRecommendationsReturn['recommendations']>([]);
   const [capabilities, setCapabilities] = useState<Record<string, unknown> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<{ message: string } | null>(null);
+  const [error, setError] = useState<Error | null>(null);
   const mountedRef = useRef(true);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -181,9 +181,7 @@ export function useModelRecommendations(
       })
       .catch((err) => {
         if (mountedRef.current) {
-          setError({
-            message: err instanceof Error ? err.message : 'Failed to detect capabilities',
-          });
+          setError(err instanceof Error ? err : new Error('Failed to detect capabilities'));
           setRecommendations([]);
           setIsLoading(false);
         }

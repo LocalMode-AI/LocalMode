@@ -142,6 +142,15 @@ export class LiteRTLanguageModel implements LanguageModel {
           explicitBackend = Backend.GPU;
         } else if (this.settings.backend === 'CPU') {
           explicitBackend = Backend.CPU;
+        } else if (!catalogEntry?.requiresWebGPU) {
+          // No explicit backend: LiteRT-LM's own default picks GPU whenever
+          // `navigator.gpu` merely EXISTS — but headless/adapterless browsers
+          // expose the API with zero usable devices ("No available adapters"),
+          // which fails the load outright even for CPU-capable models. Probe
+          // actual device usability and pin CPU when WebGPU can't deliver.
+          if (!(await isWebGPUDeviceUsable())) {
+            explicitBackend = Backend.CPU;
+          }
         }
 
         this.settings.onProgress?.({
@@ -213,83 +222,37 @@ export class LiteRTLanguageModel implements LanguageModel {
   }
 
   async doGenerate(options: DoGenerateOptions): Promise<DoGenerateResult> {
-    const {
-      prompt,
-      systemPrompt,
-      messages,
-      maxTokens = this.settings.maxTokens ?? 512,
-      temperature = this.settings.temperature ?? 0.7,
-      topP = this.settings.topP ?? 0.95,
-      stopSequences,
-      abortSignal,
-    } = options;
+    // Delegate to the streaming path and accumulate. LiteRT-LM's
+    // non-streaming `sendMessage()` executes the ENTIRE prefill+decode inside
+    // a single synchronous WASM call — and without cross-origin isolation the
+    // engine runs single-threaded on the browser MAIN thread, so that one
+    // call freezes the tab for the whole generation (tens of seconds on CPU):
+    // no React commits, no input handling, queued script evaluations.
+    // `sendMessageStreaming()` yields between tokens, so draining the stream
+    // produces the same final result while the main thread keeps breathing.
+    // Found by the blocks-chat agent E2E lane: `generateObject()` →
+    // `doGenerate()` froze the page for entire agent action generations while
+    // the streaming chat path on the same model stayed responsive.
+    let text = '';
+    let finishReason: FinishReason = 'stop';
+    let usage: DoGenerateResult['usage'] = {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      durationMs: 0,
+    };
 
-    this.warnUnsupportedStopSequences(stopSequences);
-
-    abortSignal?.throwIfAborted();
-    const engine = await this.loadEngine();
-    abortSignal?.throwIfAborted();
-
-    const startTime = Date.now();
-
-    try {
-      const conversationConfig = this.buildConversationConfig({
-        systemPrompt,
-        messages: messages as InputMessage[] | undefined,
-        temperature,
-        topP,
-        maxTokens,
-      });
-
-      const conversation = await engine.createConversation(conversationConfig);
-
-      const abortHandler = () => conversation.cancel();
-      abortSignal?.addEventListener('abort', abortHandler, { once: true });
-
-      try {
-        const messageInput = this.buildMessageInput(prompt, messages as InputMessage[] | undefined);
-        const response = await conversation.sendMessage(messageInput);
-
-        const text = typeof response.content === 'string'
-          ? response.content
-          : (response.content ?? [])
-              .filter((item: { type: string }) => item.type === 'text')
-              .map((item: { text?: string }) => item.text ?? '')
-              .join('');
-
-        const inputTokens = Math.ceil(messageInput.length / 4);
-        const outputTokens = Math.ceil(text.length / 4);
-
-        return {
-          text,
-          finishReason: this.mapFinishReason(outputTokens >= maxTokens),
-          usage: {
-            inputTokens,
-            outputTokens,
-            totalTokens: inputTokens + outputTokens,
-            durationMs: Date.now() - startTime,
-          },
-        };
-      } finally {
-        abortSignal?.removeEventListener('abort', abortHandler);
-        await conversation.delete().catch(() => {});
+    for await (const chunk of this.doStream(options)) {
+      text += chunk.text;
+      if (chunk.done) {
+        finishReason = chunk.finishReason ?? 'stop';
+        if (chunk.usage) {
+          usage = chunk.usage;
+        }
       }
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw error;
-      }
-      if (error instanceof ModelLoadError) {
-        throw error;
-      }
-
-      throw new GenerationError(
-        `Text generation failed with model ${this.modelId}: ${(error as Error)?.message ?? String(error)}`,
-        {
-          hint: 'Check that the model loaded correctly and the prompt is valid.',
-          cause: error instanceof Error ? error : undefined,
-        },
-      );
     }
+
+    return { text, finishReason, usage };
   }
 
   async *doStream(options: DoStreamOptions): AsyncIterable<StreamChunk> {

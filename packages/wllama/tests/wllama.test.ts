@@ -46,8 +46,22 @@ const mockState = {
   exit: vi.fn().mockResolvedValue(undefined),
 };
 
-vi.mock('@wllama/wllama', () => ({
-  Wllama: function Wllama() {
+// Mock OUR loader seam (src/wllama-loader.ts) — the runtime imports @wllama/wllama
+// from a CDN via a bundler-invisible dynamic import that vi.mock('@wllama/wllama')
+// can never intercept (the root cause of 23 long-standing failures).
+
+/** Build a v3-style async-iterable stream from an array of OAI delta chunks. */
+async function* streamOf(chunks: Array<Record<string, unknown>>) {
+  for (const chunk of chunks) yield chunk;
+}
+
+vi.mock('../src/wllama-loader.js', () => ({
+  WLLAMA_CDN_ESM: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.5.1/esm/index.js',
+  WLLAMA_CDN_WASM: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.5.1/src/wasm/wllama.wasm',
+  importWllama: async () => ({ Wllama: MockWllama }),
+}));
+
+function MockWllama() {
     return {
       loadModelFromUrl: (...args: unknown[]) => mockState.loadModelFromUrl(...args),
       createChatCompletion: (...args: unknown[]) => mockState.createChatCompletion(...args),
@@ -61,8 +75,7 @@ vi.mock('@wllama/wllama', () => ({
       exit: (...args: unknown[]) => mockState.exit(...args),
       cacheManager: { open: vi.fn().mockResolvedValue(null), list: vi.fn().mockResolvedValue([]) },
     };
-  },
-}));
+}
 
 vi.mock('@huggingface/gguf', () => ({
   gguf: vi.fn().mockResolvedValue({
@@ -313,19 +326,17 @@ describe('@localmode/wllama', () => {
   // ─────────────────────────────────────────────────────────────
   describe('doStream()', () => {
     it('should yield StreamChunk objects with text deltas', async () => {
-      mockState.createChatCompletion.mockResolvedValue({
-        id: 'chatcmpl-stream',
-        object: 'chat.completion',
-        created: Date.now(),
-        model: 'test-model',
-        choices: [{
-          index: 0,
-          message: { role: 'assistant', content: 'Hello world!' },
-          finish_reason: 'stop',
-          logprobs: null,
-        }],
-        usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
-      });
+      // v3 streaming: createChatCompletion({ stream: true }) returns an async
+      // iterable of OAI-style delta chunks (the previous arrangement mocked the
+      // non-streaming completion shape, which doStream never consumes).
+      mockState.createChatCompletion.mockImplementation(async () => streamOf([
+        { choices: [{ index: 0, delta: { content: 'Hello ' } }] },
+        { choices: [{ index: 0, delta: { content: 'world!' } }] },
+        {
+          choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
+        },
+      ]));
 
       const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
       const chunks: Array<{ text: string; done: boolean }> = [];
@@ -344,6 +355,13 @@ describe('@localmode/wllama', () => {
     });
 
     it('should include finishReason and usage in final chunk', async () => {
+      mockState.createChatCompletion.mockImplementation(async () => streamOf([
+        { choices: [{ index: 0, delta: { content: 'Hi' } }] },
+        {
+          choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
+        },
+      ]));
 
       const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
       let finalChunk;
@@ -404,6 +422,52 @@ describe('@localmode/wllama', () => {
       await model.doGenerate({ prompt: 'Second' });
 
       expect(mockState.loadModelFromUrl).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Default context-length cap (wasm32 KV-cache budget)
+  // ─────────────────────────────────────────────────────────────
+  describe('Default context-length cap', () => {
+    it('caps the catalog-inferred context length at 8192 for n_ctx', async () => {
+      // Regression: the DeepSeek-R1 distills advertise a 131072-token native
+      // window in the catalog. Passing that straight to n_ctx asks llama.cpp
+      // for a ~3.5GiB KV cache, which cannot fit in the wasm32 4GiB heap
+      // alongside the weights — the load aborts with
+      // "ggml_aligned_malloc: insufficient memory". The DEFAULT inferred from
+      // the catalog must be capped; found by the blocks-chat reasoning E2E lane.
+      const model = new WllamaLanguageModel('DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M');
+      await model.doGenerate({ prompt: 'Hi' });
+
+      expect(mockState.loadModelFromUrl).toHaveBeenCalledTimes(1);
+      const loadOptions = mockState.loadModelFromUrl.mock.calls[0][1] as { n_ctx: number };
+      expect(loadOptions.n_ctx).toBe(8192);
+      expect(model.contextLength).toBe(8192);
+    });
+
+    it('never caps an explicit settings.contextLength (caller owns the budget)', async () => {
+      const model = new WllamaLanguageModel('DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M', {
+        contextLength: 131072,
+      });
+      await model.doGenerate({ prompt: 'Hi' });
+
+      const loadOptions = mockState.loadModelFromUrl.mock.calls[0][1] as { n_ctx: number };
+      expect(loadOptions.n_ctx).toBe(131072);
+      expect(model.contextLength).toBe(131072);
+    });
+
+    it('leaves small catalog context lengths untouched', async () => {
+      // SmolLM2-135M advertises 8192 in the catalog — at or below the cap the
+      // inferred value passes through unchanged.
+      const model = new WllamaLanguageModel('SmolLM2-135M-Instruct-Q4_K_M');
+      await model.doGenerate({ prompt: 'Hi' });
+
+      const loadOptions = mockState.loadModelFromUrl.mock.calls[0][1] as { n_ctx: number };
+      const catalogContext = (WLLAMA_MODELS as Record<string, { contextLength: number }>)[
+        'SmolLM2-135M-Instruct-Q4_K_M'
+      ].contextLength;
+      expect(catalogContext).toBeLessThanOrEqual(8192);
+      expect(loadOptions.n_ctx).toBe(catalogContext);
     });
   });
 

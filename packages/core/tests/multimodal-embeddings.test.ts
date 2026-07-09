@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import {
   embedImage,
   embedManyImages,
+  streamEmbedManyImages,
   createMockMultimodalEmbeddingModel,
   createTestVector,
   cosineSimilarity,
@@ -174,6 +175,101 @@ describe('embedManyImages()', () => {
     });
 
     expect(result.embeddings).toHaveLength(1);
+  });
+});
+
+describe('streamEmbedManyImages()', () => {
+  it('yields embeddings with indices across batches', async () => {
+    const model = createMockMultimodalEmbeddingModel({ dimensions: 512 });
+    const images = [
+      'https://example.com/cat.jpg',
+      'https://example.com/dog.jpg',
+      'https://example.com/bird.jpg',
+    ];
+    const results: Array<{ embedding: Float32Array; index: number }> = [];
+
+    for await (const result of streamEmbedManyImages({
+      model,
+      images,
+      batchSize: 2,
+    })) {
+      results.push(result);
+    }
+
+    expect(results).toHaveLength(3);
+    expect(results[0].index).toBe(0);
+    expect(results[1].index).toBe(1);
+    expect(results[2].index).toBe(2);
+    results.forEach((r) => {
+      expect(r.embedding).toBeInstanceOf(Float32Array);
+      expect(r.embedding.length).toBe(512);
+    });
+  });
+
+  it('calls onBatch with index/count/total/usage per batch', async () => {
+    const model = createMockMultimodalEmbeddingModel({ dimensions: 512 });
+    const batchCalls: Array<{ index: number; count: number; total: number; tokens: number }> = [];
+
+    for await (const _ of streamEmbedManyImages({
+      model,
+      images: Array(5).fill('https://example.com/cat.jpg'),
+      batchSize: 2,
+      onBatch: (progress) => {
+        batchCalls.push({
+          index: progress.index,
+          count: progress.count,
+          total: progress.total,
+          tokens: progress.usage.tokens,
+        });
+      },
+    })) {
+      // consume iterator
+    }
+
+    // 5 images / batchSize 2 → batches starting at 0, 2, 4
+    expect(batchCalls).toEqual([
+      { index: 0, count: 2, total: 5, tokens: 2 },
+      { index: 2, count: 2, total: 5, tokens: 2 },
+      { index: 4, count: 1, total: 5, tokens: 1 },
+    ]);
+  });
+
+  it('supports AbortSignal mid-stream', async () => {
+    const model = createMockMultimodalEmbeddingModel({ dimensions: 512, delay: 50 });
+    const controller = new AbortController();
+
+    const promise = (async () => {
+      const results: unknown[] = [];
+      for await (const result of streamEmbedManyImages({
+        model,
+        images: Array(10).fill('https://example.com/cat.jpg'),
+        batchSize: 2,
+        abortSignal: controller.signal,
+      })) {
+        results.push(result);
+        if (results.length >= 2) {
+          controller.abort();
+        }
+      }
+      return results;
+    })();
+
+    await expect(promise).rejects.toThrow();
+  });
+
+  it('retries failed batches up to maxRetries', async () => {
+    const model = createMockMultimodalEmbeddingModel({ dimensions: 512, failCount: 1 });
+    const results: unknown[] = [];
+
+    for await (const result of streamEmbedManyImages({
+      model,
+      images: ['https://example.com/cat.jpg'],
+      maxRetries: 2,
+    })) {
+      results.push(result);
+    }
+
+    expect(results).toHaveLength(1);
   });
 });
 

@@ -1,0 +1,64 @@
+---
+title: "Response"
+description: "A streaming markdown renderer with a cursor that tolerates partial markdown, plus optional typewriter reveal and swappable KaTeX/Mermaid renderers."
+icon: Type
+---
+
+# Response
+
+The **Response** primitive renders streamed assistant text as markdown and shows a blinking cursor while content is still arriving. It tolerates partial/incomplete markdown — an unterminated code fence mid-stream renders without breaking layout. An optional client-side typewriter reveal animates already-resolved text, and `renderMath` / `renderMermaid` props route `$$…$$` and ```mermaid blocks to swappable renderers (declare `katex` / `mermaid` in your project if you supply them).
+
+## Preview
+
+<ComponentPreview name="ui/conversation/response" />
+
+<OpenInV0 name="ui/conversation/response" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/response" />
+
+### Data source & dependencies
+
+**Data source:** renders the markdown `string` you stream in — works with any backend. Recommended producer: the token stream from `useChat` / `useGenerateText` in `@localmode/react` (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `response.tsx` — the streaming renderer
+- `lib/markdown.tsx` — the streaming-safe markdown renderer
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/response/response.tsx" name="ResponseProps" />
+
+## Examples
+
+### Stream tokens
+
+```tsx
+import { Response } from '@/components/response';
+
+<Response streaming={isStreaming}>{assistantText}</Response>
+```
+
+### With KaTeX math
+
+```tsx
+// npm i katex
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
+
+const renderMath = (src: string) => (
+  <span dangerouslySetInnerHTML={{ __html: katex.renderToString(src) }} />
+);
+
+<Response renderMath={renderMath}>{text}</Response>
+```
+
+## Customization
+
+The cursor is a themed `<span>` — restyle or replace it. The math/diagram renderers are intentionally not bundled; pass your own to keep the installed footprint minimal. The markdown subset lives in `lib/markdown.tsx`.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useChat`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

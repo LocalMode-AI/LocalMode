@@ -118,4 +118,121 @@ describe('useSequentialBatch', () => {
     await act(async () => { results = await result.current.execute([]); });
     expect(results).toEqual([]);
   });
+
+  describe('itemErrors', () => {
+    it('starts empty and is cleared by reset', async () => {
+      const { result } = renderHook(() =>
+        useSequentialBatch({
+          fn: async (x: string, _signal: AbortSignal) => {
+            throw new Error(`fail ${x}`);
+          },
+        })
+      );
+
+      expect(result.current.itemErrors).toEqual([]);
+
+      await act(async () => { await result.current.execute(['a']); });
+      expect(result.current.itemErrors).toHaveLength(1);
+
+      act(() => { result.current.reset(); });
+      expect(result.current.itemErrors).toEqual([]);
+    });
+
+    it('captures per-item errors index-aligned with results', async () => {
+      const { result } = renderHook(() =>
+        useSequentialBatch({
+          fn: async (x: string, _signal: AbortSignal) => {
+            if (x === 'bad') throw new Error('item error: bad');
+            return x.toUpperCase();
+          },
+        })
+      );
+
+      await act(async () => { await result.current.execute(['a', 'bad', 'c']); });
+
+      // results still collapse failures to null (existing contract)...
+      expect(result.current.results).toEqual(['A', null, 'C']);
+      // ...but the error is no longer lost: itemErrors is index-aligned
+      expect(result.current.itemErrors).toHaveLength(3);
+      expect(result.current.itemErrors[0]).toBeNull();
+      expect(result.current.itemErrors[1]).toBeInstanceOf(Error);
+      expect(result.current.itemErrors[1]?.message).toBe('item error: bad');
+      expect(result.current.itemErrors[2]).toBeNull();
+      // Batch-level error stays null for per-item failures
+      expect(result.current.error).toBeNull();
+    });
+  });
+
+  describe('incremental publication', () => {
+    it('publishes results and itemErrors as each item completes (not only at the end)', async () => {
+      let releaseSecond!: () => void;
+      const secondGate = new Promise<void>((r) => { releaseSecond = r; });
+
+      const { result } = renderHook(() =>
+        useSequentialBatch({
+          fn: async (x: string, _signal: AbortSignal) => {
+            if (x === 'b') await secondGate;
+            return x.toUpperCase();
+          },
+        })
+      );
+
+      let executePromise!: Promise<(string | null)[]>;
+      await act(async () => {
+        executePromise = result.current.execute(['a', 'b']);
+        // Let item 'a' finish and React flush state; item 'b' stays blocked
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      // Mid-run: progress has ticked AND the completed result is already visible
+      expect(result.current.isRunning).toBe(true);
+      expect(result.current.progress).toEqual({ current: 1, total: 2 });
+      expect(result.current.results).toEqual(['A']);
+      expect(result.current.itemErrors).toEqual([null]);
+
+      await act(async () => {
+        releaseSecond();
+        await executePromise;
+      });
+
+      expect(result.current.isRunning).toBe(false);
+      expect(result.current.results).toEqual(['A', 'B']);
+      expect(result.current.itemErrors).toEqual([null, null]);
+    });
+
+    it('publishes a failed item incrementally with its error', async () => {
+      let releaseSecond!: () => void;
+      const secondGate = new Promise<void>((r) => { releaseSecond = r; });
+
+      const { result } = renderHook(() =>
+        useSequentialBatch({
+          fn: async (x: string, _signal: AbortSignal) => {
+            if (x === 'bad') throw new Error('mid-run failure');
+            if (x === 'b') await secondGate;
+            return x.toUpperCase();
+          },
+        })
+      );
+
+      let executePromise!: Promise<(string | null)[]>;
+      await act(async () => {
+        executePromise = result.current.execute(['bad', 'b']);
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      // The failure for item 0 is visible while item 1 is still running
+      expect(result.current.isRunning).toBe(true);
+      expect(result.current.results).toEqual([null]);
+      expect(result.current.itemErrors).toHaveLength(1);
+      expect(result.current.itemErrors[0]?.message).toBe('mid-run failure');
+
+      await act(async () => {
+        releaseSecond();
+        await executePromise;
+      });
+
+      expect(result.current.results).toEqual([null, 'B']);
+      expect(result.current.itemErrors[1]).toBeNull();
+    });
+  });
 });

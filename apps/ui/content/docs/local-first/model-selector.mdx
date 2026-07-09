@@ -1,0 +1,64 @@
+---
+title: "Model Selector"
+description: "A device-aware model picker with backend filter chips, vision/tools/cached badges, and download + delete-from-cache affordances."
+icon: ListFilter
+---
+
+# Model Selector
+
+The **Model Selector** renders a device-aware list of models grouped by category, with backend filter chips (WebGPU / ONNX / WASM / LiteRT) that show live counts, per-model badges (vision, tool-calling, cached), a download affordance for uncached models, and a delete-from-cache affordance for cached ones. Models that cannot run on the current device — e.g. a WebGPU-only model on a device without WebGPU — are visibly de-emphasized while their "Requires WebGPU" reason stays at full contrast. It emits `onSelect(modelId)` and owns no selection state.
+
+The backend-filter row wraps at narrow widths and only appears when **two or more** backends are actually present — a single-backend catalog (e.g. a CLIP embedding pair) hides the row rather than surfacing disabled zero-count chips. The filter chips form a labelled `role="group"` and expose their pressed state via `aria-pressed`; the active model row is marked `aria-current`; the download/delete controls carry `aria-label`s and expand to a ≥44px touch target on mobile.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/model-selector" note="Reads real WebGPU support via useCapabilities — WebGPU-only models de-emphasize on devices without it." />
+
+<OpenInV0 name="ui/local-first/model-selector" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/model-selector" />
+
+### Data source & dependencies
+
+**Data source:** renders the model list + `hasWebGPU` device-fit you pass and emits `onSelect(modelId)` — works with any backend. Recommended producer: `useCapabilities` (device-fit) and your `useModelRecommendations` data from `@localmode/react` (on-device, optional).
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `model-selector.tsx` — the `ModelSelector` component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/model-selector/model-selector.tsx" name="ModelSelectorProps" />
+
+<AutoTypeTable path="registry/localmode/local-first/model-selector/model-selector.tsx" name="SelectableModel" />
+
+## Examples
+
+### Bound to recommendations + capabilities
+
+```tsx
+import { useCapabilities } from '@localmode/react';
+import { ModelSelector } from '@/components/model-selector';
+
+export function Sidebar({ models, onPick }) {
+  const { capabilities } = useCapabilities();
+  return (
+    <ModelSelector
+      models={models}
+      hasWebGPU={Boolean(capabilities?.features.webgpu)}
+      onSelect={onPick}
+      onDownload={(id) => prefetch(id)}
+      onDelete={(id) => evict(id)}
+    />
+  );
+}
+```
+
+## Customization
+
+The de-emphasis (a muted model name, with the amber "Requires WebGPU" reason kept at full — AA — contrast rather than dimmed by opacity) and the hint itself are derived from the `hasWebGPU` prop — extend `isUnfit` in the copied file to gate on other backends (e.g. WASM-only). The filter row is auto-hidden for single-backend catalogs (`presentBackends.length > 1`); drop that guard if you always want the row. Badge icons use `lucide-react`; the active filter chip uses `bg-primary`. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

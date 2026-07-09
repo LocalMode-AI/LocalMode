@@ -12,6 +12,7 @@ import type {
   ExtractedAnswer,
 } from '@localmode/core';
 import type { ModelSettings, TransformersDevice, ModelLoadProgress } from '../types.js';
+import { installResilientModelCache } from '../resilient-cache.js';
 
 // Dynamic import types
 type QAPipeline = Awaited<
@@ -53,6 +54,7 @@ export class TransformersQuestionAnsweringModel implements QuestionAnsweringMode
 
       // Suppress ONNX runtime warnings about node execution providers
       env.backends.onnx.logLevel = 'error';
+      installResilientModelCache(env);
 
       const pipe = await pipeline('question-answering', this.baseModelId, {
         device: this.settings.device ?? 'auto',

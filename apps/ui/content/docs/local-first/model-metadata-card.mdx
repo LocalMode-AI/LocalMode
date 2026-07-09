@@ -1,0 +1,53 @@
+---
+title: "Model Metadata Card"
+description: "A structured key-value grid of parsed model metadata (GGUF and generic), driven by a field-descriptor array that skips absent fields."
+icon: FileText
+---
+
+# Model Metadata Card
+
+The **Model Metadata Card** (`GGUFMetadataCard`, with a `ModelMetadataCard` alias) is a structured key-value grid of parsed model metadata — architecture, parameter count, quantization, context length, embedding dimension, vocab size, head/layer counts, file size, and optional author/license — driven by a field-descriptor array so absent fields are skipped cleanly. Feed it `parseGGUFMetadata()` output from `@localmode/wllama` (or any object matching the `ModelMetadata` shape); the display is a generic metadata grid.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/model-metadata-card" note="Renders a representative parsed GGUF metadata set; absent optional fields are omitted." />
+
+<OpenInV0 name="ui/local-first/model-metadata-card" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/model-metadata-card" />
+
+### Data source & dependencies
+
+**Data source:** renders any object matching the `ModelMetadata` shape you pass — works with any backend. Recommended producer: `parseGGUFMetadata()` from `@localmode/wllama` (on-device, optional).
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `model-metadata-card.tsx` — `GGUFMetadataCard` (alias `ModelMetadataCard`)
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/model-metadata-card/model-metadata-card.tsx" name="GGUFMetadataCardProps" />
+
+<AutoTypeTable path="registry/localmode/local-first/model-metadata-card/model-metadata-card.tsx" name="ModelMetadata" />
+
+## Examples
+
+### Parsed GGUF metadata
+
+```tsx
+import { GGUFMetadataCard } from '@/components/model-metadata-card';
+import { parseGGUFMetadata } from '@localmode/wllama';
+
+const metadata = await parseGGUFMetadata(modelUrl);
+
+<GGUFMetadataCard metadata={metadata} />
+```
+
+## Customization
+
+Field formatting (bytes, large numbers) lives in the `FIELDS` descriptor array — add fields or change labels there. Parameters/file size are auto-formatted. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

@@ -125,12 +125,45 @@ describe('MemoryStorage', () => {
     it('returns correct count', async () => {
       const doc1 = { id: 'doc1', collectionId: 'default', metadata: {}, createdAt: Date.now(), updatedAt: Date.now() };
       const doc2 = { id: 'doc2', collectionId: 'default', metadata: {}, createdAt: Date.now(), updatedAt: Date.now() };
-      
+
       await storage.addDocument(doc1);
       await storage.addDocument(doc2);
 
       const count = await storage.countDocuments('default');
       expect(count).toBe(2);
+    });
+  });
+
+  describe('vector payload types (SQ8/PQ compression)', () => {
+    // Canonical behavior all StorageAdapter implementations must mirror:
+    // Uint8Array payloads (compressed vectors) round-trip with their type
+    // and bytes intact; Float32Array stays Float32Array.
+    it('preserves Uint8Array payloads through addVector/getVector/getAllVectors', async () => {
+      const compressed = new Uint8Array([7, 0, 255, 128, 3]); // length not divisible by 4
+      await storage.addVector({ id: 'v-u8', collectionId: 'default', vector: compressed });
+      await storage.addVector({ id: 'v-f32', collectionId: 'default', vector: new Float32Array([1.5, -2.5]) });
+
+      const u8 = await storage.getVector('v-u8');
+      expect(u8).toBeInstanceOf(Uint8Array);
+      expect(Array.from(u8 as Uint8Array)).toEqual([7, 0, 255, 128, 3]);
+
+      const f32 = await storage.getVector('v-f32');
+      expect(f32).toBeInstanceOf(Float32Array);
+      expect(Array.from(f32 as Float32Array)).toEqual([1.5, -2.5]);
+
+      const all = await storage.getAllVectors('default');
+      expect(all.get('v-u8')).toBeInstanceOf(Uint8Array);
+      expect(Array.from(all.get('v-u8') as Uint8Array)).toEqual([7, 0, 255, 128, 3]);
+      expect(all.get('v-f32')).toBeInstanceOf(Float32Array);
+    });
+
+    it('mutating the input after addVector does not affect the stored copy', async () => {
+      const compressed = new Uint8Array([1, 2, 3, 4, 5]);
+      await storage.addVector({ id: 'v-mut', collectionId: 'default', vector: compressed });
+      compressed[0] = 99;
+
+      const stored = await storage.getVector('v-mut');
+      expect(Array.from(stored as Uint8Array)).toEqual([1, 2, 3, 4, 5]);
     });
   });
 });

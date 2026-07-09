@@ -12,7 +12,7 @@ faq:
   - question: "Does DeepSeek-R1 require WebGPU?"
     answer: "The WebLLM variants (7B and 8B) require WebGPU and substantial GPU memory. The smaller 1.5B ONNX variant via Transformers.js can run with WebGPU acceleration where available but also falls back to WASM."
   - question: "Can I run DeepSeek-R1 offline in the browser?"
-    answer: "Yes. All DeepSeek-R1 variants work offline after the initial download. Models are cached in IndexedDB via LocalMode's model caching system, so subsequent uses start without any network connection."
+    answer: "Yes. All DeepSeek-R1 variants work offline after the initial download. Models are cached by the browser via LocalMode's model caching system, so subsequent uses start without any network connection."
 ---
 
 # DeepSeek-R1 Distill Models in the Browser
@@ -120,7 +120,7 @@ DeepSeek-R1 Distill models are a strong choice when:
 - **You need text generation** - DeepSeek-R1 Distill is optimized for generation tasks with models across multiple size tiers.
 - **Browser compatibility matters** - Available through 2 providers (webllm, transformers), ensuring coverage across Chrome, Firefox, Safari, and Edge.
 - **Size flexibility is important** - The 500MB–4.41GB range means you can target everything from mobile devices to high-end desktops with the same model family.
-- **Offline functionality is required** - All variants work offline after the initial download, cached in IndexedDB via LocalMode's model caching system.
+- **Offline functionality is required** - All variants work offline after the initial download, cached by the browser via LocalMode's model caching system.
 
 ## HuggingFace Model Cards
 

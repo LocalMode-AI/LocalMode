@@ -10,6 +10,8 @@ import type {
   AgentMemory,
   AgentStep,
   AgentResult,
+  ToolApprovalRequest,
+  ToolApprovalDecision,
 } from '@localmode/core';
 
 const IS_SERVER = typeof window === 'undefined';
@@ -56,13 +58,35 @@ export interface UseAgentReturn {
   /** Error if the agent failed */
   error: Error | null;
 
+  /**
+   * The tool call currently awaiting a human decision, or `null` when
+   * nothing is pending. Non-null only while the ReAct loop is paused on a
+   * tool flagged `requiresApproval: true`; exposes the pending call's
+   * `toolName`, model-proposed `args`, and `stepIndex`. Runs whose tools
+   * have no `requiresApproval` flag never surface a pending approval.
+   */
+  pendingApproval: ToolApprovalRequest | null;
+
+  /**
+   * Approve the pending tool call: the tool executes and the run resumes.
+   * No-op when nothing is pending. Clears `pendingApproval`.
+   */
+  approve: () => void;
+
+  /**
+   * Deny the pending tool call (with an optional reason): the tool is NOT
+   * executed and a denial observation is fed back to the model so the loop
+   * continues. No-op when nothing is pending. Clears `pendingApproval`.
+   */
+  deny: (reason?: string) => void;
+
   /** Start the agent with a prompt */
   run: (prompt: string, context?: string) => Promise<AgentResult | null>;
 
-  /** Abort the current agent run */
+  /** Abort the current agent run (also clears any pending approval) */
   cancel: () => void;
 
-  /** Clear steps, result, and error state */
+  /** Clear steps, result, error, and pending-approval state */
   reset: () => void;
 }
 
@@ -70,7 +94,12 @@ export interface UseAgentReturn {
  * React hook for running agents with step-by-step progress.
  *
  * Wraps `runAgent()` with React state management, providing real-time
- * step updates, loading/error state, and cancellation support.
+ * step updates, loading/error state, cancellation support, and a
+ * human-in-the-loop approval surface for tools flagged
+ * `requiresApproval: true`. The hook installs the core `onToolApproval`
+ * callback internally: when the loop pauses on a gated call,
+ * `pendingApproval` becomes non-null and the run waits until `approve()`
+ * or `deny(reason?)` is invoked (or the run is cancelled).
  *
  * @param options - Agent configuration
  * @returns Agent state and control functions
@@ -95,17 +124,62 @@ export interface UseAgentReturn {
  *   );
  * }
  * ```
+ *
+ * @example
+ * ```tsx
+ * // Human-in-the-loop approval with a ui/conversation/tool-approval-style card.
+ * // Flag sensitive tools with requiresApproval; the hook pauses the loop and
+ * // exposes the pending call for the user to approve or deny.
+ * function GatedAgent() {
+ *   const { pendingApproval, approve, deny, steps, run } = useAgent({
+ *     model,
+ *     tools: [{ ...deleteFileTool, requiresApproval: true }],
+ *   });
+ *
+ *   return (
+ *     <div>
+ *       <button onClick={() => run('Clean up temp files')}>Start</button>
+ *       {pendingApproval && (
+ *         <ToolApproval
+ *           toolName={pendingApproval.toolName}
+ *           args={pendingApproval.args}
+ *           onApprove={() => approve()}
+ *           onReject={() => deny('User rejected')}
+ *         />
+ *       )}
+ *       {steps.map(step => (
+ *         // step.approval?.decision is 'approved' | 'denied' for gated steps
+ *         <StepCard key={step.index} step={step} />
+ *       ))}
+ *     </div>
+ *   );
+ * }
+ * ```
  */
 export function useAgent(options: UseAgentOptions): UseAgentReturn {
   const [steps, setSteps] = useState<AgentStep[]>([]);
   const [result, setResult] = useState<AgentResult | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [pendingApproval, setPendingApproval] = useState<ToolApprovalRequest | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
   const optionsRef = useRef(options);
   optionsRef.current = options;
+
+  // Single pending-approval slot (the ReAct loop is sequential, so at most
+  // one decision is pending at a time). Holds the resolver of the Promise
+  // the core loop is awaiting; approve()/deny() settle it.
+  const pendingDecisionRef = useRef<((decision: ToolApprovalDecision) => void) | null>(null);
+
+  /** Clear the pending approval slot without resolving (the core abort race unblocks the loop). */
+  const clearPendingApproval = useCallback(() => {
+    pendingDecisionRef.current = null;
+    if (mountedRef.current) {
+      setPendingApproval(null);
+    }
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -113,14 +187,17 @@ export function useAgent(options: UseAgentOptions): UseAgentReturn {
     return () => {
       mountedRef.current = false;
       abortControllerRef.current?.abort();
+      pendingDecisionRef.current = null;
     };
   }, []);
 
   const run = useCallback(async (prompt: string, context?: string): Promise<AgentResult | null> => {
     if (IS_SERVER) return null;
 
-    // Abort any previous run
+    // Abort any previous run (unblocks any pending approval race in core)
     abortControllerRef.current?.abort();
+    // Drop any stale deferred so it cannot leak into the new run
+    pendingDecisionRef.current = null;
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -128,6 +205,7 @@ export function useAgent(options: UseAgentOptions): UseAgentReturn {
     setSteps([]);
     setResult(null);
     setError(null);
+    setPendingApproval(null);
     setIsRunning(true);
 
     try {
@@ -160,16 +238,33 @@ export function useAgent(options: UseAgentOptions): UseAgentReturn {
             setSteps((prev) => [...prev, step]);
           }
         },
+        // Deferred-based approval bridge: store the pending request in state
+        // and hand the core loop a Promise settled by approve()/deny().
+        // Installed unconditionally — the core loop only consults it for
+        // tools flagged requiresApproval, so ungated runs never pause.
+        onToolApproval: (request) =>
+          new Promise<ToolApprovalDecision>((resolve) => {
+            pendingDecisionRef.current = resolve;
+            if (mountedRef.current && !controller.signal.aborted) {
+              setPendingApproval(request);
+            }
+          }),
       });
 
       if (mountedRef.current && !controller.signal.aborted) {
         setResult(agentResult);
+        setPendingApproval(null);
         setIsRunning(false);
         return agentResult;
       }
       return null;
     } catch (err) {
+      // The run settled — no decision can apply anymore
+      pendingDecisionRef.current = null;
+
       if (!mountedRef.current) return null;
+
+      setPendingApproval(null);
 
       // Silence abort errors
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -187,18 +282,35 @@ export function useAgent(options: UseAgentOptions): UseAgentReturn {
     }
   }, []);
 
+  const approve = useCallback(() => {
+    const resolveDecision = pendingDecisionRef.current;
+    if (!resolveDecision) return; // no-op when nothing is pending
+    clearPendingApproval();
+    resolveDecision({ approved: true });
+  }, [clearPendingApproval]);
+
+  const deny = useCallback((reason?: string) => {
+    const resolveDecision = pendingDecisionRef.current;
+    if (!resolveDecision) return; // no-op when nothing is pending
+    clearPendingApproval();
+    resolveDecision(reason !== undefined ? { approved: false, reason } : { approved: false });
+  }, [clearPendingApproval]);
+
   const cancel = useCallback(() => {
     abortControllerRef.current?.abort();
+    clearPendingApproval();
     if (mountedRef.current) {
       setIsRunning(false);
     }
-  }, []);
+  }, [clearPendingApproval]);
 
   const reset = useCallback(() => {
     abortControllerRef.current?.abort();
+    pendingDecisionRef.current = null;
     setSteps([]);
     setResult(null);
     setError(null);
+    setPendingApproval(null);
     setIsRunning(false);
   }, []);
 
@@ -209,11 +321,14 @@ export function useAgent(options: UseAgentOptions): UseAgentReturn {
       result: null,
       isRunning: false,
       error: null,
+      pendingApproval: null,
+      approve: () => {},
+      deny: () => {},
       run: async () => null,
       cancel: () => {},
       reset: () => {},
     };
   }
 
-  return { steps, result, isRunning, error, run, cancel, reset };
+  return { steps, result, isRunning, error, pendingApproval, approve, deny, run, cancel, reset };
 }

@@ -1,0 +1,99 @@
+---
+title: "Model Cache Table"
+description: "Cached-model observability: model ID, status badge (loaded/loading/error), load duration, and relative last-used time per model — with an optional size column and per-row eviction."
+icon: Package
+---
+
+# Model Cache Table
+
+The **Model Cache Table** renders one row per cached model showing the model ID (monospace, truncated with a full-ID tooltip), a status badge (loaded / loading / error), the load duration (ms below one second, seconds above), and a relative last-used time. A size column renders only when at least one entry carries `sizeBytes` (human-formatted), and a per-row evict control renders only when `onEvict` is provided. With no models present it shows an empty state explaining that model loads are captured automatically once `enableDevTools()` runs. Entries are passed in as props — works with any backend (recommended producer: `useDevToolsModelCache` from `@localmode/devtools/react`, whose snapshot passes straight into `entries`).
+
+## Preview
+
+<ComponentPreview name="ui/devtools/model-cache-table" note="Renders three fixture entries — a loaded embedding model with a size, an LLM mid-load, and a failed load. Evict rows to reveal the empty state. No devtools bridge or model required." />
+
+<OpenInV0 name="ui/devtools/model-cache-table" />
+
+## Installation
+
+<InstallTabs name="ui/devtools/model-cache-table" />
+
+### Data source & dependencies
+
+**Data source:** renders the cached-model record you pass — works with any backend. Recommended producer: `useDevToolsModelCache` from `@localmode/devtools/react` (on-device, optional) — its `Record<string, ModelCacheInfo>` snapshot matches `entries` field-for-field, no mapping layer needed.
+
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `model-cache-table.tsx` — the `ModelCacheTable` component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/devtools/model-cache-table/model-cache-table.tsx" name="ModelCacheTableProps" />
+
+<AutoTypeTable path="registry/localmode/devtools/model-cache-table/model-cache-table.tsx" name="ModelCacheEntryLike" />
+
+## Examples
+
+### Wired to the LocalMode devtools bridge
+
+Enable devtools once, then feed the hook's snapshot straight into the table — every model load, load failure, and inference use is captured automatically:
+
+```tsx
+import { enableDevTools } from '@localmode/devtools';
+import { useDevToolsModelCache } from '@localmode/devtools/react';
+
+import { ModelCacheTable } from '@/components/model-cache-table';
+
+// Once, at app init (before loading models)
+enableDevTools();
+
+// The monitoring surface
+function ModelsPanel() {
+  const models = useDevToolsModelCache();
+  return <ModelCacheTable entries={models} />;
+}
+```
+
+### With sizes and eviction
+
+The bridge snapshot doesn't carry sizes or eviction today — supply `sizeBytes` from your own cache accounting and wire `onEvict` to your provider's cache management (e.g. `refreshModel()` from `@localmode/wllama`):
+
+```tsx
+<ModelCacheTable
+  entries={{
+    'my-model.gguf': {
+      modelId: 'my-model.gguf',
+      status: 'loaded',
+      loadDurationMs: 2140,
+      lastUsed: new Date().toISOString(),
+      sizeBytes: 668_000_000,
+    },
+  }}
+  onEvict={(modelId) => evictFromCache(modelId)}
+/>
+```
+
+### Any backend
+
+`entries` is just a record of per-model info — feed it from your own model manager, a server metrics endpoint, or a test fixture:
+
+```tsx
+<ModelCacheTable
+  entries={{
+    'sentence-encoder': {
+      modelId: 'sentence-encoder',
+      status: 'loaded',
+      loadDurationMs: 640,
+      lastUsed: '2026-07-03T09:30:00.000Z',
+    },
+  }}
+/>
+```
+
+## Customization
+
+Loaded models badge emerald, in-flight loads badge amber with a pulsing dot (and render an em dash instead of a load time), and failed loads use the theme's `destructive` token. Load durations render as milliseconds below one second and seconds above; last-used renders relative ("3m ago") with the exact timestamp on hover; sizes are human-formatted by a local `formatBytes`. The size column and the evict column each appear only when their data (`sizeBytes` on any entry) or callback (`onEvict`) is supplied. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class, tone, and threshold is yours to change.

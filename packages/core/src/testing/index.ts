@@ -8,7 +8,12 @@
 
 import type { EmbeddingModel } from '../embeddings/types.js';
 import type { Document, SearchOptions, SearchResult, StoredDocument } from '../types.js';
-import type { Entity } from '../classification/types.js';
+import type {
+  Entity,
+  DoRerankOptions,
+  RankedDocument,
+  RerankUsage,
+} from '../classification/types.js';
 import type {
   HandLandmarkModel,
   PoseLandmarkModel,
@@ -468,6 +473,153 @@ export function createMockNERModel(options: MockNERModelOptions = {}): MockNERMo
         results,
         usage: {
           inputTokens: texts.reduce((sum, t) => sum + t.split(/\s+/).length, 0),
+          durationMs: performance.now() - startTime,
+        },
+      };
+    },
+  };
+}
+
+// ============================================================================
+// Mock Reranker Model
+// ============================================================================
+
+/**
+ * Options for creating a mock reranker model.
+ */
+export interface MockRerankerModelOptions {
+  /**
+   * Fixed scores aligned to the original document indices
+   * (scores[i] scores documents[i]). Overrides the default scoring.
+   */
+  scores?: number[];
+
+  /**
+   * Scoring function receiving the query, a document, and its original index.
+   * Takes precedence over `scores`.
+   */
+  scoreFn?: (query: string, document: string, index: number) => number;
+
+  /**
+   * Delay in milliseconds before resolving (default: 0).
+   * While the delay is pending, an abort on `abortSignal` rejects
+   * immediately with an `AbortError`-named error — enabling real
+   * cancellation tests.
+   */
+  delayMs?: number;
+}
+
+/**
+ * Mock reranker model interface.
+ */
+export interface MockRerankerModel {
+  modelId: string;
+  provider: string;
+
+  /** Every options object received by doRerank(), for plumbing assertions */
+  calls: DoRerankOptions[];
+
+  doRerank(options: DoRerankOptions): Promise<{
+    results: RankedDocument[];
+    usage: RerankUsage;
+  }>;
+}
+
+/**
+ * Create a mock reranker model for testing.
+ *
+ * Produces deterministic results: by default, documents keep their input
+ * order with stable descending scores; pass `scores` or `scoreFn` to control
+ * scoring. Results are sorted by score descending with the original document
+ * `index`/`text` preserved, and `topK` is honored. Received `doRerank`
+ * options are recorded on `calls` for plumbing assertions.
+ *
+ * @param options - Configuration options
+ * @returns Mock reranker model
+ *
+ * @example
+ * ```typescript
+ * import { createMockRerankerModel, rerank } from '@localmode/core';
+ *
+ * const model = createMockRerankerModel({ scores: [0.1, 0.9, 0.5] });
+ *
+ * const { results } = await rerank({
+ *   model,
+ *   query: 'What is machine learning?',
+ *   documents: ['Cooking...', 'ML is...', 'Deep learning...'],
+ *   topK: 2,
+ * });
+ * // results: [{ index: 1, score: 0.9, ... }, { index: 2, score: 0.5, ... }]
+ * ```
+ */
+export function createMockRerankerModel(
+  options: MockRerankerModelOptions = {}
+): MockRerankerModel {
+  const { scores, scoreFn, delayMs = 0 } = options;
+
+  const calls: DoRerankOptions[] = [];
+
+  return {
+    modelId: 'mock:reranker',
+    provider: 'mock',
+    calls,
+
+    async doRerank(rerankOptions) {
+      calls.push(rerankOptions);
+
+      const { query, documents, topK, abortSignal } = rerankOptions;
+
+      abortSignal?.throwIfAborted?.();
+
+      if (delayMs > 0) {
+        // Abortable delay: reject with an AbortError-named error the moment
+        // the signal aborts, instead of waiting the delay out.
+        await new Promise<void>((resolve, reject) => {
+          const onAbort = () => {
+            clearTimeout(timer);
+            const error = new Error('Mock rerank aborted');
+            error.name = 'AbortError';
+            reject(error);
+          };
+          const timer = setTimeout(() => {
+            abortSignal?.removeEventListener('abort', onAbort);
+            resolve();
+          }, delayMs);
+          if (abortSignal?.aborted) {
+            onAbort();
+            return;
+          }
+          abortSignal?.addEventListener('abort', onAbort, { once: true });
+        });
+      }
+
+      const startTime = performance.now();
+
+      // Deterministic scoring: scoreFn > scores > stable descending by input order
+      const scored: RankedDocument[] = documents.map((text, index) => {
+        let score: number;
+        if (scoreFn) {
+          score = scoreFn(query, text, index);
+        } else if (scores && index < scores.length) {
+          score = scores[index];
+        } else {
+          score = (documents.length - index) / Math.max(documents.length, 1);
+        }
+        return { index, score, text };
+      });
+
+      // Sort by score descending; stable tie-break on original index
+      scored.sort((a, b) => b.score - a.score || a.index - b.index);
+
+      const results = topK !== undefined ? scored.slice(0, topK) : scored;
+
+      return {
+        results,
+        usage: {
+          inputTokens: [query, ...documents].reduce(
+            (sum, t) => sum + t.split(/\s+/).length,
+            0
+          ),
           durationMs: performance.now() - startTime,
         },
       };
@@ -2948,4 +3100,15 @@ export function createMockLanguageDetectionModel(
     },
   };
 }
+
+// ============================================================================
+// StorageAdapter Conformance Suite
+// ============================================================================
+
+export { createStorageAdapterConformanceSuite } from './storage-adapter-conformance.js';
+export type {
+  StorageAdapterConformanceCase,
+  StorageAdapterConformanceContext,
+  StorageAdapterConformanceFactory,
+} from './storage-adapter-conformance.js';
 

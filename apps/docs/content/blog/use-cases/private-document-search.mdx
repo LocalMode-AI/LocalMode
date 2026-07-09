@@ -35,7 +35,7 @@ Building this feature with on-device inference provides three structural advanta
 
 1. **Zero marginal cost** - After the initial model download, every inference operation is free. No per-token fees, no monthly API bills, no surprise invoices. This matters especially for features used frequently or by many users.
 2. **Architectural privacy** - User data never leaves the device. This is not a policy promise ("we won't look at your data") but an architectural guarantee: the data physically cannot reach any server because the processing happens in the browser tab.
-3. **Offline capability** - Once models are cached in IndexedDB, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
+3. **Offline capability** - Once models are cached by the browser, the entire feature works without internet. This is critical for field deployments, mobile apps with spotty connectivity, and enterprise environments with restricted networks.
 
 ## Technology Stack
 
@@ -73,7 +73,7 @@ for (const doc of documents) {
 }
 
 // Search (zero network requests)
-const results = await semanticSearch({ model, db, query: 'budget concerns', k: 10 });
+const { results } = await semanticSearch({ model, db, query: 'budget concerns', k: 10 });
 ```
 
 ### How This Works

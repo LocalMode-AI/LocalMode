@@ -14,7 +14,9 @@ Run ONNX-format language models directly in the browser using Transformers.js wi
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [LLM Chat](https://localmode.ai/llm-chat) for a working demo.
+  Try the [Chat block](https://localmode.ai/blocks/chat) — a multi-provider chat where the
+  transformers ONNX models run alongside the WebLLM, wllama, and LiteRT backends, with vision
+  input on Qwen3.5 and Gemma 4.
 </Callout>
 
 ## 4-Tier Fallback
@@ -206,10 +208,10 @@ const model = transformers.languageModel('your-org/custom-model-ONNX');
   Not all ONNX models work in the browser. The model must support the Transformers.js `text-generation` pipeline. Stick to the recommended models above for best results.
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-The [LLM Chat](https://localmode.ai/llm-chat) showcase app demonstrates ONNX models alongside the WebLLM, wllama, and LiteRT backends. Select a Qwen3.5 or Gemma 4 model to try vision input with image uploads.
+The [Chat block](https://localmode.ai/blocks/chat) demonstrates these ONNX models alongside the WebLLM, wllama, and LiteRT backends. Select a Qwen3.5 or Gemma 4 model to try vision input with image uploads.
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| LLM Chat | Chat with local ONNX language models, including vision input on Qwen3.5 | [Demo](https://localmode.ai/llm-chat) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/llm-chat) |
+| Chat | Multi-provider LLM chat (transformers, WebLLM, wllama, LiteRT) with vision, reasoning, semantic cache, and agent mode | [Live](https://localmode.ai/blocks/chat) · Install: `npx shadcn add @localmode/ui/blocks/chat` |

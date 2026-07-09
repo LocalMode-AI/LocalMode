@@ -14,7 +14,7 @@ Generate natural-sounding speech audio from text using Kokoro TTS running locall
 </Callout>
 
 <Callout type="info" title="See it in action">
-  Try [Audiobook Creator](https://localmode.ai/audiobook-creator) for long-form TTS or [Voice Studio](https://localmode.ai/voice-studio) to browse and compare all 29 English voices.
+  Try the [Audio Studio block](https://localmode.ai/blocks/audio) — it streams long-form Kokoro TTS and lets you browse and compare all 29 English voices.
 </Callout>
 
 ## Recommended Models
@@ -124,17 +124,16 @@ const { audio } = await synthesizeSpeech({
 
 <Callout type="tip" title="TTS Tips">
   1. **Use streaming for long text** — `streamSynthesizeSpeech()` plays audio while still generating
-  2. **Pick the right voice** — Browse all 29 in the [Voice Studio](https://localmode.ai/voice-studio)
+  2. **Pick the right voice** — Browse all 29 in the [Audio Studio block](https://localmode.ai/blocks/audio)
   3. **Speed 1.0 is best quality** — Extreme speeds (0.5 or 2.0) may reduce naturalness
   4. **q8 is the sweet spot** — 86MB download with no perceptible quality loss vs fp32 (326MB)
 </Callout>
 
-## Showcase Apps
+## Composed Block
 
-| App | Description | Links |
+| Block | Description | Links |
 |-----|-------------|-------|
-| Audiobook Creator | Streaming TTS with voice selection and speed control | [Demo](https://localmode.ai/audiobook-creator) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/audiobook-creator) |
-| Voice Studio | Browse, preview, and compare all 29 Kokoro voices | [Demo](https://localmode.ai/voice-studio) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/voice-studio) |
+| Audiobook Reader | Long-text streaming Kokoro synthesis with early playback, speed control, transport, and WAV download | [Live](https://localmode.ai/blocks/audio/audiobook-reader) · Install: `npx shadcn add @localmode/ui/blocks/audio/audiobook-reader` |
 
 ## Next Steps
 

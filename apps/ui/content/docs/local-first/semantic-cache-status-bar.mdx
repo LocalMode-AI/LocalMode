@@ -1,0 +1,55 @@
+---
+title: "Semantic Cache Status Bar"
+description: "A compact toolbar for useSemanticCache: entry count, hit-rate, clear button, and an enable/disable toggle — with a per-message Cached annotation."
+icon: Database
+---
+
+# Semantic Cache Status Bar
+
+The **Semantic Cache Status Bar** complements the Cache Badge: a compact toolbar row for `useSemanticCache` showing entry count, hit-rate %, an icon-only clear-cache button (when entries > 0), and an enable/disable toggle (with a spinner while the embedding model loads). It pairs with a per-message `CachedAnnotation` ("Cached (38ms)"). Distinct from the Cache Badge (model-download cache), this surfaces semantic-cache hits on responses.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/semantic-cache-status-bar" note="Toggle/clear wired to local state; bind stats to useSemanticCache().stats and onClear to cache.clear()." />
+
+<OpenInV0 name="ui/local-first/semantic-cache-status-bar" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/semantic-cache-status-bar" />
+
+### Data source & dependencies
+
+**Data source:** renders the cache `stats` you pass and emits clear/toggle — works with any backend. Recommended producer: `useSemanticCache` (backed by `createSemanticCache`) from `@localmode/react` (on-device, optional).
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `semantic-cache-status-bar.tsx` — `SemanticCacheStatusBar` + `CachedAnnotation`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/semantic-cache-status-bar/semantic-cache-status-bar.tsx" name="SemanticCacheStatusBarProps" />
+
+<AutoTypeTable path="registry/localmode/local-first/semantic-cache-status-bar/semantic-cache-status-bar.tsx" name="CacheStatsLike" />
+
+## Examples
+
+### Bound to useSemanticCache
+
+```tsx
+const { stats, cache } = useSemanticCache({ embeddingModel });
+<SemanticCacheStatusBar
+  stats={stats}
+  enabled={enabled}
+  isLoading={!cache}
+  onToggle={setEnabled}
+  onClear={() => cache?.clear()}
+/>
+```
+
+## Customization
+
+The hit-rate reads `stats.hitRate` (0–1) and renders as a percentage. The toggle is a themed switch; show the spinner via `isLoading` while the embedding model loads. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.

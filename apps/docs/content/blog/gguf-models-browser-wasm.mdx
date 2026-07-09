@@ -3,7 +3,7 @@ title: "GGUF Models in the Browser: 160,000+ Models Via llama.cpp WASM"
 description: "Run any of 160,000+ GGUF models from HuggingFace directly in the browser using llama.cpp compiled to WebAssembly. No WebGPU required. Inspect model metadata before downloading, check device compatibility, and stream text generation -- all with the same LanguageModel interface you already know."
 author: LocalMode
 date: 2026-03-17
-dateModified: "2026-05-28"
+dateModified: "2026-07-04"
 faq:
   - question: "What is GGUF and how many GGUF models are available for browser inference?"
     answer: "GGUF (GGML Universal File) is a self-contained format for quantized LLMs created by the developer of llama.cpp. A single GGUF file bundles model weights, architecture metadata, and tokenizer configuration. As of May 2026, HuggingFace hosts over 178,000 GGUF models, all runnable in the browser via @localmode/wllama."
@@ -115,7 +115,7 @@ console.log(result.recommendations);     // []
 
 The checker estimates RAM usage (file size multiplied by a 1.2x overhead factor for WASM memory and inference buffers), reads device RAM from `navigator.deviceMemory` where available, queries storage quota from `navigator.storage.estimate()`, and detects whether `SharedArrayBuffer` is available for multi-threaded execution. It generates human-readable warnings and actionable recommendations -- for example, suggesting a Q4_K_M quantization if you are trying to load a Q8_0 that exceeds your RAM, or recommending CORS headers for a 2-4x speed improvement.
 
-This is the same pattern used in the [GGUF Explorer](https://localmode.ai/gguf-explorer) showcase app, where users browse the curated catalog, inspect any model, see compatibility results, and then download and chat -- all in one flow.
+This is the same pattern used in the [Device & Model Lab block](https://localmode.ai/blocks/device/gguf-explorer), where users browse the curated catalog, inspect any model, and see compatibility results before handing off to the chat block to download and run it.
 
 ---
 
@@ -309,15 +309,15 @@ This gives your users WebGPU speed when available and WASM universality when not
 
 ---
 
-## The GGUF Explorer: Try It Live
+## The Device & Model Lab: Try It Live
 
-The [GGUF Explorer](https://localmode.ai/gguf-explorer) showcase app puts all of this together in a three-tab flow:
+The [Device & Model Lab block](https://localmode.ai/blocks/device/gguf-explorer) puts all of this together in one flow:
 
 1. **Browse** -- View the curated catalog of 30 models (25 language + 3 embedding + 2 reranker) grouped by size tier, or paste any HuggingFace GGUF URL
 2. **Inspect** -- See parsed metadata (architecture, parameters, context length, quantization) and browser compatibility (estimated RAM, device RAM, storage quota, speed estimate, warnings)
-3. **Chat** -- Download the model and start a streaming conversation
+3. **Chat** -- Hand off to the [Chat block](https://localmode.ai/blocks/chat) to download the model and start a streaming conversation
 
-The app demonstrates the complete `@localmode/wllama` API surface: `WLLAMA_MODELS` for the catalog, `parseGGUFMetadata()` for inspection, `checkGGUFBrowserCompat()` for compatibility, and `wllama.languageModel()` with `streamText()` for inference. Every operation runs entirely in the browser.
+The block demonstrates the `@localmode/wllama` inspection surface: `WLLAMA_MODELS` for the catalog, `parseGGUFMetadata()` for inspection, and `checkGGUFBrowserCompat()` for compatibility -- no model download required. It hands the chosen model to the chat block for `wllama.languageModel()` + `streamText()` inference. Every operation runs entirely in the browser.
 
 ---
 
@@ -363,12 +363,12 @@ All code examples, model IDs, API exports, and catalog metadata were verified ag
 - [WebGPU browser support - caniuse.com](https://caniuse.com/webgpu) -- Chrome 113+, Edge 113+, Safari 26+ (partial); Firefox Windows 141+, macOS ARM64 145+
 - [WebAssembly browser support - caniuse.com](https://caniuse.com/wasm) -- Supported since Chrome 57, Firefox 52, Safari 11, Edge 16 (all 2017)
 - [WebGPU vs WebAssembly benchmarks](https://www.sitepoint.com/quantization-q4km-vs-awq-fp16-local-llms/) -- Performance comparisons between WASM and WebGPU for browser-based ML inference
-- All code examples reference the `@localmode/wllama` package (wrapping `@wllama/wllama` ^3.2.3 and `@huggingface/gguf` ^0.1.14) and the GGUF Explorer showcase app in the LocalMode repository
+- All code examples reference the `@localmode/wllama` package (wrapping `@wllama/wllama` ^3.2.3 and `@huggingface/gguf` ^0.1.14) and the GGUF Explorer block in the LocalMode repository
 
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

@@ -1,0 +1,187 @@
+---
+title: "Use with the Vercel AI SDK"
+description: "Drive LocalMode UI conversation elements from the Vercel AI SDK (or any cloud backend). The components own no orchestration state — they render plain props — so swapping @localmode/react for @ai-sdk/react changes only the logic line and a small data mapping."
+icon: Plug
+---
+
+# Use with the Vercel AI SDK
+
+LocalMode UI components are **presentational and hook-driven**: they render plain prop shapes and emit callbacks, owning no model, no inference, and no message history. That means the same conversation elements work with **any** backend — the [Vercel AI SDK](https://sdk.vercel.ai), direct OpenAI/Anthropic calls, or your own cloud API — not just LocalMode.
+
+After installing, the components have **no `@localmode/*` dependency** to remove: nothing in the catalog imports a LocalMode package at runtime. You wire your own data source.
+
+<Callout type="info" title="Local-first by design, cloud-compatible by contract">
+  LocalMode UI leads with on-device inference via the `@localmode/react` hooks — that's the
+  recommended pairing. But the components render plain props, so a cloud backend works just as
+  well. This page shows the Vercel AI SDK; the same shapes apply to any source.
+</Callout>
+
+## Install the elements
+
+```bash
+npx shadcn@latest add @localmode/ui/conversation
+```
+
+This installs the conversation family (chat shell, message, response, prompt input, tool, reasoning, sources, branch) into your project. No LocalMode package is added.
+
+## A complete chat on `@ai-sdk/react`
+
+The only difference from a LocalMode chat is the logic line — `useChat` from `@ai-sdk/react` (which hits your `/api/chat` route) instead of `@localmode/react` — and a few lines mapping the SDK's message parts onto the component props.
+
+```tsx
+'use client';
+
+import { useChat } from '@ai-sdk/react'; // cloud logic instead of @localmode/react
+import {
+  Conversation,
+  ConversationContent,
+} from '@/components/conversation';
+import { Message, MessageAvatar, MessageContent } from '@/components/message';
+import {
+  PromptInput,
+  PromptInputTextarea,
+  PromptInputTools,
+  PromptInputSubmit,
+} from '@/components/prompt-input';
+
+// Map an @ai-sdk/react message's parts onto MessageContent's `content` prop.
+const textOf = (m) =>
+  m.parts.filter((p) => p.type === 'text').map((p) => p.text).join('');
+
+export default function Chat() {
+  const { messages, status, sendMessage, stop } = useChat(); // hits /api/chat
+  const streaming = status === 'streaming';
+
+  return (
+    <>
+      <Conversation streaming={streaming}>
+        <ConversationContent>
+          {messages.map((m) => (
+            <Message key={m.id} role={m.role}>
+              <MessageAvatar role={m.role} />
+              <MessageContent role={m.role} content={textOf(m)} />
+            </Message>
+          ))}
+        </ConversationContent>
+      </Conversation>
+
+      <PromptInput
+        streaming={streaming}
+        onStop={stop}
+        onSubmit={(text) => sendMessage({ text })}
+      >
+        <PromptInputTextarea />
+        <PromptInputTools>
+          <PromptInputSubmit />
+        </PromptInputTools>
+      </PromptInput>
+    </>
+  );
+}
+```
+
+That's the whole integration: `messages` → `Message`/`MessageContent`, `status` → `streaming`, `sendMessage`/`stop` → `PromptInput`. The components never knew which backend produced the data.
+
+<Callout type="info" title="Live streaming cursor">
+  `MessageContent` renders finished markdown. For a blinking cursor on the *in-flight*
+  assistant message, swap it for the `Response` renderer — a standalone streaming-aware
+  markdown component (`<Response streaming>{textOf(m)}</Response>`), installed via
+  `@localmode/ui/conversation/response`.
+</Callout>
+
+## Mapping the richer parts
+
+The Vercel AI SDK emits tool invocations, reasoning, and sources as message *parts*. Each maps cleanly onto a LocalMode element.
+
+### Tool invocations → `Tool`
+
+```tsx
+import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from '@/components/tool';
+
+// Inside the message map, for each part where p.type === 'tool-<name>'.
+// The tool name lives in the part's `type` (`tool-${name}`), not a `toolName` field.
+const toolName = p.type.replace('tool-', '');
+
+<Tool defaultOpen>
+  <ToolHeader name={toolName} status={mapToolStatus(p.state)} />
+  <ToolContent>
+    <ToolInput input={p.input} />
+    <ToolOutput output={p.output} error={p.errorText} />
+  </ToolContent>
+</Tool>;
+
+// AI SDK tool-part `state` → the component's `ToolStatus` taxonomy
+function mapToolStatus(state: string) {
+  switch (state) {
+    case 'input-streaming':
+      return 'streaming';
+    case 'input-available':
+      return 'running';
+    case 'output-available':
+      return 'completed';
+    case 'output-error':
+      return 'error';
+    default:
+      return 'pending';
+  }
+}
+```
+
+### Reasoning parts → `Reasoning`
+
+```tsx
+import { Reasoning, ReasoningTrigger, ReasoningContent } from '@/components/reasoning';
+
+const reasoning = m.parts
+  .filter((p) => p.type === 'reasoning')
+  .map((p) => p.text)
+  .join('');
+
+{reasoning && (
+  <Reasoning>
+    <ReasoningTrigger />
+    <ReasoningContent>{reasoning}</ReasoningContent>
+  </Reasoning>
+)}
+```
+
+### Source parts → `Sources`
+
+```tsx
+import { Sources, SourcesTrigger, SourcesContent, Source } from '@/components/sources';
+
+const sources = m.parts.filter((p) => p.type === 'source-url');
+
+{sources.length > 0 && (
+  <Sources>
+    <SourcesTrigger count={sources.length} />
+    <SourcesContent>
+      {sources.map((s) => (
+        <Source
+          key={s.sourceId}
+          source={{ id: s.sourceId, url: s.url, title: s.title ?? s.url }}
+        />
+      ))}
+    </SourcesContent>
+  </Sources>
+)}
+```
+
+`Branch` and `ChainOfThought` map the same way — from the SDK's message alternatives and step lists onto the components' props.
+
+## What changes vs. LocalMode
+
+| | LocalMode (recommended) | Vercel AI SDK |
+| --- | --- | --- |
+| Logic hook | `useChat` from `@localmode/react` | `useChat` from `@ai-sdk/react` |
+| Where inference runs | on-device (no server) | your API route / provider |
+| Component code | **identical** | **identical** |
+| Data mapping | none (shapes match the hooks) | ~3 lines per part type |
+
+The components are the constant. Pick the logic layer that fits your app — and reach for the [local-first families](/docs/local-first) (model download, capability gates, on-device storage observability) that no cloud UI library ships.
+
+## See also
+
+- [Chat block](/blocks/chat) — a live, fully-wired reference doing the local counterpart of this page: the same conversation elements driven by 76 on-device models across four providers (with vision, reasoning, and agent mode). Install it with `npx shadcn@latest add @localmode/ui/blocks/chat`.
+- [Bring your own data](/docs/bring-your-own-data) — the generic prop contract and per-family shape tables, for any backend or static fixtures.
+- [Conversation components](/docs/conversation) — the full family reference.

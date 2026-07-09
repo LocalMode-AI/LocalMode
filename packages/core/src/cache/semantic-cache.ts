@@ -624,26 +624,42 @@ export function semanticCacheMiddleware(cache: SemanticCache): LanguageModelMidd
 
         // Cache miss — stream from model and buffer for caching
         let accumulatedText = '';
+        let stored = false;
 
-        for await (const chunk of doStream()) {
-          accumulatedText += chunk.text;
-          yield chunk;
-
-          if (chunk.done) {
-            break;
-          }
-        }
-
-        // Store the complete response in cache (fire-and-forget)
-        if (accumulatedText.length > 0) {
+        /** Store the complete response (fire-and-forget, at most once). */
+        const storeCompletedResponse = (): void => {
+          if (stored || accumulatedText.length === 0) return;
+          stored = true;
           cache.store({
             prompt,
             response: accumulatedText,
             modelId: model.modelId,
           }).catch(() => {
-            // Silently ignore cache store errors
+            // Silently ignore cache store errors — caching is best-effort
           });
+        };
+
+        for await (const chunk of doStream()) {
+          accumulatedText += chunk.text;
+
+          if (chunk.done) {
+            // Store BEFORE yielding the final chunk: consumers commonly stop
+            // iterating as soon as they see `done` (e.g. streamText breaks out
+            // of its loop), which ends this generator with a return at the
+            // yield below — code placed after the loop would never run and
+            // the response would silently never be cached.
+            storeCompletedResponse();
+            yield chunk;
+            break;
+          }
+
+          yield chunk;
         }
+
+        // Provider ended the iterable without a done-marked final chunk.
+        // (An early consumer break lands on the non-final yield above and
+        // skips this on purpose — a truncated response must not be cached.)
+        storeCompletedResponse();
       }
 
       return cachedStream();

@@ -1,0 +1,51 @@
+---
+title: "Source Citation List"
+description: "An in-message attributed-sources list with numbered items, a radial confidence ring, and a collapsible Show N sources toggle."
+icon: ListOrdered
+---
+
+# Source Citation List
+
+The **SourceCitationList** extends `Sources` for in-message attribution. It renders retrieved RAG passages behind a collapsible "Show N sources" toggle, each with a numbered badge, a similarity score (flat text + radial confidence ring via `ConfidenceRing`), and clamped body text with a staggered fade-in. Data source: a `Source[]` (`{ text, score }`) from `useSemanticSearch` / `useAnswerQuestion` / `useAskDocument`.
+
+## Preview
+
+<ComponentPreview name="ui/conversation/source-citation-list" />
+
+<OpenInV0 name="ui/conversation/source-citation-list" />
+
+## Installation
+
+<InstallTabs name="ui/conversation/source-citation-list" />
+
+### Data source & dependencies
+
+**Data source:** renders a `Source[]` (`{ text, score }`) you pass — works with any backend. Recommended producer: `useSemanticSearch` / `useAnswerQuestion` / `useAskDocument` from `@localmode/react` (on-device, optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `source-citation-list.tsx` — `SourceCitationList` + `ConfidenceRing`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/conversation/source-citation-list/source-citation-list.tsx" name="SourceCitationListProps" />
+
+## Examples
+
+### Attribute an answer
+
+```tsx
+import { SourceCitationList } from '@/components/source-citation-list';
+
+<SourceCitationList
+  sources={results.map((r) => ({ title: r.metadata.title, text: r.text, score: r.score }))}
+/>
+```
+
+## Customization
+
+The `ConfidenceRing` is a dependency-free SVG — reuse it standalone for any 0–1 score. Adjust the `line-clamp` or the stagger delay in the copied file.
+
+These primitives are presentational and hook-driven: they render props and emit callbacks, holding only local view state. The orchestration state (e.g. `useSemanticSearch`) lives in your app. Every surface uses shadcn/ui CSS-variable utilities, so it inherits your theme — restyle the copied file freely.

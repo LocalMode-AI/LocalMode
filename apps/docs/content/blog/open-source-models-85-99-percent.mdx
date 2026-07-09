@@ -3,7 +3,7 @@ title: "Open Source AI Models Are Now 85-99% as Good as Cloud APIs - Here's the 
 description: "We tracked every major benchmark across 18 model categories from 2023 to 2026. Open source models went from 50-70% of cloud quality to 85-99%. A 4-billion parameter model now approaches GPT-5 on knowledge benchmarks. Here is every number, every source, and what it means for your architecture."
 author: LocalMode
 date: 2026-03-20
-dateModified: "2026-05-29"
+dateModified: "2026-07-04"
 faq:
   - question: "How close are open source AI models to cloud APIs like GPT-5?"
     answer: "As of 2026, open source models reach 85-99% of cloud API quality across 18 model categories. Embeddings match OpenAI at 99.8%. Qwen3.5-4B scores 88.8% on MMLU-Redux in thinking mode, within 4 points of GPT-5's 92.5% on MMLU -- a model small enough to run in a browser tab."
@@ -163,7 +163,7 @@ The WER gap narrows further for clean microphone input -- the typical use case f
 
 ### Text-to-Speech: 88-92% of OpenAI TTS
 
-Kokoro-82M delivers natural-sounding speech with 28 voices at 24kHz from an 86MB model. In the HuggingFace TTS Arena, Kokoro-82M achieved **first place** for single-speaker quality, beating models 5-15x its size in blind listener tests.
+Kokoro-82M delivers natural-sounding speech with 29 English voices at 24kHz from an 86MB model. In the HuggingFace TTS Arena, Kokoro-82M achieved **first place** for single-speaker quality, beating models 5-15x its size in blind listener tests.
 
 | Metric | Local (Kokoro-82M) | Cloud (OpenAI TTS / ElevenLabs) | Ratio |
 |--------|-------------------|-------------------------------|-------|
@@ -266,7 +266,7 @@ Intellectual honesty requires acknowledging where the gap remains significant:
 
 **Multilingual breadth.** Google Translate covers 243 languages. Each Opus-MT model covers one language pair. Chrome Built-in AI (Gemini Nano) adds some multilingual capability at zero download cost, but coverage cannot match cloud services.
 
-**Voice diversity.** ElevenLabs offers 10,000+ voices and voice cloning. Kokoro-82M offers 28 high-quality voices. For applications needing specific voice characteristics or brand voices, cloud TTS has more flexibility.
+**Voice diversity.** ElevenLabs offers 10,000+ voices and voice cloning. Kokoro-82M offers 29 high-quality English voices. For applications needing specific voice characteristics or brand voices, cloud TTS has more flexibility.
 
 ---
 
@@ -386,7 +386,7 @@ All benchmark numbers in this post come from published sources: model cards on H
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

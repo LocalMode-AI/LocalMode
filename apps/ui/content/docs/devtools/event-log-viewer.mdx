@@ -1,0 +1,82 @@
+---
+title: "Event Log Viewer"
+description: "Newest-first devtools event log with relative timestamps, namespace-colored type badges, a substring type filter, a visible cap with overflow line, and dual empty states."
+icon: ScrollText
+---
+
+# Event Log Viewer
+
+The **Event Log Viewer** renders a devtools event stream newest first: relative timestamps (absolute on hover), namespace-colored type badges (`vectordb:` emerald, `embedding:` sky, `model` violet, `queue` amber, `pipeline` fuchsia, `storage` orange), and the serialized payload per entry. A case-insensitive substring filter narrows by event type, the visible list is capped (default 100, overridable via `maxVisible`) with an overflow line for older hidden matches, and the "no events yet" and "no events matching filter" empty states are distinct. A Clear affordance renders only when `onClear` is provided. It preserves the filter + cap semantics of the deprecated `@localmode/devtools` widget's Events panel. Values are passed in as props — works with any backend; recommended data source: `useDevToolsEvents` from `@localmode/devtools/react` (on-device, optional).
+
+## Preview
+
+<ComponentPreview name="ui/devtools/event-log-viewer" note="Fixture event stream (embedding + vectordb namespaces) with maxVisible lowered to 10 so the overflow line shows. Try filtering by 'search', then by something that matches nothing; Clear empties the log." />
+
+<OpenInV0 name="ui/devtools/event-log-viewer" />
+
+## Installation
+
+<InstallTabs name="ui/devtools/event-log-viewer" />
+
+### Data source & dependencies
+
+**Data source:** renders whatever `events` you pass — works with any backend or event bus. Recommended producer: the `useDevToolsEvents` hook from `@localmode/devtools/react` (on-device, optional); its `DevToolsEvent[]` output matches `DevToolsEventLike` field-for-field, so it feeds the `events` prop with no mapping layer.
+
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `event-log-viewer.tsx` — the `EventLogViewer` component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/devtools/event-log-viewer/event-log-viewer.tsx" name="EventLogViewerProps" />
+
+<AutoTypeTable path="registry/localmode/devtools/event-log-viewer/event-log-viewer.tsx" name="DevToolsEventLike" />
+
+## Examples
+
+### Bound to the devtools event stream
+
+Enable devtools once at app init (`enableDevTools()` from `@localmode/devtools`), then the hook streams the bridge's event buffer — oldest first, exactly what `events` expects:
+
+```tsx
+import { useDevToolsEvents } from '@localmode/devtools/react';
+import { EventLogViewer } from '@/components/event-log-viewer';
+
+function EventsTab() {
+  const events = useDevToolsEvents();
+  return <EventLogViewer events={events} maxVisible={100} />;
+}
+```
+
+### Pre-narrowed to one namespace
+
+Pass the hook's own `types` filter to scope the stream before it reaches the viewer (the in-component filter then narrows further):
+
+```tsx
+const events = useDevToolsEvents({ types: ['vectordb'] });
+
+<EventLogViewer events={events} />
+```
+
+### Controlled filter with a clear affordance
+
+Own the filter in the parent (e.g. to sync it with a URL param) and wire `onClear` to whatever resets your buffer:
+
+```tsx
+const [filter, setFilter] = useState('');
+
+<EventLogViewer
+  events={events}
+  filter={filter}
+  onFilterChange={setFilter}
+  onClear={() => setEvents([])}
+/>
+```
+
+## Customization
+
+Type badges are colored by the namespace before the `:` in the event type — the `NAMESPACE_BADGES` map in the copied file is yours to extend with your own namespaces (unknown namespaces fall back to a neutral badge). The list scrolls internally past `max-h-96`; the overflow line reports matches hidden by `maxVisible`. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class, cap, and empty-state message is yours to change.

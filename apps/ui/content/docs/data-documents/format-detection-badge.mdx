@@ -1,0 +1,87 @@
+---
+title: "Format Detection Badge"
+description: "A small badge that displays an auto-detected data format (PINECONE / CHROMA / CSV / JSONL) with a per-format color map."
+icon: Tag
+---
+
+# Format Detection Badge
+
+The **Format Detection Badge** displays an auto-detected data format — `PINECONE`, `CHROMA`, `CSV`, `JSONL`, or any custom format — as a small color-coded pill. Pair it with [`useImportExport()`](https://localmode.dev/docs/react) from `@localmode/react`: after `parsePreview()` returns a `parseResult`, render `parseResult.format` to confirm the source format before importing.
+
+It is fully self-contained and presentational — pass a `format` string and an optional `colorMap`. Unknown formats fall back to a neutral style, and a nullish `format` renders a pulsing "detecting…" state.
+
+**When to use it:** confirm the detected format of a dropped vector export in a data-migration or import-preview UI. It is also consumed by the local-first `VectorImportFlow` (the import preview shows the detected format) as a registry dependency.
+
+## Preview
+
+<ComponentPreview name="ui/data-documents/format-detection-badge" note="Static, presentational — no model download. Shows each built-in format color plus an unknown/pending fallback." />
+
+<OpenInV0 name="ui/data-documents/format-detection-badge" />
+
+## Installation
+
+<InstallTabs name="ui/data-documents/format-detection-badge" />
+
+### Dependencies
+
+- **Data source:** renders the plain `format` string you pass — works with any backend; recommended LocalMode producer: `useImportExport`'s `parseResult.format` (optional).
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `format-detection-badge.tsx` — the component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/data-documents/format-detection-badge/format-detection-badge.tsx" name="FormatDetectionBadgeProps" />
+
+## Examples
+
+### Drive it from `useImportExport`
+
+```tsx
+import { FormatDetectionBadge } from '@/components/format-detection-badge';
+import { useImportExport } from '@localmode/react';
+
+export function ImportPreview({ db, content }: { db: any; content: string }) {
+  const { parsePreview, parseResult } = useImportExport({ db });
+
+  return (
+    <div className="flex items-center gap-2">
+      <button onClick={() => parsePreview({ content })}>Detect format</button>
+      <FormatDetectionBadge format={parseResult?.format} />
+    </div>
+  );
+}
+```
+
+### Custom format + color
+
+```tsx
+<FormatDetectionBadge
+  format="parquet"
+  colorMap={{
+    parquet: {
+      badge: 'bg-rose-500/10 text-rose-700 border-rose-500/30 dark:text-rose-300',
+      dot: 'bg-rose-500',
+    },
+  }}
+/>
+```
+
+### Pending / unknown
+
+```tsx
+{/* nullish format → pulsing "detecting…" */}
+<FormatDetectionBadge format={null} />
+
+{/* unknown format → neutral fallback */}
+<FormatDetectionBadge format="avro" />
+```
+
+## Customization
+
+The badge merges your `colorMap` over the built-in `DEFAULT_FORMAT_COLORS`, so you can override a single format or add new ones without editing the component. Each entry is a `{ badge, dot }` pair of Tailwind class strings — the `badge` classes set the tinted background/text/border and the `dot` sets the leading marker color. The neutral fallback and the pending state use shadcn/ui CSS variables (`bg-muted`, `text-muted-foreground`, `border-border`), so they inherit your theme.
+
+Because you own the file, you can also export `DEFAULT_FORMAT_COLORS` and reuse the same map elsewhere (e.g. an import-flow legend).

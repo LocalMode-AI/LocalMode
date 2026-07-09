@@ -4,14 +4,14 @@ description: Detect when an embedding model changes and re-embed documents to ma
 icon: Activity
 ---
 
-import { Callout, TypeTable } from 'fumadocs-ui/components/callout';
+import { Callout } from 'fumadocs-ui/components/callout';
 
 ## Overview
 
 When you switch embedding models (e.g., from MiniLM-L6 to BGE-small-en), all existing vectors become incompatible -- even if both models produce the same dimensionality. Cosine similarity between vectors from different models produces nonsensical scores.
 
 <Callout type="info" title="See it in action">
-  Try [Semantic Search](https://localmode.ai/semantic-search) for a working demo of these APIs.
+  Try the [Knowledge Base block](https://localmode.ai/blocks/knowledge/vector-data-manager) for a working demo of these APIs.
 </Callout>
 
 LocalMode tracks **model provenance** per collection via `ModelFingerprint`. On initialization, the stored fingerprint is compared against the current model. If they differ, a `modelDriftDetected` event fires so you can take action.
@@ -48,6 +48,10 @@ const db = await createVectorDB({
 ```
 
 On first use, the model's fingerprint is stored with the collection. On subsequent initializations, the stored fingerprint is compared to the current model.
+
+<Callout type="info" title="External storage adapters must persist the fingerprint">
+The `modelFingerprint` lives on the `Collection` object. Drift detection only works across a reopen if the storage adapter round-trips it. The official adapters (`@localmode/dexie`, `@localmode/idb`, `@localmode/localforage`) now persist the full `Collection` (see the [conformance suite](/docs/core/storage#verify-with-the-conformance-suite)); collections written by an earlier adapter version stored no fingerprint and silently skip drift detection until re-ingested.
+</Callout>
 
 ## Checking Compatibility
 
@@ -220,7 +224,7 @@ function ReindexPanel({ db, newModel }) {
 |-------|------|-------------|
 | `isReindexing` | `boolean` | Whether reindexing is in progress |
 | `progress` | `ReindexProgress \| null` | Current progress |
-| `error` | `{ message: string } \| null` | Error if failed |
+| `error` | `Error \| null` | Error if failed |
 | `reindex` | `() => Promise<ReindexResult \| null>` | Start reindexing |
 | `cancel` | `() => void` | Cancel the operation |
 | `clearError` | `() => void` | Clear error state |
@@ -245,8 +249,8 @@ if (!fingerprintsMatch(storedFp, currentFp)) {
 }
 ```
 
-## Showcase Apps
+## Blocks
 
 | App | Description | Links |
 |-----|-------------|-------|
-| Semantic Search | Detect model drift and trigger reindexing | [Demo](https://localmode.ai/semantic-search) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/showcase-nextjs/src/app/(apps)/semantic-search) |
+| Knowledge Base (Semantic Search) | Detect model drift and trigger reindexing | [Live block](https://localmode.ai/blocks/knowledge/vector-data-manager) · [Source](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks/knowledge/vector-data-manager) |

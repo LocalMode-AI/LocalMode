@@ -18,7 +18,7 @@ import type {
 import type { IDBStorageOptions } from './types.js';
 
 /**
- * Internal IDB record types (vector stored as ArrayBuffer for IndexedDB compatibility).
+ * Internal IDB record types.
  */
 interface DocumentRecord {
   id: string;
@@ -31,7 +31,13 @@ interface DocumentRecord {
 interface VectorRecord {
   id: string;
   collectionId: string;
-  vector: ArrayBuffer;
+  /**
+   * The stored vector. Current versions store the typed array itself
+   * (IndexedDB's structured clone preserves the type): `Float32Array` for
+   * float vectors, `Uint8Array` for SQ8/PQ-compressed payloads. Records
+   * written by older versions hold a raw `ArrayBuffer` of f32 data.
+   */
+  vector: Float32Array | Uint8Array | ArrayBuffer;
 }
 
 interface IndexRecord {
@@ -40,11 +46,29 @@ interface IndexRecord {
   updatedAt: number;
 }
 
-interface CollectionRecord {
-  id: string;
-  name: string;
-  dimensions: number;
-  createdAt: number;
+/**
+ * Revive a stored vector preserving its payload type. Records written by
+ * current versions hold the typed array itself (`Float32Array`, or
+ * `Uint8Array` for SQ8/PQ-compressed payloads); records written by older
+ * versions hold a raw `ArrayBuffer` of f32 data.
+ *
+ * Type detection uses the toString tag instead of `instanceof` because
+ * structured clone can hand back typed arrays from another realm (e.g.
+ * fake-indexeddb in tests), where `instanceof` fails. Views are re-wrapped
+ * into same-realm typed arrays so downstream `instanceof` checks (core's
+ * `decompressFromStorage`) see the expected types.
+ */
+function reviveVector(stored: Float32Array | Uint8Array | ArrayBuffer): Float32Array | Uint8Array {
+  const tag = Object.prototype.toString.call(stored);
+  if (tag === '[object Uint8Array]') {
+    const view = stored as Uint8Array;
+    return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+  }
+  if (tag === '[object Float32Array]') {
+    const view = stored as Float32Array;
+    return new Float32Array(view.buffer, view.byteOffset, view.length);
+  }
+  return new Float32Array(stored as ArrayBuffer);
 }
 
 /**
@@ -67,7 +91,16 @@ interface VectorDBSchema extends DBSchema {
   };
   collections: {
     key: string;
-    value: CollectionRecord;
+    /**
+     * The full core {@link Collection} object — including every optional
+     * extended field (`modelFingerprint`, `calibration`, `pqCodebook`,
+     * `compression`, `compressionCalibration`, `deltaCalibration`, and any
+     * future ones). Core persists quantization/compression calibration and
+     * the model fingerprint on the collection record; narrowing this shape
+     * silently corrupts quantized/compressed vectors across sessions and
+     * disables drift detection.
+     */
+    value: Collection;
     indexes: { name: string };
   };
 }
@@ -203,23 +236,26 @@ export class IDBStorage implements StorageAdapter {
   async addVector(vec: StoredVector): Promise<void> {
     const db = this.ensureOpen();
 
-    // Copy to standalone ArrayBuffer to avoid shared buffer issues
-    const buffer = new ArrayBuffer(vec.vector.byteLength);
-    new Float32Array(buffer).set(vec.vector);
+    // Copy to a standalone typed array (avoids persisting a view over a
+    // larger shared buffer) while preserving the payload type — Uint8Array
+    // for SQ8/PQ-compressed vectors, Float32Array otherwise.
+    const copy = vec.vector instanceof Uint8Array
+      ? new Uint8Array(vec.vector)
+      : new Float32Array(vec.vector);
 
     await db.put('vectors', {
       id: vec.id,
       collectionId: vec.collectionId,
-      vector: buffer,
+      vector: copy,
     });
   }
 
-  async getVector(id: string): Promise<Float32Array | null> {
+  async getVector(id: string): Promise<Float32Array | Uint8Array | null> {
     const db = this.ensureOpen();
     const record = await db.get('vectors', id);
     if (!record) return null;
 
-    return new Float32Array(record.vector);
+    return reviveVector(record.vector);
   }
 
   async deleteVector(id: string): Promise<void> {
@@ -227,13 +263,13 @@ export class IDBStorage implements StorageAdapter {
     await db.delete('vectors', id);
   }
 
-  async getAllVectors(collectionId: string): Promise<Map<string, Float32Array>> {
+  async getAllVectors(collectionId: string): Promise<Map<string, Float32Array | Uint8Array>> {
     const db = this.ensureOpen();
     const records = await db.getAllFromIndex('vectors', 'collectionId', collectionId);
 
-    const map = new Map<string, Float32Array>();
+    const map = new Map<string, Float32Array | Uint8Array>();
     for (const r of records) {
-      map.set(r.id, new Float32Array(r.vector));
+      map.set(r.id, reviveVector(r.vector));
     }
     return map;
   }
@@ -274,12 +310,11 @@ export class IDBStorage implements StorageAdapter {
 
   async createCollection(collection: Collection): Promise<void> {
     const db = this.ensureOpen();
-    await db.put('collections', {
-      id: collection.id,
-      name: collection.name,
-      dimensions: collection.dimensions,
-      createdAt: collection.createdAt,
-    });
+    // Persist the FULL Collection object (structured-clone-safe: the extended
+    // fields are plain objects/arrays/typed arrays). Cherry-picking fields
+    // would drop quantization/compression calibration and the model
+    // fingerprint, corrupting compressed vectors on the next session.
+    await db.put('collections', { ...collection });
   }
 
   async getCollection(id: string): Promise<Collection | null> {
@@ -287,12 +322,8 @@ export class IDBStorage implements StorageAdapter {
     const record = await db.get('collections', id);
     if (!record) return null;
 
-    return {
-      id: record.id,
-      name: record.name,
-      dimensions: record.dimensions,
-      createdAt: record.createdAt,
-    };
+    // Return every stored field, including the optional extended ones.
+    return { ...record };
   }
 
   async getCollectionByName(name: string): Promise<Collection | null> {
@@ -300,33 +331,20 @@ export class IDBStorage implements StorageAdapter {
     const record = await db.getFromIndex('collections', 'name', name);
     if (!record) return null;
 
-    return {
-      id: record.id,
-      name: record.name,
-      dimensions: record.dimensions,
-      createdAt: record.createdAt,
-    };
+    return { ...record };
   }
 
   async getAllCollections(): Promise<Collection[]> {
     const db = this.ensureOpen();
     const records = await db.getAll('collections');
-    return records.map((r) => ({
-      id: r.id,
-      name: r.name,
-      dimensions: r.dimensions,
-      createdAt: r.createdAt,
-    }));
+    return records.map((r) => ({ ...r }));
   }
 
   async updateCollection(collection: Collection): Promise<void> {
     const db = this.ensureOpen();
-    await db.put('collections', {
-      id: collection.id,
-      name: collection.name,
-      dimensions: collection.dimensions,
-      createdAt: collection.createdAt,
-    });
+    // Core adds calibration/fingerprint data via updateCollection() after the
+    // collection is created — the full object must round-trip here too.
+    await db.put('collections', { ...collection });
   }
 
   async deleteCollection(id: string): Promise<void> {

@@ -1,0 +1,17 @@
+{
+  "title": "Results & Insights",
+  "pages": [
+    "confidence-score-badge",
+    "scored-result-bar-list",
+    "top-result-card",
+    "cosine-similarity-meter",
+    "editable-label-set",
+    "entity-stats-bar",
+    "redacted-text-display",
+    "evaluation-metrics-dashboard",
+    "entity-relationship-graph",
+    "threshold-calibration-panel",
+    "error-alert",
+    "mode-error-boundary"
+  ]
+}

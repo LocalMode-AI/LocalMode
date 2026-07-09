@@ -42,7 +42,7 @@ export interface UseCalibrateThresholdReturn {
   isCalibrating: boolean;
 
   /** Error state (null if no error) */
-  error: { message: string } | null;
+  error: Error | null;
 
   /** Start calibration with the given corpus */
   calibrate: (corpus: string[]) => Promise<ThresholdCalibration | null>;
@@ -90,7 +90,7 @@ export function useCalibrateThreshold(
 
   const [calibration, setCalibration] = useState<ThresholdCalibration | null>(null);
   const [isCalibrating, setIsCalibrating] = useState(false);
-  const [error, setError] = useState<{ message: string } | null>(null);
+  const [error, setError] = useState<Error | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
@@ -148,8 +148,7 @@ export function useCalibrateThreshold(
           return null;
         }
 
-        const message = err instanceof Error ? err.message : String(err);
-        setError({ message });
+        setError(err instanceof Error ? err : new Error(String(err)));
         setIsCalibrating(false);
         return null;
       }

@@ -3,7 +3,7 @@ title: "Hand, Pose & Face Tracking in the Browser with MediaPipe + LocalMode"
 description: "LocalMode now ships @localmode/mediapipe -- a provider wrapping Google's MediaPipe Tasks. Detect 21-point hand landmarks, 33-point body poses, the 478-point face mesh, and 8 hand gestures, plus real-time video trackers built for live inference. The camera never leaves the device, and it works in every browser without WebGPU."
 author: LocalMode
 date: "2026-05-21"
-dateModified: "2026-05-28"
+dateModified: "2026-07-04"
 faq:
   - question: "What tracking capabilities does @localmode/mediapipe provide?"
     answer: "The provider wraps Google's MediaPipe Tasks for 21-point hand landmarks, 33-point body pose estimation, the 478-point face mesh with optional blendshapes, BlazeFace face detection (230KB), and 8 built-in hand gesture recognition. It also covers image/audio classification, segmentation, and language detection."
@@ -173,11 +173,11 @@ export function HandDetector() {
 
 ---
 
-## See It Live: MediaPipe Studio
+## See It Live: The Live Tracker Block
 
-The new **MediaPipe Studio** showcase app puts all of this together -- a webcam view with live hand, pose, face, and gesture tracking overlaid on the video, switchable in real time. It is the fastest way to see what on-device perception feels like with zero latency and zero uploads.
+The **[Live Tracker](https://localmode.ai/blocks/vision/live-tracker)** block puts all of this together -- a webcam view with live hand, pose, face, and gesture tracking overlaid on the video, switchable in real time. It is the fastest way to see what on-device perception feels like with zero latency and zero uploads.
 
-Because everything runs locally, MediaPipe Studio works offline after the first model load, costs nothing to run, and never asks for an API key.
+Because everything runs locally, the Live Tracker works offline after the first model load, costs nothing to run, and never asks for an API key.
 
 ---
 
@@ -212,7 +212,7 @@ Every API name, model count, file size, and code example in this post was verifi
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try the MediaPipe Studio demo and 30+ other AI apps running entirely in your browser -- no sign-up, no API keys, and no data leaving your device.
+  Visit the [Live Tracker block](https://localmode.ai/blocks/vision/live-tracker) to try MediaPipe hand, pose, face, and gesture tracking live, plus other installable AI blocks in the [/blocks gallery](https://localmode.ai/blocks) -- no sign-up, no API keys, and no data leaving your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

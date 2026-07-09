@@ -68,11 +68,14 @@ vi.mock('@localmode/core', async () => {
     fireUtterance(u: unknown) {
       for (const l of this.utteranceListeners) l(u);
     }
+    fireBargeIn(e: unknown) {
+      for (const l of this.bargeInListeners) l(e);
+    }
   }
 
   // Track the most recently created controller so tests can poke it.
   const created: FakeController[] = [];
-  (globalThis as { __lastFakeController__?: () => FakeController }).__lastFakeController__ = () =>
+  (globalThis as unknown as { __lastFakeController__?: () => FakeController }).__lastFakeController__ = () =>
     created[created.length - 1];
 
   return {
@@ -135,7 +138,7 @@ describe('useLiveTranscribe', () => {
       await result.current.start();
     });
 
-    const fake = (globalThis as { __lastFakeController__: () => { fireChunk(c: unknown): void; fireUtterance(u: unknown): void } }).__lastFakeController__();
+    const fake = (globalThis as unknown as { __lastFakeController__: () => { fireChunk(c: unknown): void; fireUtterance(u: unknown): void } }).__lastFakeController__();
 
     await act(async () => {
       fake.fireChunk({
@@ -176,12 +179,86 @@ describe('useLiveTranscribe', () => {
       await result.current.start();
     });
 
-    const fake = (globalThis as { __lastFakeController__: () => { state: string } }).__lastFakeController__();
+    const fake = (globalThis as unknown as { __lastFakeController__: () => { state: string } }).__lastFakeController__();
     expect(fake.state).toBe('listening');
 
     unmount();
     // dispose runs async; spin once.
     await new Promise((r) => setTimeout(r, 0));
     expect(fake.state).toBe('disposed');
+  });
+
+  it('accumulates utterances and clears them via clearUtterances()', async () => {
+    const { result } = renderHook(() =>
+      useLiveTranscribe({
+        model: { modelId: 't', provider: 't', doTranscribe: async () => ({ text: '', usage: { audioDurationSec: 0, durationMs: 0 } }) } as unknown as Parameters<typeof useLiveTranscribe>[0]['model'],
+      })
+    );
+
+    expect(result.current.utterances).toEqual([]);
+
+    await act(async () => {
+      await result.current.start();
+    });
+
+    const fake = (globalThis as unknown as { __lastFakeController__: () => { fireUtterance(u: unknown): void } }).__lastFakeController__();
+
+    const makeUtterance = (id: string, text: string) => ({
+      utteranceId: id,
+      text,
+      durationSec: 1,
+      audio: new Float32Array(0),
+      truncated: false,
+      timestamp: new Date(),
+    });
+
+    await act(async () => {
+      fake.fireUtterance(makeUtterance('u1', 'first utterance'));
+    });
+    await act(async () => {
+      fake.fireUtterance(makeUtterance('u2', 'second utterance'));
+    });
+
+    // Accumulated, oldest first.
+    expect(result.current.utterances.length).toBe(2);
+    expect(result.current.utterances[0].text).toBe('first utterance');
+    expect(result.current.utterances[1].text).toBe('second utterance');
+    // Existing lastUtterance behavior unchanged: latest only.
+    expect(result.current.lastUtterance?.text).toBe('second utterance');
+
+    act(() => {
+      result.current.clearUtterances();
+    });
+
+    expect(result.current.utterances).toEqual([]);
+    // clearUtterances does NOT clear lastUtterance.
+    expect(result.current.lastUtterance?.text).toBe('second utterance');
+  });
+
+  it('surfaces barge-in via lastBargeIn state and the onBargeIn option', async () => {
+    const onBargeIn = vi.fn();
+    const { result } = renderHook(() =>
+      useLiveTranscribe({
+        model: { modelId: 't', provider: 't', doTranscribe: async () => ({ text: '', usage: { audioDurationSec: 0, durationMs: 0 } }) } as unknown as Parameters<typeof useLiveTranscribe>[0]['model'],
+        onBargeIn,
+      })
+    );
+
+    expect(result.current.lastBargeIn).toBeNull();
+
+    await act(async () => {
+      await result.current.start();
+    });
+
+    const fake = (globalThis as unknown as { __lastFakeController__: () => { fireBargeIn(e: unknown): void } }).__lastFakeController__();
+
+    const event = { timestamp: new Date(), audioLevelDb: -12.5 };
+    await act(async () => {
+      fake.fireBargeIn(event);
+    });
+
+    expect(result.current.lastBargeIn).toEqual(event);
+    expect(onBargeIn).toHaveBeenCalledTimes(1);
+    expect(onBargeIn).toHaveBeenCalledWith(event);
   });
 });

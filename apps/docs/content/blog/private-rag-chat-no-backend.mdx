@@ -3,7 +3,7 @@ title: "Build a Private RAG Chat Over Your Documents - No Backend Required"
 description: "A complete tutorial for building a retrieval-augmented generation pipeline that runs entirely in the browser. Load PDFs, chunk text, generate embeddings with BGE-small, store vectors in IndexedDB, and answer questions with a local LLM - all without a server, API key, or any data leaving the device."
 author: LocalMode
 date: 2026-03-13
-dateModified: "2026-05-28"
+dateModified: "2026-07-04"
 faq:
   - question: "Can you build a RAG pipeline entirely in the browser without a backend?"
     answer: "Yes. LocalMode provides the complete pipeline in the browser: PDF text extraction via PDF.js, recursive text chunking, 384-dimensional embeddings with BGE-small (33MB), vector storage in IndexedDB with HNSW indexing, semantic search, and streaming LLM answers -- all without a server or API key."
@@ -24,7 +24,7 @@ What if the entire pipeline ran in the browser tab?
 This post walks through building a complete, private RAG chat - from PDF ingestion to streaming LLM answers - using only client-side JavaScript. No server, no API keys, no data ever leaving the device. Every code example uses real LocalMode APIs pulled directly from the codebase.
 
 <Callout type="info" title="Working demo">
-  The [PDF Search](https://localmode.ai/pdf-search) showcase app implements everything in this tutorial. Open it, drop a PDF, and start asking questions - entirely offline after the initial model download.
+  The [Knowledge Base block](https://localmode.ai/blocks/knowledge/rag-chat) implements everything in this tutorial. Open it, drop a PDF, and start asking questions - entirely offline after the initial model download.
 </Callout>
 
 ---
@@ -109,7 +109,7 @@ console.log(`Created ${chunks.length} chunks`);
 The `recursive` strategy splits on paragraph breaks first, then sentences, then words - preserving natural boundaries. LocalMode also provides `markdown`, `code`, and `sentence` strategies via `chunk()`. For topic-boundary detection, use `semanticChunk()` directly - it uses embedding similarity to detect natural topic shifts, producing higher-quality chunks at the cost of an extra embedding pass.
 
 <Callout type="info" title="Choosing a chunk size">
-  For BGE-small-en-v1.5 (512-token context), a chunk size of 400-512 characters works well. Overlap of 50 characters ensures context is not lost at boundaries. The [PDF Search](https://localmode.ai/pdf-search) demo defaults to 512 with 50 overlap.
+  For BGE-small-en-v1.5 (512-token context), a chunk size of 400-512 characters works well. Overlap of 50 characters ensures context is not lost at boundaries. The [Knowledge Base block](https://localmode.ai/blocks/knowledge/semantic-search) defaults to 512 with 50 overlap.
 </Callout>
 
 ---
@@ -382,7 +382,7 @@ All LocalMode API names, function signatures, option shapes, and model IDs in th
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit [localmode.ai](https://localmode.ai) to try 30+ AI demo apps running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

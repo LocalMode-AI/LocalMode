@@ -1,0 +1,48 @@
+---
+title: "Model Catalog Card"
+description: "A rich tile for a single model catalog entry: name, size badge, metadata chips, and conditional capability badges."
+icon: Box
+---
+
+# Model Catalog Card
+
+The **Model Catalog Card** is a rich tile for a single model catalog entry (wllama / webllm / transformers / litert / mediapipe shapes): name, a size badge, an optional description, a metadata chip row (architecture, params, quantization, context), and a capability sub-row (tools / vision / embedding / reranking / reasoning) rendered conditionally from the entry's flags. It complements the Model Selector (a picker) — this is a presentation tile. It fires `onClick(id)` and supports a selected ring.
+
+## Preview
+
+<ComponentPreview name="ui/local-first/model-catalog-card" note="Renders catalog tiles with capability badges; bind entries to useModelRecommendations / your registry." />
+
+<OpenInV0 name="ui/local-first/model-catalog-card" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/model-catalog-card" />
+
+### Data source & dependencies
+
+**Data source:** renders the catalog entry you pass — works with any backend. Recommended producer: `useModelRecommendations` / your registry data from `@localmode/react` (on-device, optional).
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util (installed automatically as a registry dependency)
+
+### Files installed
+
+- `model-catalog-card.tsx` — the `ModelCatalogCard` component
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/model-catalog-card/model-catalog-card.tsx" name="ModelCatalogCardProps" />
+
+<AutoTypeTable path="registry/localmode/local-first/model-catalog-card/model-catalog-card.tsx" name="CatalogEntry" />
+
+## Examples
+
+### A selectable tile
+
+```tsx
+<ModelCatalogCard entry={entry} selected={entry.id === picked} onClick={setPicked} />
+```
+
+## Customization
+
+Capability badges render only for the flags present on the entry — edit the `CAPABILITIES` array to add more (e.g. audio). The selected state adds a `ring-1 ring-primary`. Styled entirely with shadcn/ui CSS-variable utilities so it inherits your theme — because you own the copied file, every class and threshold is yours to change.
