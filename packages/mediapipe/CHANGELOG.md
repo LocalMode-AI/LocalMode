@@ -1,5 +1,11 @@
 # @localmode/mediapipe
 
+## 2.0.2
+
+### Patch Changes
+
+- docs: replace the README "Demo" badge with "UI Components" (localmode.ai) and add a "Blocks & Apps" badge linking to the localmode.ai/blocks gallery
+
 ## 2.0.1
 
 ### Fixed
@@ -21,7 +27,7 @@
 - Implements existing core interfaces — `ImageClassificationModel`,
   `ObjectDetectionModel`, `SegmentationModel`, `ImageFeatureModel` (vision),
   `AudioClassificationModel` (YAMNet, 521 categories), and `ClassificationModel`
-  + `EmbeddingModel` (text).
+  - `EmbeddingModel` (text).
 - Provider factory methods: `handLandmarker()`, `poseLandmarker()`,
   `faceLandmarker()`, `faceDetector()`, `gestureRecognizer()`,
   `imageClassifier()`, `objectDetector()`, `imageSegmenter()`,

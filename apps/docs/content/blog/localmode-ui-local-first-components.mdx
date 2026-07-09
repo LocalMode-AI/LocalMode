@@ -1,12 +1,12 @@
 ---
 title: "The UI Cloud AI Can't Build: @localmode/ui Local-First Components"
-description: "Model download progress, device-capability gates, storage quota, GGUF metadata, vector-store observability -- the surfaces a user sees because the model runs on THEIR device. @localmode/ui ships 21 copy-owned, shadcn-styled local-first primitives that cloud AI UI libraries structurally cannot have."
+description: "Model download progress, device-capability gates, storage quota, GGUF metadata, vector-store observability -- the surfaces a user sees because the model runs on THEIR device. @localmode/ui ships 25 copy-owned, shadcn-styled local-first primitives that cloud AI UI libraries structurally cannot have."
 author: LocalMode
 date: "2026-05-31"
 dateModified: "2026-05-31"
 faq:
   - question: "What are the @localmode/ui local-first components?"
-    answer: "They are 21 copy-owned, shadcn/ui-styled React primitives for the surfaces a user sees because the model runs on their own device: ModelDownloader, ModelSelector, DeviceBadge, CapabilityGate, StorageMeter, ContextUsageMeter, GGUFMetadataCard, ModelRecommendationCard, VectorStorageObservability, and more. They render the state of @localmode/react hooks like useModelLoader, useCapabilities, and useStorageQuota."
+    answer: "They are 25 copy-owned, shadcn/ui-styled React primitives for the surfaces a user sees because the model runs on their own device: ModelDownloader, ModelSelector, DeviceBadge, CapabilityGate, StorageMeter, ContextUsageMeter, GGUFMetadataCard, ModelRecommendationCard, VectorStorageObservability, and more. They render the state of @localmode/react hooks like useModelLoader, useCapabilities, and useStorageQuota."
   - question: "Why can't cloud AI UI libraries ship these components?"
     answer: "Cloud AI UI libraries assume a server route streaming from a hosted model, so there is no download progress, no device-capability gate, no on-device storage quota, and no GGUF inspection to show -- those moments only exist when the model runs on the user's machine. The local-first family is the surface that becomes possible precisely because LocalMode runs models in the browser."
   - question: "How do I install the local-first components?"
@@ -21,7 +21,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 Open any cloud AI app and you will never see a model download bar, a "Requires WebGPU" gate, a storage-quota meter, or a card inspecting a GGUF file's metadata. Not because nobody wants them -- because they cannot exist. A cloud chat UI is a view over a server stream; the model lives somewhere else. There is nothing local to download, gate, measure, or inspect.
 
-When the model runs in the **browser**, an entire category of UI appears. The `@localmode/ui` **local-first** family is 21 copy-owned, shadcn-styled primitives for exactly those surfaces -- the moments a user actually feels "this runs on my machine." They are LocalMode's headline differentiator, and there is no off-the-shelf equivalent anywhere.
+When the model runs in the **browser**, an entire category of UI appears. The `@localmode/ui` **local-first** family is 25 copy-owned, shadcn-styled primitives for exactly those surfaces -- the moments a user actually feels "this runs on my machine." They are LocalMode's headline differentiator, and there is no off-the-shelf equivalent anywhere.
 
 <Callout type="info" title="The structural gap, made visible">
   Every Vercel AI Elements component assumes a hosted model behind a server route. The local-first
@@ -46,7 +46,7 @@ With [shadcn/ui set up](https://ui.shadcn.com/docs/installation) and the `@local
 # One primitive
 npx shadcn@latest add @localmode/ui/local-first/model-downloader
 
-# The whole local-first family (21 primitives)
+# The whole local-first family (24 primitives; the device-badge seed installs separately)
 npx shadcn@latest add @localmode/ui/local-first
 ```
 
@@ -154,7 +154,7 @@ The local-first family is the foundation the other two families stand on. A chat
 
 ### What are the `@localmode/ui` local-first components?
 
-They are 21 copy-owned, shadcn/ui-styled React primitives for the surfaces a user sees because the model runs on their own device: `ModelDownloader`, `ModelSelector`, `DeviceBadge`, `CapabilityGate`, `StorageMeter`, `ContextUsageMeter`, `ModelMetadataCard`, `ModelRecommendationCard`, `VectorStorageObservability`, and more. They render the state of `@localmode/react` hooks like `useModelLoader`, `useCapabilities`, and `useStorageQuota`.
+They are 25 copy-owned, shadcn/ui-styled React primitives for the surfaces a user sees because the model runs on their own device: `ModelDownloader`, `ModelSelector`, `DeviceBadge`, `CapabilityGate`, `StorageMeter`, `ContextUsageMeter`, `ModelMetadataCard`, `ModelRecommendationCard`, `VectorStorageObservability`, and more. They render the state of `@localmode/react` hooks like `useModelLoader`, `useCapabilities`, and `useStorageQuota`.
 
 ### Why can't cloud AI UI libraries ship these components?
 
@@ -176,7 +176,7 @@ No. They are presentational and hook-driven -- they render hook state and emit c
 
 ## Methodology
 
-Every component name, count, prop, and code example in this post was verified directly against the `@localmode/ui` source. The "21 components" figure is the count of `local-first`-categorized items in `apps/ui/registry.json` (20 under `ui/local-first/*` plus the top-level `ui/device-badge` seed). Component names and props were read from the `.tsx` source under `apps/ui/registry/localmode/local-first/**` and `apps/ui/registry/localmode/device-badge/`. The hooks they render (`useModelLoader`, `useModelStatus`, `useCapabilities`, `useStorageQuota`, `useNetworkStatus`, `useModelRecommendations`, `useSemanticCache`, `useAdaptiveBatchSize`) are exported from `packages/react/src/index.ts`; `getCompressionStats` is exported from `packages/core/src/index.ts`. The `ModelDownloader`, `ModelSelector`, `ContextUsageMeter`, and `VectorStorageObservability` code examples mirror each component's own props and demo bindings.
+Every component name, count, prop, and code example in this post was verified directly against the `@localmode/ui` source. The "25 components" figure is the count of `local-first`-categorized items in `apps/ui/registry.json` (24 under `ui/local-first/*` plus the top-level `ui/device-badge` seed, which installs separately). Component names and props were read from the `.tsx` source under `apps/ui/registry/localmode/local-first/**` and `apps/ui/registry/localmode/device-badge/`. The hooks they render (`useModelLoader`, `useModelStatus`, `useCapabilities`, `useStorageQuota`, `useNetworkStatus`, `useModelRecommendations`, `useSemanticCache`, `useAdaptiveBatchSize`) are exported from `packages/react/src/index.ts`; `getCompressionStats` is exported from `packages/core/src/index.ts`. The `ModelDownloader`, `ModelSelector`, `ContextUsageMeter`, and `VectorStorageObservability` code examples mirror each component's own props and demo bindings.
 
 Two install-correctness facts were verified against the real install path rather than asserted. First, **no local-first item declares an `@localmode/*` npm dependency** — confirmed by inspecting the `dependencies` array of every local-first entry in `apps/ui/registry.json` (each lists only `lucide-react` or nothing). Second, the environment-fed components (`DeviceBadge`, `CapabilityGate`, `DeviceCapabilityGrid`, `StorageMeter`, `NetworkBadge`, `ProviderFallbackBadge`) import `useCapabilities` / `useStorageQuota` / `useNetworkStatus` from the **copy-owned** `@/lib/use-environment` (`apps/ui/registry/localmode/lib/use-environment.ts`), not from `@localmode/react` at runtime — so the family installs and runs with zero `@localmode/*` packages. The `@localmode/react` imports that appear in this post's examples are *consumer-app binding code* (your app's choice), not the components' own imports. The zero-`@localmode` guarantee is enforced by an automated test that performs a real `shadcn add` into a scratch project and asserts no `@localmode/*` import statements and no `@localmode/*` package.json entries (`apps/ui/consumer-tests/portability-test.mjs`).
 

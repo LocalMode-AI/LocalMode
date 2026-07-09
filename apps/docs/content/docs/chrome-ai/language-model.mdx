@@ -11,7 +11,11 @@ import { Callout } from 'fumadocs-ui/components/callout';
 Chrome AI provides on-device text generation via the built-in Prompt API (`window.LanguageModel` / Gemini Nano). Zero downloads, zero bundle weight, no API keys — everything runs locally in Chrome.
 
 <Callout type="info" title="Browser support">
-  The Prompt API is available on **Chrome 138+** and **Edge 138+** desktop. Firefox and Safari do not implement it; non-Chromium browsers report `false` from `isPromptAPISupported()` and the model rejects with a typed `GenerationError`.
+  The Prompt API shipped for web pages in **Chrome 148+** desktop (Chrome 138 shipped it for *Chrome Extensions* only). Firefox and Safari do not implement it; non-Chromium browsers report `false` from `isPromptAPISupported()` and the model rejects with a typed `GenerationError`.
+</Callout>
+
+<Callout type="warn" title="Sampling parameters are still origin-trial gated">
+  The Prompt API itself is stable on web pages, but `temperature` and `topK` are not: on a web page they apply only under the "Prompt API sampling parameters" origin trial (they are unrestricted in Chrome Extensions). Treat them as a progressive enhancement — set them if you have the trial, and do not depend on them changing output for ordinary visitors.
 </Callout>
 
 ## Capability Detection
@@ -30,7 +34,7 @@ if (isPromptAPISupported()) {
 
 | Browser | Prompt API | Notes |
 |---------|------------|-------|
-| Chrome 138+ desktop | Stable | Top-level `window.LanguageModel` |
+| Chrome 148+ desktop | Stable (web pages) | Top-level `window.LanguageModel` |
 | Edge 138+ desktop | Stable | Same Chromium surface |
 | Chrome 127–137 | Origin trial | Legacy `self.ai.languageModel` (auto-detected) |
 | Chrome mobile (Android/iOS) | Not available | Use `@localmode/webllm` or `@localmode/wllama` |
@@ -56,8 +60,8 @@ The factory accepts a `ChromeAILanguageModelSettings` object:
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `systemPrompt` | `string` | — | Prepended to every session as `initialPrompts[0]` |
-| `temperature` | `number` | Chrome default | Sampling temperature (0–1) |
-| `topK` | `number` | Chrome default | Top-K sampling cutoff |
+| `temperature` | `number` | Chrome default | Sampling temperature (0–1). See the sampling-parameters caveat below. |
+| `topK` | `number` | Chrome default | Top-K sampling cutoff. See the sampling-parameters caveat below. |
 | `contextLength` | `number` | `6144` | Soft documentation value for `model.contextLength` |
 | `onProgress` | `(p: { loaded: number; total: number }) => void` | — | Forwarded to `monitor` for Gemini Nano download progress |
 
@@ -173,7 +177,7 @@ const { text } = await generateText({ model, prompt: 'Hello' });
 
 | Code | When | Hint / Remediation |
 |------|------|--------------------|
-| `chrome-ai-not-supported` | `window.LanguageModel` is missing entirely | Update to Chrome 138+ stable on desktop; verify the page is not in Incognito mode |
+| `chrome-ai-not-supported` | `window.LanguageModel` is missing entirely | Update to Chrome 148+ stable on desktop; verify the page is not in Incognito mode |
 | `chrome-ai-model-not-available` | `availability()` returned `'unavailable'` | Enable `chrome://flags/#optimization-guide-on-device-model` and `chrome://flags/#prompt-api-for-gemini-nano`, then restart Chrome |
 | `chrome-ai-download-required` | Gemini Nano is `'downloadable'` / `'downloading'` and `allowDownload` is not set | Pass `providerOptions: { chromeAI: { allowDownload: true } }` from a user-gesture handler |
 | `chrome-ai-permissions-denied` | `LanguageModel.create()` threw `NotAllowedError` | Trigger generation from a user-gesture (click, tap, or keypress) on a same-origin page |

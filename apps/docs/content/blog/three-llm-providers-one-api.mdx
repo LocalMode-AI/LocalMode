@@ -1,27 +1,27 @@
 ---
-title: "Browser LLM Providers, One API: WebLLM, Transformers.js v4, wllama, and LiteRT-LM"
-description: "LocalMode ships four browser LLM providers -- WebLLM (WebGPU), Transformers.js v4 (ONNX), wllama (llama.cpp WASM), and LiteRT-LM (Google's on-device engine, early preview). All four implement the same LanguageModel interface, so your application code stays identical regardless of the engine underneath. Here is how to choose."
+title: "Browser LLM Providers, One API: WebLLM, Transformers.js v4, wllama, LiteRT-LM, and Chrome AI"
+description: "LocalMode ships five browser LLM providers -- WebLLM (WebGPU), Transformers.js v4 (ONNX), wllama (llama.cpp WASM), LiteRT-LM (Google's on-device engine, early preview), and Chrome AI (built-in Gemini Nano). All five implement the same LanguageModel interface, so your application code stays identical regardless of the engine underneath. Here is how to choose."
 author: LocalMode
 date: 2026-02-11
-dateModified: "2026-07-04"
+dateModified: "2026-07-09"
 faq:
-  - question: "What are the four browser LLM providers in LocalMode?"
-    answer: "LocalMode ships WebLLM (MLC-compiled, WebGPU, fastest inference), Transformers.js v4 (ONNX, broadest model selection including vision), wllama (llama.cpp WASM, runs in every browser without WebGPU, 160K+ GGUF models), and LiteRT-LM (Google's on-device engine, early preview with Gemma 4 models)."
+  - question: "What are the five browser LLM providers in LocalMode?"
+    answer: "LocalMode ships WebLLM (MLC-compiled, WebGPU, fastest inference), Transformers.js v4 (ONNX, broadest model selection including vision), wllama (llama.cpp WASM, runs in every browser without WebGPU, 160K+ GGUF models), LiteRT-LM (Google's on-device engine, early preview with Gemma 4 models), and Chrome AI (Chrome's built-in Gemini Nano via the Prompt API, where your app ships no model files at all)."
   - question: "Do I need to change my code when switching between LLM providers?"
-    answer: "No. All four providers implement the same LanguageModel interface from @localmode/core. Your generateText() and streamText() calls remain identical -- only the model import changes. Middleware, AbortSignal, and React hooks all work unchanged across providers."
+    answer: "No. All five providers implement the same LanguageModel interface from @localmode/core. Your generateText() and streamText() calls remain identical -- only the model import changes. Middleware, AbortSignal, and React hooks all work unchanged across providers."
   - question: "Which browser LLM provider should I choose?"
-    answer: "Choose WebLLM for maximum speed with WebGPU (60-90+ tokens/sec). Choose Transformers.js v4 for the broadest model catalog and vision support. Choose wllama for universal browser compatibility without WebGPU via WASM. Choose LiteRT-LM specifically for Google's Gemma 4 models."
+    answer: "Choose Chrome AI when the Prompt API is available and you want to ship no model files. Choose WebLLM for maximum speed with WebGPU (60-90+ tokens/sec). Choose Transformers.js v4 for the broadest model catalog and vision support. Choose wllama for universal browser compatibility without WebGPU via WASM. Choose LiteRT-LM specifically for Google's Gemma 4 models."
   - question: "Can I set up automatic fallback between LLM providers?"
-    answer: "Yes. Because all providers share the same interface, you can wrap model creation in a try/catch chain that falls back from one provider to another. For example, try WebLLM first for WebGPU speed, then fall back to wllama for WASM compatibility if WebGPU is unavailable."
+    answer: "Yes. Because all providers share the same interface, you can wrap model creation in a try/catch chain that falls back from one provider to another. Chrome AI is the exception: chromeAI.languageModel() constructs lazily and never throws when the Prompt API is missing, so gate it with the synchronous isPromptAPISupported() check above the chain rather than inside a catch block."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
 Running a large language model inside the browser used to mean picking a single runtime and coupling your entire application to it. If you chose WebLLM, you were locked into MLC-compiled models and WebGPU-only hardware. If you went with llama.cpp WASM, you accepted slower inference on CPU. And switching later meant rewriting every call site.
 
-LocalMode eliminates that trade-off. The `@localmode/core` package defines a single `LanguageModel` interface. Four separate provider packages -- `@localmode/webllm`, `@localmode/transformers`, `@localmode/wllama`, and `@localmode/litert` -- each implement that interface using a different engine. Your application code calls `generateText()` or `streamText()` exactly the same way no matter which provider is active. Swap a single import, and the engine changes. Your UI, your prompts, your streaming logic -- none of it moves.
+LocalMode eliminates that trade-off. The `@localmode/core` package defines a single `LanguageModel` interface. Five separate provider packages -- `@localmode/webllm`, `@localmode/transformers`, `@localmode/wllama`, `@localmode/litert`, and `@localmode/chrome-ai` -- each implement that interface using a different engine. Your application code calls `generateText()` or `streamText()` exactly the same way no matter which provider is active. Swap a single import, and the engine changes. Your UI, your prompts, your streaming logic -- none of it moves.
 
-This post breaks down how each provider works, what it is best at, and how to choose between them. We also show how to set up automatic fallback so your app works on every browser without a single `if` statement in your components. Three of the four providers -- WebLLM, Transformers.js v4, and wllama -- are production-stable; the fourth, LiteRT-LM, is a new early-preview addition covered in its own section below.
+This post breaks down how each provider works, what it is best at, and how to choose between them. We also show how to set up automatic fallback so your app works on every browser without a single `if` statement in your components. Four of the five providers download and run a model your application chooses. The fifth, Chrome AI, is different in kind: it borrows the Gemini Nano model Chrome itself ships, so your application never fetches model files -- at the cost of running only on Chrome. LiteRT-LM remains a new early-preview addition, covered in its own section below.
 
 ---
 
@@ -43,7 +43,7 @@ interface LanguageModel {
 
 The core functions `generateText()` and `streamText()` accept any `LanguageModel`. They handle retries, abort signals, usage tracking, and response metadata. The provider handles model loading, tokenization, and inference. Clean separation.
 
-Here is the same streaming call with all three providers:
+Here is the same streaming call with all five providers:
 
 ```typescript
 import { streamText } from '@localmode/core';
@@ -51,6 +51,7 @@ import { webllm } from '@localmode/webllm';
 import { transformers } from '@localmode/transformers';
 import { wllama } from '@localmode/wllama';
 import { litert } from '@localmode/litert';
+import { chromeAI } from '@localmode/chrome-ai';
 
 // Option A: WebLLM (WebGPU, MLC-compiled)
 const resultA = await streamText({
@@ -80,7 +81,14 @@ const resultD = await streamText({
   maxTokens: 300,
 });
 
-// All four return the same StreamTextResult shape:
+// Option E: Chrome AI (built-in Gemini Nano -- no model files to ship)
+const resultE = await streamText({
+  model: chromeAI.languageModel(),
+  prompt: 'Explain quantum tunneling in plain English',
+  maxTokens: 300,
+});
+
+// All five return the same StreamTextResult shape:
 for await (const chunk of resultA.stream) {
   process.stdout.write(chunk.text); // identical API
 }
@@ -154,25 +162,43 @@ LiteRT-LM is the on-device inference engine Google uses to ship Gemini Nano-clas
 
 ---
 
+## Provider 5: Chrome AI (No Model Files to Ship)
+
+**Package**: `@localmode/chrome-ai` | **Engine**: Chrome's built-in Prompt API (Gemini Nano) | **Runtime**: Chrome-managed
+
+The other four providers all answer the same question -- *which model do I download, and in what format?* Chrome AI does not answer it. Chrome 148+ exposes a `window.LanguageModel` global backed by Gemini Nano, a model the browser itself provides. `@localmode/chrome-ai` wraps it behind the standard `LanguageModel` interface, so it drops into the same `generateText()` and `streamText()` calls as everything else.
+
+**How it works**: `chromeAI.languageModel()` is cheap and lazy -- it does not touch `LanguageModel.create()` at construction time. The underlying Gemini Nano session is created on the first `doGenerate()`, `doStream()`, or `warmUp()` call. That laziness has a consequence worth internalizing: **construction never throws on an unsupported browser.** You must gate it with the synchronous `isPromptAPISupported()` export before you build the model, rather than wrapping it in a `try`/`catch` and expecting a rejection.
+
+**Catalog**: Exactly one model, `chrome-ai:gemini-nano`. There is nothing to choose. `contextLength` defaults to a documentation value of 6144; `temperature` and `topK` forward to `LanguageModel.create()`.
+
+**On "zero download"**: Your *application* ships and fetches no model files -- but Chrome may still download Gemini Nano once, browser-wide, on first use. If `availability()` reports `downloadable` or `downloading` and you have not opted in, the call fails fast with `chrome-ai-download-required`. Opt in with `providerOptions: { chromeAI: { allowDownload: true } }`, or trigger creation after a user gesture. The download is the browser's, shared across every site, and happens once -- not per-app, and not per-page-load.
+
+**Best for**: Shaving the model download out of your bundle story entirely on Chrome desktop, and as the top tier of a fallback chain that degrades to a downloadable provider everywhere else.
+
+**Limitation**: Chrome 148+ on desktop only -- this is the narrowest browser support of the five by a wide margin, and it is why Chrome AI belongs above a fallback chain rather than as a sole dependency. Text-only: passing an `ImagePart` is rejected with `chrome-ai-multimodal-not-supported`. Availability is Chrome's call, not yours; the model can be unavailable on a supported browser (`chrome-ai-model-not-available`), and oversized inputs raise `chrome-ai-quota-exceeded`. Token usage is estimated from text length. The same package also wraps Chrome's Summarizer and Translator APIs, which are separate interfaces beyond the scope of this post.
+
+---
+
 ## Master Comparison Table
 
-| Dimension | WebLLM | Transformers.js v4 | wllama | LiteRT-LM (Preview) |
-|---|---|---|---|---|
-| **Engine** | MLC-AI WebLLM | ONNX Runtime Web (TJS v4) | llama.cpp WASM | LiteRT-LM (`@litert-lm/core`) |
-| **Model format** | MLC-compiled (q4f16) | ONNX (q4/fp16) | GGUF (Q4_K_M, Q5, Q6, etc.) | `.litertlm` |
-| **Primary runtime** | WebGPU (GPU) | WebGPU + WASM fallback | WASM (CPU) + optional WebGPU | WebGPU (Gemma 4); WebGPU or CPU (Qwen3 0.6B) |
-| **Curated models** | 32 | 16 | 30 (25 language + 3 embedding + 2 reranker) + 160K+ GGUF | 3 (Gemma 4 E2B/E4B, Qwen3 0.6B) |
-| **Vision models** | 1 (Phi 3.5 Vision) | 5 (Qwen3.5 family, Gemma 4 E2B/E4B) | 4 (Holo2 4B/8B, Gemma 4 E2B/E4B) | None (JS API is text-only) |
-| **Custom models** | No (MLC-compiled only) | Yes (any ONNX on HF Hub) | Yes (any GGUF on HF Hub) | Yes (any `.litertlm` URL) |
-| **Size range** | 78MB -- 5.06GB | 120MB -- 3GB | 70MB -- 5.41GB | 614MB -- 3.0GB |
-| **Inference speed** | 60-100 tok/s | 40-60 tok/s (WebGPU) | 5-15 tok/s (CPU), faster with WebGPU | Not yet benchmarked |
-| **Min browser** | Chrome/Edge 113+, Safari 26+ | Chrome 80+, any modern browser | Any browser with WASM | Chrome/Edge 113+ with WebGPU (Gemma 4 is WebGPU-only) |
-| **WebGPU required** | Yes | No (preferred, not required) | No (optional via `useWebGPU`) | Yes for Gemma 4; no for Qwen3 0.6B |
-| **Multi-threading** | N/A (GPU) | N/A (GPU or single-thread WASM) | Yes (needs CORS headers) | N/A |
-| **Structured output** | `generateObject()` / `streamObject()` | `generateObject()` / `streamObject()` | `generateObject()` / `streamObject()` | `generateObject()` / `streamObject()` |
-| **AbortSignal** | Yes | Yes | Yes | Yes |
-| **Streaming** | Yes | Yes | Yes | Yes |
-| **Maturity** | Stable | Stable | Stable | Early preview |
+| Dimension | WebLLM | Transformers.js v4 | wllama | LiteRT-LM (Preview) | Chrome AI |
+|---|---|---|---|---|---|
+| **Engine** | MLC-AI WebLLM | ONNX Runtime Web (TJS v4) | llama.cpp WASM | LiteRT-LM (`@litert-lm/core`) | Chrome Prompt API (Gemini Nano) |
+| **Model format** | MLC-compiled (q4f16) | ONNX (q4/fp16) | GGUF (Q4_K_M, Q5, Q6, etc.) | `.litertlm` | N/A (Chrome-managed) |
+| **Primary runtime** | WebGPU (GPU) | WebGPU + WASM fallback | WASM (CPU) + optional WebGPU | WebGPU (Gemma 4); WebGPU or CPU (Qwen3 0.6B) | Chrome-managed (not app-selectable) |
+| **Curated models** | 32 | 16 | 30 (25 language + 3 embedding + 2 reranker) + 160K+ GGUF | 3 (Gemma 4 E2B/E4B, Qwen3 0.6B) | 1 (`chrome-ai:gemini-nano`) |
+| **Vision models** | 1 (Phi 3.5 Vision) | 5 (Qwen3.5 family, Gemma 4 E2B/E4B) | 4 (Holo2 4B/8B, Gemma 4 E2B/E4B) | None (JS API is text-only) | None (`ImagePart` rejected) |
+| **Custom models** | No (MLC-compiled only) | Yes (any ONNX on HF Hub) | Yes (any GGUF on HF Hub) | Yes (any `.litertlm` URL) | No (Chrome picks the model) |
+| **Size range** | 78MB -- 5.06GB | 120MB -- 3GB | 70MB -- 5.41GB | 614MB -- 3.0GB | No app-side download |
+| **Inference speed** | 60-100 tok/s | 40-60 tok/s (WebGPU) | 5-15 tok/s (CPU), faster with WebGPU | Not yet benchmarked | Not yet benchmarked |
+| **Min browser** | Chrome/Edge 113+, Safari 26+ | Chrome 80+, any modern browser | Any browser with WASM | Chrome/Edge 113+ with WebGPU (Gemma 4 is WebGPU-only) | Chrome 148+ desktop only |
+| **WebGPU required** | Yes | No (preferred, not required) | No (optional via `useWebGPU`) | Yes for Gemma 4; no for Qwen3 0.6B | No (Chrome's concern) |
+| **Multi-threading** | N/A (GPU) | N/A (GPU or single-thread WASM) | Yes (needs CORS headers) | N/A | N/A (Chrome-managed) |
+| **Structured output** | `generateObject()` / `streamObject()` | `generateObject()` / `streamObject()` | `generateObject()` / `streamObject()` | `generateObject()` / `streamObject()` | `generateObject()` / `streamObject()` |
+| **AbortSignal** | Yes | Yes | Yes | Yes | Yes |
+| **Streaming** | Yes | Yes | Yes | Yes | Yes |
+| **Maturity** | Stable | Stable | Stable | Early preview | Stable (availability gated by Chrome) |
 
 ---
 
@@ -184,6 +210,16 @@ Use this text-based flowchart to pick the right provider for your use case:
 START
   |
   v
+Do you need vision, a specific model, or non-Chrome support?
+  |
+  +-- NO --> isPromptAPISupported()?          (Chrome 148+ desktop)
+  |            |
+  |            +-- YES --> Use @localmode/chrome-ai
+  |            |           (text-only; your app ships no model files)
+  |            |
+  |            +-- NO --> fall through to the download path below
+  |
+  +-- YES -> v
 Does the user's browser support WebGPU?
   |
   +-- YES --> Do you need vision (image input)?
@@ -211,7 +247,7 @@ Does the user's browser support WebGPU?
                           (embeddings, classification, etc.)
 ```
 
-The flowchart covers the three production-stable providers. `@localmode/litert` is intentionally left off the default decision path while it is in early preview -- opt into it explicitly when you want to experiment with Google's engine, or add it to a fallback chain so your app picks it up once its catalog grows.
+Chrome AI sits at the top of the chart because when it applies it removes the download question altogether -- but it applies narrowly, so every branch below it is the answer for the other browsers. `@localmode/litert` is intentionally left off the default decision path while it is in early preview -- opt into it explicitly when you want to experiment with Google's engine, or add it to a fallback chain so your app picks it up once its catalog grows.
 
 ---
 
@@ -219,10 +255,16 @@ The flowchart covers the three production-stable providers. `@localmode/litert` 
 
 You can detect capabilities and route to the best available provider at runtime:
 
-
-
 ```typescript
 import { isWebGPUSupported } from '@localmode/core';
+import { chromeAI, isPromptAPISupported } from '@localmode/chrome-ai';
+
+// Chrome AI first: when the Prompt API exists, nothing needs downloading.
+// isPromptAPISupported() is synchronous, and it is the ONLY correct gate --
+// chromeAI.languageModel() constructs lazily and never throws here.
+if (isPromptAPISupported()) {
+  return chromeAI.languageModel();
+}
 
 const hasGPU = await isWebGPUSupported();
 
@@ -241,7 +283,9 @@ const model = hasGPU
 
 **Use wllama when** you need to reach every user regardless of hardware, want access to a specific GGUF model from the 160K+ available on HuggingFace, or are targeting environments where WebGPU is blocked. Corporate intranets, kiosk browsers, and older devices are where wllama shines. It also carries four curated vision-language models: Holo2 4B/8B for UI grounding and Gemma 4 E2B/E4B for vision + tool calling.
 
-**Use LiteRT-LM when** you want Gemma 4 in the browser via Google's first-party on-device engine, or want the provider wired into a fallback chain. Treat it as early preview -- the other three providers are longer-established if you need a wider catalog or vision input.
+**Use LiteRT-LM when** you want Gemma 4 in the browser via Google's first-party on-device engine, or want the provider wired into a fallback chain. Treat it as early preview -- the other providers are longer-established if you need a wider catalog or vision input.
+
+**Use Chrome AI when** you are on Chrome desktop and the download is the thing you are trying to avoid: a text-only feature where waiting on a multi-hundred-megabyte model would sink adoption, and where you are content to let Chrome pick the model. Because it needs Chrome 148+ -- where the Prompt API finally shipped for web pages -- it is almost always the first tier of a fallback chain rather than the only provider you ship.
 
 **Use the fallback chain when** you do not control the deployment environment and want the best possible experience on every device. This is the recommended approach for open-ended web applications where you cannot predict your users' hardware.
 
@@ -258,13 +302,13 @@ Regardless of which provider you choose, you get the same core capabilities thro
 - **Usage tracking** with input tokens, output tokens, and duration on every response
 - **React hooks** via `@localmode/react`: `useGenerateText()`, `useChat()`
 
-The provider is an implementation detail. The interface is the contract. Build against the interface, and your application stays portable across all four engines -- today and as new providers emerge.
+The provider is an implementation detail. The interface is the contract. Build against the interface, and your application stays portable across all five engines -- today and as new providers emerge.
 
 ---
 
 ## Methodology
 
-All model counts, model IDs, size figures, and API shapes were verified directly against the LocalMode codebase (`packages/webllm/src/models.ts`, `packages/wllama/src/models.ts`, `packages/transformers/src/models.ts`, `packages/litert/src/models.ts`, and `packages/core/src/generation/types.ts`). WebLLM performance figures (Phi 3.5 Mini at 71.1 tok/s, Llama 3.1 8B at 41.1 tok/s on M3 Max) were verified against Table 1 of the arxiv paper (2412.15803). The FOSDEM 2025 wllama talk URL was verified against the FOSDEM archive. No figures were sourced from unverified secondary summaries.
+All model counts, model IDs, size figures, and API shapes were verified directly against the LocalMode codebase (`packages/webllm/src/models.ts`, `packages/wllama/src/models.ts`, `packages/transformers/src/models.ts`, `packages/litert/src/models.ts`, `packages/chrome-ai/src/implementations/language-model.ts`, `packages/chrome-ai/src/utils.ts`, and `packages/core/src/generation/types.ts`). The Chrome AI model ID, `contextLength` default (6144), lazy-construction behaviour, `allowDownload` opt-in, and error codes were read from that provider's source rather than inferred. WebLLM performance figures (Phi 3.5 Mini at 71.1 tok/s, Llama 3.1 8B at 41.1 tok/s on M3 Max) were verified against Table 1 of the arxiv paper (2412.15803). The FOSDEM 2025 wllama talk URL was verified against the FOSDEM archive. No figures were sourced from unverified secondary summaries.
 
 ## Sources
 
@@ -277,6 +321,8 @@ All model counts, model IDs, size figures, and API shapes were verified directly
 - [LocalMode Transformers Text Generation Docs](/docs/transformers/text-generation) -- curated ONNX model catalog
 - [LocalMode WebLLM Docs](/docs/webllm) -- curated MLC model catalog
 - [LocalMode wllama Docs](/docs/wllama) -- curated GGUF model catalog and GGUF metadata parser
+- [Chrome Built-in AI: Prompt API](https://developer.chrome.com/docs/ai/prompt-api) -- the `window.LanguageModel` / Gemini Nano API wrapped by `@localmode/chrome-ai`
+- [LocalMode Chrome AI Docs](/docs/chrome-ai) -- provider setup, availability gating, and the Summarizer / Translator APIs
 - [Google LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM) -- Google's on-device LLM inference engine
 - [LocalMode LiteRT Docs](/docs/litert) -- `.litertlm` model catalog and early-preview status
 

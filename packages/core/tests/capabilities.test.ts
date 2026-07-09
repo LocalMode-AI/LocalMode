@@ -18,6 +18,10 @@ import {
   isCrossOriginIsolated,
   isOPFSSupported,
   isBroadcastChannelSupported,
+  isChromeAISupported,
+  isSummarizerAPISupported,
+  isTranslatorAPISupported,
+  isLanguageModelAPISupported,
   isWebLocksSupported,
   getDeviceInfo,
   getMemoryInfo,
@@ -384,3 +388,62 @@ describe('Capability Report', () => {
   });
 });
 
+describe('Chrome Built-in AI detection', () => {
+  const g = self as unknown as {
+    ai?: unknown;
+    Summarizer?: unknown;
+    Translator?: unknown;
+    LanguageModel?: unknown;
+  };
+
+  afterEach(() => {
+    delete g.ai;
+    delete g.Summarizer;
+    delete g.Translator;
+    delete g.LanguageModel;
+  });
+
+  it('returns false when no Chrome AI API is present', () => {
+    expect(isChromeAISupported()).toBe(false);
+    expect(isSummarizerAPISupported()).toBe(false);
+    expect(isTranslatorAPISupported()).toBe(false);
+    expect(isLanguageModelAPISupported()).toBe(false);
+  });
+
+  // Regression: these detectors used to be gated on `'ai' in self`. Chrome removed
+  // that namespace, so on every browser where the APIs actually exist they all
+  // returned false — and `detectCapabilities().features.chromeAI` was always false.
+  it('detects the MODERN top-level globals when `self.ai` does not exist', () => {
+    g.Summarizer = {};
+    expect(g.ai).toBeUndefined();
+    expect(isSummarizerAPISupported()).toBe(true);
+    expect(isChromeAISupported()).toBe(true);
+  });
+
+  it('detects a modern Translator global', () => {
+    g.Translator = {};
+    expect(isTranslatorAPISupported()).toBe(true);
+    expect(isChromeAISupported()).toBe(true);
+  });
+
+  it('detects a modern LanguageModel global', () => {
+    g.LanguageModel = {};
+    expect(isLanguageModelAPISupported()).toBe(true);
+    expect(isChromeAISupported()).toBe(true);
+  });
+
+  it('still honours the legacy self.ai.* namespace', () => {
+    g.ai = { summarizer: {}, translator: {}, languageModel: {} };
+    expect(isSummarizerAPISupported()).toBe(true);
+    expect(isTranslatorAPISupported()).toBe(true);
+    expect(isLanguageModelAPISupported()).toBe(true);
+    expect(isChromeAISupported()).toBe(true);
+  });
+
+  it('one present API is enough for isChromeAISupported()', () => {
+    g.Translator = {};
+    expect(isSummarizerAPISupported()).toBe(false);
+    expect(isLanguageModelAPISupported()).toBe(false);
+    expect(isChromeAISupported()).toBe(true);
+  });
+});

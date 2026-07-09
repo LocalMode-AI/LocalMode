@@ -192,7 +192,7 @@ import { webllm } from '@localmode/webllm';
 const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
 // const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
 // const model = transformers.languageModel('onnx-community/Qwen3-0.6B-ONNX');
-// const model = chromeAI.languageModel(); // zero-download Gemini Nano (Chrome 138+)
+// const model = chromeAI.languageModel(); // zero-download Gemini Nano (Chrome 148+)
 
 const result = await streamText({
   model,
@@ -316,7 +316,7 @@ function ChatApp() {
 | **Browser Support** | Chrome/Edge 113+, Safari 26+, Firefox 141+ | All modern browsers | All modern browsers (WebGPU optional) | Chrome/Edge 113+, Safari 26+, Firefox 141+ (WebGPU); Qwen3 0.6B also runs on CPU WASM |
 | **Best For** | Maximum performance | Universal compatibility, model variety, reranking | Multi-task (embeddings + LLM in one package) | First-party Google runtime for Gemma |
 
-A fifth option, [`@localmode/chrome-ai`](/docs/chrome-ai), provides **zero-download text generation** via Chrome's built-in Gemini Nano (Prompt API, Chrome 138+) — no model files to fetch, with `@localmode/transformers` as the recommended fallback for other browsers. For **image input in chat** (vision), use wllama (`mmprojUrl` models like Gemma 4), WebLLM (Phi 3.5 Vision), or Transformers.js (Qwen3.5 / Gemma 4 VLMs) — see the Vision row above.
+A fifth option, [`@localmode/chrome-ai`](/docs/chrome-ai), provides **zero-download text generation** via Chrome's built-in Gemini Nano (Prompt API, Chrome 148+) — no model files to fetch, with `@localmode/transformers` as the recommended fallback for other browsers. For **image input in chat** (vision), use wllama (`mmprojUrl` models like Gemma 4), WebLLM (Phi 3.5 Vision), or Transformers.js (Qwen3.5 / Gemma 4 VLMs) — see the Vision row above.
 
 ## Architecture
 
@@ -326,7 +326,7 @@ LocalMode follows a **"zero-dependency core, thin provider wrappers"** architect
 ┌───────────────────────────────────────────────────────────────────────┐
 │                          Your Application                             │
 ├───────────────────────────────────────────────────────────────────────┤
-│                    @localmode/react  (61 hooks)                       │
+│                    @localmode/react  (64 hooks)                       │
 ├───────────────────────┬───────────────────────┬───────────────────────┤
 │   @localmode/ai-sdk   │  @localmode/langchain │  @localmode/devtools  │
 ├───────────────────────┴───────────────────────┴───────────────────────┤
@@ -406,7 +406,7 @@ See LocalMode in action at [localmode.ai/blocks](https://localmode.ai/blocks) �
   <Card
     title="React Hooks"
     href="/docs/react"
-    description="61 hooks for chat, embeddings, classification, vision, audio, and more."
+    description="64 hooks for chat, embeddings, classification, vision, audio, and more."
   />
   <Card
     title="Transformers Provider"

@@ -1,5 +1,11 @@
 # @localmode/langchain
 
+## 2.1.1
+
+### Patch Changes
+
+- docs: replace the README "Demo" badge with "UI Components" (localmode.ai) and add a "Blocks & Apps" badge linking to the localmode.ai/blocks gallery
+
 ## 2.1.0
 
 ### Added

@@ -1,5 +1,11 @@
 # @localmode/litert
 
+## 2.0.2
+
+### Patch Changes
+
+- docs: replace the README "Demo" badge with "UI Components" (localmode.ai) and add a "Blocks & Apps" badge linking to the localmode.ai/blocks gallery
+
 ## 2.0.1
 
 ### Fixed
@@ -21,9 +27,9 @@
   - `gemma-4-E2B` — Gemma 4 E2B (`gemma-4-E2B-it-web.litertlm`, 2.0 GB) — WebGPU only
   - `gemma-4-E4B` — Gemma 4 E4B (`gemma-4-E4B-it-web.litertlm`, 3.0 GB) — WebGPU only
   - `qwen3-0.6B` — Qwen3 0.6B (`Qwen3-0.6B.litertlm`, 614 MB) — WebGPU or CPU
-  The Gemma 4 entries use the web-optimized `*-it-web.litertlm` builds Google
-  publishes as the models officially supported by the LiteRT-LM JS API. These
-  builds are GPU-compiled and cannot run on the CPU backend.
+    The Gemma 4 entries use the web-optimized `*-it-web.litertlm` builds Google
+    publishes as the models officially supported by the LiteRT-LM JS API. These
+    builds are GPU-compiled and cannot run on the CPU backend.
 - `requiresWebGPU` catalog flag — Gemma 4 entries are flagged WebGPU-only. The
   provider checks WebGPU availability before downloading such a model and
   throws a clear `ModelLoadError` if WebGPU is unavailable or `backend: 'CPU'`

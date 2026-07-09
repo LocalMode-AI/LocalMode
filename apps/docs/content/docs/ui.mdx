@@ -53,7 +53,7 @@ npx shadcn@latest add @localmode/ui/conversation/message
 # An entire family
 npx shadcn@latest add @localmode/ui/conversation
 
-# The whole catalog (92 components)
+# The whole catalog (100+ components)
 npx shadcn@latest add @localmode/ui/all
 ```
 
@@ -95,47 +95,47 @@ export function Chat() {
 <Cards>
   <Card
     title="Conversation (24)"
-    href="https://localmode.ai/docs/conversation"
+    href="https://localmode.ai/docs/conversation/conversation"
     description="Chat shell, streaming prompt input, reasoning, sources, tools, agent timelines, branches, and citations — the AI-native chat surface."
   />
   <Card
-    title="Local-First (24)"
-    href="https://localmode.ai/docs/local-first"
-    description="Model download/selection, a 160K-model Hub search browser, device-capability gates, storage quota, offline/cache status, VectorDB observability, and vector import/export panels — surfaces that exist because the model runs on-device."
+    title="Local-First (25)"
+    href="https://localmode.ai/docs/local-first/model-downloader"
+    description="Model download/selection, a 160K-model Hub search browser, device-capability gates, storage quota, offline/cache status, VectorDB observability, vector import/export panels, and the Chrome Built-in AI download gate — surfaces that exist because the model runs on-device."
   />
   <Card
     title="Audio (10)"
-    href="https://localmode.ai/docs/audio"
+    href="https://localmode.ai/docs/audio/waveform-activity-bars"
     description="Voice buttons and orbs, waveform bars, TTS voice pickers, streaming-speech panels, and synced transcript viewers — STT/TTS surfaces."
   />
   <Card
     title="Results & Insights (12)"
-    href="https://localmode.ai/docs/results"
+    href="https://localmode.ai/docs/results/confidence-score-badge"
     description="Confidence badges, scored result bars, similarity meters, evaluation dashboards, and entity/NER displays — scored-output primitives."
   />
   <Card
     title="Input Controls (11)"
-    href="https://localmode.ai/docs/input-controls"
+    href="https://localmode.ai/docs/input-controls/char-limit-indicator"
     description="Char-limit rings, fill-mask inputs, mode pickers, language-pair selectors, parameter sliders, and slash-command palettes."
   />
   <Card
-    title="Media & Vision (6)"
-    href="https://localmode.ai/docs/media-vision"
-    description="Image dropzones, bounding-box overlays, before/after viewers, a webcam video canvas, and result galleries — image and video I/O."
+    title="Media & Vision (7)"
+    href="https://localmode.ai/docs/media-vision/media-dropzone"
+    description="Image dropzones, bounding-box overlays, before/after viewers, a webcam video canvas, result galleries, and the use-webcam hook — image and video I/O."
   />
   <Card
     title="Data & Documents (5)"
-    href="https://localmode.ai/docs/data-documents"
+    href="https://localmode.ai/docs/data-documents/file-dropzone"
     description="File dropzones, indexed-document cards, format-detection badges, category facets, and chunk-boundary visualizers — RAG and document surfaces."
   />
   <Card
     title="Artifacts & Canvas (4)"
-    href="https://localmode.ai/docs/artifacts"
+    href="https://localmode.ai/docs/artifacts/artifact"
     description="A Claude-style docked canvas, sortable data tables, charts, and code diffs — generated output rendered beside the chat."
   />
   <Card
     title="Security & Privacy (5)"
-    href="https://localmode.ai/docs/security-privacy"
+    href="https://localmode.ai/docs/security-privacy/password-strength-bar"
     description="Password-strength bars, differential-privacy controls with provenance, a passphrase gate, a lock-aware vault item card, and a lock-status badge."
   />
   <Card
@@ -172,12 +172,12 @@ Each component maps to a hook you already use:
   <Card
     title="Blocks gallery"
     href="https://localmode.ai/blocks"
-    description="Installable blocks (ui/blocks/*) — chat, knowledge base, audio studio, vision lab, device & model lab, agent & structured data, writing tools, text insights, photo search, image studio (background removal to transparent PNG, Swin2SR 2x/4x/Restore enhancement, and caption generation), privacy vault, and the devtools drawer — complete experiences composed from the primitives, running real models live."
+    description="37 installable blocks (ui/blocks/*) across 12 categories — chat, knowledge, vision, audio, text, device, writing tools, agents, text insights, photo, image studio, and privacy, plus the devtools drawer — complete experiences composed from the primitives, running real models live."
   />
   <Card
     title="@localmode/react hooks"
     href="/docs/react"
-    description="The 61 hooks that drive the UI components — useChat, useAgent, useTranscribe, useModelLoader, and more."
+    description="The 64 hooks that drive the UI components — useChat, useAgent, useTranscribe, useModelLoad, and more."
   />
   <Card
     title="Getting Started"

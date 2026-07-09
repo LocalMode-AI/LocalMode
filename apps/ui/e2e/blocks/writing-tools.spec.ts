@@ -8,16 +8,18 @@
  * preserved verbatim from the pre-split spec; only the shell tab selectors are
  * dropped (there are no tabs — each block has its own route).
  *
- * PROVIDER PATHS:
- * - Fallback lane (deterministic): stock headless Chromium has no Gemini Nano,
- *   so every block exercises the Transformers.js path — DistilBART summarization
- *   (abstractive) + on-device sentence extraction (extractive), Opus-MT
- *   translation, ModernBERT fill-mask, and a Llama-3.2-1B instruct edit. Each
- *   provider badge must read Transformers.js and match the served modelId
- *   witness; outputs must pass content assertions for fixed fixtures.
- * - Chrome AI lane (availability-gated): the suite detects real built-in AI at
- *   runtime. Stock Chromium exposes none, so this lane records an EXPLICIT,
- *   documented availability gap into the run artifact (never a silent skip).
+ * PROVIDER PATHS: every lane reads the block's OWN truthful ProviderBadge and
+ * asserts against whichever provider actually served — never a hard-coded one.
+ * Stock headless Chromium has no downloaded Gemini Nano, so it exercises the
+ * Transformers.js path (DistilBART summarization + on-device sentence
+ * extraction, Opus-MT translation, ModernBERT fill-mask, Llama-3.2-1B edit).
+ * A real Chrome with the built-in models present serves those capabilities via
+ * Chrome AI instead, and the same lanes then assert a `chrome-ai:` modelId and
+ * zero model bytes. Asserting "Transformers.js" unconditionally would fail on
+ * such a machine — and, worse, would pass for the wrong reason when a Chrome-AI
+ * regression silently pushed a block back onto the fallback. Which path ran is
+ * recorded as a run annotation. Injecting a fake Chrome AI surface is FORBIDDEN.
+ * Fill-mask has no Chrome equivalent, so `complete` is always Transformers.js.
  *
  * Console-error policy: hard fail on any console error / pageerror; the
  * allowlist below is narrow and documented (benign HuggingFace optional-file
@@ -51,6 +53,79 @@ const CLOZE_EXPECT = /france/i;
 
 /** A draft with obvious grammar errors + a fix-grammar instruction. */
 const WRITE_DRAFT = 'i has went to the stor yesterday and buyed two apple.';
+
+/* ────────────────────── truthful provider resolution ─────────────────────── */
+
+/** The provider that ACTUALLY served, read from the block's visible ProviderBadge. */
+type Served = 'chrome-ai' | 'transformers';
+
+/**
+ * Wait for the badge to resolve, then report who served. Never injects or mocks:
+ * this is the block's own resolution, rendered from the model instance it holds.
+ */
+async function servedProvider(block: import('@playwright/test').Locator): Promise<Served> {
+  await expect(block.getByText('Resolving provider…')).toHaveCount(0, { timeout: 60 * 1000 });
+  if ((await block.getByText('Chrome AI').count()) > 0) return 'chrome-ai';
+  await expect(block.getByText('Transformers.js').first()).toBeVisible();
+  return 'transformers';
+}
+
+/**
+ * Assert the badge's provider name and served modelId agree with each other.
+ * `transformersModelId` is the exact id the fallback must report.
+ */
+async function expectTruthfulBadge(
+  block: import('@playwright/test').Locator,
+  served: Served,
+  transformersModelId: string | RegExp,
+  chromeModelId: RegExp,
+) {
+  if (served === 'transformers') {
+    await expect(block.getByText('Transformers.js').first()).toBeVisible();
+    await expect(
+      typeof transformersModelId === 'string'
+        ? block.getByText(transformersModelId).first()
+        : block.getByText(transformersModelId).first(),
+    ).toBeVisible();
+  } else {
+    await expect(block.getByText('Chrome AI').first()).toBeVisible();
+    await expect(block.getByText(chromeModelId).first()).toBeVisible();
+  }
+}
+
+/** Read Chrome's REAL availability for a capability (reads globals; injects nothing). */
+async function chromeAvailability(
+  page: Page,
+  capability: 'summarize' | 'translate' | 'edit',
+  params: { source?: string; target?: string } = {},
+): Promise<string> {
+  return page.evaluate(
+    async ({ capability, params }) => {
+      const g = self as unknown as Record<string, { availability?: (o?: unknown) => Promise<string> }>;
+      const factory =
+        capability === 'summarize' ? g.Summarizer : capability === 'translate' ? g.Translator : g.LanguageModel;
+      if (!factory) return 'unsupported';
+      if (typeof factory.availability !== 'function') return 'available';
+      const opts =
+        capability === 'translate'
+          ? { sourceLanguage: params.source ?? 'en', targetLanguage: params.target ?? 'de' }
+          : capability === 'summarize'
+            ? { type: 'tldr', length: 'medium' }
+            : undefined;
+      try {
+        // `Translator.availability()` never settles on some builds. Race it, exactly
+        // as the app does, or this evaluate() hangs until the context is destroyed.
+        return await Promise.race([
+          factory.availability(opts),
+          new Promise<string>((resolve) => setTimeout(() => resolve('probe-timed-out'), 3500)),
+        ]);
+      } catch {
+        return 'probe-threw';
+      }
+    },
+    { capability, params },
+  );
+}
 
 /* ─────────────────────── console capture + allowlist ─────────────────────── */
 
@@ -181,8 +256,10 @@ test.describe('writing-tools platform', () => {
 
 /* ══════════════════════════════ Summarize ═══════════════════════════════════ */
 
-test.describe('writing-tools summarize (Transformers.js fallback lane)', () => {
-  test('abstractive DistilBART + on-device extractive, truthful badge', async ({ page }) => {
+test.describe('writing-tools summarize', () => {
+  test('abstractive + extractive, truthful badge for whichever provider served', async ({
+    page,
+  }, testInfo) => {
     test.setTimeout(12 * 60 * 1000); // cold DistilBART download
 
     await page.goto('/blocks/writing-tools/summarize');
@@ -193,9 +270,14 @@ test.describe('writing-tools summarize (Transformers.js fallback lane)', () => {
     const resultRegion = block.getByRole('region');
     await input.fill(SUMMARY_DOC);
 
-    // ── (a) abstractive: real DistilBART generation ──
+    // Which provider serves is a property of the browser, not of this test.
+    const served = await servedProvider(block);
+    testInfo.annotations.push({ type: 'served-provider', description: `summarize → ${served}` });
+
+    // ── (a) abstractive: real generation (DistilBART, or Chrome's "tldr") ──
     await block.getByRole('radio', { name: 'Abstractive' }).click();
-    await block.getByRole('button', { name: 'Summarize' }).click();
+    // `exact` matters: the download gate's button must never shadow the run button.
+    await block.getByRole('button', { name: 'Summarize', exact: true }).click();
 
     // The compression caption ("N% of original") appears only once a summary is ready.
     await expect(block.getByText(/% of original/)).toBeVisible({ timeout: 10 * 60 * 1000 });
@@ -203,38 +285,48 @@ test.describe('writing-tools summarize (Transformers.js fallback lane)', () => {
     expect(abstractive.length, 'abstractive summary is non-empty').toBeGreaterThan(0);
     // Generated (abstractive) text mentions the document's topic.
     expect(abstractive).toMatch(/ai|intelligence|machine|model|learning/i);
-    // Badge truthfulness: Transformers.js served it; the visible badge confirms
-    // both the provider name and the served (transformers-prefixed) model id.
-    await expect(block.getByText('Transformers.js').first()).toBeVisible();
-    await expect(block.getByText(/^transformers:/).first()).toBeVisible();
+    // Badge truthfulness: the visible badge names the provider that served AND the
+    // model id it served with; the two must agree.
+    await expectTruthfulBadge(block, served, /^transformers:/, /^chrome-ai:gemini-nano-summarizer/);
 
-    // ── (b) extractive: on-device sentence extraction (verbatim sentences) ──
+    // ── (b) extractive ──
     await block.getByRole('radio', { name: 'Extractive' }).click();
-    await block.getByRole('button', { name: 'Summarize' }).click();
+    await block.getByRole('button', { name: 'Summarize', exact: true }).click();
     // Extraction is synchronous; the result region flips to the extractive summary.
     await expect
       .poll(async () => (await resultRegion.innerText()).trim(), { timeout: 60 * 1000 })
       .not.toBe(abstractive);
     const extractive = (await resultRegion.innerText()).trim();
     expect(extractive.length, 'extractive summary is non-empty').toBeGreaterThan(0);
-    // Every extracted sentence is drawn VERBATIM from the source document.
-    const normalize = (s: string) => s.replace(/\s+/g, ' ').trim();
-    for (const sentence of extractive.split(/(?<=[.!?])\s+/).map(normalize).filter(Boolean)) {
-      expect(normalize(SUMMARY_DOC), `extractive sentence drawn from source: "${sentence}"`).toContain(
-        sentence,
-      );
+
+    if (served === 'transformers') {
+      // Only the fallback path extracts: every sentence is drawn VERBATIM from source.
+      const normalize = (s: string) => s.replace(/\s+/g, ' ').trim();
+      for (const sentence of extractive.split(/(?<=[.!?])\s+/).map(normalize).filter(Boolean)) {
+        expect(normalize(SUMMARY_DOC), `extractive sentence drawn from source: "${sentence}"`).toContain(
+          sentence,
+        );
+      }
+      // Extractive on the transformers path runs no model — the badge model id says so.
+      await expect(block.getByText('local:extractive-frequency').first()).toBeVisible();
+    } else {
+      // Chrome AI maps "extractive" onto its own `key-points` summary type, which
+      // GENERATES text rather than extracting spans — so a verbatim-span assertion
+      // would be wrong here. The badge must still name Chrome AI's model.
+      await expect(block.getByText(/^chrome-ai:gemini-nano-summarizer/).first()).toBeVisible();
     }
-    // Extractive on the transformers path runs no model — the badge model id says so.
-    await expect(block.getByText('local:extractive-frequency').first()).toBeVisible();
-    // The two modes produced DISTINCT output.
+
+    // The two modes produced DISTINCT output, on either provider.
     expect(extractive).not.toEqual(abstractive);
   });
 });
 
 /* ══════════════════════════════ Translate ═══════════════════════════════════ */
 
-test.describe('writing-tools translate (Transformers.js fallback lane)', () => {
-  test('en→de and en→fr expected target text, swap, cancel, truthful badge', async ({ page }) => {
+test.describe('writing-tools translate', () => {
+  test('en→de and en→fr expected target text, swap, cancel, truthful badge', async ({
+    page,
+  }, testInfo) => {
     test.setTimeout(14 * 60 * 1000); // two cold Opus-MT downloads
 
     await page.goto('/blocks/writing-tools/translate');
@@ -251,8 +343,14 @@ test.describe('writing-tools translate (Transformers.js fallback lane)', () => {
     await input.fill(TRANSLATE_INPUT);
     await run.click();
     await expect(output).toContainText(TRANSLATE_EXPECT.de, { timeout: 10 * 60 * 1000 });
-    await expect(block.getByText('Transformers.js').first()).toBeVisible();
-    await expect(block.getByText('transformers:Xenova/opus-mt-en-de').first()).toBeVisible();
+    const served = await servedProvider(block);
+    testInfo.annotations.push({ type: 'served-provider', description: `translate → ${served}` });
+    await expectTruthfulBadge(
+      block,
+      served,
+      'transformers:Xenova/opus-mt-en-de',
+      /^chrome-ai:gemini-nano-translator/,
+    );
     // Char counts reflect both panels.
     await expect(block.getByText(`${TRANSLATE_INPUT.length} chars`).first()).toBeVisible();
 
@@ -265,15 +363,26 @@ test.describe('writing-tools translate (Transformers.js fallback lane)', () => {
     await input.fill(TRANSLATE_INPUT);
     await run.click();
     await expect(output).toContainText(TRANSLATE_EXPECT.fr, { timeout: 10 * 60 * 1000 });
-    await expect(block.getByText('transformers:Xenova/opus-mt-en-fr').first()).toBeVisible();
+    await expectTruthfulBadge(
+      block,
+      await servedProvider(block),
+      'transformers:Xenova/opus-mt-en-fr',
+      /^chrome-ai:gemini-nano-translator/,
+    );
 
     // ── swap direction carries output → input and flips the pair to fr→en ──
     // The swap affordance is the selector's own visible button.
     const frenchOutput = (await output.textContent())?.trim() ?? '';
     await block.getByRole('button', { name: 'Swap languages' }).click();
     await expect(input).toHaveValue(frenchOutput);
-    // Now source is French, target English — the badge model id reflects the reverse pair.
-    await expect(block.getByText('transformers:Xenova/opus-mt-fr-en').first()).toBeVisible();
+    // Now source is French, target English — on the fallback the badge model id
+    // reflects the reverse pair (Chrome AI uses one translator model for all pairs).
+    await expectTruthfulBadge(
+      block,
+      await servedProvider(block),
+      'transformers:Xenova/opus-mt-fr-en',
+      /^chrome-ai:gemini-nano-translator/,
+    );
 
     // ── cancel an in-flight translation returns to idle ──
     // Runs on the current fr→en pair (a cold download we can interrupt).
@@ -298,7 +407,17 @@ test.describe('writing-tools complete (Transformers.js only)', () => {
 
     const block = page.locator('[data-block-preview]');
     const maskInput = block.getByLabel('Sentence with a [MASK] token');
+
+    // Wait for the block to finish resolving before typing. The textarea is a
+    // controlled input seeded with a default sentence; a re-render landing between
+    // fill()'s clear and insert steps restores that default and the typed text is
+    // APPENDED rather than replacing it. Filling after resolution removes the race.
+    await servedProvider(block);
     await maskInput.fill(CLOZE_INPUT);
+    // Fail loudly here rather than let a clobbered value corrupt every later
+    // assertion (a stray '[MASK]' would silently survive click-to-apply).
+    await expect(maskInput).toHaveValue(CLOZE_INPUT);
+
     await block.getByRole('button', { name: 'Predict' }).click();
 
     // The "Top N predictions" heading appears once real inference completes — the
@@ -329,10 +448,10 @@ test.describe('writing-tools complete (Transformers.js only)', () => {
 
 /* ═══════════════════════════════ Write ══════════════════════════════════════ */
 
-test.describe('writing-tools write (Transformers.js fallback lane)', () => {
+test.describe('writing-tools write', () => {
   test('AI edit renders a before/after diff and Accept applies exactly the after text', async ({
     page,
-  }) => {
+  }, testInfo) => {
     test.setTimeout(20 * 60 * 1000); // cold Llama-3.2-1B download on WASM
 
     await page.goto('/blocks/writing-tools/write');
@@ -362,13 +481,84 @@ test.describe('writing-tools write (Transformers.js fallback lane)', () => {
     expect(proposal, 'proposal differs from the draft').not.toEqual(WRITE_DRAFT);
 
     // Badge truthfulness for the edit engine (visible provider + served model id).
-    await expect(block.getByText('Transformers.js').first()).toBeVisible();
-    await expect(block.getByText(/^transformers:/).first()).toBeVisible();
+    const served = await servedProvider(block);
+    testInfo.annotations.push({ type: 'served-provider', description: `write → ${served}` });
+    await expectTruthfulBadge(block, served, /^transformers:/, /^chrome-ai:gemini-nano/);
 
     // Accept applies EXACTLY the shown "after" text; the diff clears.
     await block.getByRole('button', { name: 'Accept' }).click();
     await expect(draft).toHaveValue(proposal);
     await expect(block.getByText('Proposed edit')).toHaveCount(0);
+  });
+});
+
+/* ═════════════════════ Chrome AI download gate (real availability) ═══════════ */
+
+test.describe('writing-tools chrome-ai download gate', () => {
+  test('the gate mirrors Chrome\'s REAL availability for each capability', async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(3 * 60 * 1000);
+
+    // Chrome only starts the model download from a user activation, so the gate's
+    // button is the sole trigger. We assert the gate's STATE against the browser's
+    // real availability() — we never click Download, because that would pull a
+    // browser-wide multi-GB model onto the CI machine. That click is a DOCUMENTED
+    // GAP, recorded below rather than silently skipped.
+    const cases = [
+      { slug: 'summarize', capability: 'summarize' as const, heading: /Chrome Summarizer needs a one-time download/ },
+      { slug: 'translate', capability: 'translate' as const, heading: /Chrome Translator \(en→de\) needs a one-time download/ },
+      { slug: 'write', capability: 'edit' as const, heading: /Chrome Prompt API \(Gemini Nano\) needs a one-time download/ },
+    ];
+
+    const observed: Record<string, string> = {};
+
+    for (const { slug, capability, heading } of cases) {
+      await page.goto(`/blocks/writing-tools/${slug}`);
+      const block = page.locator('[data-block-preview]');
+      await servedProvider(block); // wait for resolution before reading the gate
+
+      const availability = await chromeAvailability(page, capability);
+      observed[capability] = availability;
+
+      const downloadButton = block.getByRole('button', { name: 'Download model', exact: true });
+
+      if (availability === 'available') {
+        // Nothing to download: the gate must render nothing at all.
+        await expect(block.getByText(heading)).toHaveCount(0);
+        await expect(downloadButton).toHaveCount(0);
+      } else if (availability === 'downloadable' || availability === 'downloading') {
+        // The one state where a button must exist, with an accessible name that
+        // cannot shadow the block's own run button.
+        await expect(block.getByText(heading)).toBeVisible();
+        await expect(downloadButton).toBeVisible();
+        await expect(downloadButton).toBeEnabled();
+        // No progress bar until the user actually clicks.
+        await expect(block.getByRole('progressbar')).toHaveCount(0);
+      } else {
+        // 'unsupported' / 'unavailable' / 'probe-threw' / 'probe-timed-out': the app
+        // cannot confirm the model is usable, so it renders a terminal message and no
+        // button, and names the fallback that will serve instead.
+        await expect(downloadButton).toHaveCount(0);
+        await expect(block.getByText(/Using Transformers\.js/)).toBeVisible();
+      }
+    }
+
+    testInfo.annotations.push({
+      type: 'chrome-ai-availability',
+      description: `real availability(): ${JSON.stringify(observed)}`,
+    });
+
+    const note =
+      'DOWNLOAD-CLICK GAP: clicking the gate\'s "Download model" button makes Chrome fetch a ' +
+      'browser-wide on-device model (~1.5 GB for Gemini Nano; a language pack for Translator). ' +
+      'This suite asserts the gate STATE against the real availability() but never clicks, to ' +
+      'avoid pulling multi-GB models onto CI. The click path (button → downloadprogress events → ' +
+      'availability() flips to "available" → badge switches to Chrome AI) is covered by unit tests ' +
+      'in packages/react/tests/use-provider-fallback.test.ts and verified MANUALLY in a real Chrome. ' +
+      `Observed availability: ${JSON.stringify(observed)}.`;
+    testInfo.annotations.push({ type: 'download-click-gap', description: note });
+    await testInfo.attach('chrome-ai-download-click-gap', { body: note, contentType: 'text/plain' });
   });
 });
 
@@ -429,13 +619,15 @@ test.describe('writing-tools chrome-ai lane', () => {
         '(the Summarizer/Translator/Prompt models report "downloadable", not "available", ' +
         'and there is no legacy self.ai surface), so each block resolves its capability to ' +
         'the Transformers.js fallback. The chrome-ai serving path is verified MANUALLY in a ' +
-        'real Chrome 138+ with Built-in AI enabled and its models downloaded (split-writing-text ' +
-        'task 16.3): open /blocks/writing-tools/{summarize,translate,write}, run each, and confirm ' +
+        'real Chrome with Built-in AI models downloaded (Summarizer/Translator need Chrome 138+; ' +
+        'the Prompt API behind Write needs Chrome 148+): ' +
+        'open /blocks/writing-tools/{summarize,translate,write}, run each, and confirm ' +
         'the badge reads "Chrome AI", the modelId witness carries a chrome-ai: prefix, and zero ' +
         `model bytes are fetched. Observed providers: ${JSON.stringify(providers)}.`;
       testInfo.annotations.push({ type: 'chrome-ai-gap', description: note });
       await testInfo.attach('chrome-ai-availability-gap', { body: note, contentType: 'text/plain' });
-      // The fallback is provably active: every capability's badge reads Transformers.js.
+      // The fallback is provably active: every capability's badge reads Transformers.js,
+      // and none is left in an unresolved/unknown state.
       expect(
         Object.values(providers).every((p) => p === 'transformers'),
         'all capabilities fell back to Transformers.js',

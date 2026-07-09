@@ -1,7 +1,7 @@
 {
   "name": "ui",
   "description": "LocalMode UI — shadcn registry + Fumadocs docs site for @localmode/ui Elements",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
   "scripts": {
     "registry:build": "pnpm run block-source:generate && tsx scripts/prep-registry-dirs.ts && shadcn build && tsx scripts/strip-registry-blocks.ts && tsx scripts/build-aggregates.ts && tsx scripts/absolutize-registry-deps.ts && tsx scripts/check-no-shipped-telemetry.ts",

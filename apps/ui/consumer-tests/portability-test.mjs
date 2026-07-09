@@ -60,6 +60,10 @@ const REGISTRY_URL = `${REGISTRY_ORIGIN}/r/{name}.json`;
 // `camera`/`microphone` media-availability entries by blocks-vision-lab —
 // the detection reads only browser APIs from the copy-owned use-environment
 // and must keep installing/compiling/rendering with zero `@localmode/*`).
+// `ui/local-first/chrome-ai-download-gate` (added with the Chrome AI download
+// gate — the writing-tools blocks COMPOSE it and wire it to
+// `useProviderFallback`, but the primitive renders a plain availability enum
+// and must stay zero-`@localmode/*`).
 // All registryDependencies are local `@localmode/ui/*` and npm deps are
 // non-@localmode.
 const ITEMS = [
@@ -73,6 +77,7 @@ const ITEMS = [
   'ui/local-first/capability-gate',
   'ui/conversation/response',
   'ui/local-first/vector-export-panel',
+  'ui/local-first/chrome-ai-download-gate',
   'ui/devtools/inference-queue-monitor',
   'ui/devtools/event-log-viewer',
   'ui/devtools/pipeline-run-inspector',

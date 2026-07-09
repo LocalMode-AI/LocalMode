@@ -24,7 +24,7 @@ Zero-download, instant AI inference via Chrome's built-in Gemini Nano model. No 
 - Implements `SummarizationModel`, `TranslationModel`, and `LanguageModel` from `@localmode/core`
 - Feature detection utilities for graceful fallback
 
-The `LanguageModel` implementation wraps Chrome 138+ `window.LanguageModel` (the Prompt API) so `generateText()`, `streamText()`, `generateObject()`, and the `useGenerateText()` / `useStreamText()` / `useModelWarmup()` React hooks work on Gemini Nano with zero changes from any other provider.
+The `LanguageModel` implementation wraps Chrome 148+ `window.LanguageModel` (the Prompt API) so `generateText()`, `streamText()`, `generateObject()`, and the `useGenerateText()` / `useStreamText()` / `useModelWarmup()` React hooks work on Gemini Nano with zero changes from any other provider.
 
 ## Installation
 
@@ -72,22 +72,28 @@ console.log(summary);
 | First inference | **Instant** | After model download (50MB–2GB) | After model download (1–4GB) |
 | Bundle size | **0 bytes** | ~2MB (WASM runtime) | ~1MB |
 | Model download | **None** | Required | Required |
-| Browser support | Chrome 138+ only | All browsers | Chrome/Edge (WebGPU) |
+| Browser support | Chrome 138+ (Summarizer/Translator); Chrome 148+ (Prompt API) | All browsers | Chrome/Edge (WebGPU) |
 | Offline | **Yes** (native) | Yes (after cache) | Yes (after cache) |
 | Model quality | Good (Gemini Nano) | Varies by model | High (larger models) |
 
 ## Available APIs
 
-| API | Status | LocalMode Interface | Chrome Version |
+| API | Status | LocalMode Interface | Chrome Version (web pages) |
 |-----|--------|-------------------|----------------|
 | Summarizer | **Stable** | `SummarizationModel` | 138+ |
 | Translator | **Stable** | `TranslationModel` | 138+ |
-| Prompt API | **Stable** | `LanguageModel` | 138+ |
-| Writer | Origin trial | — | — |
-| Rewriter | Origin trial | — | — |
+| Language Detector | **Stable** | — | 138+ |
+| Prompt API | **Stable** | `LanguageModel` | **148+** |
+| Writer | Developer trial | — | — |
+| Rewriter | Developer trial | — | — |
+| Proofreader | Developer trial | — | — |
+
+<Callout type="warn" title="The Prompt API ships later than the rest">
+  Summarizer and Translator have been stable for **web pages** since Chrome 138. The **Prompt API** — the one backing `chromeAI.languageModel()` — only shipped for web pages in **Chrome 148**; Chrome 138 shipped it for *Chrome Extensions*, which is a different surface. Two consequences: `chromeAI.summarizer()` and `chromeAI.translator()` reach far more users than `chromeAI.languageModel()`, and `temperature` / `topK` remain gated behind the "Prompt API sampling parameters" origin trial on web pages even on Chrome 148+.
+</Callout>
 
 <Callout type="info">
-  All three stable APIs (Summarizer, Translator, Prompt) are supported by `@localmode/chrome-ai`. The Prompt API exposes Gemini Nano text generation via `chromeAI.languageModel()` — see the [Language Model](/docs/chrome-ai/language-model) guide.
+  All stable APIs (Summarizer, Translator, Prompt) are supported by `@localmode/chrome-ai`. The Prompt API exposes Gemini Nano text generation via `chromeAI.languageModel()` — see the [Language Model](/docs/chrome-ai/language-model) guide.
 </Callout>
 
 ## Requirements
@@ -98,32 +104,39 @@ console.log(summary);
 
 | Requirement | Detail |
 |-------------|--------|
-| Browser | Chrome 138+ (or Edge 138+) |
+| Browser | Chrome 138+ for Summarizer / Translator; **Chrome 148+ for the Prompt API** |
 | OS | Windows 10+, macOS 13+ (Ventura), Linux, ChromeOS (Chromebook Plus) |
 | Disk space | 22 GB free on the volume containing your Chrome profile |
 | Hardware | GPU with >4 GB VRAM, **or** CPU with 16 GB+ RAM and 4+ cores |
 
 ### Enabling Chrome AI
 
-1. Navigate to `chrome://flags/#optimization-guide-on-device-model` and set to **Enabled**
-2. Navigate to `chrome://flags/#prompt-api-for-gemini-nano` and set to **Enabled**
-3. For higher-quality summaries: `chrome://flags/#summarization-api-for-gemini-nano` → **Enabled with Adaptation**
-4. Restart Chrome
-5. Gemini Nano downloads automatically in the background (~1.5 GB)
-6. Verify in DevTools Console:
+On a supported Chrome stable build, **no flags are required** — these APIs ship on by default. What you do need is for Chrome to have downloaded Gemini Nano, which happens once, browser-wide, on first use.
+
+Verify the state in the DevTools console:
 
 ```ts
-// Check if Summarizer is ready
-await Summarizer.availability(); // "readily" = ready, "after-download" = downloading
+// Does the API exist at all?
+'LanguageModel' in self; // Prompt API   — Chrome 148+
+'Summarizer' in self; //    Summarizer   — Chrome 138+
+'Translator' in self; //    Translator   — Chrome 138+
 
-// Check if Translator is ready
-const caps = await Translator.availability({ sourceLanguage: 'en', targetLanguage: 'es' });
+// Is the model ready? Returns one of:
+//   'available'    — ready to use right now
+//   'downloadable' — API present, model not fetched yet
+//   'downloading'  — fetch in progress
+//   'unavailable'  — this device/build cannot run it
+await LanguageModel.availability();
+await Summarizer.availability();
+await Translator.availability({ sourceLanguage: 'en', targetLanguage: 'es' });
 ```
 
 <Callout type="info">
-  If `availability()` returns `"after-download"`, the model is still downloading. Creating a session
-  with `create()` requires a [user activation](https://developer.chrome.com/docs/ai/get-started) (click, tap, or keypress)
-  to trigger the download.
+  If `availability()` returns `'downloadable'` or `'downloading'`, the model is not on disk yet. `@localmode/chrome-ai` refuses to start that download implicitly — it throws `chrome-ai-download-required`. Opt in with `providerOptions: { chromeAI: { allowDownload: true } }`, and call it from a [user activation](https://developer.chrome.com/docs/ai/get-started) (click, tap, or keypress), which Chrome requires to trigger the ~1.5 GB fetch.
+</Callout>
+
+<Callout type="warn" title="If the API is missing on a recent Chrome">
+  On older builds the Prompt API sat behind `chrome://flags/#prompt-api-for-gemini-nano`, with the model behind `chrome://flags/#optimization-guide-on-device-model`. Those flags are no longer needed on stable and are being retired — if you enabled them long ago, note that they also mask the real availability story from your users, most of whom will not have set them. Test with a clean profile before assuming a feature works.
 </Callout>
 
 ## Provider Factory

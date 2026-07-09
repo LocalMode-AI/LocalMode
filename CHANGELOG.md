@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-07-09
+
+Repairs Chrome Built-in AI, which had been unreachable on every modern Chrome, and adds the user-activation download gate Chrome requires before it will fetch an on-device model.
+
+**Released:** `@localmode/core` 2.4.0 · `@localmode/chrome-ai` 2.2.0 · `@localmode/react` 2.3.0.
+
+### Fixed
+
+- **Chrome Built-in AI was unreachable on every modern Chrome.** `@localmode/chrome-ai`'s Summarizer and Translator, and `@localmode/core`'s four `is*APISupported()` capability detectors, all read the legacy `self.ai.*` namespace that Chrome has removed. `isChromeAISupported()` was literally `'ai' in self`, so it returned `false` on exactly the browsers where the APIs exist — and `detectCapabilities().features.chromeAI` was always `false`. All now read the modern top-level `self.Summarizer` / `self.Translator` / `self.LanguageModel` globals, with the legacy namespace as a fallback.
+- **Chrome's `SummarizerType` enum is `'tldr'`, not `'tl;dr'`.** Passing `'tl;dr'` made Chrome throw a `TypeError`, which the provider-fallback probe then swallowed and reported as "this browser does not support it" — blaming the browser for a caller bug. The enum value is corrected across `@localmode/chrome-ai` and `@localmode/react`, and the probe now rethrows bad-option errors instead of mislabelling the browser.
+- The Prompt API requires **Chrome 148+** for web pages (Chrome 138 shipped it for extensions only). Summarizer and Translator remain Chrome 138+. Documentation and runtime error hints corrected throughout.
+
+### Added
+
+- `useProviderFallback` (`@localmode/react`) exposes `chromeAvailability`, `refreshChromeAvailability`, `requestChromeDownload`, `chromeDownloadProgress`, and `downloadingCapability`, plus standalone `probeChromeAvailability` / `downloadChromeModel`. Chrome only starts its one-time, browser-wide model download from a **user activation**, so the download must be triggered from a click.
+- Chrome AI Summarizer and Translator gained `allowDownload` + `onProgress` settings and an `availability()` gate, matching the language model; they now throw typed `SummarizationError` / `TranslationError`.
+- New UI registry primitive `ui/local-first/chrome-ai-download-gate` (`ChromeAIDownloadGate` + `ChromeAIReadyBadge`) rendering the download button, progress, and terminal states. Wired into the `writing-tools/{write,translate,summarize}` blocks. The catalog is now 107 components across 10 families (147 registry items).
+
 ## [2.3.0] - 2026-07-09
 
 Launches the `@localmode/ui` registry platform at localmode.ai — a copy-owned catalog of 106 AI UI components across 10 families, plus 37 composed blocks across 12 gallery categories that wire those primitives to real on-device models. The `apps/showcase-nextjs` demo app is retired (absorbed into the blocks at parity) and the built-in DevTools widget is removed. Alongside the platform: a `@localmode/core` RAG ingest ⇄ search round-trip fix, agent tool approval, a StorageAdapter conformance suite, cross-session persistence fixes across all three storage adapters, a resilient model-file cache, and provider load fixes for WASM VLMs, long-context wllama, and LiteRT.

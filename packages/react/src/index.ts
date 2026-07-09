@@ -230,6 +230,8 @@ export {
   detectSummarizerProvider,
   detectTranslatorProvider,
   detectPromptProvider,
+  probeChromeAvailability,
+  downloadChromeModel,
   providerTier,
   providerName,
 } from './hooks/use-provider-fallback.js';
@@ -250,6 +252,10 @@ export type {
   LoadTransformers,
   UseProviderFallbackOptions,
   UseProviderFallbackReturn,
+  ChromeAIAvailability,
+  ChromeCapability,
+  ChromeCapabilityParams,
+  ChromeDownloadProgress,
 } from './hooks/use-provider-fallback.js';
 
 // Photo library (shared CLIP-family multimodal image library)

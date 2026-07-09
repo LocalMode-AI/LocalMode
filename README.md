@@ -42,7 +42,7 @@ LocalMode is a monorepo of packages for building AI-powered applications that ru
 | [`@localmode/wllama`](./packages/wllama/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/wllama.svg)](https://www.npmjs.com/package/@localmode/wllama) | GGUF model provider via llama.cpp WASM -- 30 curated models (text, vision, embeddings, reranking), true streaming, structured output (JSON mode), reasoning mode, WebGPU acceleration, tool calling, grammar sampling (GBNF), LoRA adapters, model management, GGUF model discovery (`searchGGUFModels`/`listGGUFFiles`), 160K+ HuggingFace models, universal browser support |
 | [`@localmode/litert`](./packages/litert/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/litert.svg)](https://www.npmjs.com/package/@localmode/litert) | Google LiteRT-LM provider (`.litertlm` models, WebGPU + CPU WASM fallback). Text-only, early preview. Catalog ships Gemma 4 E2B/E4B and Qwen3 0.6B, all verified end-to-end. Gated Gemma 3n / Gemma 3 1B loadable via custom URL. |
 | [`@localmode/mediapipe`](./packages/mediapipe/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/mediapipe.svg)](https://www.npmjs.com/package/@localmode/mediapipe) | Google MediaPipe Tasks provider -- real-time hand/pose/face landmark tracking, gesture recognition, image & audio classification, language detection. WASM + WebGL, all browsers. |
-| [`@localmode/chrome-ai`](./packages/chrome-ai/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/chrome-ai.svg)](https://www.npmjs.com/package/@localmode/chrome-ai) | Chrome Built-in AI provider -- zero-download inference via Gemini Nano with automatic fallback |
+| [`@localmode/chrome-ai`](./packages/chrome-ai/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/chrome-ai.svg)](https://www.npmjs.com/package/@localmode/chrome-ai) | Chrome Built-in AI provider -- your app ships no model files; Chrome supplies Gemini Nano. Automatic fallback |
 | [`@localmode/langchain`](./packages/langchain/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/langchain.svg)](https://www.npmjs.com/package/@localmode/langchain) | LangChain.js adapters -- drop-in local embeddings, chat, vector store, and reranker for existing LangChain apps, plus `createLangChainKnowledgeBaseEngine` (the `KnowledgeBaseEngine` contract over LangChain adapters) |
 | [`@localmode/devtools`](./packages/devtools/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/devtools.svg)](https://www.npmjs.com/package/@localmode/devtools) | In-app AI observability -- 9 React hooks via the `@localmode/devtools/react` subpath for model cache, VectorDB stats, and inference queue data (the bundled DevTools widget UI was **removed in v3.0.0** in favor of the hooks + the `ui/devtools` registry family and `ui/blocks/devtools-drawer` at localmode.ai) |
 | [`@localmode/pdfjs`](./packages/pdfjs/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/pdfjs.svg)](https://www.npmjs.com/package/@localmode/pdfjs) | PDF text extraction with PDF.js |
@@ -68,15 +68,15 @@ npx shadcn@latest add @localmode/ui/all                    # the whole catalog
 
 | Family | Count | What it covers |
 | ------ | ----- | -------------- |
-| [Conversation](https://localmode.ai/docs/conversation) | 24 | Chat shell, prompt input, reasoning, sources, tools, agent timelines, branches, citations |
-| [Local-First](https://localmode.ai/docs/local-first) | 24 | Model download/selection, Hub search, capability gates, storage quota, cache status, VectorDB observability |
-| [Results & Insights](https://localmode.ai/docs/results) | 12 | Confidence badges, scored result bars, similarity meters, evaluation dashboards, entity displays |
-| [Input Controls](https://localmode.ai/docs/input-controls) | 11 | Char-limit rings, fill-mask inputs, mode pickers, parameter sliders, slash-command palettes |
-| [Audio](https://localmode.ai/docs/audio) | 10 | Voice buttons/orbs, waveform bars, TTS voice pickers, streaming-speech panels, transcript viewers |
-| [Media & Vision](https://localmode.ai/docs/media-vision) | 7 | Image dropzones, bounding-box overlays, before/after viewers, webcam canvas, result galleries |
-| [Data & Documents](https://localmode.ai/docs/data-documents) | 5 | File dropzones, indexed-document cards, format badges, category facets, chunk visualizers |
-| [Security & Privacy](https://localmode.ai/docs/security-privacy) | 5 | Password-strength bar, differential-privacy controls, passphrase gate, vault item card, lock badge |
-| [Artifacts & Canvas](https://localmode.ai/docs/artifacts) | 4 | Docked canvas, sortable data tables, charts, code diffs — output rendered *beside* the chat |
+| [Conversation](https://localmode.ai/docs/conversation/conversation) | 24 | Chat shell, prompt input, reasoning, sources, tools, agent timelines, branches, citations |
+| [Local-First](https://localmode.ai/docs/local-first/model-downloader) | 24 | Model download/selection, Hub search, capability gates, storage quota, cache status, VectorDB observability |
+| [Results & Insights](https://localmode.ai/docs/results/confidence-score-badge) | 12 | Confidence badges, scored result bars, similarity meters, evaluation dashboards, entity displays |
+| [Input Controls](https://localmode.ai/docs/input-controls/char-limit-indicator) | 11 | Char-limit rings, fill-mask inputs, mode pickers, parameter sliders, slash-command palettes |
+| [Audio](https://localmode.ai/docs/audio/waveform-activity-bars) | 10 | Voice buttons/orbs, waveform bars, TTS voice pickers, streaming-speech panels, transcript viewers |
+| [Media & Vision](https://localmode.ai/docs/media-vision/media-dropzone) | 7 | Image dropzones, bounding-box overlays, before/after viewers, webcam canvas, result galleries |
+| [Data & Documents](https://localmode.ai/docs/data-documents/file-dropzone) | 5 | File dropzones, indexed-document cards, format badges, category facets, chunk visualizers |
+| [Security & Privacy](https://localmode.ai/docs/security-privacy/password-strength-bar) | 5 | Password-strength bar, differential-privacy controls, passphrase gate, vault item card, lock badge |
+| [Artifacts & Canvas](https://localmode.ai/docs/artifacts/artifact) | 4 | Docked canvas, sortable data tables, charts, code diffs — output rendered *beside* the chat |
 | [DevTools](https://localmode.ai/docs/devtools) | 4 | Inference-queue monitor, event-log viewer, pipeline-run inspector, model-cache table |
 
 **Blocks** are complete experiences composed from the primitives — the wiring layer, and the only items that depend on `@localmode/*`. Each runs real models on-device and gates its download behind an explicit in-block action. Try them in the [`/blocks` gallery](https://localmode.ai/blocks), then install with `npx shadcn@latest add @localmode/ui/blocks/<category>/<block>`.
@@ -382,7 +382,7 @@ See LocalMode running real models entirely in your browser at the **[/blocks gal
 │                                  + 160K+, streaming, JSON mode, rerank  │
 │  @localmode/litert               Google LiteRT-LM, .litertlm models      │
 │  @localmode/mediapipe            Google MediaPipe — landmarks, gestures  │
-│  @localmode/chrome-ai            Gemini Nano, zero-download              │
+│  @localmode/chrome-ai            Gemini Nano, browser-supplied           │
 ├──────────────────────────────────────────────────────────────────────────┤
 │                            Browser APIs                                  │
 │                                                                          │
@@ -429,7 +429,7 @@ See LocalMode running real models entirely in your browser at the **[/blocks gal
 | Firefox 75+ | 141+     | Yes  | Yes       | Yes     | No        |
 | Safari 14+  | 26+      | Yes  | Yes       | Partial | No        |
 
-- **Chrome AI**: Zero-download inference via Gemini Nano (fallback to Transformers.js)
+- **Chrome AI**: Gemini Nano supplied by the browser -- your app ships no model files (fallback to Transformers.js)
 - **WebGPU**: 3-5x faster inference (fallback to WASM)
 - **IndexedDB**: Persistent model/data storage (fallback to Memory)
 - **Workers**: Background processing for non-blocking UI

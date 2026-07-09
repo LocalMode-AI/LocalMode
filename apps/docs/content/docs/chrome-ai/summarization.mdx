@@ -8,7 +8,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 # Summarization
 
-Chrome AI provides instant text summarization via the built-in Summarizer API. No model download required.
+Chrome AI provides on-device text summarization via the built-in Summarizer API. Your app ships and fetches no model files — Chrome supplies the model, downloading it once browser-wide on first use.
 
 <Callout type="info" title="See it in action">
   The [Text Summarizer block](https://localmode.ai/blocks/writing-tools/summarize) runs Chrome AI summarization (with Transformers.js fallback) live in the browser.
@@ -34,8 +34,9 @@ console.log(`Completed in ${usage.durationMs}ms`);
 Chrome AI supports four summary types:
 
 ```ts
-// TL;DR — concise summary (default)
-chromeAI.summarizer({ type: 'tl;dr' })
+// TL;DR — concise summary (default). Chrome's enum value is `tldr`, with no
+// punctuation; passing 'tl;dr' throws a TypeError from the browser.
+chromeAI.summarizer({ type: 'tldr' })
 
 // Key Points — bullet-style key points
 chromeAI.summarizer({ type: 'key-points' })
@@ -80,6 +81,52 @@ const { summary } = await summarize({
   text: researchPaper,
 });
 ```
+
+## Model Availability & Download
+
+The Summarizer API can be present while its on-device model is not yet downloaded. Ask Chrome first:
+
+```ts
+// 'available' | 'downloadable' | 'downloading' | 'unavailable'
+const state = await Summarizer.availability({ type: 'tldr', length: 'medium' });
+```
+
+When the state is `downloadable` or `downloading`, `chromeAI.summarizer()` throws a
+`SummarizationError` rather than silently starting a large, browser-wide download. Opt in
+explicitly, and call it from a **user activation** (a click) — Chrome refuses to start the
+download otherwise:
+
+```ts
+import { summarize } from '@localmode/core';
+import { chromeAI } from '@localmode/chrome-ai';
+
+const model = chromeAI.summarizer({
+  type: 'tldr',
+  allowDownload: true,
+  onProgress: ({ loaded, total }) => {
+    console.log(`Downloading model: ${Math.round((loaded / total) * 100)}%`);
+  },
+});
+
+// Call this from a click handler.
+const { summary } = await summarize({ model, text: article });
+```
+
+<Callout type="info">
+  Building this UI? `useProviderFallback` from `@localmode/react` exposes `chromeAvailability`
+  and `requestChromeDownload`, and the `ui/local-first/chrome-ai-download-gate` primitive renders
+  the button, progress, and terminal states for you.
+</Callout>
+
+## Errors
+
+`ChromeAISummarizer` throws a typed `SummarizationError` from `@localmode/core`:
+
+| Situation | Hint |
+| --- | --- |
+| `self.Summarizer` is undefined | Requires Chrome 138+ stable on desktop |
+| `availability()` reports `unavailable` | This device or Chrome build cannot run the model |
+| Model not downloaded and `allowDownload` unset | Set `allowDownload: true` and call from a user activation |
 
 ## With AbortSignal
 

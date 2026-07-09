@@ -6,18 +6,24 @@
  * @packageDocumentation
  */
 
-import type {
-  TranslationModel,
-  DoTranslateOptions,
-  DoTranslateResult,
+import {
+  TranslationError,
+  type TranslationModel,
+  type DoTranslateOptions,
+  type DoTranslateResult,
 } from '@localmode/core';
-import type { AITranslator, ChromeAITranslatorSettings } from '../types.js';
-import { estimateTokens } from '../utils.js';
+import type {
+  AITranslator,
+  AITranslatorCreateOptions,
+  ChromeAITranslatorSettings,
+} from '../types.js';
+import { availabilityWithDeadline, estimateTokens, getTranslatorFactory } from '../utils.js';
 
 /**
  * Chrome AI Translator — implements TranslationModel.
  *
- * Uses Chrome's built-in Gemini Nano model for instant, zero-download translation.
+ * Uses Chrome's built-in translation models. Your app ships no model files, but Chrome may
+ * need to download a per-language-pair pack once — gate that with `allowDownload`.
  * Caches sessions per language pair for efficient reuse.
  */
 export class ChromeAITranslator implements TranslationModel {
@@ -49,25 +55,70 @@ export class ChromeAITranslator implements TranslationModel {
     if (pending) return pending;
 
     const promise = (async () => {
-      const ai = (self as any).ai;
-      if (!ai?.translator) {
-        throw new Error(
-          'Chrome AI Translator API is not available. ' +
-            'This requires Chrome 138+ with built-in AI enabled.'
+      const factory = getTranslatorFactory();
+      if (!factory) {
+        throw new TranslationError(
+          'Chrome AI Translator API is not available. `self.Translator` is undefined.',
+          {
+            hint: 'The Translator API requires Chrome 138+ stable on desktop. See https://localmode.dev/docs/chrome-ai for setup.',
+          }
         );
       }
 
-      const session = await ai.translator.create({
+      // Availability is per language pair — each pack downloads separately. The
+      // legacy `self.ai.translator` surface has no `availability()`.
+      if (typeof factory.availability === 'function') {
+        const availability = await availabilityWithDeadline(() =>
+          factory.availability!({ sourceLanguage, targetLanguage }) as Promise<string>,
+        );
+        // `Translator.availability()` has been observed never to settle on some
+        // builds. A timeout falls through to create() rather than hanging here.
+        if (availability === 'unavailable') {
+          throw new TranslationError(
+            `Chrome AI cannot translate ${sourceLanguage} to ${targetLanguage} on this device.`,
+            { hint: 'Chrome reports this language pair as unavailable. Use a downloadable provider instead.' }
+          );
+        }
+        if (
+          (availability === 'downloadable' || availability === 'downloading') &&
+          !this.settings.allowDownload
+        ) {
+          throw new TranslationError(
+            `The ${sourceLanguage}\u2192${targetLanguage} language pack needs to be downloaded before use (status: ${availability}).`,
+            {
+              hint: 'Set `allowDownload: true` on the translator settings and call it from a user activation (click/tap/keypress) so Chrome can download the language pack.',
+            }
+          );
+        }
+      }
+
+      const createOptions: AITranslatorCreateOptions = {
         sourceLanguage,
         targetLanguage,
         signal: abortSignal,
-      });
+      };
+
+      const onProgress = this.settings.onProgress;
+      if (onProgress) {
+        createOptions.monitor = (m: EventTarget) => {
+          m.addEventListener('downloadprogress', ((evt: Event) => {
+            const e = evt as Event & { loaded?: number; total?: number };
+            onProgress({ loaded: e.loaded ?? 0, total: e.total ?? 0 });
+          }) as EventListener);
+        };
+      }
+
+      const session = await factory.create(createOptions);
 
       this.sessions.set(key, session);
       return session;
     })();
 
     this.sessionPromises.set(key, promise);
+    // A failed create must not poison every later call for this pair.
+    promise.catch(() => {
+      this.sessionPromises.delete(key);
+    });
     return promise;
   }
 

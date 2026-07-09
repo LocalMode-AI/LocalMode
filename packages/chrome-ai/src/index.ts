@@ -1,8 +1,8 @@
 /**
  * @localmode/chrome-ai
  *
- * Chrome AI provider for local-first AI. Zero-download, instant inference
- * via Chrome's built-in Gemini Nano model.
+ * Chrome AI provider for local-first AI. Your application ships and fetches no model
+ * files — Chrome supplies the built-in Gemini Nano model.
  *
  * @packageDocumentation
  */
@@ -32,6 +32,7 @@ export type {
   ChromeAITranslatorSettings,
   AILanguageModel,
   AILanguageModelAvailability,
+  ChromeAIAvailability,
   AILanguageModelCreateOptions,
   AILanguageModelFactory,
   AILanguageModelPromptOptions,

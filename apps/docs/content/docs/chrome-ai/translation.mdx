@@ -8,7 +8,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 # Translation
 
-Chrome AI provides instant text translation via the built-in Translator API. No model download required.
+Chrome AI provides on-device text translation via the built-in Translator API. Your app ships and fetches no model files — Chrome supplies a language pack per directed pair, downloading it once browser-wide on first use.
 
 <Callout type="info" title="See it in action">
   The [Translator block](https://localmode.ai/blocks/writing-tools/translate) runs Chrome AI translation (with Transformers.js Opus-MT fallback across 24 offline pairs) live in the browser.
@@ -69,6 +69,40 @@ const { translations } = await translateMany({
 
 console.log(translations); // ["Hallo", "Auf Wiedersehen", "Danke"]
 ```
+
+## Model Availability & Download
+
+Chrome downloads a **separate language pack per directed pair**, so availability must be
+re-checked whenever the pair changes:
+
+```ts
+// 'available' | 'downloadable' | 'downloading' | 'unavailable'
+const state = await Translator.availability({ sourceLanguage: 'en', targetLanguage: 'fr' });
+```
+
+When the pack is not present, `chromeAI.translator()` throws a `TranslationError` instead of
+silently starting the download. Opt in with `allowDownload`, from a **user activation**:
+
+```ts
+const model = chromeAI.translator({
+  sourceLanguage: 'en',
+  targetLanguage: 'fr',
+  allowDownload: true,
+  onProgress: ({ loaded, total }) => console.log(loaded / total),
+});
+```
+
+<Callout type="info">
+  `useProviderFallback` from `@localmode/react` probes translator availability per pair
+  (`refreshChromeAvailability('translate', { source, target })`) and exposes
+  `requestChromeDownload` for the click handler.
+</Callout>
+
+## Errors
+
+`ChromeAITranslator` throws a typed `TranslationError` from `@localmode/core` when
+`self.Translator` is absent, when Chrome reports the pair `unavailable`, or when the pack
+needs downloading and `allowDownload` was not set.
 
 ## Session Caching
 

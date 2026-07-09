@@ -1,0 +1,138 @@
+---
+title: "Chrome AI Download Gate"
+description: "The button a user must click before Chrome will fetch a built-in AI model — plus the in-flight progress and the terminal unsupported / cannot-run states."
+icon: CloudDownload
+---
+
+# Chrome AI Download Gate
+
+Chrome's built-in AI APIs (`Summarizer`, `Translator`, `LanguageModel`) can exist in a browser while their on-device model has not been fetched yet. In that state `availability()` reports `'downloadable'`, and **Chrome refuses to start the download outside a user activation**. A button is therefore not a nicety here — it is the only way to trigger the download.
+
+The **Chrome AI Download Gate** renders that button, the in-flight progress bar, the failed-attempt message, and the two terminal states (the API is absent, or this device cannot run it). It renders `null` once the model is `'available'`, because a ready capability needs no gate. **Chrome AI Ready Badge** is a compact confirmation you can show in its place.
+
+It is presentational and hook-driven: bind `availability`, `progress`, and `isDownloading` to `useProviderFallback`'s Chrome state and pass its download action as `onDownload`. It owns no orchestration and starts nothing itself.
+
+<Callout type="warn">
+  The download is Chrome's, not your app's: it is shared across every site and happens once. Gemini Nano (the Prompt API) is roughly 1.5 GB; the Translator downloads a smaller pack **per language pair**, so availability must be re-probed whenever the pair changes.
+</Callout>
+
+## Preview
+
+<ComponentPreview name="ui/local-first/chrome-ai-download-gate" note="Simulated lifecycle — no browser API is called and no model is fetched in the preview." />
+
+<OpenInV0 name="ui/local-first/chrome-ai-download-gate" />
+
+## Installation
+
+<InstallTabs name="ui/local-first/chrome-ai-download-gate" />
+
+### Data source & dependencies
+
+**Data source:** renders the `availability` you pass — works with any backend. Recommended producer: `useProviderFallback` from `@localmode/react` (on-device, optional), whose `chromeAvailability`, `chromeDownloadProgress`, `downloadingCapability`, and `requestChromeDownload` map one-to-one onto these props.
+- `lucide-react` — icons
+- `clsx` + `tailwind-merge` — via the shared `cn()` util
+
+### Files installed
+
+- `chrome-ai-download-gate.tsx` — `ChromeAIDownloadGate` + `ChromeAIReadyBadge`
+- `lib/utils.ts` — the `cn()` helper (if not already present)
+
+## Props
+
+<AutoTypeTable path="registry/localmode/local-first/chrome-ai-download-gate/chrome-ai-download-gate.tsx" name="ChromeAIDownloadGateProps" />
+
+<AutoTypeTable path="registry/localmode/local-first/chrome-ai-download-gate/chrome-ai-download-gate.tsx" name="ChromeAIReadyBadgeProps" />
+
+## Examples
+
+### Wired to `useProviderFallback`
+
+`requestChromeDownload` must be called from the click handler — Chrome will reject a download started from an effect or on mount.
+
+```tsx
+import { useEffect } from 'react';
+import { useProviderFallback } from '@localmode/react';
+import { ChromeAIDownloadGate } from '@/components/chrome-ai-download-gate';
+
+export function SummarizePanel() {
+  const {
+    chromeAvailability,
+    refreshChromeAvailability,
+    requestChromeDownload,
+    chromeDownloadProgress,
+    downloadingCapability,
+    error,
+  } = useProviderFallback({
+    loadChromeAI: () => import('@localmode/chrome-ai'),
+    loadTransformers: () => import('@localmode/transformers'),
+  });
+
+  // Reading availability() downloads nothing.
+  useEffect(() => {
+    void refreshChromeAvailability('summarize', { chromeStyle: 'tldr', length: 'medium' });
+  }, [refreshChromeAvailability]);
+
+  return (
+    <ChromeAIDownloadGate
+      availability={chromeAvailability.summarize ?? 'unsupported'}
+      label="Chrome Summarizer"
+      size="~1.5 GB, shared across every site"
+      isDownloading={downloadingCapability === 'summarize'}
+      progress={chromeDownloadProgress?.progress}
+      error={error?.message ?? null}
+      fallbackLabel="Transformers.js (DistilBART)"
+      onDownload={() => {
+        void requestChromeDownload('summarize', { chromeStyle: 'tldr', length: 'medium' });
+      }}
+    />
+  );
+}
+```
+
+### Per-language-pair gating
+
+The Translator downloads one pack per directed pair, so re-probe on every pair change and name the pair in the label.
+
+```tsx
+useEffect(() => {
+  void refreshChromeAvailability('translate', { source, target });
+}, [source, target, refreshChromeAvailability]);
+
+<ChromeAIDownloadGate
+  availability={chromeAvailability.translate ?? 'unsupported'}
+  label={`Chrome Translator (${source}→${target})`}
+  size="one language pack"
+  isDownloading={downloadingCapability === 'translate'}
+  progress={chromeDownloadProgress?.progress}
+  onDownload={() => void requestChromeDownload('translate', { source, target })}
+  fallbackLabel="Transformers.js (Opus-MT)"
+/>;
+```
+
+### Showing a ready state
+
+The gate renders `null` when the model is `'available'`, so pair it with the badge:
+
+```tsx
+{chromeAvailability.summarize === 'available' ? (
+  <ChromeAIReadyBadge label="Chrome Summarizer" />
+) : (
+  <ChromeAIDownloadGate {...gateProps} />
+)}
+```
+
+## States
+
+| `availability` | What renders |
+| --- | --- |
+| `available` | Nothing (`null`) — pair with `ChromeAIReadyBadge` |
+| `downloadable` | Heading, size copy, and the **Download model** button |
+| `downloading` | Heading and a live progress bar (indeterminate when `progress` is omitted) |
+| `unavailable` | A terminal message: this device cannot run the model |
+| `unsupported` | A terminal message: this browser has no such API |
+
+## Customization
+
+The button's accessible name is deliberately the generic **"Download model"** rather than a name built from the capability label. A name like "Download Chrome Summarizer" contains the substring "Summarize", which would collide with a host block's own **Summarize** run button under role+name lookups and resolve two controls. The capability is named in the heading above the button instead. If you rename the button, keep it distinct from the run controls around it.
+
+The progress bar is a plain `role="progressbar"` with `aria-valuenow`, and the status line is a `role="status"` live region, so screen readers announce the download without extra wiring.

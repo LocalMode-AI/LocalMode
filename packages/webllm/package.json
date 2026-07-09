@@ -1,6 +1,6 @@
 {
   "name": "@localmode/webllm",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "WebLLM provider for @localmode - LLM inference with quantized models",
   "license": "MIT",
   "author": "LocalMode",

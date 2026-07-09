@@ -1,5 +1,12 @@
 # @localmode/core
 
+## 2.4.0
+
+### Minor Changes
+
+- **Fixed: Chrome Built-in AI capability detection never fired on modern Chrome.** `isChromeAISupported()` was literally `'ai' in self`, and `isSummarizerAPISupported()` / `isTranslatorAPISupported()` / `isLanguageModelAPISupported()` all read the `self.ai.*` namespace that Chrome has removed. They therefore returned `false` on exactly the browsers where the APIs exist, and `detectCapabilities().features.chromeAI` was always `false`. All four now read the modern top-level `self.Summarizer` / `self.Translator` / `self.LanguageModel` globals, with the legacy `self.ai.*` namespace as a fallback, and `isChromeAISupported()` reports whether _any_ of the three APIs is present.
+- docs: replace the README "Demo" badge with "UI Components" (localmode.ai) and add a "Blocks & Apps" badge linking to the localmode.ai/blocks gallery
+
 ## 2.3.0
 
 ### Added

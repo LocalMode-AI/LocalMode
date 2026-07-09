@@ -42,7 +42,9 @@ export type ProviderTier = 'built-in' | 'download';
 export type ProviderCapability = 'summarize' | 'translate' | 'edit' | 'fill-mask';
 
 /** Chrome Summarizer API summary style (mirrors the browser Summarizer `type`). */
-export type ChromeSummaryStyle = 'tl;dr' | 'key-points' | 'teaser' | 'headline';
+// `tldr` (no punctuation) is the spelling Chrome's `SummarizerType` enum accepts;
+// `'tl;dr'` throws a TypeError from `Summarizer.availability()` / `.create()`.
+export type ChromeSummaryStyle = 'tldr' | 'key-points' | 'teaser' | 'headline';
 
 /** Chrome Summarizer API output length. */
 export type ChromeSummaryLength = 'short' | 'medium' | 'long';
@@ -163,6 +165,31 @@ export interface UseProviderFallbackReturn {
   isResolving: boolean;
   /** Last resolution error, or null. */
   error: Error | null;
+  /**
+   * Last-probed Chrome availability per capability, or `null` if never probed.
+   * Populate it with {@link UseProviderFallbackReturn.refreshChromeAvailability}.
+   */
+  chromeAvailability: Partial<Record<ChromeCapability, ChromeAIAvailability>>;
+  /** Probe (or re-probe) Chrome's model state for one capability. */
+  refreshChromeAvailability: (
+    capability: ChromeCapability,
+    params?: ChromeCapabilityParams,
+  ) => Promise<ChromeAIAvailability>;
+  /**
+   * Ask Chrome to download a capability's on-device model.
+   *
+   * **Call this from a click handler.** Chrome requires a user activation to start
+   * the download, so it cannot be triggered from an effect or on mount. Updates
+   * `chromeAvailability` and `chromeDownloadProgress` as it runs.
+   */
+  requestChromeDownload: (
+    capability: ChromeCapability,
+    params?: ChromeCapabilityParams,
+  ) => Promise<ChromeAIAvailability>;
+  /** In-flight download progress (0–1) keyed by capability, or `null` when idle. */
+  chromeDownloadProgress: ChromeDownloadProgress | null;
+  /** The capability whose model is currently downloading, or `null`. */
+  downloadingCapability: ChromeCapability | null;
 }
 
 /* ─────────────────────────── capability detection ────────────────────────── */
@@ -171,23 +198,217 @@ export interface UseProviderFallbackReturn {
 // browser surfaces the `@localmode/chrome-ai` detectors read, so the hook needs
 // no provider import to detect.
 
+/**
+ * Chrome's on-device model state, plus `unsupported` for "the API isn't here at all".
+ * `unsupported` is ours; the other four are Chrome's own `availability()` values.
+ */
+export type ChromeAIAvailability =
+  | 'available'
+  | 'downloadable'
+  | 'downloading'
+  | 'unavailable'
+  | 'unsupported';
+
+/** Progress of a Chrome-managed model download, as a 0–1 fraction. */
+export interface ChromeDownloadProgress {
+  capability: ChromeCapability;
+  /** 0–1. Chrome reports either a fraction or loaded/total bytes; both normalize here. */
+  progress: number;
+}
+
+/** The three capabilities Chrome Built-in AI can serve (fill-mask has no Chrome API). */
+export type ChromeCapability = Exclude<ProviderCapability, 'fill-mask'>;
+
+/** Extra params some capabilities need to answer `availability()` / `create()`. */
+export interface ChromeCapabilityParams {
+  /** `translate` only — availability and downloads are per language pair. */
+  source?: string;
+  /** `translate` only. */
+  target?: string;
+  /** `summarize` only. */
+  chromeStyle?: ChromeSummaryStyle;
+  /** `summarize` only. */
+  length?: ChromeSummaryLength;
+}
+
+/**
+ * A Chrome Built-in AI factory. Modern Chrome exposes each API as its own
+ * top-level global (`self.Summarizer`, `self.Translator`, `self.LanguageModel`);
+ * Chrome 127–137 origin-trial builds used a `self.ai.*` namespace with no
+ * `availability()`. Both shapes are handled.
+ */
+interface ChromeAIFactory {
+  availability?: (options?: Record<string, unknown>) => Promise<string>;
+  create: (options?: Record<string, unknown>) => Promise<{ destroy?: () => void }>;
+}
+
 interface SelfWithAI {
-  ai?: { summarizer?: unknown; translator?: unknown; languageModel?: unknown };
-  LanguageModel?: { availability?: () => Promise<string> };
+  ai?: { summarizer?: ChromeAIFactory; translator?: ChromeAIFactory; languageModel?: ChromeAIFactory };
+  Summarizer?: ChromeAIFactory;
+  Translator?: ChromeAIFactory;
+  LanguageModel?: ChromeAIFactory;
 }
 
-/** Is the Chrome Summarizer API available in this browser? */
-export async function detectSummarizerProvider(): Promise<ProviderId> {
-  if (typeof self === 'undefined') return 'transformers';
-  const ai = (self as unknown as SelfWithAI).ai;
-  return ai && 'summarizer' in ai ? 'chrome-ai' : 'transformers';
+/** Resolve a capability's Chrome factory: modern global first, legacy namespace second. */
+function chromeFactory(capability: ChromeCapability): ChromeAIFactory | null {
+  if (typeof self === 'undefined') return null;
+  const g = self as unknown as SelfWithAI;
+  switch (capability) {
+    case 'summarize':
+      return g.Summarizer ?? g.ai?.summarizer ?? null;
+    case 'translate':
+      return g.Translator ?? g.ai?.translator ?? null;
+    case 'edit':
+      return g.LanguageModel ?? g.ai?.languageModel ?? null;
+  }
 }
 
-/** Is the Chrome Translator API available in this browser? */
-export async function detectTranslatorProvider(): Promise<ProviderId> {
-  if (typeof self === 'undefined') return 'transformers';
-  const ai = (self as unknown as SelfWithAI).ai;
-  return ai && 'translator' in ai ? 'chrome-ai' : 'transformers';
+/** The `create()` / `availability()` options a capability needs. */
+function chromeOptions(
+  capability: ChromeCapability,
+  params: ChromeCapabilityParams = {},
+): Record<string, unknown> | undefined {
+  switch (capability) {
+    case 'translate':
+      return { sourceLanguage: params.source ?? 'en', targetLanguage: params.target ?? 'es' };
+    case 'summarize':
+      return { type: params.chromeStyle ?? 'tldr', length: params.length ?? 'medium' };
+    case 'edit':
+      return undefined;
+  }
+}
+
+/**
+ * Default deadline for a Chrome `availability()` probe.
+ *
+ * Chrome normally answers in ~1ms. But `Translator.availability()` has been observed
+ * to NEVER settle on some builds (headless Chromium, profiles without the translation
+ * service). Awaiting it on a resolver's critical path leaves the UI stuck on
+ * "Preparing…" forever, so every probe is raced against this deadline.
+ */
+export const CHROME_AVAILABILITY_TIMEOUT_MS = 3000;
+
+/** Sentinel resolved when a probe outruns its deadline. */
+const PROBE_TIMED_OUT = Symbol('probe-timed-out');
+
+async function raceDeadline<T>(promise: Promise<T>, ms: number): Promise<T | typeof PROBE_TIMED_OUT> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<typeof PROBE_TIMED_OUT>((resolve) => {
+        timer = setTimeout(() => resolve(PROBE_TIMED_OUT), ms);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+/**
+ * Ask Chrome whether a capability's on-device model is ready.
+ *
+ * Returns `unsupported` only when the API is genuinely absent, and `available` on
+ * the legacy `self.ai.*` surface (which predates `availability()` and can only be
+ * probed by presence).
+ *
+ * @throws whatever `availability()` throws. This is deliberate: Chrome raises a
+ *   `TypeError` when handed an invalid option (e.g. a `SummarizerType` outside
+ *   its enum), and reporting that as `unsupported` would blame the user's browser
+ *   for a caller bug. Callers wanting a safe default should catch.
+ */
+export async function probeChromeAvailability(
+  capability: ChromeCapability,
+  params: ChromeCapabilityParams = {},
+  timeoutMs: number = CHROME_AVAILABILITY_TIMEOUT_MS,
+): Promise<ChromeAIAvailability> {
+  const factory = chromeFactory(capability);
+  if (!factory) return 'unsupported';
+  if (typeof factory.availability !== 'function') return 'available';
+  // NOT wrapped in try/catch: Chrome raises a `TypeError` on an invalid option
+  // (e.g. a `SummarizerType` outside its enum), and reporting that as `unsupported`
+  // would blame the user's browser for a caller bug. A non-settling probe is a
+  // different matter — it must never wedge the caller, so it is raced instead.
+  const state = await raceDeadline(factory.availability(chromeOptions(capability, params)), timeoutMs);
+  // An unresponsive probe means we cannot claim the model is available. Report
+  // `unavailable` (the truthful "not usable here") rather than hanging forever.
+  if (state === PROBE_TIMED_OUT) return 'unavailable';
+  // Chrome ≤ 137 spelled these 'readily' / 'after-download' / 'no'.
+  if (state === 'readily') return 'available';
+  if (state === 'after-download') return 'downloadable';
+  if (state === 'no') return 'unavailable';
+  return state as ChromeAIAvailability;
+}
+
+/** {@link probeChromeAvailability} that never throws — for paths where falling back is correct. */
+async function probeOrFallback(
+  capability: ChromeCapability,
+  params: ChromeCapabilityParams = {},
+): Promise<ChromeAIAvailability> {
+  try {
+    return await probeChromeAvailability(capability, params);
+  } catch {
+    return 'unavailable';
+  }
+}
+
+/**
+ * Ask Chrome to download a capability's on-device model, reporting progress.
+ *
+ * **Must be called from a user activation** (click / tap / keypress) — Chrome
+ * refuses to start the download otherwise. This is why the UI needs a button:
+ * there is no way to trigger it from an effect or on page load.
+ *
+ * The session created to force the download is destroyed immediately; only the
+ * cached model persists. Resolves to the post-download availability.
+ */
+export async function downloadChromeModel(
+  capability: ChromeCapability,
+  params: ChromeCapabilityParams = {},
+  onProgress?: (progress: number) => void,
+): Promise<ChromeAIAvailability> {
+  const factory = chromeFactory(capability);
+  if (!factory) return 'unsupported';
+
+  const options: Record<string, unknown> = { ...(chromeOptions(capability, params) ?? {}) };
+  if (onProgress) {
+    options.monitor = (m: EventTarget) => {
+      m.addEventListener('downloadprogress', ((evt: Event) => {
+        const e = evt as Event & { loaded?: number; total?: number };
+        const loaded = e.loaded ?? 0;
+        const total = e.total ?? 0;
+        // Chrome has reported both loaded/total bytes and a bare 0–1 fraction.
+        const fraction = total > 0 ? loaded / total : loaded <= 1 ? loaded : 0;
+        onProgress(Math.max(0, Math.min(1, fraction)));
+      }) as EventListener);
+    };
+  }
+
+  const session = await factory.create(options);
+  try {
+    session.destroy?.();
+  } catch {
+    // best-effort: the download is cached regardless of session teardown
+  }
+  return probeOrFallback(capability, params);
+}
+
+/**
+ * Is the Chrome Summarizer API usable? Presence is not enough — a present API can
+ * still be merely `downloadable`, and committing to it would throw. Mirrors
+ * {@link detectPromptProvider}.
+ */
+export async function detectSummarizerProvider(
+  params: ChromeCapabilityParams = {},
+): Promise<ProviderId> {
+  return (await probeOrFallback('summarize', params)) === 'available' ? 'chrome-ai' : 'transformers';
+}
+
+/** Is the Chrome Translator API usable for this language pair? Availability is per pair. */
+export async function detectTranslatorProvider(
+  params: ChromeCapabilityParams = {},
+): Promise<ProviderId> {
+  return (await probeOrFallback('translate', params)) === 'available' ? 'chrome-ai' : 'transformers';
 }
 
 /**
@@ -202,22 +423,7 @@ export async function detectTranslatorProvider(): Promise<ProviderId> {
  * presence.
  */
 export async function detectPromptProvider(): Promise<ProviderId> {
-  if (typeof self === 'undefined') return 'transformers';
-  const globalSelf = self as unknown as SelfWithAI;
-  const present =
-    'LanguageModel' in (self as object) ||
-    Boolean(globalSelf.ai && 'languageModel' in globalSelf.ai);
-  if (!present) return 'transformers';
-  const lm = globalSelf.LanguageModel;
-  if (lm && typeof lm.availability === 'function') {
-    try {
-      return (await lm.availability()) === 'available' ? 'chrome-ai' : 'transformers';
-    } catch {
-      return 'transformers';
-    }
-  }
-  // Legacy `self.ai.languageModel` path (no availability()): trust presence.
-  return 'chrome-ai';
+  return (await probeOrFallback('edit')) === 'available' ? 'chrome-ai' : 'transformers';
 }
 
 /* ──────────────────────────── tier / name helpers ────────────────────────── */
@@ -321,6 +527,12 @@ export function useProviderFallback(
   const [resolution, setResolution] = useState<ProviderResolution | null>(null);
   const [isResolving, setIsResolving] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [chromeAvailability, setChromeAvailability] = useState<
+    Partial<Record<ChromeCapability, ChromeAIAvailability>>
+  >({});
+  const [chromeDownloadProgress, setChromeDownloadProgress] =
+    useState<ChromeDownloadProgress | null>(null);
+  const [downloadingCapability, setDownloadingCapability] = useState<ChromeCapability | null>(null);
 
   // Session caches (per hook instance). Keyed by the full param signature so a
   // repeat call short-circuits BEFORE re-detecting or re-constructing.
@@ -368,7 +580,10 @@ export function useProviderFallback(
         const cached = summarizerCache.current.get(key);
         if (cached) return cached;
 
-        const provider = await detectSummarizerProvider();
+        const provider = await detectSummarizerProvider({
+          chromeStyle: params.chromeStyle,
+          length: params.length,
+        });
         let resolved: ResolvedModel<SummarizationModel>;
         if (provider === 'chrome-ai') {
           const { chromeAI } = await loadChromeAI();
@@ -393,7 +608,10 @@ export function useProviderFallback(
         const cached = translatorCache.current.get(key);
         if (cached) return cached;
 
-        const provider = await detectTranslatorProvider();
+        const provider = await detectTranslatorProvider({
+          source: params.source,
+          target: params.target,
+        });
         let resolved: ResolvedModel<TranslationModel>;
         if (provider === 'chrome-ai') {
           const { chromeAI } = await loadChromeAI();
@@ -451,6 +669,55 @@ export function useProviderFallback(
     [withResolution],
   );
 
+  const refreshChromeAvailability = useCallback(
+    async (capability: ChromeCapability, params: ChromeCapabilityParams = {}) => {
+      try {
+        const state = await probeChromeAvailability(capability, params);
+        setChromeAvailability((prev) => ({ ...prev, [capability]: state }));
+        return state;
+      } catch (err) {
+        // Chrome rejected the probe options (e.g. an invalid enum value). That is
+        // a caller bug, not an unsupported browser — surface it instead of
+        // silently mislabelling the browser as incapable.
+        setError(toError(err));
+        setChromeAvailability((prev) => ({ ...prev, [capability]: 'unavailable' }));
+        return 'unavailable' as ChromeAIAvailability;
+      }
+    },
+    [],
+  );
+
+  const requestChromeDownload = useCallback(
+    async (capability: ChromeCapability, params: ChromeCapabilityParams = {}) => {
+      setDownloadingCapability(capability);
+      setChromeDownloadProgress({ capability, progress: 0 });
+      setError(null);
+      try {
+        const state = await downloadChromeModel(capability, params, (progress) =>
+          setChromeDownloadProgress({ capability, progress }),
+        );
+        setChromeAvailability((prev) => ({ ...prev, [capability]: state }));
+        // A downloaded model changes which provider resolves. Drop the cached
+        // resolutions for this capability so the next resolve re-detects.
+        if (capability === 'summarize') summarizerCache.current.clear();
+        if (capability === 'translate') translatorCache.current.clear();
+        if (capability === 'edit') editEngineCache.current.clear();
+        return state;
+      } catch (err) {
+        setError(toError(err));
+        // Re-probe: the download may have failed, or the user may have denied it.
+        // The original error is already surfaced, so a failing probe must not mask it.
+        const state = await probeOrFallback(capability, params);
+        setChromeAvailability((prev) => ({ ...prev, [capability]: state }));
+        return state;
+      } finally {
+        setDownloadingCapability(null);
+        setChromeDownloadProgress(null);
+      }
+    },
+    [],
+  );
+
   return {
     resolveSummarizer,
     resolveTranslator,
@@ -459,5 +726,10 @@ export function useProviderFallback(
     resolution,
     isResolving,
     error,
+    chromeAvailability,
+    refreshChromeAvailability,
+    requestChromeDownload,
+    chromeDownloadProgress,
+    downloadingCapability,
   };
 }

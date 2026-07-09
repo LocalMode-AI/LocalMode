@@ -1,6 +1,6 @@
 {
   "name": "@localmode/devtools",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "DevTools instrumentation and React hooks for debugging and monitoring LocalMode applications",
   "license": "MIT",
   "author": "LocalMode",

@@ -17,6 +17,7 @@ import type { SummarizationModel } from '@localmode/core';
 import { SegmentedModePicker } from '@/components/segmented-mode-picker';
 import { TextProcessingPanel } from '@/components/text-processing-panel';
 import { ProviderBadge } from '@/components/provider-badge';
+import { ChromeAIDownloadGate } from '@/components/chrome-ai-download-gate';
 import { CopyButton } from '@/components/copy-button';
 import { ErrorAlert } from '@/components/error-alert';
 import { cn } from '@/lib/utils';
@@ -48,11 +49,12 @@ const LENGTH_PRESETS: Record<SummaryLength, LengthPreset> = {
 type SummaryMode = 'extractive' | 'abstractive';
 
 /** Chrome Built-in AI summary style (Summarizer API `type`). */
-type SummaryStyle = 'tl;dr' | 'key-points' | 'teaser' | 'headline';
+// `tldr` is the value Chrome's SummarizerType enum accepts; `'tl;dr'` throws.
+type SummaryStyle = 'tldr' | 'key-points' | 'teaser' | 'headline';
 
 /** Chrome summary styles, offered behind a capability gate. */
 const SUMMARY_STYLES: { value: SummaryStyle; label: string }[] = [
-  { value: 'tl;dr', label: 'TL;DR' },
+  { value: 'tldr', label: 'TL;DR' },
   { value: 'key-points', label: 'Key Points' },
   { value: 'teaser', label: 'Teaser' },
   { value: 'headline', label: 'Headline' },
@@ -62,10 +64,10 @@ const SUMMARY_STYLES: { value: SummaryStyle; label: string }[] = [
  * Map a summarization mode to the Chrome Summarizer `type`. The transformers
  * path implements extractive block-side (see {@link extractiveSummarize}); on
  * Chrome, extractive is served by the behaviorally-adjacent `key-points` type
- * and abstractive by `tl;dr` (documented in-UI as an approximation).
+ * and abstractive by `tldr` (documented in-UI as an approximation).
  */
 function modeToChromeStyle(mode: SummaryMode): SummaryStyle {
-  return mode === 'extractive' ? 'key-points' : 'tl;dr';
+  return mode === 'extractive' ? 'key-points' : 'tldr';
 }
 
 /** The abstractive summarization model (DistilBART CNN, ~120 MB quantized). */
@@ -176,7 +178,15 @@ export function SummarizeBlock() {
   const [local, setLocal] = useState<LocalSummary | null>(null);
   // Inject bundler-visible provider loaders (the hook's default Function()-hidden
   // import cannot be resolved as a bare specifier in the browser).
-  const { resolveSummarizer } = useProviderFallback({
+  const {
+    resolveSummarizer,
+    chromeAvailability,
+    refreshChromeAvailability,
+    requestChromeDownload,
+    chromeDownloadProgress,
+    downloadingCapability,
+    error: providerError,
+  } = useProviderFallback({
     loadChromeAI: () => import('@localmode/chrome-ai'),
     loadTransformers: () => import('@localmode/transformers'),
   });
@@ -185,12 +195,22 @@ export function SummarizeBlock() {
     model: resolved?.model as SummarizationModel,
   });
 
+  const chromeStyle = style ?? modeToChromeStyle(mode);
+  const summarizeAvailability = chromeAvailability.summarize ?? 'unsupported';
+
+  // Probe Chrome's model state. Reading availability() downloads nothing.
+  useEffect(() => {
+    void refreshChromeAvailability('summarize', { chromeStyle, length });
+  }, [chromeStyle, length, refreshChromeAvailability]);
+
   // Resolve the summarizer for the current style/length (no download until run).
+  // Re-runs when Chrome's availability flips, so a completed download promotes
+  // this block from the Transformers.js fallback to Chrome AI.
   useEffect(() => {
     let alive = true;
     setResolved(null);
     void resolveSummarizer({
-      chromeStyle: style ?? modeToChromeStyle(mode),
+      chromeStyle,
       length,
       fallbackModelId: SUMMARIZER_MODEL_ID,
     }).then((r) => {
@@ -199,7 +219,7 @@ export function SummarizeBlock() {
     return () => {
       alive = false;
     };
-  }, [mode, length, style, resolveSummarizer]);
+  }, [chromeStyle, length, resolveSummarizer, summarizeAvailability]);
 
   const provider = resolved?.provider ?? null;
   const ready = !!resolved;
@@ -278,6 +298,18 @@ export function SummarizeBlock() {
                   DistilBART · {SUMMARIZER_MODEL_SIZE}
                 </span>
               </div>
+              <ChromeAIDownloadGate
+                availability={summarizeAvailability}
+                label="Chrome Summarizer"
+                size="~1.5 GB, shared across every site"
+                isDownloading={downloadingCapability === 'summarize'}
+                progress={chromeDownloadProgress?.progress}
+                error={providerError?.message ?? null}
+                fallbackLabel="Transformers.js (DistilBART)"
+                onDownload={() => {
+                  void requestChromeDownload('summarize', { chromeStyle, length });
+                }}
+              />
 
               <div className="flex flex-wrap items-center gap-4">
                 <div data-mode={mode} className="flex flex-col gap-1">
@@ -318,7 +350,7 @@ export function SummarizeBlock() {
                     ? 'Extractive → Chrome “key-points”.'
                     : 'Extractive → on-device sentence extraction (DistilBART is abstractive-only).'
                   : provider === 'chrome-ai'
-                    ? 'Abstractive → Chrome “tl;dr”.'
+                    ? 'Abstractive → Chrome “tldr”.'
                     : 'Abstractive → DistilBART generated summary.'}
               </p>
 

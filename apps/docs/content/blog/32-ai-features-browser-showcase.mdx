@@ -1,318 +1,371 @@
 ---
-title: "The 34 AI Features in Our Open-Source Blocks Gallery - All Running in Your Browser Right Now"
-description: "A visual tour of every demo app at localmode.ai: LLM chat with four inference backends, RAG pipelines, real-time object detection, voice transcription, GGUF model inspection, agentic reasoning, and 26 more - all running locally with zero API keys."
+title: "The 36 AI Blocks in Our Open-Source Gallery - All Running in Your Browser Right Now"
+description: "A visual tour of every block at localmode.ai/blocks: LLM chat across four inference backends, RAG and document QA, real-time webcam tracking, live transcription, CLIP photo search, agentic reasoning with an approval gate, GGUF model inspection, and 29 more - all running locally with zero API keys."
 author: LocalMode
 date: 2026-01-29
-dateModified: "2026-07-04"
+dateModified: "2026-07-09"
 faq:
-  - question: "How many AI demo apps are available at localmode.ai and what do they cover?"
-    answer: "There are 34 fully functional AI applications covering LLM chat with four inference backends, RAG pipelines, real-time object detection, voice transcription, GGUF model inspection, agentic reasoning, privacy tools, and more. All run entirely in the browser with zero API keys."
+  - question: "How many AI blocks are available at localmode.ai and what do they cover?"
+    answer: "There are 36 fully functional, installable blocks across 12 categories: chat, knowledge, vision, audio, text, device, agents, writing tools, text insights, photo, image studio, and privacy. They cover LLM chat with four inference backends, RAG pipelines, document QA, real-time object detection and body tracking, live transcription, CLIP photo search, agentic reasoning, GGUF model inspection, and on-device privacy tools. All run entirely in the browser with zero API keys."
   - question: "What inference backends does LocalMode support?"
-    answer: "Four backends are available: WebLLM (WebGPU-accelerated via MLC), Transformers.js (ONNX via WebGPU/WASM), wllama (GGUF models via llama.cpp WASM with access to 180,000+ models), and LiteRT (Google's on-device engine). The LLM chat app surfaces 76 models across all four backends."
-  - question: "What is the range of model sizes used in the LocalMode apps?"
-    answer: "Models range from 0 MB (Chrome AI, device detection tools) to 5.41 GB (8B-parameter LLMs). The smallest ML model is MobileBERT MNLI at 25 MB for email classification. Every model downloads once from HuggingFace, caches in the browser, and loads from disk on subsequent visits."
+    answer: "Five backends are available: WebLLM (WebGPU-accelerated via MLC), Transformers.js (ONNX via WebGPU/WASM), wllama (GGUF models via llama.cpp WASM with access to 180,000+ models), LiteRT (Google's on-device engine), and Chrome AI (Chrome's built-in Gemini Nano, where your app ships no model files). The chat block surfaces 76 models across the four downloadable backends; Chrome AI backs three of the four Writing Tools blocks when the browser exposes Chrome's built-in AI, falling back to Transformers.js otherwise."
+  - question: "What is the range of model sizes used in the LocalMode blocks?"
+    answer: "Downloads range from nothing at all (Device Report, Model Advisor, GGUF Explorer, and Encrypted Vault fetch no model) to roughly 5 GB for the largest 8B-parameter chat models. Most blocks sit between 15 MB and 350 MB. Every model downloads once from HuggingFace, caches in the browser, and loads from disk on subsequent visits."
   - question: "Can I run the LocalMode blocks gallery locally on my own machine?"
-    answer: "Yes. Clone the open-source repo, run pnpm install, then pnpm --filter ui dev. The blocks gallery is available at localhost:3000/blocks, with every feature consolidated into 11 installable blocks. Each block is a self-contained reference implementation in its own directory under apps/ui/src/app/blocks/."
+    answer: "Yes. Clone the open-source repo, run pnpm install, then pnpm --filter ui dev. The blocks gallery is available at localhost:3000/blocks, where the features are organized into 36 installable blocks across 12 categories. Each block is a self-contained reference implementation in its own directory under apps/ui/src/app/blocks/."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-Open [localmode.ai](https://localmode.ai) in Chrome or Edge — it now lands on the [/blocks gallery](https://localmode.ai/blocks), where the 34 AI features cataloged below run live, consolidated into 11 fully functional, installable blocks. Every one of them runs entirely in your browser tab. No backend server. No API key. No data leaves your device. Close the tab and the computation stops - there is nothing to shut down, no bill to reconcile, no logs on a server you do not control.
+Open [localmode.ai](https://localmode.ai) in Chrome or Edge — it lands on the [/blocks gallery](https://localmode.ai/blocks), where **36 installable blocks across 12 categories** run live. Every one of them runs entirely in your browser tab. No backend server. No API key. No data leaves your device. Close the tab and the computation stops - there is nothing to shut down, no bill to reconcile, no logs on a server you do not control.
 
-This is not a collection of toy demos. These are complete applications - with file upload, drag-and-drop, batch processing, export to CSV/JSON/SRT, real-time streaming, and persistent IndexedDB storage - built on the same [`@localmode`](https://localmode.dev) packages you would use in production. The gallery exists so you can see exactly what local-first AI looks like before you write a single line of code.
+These are not toy demos. They are complete applications - with file upload, drag-and-drop, batch processing, export to CSV/JSON/SRT, real-time streaming, and persistent IndexedDB storage - built on the same [`@localmode`](https://localmode.dev) packages you would use in production. Each block is also a registry item: `npx shadcn add @localmode/ui/blocks/<category>/<block>` copies the whole thing into your project, and you own the code.
 
-This post is a guided tour through all 34 apps, organized by category. Each entry includes what the app does, which model powers it, how large the download is, and a direct link to try it.
+This post is a guided tour through all 36 blocks, organized by the category they live in. Each entry says what the block does, which models power it, and how much it downloads.
 
 <Callout type="info" title="By the numbers">
-  **34** demo apps. **25+** distinct ML models from HuggingFace. **180,000+** GGUF models accessible via the explorer. **15** `@localmode/*` packages. Four inference backends: WebLLM (WebGPU), Transformers.js (ONNX), wllama (WASM), and LiteRT. Total model sizes range from 0 MB (Chrome AI, device detection) to 5.41 GB (8B-parameter LLMs).
+  **36** blocks across **12** categories. **30+** distinct ML models from HuggingFace, plus MediaPipe task bundles. **180,000+** GGUF models accessible via the explorer. **15** `@localmode/*` packages. Five inference backends: WebLLM (WebGPU), Transformers.js (ONNX), wllama (WASM), LiteRT, and Chrome AI (built-in Gemini Nano). Downloads range from **0 MB** (four blocks fetch no model at all) to roughly **5 GB** for the largest chat models.
 </Callout>
 
----
-
-## 1. LLM Chat and Agents
-
-### 1.1 LLM Chat
-
-The flagship demo. A full-featured chat interface with streaming responses, semantic caching, conversation persistence, and vision support (attach images and ask questions about them). What makes it unusual is the model selector: it surfaces models from four different inference backends - WebLLM (MLC WebGPU), Transformers.js v4 (ONNX WebGPU), wllama (GGUF WASM), and LiteRT - all behind the same `LanguageModel` interface. Pick a tiny 78 MB model for quick answers or a 5.41 GB 8B-parameter model for deeper reasoning. Agent mode is available on models above 500 MB, enabling tool-calling with a built-in knowledge base, calculator, and summarizer.
-
-**Models:** 76 models across four backends (Llama 3.2, Qwen 3, Phi 3.5, Mistral, DeepSeek R1, Gemma 4, and more) | **Size:** 78 MB -- 5.41 GB | [Try LLM Chat](https://localmode.ai/blocks/chat)
-
-### 1.2 GGUF Explorer
-
-Browse, inspect, and chat with any GGUF model from HuggingFace - over 180,000 of them. Paste a HuggingFace URL or shorthand like `bartowski/Llama-3.2-1B-Instruct-GGUF:Q4_K_M.gguf`, and the app parses the GGUF metadata header (architecture, quantization type, context length, vocabulary size), runs a browser compatibility check (RAM estimate, WebAssembly support, cross-origin isolation status), and lets you chat with the model via wllama's WASM inference engine. Think of it as a browser-native model playground for the entire GGUF ecosystem.
-
-**Models:** Any GGUF model on HuggingFace + 30 curated defaults (25 language + 3 embedding + 2 reranker) | **Size:** 35 MB -- 5.41 GB | [Try GGUF Explorer](https://localmode.ai/blocks/device/gguf-explorer)
-
-### 1.3 Research Agent
-
-An autonomous AI agent that uses a ReAct (Reason + Act) loop to research topics step by step. Ask a question like "Compare photosynthesis and solar panels for energy conversion," and watch the agent think, search a knowledge base, take notes, perform calculations, and synthesize a final answer - all rendered in real time as expandable step cards. The agent framework is built on `@localmode/core`'s `createAgent()` and `runAgent()` primitives with typed tool definitions.
-
-**Model:** Qwen 3 1.7B (WebLLM) | **Size:** 1.1 GB | [Try Research Agent](https://localmode.ai/blocks/agents/research-agent)
-
-### 1.4 Data Extractor
-
-Extract structured JSON from unstructured text. Choose from five built-in templates (contact info, event details, product review, recipe, job posting) or define a custom Zod schema, paste any text, and the app generates schema-validated JSON using `generateObject()` with automatic retry and self-correction. Supports 15 models from Qwen 3 1.7B up to Llama 3.1 8B.
-
-**Models:** Qwen 3 1.7B through Llama 3.1 8B (WebLLM) | **Size:** 1.1 GB -- 4.9 GB | [Try Data Extractor](https://localmode.ai/blocks/agents/data-extractor)
 
 ---
 
-## 2. RAG and Search
+## 1. Chat
 
-### 2.1 PDF Search
+The flagship category, and the only one that stays a single flat block.
 
-Upload one or more PDF documents, and the app extracts text with `@localmode/pdfjs`, chunks it, embeds each chunk with BGE Small, indexes everything in a local VectorDB, and lets you ask natural-language questions. Results come back with source citations linking to specific passages. A reranker model re-scores the top candidates for higher precision, and an optional LLM generates a synthesized answer.
+### 1.1 Chat
 
-**Models:** BGE Small (33 MB) + MS MARCO Reranker (22 MB) + optional Llama 3.2 1B | [Try PDF Search](https://localmode.ai/blocks/knowledge/semantic-search)
+A full chat interface with streaming responses, conversation persistence, a semantic response cache, reasoning display, and vision support (attach an image and ask about it). What makes it unusual is the model selector: it surfaces **76 curated models from four inference backends** — WebLLM (32 MLC models), Transformers.js v4 (16 ONNX models), wllama (25 GGUF models), and LiteRT (3 `.litertlm` models) — all behind the same `LanguageModel` interface. You can also paste a custom GGUF URL, and agent mode turns on tool calling. Nothing downloads until you pick a model.
 
-### 2.2 Personal Knowledge Base (Semantic Search)
-
-A note-taking app with semantic and hybrid search. Add notes with tags, and the app embeds them in real time. Search by meaning - type "budget concerns" and find a note titled "Q3 financial projections." Supports keyword search, semantic search, and hybrid mode. Notes persist in IndexedDB across sessions, with import/export to JSON.
-
-**Model:** BGE Small | **Size:** 33 MB | [Try Semantic Search](https://localmode.ai/blocks/knowledge/semantic-search)
-
-### 2.3 LangChain RAG
-
-A complete LangChain.js RAG pipeline running locally. Uses `LocalModeEmbeddings`, `LocalModeVectorStore`, and `ChatLocalMode` adapters from `@localmode/langchain` - so if you already use LangChain, you can swap in local models with zero architecture changes. Paste or upload a document, ask questions, and get LLM-generated answers with source citations, all powered by a local Qwen 3 1.7B model.
-
-**Models:** BGE Small (33 MB) + Qwen 3 1.7B (1.1 GB) | [Try LangChain RAG](https://localmode.ai/blocks/knowledge/rag-chat)
-
-### 2.4 Data Migrator
-
-Import vector data from Pinecone, ChromaDB, CSV, or JSONL. The app auto-detects the format, shows a preview of the parsed records, and imports them into a local VectorDB. For text-only records without vectors, it re-embeds them locally with BGE Small. Export back to CSV or JSONL for interoperability. Useful for testing RAG pipelines with real data without needing a cloud vector database running.
-
-**Model:** BGE Small | **Size:** 33 MB | [Try Data Migrator](https://localmode.ai/blocks/knowledge/vector-data-manager)
+**Models:** 76 curated across four backends (Llama 3.2, Qwen 3, Phi 3.5, Mistral, DeepSeek R1, Gemma 4, and more), plus `Xenova/bge-small-en-v1.5` for the semantic cache | **Download:** ~120 MB -- 5 GB | [Try Chat](https://localmode.ai/blocks/chat)
 
 ---
 
-## 3. Text and NLP
+## 2. Knowledge
 
-### 3.1 Customer Feedback Analyzer (Sentiment)
+Four blocks over one shared knowledge-base engine. Semantic Search and RAG Chat can each swap between the core engine and a LangChain implementation of the same contract, and return equivalent results.
 
-Classify reviews, support tickets, or social mentions as positive or negative. Paste a single text or batch-process hundreds at once. The app shows a statistics dashboard with distribution charts and lets you export results to CSV. One of the smallest model downloads in the gallery at 67 MB.
+### 2.1 Semantic Search
 
-**Model:** DistilBERT SST-2 | **Size:** 67 MB | [Try Sentiment Analyzer](https://localmode.ai/blocks/text-insights/sentiment-analyzer)
+Build a searchable knowledge base in the browser. Add content three ways — paste text, upload PDFs, or scan images with OCR — then search by meaning rather than exact keywords. A cross-encoder reranker re-scores the top candidates for precision, and thresholds can be calibrated against your own corpus instead of guessed.
 
-### 3.2 Email Intent Classifier
+**Models:** `Xenova/bge-small-en-v1.5` or `Xenova/all-MiniLM-L6-v2` (embeddings); `Xenova/bge-reranker-base` or `Xenova/ms-marco-MiniLM-L-6-v2` (rerank); `Xenova/trocr-small-printed`, `onnx-community/GLM-OCR-ONNX`, `onnx-community/LightOnOCR-2-1B-ONNX` (OCR ingest) | **Download:** ~34 MB -- 700 MB | [Try Semantic Search](https://localmode.ai/blocks/knowledge/semantic-search)
 
-Zero-shot classification with custom labels. Define your own categories - "billing inquiry," "technical support," "feature request," "spam" - and the model classifies emails into them without any fine-tuning. Add or remove labels on the fly. Batch-process an inbox export and route emails to folders automatically.
+### 2.2 Document QA
 
-**Model:** MobileBERT MNLI | **Size:** 25 MB | [Try Email Classifier](https://localmode.ai/blocks/text-insights/text-classifier)
+Ask questions about your own documents and get direct answers pulled straight from the text, with a confidence tier attached. It also answers questions about an uploaded image — an invoice or a scanned page — using a document-visual-QA model rather than OCR plus search.
 
-### 3.3 Document Summarizer
+**Models:** `Xenova/distilbert-base-cased-distilled-squad` (extractive QA), `Xenova/donut-base-finetuned-docvqa` (document/invoice QA), `Xenova/bge-small-en-v1.5` | **Download:** ~34 MB -- 800 MB | [Try Document QA](https://localmode.ai/blocks/knowledge/document-qa)
 
-Summarize long documents into key points. Control output length with min/max parameters. Handles articles, meeting notes, and support threads. The DistilBART model provides abstractive summarization - it generates new sentences rather than extracting existing ones.
+### 2.3 RAG Chat
 
-**Model:** DistilBART CNN | **Size:** 300 MB | [Try Text Summarizer](https://localmode.ai/blocks/writing-tools/summarize)
+Chat with your own documents and get answers grounded in what you added. Paste text or drop in PDFs, ask a question, and watch the reply stream in. Each answer carries inline `[n]` citations that link back to the exact source and page, so you can check the facts.
 
-### 3.4 Document Q&A Bot
+**Models:** `Xenova/bge-small-en-v1.5` (retrieval) + `onnx-community/granite-4.0-350m-ONNX-web` (generation) | **Download:** ~34 MB -- 250 MB | [Try RAG Chat](https://localmode.ai/blocks/knowledge/rag-chat)
 
-Extractive question answering: paste a context paragraph, ask a question, and the model returns the exact span of text that answers it, along with a confidence score and the character offset. Useful for building FAQ bots, documentation search, or study tools.
+### 2.4 Vector Data Manager
 
-**Model:** DistilBERT SQuAD | **Size:** 100 MB | [Try Q&A Bot](https://localmode.ai/blocks/knowledge/document-qa)
+Manage the data behind the knowledge base. Import vectors from Pinecone, ChromaDB, CSV, or JSONL, preview the parsed records, then export back out to JSON, CSV, or JSONL. Watch storage use, detect embedding drift when your model changes, and re-index.
 
-### 3.5 Offline Translator
-
-Translate text between six language pairs (EN↔DE, EN↔FR, EN↔ES). Each language pair uses a dedicated Helsinki-NLP Opus MT model. Works completely offline after the initial model download. Supports batch translation and maintains a history of translations across sessions.
-
-**Models:** Opus MT (EN-DE, EN-FR, EN-ES, and more) | **Size:** 100 -- 300 MB per language pair | [Try Translator](https://localmode.ai/blocks/writing-tools/translate)
-
-### 3.6 Smart Autocomplete
-
-Intelligent text completion powered by fill-mask models. Type a sentence with a gap, and the model suggests contextually appropriate words to fill it. Uses ModernBERT Base for high-quality, context-aware predictions with multiple ranked suggestions in real time.
-
-**Model:** ModernBERT Base | **Size:** 150 MB | [Try Smart Autocomplete](https://localmode.ai/blocks/writing-tools/complete)
-
-### 3.7 Smart Writer
-
-An AI writing assistant that combines summarization (TL;DR, key points, teaser, headline) and translation (seven languages) in one interface. It tries Chrome's built-in Gemini Nano first for zero-download, instant results, and automatically falls back to Transformers.js models if Chrome AI is not available. A practical demonstration of the try/catch provider fallback pattern.
-
-**Models:** Chrome AI (0 MB) with DistilBART CNN fallback (300 MB) | [Try Smart Writer](https://localmode.ai/blocks/writing-tools/write)
-
-### 3.8 Invoice Q&A Assistant
-
-Visual document understanding for invoices, receipts, and forms. Upload an image of a document, ask "What is the total amount?" or "Who is the vendor?", and the Donut model answers based on the visual content. Supports table extraction and batch processing of multiple document images.
-
-**Model:** Donut Base (DocVQA) | **Size:** ~800 MB | [Try Invoice Q&A](https://localmode.ai/blocks/knowledge/document-qa)
+**Models:** `Xenova/bge-small-en-v1.5` or `Xenova/all-MiniLM-L6-v2` (re-embedding on import) | **Download:** ~34 MB | [Try Vector Data Manager](https://localmode.ai/blocks/knowledge/vector-data-manager)
 
 ---
 
-## 4. Computer Vision
+## 3. Vision
 
-### 4.1 Image Background Remover
+### 3.1 Object Detector
 
-Upload a photo, and the RMBG-1.4 segmentation model removes the background automatically. Preview the before/after result, then download as a PNG with transparency. Supports batch processing - drag in a folder of product photos and process them all.
+Find and label objects in a photo, drawing a colored box around each with its name and confidence. Feed it an uploaded image, the built-in sample, or a still from your webcam. A separate live camera mode runs a real-time face-detection loop and reports a running face count.
 
-**Model:** RMBG-1.4 | **Size:** 170 MB | [Try Background Remover](https://localmode.ai/blocks/image-studio/background-remover)
+**Models:** `Xenova/detr-resnet-50` (detection) + MediaPipe BlazeFace (live loop) | **Download:** ~1 MB -- 170 MB | [Try Object Detector](https://localmode.ai/blocks/vision/object-detector)
 
-### 4.2 Smart Photo Gallery
+### 3.2 Live Tracker
 
-Upload photos and the app auto-categorizes them using SigLIP embeddings. Search your gallery by text description ("sunset over water," "group photo at a restaurant"), find visually similar images, and detect near-duplicates. All indexing and search happens in a local VectorDB.
+Track your body in real time through the webcam across four modes: hand skeletons (21 points), full-body pose (33 points), a detailed face mesh (478 points, with expression blendshapes), and hand-gesture recognition (8 gestures). Landmarks are drawn on the video with a live frame rate, and switching modes disposes the previous tracker.
 
-**Model:** SigLIP Base | **Size:** 400 MB | [Try Smart Gallery](https://localmode.ai/blocks/photo/smart-gallery)
-
-### 4.3 E-commerce Visual Search
-
-Search a product catalog by image. Upload a photo of a product, and the app finds visually similar items using SigLIP multimodal embeddings. Auto-categorize your catalog, detect duplicate listings, and build a visual search experience - all without sending product images to any external service.
-
-**Model:** SigLIP Base | **Size:** 400 MB | [Try Product Search](https://localmode.ai/blocks/photo/image-search)
-
-### 4.4 Accessibility Alt-Text Generator
-
-Generate descriptive alt-text for images automatically. Upload an image and the ViT-GPT2 model produces a natural-language caption suitable for screen readers. Also supports visual QA - ask questions about image content. Batch-process a folder of images and export captions as an HTML snippet.
-
-**Model:** ViT-GPT2 Image Captioning | **Size:** ~230 MB | [Try Image Captioner](https://localmode.ai/blocks/image-studio/image-captioner)
-
-### 4.5 OCR Document Scanner
-
-Extract text from images and scanned documents. Uses the TrOCR model, which handles both printed and handwritten text. Upload a photo of a receipt, whiteboard, or handwritten note, and get the text content back. Useful for digitizing paper documents without cloud OCR services.
-
-**Model:** TrOCR Small Printed | **Size:** 10 -- 50 MB | [Try OCR Scanner](https://localmode.ai/blocks/knowledge/semantic-search)
-
-### 4.6 Real-Time Object Detector
-
-Detect and locate objects in images with bounding boxes and confidence scores. Uses DETR ResNet-50, a transformer-based detection architecture. Upload an image or connect your webcam for real-time detection. The model identifies 80 COCO object categories including people, vehicles, animals, and household items.
-
-**Model:** DETR ResNet-50 | **Size:** ~42 MB | [Try Object Detector](https://localmode.ai/blocks/vision/object-detector)
-
-### 4.7 Photo Enhancer
-
-Upscale and enhance images using super-resolution models. Upload a low-resolution photo, and the Swin2SR model produces a 2x or 4x upscaled version with sharpened detail. Useful for restoring old photos, improving thumbnails, or preparing images for print.
-
-**Model:** Swin2SR Lightweight x2 | **Size:** 50 MB | [Try Photo Enhancer](https://localmode.ai/blocks/image-studio/image-enhancer)
-
-### 4.8 Duplicate Photo Finder
-
-Find visually similar and duplicate images in your photo library. Upload a batch of photos, and the DINOv3 model extracts visual features to identify near-duplicates and similar-looking images. Group them by similarity and clean up your library without manually comparing hundreds of photos.
-
-**Model:** DINOv3 Small | **Size:** 86 MB | [Try Duplicate Finder](https://localmode.ai/blocks/photo/duplicate-finder)
-
-### 4.9 Cross-Modal Photo Search
-
-Search photos by text description or by reference image. The CLIP model embeds text and images in the same 512-dimensional vector space, so you can type "a dog playing in snow" and find matching photos, or upload a photo and find visually similar ones. Drag and drop images to build your searchable collection.
-
-**Model:** CLIP ViT Base Patch32 | **Size:** ~350 MB | [Try Cross-Modal Search](https://localmode.ai/blocks/photo/image-search)
+**Models:** MediaPipe hand / pose / face landmarker + gesture recognizer task bundles | **Download:** ~4 MB -- 15 MB | [Try Live Tracker](https://localmode.ai/blocks/vision/live-tracker)
 
 ---
 
-## 5. Audio
+## 4. Audio
 
-### 5.1 Voice Notes and Transcription
+Six blocks, from recorded transcription through live streaming speech to text-to-speech.
 
-Record audio directly in the browser or upload audio files, and the Moonshine Tiny model transcribes speech to text with timestamps. Search your voice notes semantically using embedded transcripts. One of the most practical demos - record a thought on your phone, and it is instantly searchable by meaning.
+### 4.1 Voice Notes
 
-**Models:** Moonshine Tiny (50 MB) + BGE Small (33 MB) | [Try Voice Notes](https://localmode.ai/blocks/audio/voice-notes)
+Record or upload audio and get a transcript back. Save transcripts as notes, replay them word by word in sync with the audio, and search your notes by meaning rather than keyword.
 
-### 5.2 Meeting Transcription Assistant
+**Models:** `Xenova/whisper-tiny.en` or `onnx-community/moonshine-tiny-ONNX` / `moonshine-base-ONNX` (STT) + `Xenova/bge-small-en-v1.5` (note search) | **Download:** ~34 MB -- 237 MB | [Try Voice Notes](https://localmode.ai/blocks/audio/voice-notes)
 
-A more full-featured audio app: transcribe meetings with Moonshine Base (higher accuracy than Tiny), then generate summaries and extract action items using DistilBART. Export transcripts in SRT or VTT subtitle formats. Designed for the workflow of recording a meeting, getting the transcript, and sharing the summary - all without the audio ever leaving the device.
+### 4.2 Live Transcription
 
-**Models:** Moonshine Base (~237 MB) + DistilBART CNN (~200 MB) | [Try Meeting Assistant](https://localmode.ai/blocks/audio/meeting-assistant)
+Turn on your microphone and watch speech become text in real time, gated by voice-activity detection so silence does not burn inference. It also ships a hands-free assistant that listens, thinks, and speaks back, with barge-in so you can interrupt mid-sentence. Stopping releases the microphone.
 
-### 5.3 Audiobook Creator
+**Models:** `Xenova/whisper-tiny.en` / `moonshine-*` (streaming STT), `onnx-community/silero-vad` (VAD), `onnx-community/granite-4.0-350m-ONNX-web` (assistant), `onnx-community/Kokoro-82M-v1.0-ONNX` (speech) | **Download:** ~2 MB -- 237 MB | [Try Live Transcription](https://localmode.ai/blocks/audio/live-transcription)
 
-Convert text to natural-sounding speech. Paste or type text, and the Kokoro model generates audio you can play back or download. Designed for creating audiobooks, podcasts, or accessibility audio from written content. The model is compact at around 86 MB.
+### 4.3 Meeting Assistant
 
-**Model:** Kokoro-82M | **Size:** ~86 MB | [Try Audiobook Creator](https://localmode.ai/blocks/audio/audiobook-reader)
+Upload meeting audio or paste a transcript, then get a short summary and a checklist of action items with priorities. Tick items off, track progress, and export everything to a text file. It is a three-step pipeline — transcribe, summarize, extract — and cancelling mid-summary preserves the completed transcript.
 
----
+**Models:** `Xenova/whisper-tiny.en` / `moonshine-*` (STT) → `Xenova/distilbart-cnn-6-6` (summary) → `onnx-community/granite-4.0-350m-ONNX-web` (action items) | **Download:** ~40 MB -- 237 MB | [Try Meeting Assistant](https://localmode.ai/blocks/audio/meeting-assistant)
 
-## 6. Privacy and Security
+### 4.4 Voice Explorer
 
-### 6.1 Privacy Document Redactor
+Browse and preview 29 text-to-speech voices grouped by language. Type any text, hear each voice read it, and play two side by side to compare.
 
-Detect and redact personally identifiable information from documents. The BERT NER model identifies names, locations, organizations, and other entities. Preview detected entities highlighted in the text, choose which categories to redact, and export the sanitized document. Because the model runs locally, the sensitive document never touches a server - which is exactly the point when you are redacting PII.
+**Model:** `onnx-community/Kokoro-82M-v1.0-ONNX` (29 English voices) | **Download:** ~86 MB | [Try Voice Explorer](https://localmode.ai/blocks/audio/voice-explorer)
 
-**Model:** BERT Base NER | **Size:** 110 MB | [Try Document Redactor](https://localmode.ai/blocks/privacy/pii-redactor)
+### 4.5 Audiobook Reader
 
-### 6.2 Encrypted Vault
+Paste long text and have it read aloud, with playback starting before synthesis finishes. Adjust reading speed, pause, resume, or stop anytime, and download the result as a WAV file.
 
-End-to-end encrypted notes using the Web Crypto API. Set a master password, and every note is encrypted with PBKDF2 key derivation and AES-GCM before being stored in localStorage. The encryption key exists only in memory while the vault is unlocked and is cleared when you lock it or close the tab. Semantic search over encrypted notes is supported via `@localmode/core`'s embedding model - embeddings are generated client-side before storage. No plaintext ever persists.
+**Model:** `onnx-community/Kokoro-82M-v1.0-ONNX` (streaming TTS, up to 10,000 characters) | **Download:** ~86 MB | [Try Audiobook Reader](https://localmode.ai/blocks/audio/audiobook-reader)
 
-**Model:** BGE Small (for semantic search) | **Size:** 33 MB | [Try Encrypted Vault](https://localmode.ai/blocks/privacy/encrypted-vault)
+### 4.6 Audio Classifier
 
----
+Record a sound or upload an audio file and see what it is, from music and speech to everyday noises. Results come back as a ranked list of the most likely sounds, top guess highlighted.
 
-## 7. Developer Tools
-
-### 7.1 Model Advisor
-
-A zero-download diagnostic tool. It detects your device capabilities - WebGPU support, available memory, cross-origin isolation, hardware concurrency - and provides ranked model recommendations for any of 21 task categories (embedding, classification, generation, vision, audio, and more). It also computes optimal batch sizes using `computeOptimalBatchSize()` from `@localmode/core`. Useful for building adaptive applications that select the right model based on the user's hardware. No model is downloaded; this app uses only the model registry and capabilities APIs.
-
-**Models:** None (0 MB) | [Try Model Advisor](https://localmode.ai/blocks/device/model-advisor)
-
-### 7.2 Model Evaluator
-
-Evaluate classification models with real metrics: accuracy, precision, recall, F1 score, and a confusion matrix visualization. Load a sample dataset (sentiment analysis or news topic classification) or create your own, run the model against it, and see where it succeeds and fails. A second tab provides threshold calibration - embed a corpus, compute the similarity distribution, and find the optimal cosine similarity threshold for your use case at a given percentile. Export results to JSON.
-
-**Model:** DistilBERT SST-2 (or MobileBERT MNLI) | **Size:** 25 -- 67 MB | [Try Model Evaluator](https://localmode.ai/blocks/text-insights/model-evaluator)
+**Model:** MediaPipe YAMNet (521 categories) | **Download:** ~15 MB | [Try Audio Classifier](https://localmode.ai/blocks/audio/audio-classifier)
 
 ---
 
-## 8. Media and Real-Time
+## 5. Text
 
-### 8.1 MediaPipe Studio
+### 5.1 Language Detector
 
-An interactive playground for all of MediaPipe's real-time vision, audio, and text tasks. Switch between tabs for hand landmarks (21 points), pose estimation (33 points), face mesh (478 points), gesture recognition (8 gestures), audio classification (YAMNet, 521 categories), language detection (110 languages), and text embeddings - all via `@localmode/mediapipe`'s streaming tracker APIs running at up to 60 fps through the webcam.
+Detect what language a text is written in as you type, showing the most likely candidates with a confidence for each. Paste two texts and see how close they are in meaning, scored by cosine similarity over on-device text embeddings.
 
-**Models:** MediaPipe task bundles (2--10 MB each) | [Try MediaPipe Studio](https://localmode.ai/blocks/vision/live-tracker)
+**Models:** MediaPipe language detector (110 languages) + MediaPipe text embedder (Universal Sentence Encoder) | **Download:** ~7 MB | [Try Language Detector](https://localmode.ai/blocks/text/language-detector)
 
-### 8.2 Voice Studio
+---
 
-A text-to-speech exploration tool powered by Kokoro-82M. Browse all 29 English voices (American & British English), synthesize custom text with any voice, and compare voices side by side. Demonstrates `@localmode/transformers`'s Kokoro TTS implementation with phonemizer-backed pronunciation and speed control.
+## 6. Device
 
-**Model:** Kokoro-82M | **Size:** ~86 MB | [Try Voice Studio](https://localmode.ai/blocks/audio/voice-explorer)
+Three blocks that download **nothing**. They inspect the browser, the hardware, and remote model metadata.
+
+### 6.1 Device Report
+
+See what your device and browser can do for on-device AI. It checks hardware, browser features (WebGPU, WASM threads, cross-origin isolation), and free storage, then tells you whether a small model will actually run here — and what batch size suits it.
+
+**Models:** none — browser capability detection only | **Download:** No download | [Try Device Report](https://localmode.ai/blocks/device/device-report)
+
+### 6.2 Model Advisor
+
+Find the best on-device model for a task on your hardware. Pick from 21 task categories to get a ranked list of models that fit your device, compare any two side by side, and register your own model into the registry.
+
+**Models:** none — reads the curated model registry | **Download:** No download | [Try Model Advisor](https://localmode.ai/blocks/device/model-advisor)
+
+### 6.3 GGUF Explorer
+
+Search over 160,000 GGUF models on HuggingFace and peek inside any file to see its architecture, quantization, context length, and whether it will run in your browser. It reads roughly **4 KB** via an HTTP Range request rather than downloading the model. Found one you like? Send it straight to the chat block.
+
+**Models:** none — ~4 KB Range-read of GGUF metadata headers | **Download:** No download | [Try GGUF Explorer](https://localmode.ai/blocks/device/gguf-explorer)
+
+---
+
+## 7. Agents
+
+Both blocks run their own WebLLM model and require WebGPU. They share a default model, so the browser cache is shared between them.
+
+### 7.1 Research Agent
+
+An agent that answers a question by using tools step by step — searching a bundled corpus, taking notes, running calculations — with a ReAct loop rendered as an expandable step timeline. It pauses for your approval before each tool runs, and a denial is fed back into the loop as the step's observation, so you stay in control. Every decision leaves an immutable receipt.
+
+**Models:** WebLLM, default `Qwen3-1.7B-q4f16_1-MLC`, up to Llama 3.1 8B (WebGPU required) | **Download:** 1.1 GB -- 5 GB | [Try Research Agent](https://localmode.ai/blocks/agents/research-agent)
+
+### 7.2 Data Extractor
+
+Pull structured JSON out of free text using five ready-made Zod templates, with automatic retry and self-correction when the output does not validate. The result renders as a sortable table and a chart built from the numbers it actually found.
+
+**Models:** WebLLM, default `Qwen3-1.7B-q4f16_1-MLC`, up to Llama 3.1 8B (WebGPU required) | **Download:** 1.1 GB -- 5 GB | [Try Data Extractor](https://localmode.ai/blocks/agents/data-extractor)
+
+---
+
+## 8. Writing Tools
+
+The provider-fallback reference. Three of these four resolve Chrome's built-in AI per capability when it is actually available, and fall back to Transformers.js behind an explicit download gate. A badge reports which provider actually resolved.
+
+### 8.1 Write
+
+Rewrite or improve a draft with an AI edit you review as a before/after diff, then accept or reject it. Use quick presets or write your own instructions, with a live word count.
+
+**Models:** Chrome AI Prompt API, falling back to `onnx-community/Llama-3.2-1B-Instruct-ONNX` | **Download:** Chrome AI or ~380 MB | [Try Write](https://localmode.ai/blocks/writing-tools/write)
+
+### 8.2 Translate
+
+Translate between **24 directed language pairs** (12 languages, each paired bidirectionally with English), swap the direction with one click to carry the result back into the input, and copy or clear as you go. Fully offline once the pair's model is cached.
+
+**Models:** Chrome AI Translator API, falling back to `Xenova/opus-mt-{src}-{tgt}` | **Download:** Chrome AI or ~80 MB per pair | [Try Translate](https://localmode.ai/blocks/writing-tools/translate)
+
+### 8.3 Summarize
+
+Turn long text into a shorter summary, choosing a short, medium, or long length and either an extractive (pulled from the text) or abstractive (reworded) style. See the compression ratio and the reading time saved.
+
+**Models:** Chrome AI Summarizer API, falling back to `Xenova/distilbart-cnn-6-6` | **Download:** Chrome AI or ~120 MB | [Try Summarize](https://localmode.ai/blocks/writing-tools/summarize)
+
+### 8.4 Complete
+
+Fill in a blank word in your sentence with the top five suggestions ranked by likelihood, then click one to apply it and keep going. This is the one Writing Tools block with **no** Chrome AI path — Chrome exposes no fill-mask API.
+
+**Model:** `onnx-community/ModernBERT-base-ONNX` (fill-mask) | **Download:** ~150 MB | [Try Complete](https://localmode.ai/blocks/writing-tools/complete)
+
+---
+
+## 9. Text Insights
+
+Four transformers-only blocks for classification and evaluation. Every model loads only behind an explicit Run.
+
+### 9.1 Sentiment Analyzer
+
+Score text as positive or negative, one message at a time or thousands at once. Watch live throughput and ETA, see running positive and negative totals, and browse results in a windowed list that stays responsive at scale.
+
+**Model:** `Xenova/distilbert-base-uncased-finetuned-sst-2-english` | **Download:** ~67 MB | [Try Sentiment Analyzer](https://localmode.ai/blocks/text-insights/sentiment-analyzer)
+
+### 9.2 Text Classifier
+
+Zero-shot classification with your own labels. Define categories — "billing inquiry," "technical support," "feature request," "spam" — and the model routes text into them with no fine-tuning. Add or remove labels on the fly and see how every label ranked.
+
+**Model:** `Xenova/mobilebert-uncased-mnli` (zero-shot) | **Download:** ~25 MB | [Try Text Classifier](https://localmode.ai/blocks/text-insights/text-classifier)
+
+### 9.3 Model Evaluator
+
+Measure how accurate a classifier is on a labeled set. Get accuracy plus macro precision, recall, and F1, a color-coded confusion matrix, the run duration, and one-click JSON export.
+
+**Models:** `Xenova/distilbert-base-uncased-finetuned-sst-2-english`, `Xenova/mobilebert-uncased-mnli` | **Download:** ~67 MB -- 400 MB | [Try Model Evaluator](https://localmode.ai/blocks/text-insights/model-evaluator)
+
+### 9.4 Threshold Calibrator
+
+Pick a similarity cutoff from your own examples instead of guessing. It shows the calibrated value beside the model's built-in preset, along with the distribution your scores actually formed.
+
+**Models:** `Xenova/all-MiniLM-L6-v2`, `Xenova/bge-small-en-v1.5` | **Download:** ~23 MB -- 33 MB | [Try Threshold Calibrator](https://localmode.ai/blocks/text-insights/threshold-calibrator)
+
+---
+
+## 10. Photo
+
+Four blocks over CLIP-family models. In each one, a **single model powers both the embeddings and the zero-shot categorization** — text and images land in the same vector space, which is what makes cross-modal search work at all. All four default to the same model, so the browser cache is shared.
+
+### 10.1 Smart Gallery
+
+Build a photo library in the browser that tags every image automatically as it loads, batching adaptively to your device. Browse as a grid or list with filename, category, confidence, and how many similar photos it found. Delete, clear, or cancel mid-ingest.
+
+**Models:** `Xenova/clip-vit-base-patch32` (default) or `Xenova/siglip-base-patch16-224` | **Download:** ~350 MB | [Try Smart Gallery](https://localmode.ai/blocks/photo/smart-gallery)
+
+### 10.2 Image Search
+
+Search a photo library by typing what you are looking for, **or** by dropping in a reference image. Both queries search the same vectors. Tune how many results to show and the minimum similarity a match must clear.
+
+**Models:** `Xenova/clip-vit-base-patch32` (default) or `Xenova/siglip-base-patch16-224` | **Download:** ~350 MB | [Try Image Search](https://localmode.ai/blocks/photo/image-search)
+
+### 10.3 Duplicate Finder
+
+Find and group near-duplicate images with a union-find pass over the cached embeddings. Tune how close a match must be with Strict / Balanced / Relaxed presets, review each group, and bulk-delete while keeping the first. Changing the threshold re-groups without re-embedding.
+
+**Models:** `Xenova/clip-vit-base-patch32` (default) or `Xenova/siglip-base-patch16-224` | **Download:** ~350 MB | [Try Duplicate Finder](https://localmode.ai/blocks/photo/duplicate-finder)
+
+### 10.4 Photo Categorizer
+
+Add photos to a library where each is sorted into a category as it loads. Edit the label set (Photo and Product presets ship built in), re-sort the whole library at once, and filter down to a single category.
+
+**Models:** `Xenova/clip-vit-base-patch32` (default) or `Xenova/siglip-base-patch16-224` | **Download:** ~350 MB | [Try Photo Categorizer](https://localmode.ai/blocks/photo/photo-categorizer)
+
+---
+
+## 11. Image Studio
+
+### 11.1 Background Remover
+
+Remove the background from a photo and download a clean, transparent PNG. It segments the image, picks the highest-scoring mask, composites the subject onto transparent alpha, and shows the result beside the original on a checkerboard.
+
+**Model:** `Xenova/segformer-b0-finetuned-ade-512-512` (segmentation) | **Download:** ~15 MB | [Try Background Remover](https://localmode.ai/blocks/image-studio/background-remover)
+
+### 11.2 Image Enhancer
+
+Upscale and sharpen photos. Choose a fast 2x mode, a higher-quality 4x mode, or a restore mode tuned for real-world low-quality images, then compare before and after and download the result. Each mode lazily loads its own model and keeps its own result.
+
+**Models:** `Xenova/swin2SR-lightweight-x2-64` (2x), `Xenova/swin2SR-classical-sr-x4-64` (4x), `Xenova/swin2SR-realworld-sr-x4-64-bsrgan-psnr` (restore) | **Download:** ~45 MB per mode | [Try Image Enhancer](https://localmode.ai/blocks/image-studio/image-enhancer)
+
+### 11.3 Image Captioner
+
+Automatically write short alt-text for any image. Drop in JPEG, PNG, WebP, or GIF files up to 10 MB and captions accumulate in a gallery you can copy from, remove single items from, or clear all at once.
+
+**Model:** `Xenova/vit-gpt2-image-captioning` | **Download:** ~230 MB | [Try Image Captioner](https://localmode.ai/blocks/image-studio/image-captioner)
+
+---
+
+## 12. Privacy
+
+### 12.1 PII Redactor
+
+Find and hide personal details in text — names, emails, phone numbers, card numbers. On-device named-entity recognition finds them, a regex pass catches the structured formats, and each type can be toggled independently before you copy or export the cleaned text. A second panel demonstrates differential privacy: noise is added to embeddings under a tracked privacy budget, and a badge reports when it was actually applied.
+
+**Models:** `Xenova/bert-base-NER` (entity detection) + `Xenova/all-MiniLM-L6-v2` (differential-privacy demo) | **Download:** ~23 MB -- 110 MB | [Try PII Redactor](https://localmode.ai/blocks/privacy/pii-redactor)
+
+### 12.2 Encrypted Vault
+
+Keep private notes and documents in a vault locked by a passphrase you choose. Everything is encrypted with AES-GCM before it is saved, decrypted only when you view it, and stays locked across a reload — the derived key lives in memory only and is never persisted. A tamper-evident, hash-chained audit log records every action, and you can verify the chain in the UI or export it as JSONL.
+
+**Models:** none — Web Crypto and IndexedDB only | **Download:** No download | [Try Encrypted Vault](https://localmode.ai/blocks/privacy/encrypted-vault)
+
+---
+
+<Callout type="info" title="The 37th item">
+  There is one more registry item you will not find as a gallery page: `ui/blocks/devtools-drawer`. It is layout chrome, mounted across the whole gallery, composing a six-tab observability drawer over `@localmode/devtools` — inference queue, event log, pipeline runs, model cache, vector DBs, and storage. Open any block and it is already watching.
+</Callout>
 
 ---
 
 ## What Ties It All Together
 
-Every one of these 34 apps is built on the same stack:
+Every one of these 36 blocks is built on the same stack:
 
 - **`@localmode/core`** provides the zero-dependency runtime: `embed()`, `classify()`, `generateText()`, `generateObject()`, `createVectorDB()`, `createAgent()`, `runAgent()`, `encrypt()`, `evaluateModel()`, `recommendModels()`, and dozens more functions. No external dependencies.
-- **`@localmode/transformers`** wraps HuggingFace Transformers.js for 27 model types (embeddings, classification, NER, translation, summarization, vision, audio, OCR, and more).
+- **`@localmode/transformers`** wraps HuggingFace Transformers.js v4 with 26 model factories (embeddings, classification, NER, translation, summarization, vision, audio, OCR, and more).
 - **`@localmode/webllm`** provides WebGPU-accelerated LLM inference with 32 curated chat models from Llama, Qwen, Phi, Mistral, and DeepSeek.
 - **`@localmode/wllama`** runs any GGUF model via llama.cpp compiled to WebAssembly - 180,000+ models, universal browser support, no WebGPU required.
-- **`@localmode/react`** provides 59 React hooks that manage loading states, cancellation, error handling, and streaming for every operation.
-- **`@localmode/langchain`** adapts local models to LangChain.js interfaces for drop-in RAG pipelines.
+- **`@localmode/react`** provides 64 React hooks that manage loading states, cancellation, error handling, and streaming for every operation.
+- **`@localmode/langchain`** adapts local models to LangChain.js interfaces, and implements the same knowledge-base engine contract as core - which is why the Knowledge blocks can toggle between them and get equivalent results.
 - **`@localmode/pdfjs`**, **`@localmode/chrome-ai`**, **`@localmode/devtools`**, **`@localmode/litert`**, **`@localmode/mediapipe`**, **`@localmode/ai-sdk`**, **`@localmode/dexie`**, **`@localmode/idb`**, and **`@localmode/localforage`** round out the ecosystem with PDF extraction, Chrome Built-in AI, observability, on-device LiteRT inference, MediaPipe vision/audio tasks, Vercel AI SDK integration, and storage adapters.
 
-The blocks gallery itself is a Next.js 16 application with React 19 and shadcn/ui. Each block is fully self-contained, and you can read the source of any block as a standalone reference implementation.
+The blocks gallery itself is a Next.js 16 application with React 19 and shadcn/ui. It is simultaneously a shadcn **registry endpoint** — the blocks compose 100+ copy-owned UI primitives across 10 families, and both are installable with the shadcn CLI.
 
 ---
 
 ## The Models Behind the Gallery
 
-Here is a quick reference of every model used across the 34 apps, sorted by download size:
+Every model, and which blocks load it. Sizes are listed per block above, because most blocks offer a choice of model.
 
-| Model | Size | Used In |
-|-------|------|---------|
-| MobileBERT MNLI | ~25 MB | Email Classifier |
-| BGE Small EN v1.5 | 33 MB | Semantic Search, PDF Search, LangChain RAG, Data Migrator, Encrypted Vault, Voice Notes |
-| DETR ResNet-50 | ~42 MB | Object Detector |
-| Moonshine Tiny | ~50 MB | Voice Notes |
-| Swin2SR Lightweight x2 | ~50 MB | Photo Enhancer |
-| DistilBERT SST-2 | 67 MB | Sentiment Analyzer, Model Evaluator |
-| DINOv2-based Small (dinov3-vits16) | ~86 MB | Duplicate Finder |
-| Kokoro-82M | ~86 MB | Audiobook Creator, Voice Studio |
-| DistilBERT SQuAD | ~100 MB | Q&A Bot |
-| Opus MT (per language pair) | ~100 MB | Translator, Smart Writer |
-| BERT Base NER | ~110 MB | Document Redactor |
-| TrOCR Small Printed | ~120 MB | OCR Scanner |
-| ModernBERT Base | ~150 MB | Smart Autocomplete |
-| RMBG-1.4 | ~170 MB | Background Remover |
-| ViT-GPT2 Image Captioning | ~230 MB | Image Captioner |
-| Moonshine Base | ~237 MB | Meeting Assistant |
-| DistilBART CNN | ~300 MB | Text Summarizer, Meeting Assistant, Smart Writer |
-| CLIP ViT Base Patch32 | ~350 MB | Cross-Modal Search |
-| SigLIP Base Patch16-224 | ~400 MB | Smart Gallery, Product Search |
-| Qwen 3 1.7B | 1.1 GB | Research Agent, LangChain RAG, Data Extractor |
-| Llama 3.2 1B | 712 MB | LLM Chat |
-| Phi 3.5 Mini | 2.1 GB | LLM Chat |
-| Donut Base (DocVQA) | ~800 MB | Invoice Q&A |
-| Various 3B--8B models | 1.7--5.41 GB | LLM Chat, GGUF Explorer, Data Extractor |
+| Model | Task | Loaded by |
+|-------|------|-----------|
+| `Xenova/bge-small-en-v1.5` | Embeddings | Semantic Search, RAG Chat, Vector Data Manager, Document QA, Voice Notes, Threshold Calibrator, Chat (semantic cache) |
+| `Xenova/all-MiniLM-L6-v2` | Embeddings | Semantic Search, Vector Data Manager, Threshold Calibrator, PII Redactor (DP demo) |
+| `Xenova/bge-reranker-base`, `Xenova/ms-marco-MiniLM-L-6-v2` | Reranking | Semantic Search |
+| `Xenova/trocr-small-printed`, `onnx-community/GLM-OCR-ONNX`, `onnx-community/LightOnOCR-2-1B-ONNX` | OCR | Semantic Search |
+| `Xenova/distilbert-base-cased-distilled-squad` | Extractive QA | Document QA |
+| `Xenova/donut-base-finetuned-docvqa` | Document visual QA | Document QA |
+| `onnx-community/granite-4.0-350m-ONNX-web` | Text generation | RAG Chat, Meeting Assistant, Live Transcription |
+| `Xenova/distilbart-cnn-6-6` | Summarization | Summarize, Meeting Assistant, Chat (agent-mode summarize tool) |
+| `Xenova/whisper-tiny.en`, `onnx-community/moonshine-tiny-ONNX`, `onnx-community/moonshine-base-ONNX` | Speech-to-text | Voice Notes, Live Transcription, Meeting Assistant |
+| `onnx-community/silero-vad` | Voice-activity detection | Live Transcription |
+| `onnx-community/Kokoro-82M-v1.0-ONNX` | Text-to-speech (29 voices) | Voice Explorer, Audiobook Reader, Live Transcription |
+| `Xenova/detr-resnet-50` | Object detection | Object Detector |
+| `Xenova/clip-vit-base-patch32`, `Xenova/siglip-base-patch16-224` | Multimodal embeddings + zero-shot | Smart Gallery, Image Search, Duplicate Finder, Photo Categorizer |
+| `Xenova/segformer-b0-finetuned-ade-512-512` | Segmentation | Background Remover |
+| `Xenova/swin2SR-*` (x2, x4, real-world) | Super-resolution | Image Enhancer |
+| `Xenova/vit-gpt2-image-captioning` | Image captioning | Image Captioner |
+| `Xenova/bert-base-NER` | Named-entity recognition | PII Redactor |
+| `Xenova/distilbert-base-uncased-finetuned-sst-2-english` | Sentiment | Sentiment Analyzer, Model Evaluator |
+| `Xenova/mobilebert-uncased-mnli` | Zero-shot classification | Text Classifier, Model Evaluator |
+| `onnx-community/ModernBERT-base-ONNX` | Fill-mask | Complete |
+| `Xenova/opus-mt-{src}-{tgt}` | Translation (24 directed pairs) | Translate |
+| `onnx-community/Llama-3.2-1B-Instruct-ONNX` | Text generation | Write |
+| MediaPipe task bundles (hand, pose, face, gesture, BlazeFace, YAMNet, language detector, text embedder) | Vision / audio / text | Live Tracker, Object Detector, Audio Classifier, Language Detector |
+| WebLLM MLC catalog (32 models) | Text generation | Chat, Research Agent, Data Extractor |
+| wllama GGUF catalog + 180,000+ HuggingFace GGUF | Text generation | Chat, GGUF Explorer |
+| LiteRT `.litertlm` catalog (3 models) | Text generation | Chat |
 
-Every model is downloaded once from HuggingFace and cached in the browser's Cache API or OPFS. Subsequent visits load from disk in seconds.
+Every model is downloaded once from HuggingFace and cached in the browser's Cache API. Subsequent visits load from disk in seconds. Four blocks — Device Report, Model Advisor, GGUF Explorer, and Encrypted Vault — never download a model at all.
 
 ---
 
@@ -327,30 +380,32 @@ pnpm install
 pnpm --filter ui dev
 ```
 
-Open `http://localhost:3000/blocks` and every feature is available locally. You can also read the source of any block at `apps/ui/src/app/blocks/{category}/{block}/` - each one is a self-contained reference implementation with its own components and hooks.
+Open `http://localhost:3000/blocks` and every feature is available locally. You can also read the source of any block at `apps/ui/src/app/blocks/{category}/{block}/` - each one is a single self-contained file with zero local sibling imports, so the version you read is the version `shadcn add` copies into your project.
 
 ---
 
 ## Methodology
 
-All feature names, counts, model IDs, and model sizes were verified against the block sources under `apps/ui/src/app/blocks/` and the model catalogs in `packages/`. Package counts were verified against the `packages/` directory. React hook counts were verified against `packages/react/src/index.ts`. WebLLM and wllama model counts were verified against `packages/webllm/src/models.ts` and `packages/wllama/src/models.ts` respectively. The GGUF model count was verified against [huggingface.co/models?library=gguf](https://huggingface.co/models?library=gguf) (180,000+ as of May 2026). Moonshine Base size was cross-referenced against the LocalMode model catalog (~237 MB).
+All block names, routes, counts, and model IDs were verified against the block sources under `apps/ui/src/app/blocks/` (36 route-served blocks across 12 categories, read 2026-07-09) and the gallery card model in `apps/ui/src/app/blocks/blocks-catalog.ts`, whose download badges are grounded in each block's real model constants. Per-block download figures are those badges. Package count was verified against the `packages/` directory (15). React hook count was verified against `packages/react/src/index.ts` (64). Transformers model-factory count was verified against `packages/transformers/src/provider.ts` (26). WebLLM and Transformers.js LLM catalog counts were verified against `packages/webllm/src/models.ts` (32) and `packages/transformers/src/models.ts` (16). The 24 directed translation pairs were verified against the `LANGUAGES` list in the Translate block (12 non-English languages, each bidirectional with English). The GGUF model count was verified against [huggingface.co/models?library=gguf](https://huggingface.co/models?library=gguf) (180,000+ as of May 2026).
 
 ## Sources
 
 - [LocalMode blocks source (apps/ui/src/app/blocks)](https://github.com/LocalMode-AI/LocalMode/tree/main/apps/ui/src/app/blocks) -- ground truth for the block implementations and feature list
 - [LocalMode documentation](https://localmode.dev/docs) -- full API reference for all packages
+- [`@localmode/ui` registry](https://localmode.dev/docs/ui) -- the UI primitives the blocks compose, and how to install them
 - [HuggingFace GGUF models filter](https://huggingface.co/models?library=gguf) -- live count of GGUF models (180,000+ as of May 2026)
-- [Xenova/detr-resnet-50 model card](https://huggingface.co/Xenova/detr-resnet-50) -- object detection model used in Object Detector app
+- [Xenova/detr-resnet-50 model card](https://huggingface.co/Xenova/detr-resnet-50) -- object detection model used in Object Detector
+- [Xenova/donut-base-finetuned-docvqa model card](https://huggingface.co/Xenova/donut-base-finetuned-docvqa) -- document visual QA model used in Document QA
 - [onnx-community/moonshine-base-ONNX file tree](https://huggingface.co/onnx-community/moonshine-base-ONNX/tree/main/onnx) -- ONNX file sizes for Moonshine Base
-- [Xenova/donut-base-finetuned-docvqa model card](https://huggingface.co/Xenova/donut-base-finetuned-docvqa) -- model used in Invoice Q&A app
 - [Transformers.js documentation](https://huggingface.co/docs/transformers.js) -- browser ML inference library
 - [WebLLM project](https://webllm.mlc.ai/) -- WebGPU LLM inference engine
+- [MediaPipe Tasks](https://ai.google.dev/edge/mediapipe/solutions/guide) -- the vision, audio, and text task bundles
 - [Chrome Built-in AI](https://developer.chrome.com/docs/ai/built-in) -- Gemini Nano APIs in Chrome
 
 ---
 
 <Callout type="info" title="Try it yourself">
-  Visit the [/blocks gallery](https://localmode.ai/blocks) to try these features as 11 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
+  Visit the [/blocks gallery](https://localmode.ai/blocks) to try these features as 36 installable AI blocks running entirely in your browser. No sign-up, no API keys, no data leaves your device.
 
   Read the [Getting Started guide](/docs/getting-started) to add local AI to your application in under 5 minutes.
 </Callout>

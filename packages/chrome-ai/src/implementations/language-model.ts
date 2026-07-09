@@ -46,9 +46,10 @@ interface SessionKeyPayload {
 /**
  * Chrome AI Language Model — implements `LanguageModel` from `@localmode/core`.
  *
- * Wraps Chrome 138+ `window.LanguageModel` (Gemini Nano) to provide zero-download
- * text generation with `doGenerate()` and streaming `doStream()`. Supports the
- * model-warmup protocol via `warmUp()` / `isReady()`.
+ * Wraps Chrome 148+ `window.LanguageModel` (Gemini Nano). Your application ships and
+ * fetches no model files: Chrome supplies the model, downloading it once browser-wide
+ * on first use (opt in via `allowDownload`). Text generation with `doGenerate()` and
+ * streaming `doStream()`. Supports the model-warmup protocol via `warmUp()` / `isReady()`.
  *
  * Multimodal `ImagePart` content is rejected with `GenerationError`
  * (`code: 'chrome-ai-multimodal-not-supported'`) — Chrome's multimodal Prompt
@@ -270,7 +271,7 @@ export class ChromeAILanguageModel implements LanguageModel {
       throw this.createError(
         'Chrome AI Prompt API is not available. `window.LanguageModel` is undefined.',
         'chrome-ai-not-supported',
-        'This requires Chrome 138+ stable on desktop with built-in AI enabled. See https://localmode.dev/docs/chrome-ai/language-model for setup.',
+        'The Prompt API requires Chrome 148+ stable on desktop (Chrome 138 shipped it for extensions only). See https://localmode.dev/docs/chrome-ai/language-model for setup.',
       );
     }
 
@@ -298,7 +299,7 @@ export class ChromeAILanguageModel implements LanguageModel {
         throw this.createError(
           'Failed to query Chrome AI availability.',
           'chrome-ai-not-supported',
-          'Update to Chrome 138+ stable with built-in AI enabled.',
+          'Update to Chrome 148+ stable on desktop, where the Prompt API ships for web pages.',
           err as Error,
         );
       }
@@ -348,7 +349,7 @@ export class ChromeAILanguageModel implements LanguageModel {
         throw this.createError(
           `Chrome AI failed to create a Prompt API session: ${e?.message ?? String(e)}`,
           'chrome-ai-not-supported',
-          'Verify Chrome 138+ stable, on-device model is enabled, and the page is not in Incognito mode.',
+          'Verify Chrome 148+ stable on desktop, the on-device model is enabled, and the page is not in Incognito mode.',
           e,
         );
       }

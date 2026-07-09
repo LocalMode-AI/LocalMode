@@ -8,7 +8,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 # Fallback Patterns
 
-Chrome AI is only available in Chrome 138+. For broader browser support, pair it with `@localmode/transformers` as a fallback.
+Chrome AI is Chrome-only: Summarizer and Translator need Chrome 138+, and the Prompt API needs Chrome 148+. For broader browser support, pair it with `@localmode/transformers` as a fallback.
 
 <Callout type="info" title="See it in action">
   The [Writing Tools blocks](https://localmode.ai/blocks/writing-tools) are the canonical real-app example of this pattern — four single-purpose blocks (Write, Translate, Summarize, Complete) that each run Chrome AI with automatic Transformers.js fallback.
@@ -19,7 +19,7 @@ Chrome AI is only available in Chrome 138+. For broader browser support, pair it
 ```
 User's Browser
   │
-  ├─ Chrome 138+ with AI?  ──→  @localmode/chrome-ai    (instant, 0 bytes)
+  ├─ Chrome AI available?  ──→  @localmode/chrome-ai    (instant, 0 bytes)
   │
   └─ Other browser?        ──→  @localmode/transformers  (model download, then cached)
 ```
@@ -71,7 +71,10 @@ let cachedModel: SummarizationModel | null = null;
 export async function getSummarizerModel(): Promise<SummarizationModel> {
   if (cachedModel) return cachedModel;
 
-  if (typeof self !== 'undefined' && 'ai' in self && 'summarizer' in (self as any).ai) {
+  // Chrome removed the `self.ai.*` namespace; the Summarizer is a top-level
+  // global now. `isSummarizerAPISupported()` checks both surfaces for you.
+  const { isSummarizerAPISupported } = await import('@localmode/chrome-ai');
+  if (isSummarizerAPISupported()) {
     const { chromeAI } = await import('@localmode/chrome-ai');
     cachedModel = chromeAI.summarizer();
   } else {
@@ -115,7 +118,7 @@ function ProviderStatus() {
   return (
     <div>
       {isChrome ? (
-        <span>⚡ Chrome AI (instant, no download)</span>
+        <span>⚡ Chrome AI (built-in; Chrome supplies the model)</span>
       ) : (
         <span>📦 Transformers.js (model download required)</span>
       )}

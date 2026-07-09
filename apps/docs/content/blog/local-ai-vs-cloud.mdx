@@ -14,7 +14,7 @@ faq:
   - question: "What is the privacy advantage of local browser AI?"
     answer: "Privacy is architectural, not contractual. The code physically cannot send data to external servers because all inference runs in the browser's WebAssembly or WebGPU runtime. This matters for healthcare (HIPAA), legal (attorney-client privilege), finance, and any user-sensitive data."
   - question: "What local LLM providers does LocalMode support for browser inference?"
-    answer: "LocalMode ships four LLM providers: WebLLM (MLC/WebGPU, fastest), Transformers.js v4 (ONNX/WebGPU, broadest model selection), wllama (GGUF/WASM, universal browser support), and LiteRT-LM (Google's on-device engine). Together they offer 76 curated models and access to 160,000+ GGUF models."
+    answer: "LocalMode ships five LLM providers: WebLLM (MLC/WebGPU, fastest), Transformers.js v4 (ONNX/WebGPU, broadest model selection), wllama (GGUF/WASM, universal browser support), LiteRT-LM (Google's on-device engine), and Chrome AI (Chrome's built-in Gemini Nano). The four app-managed providers offer 76 curated models and access to 160,000+ GGUF models; with Chrome AI your app ships no model files, because Chrome provides the model itself."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
@@ -117,7 +117,7 @@ The structural limitation: Opus-MT requires downloading a separate model for eac
 
 ### LLM Chat: 75-96% of GPT-5 (Depending on Task and Mode)
 
-LocalMode now ships **four LLM providers** that run entirely in the browser - WebLLM (MLC/WebGPU, fastest), Transformers.js v4 (ONNX/WebGPU, broadest model selection), wllama (GGUF/WASM, universal browser support), and LiteRT-LM (Google's on-device engine, early preview). Together they offer 76 curated models and access to 160,000+ GGUF models on HuggingFace.
+LocalMode now ships **five LLM providers** that run entirely in the browser - WebLLM (MLC/WebGPU, fastest), Transformers.js v4 (ONNX/WebGPU, broadest model selection), wllama (GGUF/WASM, universal browser support), LiteRT-LM (Google's on-device engine, early preview), and Chrome AI (Chrome's built-in Gemini Nano). The four app-managed providers offer 76 curated models and access to 160,000+ GGUF models on HuggingFace; with Chrome AI your app fetches no model files, because Chrome provides the model itself.
 
 The headline result: **Qwen3.5-4B** (ONNX, Feb 2026) scores **88.8% on MMLU-Redux** in thinking mode - within 4 points of GPT-5's 92.5% on MMLU. (Note: MMLU and MMLU-Redux are related but distinct benchmarks; this is a close comparison, not an exact apples-to-apples match.) For knowledge-intensive tasks -- the kind that power search, classification, and Q&A features -- a browser model is now in the same tier as the flagship cloud API.
 

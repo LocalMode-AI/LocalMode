@@ -428,7 +428,7 @@ const providerComparison = [
   {
     provider: 'Transformers.js',
     runtime: 'ONNX Runtime',
-    models: '14 curated ONNX (TJS v4)',
+    models: '16 curated ONNX (TJS v4)',
     speed: 'Good (CPU/GPU)',
     browsers: 'All modern browsers',
     bestFor: 'Multi-task (embed + LLM)',
@@ -440,6 +440,14 @@ const providerComparison = [
     speed: 'Fast (GPU) / Good (CPU)',
     browsers: 'Chrome/Edge (WebGPU)',
     bestFor: 'Google on-device models',
+  },
+  {
+    provider: 'Chrome AI',
+    runtime: 'Built-in (Gemini Nano)',
+    models: '1 built-in (Gemini Nano)',
+    speed: 'Fast (Chrome-managed)',
+    browsers: 'Chrome 148+ desktop',
+    bestFor: 'Shipping no model files',
   },
 ];
 
@@ -796,8 +804,8 @@ export default async function HomePage() {
 
       {/* LLM Provider Comparison */}
       <section className="px-6 py-20 bg-fd-muted/30">
-        <div className="max-w-5xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-4">4 LLM Providers, 1 Interface</h2>
+        <div className="max-w-7xl mx-auto">
+          <h2 className="text-3xl font-bold text-center mb-4">5 LLM Providers, 1 Interface</h2>
           <p className="text-center text-fd-muted-foreground mb-12 max-w-3xl mx-auto">
             All providers implement the same <code className="text-fd-foreground">LanguageModel</code> interface - swap with a single line change.
           </p>

@@ -67,8 +67,47 @@ function SummarizeTab() {
     resolution: { description: 'Last resolved provider/model — the truthful badge source, or null.', type: 'ProviderResolution | null' },
     isResolving: { description: 'True while any resolver is in flight.', type: 'boolean' },
     error: { description: 'Last resolution error, or null.', type: 'Error | null' },
+    chromeAvailability: { description: "Last-probed Chrome model state per capability. Populate it with refreshChromeAvailability.", type: "Partial<Record<ChromeCapability, ChromeAIAvailability>>" },
+    refreshChromeAvailability: { description: 'Probe (or re-probe) Chrome\'s on-device model state for one capability. Reading availability() downloads nothing.', type: '(capability: ChromeCapability, params?: ChromeCapabilityParams) => Promise<ChromeAIAvailability>' },
+    requestChromeDownload: { description: "Ask Chrome to download a capability's on-device model. MUST be called from a click handler — Chrome requires a user activation. Invalidates that capability's cached resolution on success.", type: '(capability: ChromeCapability, params?: ChromeCapabilityParams) => Promise<ChromeAIAvailability>' },
+    chromeDownloadProgress: { description: 'In-flight download progress (0–1) with its capability, or null when idle.', type: 'ChromeDownloadProgress | null' },
+    downloadingCapability: { description: 'The capability whose model is currently downloading, or null.', type: 'ChromeCapability | null' },
   }}
 />
+
+### Chrome availability & the download gate
+
+Chrome's built-in AI APIs can exist while their on-device model has not been fetched. In that
+state `availability()` reports `'downloadable'`, and Chrome **refuses to start the download
+outside a user activation** — so a button is the only way to trigger it.
+
+```tsx
+const {
+  chromeAvailability,
+  refreshChromeAvailability,
+  requestChromeDownload,
+  chromeDownloadProgress,
+  downloadingCapability,
+} = useProviderFallback({ loadChromeAI, loadTransformers });
+
+// Probing downloads nothing.
+useEffect(() => {
+  void refreshChromeAvailability('summarize', { chromeStyle: 'tldr', length: 'medium' });
+}, [refreshChromeAvailability]);
+
+// Must run from a click.
+<button onClick={() => void requestChromeDownload('summarize', { chromeStyle: 'tldr', length: 'medium' })}>
+  Download model
+</button>;
+```
+
+`ChromeAIAvailability` is `'available' | 'downloadable' | 'downloading' | 'unavailable' | 'unsupported'`
+(the last is ours, meaning the API is absent). `ChromeCapability` is `'summarize' | 'translate' | 'edit'`
+— fill-mask has no Chrome equivalent. Translator availability is **per language pair**, so pass
+`{ source, target }` and re-probe whenever the pair changes.
+
+The `ui/local-first/chrome-ai-download-gate` registry primitive renders this state machine —
+button, progress, and the terminal unsupported / cannot-run states — from exactly these fields.
 
 ### Resolver Params
 
@@ -78,7 +117,7 @@ Each resolver takes exactly the params its capability needs, so the split Write 
 
 <TypeTable
   type={{
-    chromeStyle: { description: 'Chrome Summarizer summary style (used when Chrome AI serves).', type: "'tl;dr' | 'key-points' | 'teaser' | 'headline'", required: true },
+    chromeStyle: { description: "Chrome Summarizer summary style (used when Chrome AI serves). Chrome's enum spells it `tldr`; `'tl;dr'` throws a TypeError.", type: "'tldr' | 'key-points' | 'teaser' | 'headline'", required: true },
     length: { description: 'Chrome Summarizer output length (used when Chrome AI serves).', type: "'short' | 'medium' | 'long'", required: true },
     fallbackModelId: { description: 'Transformers.js fallback model id (used when Chrome AI is unavailable).', type: 'string', required: true },
   }}
@@ -122,8 +161,10 @@ The detection functions are exported standalone (all `async`, all returning a `P
 
 | Function | Signature | Behavior |
 |----------|-----------|----------|
-| `detectSummarizerProvider` | `() => Promise<ProviderId>` | `'chrome-ai'` when the Chrome Summarizer API is present, else `'transformers'`. |
-| `detectTranslatorProvider` | `() => Promise<ProviderId>` | `'chrome-ai'` when the Chrome Translator API is present, else `'transformers'`. |
+| `detectSummarizerProvider` | `(params?: ChromeCapabilityParams) => Promise<ProviderId>` | Gated on `Summarizer.availability() === 'available'` — presence alone is **not** enough, since a merely-`downloadable` model would throw at `create()`. Every other state falls back to `'transformers'`. |
+| `detectTranslatorProvider` | `(params?: ChromeCapabilityParams) => Promise<ProviderId>` | Gated on `Translator.availability() === 'available'` **for the given language pair** (packs download per directed pair). Every other state falls back to `'transformers'`. |
+| `probeChromeAvailability` | `(capability, params?, timeoutMs?) => Promise<ChromeAIAvailability>` | Chrome's raw model state. Returns `'unsupported'` only when the API is genuinely absent, and **rethrows** a bad-option `TypeError` rather than mislabelling the browser. Raced against a 3s deadline (`CHROME_AVAILABILITY_TIMEOUT_MS`) because `Translator.availability()` never settles on some builds; a timeout reports `'unavailable'`. |
+| `downloadChromeModel` | `(capability: ChromeCapability, params?: ChromeCapabilityParams, onProgress?: (p: number) => void) => Promise<ChromeAIAvailability>` | Triggers Chrome's one-time, browser-wide download. **Must be called from a user activation.** Resolves to the post-download availability. |
 | `detectPromptProvider` | `() => Promise<ProviderId>` | Gated on `LanguageModel.availability() === 'available'` — presence alone is **not** enough, which prevents committing to a merely-downloadable Gemini Nano. Every other state falls back to `'transformers'`. The legacy `self.ai.languageModel` surface (no `availability()`) trusts presence. |
 | `providerTier` | `(provider: ProviderId) => ProviderTier` | Maps `'chrome-ai'` → `'built-in'`, `'transformers'` → `'download'`. |
 | `providerName` | `(provider: ProviderId) => string` | Human-readable name: `'Chrome AI'` or `'Transformers.js'`. |

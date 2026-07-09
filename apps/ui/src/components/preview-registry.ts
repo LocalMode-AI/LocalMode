@@ -64,6 +64,7 @@ export const PREVIEWS: Record<string, PreviewLoader> = {
   'ui/input-controls/prompt-enhance-button': dynamic(() => import('@/registry/localmode/input-controls/prompt-enhance-button/prompt-enhance-button-demo'), { ssr: false }),
   'ui/input-controls/copy-button': dynamic(() => import('@/registry/localmode/input-controls/copy-button/copy-button-demo'), { ssr: false }),
   'ui/input-controls/system-prompt-editor': dynamic(() => import('@/registry/localmode/input-controls/system-prompt-editor/system-prompt-editor-demo'), { ssr: false }),
+  'ui/local-first/chrome-ai-download-gate': dynamic(() => import('@/registry/localmode/local-first/chrome-ai-download-gate/chrome-ai-download-gate-demo'), { ssr: false }),
   'ui/local-first/model-downloader': dynamic(() => import('@/registry/localmode/local-first/model-downloader/model-downloader-demo'), { ssr: false }),
   'ui/local-first/model-selector': dynamic(() => import('@/registry/localmode/local-first/model-selector/model-selector-demo'), { ssr: false }),
   'ui/local-first/capability-gate': dynamic(() => import('@/registry/localmode/local-first/capability-gate/capability-gate-demo'), { ssr: false }),

@@ -1,5 +1,17 @@
 # @localmode/react
 
+## 2.3.0
+
+### Minor Changes
+
+- `useProviderFallback` now returns `chromeAvailability`, `refreshChromeAvailability`, `requestChromeDownload`, `chromeDownloadProgress`, and `downloadingCapability`. Chrome only starts its one-time, browser-wide model download from a **user activation**, so `requestChromeDownload` must be called from a click handler. A completed download invalidates that capability's cached resolution, so the next resolve promotes the caller from the Transformers.js fallback to Chrome AI.
+- Added standalone `probeChromeAvailability` and `downloadChromeModel` exports, plus the `ChromeAIAvailability`, `ChromeCapability`, `ChromeCapabilityParams`, and `ChromeDownloadProgress` types.
+- `detectSummarizerProvider` and `detectTranslatorProvider` now take optional capability params and select Chrome AI only when `availability() === 'available'`, matching `detectPromptProvider`. Previously they trusted API presence, which resolved to a model that then threw. Translator availability is probed per language pair.
+- **Every `availability()` probe is raced against a 3s deadline** (`CHROME_AVAILABILITY_TIMEOUT_MS`). `Translator.availability()` has been observed never to settle on some Chrome builds; awaiting it on a resolver's critical path left the UI stuck on "Preparing…" indefinitely. A probe that outruns its deadline reports `'unavailable'` and the caller falls back to Transformers.js.
+- `probeChromeAvailability` deliberately rethrows a bad-option `TypeError` instead of reporting `'unsupported'` — reporting a caller bug as an unsupported browser hid the `'tl;dr'` defect for as long as it existed.
+- `ChromeSummaryStyle` is now `'tldr' | 'key-points' | 'teaser' | 'headline'`. The removed `'tl;dr'` member always threw at runtime, so no working consumer relied on it.
+- docs: replace the README "Demo" badge with "UI Components" (localmode.ai) and add a "Blocks & Apps" badge linking to the localmode.ai/blocks gallery
+
 ## 2.2.0
 
 ### Added
@@ -26,7 +38,7 @@
 ### Fixed
 
 - Mid-flight cancellation is now silent for every `useOperation`-based hook even when the wrapped core function turns an abort into a plain `Error` (e.g. `rerank()`/`classify()` "was cancelled") — such cancellations previously surfaced in `error`.
-- `cancel()` returns every `useOperation`-based hook to idle immediately. Previously the loading state reset only when the promise settled — and never when a cancelled operation *resolved*, so a non-interruptible in-worker call left the hook stuck loading. Also fixes a supersede race where a superseded call's late abort flipped its in-flight replacement back to idle.
+- `cancel()` returns every `useOperation`-based hook to idle immediately. Previously the loading state reset only when the promise settled — and never when a cancelled operation _resolved_, so a non-interruptible in-worker call left the hook stuck loading. Also fixes a supersede race where a superseded call's late abort flipped its in-flight replacement back to idle.
 - `useModelLoad`/`useModelStatus` progress is now non-decreasing within a load attempt (high-water clamp, reset per `load()`) — raw Σloaded/Σtotal could dip when a provider discovered additional files mid-download.
 - `useModelStatus` de-stubbed: it previously reported `isReady: true` optimistically without observing any load, and now reflects the real lifecycle via the `useModelLoad` registry.
 - `useVoiceRecorder` forwards `deviceId`/`constraints` to `getUserMedia` — a selected microphone was previously ignored, and recording now errors when the requested device is unavailable instead of silently falling back.

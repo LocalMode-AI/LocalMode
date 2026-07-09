@@ -21,23 +21,11 @@
 import { NextResponse } from 'next/server';
 import type { NextProxy } from 'next/server';
 
-import { countInstall, isCliInstall } from '@/lib/install-counter';
+import { countInstall, isCliInstall, protectedItems } from '@/lib/install-counter';
 
 export const config = {
   matcher: '/r/:path*',
 };
-
-/**
- * Registry item names (without the `.json` suffix) that require a token.
- * Empty by default — populated when premium items ship. For E2E verification a
- * sentinel `ui/__protected-test` entry can be enabled via env.
- */
-const PROTECTED_ITEMS = new Set<string>(
-  (process.env.REGISTRY_PROTECTED_ITEMS ?? 'ui/__protected-test')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean),
-);
 
 const REGISTRY_TOKEN = process.env.REGISTRY_TOKEN ?? 'localmode-test-token';
 
@@ -53,7 +41,7 @@ export const proxy: NextProxy = (req, event) => {
     if (counted) event.waitUntil(counted);
   };
 
-  if (!PROTECTED_ITEMS.has(itemName)) {
+  if (!protectedItems().has(itemName)) {
     tally();
     return NextResponse.next();
   }

@@ -6,18 +6,20 @@
  * @packageDocumentation
  */
 
-import type {
-  SummarizationModel,
-  DoSummarizeOptions,
-  DoSummarizeResult,
+import {
+  SummarizationError,
+  type SummarizationModel,
+  type DoSummarizeOptions,
+  type DoSummarizeResult,
 } from '@localmode/core';
-import type { AISummarizer, ChromeAISummarizerSettings } from '../types.js';
-import { estimateTokens } from '../utils.js';
+import type { AISummarizer, AISummarizerCreateOptions, ChromeAISummarizerSettings } from '../types.js';
+import { availabilityWithDeadline, estimateTokens, getSummarizerFactory } from '../utils.js';
 
 /**
  * Chrome AI Summarizer — implements SummarizationModel.
  *
- * Uses Chrome's built-in Gemini Nano model for instant, zero-download summarization.
+ * Uses Chrome's built-in on-device model. Your app ships no model files, but Chrome may
+ * need to download the model once (browser-wide) — gate that with `allowDownload`.
  */
 export class ChromeAISummarizer implements SummarizationModel {
   readonly modelId = 'chrome-ai:gemini-nano-summarizer';
@@ -39,25 +41,71 @@ export class ChromeAISummarizer implements SummarizationModel {
     if (this.sessionPromise) return this.sessionPromise;
 
     this.sessionPromise = (async () => {
-      const ai = (self as any).ai;
-      if (!ai?.summarizer) {
-        throw new Error(
-          'Chrome AI Summarizer API is not available. ' +
-            'This requires Chrome 138+ with built-in AI enabled.'
+      const factory = getSummarizerFactory();
+      if (!factory) {
+        throw new SummarizationError(
+          'Chrome AI Summarizer API is not available. `self.Summarizer` is undefined.',
+          {
+            hint: 'The Summarizer API requires Chrome 138+ stable on desktop. See https://localmode.dev/docs/chrome-ai for setup.',
+          }
         );
       }
 
-      const session = await ai.summarizer.create({
-        type: this.settings.type ?? 'tl;dr',
+      const createOptions: AISummarizerCreateOptions = {
+        type: this.settings.type ?? 'tldr',
         format: this.settings.format ?? 'plain-text',
         length: this.settings.length ?? 'medium',
         sharedContext: this.settings.sharedContext,
         signal: abortSignal,
-      });
+      };
+
+      // Availability gate. The legacy `self.ai.summarizer` surface has no
+      // `availability()`; there, presence is all we can check.
+      if (typeof factory.availability === 'function') {
+        const availability = await availabilityWithDeadline(() =>
+          factory.availability!(createOptions) as Promise<string>,
+        );
+        // A probe that never answers must not wedge the caller; fall through to
+        // create(), which surfaces a real error instead of hanging on the gate.
+        if (availability === 'unavailable') {
+          throw new SummarizationError(
+            'Chrome AI Summarizer is reported as unavailable on this device.',
+            { hint: 'This device or Chrome build cannot run the on-device summarization model.' }
+          );
+        }
+        if (
+          (availability === 'downloadable' || availability === 'downloading') &&
+          !this.settings.allowDownload
+        ) {
+          throw new SummarizationError(
+            `The Chrome AI summarization model needs to be downloaded before use (status: ${availability}).`,
+            {
+              hint: 'Set `allowDownload: true` on the summarizer settings and call it from a user activation (click/tap/keypress) so Chrome can download the model.',
+            }
+          );
+        }
+      }
+
+      const onProgress = this.settings.onProgress;
+      if (onProgress) {
+        createOptions.monitor = (m: EventTarget) => {
+          m.addEventListener('downloadprogress', ((evt: Event) => {
+            const e = evt as Event & { loaded?: number; total?: number };
+            onProgress({ loaded: e.loaded ?? 0, total: e.total ?? 0 });
+          }) as EventListener);
+        };
+      }
+
+      const session = await factory.create(createOptions);
 
       this.session = session;
       return session;
     })();
+
+    // A failed create must not poison every later call with the same rejection.
+    this.sessionPromise.catch(() => {
+      this.sessionPromise = null;
+    });
 
     return this.sessionPromise;
   }

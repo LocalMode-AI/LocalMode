@@ -244,7 +244,7 @@ All three models cache in the browser after the first download. On subsequent vi
 
 Tiny models are not universal replacements. There are tasks where model size directly determines capability, and no amount of quantization changes that.
 
-**Open-ended text generation.** Writing coherent paragraphs, following complex instructions, maintaining context across long conversations -- these require the parametric memory that only comes with billions of parameters. A 33MB model cannot write a blog post or debug your code. For LLM chat, you need at least a 1-4B parameter model (350MB-2.5GB quantized). LocalMode ships four LLM providers for this: WebLLM, Transformers.js v4, wllama, and LiteRT-LM (Google's on-device engine, early preview).
+**Open-ended text generation.** Writing coherent paragraphs, following complex instructions, maintaining context across long conversations -- these require the parametric memory that only comes with billions of parameters. A 33MB model cannot write a blog post or debug your code. For LLM chat, you need at least a 1-4B parameter model (350MB-2.5GB quantized). LocalMode ships five LLM providers for this: WebLLM, Transformers.js v4, wllama, LiteRT-LM (Google's on-device engine, early preview), and Chrome AI -- which spares your app the download entirely by using the Gemini Nano model Chrome provides.
 
 **Complex reasoning.** Multi-step logic, mathematical proof, code generation with architectural understanding -- these tasks scale with model size. Qwen3.5-4B (~2.5GB) approaches GPT-5 on MMLU-Redux knowledge benchmarks, but it is not a 30MB model. Some tasks genuinely need that capacity.
 

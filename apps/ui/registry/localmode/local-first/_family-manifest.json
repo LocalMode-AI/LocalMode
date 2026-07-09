@@ -8,36 +8,37 @@
     "lucide-react"
   ],
   "previews": {
-    "ui/local-first/model-downloader": "@/registry/localmode/local-first/model-downloader/model-downloader-demo",
-    "ui/local-first/model-selector": "@/registry/localmode/local-first/model-selector/model-selector-demo",
-    "ui/local-first/capability-gate": "@/registry/localmode/local-first/capability-gate/capability-gate-demo",
-    "ui/local-first/storage-meter": "@/registry/localmode/local-first/storage-meter/storage-meter-demo",
-    "ui/local-first/network-badge": "@/registry/localmode/local-first/network-badge/network-badge-demo",
-    "ui/local-first/cache-badge": "@/registry/localmode/local-first/cache-badge/cache-badge-demo",
-    "ui/local-first/device-capability-grid": "@/registry/localmode/local-first/device-capability-grid/device-capability-grid-demo",
+    "ui/local-first/adaptive-batch-card": "@/registry/localmode/local-first/adaptive-batch-card/adaptive-batch-card-demo",
     "ui/local-first/browser-compat-card": "@/registry/localmode/local-first/browser-compat-card/browser-compat-card-demo",
-    "ui/local-first/provider-fallback-badge": "@/registry/localmode/local-first/provider-fallback-badge/provider-fallback-badge-demo",
+    "ui/local-first/cache-badge": "@/registry/localmode/local-first/cache-badge/cache-badge-demo",
+    "ui/local-first/capability-gate": "@/registry/localmode/local-first/capability-gate/capability-gate-demo",
+    "ui/local-first/chrome-ai-download-gate": "@/registry/localmode/local-first/chrome-ai-download-gate/chrome-ai-download-gate-demo",
     "ui/local-first/context-usage-meter": "@/registry/localmode/local-first/context-usage-meter/context-usage-meter-demo",
+    "ui/local-first/device-capability-grid": "@/registry/localmode/local-first/device-capability-grid/device-capability-grid-demo",
+    "ui/local-first/embedding-drift-banner": "@/registry/localmode/local-first/embedding-drift-banner/embedding-drift-banner-demo",
     "ui/local-first/model-catalog-card": "@/registry/localmode/local-first/model-catalog-card/model-catalog-card-demo",
+    "ui/local-first/model-comparison-panel": "@/registry/localmode/local-first/model-comparison-panel/model-comparison-panel-demo",
+    "ui/local-first/model-downloader": "@/registry/localmode/local-first/model-downloader/model-downloader-demo",
     "ui/local-first/model-loading-panel": "@/registry/localmode/local-first/model-loading-panel/model-loading-panel-demo",
     "ui/local-first/model-metadata-card": "@/registry/localmode/local-first/model-metadata-card/model-metadata-card-demo",
     "ui/local-first/model-recommendation-card": "@/registry/localmode/local-first/model-recommendation-card/model-recommendation-card-demo",
     "ui/local-first/model-search-browser": "@/registry/localmode/local-first/model-search-browser/model-search-browser-demo",
-    "ui/local-first/model-comparison-panel": "@/registry/localmode/local-first/model-comparison-panel/model-comparison-panel-demo",
-    "ui/local-first/adaptive-batch-card": "@/registry/localmode/local-first/adaptive-batch-card/adaptive-batch-card-demo",
-    "ui/local-first/vector-storage-observability": "@/registry/localmode/local-first/vector-storage-observability/vector-storage-observability-demo",
-    "ui/local-first/embedding-drift-banner": "@/registry/localmode/local-first/embedding-drift-banner/embedding-drift-banner-demo",
-    "ui/local-first/vector-import-flow": "@/registry/localmode/local-first/vector-import-flow/vector-import-flow-demo",
-    "ui/local-first/vector-export-panel": "@/registry/localmode/local-first/vector-export-panel/vector-export-panel-demo",
+    "ui/local-first/model-selector": "@/registry/localmode/local-first/model-selector/model-selector-demo",
+    "ui/local-first/network-badge": "@/registry/localmode/local-first/network-badge/network-badge-demo",
+    "ui/local-first/provider-badge": "@/registry/localmode/local-first/provider-badge/provider-badge-demo",
+    "ui/local-first/provider-fallback-badge": "@/registry/localmode/local-first/provider-fallback-badge/provider-fallback-badge-demo",
     "ui/local-first/semantic-cache-status-bar": "@/registry/localmode/local-first/semantic-cache-status-bar/semantic-cache-status-bar-demo",
-    "ui/local-first/provider-badge": "@/registry/localmode/local-first/provider-badge/provider-badge-demo"
+    "ui/local-first/storage-meter": "@/registry/localmode/local-first/storage-meter/storage-meter-demo",
+    "ui/local-first/vector-export-panel": "@/registry/localmode/local-first/vector-export-panel/vector-export-panel-demo",
+    "ui/local-first/vector-import-flow": "@/registry/localmode/local-first/vector-import-flow/vector-import-flow-demo",
+    "ui/local-first/vector-storage-observability": "@/registry/localmode/local-first/vector-storage-observability/vector-storage-observability-demo"
   },
   "items": [
     {
-      "name": "ui/local-first/model-downloader",
+      "name": "ui/local-first/adaptive-batch-card",
       "type": "registry:component",
-      "title": "Model Downloader",
-      "description": "The headline local-first card a user sees while a model loads on-device: model name, size, context length, category, a live progress bar, and a clear first-time-downloading vs loading-from-cache distinction (with a ready state). Includes a lower-level DownloadProgress (bar + percentage from a 0–1 fraction or {loaded,total,percent,cached}). Presentational — bind progress to useModelLoader/useModelStatus; it does not own the download. Lifted out of a chat empty-state into a reusable primitive.",
+      "title": "Adaptive Batch Card",
+      "description": "Surfaces useAdaptiveBatchSize output: a prominent computed optimal batch number, a hardware summary (cores/RAM/GPU), the detection source (detected/estimated/override), and a collapsible reasoning string. Ships a compact AdaptiveBatchBadge variant (e.g. \"Batch: 32\") with a click-to-expand device-profile popover. Data source useAdaptiveBatchSize.",
       "author": "LocalMode",
       "dependencies": [
         "lucide-react"
@@ -47,7 +48,7 @@
       ],
       "files": [
         {
-          "path": "registry/localmode/local-first/model-downloader/model-downloader.tsx",
+          "path": "registry/localmode/local-first/adaptive-batch-card/adaptive-batch-card.tsx",
           "type": "registry:component"
         }
       ],
@@ -56,10 +57,10 @@
       ]
     },
     {
-      "name": "ui/local-first/model-selector",
+      "name": "ui/local-first/browser-compat-card",
       "type": "registry:component",
-      "title": "Model Selector",
-      "description": "A device-aware model picker: a list grouped by category, backend filter chips (WebGPU/ONNX/WASM/LiteRT) with live counts, per-model vision/tool-calling/cached badges, a download affordance for uncached models, and a delete-from-cache affordance for cached ones. Device-unfit models (e.g. a WebGPU-only model on a non-WebGPU device) are de-emphasized and labeled. Emits onSelect(modelId) and owns no selection state. Bind models to useModelRecommendations and hasWebGPU to useCapabilities.",
+      "title": "Browser Compat Card",
+      "description": "A per-model runnability report for the current device — the feasibility check you want before a multi-GB download: a pass/fail RAM-headroom bar (model RAM vs device RAM), available storage, threading (cross-origin-isolation) status, estimated speed, and a warnings list, with a canRun boolean gating a success/error header. Ships an independently-usable RAMUsageBar. Extends the spirit of CapabilityGate; data source useCapabilities.",
       "author": "LocalMode",
       "dependencies": [
         "lucide-react"
@@ -69,7 +70,29 @@
       ],
       "files": [
         {
-          "path": "registry/localmode/local-first/model-selector/model-selector.tsx",
+          "path": "registry/localmode/local-first/browser-compat-card/browser-compat-card.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "local-first"
+      ]
+    },
+    {
+      "name": "ui/local-first/cache-badge",
+      "type": "registry:component",
+      "title": "Cache Badge",
+      "description": "Annotates a result as served from the semantic cache, optionally with the hit latency (e.g. \"cached · 12ms\"). Drive cached/latencyMs from a useSemanticCache lookup result. Renders nothing when cached is false, so it is safe to drop next to any result. Self-contained and presentational.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/local-first/cache-badge/cache-badge.tsx",
           "type": "registry:component"
         }
       ],
@@ -99,57 +122,10 @@
       ]
     },
     {
-      "name": "ui/local-first/storage-meter",
+      "name": "ui/local-first/chrome-ai-download-gate",
       "type": "registry:component",
-      "title": "Storage Meter",
-      "description": "Shows origin/IndexedDB storage usage against quota as a meter, with a warning state past a configurable threshold and a graceful unavailable state (estimates are approximate and blocked in Safari private mode). Bind to useStorageQuota (default) or pass an explicit quota. Complements ContextUsageMeter (the token-budget gauge).",
-      "author": "LocalMode",
-      "dependencies": [
-        "lucide-react"
-      ],
-      "registryDependencies": [
-        "@localmode/ui/lib/utils",
-        "@localmode/ui/lib/browser-utils",
-        "@localmode/ui/lib/use-environment"
-      ],
-      "files": [
-        {
-          "path": "registry/localmode/local-first/storage-meter/storage-meter.tsx",
-          "type": "registry:component"
-        }
-      ],
-      "categories": [
-        "local-first"
-      ]
-    },
-    {
-      "name": "ui/local-first/network-badge",
-      "type": "registry:component",
-      "title": "Network Badge",
-      "description": "A reactive online/offline indicator (NetworkBadge) sourced from useNetworkStatus, plus an OfflineReady badge that signals the app's required model is cached on-device and can run with no network. Because local models keep working offline, offline is informational, not an error.",
-      "author": "LocalMode",
-      "dependencies": [
-        "lucide-react"
-      ],
-      "registryDependencies": [
-        "@localmode/ui/lib/utils",
-        "@localmode/ui/lib/use-environment"
-      ],
-      "files": [
-        {
-          "path": "registry/localmode/local-first/network-badge/network-badge.tsx",
-          "type": "registry:component"
-        }
-      ],
-      "categories": [
-        "local-first"
-      ]
-    },
-    {
-      "name": "ui/local-first/cache-badge",
-      "type": "registry:component",
-      "title": "Cache Badge",
-      "description": "Annotates a result as served from the semantic cache, optionally with the hit latency (e.g. \"cached · 12ms\"). Drive cached/latencyMs from a useSemanticCache lookup result. Renders nothing when cached is false, so it is safe to drop next to any result. Self-contained and presentational.",
+      "title": "Chrome AI Download Gate",
+      "description": "The gate a user sees when a Chrome Built-in AI capability exists but its on-device model has not been fetched yet. Chrome refuses to start the model download outside a user activation, so the button is not a convenience — it is the only way to trigger it. Renders the download prompt, in-flight progress, the failed-attempt message, and the terminal unsupported / cannot-run-here states; returns null once the model is available. Includes ChromeAIReadyBadge. Presentational — bind availability/progress to a provider-fallback hook and pass its download action as onDownload; it starts nothing itself.",
       "author": "LocalMode",
       "dependencies": [
         "lucide-react"
@@ -159,7 +135,27 @@
       ],
       "files": [
         {
-          "path": "registry/localmode/local-first/cache-badge/cache-badge.tsx",
+          "path": "registry/localmode/local-first/chrome-ai-download-gate/chrome-ai-download-gate.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "local-first"
+      ]
+    },
+    {
+      "name": "ui/local-first/context-usage-meter",
+      "type": "registry:component",
+      "title": "Context Usage Meter",
+      "description": "A token / context-window budget meter (with composable Context/ContextTrigger/ContextContent/ContextInputUsage/ContextOutputUsage parts) breaking down input/output/reasoning/cache token usage against the model's context-window limit (a hard local GGUF/LiteRT KV-cache constraint), warning near the limit. Fed by usage.tokens from a generate result. Local-only — there is NO cost field. Complements StorageMeter (disk) with a token-budget gauge.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/local-first/context-usage-meter/context-usage-meter.tsx",
           "type": "registry:component"
         }
       ],
@@ -191,10 +187,10 @@
       ]
     },
     {
-      "name": "ui/local-first/browser-compat-card",
+      "name": "ui/local-first/embedding-drift-banner",
       "type": "registry:component",
-      "title": "Browser Compat Card",
-      "description": "A per-model runnability report for the current device — the feasibility check you want before a multi-GB download: a pass/fail RAM-headroom bar (model RAM vs device RAM), available storage, threading (cross-origin-isolation) status, estimated speed, and a warnings list, with a canRun boolean gating a success/error header. Ships an independently-usable RAMUsageBar. Extends the spirit of CapabilityGate; data source useCapabilities.",
+      "title": "Embedding Drift Banner",
+      "description": "A warning panel shown when the active embedding model is incompatible with vectors already stored (model changed or dimension mismatch): explains stored vs current model ids, shows a reindex progress bar + phase label while re-embedding, and offers Re-embed All / Cancel actions. Data source useReindex + compatibility check.",
       "author": "LocalMode",
       "dependencies": [
         "lucide-react"
@@ -204,50 +200,7 @@
       ],
       "files": [
         {
-          "path": "registry/localmode/local-first/browser-compat-card/browser-compat-card.tsx",
-          "type": "registry:component"
-        }
-      ],
-      "categories": [
-        "local-first"
-      ]
-    },
-    {
-      "name": "ui/local-first/provider-fallback-badge",
-      "type": "registry:component",
-      "title": "Provider Fallback Badge",
-      "description": "Surfaces the active AI backend tier — a zero-download built-in (Chrome AI) vs a model-download provider (Transformers.js) — plus a WASM threading variant (Multi-thread when cross-origin isolated / SharedArrayBuffer is available, else Single-thread). A software-side sibling to DeviceBadge; data source useCapabilities (crossOriginIsolated) + provider identifier.",
-      "author": "LocalMode",
-      "dependencies": [
-        "lucide-react"
-      ],
-      "registryDependencies": [
-        "@localmode/ui/lib/utils",
-        "@localmode/ui/lib/use-environment"
-      ],
-      "files": [
-        {
-          "path": "registry/localmode/local-first/provider-fallback-badge/provider-fallback-badge.tsx",
-          "type": "registry:component"
-        }
-      ],
-      "categories": [
-        "local-first"
-      ]
-    },
-    {
-      "name": "ui/local-first/context-usage-meter",
-      "type": "registry:component",
-      "title": "Context Usage Meter",
-      "description": "A token / context-window budget meter (with composable Context/ContextTrigger/ContextContent/ContextInputUsage/ContextOutputUsage parts) breaking down input/output/reasoning/cache token usage against the model's context-window limit (a hard local GGUF/LiteRT KV-cache constraint), warning near the limit. Fed by usage.tokens from a generate result. Local-only — there is NO cost field. Complements StorageMeter (disk) with a token-budget gauge.",
-      "author": "LocalMode",
-      "dependencies": [],
-      "registryDependencies": [
-        "@localmode/ui/lib/utils"
-      ],
-      "files": [
-        {
-          "path": "registry/localmode/local-first/context-usage-meter/context-usage-meter.tsx",
+          "path": "registry/localmode/local-first/embedding-drift-banner/embedding-drift-banner.tsx",
           "type": "registry:component"
         }
       ],
@@ -270,6 +223,50 @@
       "files": [
         {
           "path": "registry/localmode/local-first/model-catalog-card/model-catalog-card.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "local-first"
+      ]
+    },
+    {
+      "name": "ui/local-first/model-comparison-panel",
+      "type": "registry:component",
+      "title": "Model Comparison Panel",
+      "description": "A side-by-side comparison of two scored entries with labeled rows (Score, Size, Speed, Quality, Device, Dimensions) where winning rows are accent-highlighted and losing rows dimmed, plus an onClear dismissal. Win-highlighting is derived purely from props (no orchestration state). Data source useModelRecommendations.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/local-first/model-comparison-panel/model-comparison-panel.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "local-first"
+      ]
+    },
+    {
+      "name": "ui/local-first/model-downloader",
+      "type": "registry:component",
+      "title": "Model Downloader",
+      "description": "The headline local-first card a user sees while a model loads on-device: model name, size, context length, category, a live progress bar, and a clear first-time-downloading vs loading-from-cache distinction (with a ready state). Includes a lower-level DownloadProgress (bar + percentage from a 0–1 fraction or {loaded,total,percent,cached}). Presentational — bind progress to useModelLoader/useModelStatus; it does not own the download. Lifted out of a chat empty-state into a reusable primitive.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/local-first/model-downloader/model-downloader.tsx",
           "type": "registry:component"
         }
       ],
@@ -368,10 +365,10 @@
       ]
     },
     {
-      "name": "ui/local-first/model-comparison-panel",
+      "name": "ui/local-first/model-selector",
       "type": "registry:component",
-      "title": "Model Comparison Panel",
-      "description": "A side-by-side comparison of two scored entries with labeled rows (Score, Size, Speed, Quality, Device, Dimensions) where winning rows are accent-highlighted and losing rows dimmed, plus an onClear dismissal. Win-highlighting is derived purely from props (no orchestration state). Data source useModelRecommendations.",
+      "title": "Model Selector",
+      "description": "A device-aware model picker: a list grouped by category, backend filter chips (WebGPU/ONNX/WASM/LiteRT) with live counts, per-model vision/tool-calling/cached badges, a download affordance for uncached models, and a delete-from-cache affordance for cached ones. Device-unfit models (e.g. a WebGPU-only model on a non-WebGPU device) are de-emphasized and labeled. Emits onSelect(modelId) and owns no selection state. Bind models to useModelRecommendations and hasWebGPU to useCapabilities.",
       "author": "LocalMode",
       "dependencies": [
         "lucide-react"
@@ -381,7 +378,7 @@
       ],
       "files": [
         {
-          "path": "registry/localmode/local-first/model-comparison-panel/model-comparison-panel.tsx",
+          "path": "registry/localmode/local-first/model-selector/model-selector.tsx",
           "type": "registry:component"
         }
       ],
@@ -390,43 +387,21 @@
       ]
     },
     {
-      "name": "ui/local-first/adaptive-batch-card",
+      "name": "ui/local-first/network-badge",
       "type": "registry:component",
-      "title": "Adaptive Batch Card",
-      "description": "Surfaces useAdaptiveBatchSize output: a prominent computed optimal batch number, a hardware summary (cores/RAM/GPU), the detection source (detected/estimated/override), and a collapsible reasoning string. Ships a compact AdaptiveBatchBadge variant (e.g. \"Batch: 32\") with a click-to-expand device-profile popover. Data source useAdaptiveBatchSize.",
-      "author": "LocalMode",
-      "dependencies": [
-        "lucide-react"
-      ],
-      "registryDependencies": [
-        "@localmode/ui/lib/utils"
-      ],
-      "files": [
-        {
-          "path": "registry/localmode/local-first/adaptive-batch-card/adaptive-batch-card.tsx",
-          "type": "registry:component"
-        }
-      ],
-      "categories": [
-        "local-first"
-      ]
-    },
-    {
-      "name": "ui/local-first/vector-storage-observability",
-      "type": "registry:component",
-      "title": "Vector Storage Observability",
-      "description": "VectorDB observability complementing StorageMeter (quota): a compression-stats badge (SQ8 ratio + before/after size, e.g. \"4.0x — 15KB→3.7KB\"), a three-tier storage estimate (Raw Float32 / SQ8 4x / PQ 8–32x with the active tier highlighted), and a GPU-aware search-latency badge (accented when WebGPU-accelerated). Values derive from getCompressionStats() (a core function) + search timing, passed in as props; the nearest shipped hook is useStorageQuota.",
+      "title": "Network Badge",
+      "description": "A reactive online/offline indicator (NetworkBadge) sourced from useNetworkStatus, plus an OfflineReady badge that signals the app's required model is cached on-device and can run with no network. Because local models keep working offline, offline is informational, not an error.",
       "author": "LocalMode",
       "dependencies": [
         "lucide-react"
       ],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
-        "@localmode/ui/lib/browser-utils"
+        "@localmode/ui/lib/use-environment"
       ],
       "files": [
         {
-          "path": "registry/localmode/local-first/vector-storage-observability/vector-storage-observability.tsx",
+          "path": "registry/localmode/local-first/network-badge/network-badge.tsx",
           "type": "registry:component"
         }
       ],
@@ -435,10 +410,54 @@
       ]
     },
     {
-      "name": "ui/local-first/embedding-drift-banner",
+      "name": "ui/local-first/provider-badge",
       "type": "registry:component",
-      "title": "Embedding Drift Banner",
-      "description": "A warning panel shown when the active embedding model is incompatible with vectors already stored (model changed or dimension mismatch): explains stored vs current model ids, shows a reindex progress bar + phase label while re-embedding, and offers Re-embed All / Cancel actions. Data source useReindex + compatibility check.",
+      "title": "Provider Badge",
+      "description": "Displays the RESOLVED provider identity — composing ProviderFallbackBadge for the tier and name — alongside the model id that actually served the request. While providerName is null it shows a \"Resolving provider…\" placeholder, so the badge never claims a provider before one has resolved. Takes generic display props (providerName / tier / modelId / note). Distinct from ProviderFallbackBadge (the tier chip it composes): this adds the resolved provider identity plus the served model id. Data source: a provider-fallback resolver.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/local-first/provider-fallback-badge"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/local-first/provider-badge/provider-badge.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "local-first"
+      ]
+    },
+    {
+      "name": "ui/local-first/provider-fallback-badge",
+      "type": "registry:component",
+      "title": "Provider Fallback Badge",
+      "description": "Surfaces the active AI backend tier — a zero-download built-in (Chrome AI) vs a model-download provider (Transformers.js) — plus a WASM threading variant (Multi-thread when cross-origin isolated / SharedArrayBuffer is available, else Single-thread). A software-side sibling to DeviceBadge; data source useCapabilities (crossOriginIsolated) + provider identifier.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/lib/use-environment"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/local-first/provider-fallback-badge/provider-fallback-badge.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "local-first"
+      ]
+    },
+    {
+      "name": "ui/local-first/semantic-cache-status-bar",
+      "type": "registry:component",
+      "title": "Semantic Cache Status Bar",
+      "description": "A compact toolbar row for useSemanticCache complementing CacheBadge: entry count, hit-rate percentage, an icon-only clear-cache button (when entries > 0), and an enable/disable toggle (with a spinner while the embedding model loads). Pairs with a per-message CachedAnnotation (\"Cached (38ms)\"). Distinct from CacheBadge (model-download cache) — this surfaces semantic-cache hits on responses. Data source useSemanticCache.",
       "author": "LocalMode",
       "dependencies": [
         "lucide-react"
@@ -448,7 +467,53 @@
       ],
       "files": [
         {
-          "path": "registry/localmode/local-first/embedding-drift-banner/embedding-drift-banner.tsx",
+          "path": "registry/localmode/local-first/semantic-cache-status-bar/semantic-cache-status-bar.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "local-first"
+      ]
+    },
+    {
+      "name": "ui/local-first/storage-meter",
+      "type": "registry:component",
+      "title": "Storage Meter",
+      "description": "Shows origin/IndexedDB storage usage against quota as a meter, with a warning state past a configurable threshold and a graceful unavailable state (estimates are approximate and blocked in Safari private mode). Bind to useStorageQuota (default) or pass an explicit quota. Complements ContextUsageMeter (the token-budget gauge).",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/lib/browser-utils",
+        "@localmode/ui/lib/use-environment"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/local-first/storage-meter/storage-meter.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "local-first"
+      ]
+    },
+    {
+      "name": "ui/local-first/vector-export-panel",
+      "type": "registry:component",
+      "title": "Vector Export Panel",
+      "description": "An export surface for vector data — the counterpart to VectorImportFlow: a record/dimension count line, a row per export format (native JSON with vectors, CSV, JSONL — label, description, vectors-included / text-only indicator, per-format export action emitting onExport(formatId)), a busy state that disables all actions with a spinner on the active format, a zero-records disabled state, and an optional last-export banner (format, records, human-readable size, filename). Works with any backend; data source useImportExport (exportCSV, exportJSONL) plus a native JSON export.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/local-first/vector-export-panel/vector-export-panel.tsx",
           "type": "registry:component"
         }
       ],
@@ -480,63 +545,21 @@
       ]
     },
     {
-      "name": "ui/local-first/vector-export-panel",
+      "name": "ui/local-first/vector-storage-observability",
       "type": "registry:component",
-      "title": "Vector Export Panel",
-      "description": "An export surface for vector data — the counterpart to VectorImportFlow: a record/dimension count line, a row per export format (native JSON with vectors, CSV, JSONL — label, description, vectors-included / text-only indicator, per-format export action emitting onExport(formatId)), a busy state that disables all actions with a spinner on the active format, a zero-records disabled state, and an optional last-export banner (format, records, human-readable size, filename). Works with any backend; data source useImportExport (exportCSV, exportJSONL) plus a native JSON export.",
+      "title": "Vector Storage Observability",
+      "description": "VectorDB observability complementing StorageMeter (quota): a compression-stats badge (SQ8 ratio + before/after size, e.g. \"4.0x — 15KB→3.7KB\"), a three-tier storage estimate (Raw Float32 / SQ8 4x / PQ 8–32x with the active tier highlighted), and a GPU-aware search-latency badge (accented when WebGPU-accelerated). Values derive from getCompressionStats() (a core function) + search timing, passed in as props; the nearest shipped hook is useStorageQuota.",
       "author": "LocalMode",
       "dependencies": [
         "lucide-react"
       ],
-      "registryDependencies": [
-        "@localmode/ui/lib/utils"
-      ],
-      "files": [
-        {
-          "path": "registry/localmode/local-first/vector-export-panel/vector-export-panel.tsx",
-          "type": "registry:component"
-        }
-      ],
-      "categories": [
-        "local-first"
-      ]
-    },
-    {
-      "name": "ui/local-first/semantic-cache-status-bar",
-      "type": "registry:component",
-      "title": "Semantic Cache Status Bar",
-      "description": "A compact toolbar row for useSemanticCache complementing CacheBadge: entry count, hit-rate percentage, an icon-only clear-cache button (when entries > 0), and an enable/disable toggle (with a spinner while the embedding model loads). Pairs with a per-message CachedAnnotation (\"Cached (38ms)\"). Distinct from CacheBadge (model-download cache) — this surfaces semantic-cache hits on responses. Data source useSemanticCache.",
-      "author": "LocalMode",
-      "dependencies": [
-        "lucide-react"
-      ],
-      "registryDependencies": [
-        "@localmode/ui/lib/utils"
-      ],
-      "files": [
-        {
-          "path": "registry/localmode/local-first/semantic-cache-status-bar/semantic-cache-status-bar.tsx",
-          "type": "registry:component"
-        }
-      ],
-      "categories": [
-        "local-first"
-      ]
-    },
-    {
-      "name": "ui/local-first/provider-badge",
-      "type": "registry:component",
-      "title": "Provider Badge",
-      "description": "Displays the RESOLVED provider identity — composing ProviderFallbackBadge for the tier and name — alongside the model id that actually served the request. While providerName is null it shows a \"Resolving provider…\" placeholder, so the badge never claims a provider before one has resolved. Takes generic display props (providerName / tier / modelId / note). Distinct from ProviderFallbackBadge (the tier chip it composes): this adds the resolved provider identity plus the served model id. Data source: a provider-fallback resolver.",
-      "author": "LocalMode",
-      "dependencies": [],
       "registryDependencies": [
         "@localmode/ui/lib/utils",
-        "@localmode/ui/local-first/provider-fallback-badge"
+        "@localmode/ui/lib/browser-utils"
       ],
       "files": [
         {
-          "path": "registry/localmode/local-first/provider-badge/provider-badge.tsx",
+          "path": "registry/localmode/local-first/vector-storage-observability/vector-storage-observability.tsx",
           "type": "registry:component"
         }
       ],

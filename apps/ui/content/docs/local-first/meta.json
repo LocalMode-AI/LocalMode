@@ -2,6 +2,7 @@
   "title": "Local-First",
   "pages": [
     "model-downloader",
+    "chrome-ai-download-gate",
     "model-selector",
     "model-loading-panel",
     "capability-gate",

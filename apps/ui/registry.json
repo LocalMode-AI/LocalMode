@@ -1799,6 +1799,28 @@
       ]
     },
     {
+      "name": "ui/local-first/chrome-ai-download-gate",
+      "type": "registry:component",
+      "title": "Chrome AI Download Gate",
+      "description": "The gate a user sees when a Chrome Built-in AI capability exists but its on-device model has not been fetched yet. Chrome refuses to start the model download outside a user activation, so the button is the only way to trigger it. Renders the download prompt, in-flight progress, the failed-attempt message, and the terminal unsupported / cannot-run-here states; returns null once the model is available. Includes ChromeAIReadyBadge. Presentational — bind availability/progress to a provider-fallback hook and pass its download action as onDownload.",
+      "author": "LocalMode",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/local-first/chrome-ai-download-gate/chrome-ai-download-gate.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "local-first"
+      ]
+    },
+    {
       "name": "ui/media-vision/media-dropzone",
       "type": "registry:component",
       "title": "Media Dropzone",
@@ -2767,11 +2789,12 @@
         "@localmode/chrome-ai"
       ],
       "registryDependencies": [
-        "@localmode/ui/lib/utils",
+        "@localmode/ui/artifacts/code-diff-viewer",
         "@localmode/ui/input-controls/char-limit-indicator",
         "@localmode/ui/input-controls/prompt-enhance-button",
-        "@localmode/ui/artifacts/code-diff-viewer",
+        "@localmode/ui/lib/utils",
         "@localmode/ui/local-first/capability-gate",
+        "@localmode/ui/local-first/chrome-ai-download-gate",
         "@localmode/ui/local-first/provider-badge",
         "@localmode/ui/results/error-alert"
       ],
@@ -2800,10 +2823,11 @@
         "@localmode/chrome-ai"
       ],
       "registryDependencies": [
-        "@localmode/ui/lib/utils",
-        "@localmode/ui/input-controls/language-pair-selector",
-        "@localmode/ui/local-first/provider-badge",
         "@localmode/ui/input-controls/copy-button",
+        "@localmode/ui/input-controls/language-pair-selector",
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/local-first/chrome-ai-download-gate",
+        "@localmode/ui/local-first/provider-badge",
         "@localmode/ui/results/error-alert"
       ],
       "files": [
@@ -2831,11 +2855,12 @@
         "@localmode/chrome-ai"
       ],
       "registryDependencies": [
-        "@localmode/ui/lib/utils",
+        "@localmode/ui/input-controls/copy-button",
         "@localmode/ui/input-controls/segmented-mode-picker",
         "@localmode/ui/input-controls/text-processing-panel",
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/local-first/chrome-ai-download-gate",
         "@localmode/ui/local-first/provider-badge",
-        "@localmode/ui/input-controls/copy-button",
         "@localmode/ui/results/error-alert"
       ],
       "files": [

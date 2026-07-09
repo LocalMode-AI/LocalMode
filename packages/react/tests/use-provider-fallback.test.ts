@@ -20,6 +20,8 @@ import {
   detectSummarizerProvider,
   detectTranslatorProvider,
   detectPromptProvider,
+  probeChromeAvailability,
+  downloadChromeModel,
   providerTier,
   providerName,
   type LoadChromeAI,
@@ -31,14 +33,61 @@ import {
 const globalSelf = self as unknown as {
   ai?: unknown;
   LanguageModel?: unknown;
+  Summarizer?: unknown;
+  Translator?: unknown;
 };
 
 /** Reset the Chrome AI browser surfaces after every test. */
 afterEach(() => {
   delete globalSelf.ai;
   delete globalSelf.LanguageModel;
+  delete globalSelf.Summarizer;
+  delete globalSelf.Translator;
   vi.restoreAllMocks();
 });
+
+type Avail = 'available' | 'downloadable' | 'downloading' | 'unavailable' | 'readily' | 'no';
+
+/**
+ * Model CURRENT Chrome: each API is its own top-level global with `availability()`
+ * and `create()`, and `self.ai` does NOT exist. Chrome dropped the `self.ai.*`
+ * namespace, so a detector that only reads it sees nothing here.
+ */
+function setModernBrowser(config: {
+  summarizer?: Avail;
+  translator?: Avail;
+  prompt?: Avail;
+  /** Fail `create()` — models a denied or failed download. */
+  createRejects?: boolean;
+  /** `downloadprogress` events `create()` should emit on its monitor. */
+  progressEvents?: Array<{ loaded: number; total?: number }>;
+}) {
+  const destroy = vi.fn();
+  const makeFactory = (state: Avail) => ({
+    availability: vi.fn(async () => state),
+    create: vi.fn(async (options?: Record<string, unknown>) => {
+      if (config.createRejects) throw new Error('download denied');
+      const monitor = options?.monitor as ((m: EventTarget) => void) | undefined;
+      if (monitor) {
+        const target = new EventTarget();
+        monitor(target);
+        for (const ev of config.progressEvents ?? []) {
+          const e = new Event('downloadprogress') as Event & { loaded?: number; total?: number };
+          e.loaded = ev.loaded;
+          if (ev.total !== undefined) e.total = ev.total;
+          target.dispatchEvent(e);
+        }
+      }
+      return { destroy };
+    }),
+  });
+  const factories: Record<string, ReturnType<typeof makeFactory>> = {};
+  if (config.summarizer) factories.Summarizer = makeFactory(config.summarizer);
+  if (config.translator) factories.Translator = makeFactory(config.translator);
+  if (config.prompt) factories.LanguageModel = makeFactory(config.prompt);
+  Object.assign(globalSelf, factories);
+  return { ...factories, destroy };
+}
 
 /** Model the browser: which `self.ai.*` capabilities exist + Prompt availability. */
 function setBrowser(config: {
@@ -133,6 +182,159 @@ describe('detection functions (real self.* boundary)', () => {
     expect(await detectPromptProvider()).toBe('transformers');
   });
 
+  /* ── modern Chrome: top-level globals, no `self.ai` namespace ───────────── */
+  // Regression: the detectors used to read ONLY `self.ai.summarizer` /
+  // `self.ai.translator`. Chrome removed that namespace, so on every browser
+  // where the Summarizer/Translator APIs actually exist, detection returned
+  // 'transformers' and Chrome AI was unreachable. These fail against that code.
+
+  it('modern Chrome (no self.ai): an available Summarizer resolves chrome-ai', async () => {
+    setModernBrowser({ summarizer: 'available' });
+    expect(globalSelf.ai).toBeUndefined();
+    expect(await detectSummarizerProvider()).toBe('chrome-ai');
+  });
+
+  it('modern Chrome (no self.ai): an available Translator resolves chrome-ai', async () => {
+    setModernBrowser({ translator: 'available' });
+    expect(globalSelf.ai).toBeUndefined();
+    expect(await detectTranslatorProvider({ source: 'en', target: 'es' })).toBe('chrome-ai');
+  });
+
+  it('a present-but-downloadable Summarizer falls back rather than throwing at create()', async () => {
+    setModernBrowser({ summarizer: 'downloadable' });
+    expect(await detectSummarizerProvider()).toBe('transformers');
+  });
+
+  it('Translator availability is probed per language pair', async () => {
+    const { Translator } = setModernBrowser({ translator: 'available' });
+    await detectTranslatorProvider({ source: 'en', target: 'de' });
+    expect(Translator!.availability).toHaveBeenCalledWith({
+      sourceLanguage: 'en',
+      targetLanguage: 'de',
+    });
+  });
+
+  it('probeChromeAvailability maps the legacy readily/no spellings', async () => {
+    setModernBrowser({ summarizer: 'readily' });
+    expect(await probeChromeAvailability('summarize')).toBe('available');
+    delete globalSelf.Summarizer;
+    setModernBrowser({ summarizer: 'no' });
+    expect(await probeChromeAvailability('summarize')).toBe('unavailable');
+  });
+
+  // Regression: `Translator.availability()` never settles on some Chrome builds
+  // (observed in headless Chromium). Awaiting it unguarded on the resolver's
+  // critical path leaves the block stuck on "Preparing…" forever.
+  it('a never-settling availability() probe resolves to `unavailable` instead of hanging', async () => {
+    vi.useFakeTimers();
+    globalSelf.Translator = {
+      availability: vi.fn(() => new Promise<string>(() => {})), // never settles
+      create: vi.fn(),
+    };
+    const probe = probeChromeAvailability('translate', { source: 'en', target: 'de' });
+    await vi.advanceTimersByTimeAsync(3100);
+    await expect(probe).resolves.toBe('unavailable');
+    vi.useRealTimers();
+  });
+
+  it('a hung probe still lets detectTranslatorProvider fall back (never wedges the resolver)', async () => {
+    vi.useFakeTimers();
+    globalSelf.Translator = {
+      availability: vi.fn(() => new Promise<string>(() => {})),
+      create: vi.fn(),
+    };
+    const detect = detectTranslatorProvider({ source: 'en', target: 'de' });
+    await vi.advanceTimersByTimeAsync(3100);
+    await expect(detect).resolves.toBe('transformers');
+    vi.useRealTimers();
+  });
+
+  it('a fast probe is NOT delayed by the deadline', async () => {
+    setModernBrowser({ translator: 'available' });
+    const t0 = Date.now();
+    await expect(probeChromeAvailability('translate', { source: 'en', target: 'de' })).resolves.toBe(
+      'available',
+    );
+    expect(Date.now() - t0).toBeLessThan(1000);
+  });
+
+  it('probeChromeAvailability reports unsupported when the API is absent', async () => {
+    expect(await probeChromeAvailability('summarize')).toBe('unsupported');
+  });
+
+  /* ── downloadChromeModel: the user-gesture download path ─────────────────── */
+
+  it("sends Chrome's 'tldr' enum value, never 'tl;dr' (which Chrome rejects)", async () => {
+    // Chrome's SummarizerType enum is `tldr`. Passing `'tl;dr'` makes
+    // Summarizer.availability() throw a TypeError.
+    const { Summarizer } = setModernBrowser({ summarizer: 'available' });
+    await probeChromeAvailability('summarize');
+    expect(Summarizer!.availability).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'tldr' }),
+    );
+    const sent = Summarizer!.availability.mock.calls[0][0] as { type: string };
+    expect(sent.type).not.toBe('tl;dr');
+  });
+
+  it('probeChromeAvailability rethrows a bad-option TypeError instead of reporting "unsupported"', async () => {
+    // Reporting a caller bug as `unsupported` blames the user's browser and hides
+    // the defect — the exact failure this guards against.
+    globalSelf.Summarizer = {
+      availability: vi.fn(async () => {
+        throw new TypeError("The provided value 'tl;dr' is not a valid enum value of type SummarizerType.");
+      }),
+      create: vi.fn(),
+    };
+    await expect(probeChromeAvailability('summarize')).rejects.toThrow(/not a valid enum value/);
+  });
+
+  it('detectSummarizerProvider still falls back (never throws) when the probe throws', async () => {
+    globalSelf.Summarizer = {
+      availability: vi.fn(async () => {
+        throw new TypeError('bad option');
+      }),
+      create: vi.fn(),
+    };
+    await expect(detectSummarizerProvider()).resolves.toBe('transformers');
+  });
+
+  it('downloadChromeModel creates a session, reports normalized progress, and destroys it', async () => {
+    const { Summarizer, destroy } = setModernBrowser({
+      summarizer: 'available',
+      progressEvents: [
+        { loaded: 25, total: 100 },
+        { loaded: 100, total: 100 },
+      ],
+    });
+    const seen: number[] = [];
+    const state = await downloadChromeModel('summarize', {}, (p) => seen.push(p));
+
+    expect(Summarizer!.create).toHaveBeenCalledTimes(1);
+    expect(seen).toEqual([0.25, 1]);
+    expect(destroy).toHaveBeenCalledTimes(1);
+    expect(state).toBe('available');
+  });
+
+  it('downloadChromeModel normalizes a bare 0-1 fraction (no total)', async () => {
+    setModernBrowser({ prompt: 'available', progressEvents: [{ loaded: 0.5 }] });
+    const seen: number[] = [];
+    await downloadChromeModel('edit', {}, (p) => seen.push(p));
+    expect(seen).toEqual([0.5]);
+  });
+
+  it('downloadChromeModel forwards the language pair to create()', async () => {
+    const { Translator } = setModernBrowser({ translator: 'available' });
+    await downloadChromeModel('translate', { source: 'en', target: 'fr' });
+    expect(Translator!.create).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceLanguage: 'en', targetLanguage: 'fr' }),
+    );
+  });
+
+  it('downloadChromeModel rejects when Chrome refuses the download', async () => {
+    setModernBrowser({ summarizer: 'downloadable', createRejects: true });
+    await expect(downloadChromeModel('summarize')).rejects.toThrow('download denied');
+  });
+
   it('tier + name helpers map both providers', () => {
     expect(providerTier('chrome-ai')).toBe('built-in');
     expect(providerTier('transformers')).toBe('download');
@@ -191,7 +393,7 @@ describe('useProviderFallback', () => {
     let tr!: Awaited<ReturnType<typeof result.current.resolveTranslator>>;
     await act(async () => {
       sum = await result.current.resolveSummarizer({
-        chromeStyle: 'tl;dr',
+        chromeStyle: 'tldr',
         length: 'short',
         fallbackModelId: 'Xenova/distilbart-cnn-6-6',
       });
@@ -282,6 +484,115 @@ describe('useProviderFallback', () => {
     expect(tf.languageModel).toHaveBeenCalledWith('onnx-community/Qwen2.5-0.5B-Instruct', {
       device: 'wasm',
     });
+  });
+
+  it('requestChromeDownload flips availability and makes the next resolve pick chrome-ai', async () => {
+    // Start on a browser where the Summarizer exists but the model is not fetched.
+    let state: string = 'downloadable';
+    const destroy = vi.fn();
+    globalSelf.Summarizer = {
+      availability: vi.fn(async () => state),
+      create: vi.fn(async (options?: Record<string, unknown>) => {
+        const monitor = options?.monitor as ((m: EventTarget) => void) | undefined;
+        if (monitor) {
+          const target = new EventTarget();
+          monitor(target);
+          const e = new Event('downloadprogress') as Event & { loaded?: number; total?: number };
+          e.loaded = 1;
+          e.total = 1;
+          target.dispatchEvent(e);
+        }
+        state = 'available'; // Chrome has now cached the model
+        return { destroy };
+      }),
+    };
+
+    const chrome = fakeChromeAI();
+    const tf = fakeTransformers();
+    const { result } = renderHook(() =>
+      useProviderFallback({ loadChromeAI: chrome.load, loadTransformers: tf.load }),
+    );
+
+    // Before the download: the block must fall back, not throw at create().
+    await act(async () => {
+      const resolved = await result.current.resolveSummarizer({
+        chromeStyle: 'tldr',
+        length: 'medium',
+        fallbackModelId: 'Xenova/distilbart-cnn-6-6',
+      });
+      expect(resolved.provider).toBe('transformers');
+    });
+    expect(chrome.summarizer).not.toHaveBeenCalled();
+
+    // The user clicks the button.
+    await act(async () => {
+      const after = await result.current.requestChromeDownload('summarize', {
+        chromeStyle: 'tldr',
+        length: 'medium',
+      });
+      expect(after).toBe('available');
+    });
+    expect(result.current.chromeAvailability.summarize).toBe('available');
+    expect(result.current.downloadingCapability).toBeNull();
+    expect(result.current.chromeDownloadProgress).toBeNull();
+    expect(destroy).toHaveBeenCalledTimes(1);
+
+    // After the download: the cache was invalidated, so the SAME params now
+    // re-detect and resolve chrome-ai.
+    await act(async () => {
+      const resolved = await result.current.resolveSummarizer({
+        chromeStyle: 'tldr',
+        length: 'medium',
+        fallbackModelId: 'Xenova/distilbart-cnn-6-6',
+      });
+      expect(resolved.provider).toBe('chrome-ai');
+      expect(resolved.tier).toBe('built-in');
+    });
+    expect(chrome.summarizer).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed requestChromeDownload surfaces `error` and leaves availability truthful', async () => {
+    globalSelf.Summarizer = {
+      availability: vi.fn(async () => 'downloadable'),
+      create: vi.fn(async () => {
+        throw new Error('user denied the download');
+      }),
+    };
+    const chrome = fakeChromeAI();
+    const tf = fakeTransformers();
+    const { result } = renderHook(() =>
+      useProviderFallback({ loadChromeAI: chrome.load, loadTransformers: tf.load }),
+    );
+
+    await act(async () => {
+      const after = await result.current.requestChromeDownload('summarize');
+      expect(after).toBe('downloadable'); // still not downloaded
+    });
+    expect(result.current.error?.message).toContain('user denied the download');
+    expect(result.current.chromeAvailability.summarize).toBe('downloadable');
+    expect(result.current.downloadingCapability).toBeNull();
+  });
+
+  it('refreshChromeAvailability surfaces a bad-option error rather than claiming "unsupported"', async () => {
+    globalSelf.Summarizer = {
+      availability: vi.fn(async () => {
+        throw new TypeError("The provided value 'tl;dr' is not a valid enum value of type SummarizerType.");
+      }),
+      create: vi.fn(),
+    };
+    const chrome = fakeChromeAI();
+    const tf = fakeTransformers();
+    const { result } = renderHook(() =>
+      useProviderFallback({ loadChromeAI: chrome.load, loadTransformers: tf.load }),
+    );
+
+    await act(async () => {
+      const state = await result.current.refreshChromeAvailability('summarize');
+      expect(state).toBe('unavailable');
+    });
+    // The browser DOES support the API — the caller passed a bad option.
+    expect(result.current.chromeAvailability.summarize).not.toBe('unsupported');
+    expect(result.current.error?.message).toMatch(/not a valid enum value/);
   });
 
   it('surfaces a resolution error via `error` and rejects', async () => {

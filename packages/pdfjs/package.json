@@ -1,6 +1,6 @@
 {
   "name": "@localmode/pdfjs",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "PDF text extraction for @localmode using PDF.js",
   "license": "MIT",
   "author": "LocalMode",

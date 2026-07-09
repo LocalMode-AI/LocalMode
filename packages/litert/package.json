@@ -1,6 +1,6 @@
 {
   "name": "@localmode/litert",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "LiteRT-LM provider for @localmode - Google's on-device LLM inference engine with WebGPU/CPU support, runs .litertlm models (Gemma 4, Qwen3)",
   "license": "MIT",
   "author": "LocalMode",

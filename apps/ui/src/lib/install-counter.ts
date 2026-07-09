@@ -16,6 +16,16 @@
  * all increment it, and installing an aggregate (`ui/all`, `ui/<family>`) fans
  * out into one fetch per member item. Read these numbers the way you read npm
  * download counts.
+ *
+ * Measured against production: one `shadcn add <item>` increments the NAMED item
+ * by 3 (the CLI fetches its JSON during resolve and install) and each transitive
+ * registryDependency by 1. Compare like with like — a named-item count is not
+ * directly comparable to a dependency's.
+ *
+ * VISIBILITY LAG: writes are deferred via `event.waitUntil()`, so a fresh install
+ * typically surfaces in `/api/stats` a few minutes later, not immediately. Writes
+ * are durable, only delayed — do not read a zero right after an install as a
+ * lost count.
  */
 import { Redis } from '@upstash/redis';
 
@@ -39,6 +49,28 @@ export function getRedis(): Redis | null {
     client = creds ? new Redis(creds) : null;
   }
   return client;
+}
+
+let protectedMemo: Set<string> | undefined;
+
+/**
+ * Registry item names (without the `.json` suffix) that require a token.
+ *
+ * Single source of truth for BOTH the proxy's auth gate and the public stats
+ * filter. Keeping one definition is the point: a premium item that the proxy
+ * gates must never have its install volume published by `/api/stats`, and two
+ * independent copies of this list would eventually drift into exactly that leak.
+ */
+export function protectedItems(): Set<string> {
+  if (protectedMemo === undefined) {
+    protectedMemo = new Set(
+      (process.env.REGISTRY_PROTECTED_ITEMS ?? 'ui/__protected-test')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    );
+  }
+  return protectedMemo;
 }
 
 /** Redis key holding one UTC day's per-item install tally (a hash). */
@@ -77,7 +109,11 @@ export function countingEnabled(): boolean {
  * Increment the `(item, day)` and lifetime tallies in a single pipelined
  * round-trip. Returns `null` when counting is disabled.
  *
- * Rejections are swallowed: a metrics outage must never fail a user's install.
+ * Rejections are swallowed — a metrics outage must never fail a user's install —
+ * but they are LOGGED. A silent catch would hide the one failure that matters:
+ * an exhausted Redis quota stops the counter dead while every install keeps
+ * succeeding, so the only symptom is a graph that quietly goes flat. The log line
+ * gives Vercel runtime logs something to alert on.
  */
 export function countInstall(item: string, now?: Date): Promise<unknown> | null {
   const redis = getRedis();
@@ -88,7 +124,59 @@ export function countInstall(item: string, now?: Date): Promise<unknown> | null 
     .hincrby(dayKey(utcDay(now)), item, 1)
     .hincrby(ALL_TIME_KEY, item, 1)
     .exec()
-    .catch(() => {
-      // Intentionally silent — see the contract above.
+    .catch((error: unknown) => {
+      console.error('[install-counter] tally write failed (install unaffected):', error);
     });
+}
+
+/** How long a read result is reused within one instance. */
+const READ_MEMO_MS = 60_000;
+
+let readMemo: { at: number; value: Tallies } | undefined;
+
+export interface Tallies {
+  /** UTC day the `today` tally covers. */
+  date: string;
+  /** Lifetime per-item fetch counts, protected items removed. */
+  allTime: Record<string, number>;
+  /** Today's per-item fetch counts, protected items removed. */
+  today: Record<string, number>;
+}
+
+function withoutProtected(hash: Record<string, number> | null): Record<string, number> {
+  const hidden = protectedItems();
+  return Object.fromEntries(Object.entries(hash ?? {}).filter(([item]) => !hidden.has(item)));
+}
+
+/**
+ * Read the public tallies. Takes no caller-controlled input by design: the
+ * endpoint is unauthenticated, so the work per request must be constant. Costs
+ * exactly two Redis commands in one round-trip, memoized for `READ_MEMO_MS`.
+ *
+ * Returns `null` when no store is bound.
+ */
+export async function readTallies(now: Date = new Date()): Promise<Tallies | null> {
+  const redis = getRedis();
+  if (!redis) return null;
+
+  const date = utcDay(now);
+
+  // Reuse only within the same UTC day, so `today` never reports yesterday.
+  if (readMemo && readMemo.value.date === date && Date.now() - readMemo.at < READ_MEMO_MS) {
+    return readMemo.value;
+  }
+
+  const [allTime, today] = await redis
+    .pipeline()
+    .hgetall<Record<string, number>>(ALL_TIME_KEY)
+    .hgetall<Record<string, number>>(dayKey(date))
+    .exec();
+
+  const value: Tallies = {
+    date,
+    allTime: withoutProtected(allTime),
+    today: withoutProtected(today),
+  };
+  readMemo = { at: Date.now(), value };
+  return value;
 }

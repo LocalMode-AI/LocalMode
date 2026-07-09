@@ -261,42 +261,64 @@ export function isLiveTranscribeSupported(): boolean {
 // ============================================================================
 
 /**
- * Check if Chrome Built-in AI is supported.
+ * The legacy `self.ai.*` namespace, exposed by Chrome 127–137 origin-trial builds.
+ * Current Chrome gives each API its own top-level global and does NOT define
+ * `self.ai` at all, so every detector below reads the modern surface first.
+ */
+function legacyAI(): { summarizer?: unknown; translator?: unknown; languageModel?: unknown } | undefined {
+  if (typeof self === 'undefined') return undefined;
+  return (self as unknown as { ai?: { summarizer?: unknown; translator?: unknown; languageModel?: unknown } }).ai;
+}
+
+/**
+ * Check if any Chrome Built-in AI API is supported.
  *
- * @returns true if Chrome AI APIs are available
+ * @returns true if the Summarizer, Translator, or Prompt API is available
  */
 export function isChromeAISupported(): boolean {
-  return typeof self !== 'undefined' && 'ai' in self;
+  return isSummarizerAPISupported() || isTranslatorAPISupported() || isLanguageModelAPISupported();
 }
 
 /**
  * Check if Chrome AI Summarizer API is supported.
  *
+ * Reads the modern `self.Summarizer` global (Chrome 138+), falling back to the
+ * legacy `self.ai.summarizer` surface.
+ *
  * @returns true if the Summarizer API is available
  */
 export function isSummarizerAPISupported(): boolean {
-  if (!isChromeAISupported()) return false;
-  return 'summarizer' in (self as any).ai;
+  if (typeof self === 'undefined') return false;
+  if ('Summarizer' in self) return true;
+  return Boolean(legacyAI()?.summarizer);
 }
 
 /**
  * Check if Chrome AI Translator API is supported.
  *
+ * Reads the modern `self.Translator` global (Chrome 138+), falling back to the
+ * legacy `self.ai.translator` surface.
+ *
  * @returns true if the Translator API is available
  */
 export function isTranslatorAPISupported(): boolean {
-  if (!isChromeAISupported()) return false;
-  return 'translator' in (self as any).ai;
+  if (typeof self === 'undefined') return false;
+  if ('Translator' in self) return true;
+  return Boolean(legacyAI()?.translator);
 }
 
 /**
  * Check if Chrome AI Language Model (Prompt) API is supported.
  *
- * @returns true if the Language Model API is available
+ * Reads the modern `self.LanguageModel` global (Chrome 148+ for web pages),
+ * falling back to the legacy `self.ai.languageModel` surface.
+ *
+ * @returns true if the Prompt API is available
  */
 export function isLanguageModelAPISupported(): boolean {
-  if (!isChromeAISupported()) return false;
-  return 'languageModel' in (self as any).ai;
+  if (typeof self === 'undefined') return false;
+  if ('LanguageModel' in self) return true;
+  return Boolean(legacyAI()?.languageModel);
 }
 
 // ============================================================================

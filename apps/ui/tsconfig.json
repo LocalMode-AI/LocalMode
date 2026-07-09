@@ -167,6 +167,9 @@
       "@/components/model-comparison-panel": [
         "./registry/localmode/local-first/model-comparison-panel/model-comparison-panel"
       ],
+      "@/components/chrome-ai-download-gate": [
+        "./registry/localmode/local-first/chrome-ai-download-gate/chrome-ai-download-gate"
+      ],
       "@/components/model-downloader": [
         "./registry/localmode/local-first/model-downloader/model-downloader"
       ],

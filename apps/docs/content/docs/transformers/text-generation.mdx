@@ -19,40 +19,49 @@ Run ONNX-format language models directly in the browser using Transformers.js wi
   input on Qwen3.5 and Gemma 4.
 </Callout>
 
-## 4-Tier Fallback
+## 5-Tier Fallback
 
-LocalMode offers four LLM providers, each with different trade-offs:
+LocalMode offers five LLM providers, each with different trade-offs:
 
 | Provider | Format | Best For | Notes |
 |----------|--------|----------|-------|
+| `@localmode/chrome-ai` | none (Chrome-managed) | Shipping no model files | Chrome 148+ desktop only (Prompt API shipped for web pages in 148); Gemini Nano; text-only; gate with `isPromptAPISupported()`; Chrome may download the model once, browser-wide |
 | `@localmode/litert` | `.litertlm` (Google) | Google's officially-supported Gemma 4 pipeline | 3 verified models; text-only; early preview |
 | `@localmode/webllm` | MLC-compiled | Fastest WebGPU inference | 32 curated models (incl. Phi 3.5 Vision); WebGPU required |
 | `@localmode/transformers` | ONNX | Broad model selection, WebGPU + WASM | 16 curated ONNX LLMs (5 vision); auto-fallback to WASM |
 | `@localmode/wllama` | GGUF (llama.cpp) | Universal browser support | 30 curated (25 language + 3 embedding + 2 reranker) + 160K+ GGUF; true streaming, structured output, reasoning, optional WebGPU, tool calling, vision |
 
-Use a try/catch chain for automatic failover:
+Use a try/catch chain for automatic failover. Chrome AI sits above the chain rather than inside it: `chromeAI.languageModel()` constructs lazily and never throws when the Prompt API is absent, so it must be gated with the synchronous `isPromptAPISupported()` check instead of a `catch`.
 
 ```typescript
+import { chromeAI, isPromptAPISupported } from '@localmode/chrome-ai';
 import { litert } from '@localmode/litert';
 import { webllm } from '@localmode/webllm';
 import { transformers } from '@localmode/transformers';
 import { wllama } from '@localmode/wllama';
 
-let model;
-try {
-  // Google's optimized engine for supported devices
-  model = litert.languageModel('qwen3-0.6B');
-} catch {
+function downloadableModel() {
   try {
-    model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+    // Google's optimized engine for supported devices
+    return litert.languageModel('qwen3-0.6B');
   } catch {
     try {
-      model = transformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX');
+      return webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
     } catch {
-      model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+      try {
+        return transformers.languageModel('onnx-community/Qwen3.5-0.8B-ONNX');
+      } catch {
+        return wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+      }
     }
   }
 }
+
+// Tier 0: Chrome supplies Gemini Nano — your app fetches no model files.
+// Tiers 1-4: fall through the app-managed downloadable providers.
+const model = isPromptAPISupported()
+  ? chromeAI.languageModel()
+  : downloadableModel();
 ```
 
 ## Recommended ONNX Models

@@ -10,7 +10,7 @@ faq:
   - question: "Does browser-based text summarization work offline?"
     answer: "Yes. After the initial model download (~284MB for DistilBART), summarization works completely offline. Chrome Built-in AI also works offline with no separate download since the model is bundled with the browser."
   - question: "What browsers support text summarization with LocalMode?"
-    answer: "Transformers.js models work in all modern browsers via WebGPU or WASM backends. Chrome Built-in AI (Gemini Nano) is available in Chrome 138+ with a flag. LocalMode provides a fallback pattern to try Chrome AI first and fall back to DistilBART."
+    answer: "Transformers.js models work in all modern browsers via WebGPU or WASM backends. Chrome Built-in AI's Summarizer API is stable in Chrome 138+ on desktop, with no flag required; Chrome downloads the on-device model once, browser-wide, on first use. LocalMode provides a fallback pattern to try Chrome AI first and fall back to DistilBART."
   - question: "How does local summarization compare to cloud LLM summarization?"
     answer: "Cloud summarization uses general-purpose LLMs at $2-10 per million tokens. Dedicated models like DistilBART are faster for this specific task and run at $0 cost. Chrome AI summarization is also free and instant in supported browsers."
 ---
@@ -104,7 +104,7 @@ The break-even point for most applications is low: if you process more than a fe
 ## Available Providers
 
 - **Transformers.js** - ONNX-optimized models via ONNX Runtime Web. Supports both WebGPU and WASM backends. Broadest model catalog for non-LLM tasks.
-- **Chrome Built-in AI** - Chrome Built-in AI (Gemini Nano). Zero model download. Available in Chrome 138+ with flag.
+- **Chrome Built-in AI** - Chrome Built-in AI (Gemini Nano). Your app ships no model files; Chrome fetches the model once, browser-wide. Available in Chrome 138+ on desktop, no flag.
 
 ## AbortSignal Support
 

@@ -13,7 +13,7 @@
 /** Options for creating a Chrome AI summarizer session */
 export interface AISummarizerCreateOptions {
   /** Summary type */
-  type?: 'key-points' | 'tl;dr' | 'teaser' | 'headline';
+  type?: 'key-points' | 'tldr' | 'teaser' | 'headline';
   /** Output format */
   format?: 'markdown' | 'plain-text';
   /** Summary length */
@@ -22,6 +22,8 @@ export interface AISummarizerCreateOptions {
   sharedContext?: string;
   /** AbortSignal for cancellation */
   signal?: AbortSignal;
+  /** Download-progress monitor, called with an EventTarget emitting `downloadprogress` */
+  monitor?: (m: EventTarget) => void;
 }
 
 /** Options for summarize/summarizeStreaming calls */
@@ -48,12 +50,17 @@ export interface AISummarizerCapabilities {
   available: 'readily' | 'after-download' | 'no';
 }
 
-/** Chrome AI Summarizer factory */
+/** Chrome AI Summarizer factory (`self.Summarizer`, or legacy `self.ai.summarizer`) */
 export interface AISummarizerFactory {
   /** Create a summarizer session */
   create(options?: AISummarizerCreateOptions): Promise<AISummarizer>;
-  /** Check capabilities */
-  capabilities(): Promise<AISummarizerCapabilities>;
+  /**
+   * Current on-device model state. Present on the modern `self.Summarizer` global;
+   * absent on the legacy `self.ai.summarizer` surface.
+   */
+  availability?(options?: AISummarizerCreateOptions): Promise<ChromeAIAvailability>;
+  /** Check capabilities (legacy surface) */
+  capabilities?(): Promise<AISummarizerCapabilities>;
 }
 
 /** Options for creating a Chrome AI translator session */
@@ -64,6 +71,8 @@ export interface AITranslatorCreateOptions {
   targetLanguage: string;
   /** AbortSignal for cancellation */
   signal?: AbortSignal;
+  /** Download-progress monitor, called with an EventTarget emitting `downloadprogress` */
+  monitor?: (m: EventTarget) => void;
 }
 
 /** Chrome AI Translator session */
@@ -82,20 +91,39 @@ export interface AITranslatorCapabilities {
   languagePairAvailable(sourceLanguage: string, targetLanguage: string): 'readily' | 'after-download' | 'no';
 }
 
-/** Chrome AI Translator factory */
+/** Chrome AI Translator factory (`self.Translator`, or legacy `self.ai.translator`) */
 export interface AITranslatorFactory {
   /** Create a translator session */
   create(options: AITranslatorCreateOptions): Promise<AITranslator>;
-  /** Check capabilities */
-  capabilities(): Promise<AITranslatorCapabilities>;
+  /**
+   * Current on-device state for a language pair. Present on the modern `self.Translator`
+   * global; absent on the legacy `self.ai.translator` surface.
+   */
+  availability?(options: {
+    sourceLanguage: string;
+    targetLanguage: string;
+  }): Promise<ChromeAIAvailability>;
+  /** Check capabilities (legacy surface) */
+  capabilities?(): Promise<AITranslatorCapabilities>;
 }
 
-/** Availability status reported by Chrome's Prompt API `LanguageModel.availability()` */
-export type AILanguageModelAvailability =
+/**
+ * Availability status reported by every Chrome Built-in AI factory's `availability()`.
+ *
+ * - `available` — the on-device model is present; inference can start immediately.
+ * - `downloadable` — the API exists but Chrome has not fetched the model yet. A
+ *   `create()` call from a user activation will start the download.
+ * - `downloading` — a fetch is already in flight.
+ * - `unavailable` — this device or build cannot run the model at all.
+ */
+export type ChromeAIAvailability =
   | 'available'
   | 'downloadable'
   | 'downloading'
   | 'unavailable';
+
+/** Availability status reported by Chrome's Prompt API `LanguageModel.availability()` */
+export type AILanguageModelAvailability = ChromeAIAvailability;
 
 /** Options accepted by Chrome's `LanguageModel.create()` factory */
 export interface AILanguageModelCreateOptions {
@@ -154,7 +182,7 @@ declare global {
     ai?: ChromeAINamespace;
   }
   interface Window {
-    /** Chrome 138+ Prompt API (top-level surface) */
+    /** Chrome 148+ Prompt API for web pages (top-level surface) */
     LanguageModel?: AILanguageModelFactory;
   }
 }
@@ -170,14 +198,22 @@ export interface ChromeAIProviderSettings {
 
 /** Settings for creating a Chrome AI summarizer */
 export interface ChromeAISummarizerSettings {
-  /** Summary type (default: 'tl;dr') */
-  type?: 'key-points' | 'tl;dr' | 'teaser' | 'headline';
+  /** Summary type (default: 'tldr') */
+  type?: 'key-points' | 'tldr' | 'teaser' | 'headline';
   /** Output format (default: 'plain-text') */
   format?: 'markdown' | 'plain-text';
   /** Summary length (default: 'medium') */
   length?: 'short' | 'medium' | 'long';
   /** Shared context for all summarizations */
   sharedContext?: string;
+  /**
+   * Opt in to letting Chrome download the on-device model when `availability()`
+   * reports `downloadable`. Without this the model throws rather than starting a
+   * large download the user never asked for. Chrome requires a user activation.
+   */
+  allowDownload?: boolean;
+  /** Callback for model download progress (forwarded via `monitor`) */
+  onProgress?: (progress: { loaded: number; total: number }) => void;
 }
 
 /** Settings for creating a Chrome AI translator */
@@ -186,6 +222,13 @@ export interface ChromeAITranslatorSettings {
   sourceLanguage?: string;
   /** Default target language (BCP 47 tag) */
   targetLanguage?: string;
+  /**
+   * Opt in to letting Chrome download the language pack when `availability()`
+   * reports `downloadable`. Chrome requires a user activation.
+   */
+  allowDownload?: boolean;
+  /** Callback for language-pack download progress (forwarded via `monitor`) */
+  onProgress?: (progress: { loaded: number; total: number }) => void;
 }
 
 /** Settings for creating a Chrome AI language model (Prompt API / Gemini Nano) */
@@ -200,6 +243,12 @@ export interface ChromeAILanguageModelSettings {
   contextLength?: number;
   /** Callback for Gemini Nano download progress (forwarded via `monitor`) */
   onProgress?: (progress: { loaded: number; total: number }) => void;
+  /**
+   * Opt in to letting Chrome download Gemini Nano when `availability()` reports
+   * `downloadable`. Also settable per call via
+   * `providerOptions: { chromeAI: { allowDownload: true } }`.
+   */
+  allowDownload?: boolean;
 }
 
 /** Chrome AI provider interface */

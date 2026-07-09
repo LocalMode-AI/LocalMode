@@ -1,6 +1,6 @@
 {
   "name": "@localmode/transformers",
-  "version": "4.1.0",
+  "version": "4.1.1",
   "description": "Transformers.js provider for @localmode - implements all ML model interfaces",
   "license": "MIT",
   "author": "LocalMode",

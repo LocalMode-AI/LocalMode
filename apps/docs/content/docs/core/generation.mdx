@@ -8,7 +8,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 import { Card, Cards } from 'fumadocs-ui/components/card';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
-Generate text using local language models with streaming support. All four LLM providers use the same `streamText()` and `generateText()` functions from `@localmode/core`.
+Generate text using local language models with streaming support. All five LLM providers use the same `streamText()` and `generateText()` functions from `@localmode/core`.
 
 <Callout type="info" title="See it in action">
   Try the [Chat block](https://localmode.ai/blocks/chat) and [Agent & Structured Data block](https://localmode.ai/blocks/agents) for working demos of these APIs.
@@ -20,9 +20,9 @@ Need structured JSON output instead of free text? See the [Structured Output](/d
 
 ## Providers
 
-LocalMode ships four LLM providers. All implement the same `LanguageModel` interface, so you can swap them without changing application code.
+LocalMode ships five LLM providers. All implement the same `LanguageModel` interface, so you can swap them without changing application code.
 
-<Tabs items={['WebLLM (WebGPU)', 'wllama (WASM)', 'Transformers (ONNX)', 'LiteRT (Google)']}>
+<Tabs items={['WebLLM (WebGPU)', 'wllama (WASM)', 'Transformers (ONNX)', 'LiteRT (Google)', 'Chrome AI (built-in)']}>
   <Tab value="WebLLM (WebGPU)">
   ```typescript
   import { streamText } from '@localmode/core';
@@ -63,22 +63,32 @@ LocalMode ships four LLM providers. All implement the same `LanguageModel` inter
   ```
   Google's LiteRT-LM engine via `@litert-lm/core` — first-party browser bindings for the inference engine Google uses across its own on-device AI products (Chrome's built-in AI, Chromebook Plus, Pixel Watch Smart Replies). Runs `.litertlm` models on a WebGPU backend with CPU WASM fallback for portable models. 3 verified models (`gemma-4-E2B`, `gemma-4-E4B`, `qwen3-0.6B`). Text-only.
   </Tab>
+  <Tab value="Chrome AI (built-in)">
+  ```typescript
+  import { streamText } from '@localmode/core';
+  import { chromeAI } from '@localmode/chrome-ai';
+
+  const model = chromeAI.languageModel();
+  const result = await streamText({ model, prompt: 'Hello!' });
+  ```
+  Chrome's built-in Gemini Nano via the Prompt API — **your app ships and fetches no model files**. Chrome supplies the model, downloading it once browser-wide on first use (opt in with `providerOptions: { chromeAI: { allowDownload: true } }`, or the call fails with `chrome-ai-download-required`). Requires Chrome 148+ on desktop, where the Prompt API shipped for web pages (Chrome 138 shipped it for extensions only); gate on `isPromptAPISupported()` before constructing the model. Text-only (image input is rejected with `chrome-ai-multimodal-not-supported`).
+  </Tab>
 </Tabs>
 
 ### Provider Comparison
 
-| | WebLLM | wllama | Transformers | LiteRT |
-|---|---|---|---|---|
-| **Runtime** | MLC WebGPU | llama.cpp WASM + optional WebGPU | Transformers.js v4 ONNX | LiteRT-LM (Google) |
-| **GPU Required** | Yes (WebGPU) | No (optional WebGPU acceleration) | No (auto-fallback to WASM) | WebGPU for Gemma 4; Qwen3 0.6B runs on CPU WASM too |
-| **Browser Support** | Chrome/Edge 113+, Safari 26+, Firefox 141+ | All modern browsers | Chrome/Edge 113+, Safari 26+ (WASM everywhere) | WebGPU-capable browsers (Chrome/Edge 113+, Safari 26+, Firefox 141+) |
-| **Model Catalog** | 32 curated MLC models | 30 curated (25 language + 3 embedding + 2 reranker) + 160K+ GGUF | 16 curated ONNX models | 3 verified models |
-| **Model Format** | MLC (pre-compiled) | GGUF (standard) | ONNX | `.litertlm` (Google) |
-| **Embeddings** | -- | 3 GGUF embedding models | Yes (many models) | -- |
-| **Tool Calling** | Yes | Yes (via providerOptions) | -- | -- |
-| **Multimodal** | Phi 3.5 Vision | Holo2 4B/8B, Gemma 4 E2B/E4B (vision via mmprojUrl) | 5 vision variants (Qwen3.5 + Gemma 4) | Text-only |
-| **Best For** | Maximum speed on GPU-capable devices | Universal compatibility, embeddings, huge model selection | Broad ONNX ecosystem, WebGPU + WASM flexibility | Google's officially-supported on-device pipeline (Gemma 4) |
-| **Status** | Stable | Stable | Stable | Early preview (`@litert-lm/core@^0.12.1`) |
+| | WebLLM | wllama | Transformers | LiteRT | Chrome AI |
+|---|---|---|---|---|---|
+| **Runtime** | MLC WebGPU | llama.cpp WASM + optional WebGPU | Transformers.js v4 ONNX | LiteRT-LM (Google) | Chrome built-in (Gemini Nano) |
+| **GPU Required** | Yes (WebGPU) | No (optional WebGPU acceleration) | No (auto-fallback to WASM) | WebGPU for Gemma 4; Qwen3 0.6B runs on CPU WASM too | No (managed by Chrome) |
+| **Browser Support** | Chrome/Edge 113+, Safari 26+, Firefox 141+ | All modern browsers | Chrome/Edge 113+, Safari 26+ (WASM everywhere) | WebGPU-capable browsers (Chrome/Edge 113+, Safari 26+, Firefox 141+) | Chrome 148+ desktop only |
+| **Model Catalog** | 32 curated MLC models | 30 curated (25 language + 3 embedding + 2 reranker) + 160K+ GGUF | 16 curated ONNX models | 3 verified models | 1 built-in (Gemini Nano) |
+| **Model Format** | MLC (pre-compiled) | GGUF (standard) | ONNX | `.litertlm` (Google) | n/a (Chrome-managed) |
+| **Embeddings** | -- | 3 GGUF embedding models | Yes (many models) | -- | -- |
+| **Tool Calling** | Yes | Yes (via providerOptions) | -- | -- | -- |
+| **Multimodal** | Phi 3.5 Vision | Holo2 4B/8B, Gemma 4 E2B/E4B (vision via mmprojUrl) | 5 vision variants (Qwen3.5 + Gemma 4) | Text-only | Text-only |
+| **Best For** | Maximum speed on GPU-capable devices | Universal compatibility, embeddings, huge model selection | Broad ONNX ecosystem, WebGPU + WASM flexibility | Google's officially-supported on-device pipeline (Gemma 4) | Shipping no model files, where Chrome already provides one |
+| **Status** | Stable | Stable | Stable | Early preview (`@litert-lm/core@^0.12.1`) | Stable (availability gated by Chrome) |
 
 ### Automatic Fallback
 
@@ -104,8 +114,20 @@ try {
 }
 ```
 
+To prefer Chrome's built-in Gemini Nano when it exists — so your app never ships or fetches model files — check for it *before* the chain. `chromeAI.languageModel()` constructs lazily and does **not** throw when the Prompt API is missing, so guard it with `isPromptAPISupported()` rather than a `try`/`catch`:
+
+```typescript
+import { chromeAI, isPromptAPISupported } from '@localmode/chrome-ai';
+
+// Chrome supplies the model. It may still download Gemini Nano once,
+// browser-wide, on first use — that is Chrome's download, not your app's.
+const model = isPromptAPISupported()
+  ? chromeAI.languageModel()
+  : downloadableFallback(); // the try/catch chain above
+```
+
 <Callout type="info">
-For model catalogs, provider-specific configuration, and detailed setup, see the [WebLLM](/docs/webllm), [wllama](/docs/wllama), [Transformers Text Generation](/docs/transformers/text-generation), and [LiteRT](/docs/litert) guides.
+For model catalogs, provider-specific configuration, and detailed setup, see the [WebLLM](/docs/webllm), [wllama](/docs/wllama), [Transformers Text Generation](/docs/transformers/text-generation), [LiteRT](/docs/litert), and [Chrome AI](/docs/chrome-ai) guides.
 </Callout>
 
 ## streamText()

@@ -7,19 +7,20 @@
 [![UI Components](https://img.shields.io/badge/UI_Components-LocalMode.ai-green)](https://localmode.ai)
 [![Blocks & Apps](https://img.shields.io/badge/Blocks_&_Apps-LocalMode.ai-purple)](https://localmode.ai/blocks)
 
-Zero-download, instant AI inference via Chrome's built-in Gemini Nano model. Part of the [LocalMode](https://localmode.dev) ecosystem.
+On-device AI inference via Chrome's built-in Gemini Nano model. Your application ships and fetches no model files — Chrome supplies the model. Part of the [LocalMode](https://localmode.dev) ecosystem.
 
 ## Features
 
-- Zero model downloads — Gemini Nano ships with Chrome
+- Your app ships no model files — Chrome supplies the model and downloads it once, browser-wide, on first use (opt in with `allowDownload`, track it with `onProgress`)
 - Zero bundle size impact — browser-native APIs
-- Instant inference — no model loading delay
+- No per-call model loading once the on-device model is available
 - Implements `SummarizationModel`, `TranslationModel`, and `LanguageModel` from `@localmode/core`
 - Automatic fallback support — pair with `@localmode/transformers`, `@localmode/webllm`, `@localmode/wllama`, or `@localmode/litert` for non-Chrome browsers
 
 ## Requirements
 
-- **Chrome 138+** on desktop (Windows 10+, macOS 13+, Linux, or ChromeOS on Chromebook Plus)
+- **Summarizer & Translator APIs: Chrome 138+** on desktop (Windows 10+, macOS 13+, Linux, or ChromeOS on Chromebook Plus)
+- **Prompt API (`languageModel()`): Chrome 148+** on desktop — Chrome 138 shipped the Prompt API for *extensions* only; it reached web pages in 148
 - **22 GB free disk space** on the volume containing your Chrome profile (for the Gemini Nano model)
 - **Hardware**: GPU with >4 GB VRAM, or CPU with 16 GB+ RAM and 4+ cores
 - Not available on mobile (Android/iOS) or in Incognito mode
@@ -27,13 +28,22 @@ Zero-download, instant AI inference via Chrome's built-in Gemini Nano model. Par
 
 ### Enabling Chrome AI
 
-1. Navigate to `chrome://flags/#optimization-guide-on-device-model` → set to **Enabled**
-2. Navigate to `chrome://flags/#prompt-api-for-gemini-nano` → set to **Enabled**
-3. Restart Chrome
-4. The Gemini Nano model downloads automatically in the background (~1.5 GB)
-5. Verify in DevTools Console: `await Summarizer.availability()` should return `"readily"`
+On a supported Chrome stable build, **no flags are required** — these APIs ship on by default. What
+you need is for Chrome to have fetched the on-device model, which happens once, browser-wide.
 
-For the Summarizer API specifically, also enable `chrome://flags/#summarization-api-for-gemini-nano` → **Enabled with Adaptation** for higher-quality summaries via LoRA.
+Verify in the DevTools console:
+
+```ts
+'Summarizer' in self;      // Summarizer  — Chrome 138+
+'LanguageModel' in self;   // Prompt API  — Chrome 148+
+
+// 'available' | 'downloadable' | 'downloading' | 'unavailable'
+await Summarizer.availability();
+```
+
+If it reports `'downloadable'`, the model is not on disk yet. This package refuses to start that
+download implicitly; pass `allowDownload: true` and call from a **user activation** (a click), which
+Chrome requires to begin the ~1.5 GB fetch.
 
 ## Installation
 
@@ -90,10 +100,12 @@ Creates a `SummarizationModel` using Chrome's Summarizer API.
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `type` | `'key-points' \| 'tl;dr' \| 'teaser' \| 'headline'` | `'tl;dr'` | Summary type |
+| `type` | `'key-points' \| 'tldr' \| 'teaser' \| 'headline'` | `'tldr'` | Summary type. Chrome's enum spells it `tldr`; `'tl;dr'` throws a `TypeError`. |
 | `format` | `'markdown' \| 'plain-text'` | `'plain-text'` | Output format |
 | `length` | `'short' \| 'medium' \| 'long'` | `'medium'` | Summary length |
 | `sharedContext` | `string` | — | Context shared across calls |
+| `allowDownload` | `boolean` | `false` | Let Chrome download the model when `availability()` is `downloadable`. Requires a user activation. |
+| `onProgress` | `(p: { loaded: number; total: number }) => void` | — | Model download progress |
 
 ### `chromeAI.translator(settings?)`
 
@@ -103,6 +115,8 @@ Creates a `TranslationModel` using Chrome's Translator API.
 |---------|------|---------|-------------|
 | `sourceLanguage` | `string` | `'en'` | Source language (BCP 47) |
 | `targetLanguage` | `string` | `'es'` | Target language (BCP 47) |
+| `allowDownload` | `boolean` | `false` | Let Chrome download the language pack for this directed pair. Requires a user activation. |
+| `onProgress` | `(p: { loaded: number; total: number }) => void` | — | Language-pack download progress |
 
 ### `chromeAI.languageModel(settings?)`
 
@@ -115,6 +129,7 @@ Creates a `LanguageModel` using Chrome's Prompt API (Gemini Nano). Supports `gen
 | `topK` | `number` | Chrome default | Top-K sampling cutoff |
 | `contextLength` | `number` | `6144` | Soft documentation value for `model.contextLength` |
 | `onProgress` | `(p: { loaded: number; total: number }) => void` | — | Forwarded to `monitor` for Gemini Nano download progress |
+| `allowDownload` | `boolean` | `false` | Let Chrome download Gemini Nano. Also settable per call via `providerOptions.chromeAI.allowDownload`. Requires a user activation. |
 
 ```typescript
 import { generateText } from '@localmode/core';
@@ -182,7 +197,8 @@ The package exports TypeScript types for Chrome's built-in AI APIs:
 | `ChromeAISummarizerSettings` | Settings for `summarizer()` (type, format, length) |
 | `ChromeAITranslatorSettings` | Settings for `translator()` (sourceLanguage, targetLanguage) |
 | `AILanguageModel` | Chrome Prompt API session interface |
-| `AILanguageModelAvailability` | Availability status: `'available' \| 'downloadable' \| 'downloading' \| 'unavailable'` |
+| `ChromeAIAvailability` | On-device model state reported by every factory's `availability()`: `'available' \| 'downloadable' \| 'downloading' \| 'unavailable'` |
+| `AILanguageModelAvailability` | Alias of `ChromeAIAvailability`, kept for backward compatibility |
 | `AILanguageModelCreateOptions` | Options for `LanguageModel.create()` |
 | `AILanguageModelFactory` | Chrome Prompt API factory (`window.LanguageModel`) |
 | `AILanguageModelPromptOptions` | Per-call options for `prompt()` / `promptStreaming()` |
@@ -217,7 +233,7 @@ const model = new ChromeAILanguageModel({
 
 ## Acknowledgments
 
-This package is built on [Chrome Built-in AI](https://developer.chrome.com/docs/ai/built-in) by [Google](https://google.com/) — on-device AI APIs powered by Gemini Nano, enabling zero-download inference directly in Chrome.
+This package is built on [Chrome Built-in AI](https://developer.chrome.com/docs/ai/built-in) by [Google](https://google.com/) — on-device AI APIs powered by Gemini Nano, enabling inference directly in Chrome with no model files shipped by your app.
 
 ## License
 

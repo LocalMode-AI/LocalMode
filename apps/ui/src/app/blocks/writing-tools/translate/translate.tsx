@@ -16,6 +16,7 @@ import type { TranslationModel } from '@localmode/core';
 
 import { LanguagePairSelector } from '@/components/language-pair-selector';
 import { ProviderBadge } from '@/components/provider-badge';
+import { ChromeAIDownloadGate } from '@/components/chrome-ai-download-gate';
 import { CopyButton } from '@/components/copy-button';
 import { ErrorAlert } from '@/components/error-alert';
 import { cn } from '@/lib/utils';
@@ -80,7 +81,15 @@ export function TranslateBlock() {
   const [resolved, setResolved] = useState<ResolvedModel<TranslationModel> | null>(null);
   // Inject bundler-visible provider loaders (the hook's default Function()-hidden
   // import cannot be resolved as a bare specifier in the browser).
-  const { resolveTranslator } = useProviderFallback({
+  const {
+    resolveTranslator,
+    chromeAvailability,
+    refreshChromeAvailability,
+    requestChromeDownload,
+    chromeDownloadProgress,
+    downloadingCapability,
+    error: providerError,
+  } = useProviderFallback({
     loadChromeAI: () => import('@localmode/chrome-ai'),
     loadTransformers: () => import('@localmode/transformers'),
   });
@@ -89,7 +98,16 @@ export function TranslateBlock() {
     model: resolved?.model as TranslationModel,
   });
 
+  // Chrome downloads a language pack per directed pair, so availability is
+  // re-probed whenever the pair changes. Reading availability() downloads nothing.
+  const translateAvailability = chromeAvailability.translate ?? 'unsupported';
+  useEffect(() => {
+    void refreshChromeAvailability('translate', { source, target });
+  }, [source, target, refreshChromeAvailability]);
+
   // Resolve the translator for the current directed pair (no download until run).
+  // Re-runs when Chrome's availability flips so a completed language-pack
+  // download promotes this block from Opus-MT to Chrome AI.
   useEffect(() => {
     let alive = true;
     setResolved(null);
@@ -103,7 +121,7 @@ export function TranslateBlock() {
     return () => {
       alive = false;
     };
-  }, [source, target, resolveTranslator]);
+  }, [source, target, resolveTranslator, translateAvailability]);
 
   const output = data?.translation ?? '';
   const ready = !!resolved;
@@ -153,6 +171,19 @@ export function TranslateBlock() {
       <p className="text-xs text-muted-foreground">
         Translate - 24 offline Opus-MT pairs. Models load only behind an explicit action.
       </p>
+
+      <ChromeAIDownloadGate
+        availability={translateAvailability}
+        label={`Chrome Translator (${source}\u2192${target})`}
+        size="one language pack"
+        isDownloading={downloadingCapability === 'translate'}
+        progress={chromeDownloadProgress?.progress}
+        error={providerError?.message ?? null}
+        fallbackLabel="Transformers.js (Opus-MT)"
+        onDownload={() => {
+          void requestChromeDownload('translate', { source, target });
+        }}
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span data-provider={resolved?.provider ?? 'resolving'}>

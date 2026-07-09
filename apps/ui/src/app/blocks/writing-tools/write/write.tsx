@@ -20,6 +20,7 @@ import { PromptEnhanceButton } from '@/components/prompt-enhance-button';
 import { CodeDiffViewer } from '@/components/code-diff-viewer';
 import { CapabilityGate } from '@/components/capability-gate';
 import { ProviderBadge } from '@/components/provider-badge';
+import { ChromeAIDownloadGate } from '@/components/chrome-ai-download-gate';
 import { ErrorAlert } from '@/components/error-alert';
 import { cn } from '@/lib/utils';
 
@@ -70,7 +71,15 @@ export function WriteBlock() {
   // Inject bundler-visible provider loaders: the hook's default loader hides the
   // import behind a Function() (for published-package safety) which the browser
   // cannot resolve as a bare specifier — the app supplies static imports instead.
-  const { resolveEditEngine } = useProviderFallback({
+  const {
+    resolveEditEngine,
+    chromeAvailability,
+    refreshChromeAvailability,
+    requestChromeDownload,
+    chromeDownloadProgress,
+    downloadingCapability,
+    error: providerError,
+  } = useProviderFallback({
     loadChromeAI: () => import('@localmode/chrome-ai'),
     loadTransformers: () => import('@localmode/transformers'),
   });
@@ -88,7 +97,15 @@ export function WriteBlock() {
     };
   }, []);
 
+  // Probe the Prompt API's model state. Reading availability() downloads nothing.
+  const editAvailability = chromeAvailability.edit ?? 'unsupported';
+  useEffect(() => {
+    void refreshChromeAvailability('edit');
+  }, [refreshChromeAvailability]);
+
   // Resolve the edit engine once the device is known (no download until run).
+  // Re-runs when Chrome's availability flips so a completed Gemini Nano download
+  // promotes this block from the Transformers.js fallback to Chrome AI.
   useEffect(() => {
     if (!device) return;
     let alive = true;
@@ -98,7 +115,7 @@ export function WriteBlock() {
     return () => {
       alive = false;
     };
-  }, [device, resolveEditEngine]);
+  }, [device, resolveEditEngine, editAvailability]);
 
   const { data, error, isLoading, execute, cancel, reset } = useGenerateText({
     model: resolved?.model as LanguageModel,
@@ -133,6 +150,19 @@ export function WriteBlock() {
       <p className="text-xs text-muted-foreground">
         Write - AI-edit draft editor. Models load only behind an explicit action.
       </p>
+
+      <ChromeAIDownloadGate
+        availability={editAvailability}
+        label="Chrome Prompt API (Gemini Nano)"
+        size="~1.5 GB, shared across every site"
+        isDownloading={downloadingCapability === 'edit'}
+        progress={chromeDownloadProgress?.progress}
+        error={providerError?.message ?? null}
+        fallbackLabel={`Transformers.js (Llama 3.2 1B, ${EDIT_ENGINE_MODEL_SIZE})`}
+        onDownload={() => {
+          void requestChromeDownload('edit');
+        }}
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span data-provider={resolved?.provider ?? 'resolving'}>

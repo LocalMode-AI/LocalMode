@@ -1,6 +1,6 @@
 {
   "name": "@localmode/langchain",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "LangChain.js adapters for @localmode — drop-in local inference for existing LangChain apps",
   "license": "MIT",
   "author": "LocalMode",
