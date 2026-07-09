@@ -57,7 +57,7 @@
     "localforage": "^1.10.0"
   },
   "peerDependencies": {
-    "@localmode/core": ">=2.0.0"
+    "@localmode/core": ">=2.3.0"
   },
   "devDependencies": {
     "@localmode/core": "workspace:*",

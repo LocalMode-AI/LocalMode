@@ -40,7 +40,7 @@
     "@huggingface/gguf": "^0.1.14"
   },
   "peerDependencies": {
-    "@localmode/core": ">=2.0.0"
+    "@localmode/core": ">=2.2.0"
   },
   "devDependencies": {
     "@localmode/core": "workspace:*",

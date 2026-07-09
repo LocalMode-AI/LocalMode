@@ -122,8 +122,9 @@ export default tseslint.config(
   },
 
   {
-    // Root tooling (vitest config, scripts).
-    files: ['*.{js,mjs,cjs,ts}'],
+    // Root tooling: config files at the repo root plus the `scripts/` helpers.
+    // Both run under Node, so `process`/`console` are globals, not undefined.
+    files: ['*.{js,mjs,cjs,ts}', 'scripts/**/*.{js,mjs,cjs,ts}'],
     languageOptions: {
       globals: { ...globals.node },
     },
