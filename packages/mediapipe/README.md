@@ -6,7 +6,8 @@ MediaPipe Tasks provider for [LocalMode](https://localmode.dev) -- run Google's 
 [![license](https://img.shields.io/npm/l/@localmode/mediapipe)](../../LICENSE)
 
 [![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev/docs/mediapipe)
-[![Demo](https://img.shields.io/badge/Demo-LocalMode.ai-purple)](https://localmode.ai)
+[![UI Components](https://img.shields.io/badge/UI_Components-LocalMode.ai-green)](https://localmode.ai)
+[![Blocks & Apps](https://img.shields.io/badge/Blocks_&_Apps-LocalMode.ai-purple)](https://localmode.ai/blocks)
 
 Wraps `@mediapipe/tasks-vision`, `@mediapipe/tasks-audio`, and `@mediapipe/tasks-text` as a single unified LocalMode provider. The privacy-first part is the point: the camera, microphone, and text never leave the browser -- the only network requests are the one-time model and WASM downloads.
 

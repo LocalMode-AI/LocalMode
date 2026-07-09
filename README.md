@@ -7,11 +7,11 @@ Run ML models entirely in your browser. No servers. No API keys. Your data never
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev)
 [![UI Components](https://img.shields.io/badge/UI_Components-LocalMode.ai-green)](https://localmode.ai)
-[![Demo](https://img.shields.io/badge/Demo-Blocks_Gallery-purple)](https://localmode.ai/blocks)
+[![Blocks & Apps](https://img.shields.io/badge/Blocks_&_Apps-LocalMode.ai-purple)](https://localmode.ai/blocks)
 
 - Docs website: https://localmode.dev
 - UI Components: https://localmode.ai
-- Demo blocks apps: https://localmode.ai/blocks
+- Blocks & Apps: https://localmode.ai/blocks
 
 ## What is LocalMode?
 

@@ -4,7 +4,8 @@
 [![license](https://img.shields.io/npm/l/@localmode/devtools)](../../LICENSE)
 
 [![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev/docs/devtools)
-[![Demo](https://img.shields.io/badge/Demo-LocalMode.ai-purple)](https://localmode.ai)
+[![UI Components](https://img.shields.io/badge/UI_Components-LocalMode.ai-green)](https://localmode.ai)
+[![Blocks & Apps](https://img.shields.io/badge/Blocks_&_Apps-LocalMode.ai-purple)](https://localmode.ai/blocks)
 
 DevTools instrumentation and React hooks for debugging and monitoring [LocalMode](https://localmode.dev) applications. See model cache, VectorDB stats, inference queue metrics, pipeline traces, and live event streams — all without any telemetry. Works in any browser.
 

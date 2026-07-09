@@ -6,7 +6,8 @@ LiteRT provider for [LocalMode](https://localmode.dev) -- run Google's `.litertl
 [![license](https://img.shields.io/npm/l/@localmode/litert)](../../LICENSE)
 
 [![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev/docs/litert)
-[![Demo](https://img.shields.io/badge/Demo-LocalMode.ai-purple)](https://localmode.ai)
+[![UI Components](https://img.shields.io/badge/UI_Components-LocalMode.ai-green)](https://localmode.ai)
+[![Blocks & Apps](https://img.shields.io/badge/Blocks_&_Apps-LocalMode.ai-purple)](https://localmode.ai/blocks)
 
 > **Status: early preview.** Wraps Google's [`@litert-lm/core`](https://www.npmjs.com/package/@litert-lm/core) `^0.12.1` -- the first JavaScript release of the LiteRT-LM runtime. The JS API is text-in / text-out. APIs and model availability may change as upstream stabilizes.
 

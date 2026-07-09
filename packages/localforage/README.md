@@ -6,7 +6,8 @@ Cross-browser storage adapter for LocalMode — automatic fallback from IndexedD
 [![license](https://img.shields.io/npm/l/@localmode/localforage)](../../LICENSE)
 
 [![Docs](https://img.shields.io/badge/Docs-LocalMode.dev-red)](https://localmode.dev/docs/localforage)
-[![Demo](https://img.shields.io/badge/Demo-LocalMode.ai-purple)](https://localmode.ai)
+[![UI Components](https://img.shields.io/badge/UI_Components-LocalMode.ai-green)](https://localmode.ai)
+[![Blocks & Apps](https://img.shields.io/badge/Blocks_&_Apps-LocalMode.ai-purple)](https://localmode.ai/blocks)
 
 ## Installation
 
