@@ -1,5 +1,11 @@
 # @localmode/mediapipe
 
+## 2.0.1
+
+### Fixed
+
+- `@localmode/core` peer range corrected from `>=2.0.0` to `>=2.2.0`. The provider implements `FaceDetectionModel`, `HandLandmarkModel`, `PoseLandmarkModel`, `FaceLandmarkModel`, `GestureRecognitionModel`, and `LanguageDetectionModel` — all added in core 2.2.0 — so installing it against core 2.0.x or 2.1.x resolved cleanly but failed to typecheck. No runtime or API change.
+
 ## 2.0.0
 
 ### Major Changes

@@ -1,6 +1,6 @@
 {
   "name": "@localmode/mediapipe",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "MediaPipe Tasks provider for @localmode - hand/pose/face landmarks, gesture recognition, audio classification, language detection, and more via Google's on-device WASM runtime",
   "license": "MIT",
   "author": "LocalMode",
