@@ -158,7 +158,6 @@ export function ImageSearchBlock() {
   const lib: PhotoLibrary = usePhotoLibrary({
     modelId: DEFAULT_MODEL_ID,
     createEmbeddingModel: (id, onProgress) =>
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       transformers.multimodalEmbedding(id, { onProgress: (p) => onProgress(p as any) }),
     createZeroShotClassifier: (id) => transformers.zeroShotImageClassifier(id),
     isModelCached: (id) => isModelCached(id),

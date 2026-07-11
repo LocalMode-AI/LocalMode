@@ -19,7 +19,7 @@
  * promoted hook alone (same scenarios, same assertions).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { act, createElement } from 'react';
+import { act, createElement, useEffect } from 'react';
 
 import { mount } from './_equivalence-dom';
 import { useWebcam } from '../registry/localmode/media-vision/use-webcam/use-webcam';
@@ -50,7 +50,11 @@ function removeMediaDevices() {
 async function mountHook(useHook: (opts?: { width?: number; height?: number }) => WebcamApi, options?: { width?: number; height?: number }) {
   const holder: { api: WebcamApi } = { api: undefined as unknown as WebcamApi };
   function Probe() {
-    holder.api = useHook(options);
+    const api = useHook(options);
+    // Publish after commit — assigning an outer variable during render is not allowed.
+    useEffect(() => {
+      holder.api = api;
+    });
     return null;
   }
   const m = await mount(createElement(Probe));

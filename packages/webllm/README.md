@@ -142,6 +142,27 @@ const result = await streamText({
 });
 ```
 
+## Structured Output (JSON mode)
+
+Forward MLC's OpenAI-compatible `response_format` via `providerOptions.webllm` to force schema-conforming JSON through XGrammar-constrained decoding — far more reliable than prompting a small model for JSON:
+
+```typescript
+import { generateObject, jsonSchema } from '@localmode/core';
+import { webllm } from '@localmode/webllm';
+import { z } from 'zod';
+
+const schema = jsonSchema(z.object({ name: z.string(), age: z.number() }));
+
+const { object } = await generateObject({
+  model: webllm.languageModel('Qwen3-1.7B-q4f16_1-MLC'),
+  schema,
+  prompt: 'Generate a profile for a software engineer named Alex',
+  providerOptions: {
+    webllm: { response_format: { type: 'json_object', schema: JSON.stringify(schema.jsonSchema) } },
+  },
+});
+```
+
 ## Custom Configuration
 
 ```typescript

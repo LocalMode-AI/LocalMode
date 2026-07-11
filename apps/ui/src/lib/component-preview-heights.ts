@@ -99,7 +99,7 @@ export const COMPONENT_PREVIEW_HEIGHTS: Record<string, number> = {
   "ui/audio/voice-button": 104,
   "ui/input-controls/segmented-mode-picker": 104,
   "ui/audio/synced-transcript-viewer": 100,
-  "ui/device-badge": 98,
+  "ui/local-first/device-badge": 98,
   "ui/security-privacy/lock-status-badge": 98,
   "ui/conversation/branch": 86,
   "ui/results/error-alert": 78,

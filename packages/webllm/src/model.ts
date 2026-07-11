@@ -227,6 +227,7 @@ export class WebLLMLanguageModel implements LanguageModel {
       topP = this.settings.topP ?? 0.95,
       stopSequences,
       abortSignal,
+      providerOptions,
     } = options;
 
     abortSignal?.throwIfAborted();
@@ -239,6 +240,13 @@ export class WebLLMLanguageModel implements LanguageModel {
 
     const engineMessages = await this.buildMessages({ prompt, systemPrompt, messages });
 
+    // MLC's OpenAI-compatible `response_format` — `{ type: 'json_object', schema }`
+    // enables XGrammar-constrained decoding that FORCES schema-conforming JSON,
+    // which small models (e.g. Qwen3-1.7B) cannot produce reliably from a prompt
+    // alone. Forwarded verbatim from providerOptions.webllm, mirroring wllama.
+    const responseFormat = (providerOptions?.webllm as Record<string, unknown> | undefined)
+      ?.response_format as Record<string, unknown> | undefined;
+
     // Generate completion
     const response = await engine.chat.completions.create({
       messages: engineMessages as Parameters<typeof engine.chat.completions.create>[0]['messages'],
@@ -246,6 +254,13 @@ export class WebLLMLanguageModel implements LanguageModel {
       temperature,
       top_p: topP,
       stop: stopSequences,
+      ...(responseFormat
+        ? {
+            response_format: responseFormat as Parameters<
+              typeof engine.chat.completions.create
+            >[0]['response_format'],
+          }
+        : {}),
     });
 
     const text = response.choices[0]?.message?.content ?? '';
@@ -292,6 +307,7 @@ export class WebLLMLanguageModel implements LanguageModel {
       topP = this.settings.topP ?? 0.95,
       stopSequences,
       abortSignal,
+      providerOptions,
     } = options;
 
     abortSignal?.throwIfAborted();
@@ -304,6 +320,10 @@ export class WebLLMLanguageModel implements LanguageModel {
 
     const engineMessages = await this.buildMessages({ prompt, systemPrompt, messages });
 
+    // See doGenerate: XGrammar-constrained JSON via providerOptions.webllm.response_format.
+    const responseFormat = (providerOptions?.webllm as Record<string, unknown> | undefined)
+      ?.response_format as Record<string, unknown> | undefined;
+
     // Stream completion
     const stream = await engine.chat.completions.create({
       messages: engineMessages as Parameters<typeof engine.chat.completions.create>[0]['messages'],
@@ -312,6 +332,13 @@ export class WebLLMLanguageModel implements LanguageModel {
       top_p: topP,
       stop: stopSequences,
       stream: true,
+      ...(responseFormat
+        ? {
+            response_format: responseFormat as Parameters<
+              typeof engine.chat.completions.create
+            >[0]['response_format'],
+          }
+        : {}),
     });
 
     let totalOutputTokens = 0;

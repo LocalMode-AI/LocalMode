@@ -23,6 +23,8 @@
  * uncaught page error. Allowlist INTENTIONALLY EMPTY (carried from the retired
  * suite). Screenshots land in e2e-artifacts/screenshots/kb-*.png.
  */
+import { createRequire } from 'node:module';
+import { readFileSync, readdirSync } from 'node:fs';
 import * as path from 'node:path';
 import { expect, test } from '@playwright/test';
 import type { ConsoleMessage, Page, TestInfo, WebError } from '@playwright/test';
@@ -122,11 +124,72 @@ async function expectRawTopScore(page: Page): Promise<number> {
 
 /* ──────────────────────── bundle-isolation helpers ───────────────────── */
 
-const CHUNK_LEAK_SIGNATURES: ReadonlyArray<{ name: string; pattern: RegExp }> = [
-  { name: 'model-host code (transformers/webllm)', pattern: /huggingface\.co/ },
-  { name: 'pdfjs (@localmode/pdfjs → pdfjs-dist)', pattern: /pdfjs-dist/ },
-  { name: 'langchain (@langchain/core)', pattern: /langchain_core/ },
+/**
+ * Signatures must identify the LIBRARY, not a hostname. `huggingface.co` alone is
+ * a false positive: `src/components/network-status.tsx` ships a URL-classification
+ * table containing that literal to label model downloads in the /blocks pill, so a
+ * hostname match flags an app chunk that holds no model code at all. These markers
+ * are internal identifiers of the runtimes themselves.
+ */
+const CHUNK_LEAK_SIGNATURES: ReadonlyArray<{
+  name: string;
+  pattern: RegExp;
+  /** A package whose bundle MUST match `pattern` — guards against signature rot. */
+  witnessPackage: string;
+  /** The `@localmode/*` provider that owns it (pnpm hides transitive deps). */
+  witnessOwner: string;
+}> = [
+  {
+    name: 'transformers.js runtime (@huggingface/transformers)',
+    pattern: /onnxruntime-web|ort-wasm|AutoTokenizer|PreTrainedModel/,
+    witnessPackage: '@huggingface/transformers',
+    witnessOwner: '@localmode/transformers',
+  },
+  {
+    name: 'WebLLM runtime (@mlc-ai/web-llm)',
+    pattern: /MLCEngine|prebuiltAppConfig/,
+    witnessPackage: '@mlc-ai/web-llm',
+    witnessOwner: '@localmode/webllm',
+  },
+  {
+    // `pdfjs-dist` is the package NAME and never appears inside its own bundle;
+    // these are identifiers the bundle actually exports.
+    name: 'pdfjs (@localmode/pdfjs → pdfjs-dist)',
+    pattern: /PDFDocumentProxy|PDFWorker|PasswordException/,
+    witnessPackage: 'pdfjs-dist',
+    witnessOwner: '@localmode/pdfjs',
+  },
+  {
+    name: 'langchain (@langchain/core)',
+    pattern: /langchain_core/,
+    witnessPackage: '@langchain/core',
+    witnessOwner: '@localmode/langchain',
+  },
 ];
+
+/**
+ * Prove each signature can still fire. A pattern that matches nothing would make
+ * the bundle-isolation assertion pass vacuously after any dependency upgrade, so
+ * every signature is checked against the real installed package before it is used.
+ */
+function assertLeakSignaturesStillMatchTheirLibraries(): void {
+  // Playwright transpiles specs to CJS, so `import.meta.url` is unavailable.
+  const fromSpec = createRequire(__filename);
+  for (const { name, pattern, witnessPackage, witnessOwner } of CHUNK_LEAK_SIGNATURES) {
+    // pnpm's strict layout hides transitive deps from apps/ui, so resolve each
+    // witness through the `@localmode/*` provider that declares it.
+    const entry = createRequire(fromSpec.resolve(witnessOwner)).resolve(witnessPackage);
+    const dir = path.dirname(entry);
+    const candidates = readdirSync(dir)
+      .filter((f) => /\.(js|mjs|cjs)$/.test(f))
+      .map((f) => path.join(dir, f));
+    const matched = candidates.some((f) => pattern.test(readFileSync(f, 'utf8')));
+    expect(
+      matched,
+      `leak signature "${name}" no longer matches ${witnessPackage} — it would never fire`,
+    ).toBe(true);
+  }
+}
 
 async function routeHtmlChunkUrls(page: Page, route: string): Promise<string[]> {
   const response = await page.request.get(route);
@@ -566,6 +629,7 @@ test.describe('blocks/knowledge', () => {
 
     // Bundle isolation: the homepage + gallery index must not bundle
     // pdfjs/langchain/model-host code in their OWN chunk graph.
+    assertLeakSignaturesStillMatchTheirLibraries();
     const leaks: string[] = [];
     for (const route of ['/', '/blocks']) {
       await page.goto(route);

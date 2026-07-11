@@ -1,10 +1,10 @@
 {
   "name": "ui",
   "description": "LocalMode UI — shadcn registry + Fumadocs docs site for @localmode/ui Elements",
-  "version": "0.0.1",
+  "version": "0.0.0",
   "private": true,
   "scripts": {
-    "registry:build": "pnpm run block-source:generate && tsx scripts/prep-registry-dirs.ts && shadcn build && tsx scripts/strip-registry-blocks.ts && tsx scripts/build-aggregates.ts && tsx scripts/absolutize-registry-deps.ts && tsx scripts/check-no-shipped-telemetry.ts",
+    "registry:build": "pnpm run block-source:generate && tsx scripts/prep-registry-dirs.ts && shadcn build && tsx scripts/add-default-export.ts && tsx scripts/strip-registry-blocks.ts && tsx scripts/build-aggregates.ts && tsx scripts/absolutize-registry-deps.ts && tsx scripts/check-no-shipped-telemetry.ts",
     "prebuild": "pnpm run registry:build",
     "predev": "pnpm run registry:build",
     "build": "next build && node scripts/build-sw.mjs",

@@ -3,17 +3,24 @@
  * @description "Open in v0" handoff button — cherry-picked from registry-starter,
  * restyled to match the Fumadocs/shadcn theme. Links to v0 with the item's
  * `/r/<name>.json` registry endpoint so the component can be remixed in v0.
+ * Renders only for components whose v0 preview actually works (see
+ * {@link isV0Eligible}) — v0 mounts the component propless and cannot resolve
+ * shadcn-primitive deps, so the button is hidden where it would land on a broken
+ * preview.
  */
 import { registryItemUrl, openInV0Url } from '@/lib/registry';
+import { isV0Eligible } from '@/lib/v0-eligibility';
 
 /** Props for {@link OpenInV0}. */
 interface OpenInV0Props {
-  /** Registry item name (under the ui/ scheme), e.g. `ui/device-badge`. */
+  /** Registry item name (under the ui/ scheme), e.g. `ui/local-first/device-badge`. */
   name: string;
 }
 
-/** A button that opens the given registry item in v0. */
+/** A button that opens the given registry item in v0, when its preview works. */
 export function OpenInV0({ name }: OpenInV0Props) {
+  if (!isV0Eligible(name)) return null;
+
   return (
     <a
       href={openInV0Url(name)}

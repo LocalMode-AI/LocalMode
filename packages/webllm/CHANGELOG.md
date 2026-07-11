@@ -1,5 +1,11 @@
 # @localmode/webllm
 
+## 2.2.0
+
+### Minor Changes
+
+- **Schema-constrained JSON via `providerOptions.webllm.response_format`.** `doGenerate`/`doStream` forward MLC's OpenAI-compatible `response_format` (`{ type: 'json_object', schema }`) to enable XGrammar-constrained decoding that forces schema-conforming JSON — which small models can't produce reliably from a prompt alone. Mirrors the wllama provider.
+
 ## 2.1.1
 
 ### Patch Changes

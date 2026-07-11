@@ -55,9 +55,11 @@ function DetectionSection() {
   // execute/reset identities may change per render — route the debounce
   // through refs so the effect depends on `text` only.
   const executeRef = useRef(detect.execute);
-  executeRef.current = detect.execute;
   const resetRef = useRef(detect.reset);
-  resetRef.current = detect.reset;
+  useEffect(() => {
+    executeRef.current = detect.execute;
+    resetRef.current = detect.reset;
+  });
 
   // 400ms-debounced auto-detect once the text reaches 10 characters.
   useEffect(() => {

@@ -1,5 +1,12 @@
 # @localmode/core
 
+## 2.4.2
+
+### Patch Changes
+
+- **`jsonSchema()` / `generateObject` now accept Zod 4 schemas.** The duck-typed Zod reader in `generation/schema.ts` only understood Zod 3's `_def` layout, so every Zod 4 scalar collapsed to `{ type: 'object' }`. It now normalizes both layouts (Zod 3 `_def.typeName` ⇄ Zod 4 `_def.type`, and the moved array/enum/literal fields `element`/`entries`), plus `bigint`.
+- **`buildStructuredPrompt()` produces a filled example.** The structured-output prompt now includes a concrete example instance and, in object mode, an explicit "exactly these top-level keys" line, so a small model returns data instead of echoing the schema back.
+
 ## 2.4.0
 
 ### Minor Changes

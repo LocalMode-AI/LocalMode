@@ -263,6 +263,13 @@ async function completeChatTurn(page: Page, text: string, turn: number): Promise
   return reply;
 }
 
+// NOTE: the trace runs WITHOUT the screencast + DOM snapshotter (action log
+// only), set GLOBALLY in playwright.config.ts. This lane is the worst case —
+// it loads a WebGPU model while the observability drawer re-renders live
+// activity — so the snapshotter flood would otherwise starve the load (a 420MB
+// trace / 2276 frames was captured while granite, which loads in ~38s
+// unmonitored, hung for 8min). See the config comment.
+
 test.describe('blocks/devtools-drawer', () => {
   // The drawer is a fixed right-side overlay (max-w-md = 448px). At the
   // Playwright default 1280×720 its left edge (x=832) covers the chat block's

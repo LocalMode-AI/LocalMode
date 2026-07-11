@@ -73,7 +73,15 @@ const enhancers = new Map<string, ReturnType<typeof transformers.imageToImage>>(
 function getEnhanceModel(modelId: string) {
   let model = enhancers.get(modelId);
   if (!model) {
-    model = transformers.imageToImage(modelId);
+    // Pin the Swin2SR super-resolution models to WASM. These are small ONNX
+    // ports and WASM runs them in ~1s (its load is actually faster than WebGPU,
+    // which spends ~16s compiling shaders for no inference win at this size).
+    // More importantly, the block keeps three separate SR pipelines alive
+    // (2x / 4x / restore) and switching between them loads a second WebGPU
+    // (ONNX-Runtime JSEP) session on the same page — the JSEP session lifecycle
+    // wedges there, so the second enhancement never completes. WASM has no such
+    // per-session GPU state, so every mode runs reliably.
+    model = transformers.imageToImage(modelId, { device: 'wasm' });
     enhancers.set(modelId, model);
   }
   return model;

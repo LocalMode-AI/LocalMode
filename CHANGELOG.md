@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-07-11
+
+Makes on-device structured output actually reliable — small models now emit schema-conforming JSON through grammar-constrained decoding and stronger prompts — and refines the `@localmode/ui` platform at localmode.ai: Device Badge folds into the local-first family, "Open in v0" is supported, the component browser is deep-linkable, and the image blocks are WASM-pinned for stability.
+
+**Released:** `@localmode/core` 2.4.2 · `@localmode/react` 2.4.0 · `@localmode/webllm` 2.2.0.
+
+### Fixed
+
+- **Structured output was broken under Zod 4 and unreliable on small models.** `@localmode/core`'s duck-typed Zod→JSON-Schema reader only understood Zod 3 internals, so every Zod 4 scalar collapsed to `{ type: 'object' }`; it now normalizes both layouts (and adds `bigint`). `buildStructuredPrompt()` now emits a concrete filled example and an explicit top-level-key list, so a model returns data instead of echoing the schema.
+- **Image blocks wedged on WebGPU.** The background-remover (SegFormer) and image-enhancer (Swin2SR) pin `device: 'wasm'` — the ONNX-Runtime WebGPU session lifecycle wedged on cancel-mid-load and on switching super-resolution modes, while these tiny models run in ~1s on WASM. The object-detector pauses its live face-tracking loop during one-shot DETR so the two don't starve the GPU.
+- **Accessibility & hydration** — `before-after-image-viewer` is now a keyboard-navigable ARIA tablist, and `event-log-viewer` moved its `Date.now()` clock into an effect to fix a server/client hydration mismatch.
+
+### Added
+
+- **Schema-constrained JSON generation.** `@localmode/webllm` forwards `providerOptions.webllm.response_format` to MLC for XGrammar-constrained decoding, and `useGenerateObject` (`@localmode/react`) gains a `providerOptions` passthrough — together forcing schema-conforming JSON from small models (wired into the Data Extractor block).
+- **"Open in v0" support** — a new `add-default-export` registry-build step appends `export default <Component>` to shipped component payloads (v0 default-imports the primary component), shown only for an empirical hand-verified allowlist of primitives that render real UI in v0.
+- **Deep-linkable component browser** — `/docs/components` accepts `?filter=<family>` and reflects the active family into the URL; the docs homepage gained a "100+ components" preview and a "36 interactive blocks" section linking the real `/blocks/<category>/<block>` routes.
+
+### Changed
+
+- **Device Badge moved into the local-first family** — `ui/device-badge` → `ui/local-first/device-badge` (source, install command, and docs route `/docs/local-first/device-badge`, with a 308 from the old path). The registry's lone top-level "seed" is gone; every component is now family-scoped.
+- A mounting preview (e.g. a cmdk list) can no longer scroll the component-browser page, and several blocks now render their full surface before the model loads (controls stay disabled until ready).
+
+### Removed
+
+- `ui/local-first/vector-import-flow` no longer depends on `format-detection-badge` — it inlines a minimal fallback and installs independently.
+
 ## [2.4.0] - 2026-07-09
 
 Repairs Chrome Built-in AI, which had been unreachable on every modern Chrome, and adds the user-activation download gate Chrome requires before it will fetch an on-device model.

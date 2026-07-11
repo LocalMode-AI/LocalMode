@@ -11,7 +11,7 @@ import { readDemoSource } from '@/lib/registry-source';
 
 /** Props for {@link ComponentPreview}. */
 interface ComponentPreviewProps {
-  /** Registry item name under the ui/ scheme, e.g. `ui/device-badge`. */
+  /** Registry item name under the ui/ scheme, e.g. `ui/local-first/device-badge`. */
   name: string;
   /**
    * Gate the demo behind a "Run preview" click. Use ONLY for demos that load a

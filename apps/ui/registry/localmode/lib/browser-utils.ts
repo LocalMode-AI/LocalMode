@@ -113,20 +113,17 @@ export function useObjectUrl(blob: Blob | null | undefined): string | null {
   const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!blob) {
-      setUrl(null);
-      return;
-    }
-    if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
-      setUrl(null);
-      return;
-    }
+    const supported = typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function';
+    const objectUrl = blob && supported ? URL.createObjectURL(blob) : null;
 
-    const objectUrl = URL.createObjectURL(blob);
+    // The object URL is an external resource created here rather than during
+    // render, so SSR and the first client render both emit null. Reflecting it
+    // back into React state is the only way to render it.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setUrl(objectUrl);
 
     return () => {
-      URL.revokeObjectURL(objectUrl);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [blob]);
 

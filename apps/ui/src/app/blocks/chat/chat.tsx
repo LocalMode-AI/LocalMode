@@ -972,7 +972,6 @@ export function CustomModelPanel({
     setUrl(initialUrl);
     if (initialMmproj) setMmproj(initialMmproj);
     void runInspect(initialUrl);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- runInspect is stable per render; the ref guard makes this once-only
   }, [open, initialUrl, initialMmproj]);
 
   // Cancel any in-flight inspection on unmount.
@@ -1426,13 +1425,12 @@ function HandoffReceiver({
 function CacheHost({ onBridge }: { onBridge: (bridge: CacheBridgeState | null) => void }) {
   // Created once, client-only (CacheHost never renders during SSR — it mounts
   // behind a user toggle). Shared between the cache and the warmup embed.
-  const embeddingModelRef = useRef<EmbeddingModel | null>(null);
-  if (embeddingModelRef.current === null) {
-    embeddingModelRef.current = transformers.embedding(CACHE_EMBEDDING_MODEL_ID);
-  }
+  const [embeddingModel] = useState<EmbeddingModel>(() =>
+    transformers.embedding(CACHE_EMBEDDING_MODEL_ID),
+  );
 
   const { cache, stats, isLoading, error, refreshStats, clear } = useSemanticCache({
-    embeddingModel: embeddingModelRef.current,
+    embeddingModel,
     threshold: CACHE_THRESHOLD,
     maxEntries: CACHE_MAX_ENTRIES,
     ttlMs: CACHE_TTL_MS,
@@ -1442,8 +1440,6 @@ function CacheHost({ onBridge }: { onBridge: (bridge: CacheBridgeState | null) =
   // (explicit user action) instead of stalling the first store() later.
   const [warming, setWarming] = useState(true);
   useEffect(() => {
-    const embeddingModel = embeddingModelRef.current;
-    if (!embeddingModel) return;
     let alive = true;
     void (async () => {
       try {
@@ -1456,12 +1452,14 @@ function CacheHost({ onBridge }: { onBridge: (bridge: CacheBridgeState | null) =
     return () => {
       alive = false;
     };
-  }, []);
+  }, [embeddingModel]);
 
   // `refreshStats`/`clear` from useSemanticCache are re-created per render —
   // route them through a ref so the published bridge only changes on data.
   const apiRef = useRef({ refreshStats, clear });
-  apiRef.current = { refreshStats, clear };
+  useEffect(() => {
+    apiRef.current = { refreshStats, clear };
+  });
   const stableApiRef = useRef({
     refreshStats: () => apiRef.current.refreshStats(),
     clear: (filter?: { modelId?: string }) => apiRef.current.clear(filter),
@@ -2542,16 +2540,17 @@ function ChatLab({
               {modelStatus === 'loading' ? 'Loading…' : 'Load model'}
             </button>
           )}
-          {modelStatus === 'ready' && (
-            <div role="status" aria-label="Token usage" title={meterLabel} className="hidden sm:block">
-              <Context
-                usage={{ inputTokens: meterInput, outputTokens: meterOutput }}
-                contextWindow={contextWindow}
-              >
-                <ContextTrigger />
-              </Context>
-            </div>
-          )}
+          {/* Always rendered: the meter shows the chars/4 estimate before the
+              first reply, and the measured usage after it. It is a context
+              budget, not a model action, so it is not gated on the load. */}
+          <div role="status" aria-label="Token usage" title={meterLabel} className="hidden sm:block">
+            <Context
+              usage={{ inputTokens: meterInput, outputTokens: meterOutput }}
+              contextWindow={contextWindow}
+            >
+              <ContextTrigger />
+            </Context>
+          </div>
         </div>
       </header>
 

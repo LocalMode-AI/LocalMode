@@ -289,6 +289,68 @@ describe('jsonSchema()', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════
+// jsonSchema() — Zod 4 `_def` layout
+// ═══════════════════════════════════════════════════════════════
+
+// Zod 4 dropped `_def.typeName` (the Zod 3 discriminant) for `_def.type`, and
+// moved an array's element to `_def.element`, an enum's members to
+// `_def.entries`, and a literal's value to `_def.values`. The converter reads
+// both layouts; before that fix every Zod 4 scalar collapsed to `{type:'object'}`,
+// which fed a garbage schema to prompts and to grammar-constrained decoding.
+describe('jsonSchema() — Zod 4 _def layout', () => {
+  // Mocks shaped exactly like real Zod 4 internals (verified against zod@4.4.1).
+  const v4String = () => ({ _def: { type: 'string' }, parse: (v: unknown) => v });
+  const v4Number = () => ({ _def: { type: 'number' }, parse: (v: unknown) => v });
+  const v4Array = (element: { _def: unknown; parse: (v: unknown) => unknown }) => ({
+    _def: { type: 'array', element },
+    parse: (v: unknown) => v,
+  });
+  const v4Optional = (inner: { _def: unknown; parse: (v: unknown) => unknown }) => ({
+    _def: { type: 'optional', innerType: inner },
+    parse: (v: unknown) => v,
+  });
+  const v4Enum = (entries: Record<string, unknown>) => ({
+    _def: { type: 'enum', entries },
+    parse: (v: unknown) => v,
+  });
+  const v4Object = (shape: Record<string, { _def: unknown; parse: (v: unknown) => unknown }>) => ({
+    _def: { type: 'object', shape },
+    shape,
+    parse: (v: unknown) => v,
+  });
+
+  it('resolves scalar, array, and optional field types (not a degraded object)', () => {
+    const schema = jsonSchema(
+      v4Object({
+        product: v4String(),
+        rating: v4Number(),
+        pros: v4Array(v4String()),
+        tags: v4Optional(v4String()),
+      })
+    );
+    expect(schema.jsonSchema).toEqual({
+      type: 'object',
+      properties: {
+        product: { type: 'string' },
+        rating: { type: 'number' },
+        pros: { type: 'array', items: { type: 'string' } },
+        tags: { type: 'string' },
+      },
+      // `tags` is optional, so it is absent from `required`.
+      required: ['product', 'rating', 'pros'],
+    });
+  });
+
+  it('resolves enum members from _def.entries', () => {
+    const schema = jsonSchema(v4Enum({ positive: 'positive', negative: 'negative' }));
+    expect(schema.jsonSchema).toEqual({
+      type: 'string',
+      enum: ['positive', 'negative'],
+    });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
 // buildStructuredPrompt()
 // ═══════════════════════════════════════════════════════════════
 
@@ -315,6 +377,37 @@ describe('buildStructuredPrompt()', () => {
   it('prepends user system prompt', () => {
     const prompt = buildStructuredPrompt(schema, 'json', 'Be concise.');
     expect(prompt).toMatch(/^Be concise\./);
+  });
+
+  it('names the exact top-level keys and shows a filled example instance', () => {
+    // Small models echo the JSON Schema back verbatim instead of an instance;
+    // the key list + a concrete data example anchors them to the target shape.
+    const reviewSchema = jsonSchema(
+      mockZodObject({
+        product: mockZodString(),
+        rating: mockZodNumber(),
+        pros: mockZodArray(mockZodString()),
+        cons: mockZodArray(mockZodString()),
+      })
+    );
+    const prompt = buildStructuredPrompt(reviewSchema, 'json');
+    expect(prompt).toContain('exactly these top-level keys: product, rating, pros, cons');
+    expect(prompt).toContain('DATA VALUES');
+    // A filled example instance (data, not schema): placeholder values by type.
+    expect(prompt.replace(/\s/g, '')).toContain(
+      '{"product":"text","rating":0,"pros":["text"],"cons":["text"]}'
+    );
+    // The example must NOT be the schema itself.
+    expect(prompt).not.toContain('{"product":{"type":"string"}}');
+  });
+
+  it('array mode shows a filled example element', () => {
+    const itemSchema = jsonSchema(
+      mockZodObject({ item: mockZodString(), qty: mockZodNumber() })
+    );
+    const prompt = buildStructuredPrompt(itemSchema, 'array');
+    expect(prompt).toContain('DATA VALUES');
+    expect(prompt.replace(/\s/g, '')).toContain('[{"item":"text","qty":0}]');
   });
 });
 

@@ -100,8 +100,18 @@ function DetectSurface({
   const webcam = useWebcam({ width: 640, height: 480 });
   const videoCanvasRef = useRef<VideoCanvasHandle>(null);
   const detectBusyRef = useRef(false);
+  // True while the one-shot DETR detection is running. The live BlazeFace loop
+  // reads it to pause: DETR runs on WebGPU and BlazeFace on the GPU delegate, so
+  // hammering the GPU with a face frame every 1.5s while DETR runs starves it —
+  // measured 221s vs 11s for the same detection. Kept in a ref because the
+  // setInterval closure below captures state at mount and would never see it.
+  const detrBusyRef = useRef(false);
 
   const objects = useDetectObjects({ model: detrModel });
+
+  useEffect(() => {
+    detrBusyRef.current = objects.isLoading;
+  }, [objects.isLoading]);
 
   const startCamera = async () => {
     if (webcam.isActive) return;
@@ -116,7 +126,7 @@ function DetectSurface({
     if (!stream) return;
 
     const detectOnFrame = async () => {
-      if (detectBusyRef.current) return;
+      if (detectBusyRef.current || detrBusyRef.current) return;
       const video = videoCanvasRef.current?.video;
       const overlay = videoCanvasRef.current?.canvas;
       if (!video || !overlay || video.videoWidth === 0) return;
@@ -258,8 +268,11 @@ function DetectSurface({
     <div className="flex flex-col gap-4 p-4">
       {/* Single consolidated, user-facing status region (the raw
           "camera: X · objects: Y" debug line was removed). */}
-      <p role="status" aria-live="polite" aria-label="Detector status" className="text-xs text-muted-foreground">
-        <span className="font-medium text-foreground">Status:</span> {statusText}
+      <p className="text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">Status:</span>{' '}
+        <span role="status" aria-live="polite" aria-label="Detector status">
+          {statusText}
+        </span>
       </p>
       {errorText && (
         <div role="alert" className="flex flex-wrap items-center gap-2">

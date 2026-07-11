@@ -177,7 +177,7 @@ function keepOwn<T extends { name: string }>(entries: ReadonlyArray<T>, spec: Fi
 export interface TypeTableRef {
   /**
    * Path to the source file containing the type, relative to the app root,
-   * e.g. `registry/localmode/device-badge/device-badge.tsx`.
+   * e.g. `registry/localmode/local-first/device-badge/device-badge.tsx`.
    */
   path: string;
   /** Exported type/interface name to render, e.g. `DeviceBadgeProps`. */

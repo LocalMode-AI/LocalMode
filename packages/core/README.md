@@ -9,6 +9,9 @@ Local-first AI utilities for the browser. Zero dependencies. Privacy-first.
 [![UI Components](https://img.shields.io/badge/UI_Components-LocalMode.ai-green)](https://localmode.ai)
 [![Blocks & Apps](https://img.shields.io/badge/Blocks_&_Apps-LocalMode.ai-purple)](https://localmode.ai/blocks)
 
+- Docs website: https://localmode.dev
+- UI Components: https://localmode.ai
+- Blocks & Apps: https://localmode.ai/blocks
 
 ## Installation
 

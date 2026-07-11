@@ -1,5 +1,11 @@
 # @localmode/react
 
+## 2.4.0
+
+### Minor Changes
+
+- **`useGenerateObject` forwards `providerOptions`.** A new optional `providerOptions` on `UseGenerateObjectOptions` is passed through to `generateObject` — e.g. `{ webllm: { response_format: { type: 'json_object', schema } } }` for grammar-constrained JSON output. Backward compatible.
+
 ## 2.3.0
 
 ### Minor Changes

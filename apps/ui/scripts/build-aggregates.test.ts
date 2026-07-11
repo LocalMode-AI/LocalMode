@@ -23,7 +23,11 @@ const primitive: RegistryItem = {
   type: 'registry:component',
   categories: ['conversation'],
 };
-const seed: RegistryItem = { name: 'ui/device-badge', type: 'registry:component', categories: ['local-first'] };
+const deviceBadge: RegistryItem = {
+  name: 'ui/local-first/device-badge',
+  type: 'registry:component',
+  categories: ['local-first'],
+};
 const internal: RegistryItem = { name: 'ui/lib/utils', type: 'registry:lib', categories: ['internal'] };
 
 describe('isBlock()', () => {
@@ -32,7 +36,7 @@ describe('isBlock()', () => {
     expect(isBlock(flatBlock)).toBe(true);
     expect(isBlock(nestedBlock)).toBe(true);
     expect(isBlock(primitive)).toBe(false);
-    expect(isBlock(seed)).toBe(false);
+    expect(isBlock(deviceBadge)).toBe(false);
   });
 });
 
@@ -46,8 +50,11 @@ describe('isInternal()', () => {
 
 describe('aggregate rollup predicate', () => {
   it('includes only public non-block components', () => {
-    const fixture = [twoTagBlock, flatBlock, nestedBlock, primitive, seed, internal];
+    const fixture = [twoTagBlock, flatBlock, nestedBlock, primitive, deviceBadge, internal];
     const publicItems = fixture.filter((i) => !isInternal(i) && !isBlock(i) && i.name.startsWith('ui/'));
-    expect(publicItems.map((i) => i.name)).toEqual(['ui/conversation/message', 'ui/device-badge']);
+    expect(publicItems.map((i) => i.name)).toEqual([
+      'ui/conversation/message',
+      'ui/local-first/device-badge',
+    ]);
   });
 });

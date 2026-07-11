@@ -180,7 +180,11 @@ test.describe('privacy blocks', () => {
     const block = page.locator('[data-block-preview]');
 
     // Gated: nothing has downloaded yet.
-    await expect(block.getByText('Model loads on Scan (bert-base-NER ~110MB).')).toBeVisible();
+    // The block renders a non-breaking space before the unit (U+00A0); `\s`
+    // matches it, so the assertion does not depend on invisible whitespace.
+    await expect(
+      block.getByText(/^Model loads on Scan \(bert-base-NER ~110\sMB\)\.$/),
+    ).toBeVisible();
     expect(modelRequests(), 'no model bytes before Scan').toEqual([]);
 
     // Load the sample document and scan (real NER download + inference).

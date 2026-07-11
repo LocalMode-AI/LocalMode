@@ -325,7 +325,7 @@ test('background-remover: cancel mid-run, then real SegFormer removal → transp
   const dropzone = page.getByRole('button', { name: /Drop an image to remove its background/i });
   await expect(dropzone).toBeVisible();
   const result = page.getByRole('group', { name: 'Background removal result' });
-  const doneStatus = block.getByText('Background removed — transparent PNG ready');
+  const doneStatus = block.getByText('Background removed: transparent PNG ready');
 
   // Cancel lane: cold first run shows the processing overlay (download window);
   // cancelling returns the block to a usable idle state with no result. The

@@ -71,14 +71,13 @@ export function isBlock(item: RegistryItem) {
   return item.name.startsWith('ui/blocks/');
 }
 
-/** A component item is named `ui/<family>/<component>` OR `ui/<family>`. */
+/** A component item is named `ui/<family>/<component>`. */
 function familyOf(name: string): string | null {
   if (!name.startsWith('ui/')) return null;
-  const rest = name.slice('ui/'.length); // e.g. "device-badge" or "conversation/message"
+  const rest = name.slice('ui/'.length); // e.g. "local-first/device-badge" or "conversation/message"
   const parts = rest.split('/');
-  // `ui/<family>/<component>` → family is parts[0]; a bare `ui/<component>`
-  // (single segment, like the seed `ui/device-badge`) has no family grouping
-  // of its own, so it rolls up only into `all`.
+  // `ui/<family>/<component>` → family is parts[0]. A bare single-segment
+  // `ui/<component>` has no family grouping and rolls up only into `all`.
   return parts.length >= 2 ? parts[0] : null;
 }
 

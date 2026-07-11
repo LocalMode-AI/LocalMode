@@ -54,7 +54,7 @@ LocalMode is a monorepo of packages for building AI-powered applications that ru
 
 ### `@localmode/ui` — UI registry (not an npm package)
 
-[**LocalMode UI**](https://localmode.ai) is a shadcn-style registry of copy-owned AI UI components: **106 primitives across 10 families**, plus **37 blocks** that wire them to real on-device models. Like shadcn/ui, you install with the shadcn CLI and own the copied code, styled with shadcn/ui CSS variables so it inherits your theme. See the [docs](https://localmode.ai/docs), [installation guide](https://localmode.ai/docs/installation), and [`apps/ui/README.md`](./apps/ui/README.md).
+[**LocalMode UI**](https://localmode.ai) is a shadcn-style registry of copy-owned AI UI components: **107 primitives across 10 families**, plus **37 blocks** that wire them to real on-device models. Like shadcn/ui, you install with the shadcn CLI and own the copied code, styled with shadcn/ui CSS variables so it inherits your theme. See the [docs](https://localmode.ai/docs), [installation guide](https://localmode.ai/docs/installation), and [`apps/ui/README.md`](./apps/ui/README.md).
 
 The primitives are presentational and install with **zero `@localmode/*` packages**, so they work with any React AI app — the LocalMode hooks (on-device), the [Vercel AI SDK](https://localmode.ai/docs/use-with-ai-sdk), or [your own data](https://localmode.ai/docs/bring-your-own-data). Local-first by design, cloud-compatible by contract.
 

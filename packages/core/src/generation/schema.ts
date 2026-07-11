@@ -15,23 +15,54 @@ import type { ObjectSchema, ObjectOutputMode } from './types.js';
 
 /**
  * Duck-typed Zod-like schema interface.
- * Reads internal Zod structure without importing Zod.
+ * Reads internal Zod structure without importing Zod. The shape of `_def`
+ * differs between Zod 3 and Zod 4, so both layouts are declared here:
+ * - Zod 3 tags the kind in `typeName` ('ZodString'); an array's element sits in
+ *   `type`, an enum's members in `values`, a literal's value in `value`.
+ * - Zod 4 tags the kind in `type` ('string'); an array's element sits in
+ *   `element`, an enum's members in `entries`, a literal's value in `values`.
  */
 interface ZodLike<T = unknown> {
   parse: (value: unknown) => T;
   _def?: {
+    /** Zod 3 discriminant, e.g. 'ZodString'. Absent in Zod 4. */
     typeName?: string;
+    /**
+     * Zod 4 discriminant, e.g. 'string' | 'array' | 'object'. In Zod 3 this
+     * field instead holds an array's element schema, so it is read as a kind
+     * only when it is a string.
+     */
+    type?: string | ZodLike;
     description?: string;
-    shape?: () => Record<string, ZodLike>;
-    type?: ZodLike;
+    shape?: (() => Record<string, ZodLike>) | Record<string, ZodLike>;
+    /** Zod 4 array element schema. */
+    element?: ZodLike;
     innerType?: ZodLike;
     options?: ZodLike[];
-    values?: readonly string[];
+    /** Zod 3 enum members. */
+    values?: readonly unknown[];
+    /** Zod 4 enum members (value map). */
+    entries?: Record<string, unknown>;
+    /** Zod 3 literal value. */
     value?: unknown;
     checks?: Array<{ kind: string; value?: unknown }>;
   };
   shape?: Record<string, ZodLike>;
   description?: string;
+}
+
+/**
+ * Normalize the Zod type discriminant across Zod 3 (`_def.typeName`, e.g.
+ * 'ZodString') and Zod 4 (`_def.type`, e.g. 'string') to a lowercase kind
+ * ('string' | 'number' | 'array' | 'object' | 'optional' | …), or `undefined`.
+ */
+function zodKind(def: ZodLike['_def']): string | undefined {
+  if (!def) return undefined;
+  // Zod 4: `type` is a string kind. (In Zod 3 `type` is a schema, not a string.)
+  if (typeof def.type === 'string') return def.type;
+  // Zod 3: strip the `Zod` prefix and lowercase — 'ZodString' → 'string'.
+  if (typeof def.typeName === 'string') return def.typeName.replace(/^Zod/, '').toLowerCase();
+  return undefined;
 }
 
 /**
@@ -70,22 +101,24 @@ export function jsonSchema<T>(zodSchema: { parse: (v: unknown) => T }): ObjectSc
 }
 
 /**
- * Convert a Zod schema to JSON Schema representation.
+ * Convert a Zod schema to JSON Schema representation. Version-agnostic:
+ * `zodKind()` resolves the discriminant for both Zod 3 and Zod 4.
  */
 function zodToJsonSchema(schema: ZodLike): Record<string, unknown> {
   const def = schema._def;
-  if (!def?.typeName) {
-    // Fallback: try reading .shape directly (Zod 4 compat)
+  const kind = zodKind(def);
+  if (!kind) {
+    // No recognizable discriminant: fall back to reading `.shape` directly.
     if (schema.shape && typeof schema.shape === 'object') {
       return zodObjectToJsonSchema(schema);
     }
     return { type: 'object' };
   }
 
-  const result = zodTypeToJsonSchema(def.typeName, schema);
+  const result = zodTypeToJsonSchema(kind, schema);
 
   // Add description if present
-  const description = schema.description ?? def.description;
+  const description = schema.description ?? def?.description;
   if (description) {
     result.description = description;
   }
@@ -93,55 +126,62 @@ function zodToJsonSchema(schema: ZodLike): Record<string, unknown> {
   return result;
 }
 
+/** The Zod 4 array element schema, else the Zod 3 element (held in `_def.type`). */
+function arrayElement(def: ZodLike['_def']): ZodLike | undefined {
+  if (def?.element) return def.element;
+  // Zod 3 stores the element schema in `type` (an object, not a string kind).
+  if (def?.type && typeof def.type !== 'string') return def.type;
+  return undefined;
+}
+
 /**
- * Map a Zod type name to JSON Schema.
+ * Map a normalized (lowercase) Zod kind to JSON Schema. Reads whichever inner
+ * fields the installed Zod major populates (see the ZodLike doc comment).
  */
-function zodTypeToJsonSchema(typeName: string, schema: ZodLike): Record<string, unknown> {
-  switch (typeName) {
-    case 'ZodString':
+function zodTypeToJsonSchema(kind: string, schema: ZodLike): Record<string, unknown> {
+  const def = schema._def;
+  switch (kind) {
+    case 'string':
       return { type: 'string' };
 
-    case 'ZodNumber':
+    case 'number':
+    case 'bigint':
       return { type: 'number' };
 
-    case 'ZodBoolean':
+    case 'boolean':
       return { type: 'boolean' };
 
-    case 'ZodArray':
-      return {
-        type: 'array',
-        items: schema._def?.type ? zodToJsonSchema(schema._def.type) : {},
-      };
+    case 'array': {
+      const element = arrayElement(def);
+      return { type: 'array', items: element ? zodToJsonSchema(element) : {} };
+    }
 
-    case 'ZodObject':
+    case 'object':
       return zodObjectToJsonSchema(schema);
 
-    case 'ZodEnum':
-      return {
-        type: 'string',
-        enum: schema._def?.values ? [...schema._def.values] : [],
-      };
+    case 'enum': {
+      // Zod 4 keeps members in `entries` (a value map); Zod 3 in `values`.
+      const values = def?.entries ? Object.values(def.entries) : def?.values ? [...def.values] : [];
+      return { type: 'string', enum: values };
+    }
 
-    case 'ZodLiteral':
-      return {
-        const: schema._def?.value,
-      };
+    case 'literal':
+      // Zod 4 keeps the value in `values` (array); Zod 3 in `value`.
+      return { const: def?.values ? def.values[0] : def?.value };
 
-    case 'ZodUnion':
-      return {
-        anyOf: (schema._def?.options ?? []).map((opt: ZodLike) => zodToJsonSchema(opt)),
-      };
+    case 'union':
+      return { anyOf: (def?.options ?? []).map((opt: ZodLike) => zodToJsonSchema(opt)) };
 
-    case 'ZodOptional':
-      return schema._def?.innerType ? zodToJsonSchema(schema._def.innerType) : {};
+    case 'optional':
+      return def?.innerType ? zodToJsonSchema(def.innerType) : {};
 
-    case 'ZodNullable': {
-      const inner = schema._def?.innerType ? zodToJsonSchema(schema._def.innerType) : {};
+    case 'nullable': {
+      const inner = def?.innerType ? zodToJsonSchema(def.innerType) : {};
       return { anyOf: [inner, { type: 'null' }] };
     }
 
-    case 'ZodDefault':
-      return schema._def?.innerType ? zodToJsonSchema(schema._def.innerType) : {};
+    case 'default':
+      return def?.innerType ? zodToJsonSchema(def.innerType) : {};
 
     default:
       return {};
@@ -155,7 +195,7 @@ function zodObjectToJsonSchema(schema: ZodLike): Record<string, unknown> {
   const shapeObj =
     typeof schema._def?.shape === 'function'
       ? schema._def.shape()
-      : schema.shape ?? {};
+      : schema._def?.shape ?? schema.shape ?? {};
 
   const properties: Record<string, unknown> = {};
   const required: string[] = [];
@@ -163,9 +203,9 @@ function zodObjectToJsonSchema(schema: ZodLike): Record<string, unknown> {
   for (const [key, fieldSchema] of Object.entries(shapeObj)) {
     properties[key] = zodToJsonSchema(fieldSchema as ZodLike);
 
-    // Check if field is optional
-    const fieldTypeName = (fieldSchema as ZodLike)._def?.typeName;
-    if (fieldTypeName !== 'ZodOptional' && fieldTypeName !== 'ZodDefault') {
+    // A field is optional when its kind is optional/default (either Zod major).
+    const fieldKind = zodKind((fieldSchema as ZodLike)._def);
+    if (fieldKind !== 'optional' && fieldKind !== 'default') {
       required.push(key);
     }
   }
@@ -185,6 +225,65 @@ function zodObjectToJsonSchema(schema: ZodLike): Record<string, unknown> {
 // ═══════════════════════════════════════════════════════════════
 // PROMPT CONSTRUCTION
 // ═══════════════════════════════════════════════════════════════
+
+/** A minimal JSON-Schema node shape (only the fields this module reads). */
+interface JsonSchemaNode {
+  type?: string | string[];
+  properties?: Record<string, JsonSchemaNode>;
+  items?: JsonSchemaNode;
+  enum?: unknown[];
+  const?: unknown;
+}
+
+/** The declared top-level property names of an object schema (empty if none). */
+function topLevelKeys(jsonSchema: unknown): string[] {
+  const node = jsonSchema as JsonSchemaNode;
+  return node && node.properties ? Object.keys(node.properties) : [];
+}
+
+/**
+ * Build a concrete EXAMPLE INSTANCE of a JSON Schema — a value of the right
+ * shape with placeholder contents (`"text"`, `0`, `true`, `[…]`, `{…}`). This
+ * is shown to the model as the target so it emits data, not the schema.
+ * Returns `undefined` for schemas with no usable structure (the caller then
+ * falls back to the raw-schema instruction alone). Depth-capped against
+ * pathological/recursive schemas.
+ */
+function exampleFromSchema(jsonSchema: unknown, depth = 0): unknown {
+  const node = jsonSchema as JsonSchemaNode;
+  if (!node || depth > 5) return undefined;
+
+  if (node.const !== undefined) return node.const;
+  if (Array.isArray(node.enum) && node.enum.length > 0) return node.enum[0];
+
+  const type = Array.isArray(node.type) ? node.type[0] : node.type;
+
+  switch (type) {
+    case 'string':
+      return 'text';
+    case 'number':
+    case 'integer':
+      return 0;
+    case 'boolean':
+      return true;
+    case 'null':
+      return null;
+    case 'array': {
+      const item = node.items ? exampleFromSchema(node.items, depth + 1) : 'text';
+      return item === undefined ? [] : [item];
+    }
+    case 'object':
+    default: {
+      if (!node.properties) return type === 'object' ? {} : undefined;
+      const obj: Record<string, unknown> = {};
+      for (const [key, child] of Object.entries(node.properties)) {
+        const value = exampleFromSchema(child, depth + 1);
+        obj[key] = value === undefined ? 'text' : value;
+      }
+      return obj;
+    }
+  }
+}
 
 /**
  * Build a system prompt that instructs the model to output JSON.
@@ -220,11 +319,38 @@ export function buildStructuredPrompt(
       'Output a JSON array where each element matches this schema:',
       JSON.stringify(schema.jsonSchema, null, 2)
     );
+    const example = exampleFromSchema(schema.jsonSchema);
+    if (example !== undefined) {
+      parts.push(
+        'Return the actual extracted DATA VALUES — never the schema itself. Fill an ' +
+          'array of objects shaped like this example (use real values from the input, ' +
+          'not the placeholders):',
+        JSON.stringify([example])
+      );
+    }
   } else {
     parts.push(
       'Output a JSON object matching this schema:',
       JSON.stringify(schema.jsonSchema, null, 2)
     );
+    // Small models frequently echo the JSON Schema back verbatim
+    // (`{"type":"object","properties":{…}}`) instead of an instance of it.
+    // A concrete key list + a filled example anchors them to the target shape.
+    const keys = topLevelKeys(schema.jsonSchema);
+    const example = exampleFromSchema(schema.jsonSchema);
+    if (keys.length > 0) {
+      parts.push(
+        `Your JSON object must have exactly these top-level keys: ${keys.join(', ')}.`
+      );
+    }
+    if (example !== undefined) {
+      parts.push(
+        'Return the actual extracted DATA VALUES — never the schema itself. Produce a ' +
+          'JSON object shaped like this example (replace the placeholders with real ' +
+          'values from the input):',
+        JSON.stringify(example)
+      );
+    }
   }
 
   if (schema.description) {

@@ -5,7 +5,7 @@
  * @description Self-sufficient Research Agent block — its own WebGPU-only WebLLM load plus a tool-using ReAct loop with human-in-the-loop tool approval and a step timeline.
  */
 
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { defineTool, jsonSchema, type AgentStep, type LanguageModel, type ToolDefinition } from '@localmode/core';
 import { useAgent, useModelLoad } from '@localmode/react';
@@ -358,7 +358,6 @@ export function createResearchTools(): ResearchToolset {
         if (!sanitized.trim()) {
           return 'Invalid expression. Use numbers and operators: + - * / ()';
         }
-        // eslint-disable-next-line @typescript-eslint/no-implied-eval
         const result = new Function(`return (${sanitized})`)() as number;
         return String(result);
       } catch {
@@ -461,10 +460,9 @@ export function ResearchAgentBlock() {
             : 'idle - select a model and click Load';
 
   // ── ReAct loop (uses the block's own model directly) ──
-  // Stable toolset with a resettable per-run note accumulator.
-  const toolsetRef = useRef<ResearchToolset | null>(null);
-  if (!toolsetRef.current) toolsetRef.current = createResearchTools();
-  const toolset = toolsetRef.current;
+  // Stable toolset with a resettable per-run note accumulator. The lazy
+  // initializer runs once, so the identity survives every re-render.
+  const [toolset] = useState<ResearchToolset>(createResearchTools);
 
   const [requireApproval, setRequireApproval] = useState(true);
   const [question, setQuestion] = useState('');
@@ -643,11 +641,11 @@ export function ResearchAgentBlock() {
         </div>
       )}
 
-      {/* ── ReAct experience: mounts once the model exists AND the device has
-           WebGPU — a no-WebGPU device shows the gate alone (no dead composer). */}
-      {!webgpuUnsupported && (
+      {/* ── ReAct experience: always rendered. The approval gate and the
+           step timeline are the block's showcase, so they must be visible
+           before a model loads and on devices without WebGPU. Every
+           model-driven control is disabled until `modelReady`. ── */}
         <div className="min-h-48">
-          {model ? (
           <div className="flex flex-col gap-4">
             {/* ── composer + sample chips + approval toggle ── */}
             <div className="flex flex-col gap-3">
@@ -892,11 +890,7 @@ export function ResearchAgentBlock() {
               </div>
             )}
           </div>
-          ) : (
-            <p className="p-4 text-sm text-muted-foreground">Preparing…</p>
-          )}
         </div>
-      )}
     </div>
   );
 }

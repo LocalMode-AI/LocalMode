@@ -12,6 +12,8 @@ const config = {
   transpilePackages: ['fumadocs-ui', 'fumadocs-core', '@fumadocs/ui'],
   async redirects() {
     return [
+      // Device Badge moved from a top-level seed into the local-first family.
+      { source: '/docs/device-badge', destination: '/docs/local-first/device-badge', permanent: true },
       // The rag block was absorbed into knowledge-base, then into the `knowledge`
       // category. Re-pointed to the category page so the legacy chain never loops
       // through the knowledge-base → knowledge CATEGORY_RENAMES 308.

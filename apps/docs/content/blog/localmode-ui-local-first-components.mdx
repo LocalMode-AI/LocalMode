@@ -46,7 +46,7 @@ With [shadcn/ui set up](https://ui.shadcn.com/docs/installation) and the `@local
 # One primitive
 npx shadcn@latest add @localmode/ui/local-first/model-downloader
 
-# The whole local-first family (24 primitives; the device-badge seed installs separately)
+# The whole local-first family (25 primitives)
 npx shadcn@latest add @localmode/ui/local-first
 ```
 
@@ -109,7 +109,7 @@ For scored guidance, [`ModelRecommendationCard`](https://localmode.ai/docs/local
 
 These primitives tell the user -- and your code -- what the current device and runtime can do.
 
-[`DeviceBadge`](https://localmode.ai/docs/device-badge) and [`CapabilityGate`](https://localmode.ai/docs/local-first/capability-gate) read `useCapabilities` to detect WebGPU / WASM / RAM and can gate children until support exists. [`StorageMeter`](https://localmode.ai/docs/local-first/storage-meter) shows IndexedDB quota from `useStorageQuota`. [`NetworkBadge`](https://localmode.ai/docs/local-first/network-badge) surfaces offline-ready status. [`CacheBadge`](https://localmode.ai/docs/local-first/cache-badge) annotates a semantic-cache hit, e.g. "cached - 12ms". [`ProviderFallbackBadge`](https://localmode.ai/docs/local-first/provider-fallback-badge) shows the active provider and threading tier after a WebGPU-to-WASM fallback.
+[`DeviceBadge`](https://localmode.ai/docs/local-first/device-badge) and [`CapabilityGate`](https://localmode.ai/docs/local-first/capability-gate) read `useCapabilities` to detect WebGPU / WASM / RAM and can gate children until support exists. [`StorageMeter`](https://localmode.ai/docs/local-first/storage-meter) shows IndexedDB quota from `useStorageQuota`. [`NetworkBadge`](https://localmode.ai/docs/local-first/network-badge) surfaces offline-ready status. [`CacheBadge`](https://localmode.ai/docs/local-first/cache-badge) annotates a semantic-cache hit, e.g. "cached - 12ms". [`ProviderFallbackBadge`](https://localmode.ai/docs/local-first/provider-fallback-badge) shows the active provider and threading tier after a WebGPU-to-WASM fallback.
 
 A standout is [`ContextUsageMeter`](https://localmode.ai/docs/local-first/context-usage-meter) -- a token / context-window budget gauge:
 
@@ -176,7 +176,7 @@ No. They are presentational and hook-driven -- they render hook state and emit c
 
 ## Methodology
 
-Every component name, count, prop, and code example in this post was verified directly against the `@localmode/ui` source. The "25 components" figure is the count of `local-first`-categorized items in `apps/ui/registry.json` (24 under `ui/local-first/*` plus the top-level `ui/device-badge` seed, which installs separately). Component names and props were read from the `.tsx` source under `apps/ui/registry/localmode/local-first/**` and `apps/ui/registry/localmode/device-badge/`. The hooks they render (`useModelLoader`, `useModelStatus`, `useCapabilities`, `useStorageQuota`, `useNetworkStatus`, `useModelRecommendations`, `useSemanticCache`, `useAdaptiveBatchSize`) are exported from `packages/react/src/index.ts`; `getCompressionStats` is exported from `packages/core/src/index.ts`. The `ModelDownloader`, `ModelSelector`, `ContextUsageMeter`, and `VectorStorageObservability` code examples mirror each component's own props and demo bindings.
+Every component name, count, prop, and code example in this post was verified directly against the `@localmode/ui` source. The "25 components" figure is the count of `local-first`-categorized items in `apps/ui/registry.json` (all 25 under `ui/local-first/*`). Component names and props were read from the `.tsx` source under `apps/ui/registry/localmode/local-first/**`. The hooks they render (`useModelLoader`, `useModelStatus`, `useCapabilities`, `useStorageQuota`, `useNetworkStatus`, `useModelRecommendations`, `useSemanticCache`, `useAdaptiveBatchSize`) are exported from `packages/react/src/index.ts`; `getCompressionStats` is exported from `packages/core/src/index.ts`. The `ModelDownloader`, `ModelSelector`, `ContextUsageMeter`, and `VectorStorageObservability` code examples mirror each component's own props and demo bindings.
 
 Two install-correctness facts were verified against the real install path rather than asserted. First, **no local-first item declares an `@localmode/*` npm dependency** — confirmed by inspecting the `dependencies` array of every local-first entry in `apps/ui/registry.json` (each lists only `lucide-react` or nothing). Second, the environment-fed components (`DeviceBadge`, `CapabilityGate`, `DeviceCapabilityGrid`, `StorageMeter`, `NetworkBadge`, `ProviderFallbackBadge`) import `useCapabilities` / `useStorageQuota` / `useNetworkStatus` from the **copy-owned** `@/lib/use-environment` (`apps/ui/registry/localmode/lib/use-environment.ts`), not from `@localmode/react` at runtime — so the family installs and runs with zero `@localmode/*` packages. The `@localmode/react` imports that appear in this post's examples are *consumer-app binding code* (your app's choice), not the components' own imports. The zero-`@localmode` guarantee is enforced by an automated test that performs a real `shadcn add` into a scratch project and asserts no `@localmode/*` import statements and no `@localmode/*` package.json entries (`apps/ui/consumer-tests/portability-test.mjs`).
 
@@ -184,7 +184,7 @@ Two install-correctness facts were verified against the real install path rather
 
 Sources:
 - `apps/ui/registry.json` — catalog; local-first item count and per-item dependencies
-- `apps/ui/registry/localmode/local-first/**`, `apps/ui/registry/localmode/device-badge/device-badge.tsx` — component source and props
+- `apps/ui/registry/localmode/local-first/**` (incl. `local-first/device-badge/device-badge.tsx`) — component source and props
 - `apps/ui/registry/localmode/lib/use-environment.ts` — copy-owned `useCapabilities` / `useStorageQuota` / `useNetworkStatus`
 - `apps/ui/consumer-tests/portability-test.mjs` — real-install zero-`@localmode` portability test
 - `packages/react/src/index.ts`, `packages/react/src/utilities/use-model-loader.ts` — hook exports and `useModelLoader` return (`totalProgress`, `isDownloading`)

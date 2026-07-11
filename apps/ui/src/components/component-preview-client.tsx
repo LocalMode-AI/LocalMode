@@ -28,7 +28,7 @@ type ThemeId = (typeof THEMES)[number]['id'];
 
 /** Props for {@link ComponentPreviewClient}. */
 interface ComponentPreviewClientProps {
-  /** Registry item name under the ui/ scheme, e.g. `ui/device-badge`. */
+  /** Registry item name under the ui/ scheme, e.g. `ui/local-first/device-badge`. */
   name: string;
   /** Raw demo source, read server-side; null when the file is unavailable. */
   source: string | null;

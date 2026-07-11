@@ -12,7 +12,7 @@ import { DynamicCodeBlock } from 'fumadocs-ui/components/dynamic-codeblock';
 
 /** Props for {@link InstallTabs}. */
 interface InstallTabsProps {
-  /** Registry item name under the ui/ scheme, e.g. `ui/device-badge`. */
+  /** Registry item name under the ui/ scheme, e.g. `ui/local-first/device-badge`. */
   name: string;
 }
 

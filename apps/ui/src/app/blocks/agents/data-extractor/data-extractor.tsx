@@ -540,6 +540,19 @@ export function DataExtractorBlock() {
     mode: 'json',
     temperature: 0,
     maxRetries: 3,
+    // Grammar-constrained JSON via WebLLM's XGrammar backend. Qwen3-1.7B cannot
+    // reliably emit schema-conforming JSON from a prompt alone — unconstrained,
+    // it invents its own keys or echoes the schema — so the extraction is forced
+    // to follow the active template's schema. The `schema` string is WebLLM's
+    // `response_format` contract (see @localmode/webllm doGenerate).
+    providerOptions: {
+      webllm: {
+        response_format: {
+          type: 'json_object',
+          schema: JSON.stringify(template.schema.jsonSchema),
+        },
+      },
+    },
   });
 
   const hasInput = input.trim().length > 0;
@@ -665,11 +678,11 @@ export function DataExtractorBlock() {
         </div>
       )}
 
-      {/* ── extractor: mounts once the model exists AND the device has WebGPU —
-           a no-WebGPU device shows the gate alone (no dead extractor UI). */}
-      {!webgpuUnsupported && (
+      {/* ── Extraction surface: always rendered. The template picker, schema
+           preview and sample loader work without a model, so they must be
+           visible before a load and on devices without WebGPU. Extract stays
+           disabled until `modelReady`. ── */}
         <div className="min-h-48">
-          {model ? (
           <div className="flex flex-col gap-4">
             {/* ── template picker ──
                 A labelled button group with `aria-pressed` (NOT the WAI-ARIA tab
@@ -885,11 +898,7 @@ export function DataExtractorBlock() {
               </div>
             )}
           </div>
-          ) : (
-            <p className="p-4 text-sm text-muted-foreground">Preparing…</p>
-          )}
         </div>
-      )}
     </div>
   );
 }

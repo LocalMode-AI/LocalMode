@@ -30,12 +30,13 @@ pnpm --filter ui test:e2e          # Playwright — /blocks pages with real mode
 
 ### The registry build pipeline
 
-`predev`/`prebuild` run `registry:build`, which is seven steps (see `scripts/`):
+`predev`/`prebuild` run `registry:build`, which is eight steps (see `scripts/`):
 
 ```
 generate-block-source.ts     # snapshot each block impl → src/lib/block-source.generated.ts (Code tabs)
 prep-registry-dirs.ts        # mkdir the nested public/r/ dirs shadcn build needs
 shadcn build                 # registry.json items[] → per-item public/r/<name>.json
+add-default-export.ts        # append `export default <Component>` to component payloads (Open-in-v0 auto-mount)
 strip-registry-blocks.ts     # clean the shipped public/r/ui/blocks/**.json content payloads
 build-aggregates.ts          # emit ui/all + per-family aggregates
 absolutize-registry-deps.ts  # @localmode/ui/<item> registryDependencies → <origin>/r/ui/<item>.json

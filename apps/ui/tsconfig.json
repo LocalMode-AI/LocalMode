@@ -90,7 +90,7 @@
         "./registry/localmode/artifacts/data-table-artifact/data-table-artifact"
       ],
       "@/components/device-badge": [
-        "./registry/localmode/device-badge/device-badge"
+        "./registry/localmode/local-first/device-badge/device-badge"
       ],
       "@/components/device-capability-grid": [
         "./registry/localmode/local-first/device-capability-grid/device-capability-grid"

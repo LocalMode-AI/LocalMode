@@ -989,7 +989,7 @@ function DataManager({ session }: { session: Session }) {
                     <span>
                       {plan.lanes.vectorOnly} vector-only record
                       {plan.lanes.vectorOnly === 1 ? '' : 's'} will be skipped: the corpus only
-                      accepts text documents (raw-vector insert is not part of the engine's ingest
+                      accepts text documents (raw-vector insert is not part of the engine&apos;s ingest
                       API).
                       {plan.lanes.vectorOnlyMismatched > 0 &&
                         ` ${plan.lanes.vectorOnlyMismatched} of them also mismatch the current index dimensions.`}
@@ -1361,7 +1361,9 @@ export function VectorDataManagerBlock() {
       return createKnowledgeBaseEngine({ embeddingModel, getLanguageModel });
     },
   });
-  idRef.current = kb.embeddingModelId;
+  useEffect(() => {
+    idRef.current = kb.embeddingModelId;
+  });
 
   const [seedText, setSeedText] = useState('');
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Inbox, Search, SearchX, Trash2 } from 'lucide-react';
 
 import { cn } from '@/registry/localmode/lib/utils';
@@ -134,7 +134,19 @@ export function EventLogViewer({
     matches.length > maxVisible ? matches.slice(matches.length - maxVisible) : matches;
   const visible = capped.slice().reverse();
   const hiddenCount = matches.length - visible.length;
-  const now = Date.now();
+  // Wall-clock read from an effect, never during render: keeps the component
+  // pure and the server/client markup identical, and refreshes the "x ago"
+  // labels once a second. Stays 0 until the first tick, which reads as "now".
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    const first = setTimeout(tick, 0);
+    const id = setInterval(tick, 1000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(id);
+    };
+  }, []);
 
   return (
     <div

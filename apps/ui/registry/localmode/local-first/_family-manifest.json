@@ -8,6 +8,7 @@
     "lucide-react"
   ],
   "previews": {
+    "ui/local-first/device-badge": "@/registry/localmode/local-first/device-badge/device-badge-demo",
     "ui/local-first/adaptive-batch-card": "@/registry/localmode/local-first/adaptive-batch-card/adaptive-batch-card-demo",
     "ui/local-first/browser-compat-card": "@/registry/localmode/local-first/browser-compat-card/browser-compat-card-demo",
     "ui/local-first/cache-badge": "@/registry/localmode/local-first/cache-badge/cache-badge-demo",
@@ -34,6 +35,27 @@
     "ui/local-first/vector-storage-observability": "@/registry/localmode/local-first/vector-storage-observability/vector-storage-observability-demo"
   },
   "items": [
+    {
+      "name": "ui/local-first/device-badge",
+      "type": "registry:component",
+      "title": "Device Badge",
+      "description": "A local-first capability badge. Detects WebGPU / WASM / IndexedDB support via a bundled useCapabilities() hook (copy-owned, reads navigator — no @localmode dependency) and renders a themed status pill. Use it to gate model-download UIs behind device support.",
+      "author": "LocalMode",
+      "dependencies": [],
+      "registryDependencies": [
+        "@localmode/ui/lib/utils",
+        "@localmode/ui/lib/use-environment"
+      ],
+      "files": [
+        {
+          "path": "registry/localmode/local-first/device-badge/device-badge.tsx",
+          "type": "registry:component"
+        }
+      ],
+      "categories": [
+        "local-first"
+      ]
+    },
     {
       "name": "ui/local-first/adaptive-batch-card",
       "type": "registry:component",

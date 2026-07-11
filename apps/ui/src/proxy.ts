@@ -32,7 +32,7 @@ const REGISTRY_TOKEN = process.env.REGISTRY_TOKEN ?? 'localmode-test-token';
 export const proxy: NextProxy = (req, event) => {
   const { pathname } = req.nextUrl;
 
-  // `/r/ui/device-badge.json` → item name `ui/device-badge`
+  // `/r/ui/local-first/device-badge.json` → item name `ui/local-first/device-badge`
   const itemName = pathname.replace(/^\/r\//, '').replace(/\.json$/, '');
 
   const tally = () => {

@@ -22,6 +22,12 @@ export interface UseGenerateObjectOptions<T> {
   maxRetries?: number;
   /** Optional system prompt */
   systemPrompt?: string;
+  /**
+   * Provider-specific options forwarded to the model, e.g.
+   * `{ webllm: { response_format: { type: 'json_object', schema } } }` or
+   * `{ wllama: { response_format: … } }` for grammar-constrained JSON output.
+   */
+  providerOptions?: Record<string, Record<string, unknown>>;
 }
 
 /**
@@ -47,7 +53,8 @@ export interface UseGenerateObjectOptions<T> {
  * ```
  */
 export function useGenerateObject<T>(options: UseGenerateObjectOptions<T>) {
-  const { model, schema, mode, maxTokens, temperature, maxRetries, systemPrompt } = options;
+  const { model, schema, mode, maxTokens, temperature, maxRetries, systemPrompt, providerOptions } =
+    options;
 
   return useOperation<[string], GenerateObjectResult<T>>({
     fn: async (prompt: string, signal: AbortSignal) => {
@@ -61,6 +68,7 @@ export function useGenerateObject<T>(options: UseGenerateObjectOptions<T>) {
         temperature,
         maxRetries,
         systemPrompt,
+        providerOptions,
         abortSignal: signal,
       });
     },

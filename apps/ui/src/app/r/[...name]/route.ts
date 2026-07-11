@@ -3,8 +3,8 @@
  * @description Registry JSON serving route — cherry-picked from registry-starter
  * (Fumadocs provides no registry serving) and implemented to match this app's
  * route conventions. Serves the per-item JSON that `shadcn build` emitted into
- * `public/r/`. Item names carry the `ui/` prefix, so `@localmode/ui/device-badge`
- * resolves to `/r/ui/device-badge.json` → `public/r/ui/device-badge.json`.
+ * `public/r/`. Item names carry the `ui/` prefix, so `@localmode/ui/local-first/device-badge`
+ * resolves to `/r/ui/local-first/device-badge.json` → `public/r/ui/local-first/device-badge.json`.
  *
  * Token-gating for protected items is enforced upstream in `middleware.ts`.
  */

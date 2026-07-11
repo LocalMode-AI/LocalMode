@@ -269,7 +269,9 @@ test.describe('object-detector block', () => {
     await expect(block.getByText(/^Faces detected: \d+$/)).toBeVisible({
       timeout: MEDIAPIPE_TIMEOUT_MS,
     });
-    await expect(detectorStatus).toHaveText(/^camera on — \d+ face\(s\)$/);
+    // Block copy uses an ASCII hyphen (every block string literal does; none
+    // uses an em dash) — assert the source of truth, not a prettier variant.
+    await expect(detectorStatus).toHaveText(/^camera on - \d+ face\(s\)$/);
     await expect(page.getByAltText('Captured webcam still')).toBeVisible();
 
     // ── (b) cancel: abort the cold DETR download and stay retryable ──

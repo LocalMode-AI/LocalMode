@@ -143,6 +143,14 @@ let requestUrls: string[] = [];
 // resolves and the spec can read the clipboard back for verification.
 test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
 
+// NOTE: the trace runs WITHOUT the screencast + DOM snapshotter (action log
+// only). This is set GLOBALLY in playwright.config.ts — a chat block streaming
+// GGUF tokens mutates the DOM tens of times a second while wllama saturates
+// every core, and the per-mutation snapshots + screencast frames otherwise pile
+// up in the browser process and starve the model load/inference under test
+// (on the WebGPU path the browser OOM-crashes with SIGTRAP). See the config
+// comment for the full measurement.
+
 test.describe('blocks/chat', () => {
   test.beforeEach(({ context }) => {
     consoleMessages = [];
@@ -1181,8 +1189,27 @@ test.describe('blocks/chat extended lanes (6.3–6.12)', () => {
         'runs in a persistent (disk-backed) browser context: ephemeral contexts memory-back OPFS and corrupt >~1GiB single-file writes, so the 1.1GB GGUF cannot be stored in the default fixture context',
     });
 
+    // A dead browser must never masquerade as a product failure. When this
+    // browser exits, Playwright aborts whichever call is in flight and reports
+    // it as an ordinary failure — an expect showing its last observed value and
+    // no `Timeout:` line, or a `page.screenshot` that cannot reach its target.
+    // Both read as bugs in the chat block. Witness the death directly and name
+    // it, so the assertion is never mistaken for the cause.
+    let browserFailure: string | null = null;
+    let closingIntentionally = false;
+    const witnessDeath = (what: string) => {
+      if (!closingIntentionally) browserFailure ??= what;
+    };
+    persistentContext.on('close', () => witnessDeath('the persistent browser context closed on its own'));
+    persistentContext
+      .browser()
+      ?.on('disconnected', () =>
+        witnessDeath('the persistent browser process exited on its own (a Chromium crash, e.g. SIGTRAP)'),
+      );
+
     try {
       const page = persistentContext.pages()[0] ?? (await persistentContext.newPage());
+      page.on('crash', () => witnessDeath('the persistent browser page crashed (renderer OOM)'));
 
       await page.goto('/blocks/chat');
       await expect(page.getByRole('region', { name: 'Models' })).toBeVisible();
@@ -1200,7 +1227,18 @@ test.describe('blocks/chat extended lanes (6.3–6.12)', () => {
       });
 
       await runReasoningAssertions(page, testInfo);
+    } catch (error) {
+      if (browserFailure) {
+        throw new Error(
+          `${browserFailure}. The failure below is a symptom of that death, not a chat-block defect:\n\n${
+            (error as Error).message
+          }`,
+          { cause: error },
+        );
+      }
+      throw error;
     } finally {
+      closingIntentionally = true;
       await persistentContext.close();
       // Free the ~1.1GB profile — screenshots/attachments carry the evidence.
       await rm(profileDir, { recursive: true, force: true });

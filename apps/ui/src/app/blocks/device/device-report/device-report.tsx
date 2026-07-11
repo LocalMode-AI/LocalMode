@@ -6,7 +6,7 @@
  * @constraint Renders entirely from browser APIs — zero network, zero model bytes on mount.
  */
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { useAdaptiveBatchSize, useCapabilities, useStorageQuota } from '@localmode/react';
 import { formatBytes } from '@localmode/core';
@@ -67,6 +67,12 @@ function simplifyGpuName(raw: string): string {
  * browser/OS line, storage meter, reference readiness verdict, and adaptive
  * batch-size guidance — all from browser APIs, nothing downloaded.
  */
+/** Stable `useSyncExternalStore` args: a never-changing store that reads `false`
+ * on the server and `true` on the client — a setState-free mount flag. */
+const subscribeNever = () => () => {};
+const getTrue = () => true;
+const getFalse = () => false;
+
 export function DeviceReportBlock() {
   const { capabilities, isDetecting, error: capabilitiesError, refresh } = useCapabilities();
   const { quota, error: quotaError, refresh: refreshQuota } = useStorageQuota();
@@ -75,8 +81,7 @@ export function DeviceReportBlock() {
   // The batch computation is synchronous and reads `navigator` at call time,
   // so its server-rendered fallback would mismatch the client's detected
   // values. Gate its output behind a client mount to keep hydration clean.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useSyncExternalStore(subscribeNever, getTrue, getFalse);
 
   const error = capabilitiesError ?? quotaError;
   const status = error ? 'error' : isDetecting || !capabilities ? 'detecting' : 'ready';

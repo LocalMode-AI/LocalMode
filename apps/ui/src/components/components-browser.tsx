@@ -13,6 +13,25 @@ import { PREVIEWS } from '@/components/preview-registry';
 import { COMPONENT_PREVIEW_HEIGHTS } from '@/lib/component-preview-heights';
 import { cn } from '@/lib/utils';
 
+// Presentational preview cards must never scroll the page. Some demos call
+// Element.scrollIntoView() on mount (e.g. a cmdk list scrolling its selected item
+// into view), which scrolls the window to a card below the fold. Neutralize
+// scrollIntoView for elements inside a registered static preview — a targeted,
+// timing-independent guard; every other scrollIntoView is untouched. Roots are
+// tracked client-side via ref (not a DOM attribute) so it is hydration-safe.
+const staticPreviewRoots = new Set<Element>();
+if (typeof Element !== 'undefined') {
+  const proto = Element.prototype as Element & { __lmStaticPreviewPatched?: boolean };
+  if (!proto.__lmStaticPreviewPatched) {
+    proto.__lmStaticPreviewPatched = true;
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element, ...args: unknown[]) {
+      for (const root of staticPreviewRoots) if (root.contains(this)) return;
+      return (original as (...a: unknown[]) => void).apply(this, args);
+    };
+  }
+}
+
 /** Previews taller than this are capped with a scroll-free fade (click to see the full component). */
 const PREVIEW_CAP_PX = 400;
 
@@ -56,6 +75,17 @@ function CardPreview({ name }: { name: string }) {
     io.observe(el);
     return () => io.disconnect();
   }, [show]);
+
+  // Register this preview root so a mounting demo's scrollIntoView can't move the
+  // page (see the guard above).
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    staticPreviewRoots.add(el);
+    return () => {
+      staticPreviewRoots.delete(el);
+    };
+  }, []);
 
   const Demo = show ? PREVIEWS[name] : undefined;
 
@@ -103,6 +133,27 @@ export function ComponentsBrowser({ items }: { items: BrowserItem[] }) {
   const families = Object.keys(counts).sort();
 
   const [active, setActive] = React.useState<string>('all');
+
+  // Deep-link support: on mount, honor a `?filter=<family>` query param (e.g.
+  // linked from the docs site's component-family cards). An unknown value falls
+  // back to "all". Read in a client-only effect so the page stays statically
+  // rendered (no useSearchParams bailout) and hydration matches the server.
+  React.useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get('filter');
+    if (param && counts[param]) setActive(param);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Reflect the active family in the URL (replaceState only — no navigation) so a
+  // filtered view is shareable; "all" clears the param back to the canonical URL.
+  const selectFamily = React.useCallback((f: string) => {
+    setActive(f);
+    const url = new URL(window.location.href);
+    if (f === 'all') url.searchParams.delete('filter');
+    else url.searchParams.set('filter', f);
+    window.history.replaceState(null, '', url);
+  }, []);
+
   const visible = active === 'all' ? items : items.filter((i) => i.family === active);
 
   return (
@@ -111,14 +162,14 @@ export function ComponentsBrowser({ items }: { items: BrowserItem[] }) {
         <FilterChip
           label={`All (${items.length})`}
           active={active === 'all'}
-          onClick={() => setActive('all')}
+          onClick={() => selectFamily('all')}
         />
         {families.map((f) => (
           <FilterChip
             key={f}
             label={`${f} (${counts[f]})`}
             active={active === f}
-            onClick={() => setActive(f)}
+            onClick={() => selectFamily(f)}
           />
         ))}
       </div>

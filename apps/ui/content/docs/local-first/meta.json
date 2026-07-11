@@ -1,6 +1,7 @@
 {
   "title": "Local-First",
   "pages": [
+    "device-badge",
     "model-downloader",
     "chrome-ai-download-gate",
     "model-selector",

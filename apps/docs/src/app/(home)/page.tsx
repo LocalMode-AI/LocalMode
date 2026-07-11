@@ -63,10 +63,12 @@ const terminalCodeLLM = `$ pnpm install @localmode/core @localmode/webllm`;
 
 const exampleCodeLLM = `import { streamText, generateObject, jsonSchema } from '@localmode/core';
 import { webllm } from '@localmode/webllm';
+// import { wllama } from '@localmode/wllama'; // alternative provider
 import { z } from 'zod';
 
 // Stream text from a local LLM
 const model = webllm.languageModel('Llama-3.2-1B-Instruct-q4f16_1-MLC');
+// const model = wllama.languageModel('Qwen2.5-0.5B-Instruct-Q4_K_M');
 
 const result = await streamText({
   model,
@@ -265,7 +267,7 @@ const capabilities = [
       'Typed JSON output with Zod',
       'Semantic response caching',
       'Language model middleware',
-      '4 providers: WebGPU, WASM, ONNX, LiteRT',
+      '5 providers: WebGPU, WASM, ONNX, LiteRT, Chrome AI',
     ],
     href: '/docs/core/generation',
   },
@@ -343,67 +345,141 @@ const capabilities = [
   },
 ];
 
+// Featured UI component families (9 of the 10 shipped families; DevTools is
+// browsable at /docs/components but not featured here). `id` matches the family
+// filter on the components browser, so each card deep-links to that filtered view.
+// Sample names are real registry items.
+const componentFamilies = [
+  {
+    id: 'conversation',
+    icon: MessageSquare,
+    name: 'Conversation',
+    count: 24,
+    samples: ['message', 'prompt-input', 'agent-step-timeline', 'reasoning', 'tool'],
+  },
+  {
+    id: 'local-first',
+    icon: HardDrive,
+    name: 'Local-First',
+    count: 25,
+    samples: ['model-downloader', 'browser-compat-card', 'capability-gate'],
+  },
+  {
+    id: 'audio',
+    icon: Mic,
+    name: 'Audio',
+    count: 10,
+    samples: ['voice-button', 'streaming-speech-panel', 'transcribed-note-card'],
+  },
+  {
+    id: 'results',
+    icon: BarChart3,
+    name: 'Results & Insights',
+    count: 12,
+    samples: ['confidence-score-badge', 'cosine-similarity-meter', 'entity-stats-bar'],
+  },
+  {
+    id: 'input-controls',
+    icon: Terminal,
+    name: 'Input Controls',
+    count: 11,
+    samples: ['slash-command-palette', 'parameter-slider', 'copy-button'],
+  },
+  {
+    id: 'media-vision',
+    icon: Eye,
+    name: 'Media & Vision',
+    count: 7,
+    samples: ['media-dropzone', 'bounding-box-overlay', 'video-canvas'],
+  },
+  {
+    id: 'data-documents',
+    icon: Layers,
+    name: 'Data & Documents',
+    count: 5,
+    samples: ['file-dropzone', 'indexed-document-card', 'category-facet-list'],
+  },
+  {
+    id: 'artifacts',
+    icon: Code,
+    name: 'Artifacts & Canvas',
+    count: 4,
+    samples: ['artifact', 'data-table-artifact', 'chart-artifact'],
+  },
+  {
+    id: 'security-privacy',
+    icon: Lock,
+    name: 'Security & Privacy',
+    count: 5,
+    samples: ['passphrase-gate', 'differential-privacy-controls', 'lock-status-badge'],
+  },
+];
+
+// Installable blocks at localmode.ai/blocks — 36 route-served blocks across 12
+// categories, grouped here into four themes. `route` is the canonical block path.
 const demoCategories = [
   {
     icon: MessageSquare,
     title: 'Chat, Agents & Audio',
-    count: 7,
+    count: 9,
     apps: [
-      { name: 'LLM Chat', slug: 'llm-chat' },
-      { name: 'Research Agent', slug: 'research-agent' },
-      { name: 'GGUF Explorer', slug: 'gguf-explorer' },
-      { name: 'Voice Notes', slug: 'voice-notes' },
-      { name: 'Voice Studio', slug: 'voice-studio' },
-      { name: 'Meeting Assistant', slug: 'meeting-assistant' },
-      { name: 'Audiobook Creator', slug: 'audiobook-creator' },
+      { name: 'Chat', route: '/blocks/chat' },
+      { name: 'Research Agent', route: '/blocks/agents/research-agent' },
+      { name: 'Data Extractor', route: '/blocks/agents/data-extractor' },
+      { name: 'Voice Notes', route: '/blocks/audio/voice-notes' },
+      { name: 'Live Transcription', route: '/blocks/audio/live-transcription' },
+      { name: 'Meeting Assistant', route: '/blocks/audio/meeting-assistant' },
+      { name: 'Voice Explorer', route: '/blocks/audio/voice-explorer' },
+      { name: 'Audiobook Reader', route: '/blocks/audio/audiobook-reader' },
+      { name: 'Audio Classifier', route: '/blocks/audio/audio-classifier' },
     ],
   },
   {
     icon: Brain,
-    title: 'Text & NLP',
+    title: 'Text, Writing & NLP',
     count: 9,
     apps: [
-      { name: 'Smart Writer', slug: 'smart-writer' },
-      { name: 'Data Extractor', slug: 'data-extractor' },
-      { name: 'Sentiment Analyzer', slug: 'sentiment-analyzer' },
-      { name: 'Email Classifier', slug: 'email-classifier' },
-      { name: 'Translator', slug: 'translator' },
-      { name: 'Text Summarizer', slug: 'text-summarizer' },
-      { name: 'Q&A Bot', slug: 'qa-bot' },
-      { name: 'Smart Autocomplete', slug: 'smart-autocomplete' },
-      { name: 'Invoice Q&A', slug: 'invoice-qa' },
+      { name: 'Write', route: '/blocks/writing-tools/write' },
+      { name: 'Translate', route: '/blocks/writing-tools/translate' },
+      { name: 'Summarize', route: '/blocks/writing-tools/summarize' },
+      { name: 'Complete', route: '/blocks/writing-tools/complete' },
+      { name: 'Language Detector', route: '/blocks/text/language-detector' },
+      { name: 'Sentiment Analyzer', route: '/blocks/text-insights/sentiment-analyzer' },
+      { name: 'Text Classifier', route: '/blocks/text-insights/text-classifier' },
+      { name: 'Model Evaluator', route: '/blocks/text-insights/model-evaluator' },
+      { name: 'Threshold Calibrator', route: '/blocks/text-insights/threshold-calibrator' },
     ],
   },
   {
     icon: Eye,
-    title: 'Vision & Images',
-    count: 10,
+    title: 'Vision, Photo & Images',
+    count: 9,
     apps: [
-      { name: 'Background Remover', slug: 'background-remover' },
-      { name: 'Smart Gallery', slug: 'smart-gallery' },
-      { name: 'Product Search', slug: 'product-search' },
-      { name: 'Cross-Modal Search', slug: 'cross-modal-search' },
-      { name: 'Image Captioner', slug: 'image-captioner' },
-      { name: 'OCR Scanner', slug: 'ocr-scanner' },
-      { name: 'Object Detector', slug: 'object-detector' },
-      { name: 'MediaPipe Studio', slug: 'mediapipe-studio' },
-      { name: 'Duplicate Finder', slug: 'duplicate-finder' },
-      { name: 'Photo Enhancer', slug: 'photo-enhancer' },
+      { name: 'Object Detector', route: '/blocks/vision/object-detector' },
+      { name: 'Live Tracker', route: '/blocks/vision/live-tracker' },
+      { name: 'Smart Gallery', route: '/blocks/photo/smart-gallery' },
+      { name: 'Image Search', route: '/blocks/photo/image-search' },
+      { name: 'Duplicate Finder', route: '/blocks/photo/duplicate-finder' },
+      { name: 'Photo Categorizer', route: '/blocks/photo/photo-categorizer' },
+      { name: 'Background Remover', route: '/blocks/image-studio/background-remover' },
+      { name: 'Image Enhancer', route: '/blocks/image-studio/image-enhancer' },
+      { name: 'Image Captioner', route: '/blocks/image-studio/image-captioner' },
     ],
   },
   {
     icon: Search,
-    title: 'RAG, Search & Tools',
-    count: 8,
+    title: 'Knowledge, Device & Privacy',
+    count: 9,
     apps: [
-      { name: 'PDF Search', slug: 'pdf-search' },
-      { name: 'Semantic Search', slug: 'semantic-search' },
-      { name: 'LangChain RAG', slug: 'langchain-rag' },
-      { name: 'Data Migrator', slug: 'data-migrator' },
-      { name: 'Document Redactor', slug: 'document-redactor' },
-      { name: 'Encrypted Vault', slug: 'encrypted-vault' },
-      { name: 'Model Advisor', slug: 'model-advisor' },
-      { name: 'Model Evaluator', slug: 'model-evaluator' },
+      { name: 'Semantic Search', route: '/blocks/knowledge/semantic-search' },
+      { name: 'Document QA', route: '/blocks/knowledge/document-qa' },
+      { name: 'RAG Chat', route: '/blocks/knowledge/rag-chat' },
+      { name: 'Vector Data Manager', route: '/blocks/knowledge/vector-data-manager' },
+      { name: 'Device Report', route: '/blocks/device/device-report' },
+      { name: 'Model Advisor', route: '/blocks/device/model-advisor' },
+      { name: 'GGUF Explorer', route: '/blocks/device/gguf-explorer' },
+      { name: 'PII Redactor', route: '/blocks/privacy/pii-redactor' },
+      { name: 'Encrypted Vault', route: '/blocks/privacy/encrypted-vault' },
     ],
   },
 ];
@@ -614,10 +690,10 @@ export default async function HomePage() {
           <Link
             target="_blank"
             rel="noopener noreferrer"
-            href="https://localmode.ai"
+            href="https://localmode.ai/blocks"
             className="inline-flex items-center gap-2 px-6 py-3 text-base font-semibold rounded-lg border border-fd-border hover:bg-fd-accent transition-colors"
           >
-            Try 34 Demo Apps
+            Try 36 Live Blocks
           </Link>
           <Link
             target="_blank"
@@ -752,7 +828,7 @@ export default async function HomePage() {
             Function-first design with TypeScript. All operations return structured results.
           </p>
 
-          <div className="grid gap-12 lg:grid-cols-2">
+          <div className="grid gap-10 lg:grid-cols-2">
             {/* Embeddings & Vector Search */}
             <div className="space-y-4 min-w-0">
               <h3 className="text-xl font-semibold text-center mb-4">
@@ -766,7 +842,7 @@ export default async function HomePage() {
                   icon={<Terminal className="w-4 h-4" />}
                 />
               </div>
-              <div className="overflow-x-auto">
+              <div className="xl:[&_pre]:w-full! xl:[&_pre]:min-w-0! xl:[&_pre]:whitespace-pre-wrap! xl:[&_pre]:break-words xl:[&_code]:whitespace-pre-wrap! [&_figure]:mt-auto! [&_.fd-scroll-container]:max-h-none!">
                 <HighlightedCode
                   code={exampleCodeTransformers}
                   lang="typescript"
@@ -789,7 +865,7 @@ export default async function HomePage() {
                   icon={<Terminal className="w-4 h-4" />}
                 />
               </div>
-              <div className="overflow-x-auto">
+              <div className="xl:[&_pre]:w-full! xl:[&_pre]:min-w-0! xl:[&_pre]:whitespace-pre-wrap! xl:[&_pre]:break-words xl:[&_code]:whitespace-pre-wrap! [&_figure]:mt-auto! [&_.fd-scroll-container]:max-h-none!">
                 <HighlightedCode
                   code={exampleCodeLLM}
                   lang="typescript"
@@ -858,21 +934,88 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Demo Apps */}
-      <section className="px-6 py-20">
+      {/* Components */}
+      <section className="px-6 pt-20 pb-10">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-4">34 Demo Applications</h2>
-          <p className="text-center text-fd-muted-foreground mb-12 max-w-2xl mx-auto">
-            See every feature in action at{' '}
+          <h2 className="text-3xl font-bold text-center mb-4">100+ UI Components</h2>
+          <p className="text-center text-fd-muted-foreground mb-12 max-w-3xl mx-auto">
+            Beyond the packages, LocalMode ships{' '}
+            <span className="text-fd-foreground font-medium">107 copy-owned React components</span>{' '}
+            across 10 families - composable, local-first AI UI primitives you install with the shadcn
+            CLI and own outright.
+            <br />
+            Browse them all at{' '}
             <Link
-              href="https://localmode.ai"
+              href="https://localmode.ai/docs/components"
               target="_blank"
               rel="noopener noreferrer"
               className="text-fd-primary hover:underline"
             >
-              localmode.ai
+              LocalMode.ai
             </Link>
-            . All apps run 100% in the browser.
+            .
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {componentFamilies.map((fam) => (
+              <Link
+                key={fam.name}
+                href={`https://localmode.ai/docs/components?filter=${fam.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group p-5 rounded-xl bg-fd-card border border-fd-border hover:border-fd-primary/50 transition-colors"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <fam.icon className="w-6 h-6 text-fd-primary" />
+                  <h3 className="text-base font-semibold group-hover:text-fd-primary transition-colors">
+                    {fam.name}
+                  </h3>
+                  <span className="ml-auto text-xs font-medium text-fd-muted-foreground bg-fd-muted px-2 py-0.5 rounded-full">
+                    {fam.count}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {fam.samples.map((sample) => (
+                    <span
+                      key={sample}
+                      className="text-[11px] font-mono text-fd-muted-foreground bg-fd-muted/50 px-2 py-0.5 rounded"
+                    >
+                      {sample}
+                    </span>
+                  ))}
+                </div>
+              </Link>
+            ))}
+          </div>
+          <div className="text-center mt-8">
+            <Link
+              href="https://localmode.ai/docs/components"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-sm font-medium text-fd-primary hover:underline"
+            >
+              Browse all 107 components
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Blocks */}
+      <section className="px-6 pt-10 pb-20">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-3xl font-bold text-center mb-4">36 Interactive Blocks</h2>
+          <p className="text-center text-fd-muted-foreground mb-12 max-w-2xl mx-auto">
+            The components composed into full, installable experiences - each running a real model
+            entirely in the browser. See them live at{' '}
+            <Link
+              href="https://localmode.ai/blocks"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-fd-primary hover:underline"
+            >
+              LocalMode.ai/blocks
+            </Link>
+            .
           </p>
           <div className="grid gap-6 sm:grid-cols-2">
             {demoCategories.map((cat) => (
@@ -884,14 +1027,14 @@ export default async function HomePage() {
                   <cat.icon className="w-6 h-6 text-fd-primary" />
                   <h3 className="text-base font-semibold">{cat.title}</h3>
                   <span className="ml-auto text-xs font-medium text-fd-muted-foreground bg-fd-muted px-2 py-0.5 rounded-full">
-                    {cat.count} apps
+                    {cat.count} blocks
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {cat.apps.map((app) => (
                     <Link
-                      key={app.slug}
-                      href={`https://localmode.ai/${app.slug}`}
+                      key={app.route}
+                      href={`https://localmode.ai${app.route}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-xs text-fd-muted-foreground bg-fd-muted/50 px-2.5 py-1 rounded-md hover:bg-fd-primary/10 hover:text-fd-primary transition-colors"
@@ -905,12 +1048,12 @@ export default async function HomePage() {
           </div>
           <div className="text-center mt-8">
             <Link
-              href="https://localmode.ai"
+              href="https://localmode.ai/blocks"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 text-sm font-medium text-fd-primary hover:underline"
             >
-              Try all demos at localmode.ai
+              Explore all 36 blocks
               <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
@@ -935,7 +1078,7 @@ export default async function HomePage() {
             >
               <p className="text-xs text-fd-muted-foreground mb-2">Featured</p>
               <h3 className="font-semibold text-sm group-hover:text-fd-primary transition-colors mb-1">
-                The 34 AI Features in Our Open-Source Showcase
+                The 36 AI Blocks in Our Open-Source Gallery - All Running in Your Browser Right Now
               </h3>
               <p className="text-xs text-fd-muted-foreground line-clamp-2">
                 Every feature running in your browser, from embeddings and vector search to LLM chat and real-time hand tracking.
@@ -1020,8 +1163,8 @@ export default async function HomePage() {
           <Globe className="w-12 h-12 mx-auto mb-6 text-fd-primary" />
           <h2 className="text-3xl font-bold mb-4">Ready to Build?</h2>
           <p className="text-fd-muted-foreground mb-8 max-w-xl mx-auto">
-            Start building local-first AI applications with comprehensive documentation, 34 example
-            apps, and guides for every feature.
+            Start building local-first AI applications with comprehensive documentation, 100+ UI
+            components, 36 interactive blocks, and guides for every feature.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <Link

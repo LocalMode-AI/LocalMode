@@ -239,14 +239,21 @@ export function NetworkStatus() {
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.__networkMonitor) return;
+    const monitor = window.__networkMonitor;
+    let cancelled = false;
 
-    // Backfill anything captured before React mounted.
-    for (const entry of window.__networkMonitor.getLogs()) {
-      processEntry(entry);
-    }
+    // Backfill anything captured before React mounted. Deferred to a microtask
+    // so the effect body itself performs no synchronous state updates.
+    queueMicrotask(() => {
+      if (cancelled) return;
+      for (const entry of monitor.getLogs()) processEntry(entry);
+    });
 
-    const unsubscribe = window.__networkMonitor.subscribe(processEntry);
-    return () => unsubscribe();
+    const unsubscribe = monitor.subscribe(processEntry);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [processEntry]);
 
   const groupedRequests = useMemo(() => groupRequests(recentRequests), [recentRequests]);

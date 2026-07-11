@@ -72,7 +72,7 @@ const ITEMS = [
   'ui/results/scored-result-bar-list',
   'ui/results/threshold-calibration-panel',
   'ui/data-documents/file-dropzone',
-  'ui/device-badge',
+  'ui/local-first/device-badge',
   'ui/local-first/network-badge',
   'ui/local-first/capability-gate',
   'ui/conversation/response',

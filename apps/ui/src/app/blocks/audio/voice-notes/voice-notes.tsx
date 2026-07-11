@@ -73,12 +73,13 @@ export function useNoteIndex() {
   };
 
   // Dispose the in-memory VectorDB when the block unmounts (STT-model remount
-  // or page leave). Reads the refs at cleanup time so the live instance closes.
+  // or page leave). The id set is captured on mount (the ref is never reassigned).
   useEffect(() => {
+    const indexedIds = indexedIdsRef.current;
     return () => {
       const pending = dbPromiseRef.current;
       dbPromiseRef.current = null;
-      indexedIdsRef.current.clear();
+      indexedIds.clear();
       if (pending) void pending.then((db) => db.close()).catch(() => {});
     };
   }, []);

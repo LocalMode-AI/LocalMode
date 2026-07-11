@@ -21,17 +21,17 @@ The **Device Badge** surfaces a browser AI capability.
 
 Preview [#preview]
 
-<ComponentPreview name="ui/device-badge" note="Detects your browser's WebGPU / WASM / storage support — runs locally, no model download." />
+<ComponentPreview name="ui/local-first/device-badge" note="Detects your browser's WebGPU / WASM / storage support — runs locally, no model download." />
 
-<OpenInV0 name="ui/device-badge" />
+<OpenInV0 name="ui/local-first/device-badge" />
 
 Installation [#installation]
 
-<InstallTabs name="ui/device-badge" />
+<InstallTabs name="ui/local-first/device-badge" />
 
 Props [#props]
 
-<AutoTypeTable path="registry/localmode/device-badge/device-badge.tsx" name="DeviceBadgeProps" />
+<AutoTypeTable path="registry/localmode/local-first/device-badge/device-badge.tsx" name="DeviceBadgeProps" />
 
 Examples [#examples]
 
@@ -72,7 +72,7 @@ describe('expandDocMarkdown (expandSource: true — per-page Copy page)', () => 
     const out = await expandDocMarkdown(PROCESSED, { expandSource: true });
     expect(out).not.toContain('<InstallTabs');
     expect(out).not.toContain('<OpenInV0');
-    expect(out).toContain('npx shadcn@latest add @localmode/ui/device-badge');
+    expect(out).toContain('npx shadcn@latest add @localmode/ui/local-first/device-badge');
   });
 
   it('leaves the hand-written Examples fence untouched', async () => {
@@ -89,8 +89,8 @@ describe('expandDocMarkdown (expandSource: false — lean llms-full.txt)', () =>
     // No inlined demo source.
     expect(out).not.toContain('DeviceBadgeDemo');
     // A compact pointer to the canonical registry source.
-    expect(out).toContain('/r/ui/device-badge.json');
-    expect(out).toContain('npx shadcn@latest add @localmode/ui/device-badge');
+    expect(out).toContain('/r/ui/local-first/device-badge.json');
+    expect(out).toContain('npx shadcn@latest add @localmode/ui/local-first/device-badge');
     // Props table still expands (it is compact and high-value).
     expect(out).toContain('| `capability` |');
   });

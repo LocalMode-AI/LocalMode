@@ -131,6 +131,7 @@ export function BeforeAfterImageViewer({
 }: BeforeAfterImageViewerProps) {
   const [showProcessed, setShowProcessed] = React.useState(true);
   const hasProcessed = Boolean(processedSrc);
+  const panelId = React.useId();
 
   // Derive distinct alts so the original and result are never announced
   // identically. Empty `alt` stays empty (both decorative).
@@ -141,9 +142,35 @@ export function BeforeAfterImageViewer({
     const showingResult = hasProcessed && showProcessed;
     const activeSrc = showingResult ? processedSrc! : originalSrc;
 
+    // Two mutually exclusive views of one region: an ARIA tablist, not a pair of
+    // aria-pressed toggle buttons. Assistive tech announces "selected, 1 of 2"
+    // and the arrow keys move between views, which `aria-pressed` cannot express.
+    const tabProps = (selected: boolean, onSelect: () => void) => ({
+      type: 'button' as const,
+      role: 'tab',
+      'aria-selected': selected,
+      'aria-controls': panelId,
+      tabIndex: selected ? 0 : -1,
+      onClick: onSelect,
+      onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => {
+        if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+        event.preventDefault();
+        setShowProcessed((current) => !current);
+      },
+      className: cn(
+        'rounded-md px-3 py-1 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
+        selected
+          ? 'bg-background text-foreground shadow-sm'
+          : 'text-muted-foreground hover:text-foreground',
+      ),
+    });
+
     return (
       <div className={cn('space-y-3', className)}>
         <div
+          id={panelId}
+          role={hasProcessed ? 'tabpanel' : undefined}
+          aria-label={hasProcessed ? (showingResult ? processedLabel : originalLabel) : undefined}
           className="relative flex items-center justify-center overflow-hidden rounded-lg border border-border bg-card"
           style={showingResult && checkerboard ? CHECKERBOARD_STYLE : undefined}
         >
@@ -157,34 +184,14 @@ export function BeforeAfterImageViewer({
 
         {hasProcessed && (
           <div
-            role="group"
+            role="tablist"
             aria-label="Compare original and result"
             className="inline-flex rounded-lg border border-border bg-muted p-1"
           >
-            <button
-              type="button"
-              aria-pressed={!showProcessed}
-              onClick={() => setShowProcessed(false)}
-              className={cn(
-                'rounded-md px-3 py-1 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
-                !showProcessed
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
+            <button {...tabProps(!showProcessed, () => setShowProcessed(false))}>
               {originalLabel}
             </button>
-            <button
-              type="button"
-              aria-pressed={showProcessed}
-              onClick={() => setShowProcessed(true)}
-              className={cn(
-                'rounded-md px-3 py-1 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
-                showProcessed
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
+            <button {...tabProps(showProcessed, () => setShowProcessed(true))}>
               {processedLabel}
             </button>
           </div>

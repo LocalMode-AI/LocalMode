@@ -741,15 +741,22 @@ const localmodeOf = (npmDeps) => npmDeps.filter((p) => p.startsWith('@localmode/
 
 /**
  * Build a render-check.tsx that mounts the installed split block with
- * `react-dom/server` and asserts each witness (a list of substrings ALL of
- * which must be present in the static markup). The witnesses key on REAL
- * text/role observables — never `data-testid`, which the platform strip
- * transform removes from the installed files.
+ * `react-dom/server` and asserts each witness: every substring in `all` must be
+ * present in the static markup, and every substring in `none` must be absent.
+ * `none` is what proves a surface is still GATED — that a block renders its
+ * pre-model controls without leaking model- or result-dependent output into the
+ * first paint. The witnesses key on REAL text/role observables — never
+ * `data-testid`, which the platform strip transform removes from the installs.
  */
 function makeRenderCheck(importPath, componentName, witnesses) {
   const checks = witnesses
     .map((w) => {
-      const cond = w.all.map((s) => `html.includes(${JSON.stringify(s)})`).join(' && ');
+      const present = (w.all ?? []).map((s) => `html.includes(${JSON.stringify(s)})`);
+      const absent = (w.none ?? []).map((s) => `!html.includes(${JSON.stringify(s)})`);
+      const cond = [...present, ...absent].join(' && ');
+      // A witness with no clauses would compile to a condition that can never
+      // fail — worse than no witness at all. Refuse to emit one.
+      if (!cond) throw new Error(`witness "${w.name}" declares neither \`all\` nor \`none\``);
       return `  [${JSON.stringify(w.name)}, ${cond}],`;
     })
     .join('\n');
@@ -1043,7 +1050,24 @@ const SPLIT_BLOCK_LANES = [
     witnesses: [
       { name: 'idle status line', all: ['idle - select a model and click Load'] },
       { name: 'model panel probes WebGPU on the client', all: ['Checking WebGPU support'] },
-      { name: 'extractor gated on client model creation', all: ['Preparing…'] },
+      // The template picker, schema preview and input are real WITHOUT a model —
+      // `e2e/blocks/agents.spec.ts` asserts exactly this on the category page
+      // before any Load, so a consumer must get the same first paint. Only the
+      // model- and result-dependent parts stay gated: Extract is disabled until
+      // the model is ready, and the "Extracted data" region has no result to show.
+      {
+        name: 'template picker + schema preview render without a model',
+        all: [
+          'aria-label="Extraction template"',
+          'data-template="contact"',
+          '{ name, email, phone?, company? }',
+          'aria-label="Text to extract from"',
+        ],
+      },
+      {
+        name: 'result surface stays gated on a real extraction',
+        none: ['aria-label="Extracted data"'],
+      },
     ],
   },
   {

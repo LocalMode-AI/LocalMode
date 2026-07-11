@@ -194,11 +194,11 @@ function majorVersion(version: string | undefined): string {
   return version.split('.')[0] ?? '';
 }
 
-/** Picks the lucide icon for a device type. */
-function deviceIcon(type: DeviceCapabilities['device']['type']) {
-  if (type === 'mobile') return Smartphone;
-  if (type === 'tablet') return Tablet;
-  return Laptop; // desktop | unknown
+/** Renders the lucide icon element for a device type. */
+function deviceIcon(type: DeviceCapabilities['device']['type'], className?: string) {
+  if (type === 'mobile') return <Smartphone className={className} />;
+  if (type === 'tablet') return <Tablet className={className} />;
+  return <Laptop className={className} />; // desktop | unknown
 }
 
 /**
@@ -336,7 +336,7 @@ export function CapabilitiesPanel() {
     : PENDING;
 
   const deviceValue = caps ? `${caps.device.os} ${caps.device.osVersion}`.trim() || 'Unknown' : PENDING;
-  const DeviceIcon = deviceIcon(caps?.device.type ?? 'unknown');
+  const deviceIconEl = deviceIcon(caps?.device.type ?? 'unknown', 'size-4');
 
   const coresValue = caps ? (caps.hardware.cores > 0 ? String(caps.hardware.cores) : 'Unknown') : PENDING;
 
@@ -381,7 +381,7 @@ export function CapabilitiesPanel() {
             hint="The browser and version LocalMode detected from your user agent."
           />
           <StatCard
-            icon={<DeviceIcon className="size-4" />}
+            icon={deviceIconEl}
             label="Device"
             value={deviceValue}
             hint="Your operating system and device type, detected locally from your browser."

@@ -25,14 +25,14 @@ interface Registry {
 
 /** Map a registry item name (`ui/conversation/message`) to its docs slug. */
 function docsSlug(name: string) {
-  // `ui/device-badge` → `/docs/device-badge`; `ui/conversation/message` → `/docs/conversation/message`
+  // `ui/local-first/device-badge` → `/docs/local-first/device-badge`; `ui/conversation/message` → `/docs/conversation/message`
   return `/docs/${name.replace(/^ui\//, '')}`;
 }
 
-/** Family slug from the item name (the docs folder), or `general` for the seed. */
+/** Family slug from the item name (the docs folder). Every component is family-scoped. */
 function familyOf(name: string) {
   const parts = name.replace(/^ui\//, '').split('/');
-  return parts.length > 1 ? parts[0] : 'general';
+  return parts.length > 1 ? parts[0] : 'local-first';
 }
 
 function loadRegistry(): Registry {

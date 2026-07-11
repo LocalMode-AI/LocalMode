@@ -9,7 +9,7 @@ import type { ComponentType } from 'react';
 export type PreviewLoader = ComponentType;
 
 export const PREVIEWS: Record<string, PreviewLoader> = {
-  'ui/device-badge': dynamic(() => import('@/registry/localmode/device-badge/device-badge-demo'), { ssr: false }),
+  'ui/local-first/device-badge': dynamic(() => import('@/registry/localmode/local-first/device-badge/device-badge-demo'), { ssr: false }),
   'ui/artifacts/artifact': dynamic(() => import('@/registry/localmode/artifacts/artifact/artifact-demo'), { ssr: false }),
   'ui/artifacts/data-table-artifact': dynamic(() => import('@/registry/localmode/artifacts/data-table-artifact/data-table-artifact-demo'), { ssr: false }),
   'ui/artifacts/chart-artifact': dynamic(() => import('@/registry/localmode/artifacts/chart-artifact/chart-artifact-demo'), { ssr: false }),

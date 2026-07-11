@@ -19,8 +19,17 @@ import { applyMaskToImage, downloadDataUrl } from '@/lib/browser-utils';
 /** SegFormer background-removal model (~15MB). */
 const SEGMENTER_MODEL_ID = 'Xenova/segformer-b0-finetuned-ade-512-512';
 
+// Pin the segmenter to WASM. SegFormer-b0 is a ~15MB one-shot model that loads
+// and runs in well under a second on WASM — indistinguishable from WebGPU here.
+// The WebGPU (ONNX-Runtime JSEP) path, by contrast, has a lifecycle hazard: if
+// the segmenter is cancelled while its first inference is still starting (the
+// block exposes a Cancel during the cold load), the JSEP session is left wedged
+// and every later inference on the page hangs forever — even after a fresh
+// pipeline. WASM has no such state, so cancel-then-retry is safe. Forcing WebGPU
+// on a model this small buys no measurable speed and reintroduces the hang.
 let segmenter: ReturnType<typeof transformers.segmenter> | null = null;
-const getSegmenterModel = () => (segmenter ??= transformers.segmenter(SEGMENTER_MODEL_ID));
+const getSegmenterModel = () =>
+  (segmenter ??= transformers.segmenter(SEGMENTER_MODEL_ID, { device: 'wasm' }));
 
 /** Accepted upload types (background-remover parity). */
 const ACCEPTED = ['image/png', 'image/jpeg', 'image/webp'];

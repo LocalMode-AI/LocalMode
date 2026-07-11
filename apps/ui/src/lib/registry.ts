@@ -3,7 +3,7 @@
  * @description Shared registry constants for the @localmode/ui shadcn registry.
  *
  * The site is BOTH the registry endpoint and the docs site. Registry item JSON
- * is served from `/r/<name>.json` (e.g. `/r/ui/device-badge.json`). The consumer
+ * is served from `/r/<name>.json` (e.g. `/r/ui/local-first/device-badge.json`). The consumer
  * configures the single-token `@localmode` namespace in their `components.json`:
  *
  *   { "registries": { "@localmode": "https://localmode.ai/r/{name}.json" } }

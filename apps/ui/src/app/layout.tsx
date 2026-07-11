@@ -88,8 +88,15 @@ export default function Layout({ children }: { children: ReactNode }) {
         {/* PWA + perf, mounted once site-wide. */}
         <SWRegistrar />
         <SpeculationRules />
-        <Analytics />
-        <SpeedInsights />
+        {/* Vercel-only: both scripts are served from `/_vercel/*` by Vercel's
+            edge. Outside Vercel (a local `next start`, a self-hosted build) they
+            404 and every page logs two MIME-type console errors. */}
+        {process.env.VERCEL_ENV ? (
+          <>
+            <Analytics />
+            <SpeedInsights />
+          </>
+        ) : null}
       </body>
     </html>
   );
