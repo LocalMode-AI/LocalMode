@@ -89,7 +89,9 @@ function writeAggregate(
 ) {
   const json = {
     $schema: 'https://ui.shadcn.com/schema/registry-item.json',
-    name: path.basename(fileName, '.json'),
+    // Prefix with `ui/` so the aggregate's `name` matches its install path /
+    // served route (`/r/ui/<basename>.json`), consistent with component items.
+    name: `ui/${path.basename(fileName, '.json')}`,
     type: 'registry:block',
     title,
     description,
