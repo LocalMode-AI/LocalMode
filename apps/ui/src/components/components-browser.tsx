@@ -11,26 +11,8 @@ import * as React from 'react';
 import Link from 'next/link';
 import { PREVIEWS } from '@/components/preview-registry';
 import { COMPONENT_PREVIEW_HEIGHTS } from '@/lib/component-preview-heights';
+import { registerStaticPreviewRoot } from '@/lib/static-preview-scroll-guard';
 import { cn } from '@/lib/utils';
-
-// Presentational preview cards must never scroll the page. Some demos call
-// Element.scrollIntoView() on mount (e.g. a cmdk list scrolling its selected item
-// into view), which scrolls the window to a card below the fold. Neutralize
-// scrollIntoView for elements inside a registered static preview — a targeted,
-// timing-independent guard; every other scrollIntoView is untouched. Roots are
-// tracked client-side via ref (not a DOM attribute) so it is hydration-safe.
-const staticPreviewRoots = new Set<Element>();
-if (typeof Element !== 'undefined') {
-  const proto = Element.prototype as Element & { __lmStaticPreviewPatched?: boolean };
-  if (!proto.__lmStaticPreviewPatched) {
-    proto.__lmStaticPreviewPatched = true;
-    const original = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = function (this: Element, ...args: unknown[]) {
-      for (const root of staticPreviewRoots) if (root.contains(this)) return;
-      return (original as (...a: unknown[]) => void).apply(this, args);
-    };
-  }
-}
 
 /** Previews taller than this are capped with a scroll-free fade (click to see the full component). */
 const PREVIEW_CAP_PX = 400;
@@ -77,14 +59,11 @@ function CardPreview({ name }: { name: string }) {
   }, [show]);
 
   // Register this preview root so a mounting demo's scrollIntoView can't move the
-  // page (see the guard above).
+  // page (see static-preview-scroll-guard).
   React.useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    staticPreviewRoots.add(el);
-    return () => {
-      staticPreviewRoots.delete(el);
-    };
+    return registerStaticPreviewRoot(el);
   }, []);
 
   const Demo = show ? PREVIEWS[name] : undefined;
