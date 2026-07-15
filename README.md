@@ -1,5 +1,11 @@
 # LocalMode
 
+<p align="center">
+  <a href="https://localmode.ai/blocks">
+    <img src="./.github/assets/hero-stat.svg" alt="LocalMode — local-first, private, offline AI for the browser. 15 npm packages, 107 UI components, 37 blocks, 76 chat models, 64 React hooks. No servers, no API keys." width="100%">
+  </a>
+</p>
+
 **Local-first, privacy-first, offline-first AI for the browser.**
 
 Run ML models entirely in your browser. No servers. No API keys. Your data never leaves your device.
@@ -69,7 +75,7 @@ npx shadcn@latest add @localmode/ui/all                    # the whole catalog
 | Family | Count | What it covers |
 | ------ | ----- | -------------- |
 | [Conversation](https://localmode.ai/docs/conversation/conversation) | 24 | Chat shell, prompt input, reasoning, sources, tools, agent timelines, branches, citations |
-| [Local-First](https://localmode.ai/docs/local-first/model-downloader) | 24 | Model download/selection, Hub search, capability gates, storage quota, cache status, VectorDB observability |
+| [Local-First](https://localmode.ai/docs/local-first/model-downloader) | 25 | Model download/selection, Hub search, capability gates, storage quota, cache status, VectorDB observability |
 | [Results & Insights](https://localmode.ai/docs/results/confidence-score-badge) | 12 | Confidence badges, scored result bars, similarity meters, evaluation dashboards, entity displays |
 | [Input Controls](https://localmode.ai/docs/input-controls/char-limit-indicator) | 11 | Char-limit rings, fill-mask inputs, mode pickers, parameter sliders, slash-command palettes |
 | [Audio](https://localmode.ai/docs/audio/waveform-activity-bars) | 10 | Voice buttons/orbs, waveform bars, TTS voice pickers, streaming-speech panels, transcript viewers |
@@ -379,7 +385,7 @@ See LocalMode running real models entirely in your browser at the **[/blocks gal
 │                                  26 model factories (ONNX)               │
 │  @localmode/webllm               WebGPU LLM inference, 32 models         │
 │  @localmode/wllama               GGUF via llama.cpp WASM, 30 curated     │
-│                                  + 160K+, streaming, JSON mode, rerank  │
+│                                  + 160K+, streaming, JSON mode, rerank   │
 │  @localmode/litert               Google LiteRT-LM, .litertlm models      │
 │  @localmode/mediapipe            Google MediaPipe — landmarks, gestures  │
 │  @localmode/chrome-ai            Gemini Nano, browser-supplied           │
@@ -532,7 +538,7 @@ Found a bug or unexpected behavior? [Open an issue](https://github.com/LocalMode
 
 ## Contributing
 
-Contributions are welcome! Fork the repo, create a branch, and open a pull request. Please follow the existing code style and patterns.
+Contributions are welcome! See **[CONTRIBUTING.md](./CONTRIBUTING.md)** for setup, the architecture rules, our testing standards, and the pull-request checklist.
 
 ## Changelog
 

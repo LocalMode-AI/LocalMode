@@ -84,10 +84,41 @@ A block (`ui/blocks/*`) is a full working surface — chat, semantic search, voi
 Category names changed during development, so `next.config.mjs` 308-redirects the earlier `/blocks/<name>` routes to their category page, and permanently redirects the 34 `localmode.ai/<slug>` URLs the retired showcase app served to the block that absorbed each one. Both tables live in `src/lib/legacy-redirects.ts`, shared with the redirect-walk E2E spec so config and test cannot drift.
 
 
-- **Component** — add `registry/localmode/<family>/<component>/<component>.tsx`, declare the item in `registry.json`, register a live-preview loader in `src/components/preview-registry.ts`, and author `content/docs/<family>/<component>.mdx`. Aggregates pick it up automatically.
-- **Block** — add `src/app/blocks/<name>/` (or `<category>/<slug>/`) with a `BlockShell` page wrapper, register it in `category-map.ts`, declare the `registry:block` item in `registry.json`, add its card to `blocks-catalog.ts`, and add an `e2e/blocks/<name>.spec.ts` real-model spec.
+## How to add a component
 
-Then run `pnpm --filter ui registry:build` and keep the unit + consumer lanes green.
+A primitive is one copy-owned `.tsx`. `registry.json` is the catalog `shadcn build` reads, so it is the file you edit — the aggregates are generated from it. (Per-family `_family-manifest.json` files carry family metadata; there is no active step that merges them, so add the item to `registry.json` directly.)
+
+1. **Create** `registry/localmode/<family>/<component>/<component>.tsx` — presentational and hook-driven, styled with shadcn/ui tokens + `cn()` from `@/lib/utils`. Keep the [portability invariant](#primitives-are-zero-localmode-portability-invariant): no `@localmode/*` imports, and define prop shapes locally. Import sibling items as `@/components/<item>` (add a matching `tsconfig.json` `paths` entry) — never a relative `../<item>/` path, which breaks after a flat `shadcn add`. Add an optional `<component>-demo.tsx` for the docs live preview; it **must not** load a model on mount (gate it behind an in-demo action, or mark the preview `gated`).
+2. **Declare the item** in `registry.json`:
+   ```jsonc
+   {
+     "name": "ui/<family>/<component>",
+     "type": "registry:component",
+     "title": "…",
+     "description": "…",
+     "author": "LocalMode",
+     "dependencies": ["lucide-react"],                    // ONLY real npm packages the .tsx imports — never @localmode/*
+     "registryDependencies": ["@localmode/ui/lib/utils"], // + other ui/<…> items or bare shadcn names (button, dialog…)
+     "files": [{ "path": "registry/localmode/<family>/<component>/<component>.tsx", "type": "registry:component" }],
+     "categories": ["<family>"]
+   }
+   ```
+   The `ui/all` and `ui/<family>` aggregates pick it up on the next `registry:build` — **never edit the aggregates** (`scripts/build-aggregates.ts` generates them).
+3. **Register the demo loader** (only if it has a `-demo.tsx`) in `src/components/preview-registry.ts`: map the item name to a `ssr:false` dynamic import so the live preview stays client-only and gated.
+4. **Author the docs page** `content/docs/<family>/<component>.mdx` — description → `<ComponentPreview name="ui/<family>/<component>" />` → `<InstallTabs name="…" />` → `<AutoTypeTable path="…" name="<Component>Props" />` → examples → `<OpenInV0 name="…" />` — and list it in `content/docs/<family>/meta.json`.
+5. **Verify:** `pnpm --filter ui build` (runs `registry:build`, then `next build`) and `pnpm --filter ui test:portability` (proves the item installs with zero `@localmode/*` leakage).
+
+## How to add a block
+
+A block is a single self-contained experience that wires primitives to real on-device models. It is the only kind of item allowed to depend on `@localmode/*`.
+
+1. **Create** `src/app/blocks/<name>/<name>.tsx` as **one self-contained file** — inline any block-specific helpers (model catalogs, tools, templates, hot-path utils) so the installed/Code-tab file has zero local `./` imports; import primitives via `@/components/<item>`; **gate every model load behind an explicit in-block action** (nothing downloads on page open). Keep the main-file header ≤3 lines and tag any load-bearing constraint comment `/** KEEP */` — `stripSnippet` removes everything else from the shipped surface. No `data-testid`; give every control a role + accessible name instead.
+2. **Add the page wrapper** `src/app/blocks/<name>/page.tsx` wrapping the impl in `BlockShell` with `source={readBlockSource('<name>')}`. For a multi-block category, nest the block at `src/app/blocks/<category>/<slug>/` and add a `src/app/blocks/<category>/page.tsx` `CategoryShell` that mounts every block of the category.
+3. **Register the block** in `src/app/blocks/category-map.ts` — the single source of the category → blocks structure. A category with one block whose slug equals the category id stays flat (`ui/blocks/<slug>`); otherwise it is deep-routed (`ui/blocks/<category>/<slug>`).
+4. **Declare the `registry:block` item** in `registry.json` — file `path` pointing at the impl with a `target` under `components/blocks/<name>/`, `registryDependencies` listing the composed primitives, `dependencies` listing the `@localmode/*` (and other npm) packages it imports, and `categories: ["blocks", "<category>"]`. Blocks are excluded from aggregates automatically (the exclusion keys on the `ui/blocks/` name prefix).
+5. **Add the gallery card** to `src/app/blocks/blocks-catalog.ts` (the `/blocks` grid derives from it — never hand-edit `page.tsx`). Set the card's `pageDescription` to the block's full page description so "Copy page" / "View as Markdown" match — a unit test guards against drift.
+6. **Add a real-model E2E spec** `e2e/blocks/<name>.spec.ts` — real model download + inference (no mocked model boundary), selecting via role/label/text.
+7. **Verify:** `pnpm --filter ui build`, `test:unit`, `test:blocks`, and `test:e2e`. The shipped output must meet the acceptance criterion — every installed block file has **zero `data-testid`, zero QA/E2E comments, and a ≤3-line header**.
 
 ## Site surfaces
 
