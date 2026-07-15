@@ -26,15 +26,15 @@
   <rect width="1280" height="440" rx="20" fill="url(#glow2)"/>
   <rect x="1" y="1" width="1278" height="438" rx="19" fill="none" stroke="#ffffff" stroke-opacity="0.08"/>
 
-  <!-- Brand mark + wordmark -->
+  <!-- Brand mark + wordmark (centered as one unit on CX) -->
   <g>
-    <rect x="512" y="40" width="76" height="76" rx="18" fill="#0a0a0a" stroke="#ffffff" stroke-opacity="0.16"/>
-    <g transform="translate(529,57) scale(1.75)" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <rect x="461" y="40" width="76" height="76" rx="18" fill="#0a0a0a" stroke="#ffffff" stroke-opacity="0.16"/>
+    <g transform="translate(478,57) scale(1.75)" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
       <path d="m2 2 20 20"/>
       <path d="M5.782 5.782A7 7 0 0 0 9 19h8.5a4.5 4.5 0 0 0 1.307-.193"/>
       <path d="M21.532 16.5A4.5 4.5 0 0 0 17.5 10h-1.79A7.008 7.008 0 0 0 10 5.07"/>
     </g>
-    <text x="604" y="94" font-size="52" font-weight="800" fill="#ffffff">LocalMode</text>
+    <text x="553" y="94" font-size="52" font-weight="800" fill="#ffffff">LocalMode</text>
   </g>
 
   <text x="640" y="156" font-size="21" text-anchor="middle" fill="#94a3b8">Run ML models entirely in your browser. No servers. No API keys. Your data never leaves the device.</text>
