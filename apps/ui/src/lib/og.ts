@@ -21,8 +21,8 @@ export function ogImageUrl({ title, description, eyebrow }: OgParams): string {
   return `/api/og?${p.toString()}`;
 }
 
-/** The default site OG image (homepage / any page without its own). */
-export const DEFAULT_OG = ogImageUrl({
-  title: 'Local-first AI UI components',
-  description: 'Copy-owned React components and installable blocks that run real models in the browser.',
-});
+/**
+ * The default site OG image (homepage / any page without its own).
+ * Static brand cover in `public/`; resolved to an absolute URL via `metadataBase`.
+ */
+export const DEFAULT_OG = '/og-default.png';
