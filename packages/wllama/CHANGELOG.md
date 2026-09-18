@@ -1,5 +1,11 @@
 # @localmode/wllama
 
+## 3.1.2
+
+### Patch Changes
+
+- fix: `preloadModel()` now downloads through wllama's `ModelManager` (cache-only, no inference context). The previous implementation preloaded via a full `loadModelFromUrl()`, which ran llama.cpp's causal-LLM init warmup — on encoder-only GGUFs (embedding and reranker models) that warmup aborts the WASM runtime in `llama_context::output_reserve`, so those models could never be preloaded; it also loaded full model weights into memory just to populate the cache. The new path caches without constructing an inference context. Regression tests: `tests/preload.test.ts`.
+
 ## 3.1.1
 
 ### Patch Changes

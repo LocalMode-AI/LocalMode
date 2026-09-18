@@ -78,7 +78,7 @@ test.describe('site platform — SEO + PWA surfaces', () => {
     const xml = await res.text();
     const paths = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => new URL(m[1]).pathname);
 
-    for (const p of ['/', '/docs', '/blocks', '/capabilities']) {
+    for (const p of ['/', '/docs', '/blocks', '/bench', '/bench/run', '/bench/methodology', '/capabilities']) {
       expect(paths, `sitemap lists ${p}`).toContain(p);
     }
     for (const route of expectedBlockRoutes()) {

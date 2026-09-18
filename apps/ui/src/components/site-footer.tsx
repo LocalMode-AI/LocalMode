@@ -50,6 +50,7 @@ const LINKS: FooterLink[] = [
   { label: 'Docs', href: '/docs' },
   { label: 'Components', href: '/docs/components' },
   { label: 'Blocks', href: '/blocks' },
+  { label: 'Bench', href: '/bench' },
   { label: 'Capabilities', href: '/capabilities' },
   { label: 'Blog', href: 'https://localmode.dev/blog', external: true },
   { label: 'npm', href: 'https://www.npmjs.com/org/localmode', external: true },

@@ -36,6 +36,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
   add('/docs', 0.9, 'weekly');
   add('/docs/components', 0.8, 'weekly');
   add('/blocks', 0.8, 'weekly');
+  add('/bench', 0.8, 'daily');
+  add('/bench/run', 0.7, 'monthly');
+  add('/bench/methodology', 0.6, 'monthly');
   add('/capabilities', 0.5, 'monthly');
 
   // Blocks: category pages (deep) + every block detail (tool) page.

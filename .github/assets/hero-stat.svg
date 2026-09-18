@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 440" width="1280" height="440" role="img" aria-label="LocalMode — 15 npm packages, 107 UI components, 37 blocks, 76 chat models, 64 React hooks.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 440" width="1280" height="440" role="img" aria-label="LocalMode — 16 npm packages, 107 UI components, 37 blocks, 76 chat models, 64 React hooks.">
   <defs>
     <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#0a0a0a"/>
@@ -49,7 +49,7 @@
       <line x1="1004" y1="214" x2="1004" y2="300"/>
     </g>
     <g font-weight="800" font-size="46" fill="url(#num)">
-      <text x="155" y="272">15</text>
+      <text x="155" y="272">16</text>
       <text x="398" y="272">107</text>
       <text x="640" y="272">37</text>
       <text x="882" y="272">76</text>

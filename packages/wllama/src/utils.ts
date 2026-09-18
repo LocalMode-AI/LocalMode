@@ -7,7 +7,7 @@
  */
 
 import type { WllamaLoadProgress } from './types.js';
-import { importWllama, WLLAMA_CDN_WASM } from './wllama-loader.js';
+import { importWllama } from './wllama-loader.js';
 import { WLLAMA_MODELS, type WllamaModelId } from './models.js';
 
 /** Base URL for HuggingFace model file resolution */
@@ -162,20 +162,17 @@ export async function preloadModel(
     modelUrl?: string;
   }
 ): Promise<void> {
-  const { Wllama } = await importWllama();
+  const { ModelManager } = await importWllama();
 
   const url = resolveModelUrl(modelId, options?.modelUrl);
 
-  const wllamaInstance = new Wllama({
-    default: WLLAMA_CDN_WASM,
-  });
-
-  const numThreads = isCrossOriginIsolated()
-    ? (typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : 1)
-    : 1;
-
-  await wllamaInstance.loadModelFromUrl(url, {
-    n_threads: numThreads,
+  // Download into the OPFS cache WITHOUT creating an inference context.
+  // A full loadModelFromUrl() here would run llama.cpp's causal-LLM init
+  // warmup, which aborts the WASM on encoder-only (embedding/reranker) GGUFs
+  // and needlessly loads multi-hundred-MB weights into memory just to cache
+  // them. ModelManager is wllama's download-only path and skips both.
+  const manager = new ModelManager();
+  await manager.getModelOrDownload(url, {
     progressCallback: (opts: { loaded: number; total: number }) => {
       if (options?.onProgress) {
         const pct = opts.total > 0 ? (opts.loaded / opts.total) * 100 : 0;
@@ -189,9 +186,6 @@ export async function preloadModel(
       }
     },
   });
-
-  // Model is cached now, release memory
-  await wllamaInstance.exit();
 }
 
 /**

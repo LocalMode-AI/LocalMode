@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-09-18
+
+Introduces **LocalMode Bench** - an open, cross-runtime benchmark of in-browser AI with a public leaderboard at [localmode.ai/bench](https://localmode.ai/bench) - and fixes a wllama preload crash on encoder-only GGUF models.
+
+**Released:** `@localmode/bench` 0.1.0 · `@localmode/wllama` 3.1.2.
+
+### Added
+
+- **`@localmode/bench` 0.1.0 - the LocalMode Bench measurement harness.** Versioned protocol `localmode-bench/1` with MLPerf-Client-compatible metrics (TTFT; pp128/pp512 prefill; tg128 decode excluding the first token), a suite runner that records raw per-chunk timing traces and full environment captures, integrity validation (canonical-JSON SHA-256 digests, timer-grid conformance, plausibility envelopes, software/virtual-renderer rejection), a quality-fidelity lane (tinyMMLU accuracy, STS-B Spearman), and leaderboard aggregation + CSV tooling that recomputes every published statistic from the raw traces. Zero runtime dependencies; runtimes are injected via adapters.
+- **localmode.ai/bench - the public benchmark surface.** The leaderboard (ISR over the open CC0 [LocalMode-Bench](https://github.com/LocalMode-AI/LocalMode-Bench) dataset), the in-browser runner at `/bench/run` (suite/lane picker with availability preflight, live progress, JSON export, one-click submission; models download only behind the explicit Run action), the versioned protocol page at `/bench/methodology`, and the submission APIs (HMAC session nonce, server-side trace recompute, public quarantine for flagged runs). Model pairings run the same weights family across WebLLM, wllama, Transformers.js (WebGPU and WASM lanes), LiteRT, and Chrome Built-in AI - headlined by Qwen3-0.6B across five lanes.
+- **localmode.dev/docs/bench** - a docs pointer page linking the leaderboard, runner, methodology, dataset, and harness package.
+
+### Fixed
+
+- **`@localmode/wllama` `preloadModel()` crashed the WASM runtime on encoder-only GGUFs** (embedding and reranker models). The previous implementation preloaded through a full `loadModelFromUrl()`, whose causal-LLM init warmup aborts in `llama_context::output_reserve` on encoder-only architectures - and loaded full model weights into memory just to populate the cache. Preloading now routes through wllama's `ModelManager` download-only path (regression tests in `packages/wllama/tests/preload.test.ts`).
+
 ## [2.5.0] - 2026-07-11
 
 Makes on-device structured output actually reliable — small models now emit schema-conforming JSON through grammar-constrained decoding and stronger prompts — and refines the `@localmode/ui` platform at localmode.ai: Device Badge folds into the local-first family, "Open in v0" is supported, the component browser is deep-linkable, and the image blocks are WASM-pinned for stability.

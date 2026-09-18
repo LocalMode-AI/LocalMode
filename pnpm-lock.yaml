@@ -117,6 +117,9 @@ importers:
 
   apps/ui:
     dependencies:
+      '@localmode/bench':
+        specifier: workspace:*
+        version: link:../../packages/bench
       '@localmode/chrome-ai':
         specifier: workspace:*
         version: link:../../packages/chrome-ai
@@ -280,6 +283,18 @@ importers:
       ai:
         specifier: ^6.0.134
         version: 6.0.134(zod@4.4.1)
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.8)(tsx@4.22.4)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  packages/bench:
+    devDependencies:
+      '@localmode/core':
+        specifier: workspace:*
+        version: link:../core
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(jiti@2.6.1)(postcss@8.5.8)(tsx@4.22.4)(typescript@5.9.3)

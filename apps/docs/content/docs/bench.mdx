@@ -1,0 +1,38 @@
+---
+title: 'LocalMode Bench'
+description: 'The open cross-runtime browser-AI benchmark - LLM and embedding inference measured across WebLLM, wllama, Transformers.js, LiteRT, and Chrome Built-in AI on real consumer hardware, with a public leaderboard and a CC0 open dataset.'
+icon: Gauge
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Card, Cards } from 'fumadocs-ui/components/card';
+
+# LocalMode Bench
+
+**LocalMode Bench** is an open, reproducible benchmark of in-browser AI: LLM and embedding inference measured across five web runtimes - [WebLLM](/docs/webllm), [wllama](/docs/wllama), [Transformers.js](/docs/transformers) (WebGPU and WASM), [LiteRT](/docs/litert), and [Chrome Built-in AI](/docs/chrome-ai) - with the **same weights family compared engine-to-engine** on real consumer devices. Every submission publishes its raw timing trace to an open dataset, and every published number is recomputed from that trace.
+
+The benchmark itself lives on the LocalMode UI site; this page is a pointer.
+
+<Cards>
+  <Card title="Leaderboard" href="https://localmode.ai/bench">
+    Community results by device class, runtime, and model - medians of per-device medians, with provisional markers until a cell has 3+ submissions.
+  </Card>
+  <Card title="Run it on your device" href="https://localmode.ai/bench/run">
+    Pick a suite, keep the tab visible, press Run. Models download only behind the explicit Run action; results publish automatically when the run completes (opt out to keep a run local).
+  </Card>
+  <Card title="Methodology" href="https://localmode.ai/bench/methodology">
+    The versioned protocol (`localmode-bench/1`): metric definitions (TTFT, pp/tg throughput), run policy, statistics, environment capture, and submission-integrity rules.
+  </Card>
+</Cards>
+
+<Callout type="info" title="Open data, open harness">
+  Raw runs live in the CC0 [**LocalMode-Bench** dataset](https://github.com/LocalMode-AI/LocalMode-Bench) (`runs/` verified, `quarantine/` flagged-but-public, `index/` machine-written), and the MIT measurement harness ships as [`@localmode/bench`](https://www.npmjs.com/package/@localmode/bench) - protocol types, the suite runner with raw per-chunk traces, integrity validation, and the aggregation/CSV tooling that regenerates every published statistic.
+</Callout>
+
+## What it measures
+
+Time-to-first-token, prefill and decode throughput (`pp128`/`pp512`/`tg128`, first token excluded), cold vs warm model loads with the first-inference compile phase separated out, single-query vs batched embedding performance, and an optional quality-fidelity lane (tinyMMLU accuracy, STS-B Spearman) that checks whether each runtime's build of the same weights reproduces expected outputs.
+
+## Contribute a run
+
+Open [localmode.ai/bench/run](https://localmode.ai/bench/run) on any device and run the quick suite (~10 minutes including downloads); the result publishes to the leaderboard automatically when the run completes, with an opt-out toggle next to Run for keeping a run local. Submissions carry no personal data - the payload is the timing trace, the generated text for the fixed public prompts, and the device environment capture, all documented in the dataset's [schema](https://github.com/LocalMode-AI/LocalMode-Bench/blob/main/SCHEMA.md).

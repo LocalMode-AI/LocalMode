@@ -38,14 +38,41 @@ export type WllamaInstance = InstanceType<
 export type WllamaCtor = new (config: { default: string }) => WllamaInstance;
 
 /**
+ * Minimal shape of wllama's ModelManager: downloads GGUF files into the OPFS
+ * cache WITHOUT creating an inference context. This is the only safe way to
+ * preload a model of unknown task type — loading an embedding/reranker GGUF
+ * through a plain `loadModelFromUrl()` runs llama.cpp's causal-LLM init warmup
+ * on an encoder-only model and aborts the WASM (`llama_context::output_reserve`).
+ */
+export interface ModelManagerLike {
+  getModelOrDownload(
+    sourceOrURL: string | { url: string; mmprojUrl?: string },
+    options?: {
+      progressCallback?: (opts: { loaded: number; total: number }) => unknown;
+    }
+  ): Promise<unknown>;
+}
+
+/** Constructor shape of wllama's ModelManager. */
+export type ModelManagerCtor = new (params?: {
+  parallelDownloads?: number;
+}) => ModelManagerLike;
+
+/** The wllama module exports the loader returns. */
+export interface WllamaModule {
+  Wllama: WllamaCtor;
+  ModelManager: ModelManagerCtor;
+}
+
+/**
  * Import the wllama runtime module from the CDN.
  *
- * @returns The module's exports (at minimum `{ Wllama }`).
+ * @returns The module's exports (at minimum `{ Wllama, ModelManager }`).
  * @internal
  */
-export async function importWllama(): Promise<{ Wllama: WllamaCtor }> {
+export async function importWllama(): Promise<WllamaModule> {
   const dynamicImport = new Function('u', 'return import(u)') as (
     url: string
-  ) => Promise<{ Wllama: WllamaCtor }>;
+  ) => Promise<WllamaModule>;
   return dynamicImport(WLLAMA_CDN_ESM);
 }

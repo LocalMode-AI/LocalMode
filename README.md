@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://localmode.ai/blocks">
-    <img src="./.github/assets/hero-stat.svg" alt="LocalMode — local-first, private, offline AI for the browser. 15 npm packages, 107 UI components, 37 blocks, 76 chat models, 64 React hooks. No servers, no API keys." width="100%">
+    <img src="./.github/assets/hero-stat.svg" alt="LocalMode — local-first, private, offline AI for the browser. 16 npm packages, 107 UI components, 37 blocks, 76 chat models, 64 React hooks. No servers, no API keys." width="100%">
   </a>
 </p>
 
@@ -23,7 +23,7 @@ Run ML models entirely in your browser. No servers. No API keys. Your data never
 
 LocalMode is a monorepo of packages for building AI-powered applications that run 100% in the browser. Everything from embeddings and vector search to LLM chat, vision, audio, agents, and structured output works offline after the initial model download.
 
-**15 packages. 36 demo blocks. Zero cloud dependencies.**
+**16 packages. 36 demo blocks. Zero cloud dependencies.**
 
 ### Why LocalMode?
 
@@ -51,6 +51,7 @@ LocalMode is a monorepo of packages for building AI-powered applications that ru
 | [`@localmode/chrome-ai`](./packages/chrome-ai/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/chrome-ai.svg)](https://www.npmjs.com/package/@localmode/chrome-ai) | Chrome Built-in AI provider -- your app ships no model files; Chrome supplies Gemini Nano. Automatic fallback |
 | [`@localmode/langchain`](./packages/langchain/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/langchain.svg)](https://www.npmjs.com/package/@localmode/langchain) | LangChain.js adapters -- drop-in local embeddings, chat, vector store, and reranker for existing LangChain apps, plus `createLangChainKnowledgeBaseEngine` (the `KnowledgeBaseEngine` contract over LangChain adapters) |
 | [`@localmode/devtools`](./packages/devtools/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/devtools.svg)](https://www.npmjs.com/package/@localmode/devtools) | In-app AI observability -- 9 React hooks via the `@localmode/devtools/react` subpath for model cache, VectorDB stats, and inference queue data (the bundled DevTools widget UI was **removed in v3.0.0** in favor of the hooks + the `ui/devtools` registry family and `ui/blocks/devtools-drawer` at localmode.ai) |
+| [`@localmode/bench`](./packages/bench/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/bench.svg)](https://www.npmjs.com/package/@localmode/bench) | LocalMode Bench harness -- cross-runtime browser-AI benchmarking with MLPerf-Client-compatible metrics (TTFT, pp/tg throughput), raw trace capture, versioned submission-integrity rules, and leaderboard aggregation; powers the public leaderboard at [localmode.ai/bench](https://localmode.ai/bench) |
 | [`@localmode/pdfjs`](./packages/pdfjs/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/pdfjs.svg)](https://www.npmjs.com/package/@localmode/pdfjs) | PDF text extraction with PDF.js |
 | [`@localmode/dexie`](./packages/dexie/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/dexie.svg)](https://www.npmjs.com/package/@localmode/dexie) | Dexie.js storage adapter with schema versioning and transactions |
 | [`@localmode/idb`](./packages/idb/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/idb.svg)](https://www.npmjs.com/package/@localmode/idb) | Minimal IndexedDB storage adapter using the idb library |

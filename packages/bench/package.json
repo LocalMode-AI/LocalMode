@@ -1,0 +1,75 @@
+{
+  "name": "@localmode/bench",
+  "version": "0.1.0",
+  "description": "Cross-runtime benchmark harness for in-browser AI — MLPerf-Client-compatible metrics (TTFT, prefill/decode throughput), raw trace capture, integrity checks, and leaderboard aggregation for LLM and embedding inference across browser ML runtimes",
+  "license": "MIT",
+  "author": "LocalMode",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LocalMode-AI/LocalMode.git",
+    "directory": "packages/bench"
+  },
+  "homepage": "https://localmode.ai/bench",
+  "bugs": {
+    "url": "https://github.com/LocalMode-AI/LocalMode/issues"
+  },
+  "keywords": [
+    "benchmark",
+    "webgpu",
+    "wasm",
+    "llm",
+    "embeddings",
+    "browser",
+    "local-first",
+    "inference",
+    "ttft",
+    "leaderboard"
+  ],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "@localmode/core": ">=2.3.0"
+  },
+  "peerDependenciesMeta": {
+    "@localmode/core": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@localmode/core": "workspace:*",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

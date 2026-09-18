@@ -1,6 +1,6 @@
 import type { BaseLayoutProps, LinkItemType } from 'fumadocs-ui/layouts/shared';
 import { createElement } from 'react';
-import { BookOpen, Boxes, Play, Newspaper } from 'lucide-react';
+import { BookOpen, Boxes, Gauge, Play, Newspaper } from 'lucide-react';
 
 const GITHUB_URL = 'https://github.com/LocalMode-AI/LocalMode';
 
@@ -13,6 +13,7 @@ export async function baseOptions(): Promise<BaseLayoutProps> {
     { text: 'Docs', url: '/docs', icon: createElement(BookOpen) },
     { text: 'Components', url: '/docs/components', icon: createElement(Boxes) },
     { text: 'Blocks', url: '/blocks', icon: createElement(Play) },
+    { text: 'Bench', url: '/bench', icon: createElement(Gauge) },
     { text: 'Blog', url: 'https://localmode.dev/blog', external: true, icon: createElement(Newspaper) },
     { text: 'Core Docs', url: 'https://localmode.dev/docs', external: true },
   ];

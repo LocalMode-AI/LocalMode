@@ -22,6 +22,7 @@
     "block-source:generate": "tsx scripts/generate-block-source.ts"
   },
   "dependencies": {
+    "@localmode/bench": "workspace:*",
     "@localmode/chrome-ai": "workspace:*",
     "@localmode/core": "workspace:*",
     "@localmode/devtools": "workspace:*",

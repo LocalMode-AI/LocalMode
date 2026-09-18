@@ -41,6 +41,12 @@ const serwist = new Serwist({
       matcher: ({ url }) => MODEL_HOSTS.includes(url.hostname),
       handler: new NetworkOnly(),
     },
+    {
+      // Bench nonce/submission/leaderboard must always hit the network —
+      // a cached nonce or stale leaderboard would break submission integrity.
+      matcher: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/api/bench'),
+      handler: new NetworkOnly(),
+    },
     ...defaultCache,
   ],
   fallbacks: {
