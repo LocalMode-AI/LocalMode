@@ -70,7 +70,7 @@ test.describe('bench shell (zero model bytes)', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: /localmode bench methodology/i }),
     ).toBeVisible();
-    await expect(page.getByText('localmode-bench/1').first()).toBeVisible();
+    await expect(page.getByText('localmode-bench/2').first()).toBeVisible();
     for (const section of ['Metric definitions', 'Run policy', 'Statistics', 'Submission integrity']) {
       await expect(page.getByRole('heading', { name: section })).toBeVisible();
     }
@@ -142,12 +142,43 @@ test.describe('bench real run (WASM lanes)', () => {
       protocol: string;
       digest?: string;
       fingerprint: { mflops: number } | null;
-      cells: Array<{ status: string; iterations: unknown[] }>;
+      cells: Array<{
+        cellId: string;
+        status: string;
+        iterations: Array<{ chunks?: Array<{ t: number; c: number }>; text?: string; startT: number }>;
+      }>;
+      clientSummaries?: Array<{
+        cellId: string;
+        streamIncremental?: boolean;
+        ttftMs?: { median: number };
+        decodeCharsPerSec?: { median: number };
+      }>;
     };
-    expect(exported.protocol).toBe('localmode-bench/1');
+    expect(exported.protocol).toBe('localmode-bench/2');
     expect(exported.digest).toMatch(/^[0-9a-f]{64}$/);
     expect(exported.fingerprint?.mflops).toBeGreaterThan(1);
     expect(exported.cells.some((c) => c.status === 'ok' && c.iterations.length > 0)).toBe(true);
+
+    // Regression guards for the wllama lane, all surfaced by the thorough
+    // pilots: (a) a bare prompt must go through the chat template - SmolLM2
+    // answered an untemplated prompt with 0 characters; (b) generation must be
+    // genuinely token-streamed - the raw completion path delivered one
+    // terminal chunk, so no TTFT/decode could be derived; (c) the prompt-KV
+    // cache must be off - with it on, TTFT collapsed ~40x after iteration 1.
+    const wllamaChat = exported.cells.find((c) => c.cellId === 'wllama/smollm2-135m/chat-pp128-tg128');
+    expect(wllamaChat?.status, 'wllama chat cell must be ok (a degenerate generation marks it invalid)').toBe('ok');
+    for (const it of wllamaChat!.iterations) {
+      expect(it.text!.length).toBeGreaterThanOrEqual(16);
+      expect(it.chunks!.filter((ch) => ch.c > 0).length).toBeGreaterThan(1);
+    }
+    const wllamaSummary = exported.clientSummaries?.find((s) => s.cellId === wllamaChat!.cellId);
+    expect(wllamaSummary?.streamIncremental).toBe(true);
+    expect(wllamaSummary?.decodeCharsPerSec?.median).toBeGreaterThan(0);
+    const ttfts = wllamaChat!.iterations.map((it) => it.chunks!.find((ch) => ch.c > 0)!.t - it.startT);
+    const [first, ...rest] = ttfts;
+    for (const t of rest) {
+      expect(t, `iteration TTFT ${t}ms vs first ${first}ms: prompt cache reuse skipped prefill`).toBeGreaterThan(first / 4);
+    }
 
     // Auto-publish is on by default: the unbound dev store's 503 surfaces with
     // no click, and the failed submission leaves a Retry control available.

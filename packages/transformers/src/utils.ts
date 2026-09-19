@@ -107,10 +107,25 @@ export async function preloadModel(
   options?: {
     onProgress?: (progress: ModelLoadProgress) => void;
     quantized?: boolean;
+    /**
+     * Execution device for the throwaway session that triggers the download.
+     * Language models default to WebGPU when the browser exposes an adapter,
+     * else WASM, so a preload never fails on a WebGPU-less browser; other
+     * pipelines keep Transformers.js's own default unless a device is given.
+     * Pass the device the model will actually run on so the cached artifacts
+     * match it.
+     */
+    device?: 'webgpu' | 'wasm';
   }
 ): Promise<void> {
   const { pipeline, env } = await import('@huggingface/transformers');
   installResilientModelCache(env);
+
+  const device =
+    options?.device ??
+    (typeof navigator !== 'undefined' && 'gpu' in navigator && navigator.gpu !== undefined
+      ? 'webgpu'
+      : 'wasm');
 
   // Determine the task type from the model ID
   // This is a heuristic - in practice, users should know which task they need
@@ -164,6 +179,15 @@ export async function preloadModel(
       }
     : undefined;
 
+  // The session built here exists only to populate the cache. It MUST be
+  // disposed: ONNX Runtime's WASM heap never shrinks, so a leaked session
+  // stays resident for the page lifetime and later session creations fail
+  // with std::bad_alloc once a few models have been preloaded.
+  const disposeOf = async (handle: unknown): Promise<void> => {
+    const d = (handle as { dispose?: () => Promise<void> | void } | null)?.dispose;
+    if (typeof d === 'function') await d.call(handle);
+  };
+
   // LLM models use different loading strategies
   const isLLMModel = modelId in TRANSFORMERS_LLM_MODELS;
   if (isLLMModel) {
@@ -172,22 +196,24 @@ export async function preloadModel(
     const isQwen35 = lower.includes('qwen3.5') || lower.includes('qwen3_5') || lower.includes('qwen35');
 
     if (isQwen35) {
-      await Promise.all([
+      const [, model] = await Promise.all([
         tjs.AutoTokenizer.from_pretrained(modelId, {
           progress_callback: progressCallback,
         } as Record<string, unknown>),
         tjs.AutoModelForCausalLM.from_pretrained(modelId, {
           dtype: { embed_tokens: 'q4', vision_encoder: 'q4', decoder_model_merged: 'q4' },
-          device: 'webgpu',
+          device,
           progress_callback: progressCallback,
         } as Record<string, unknown>),
       ]);
+      await disposeOf(model);
     } else {
-      await tjs.pipeline('text-generation', modelId, {
-        device: 'webgpu',
+      const pipe = await tjs.pipeline('text-generation', modelId, {
+        device,
         dtype: 'q4',
         progress_callback: progressCallback,
       } as Record<string, unknown>);
+      await disposeOf(pipe);
     }
     return;
   }
@@ -201,8 +227,12 @@ export async function preloadModel(
   if (options?.quantized !== undefined) {
     pipelineOptions.dtype = options.quantized ? 'q8' : 'fp32';
   }
+  // Only an explicit device is forwarded here: non-LLM preloads keep
+  // Transformers.js's own default so existing callers' preloads are unchanged.
+  if (options?.device) pipelineOptions.device = options.device;
 
-  await pipeline(task as Parameters<typeof pipeline>[0], modelId, pipelineOptions);
+  const pipe = await pipeline(task as Parameters<typeof pipeline>[0], modelId, pipelineOptions);
+  await disposeOf(pipe);
 }
 
 /**

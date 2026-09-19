@@ -44,6 +44,8 @@ const mockState = {
     usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
   }),
   exit: vi.fn().mockResolvedValue(undefined),
+  /** GGUF chat-template metadata; null = base model without a template. */
+  getChatTemplate: vi.fn().mockReturnValue(null),
 };
 
 // Mock OUR loader seam (src/wllama-loader.ts) — the runtime imports @wllama/wllama
@@ -73,6 +75,7 @@ function MockWllama() {
         usage: { prompt_tokens: 3, total_tokens: 3 },
       }),
       exit: (...args: unknown[]) => mockState.exit(...args),
+      getChatTemplate: () => mockState.getChatTemplate(),
       cacheManager: { open: vi.fn().mockResolvedValue(null), list: vi.fn().mockResolvedValue([]) },
     };
 }
@@ -118,6 +121,7 @@ describe('@localmode/wllama', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockState.loadModelFromUrl.mockResolvedValue(undefined);
+    mockState.getChatTemplate.mockReturnValue(null);
     mockState.createChatCompletion.mockResolvedValue({
       id: 'chatcmpl-1',
       object: 'chat.completion',
@@ -246,7 +250,7 @@ describe('@localmode/wllama', () => {
   // ─────────────────────────────────────────────────────────────
   // doGenerate() — raw completion path (prompt only)
   // ─────────────────────────────────────────────────────────────
-  describe('doGenerate() with prompt only (createCompletion)', () => {
+  describe('doGenerate() with prompt only on a model WITHOUT a chat template (createCompletion)', () => {
     it('should call createCompletion for prompt-only input', async () => {
       const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
       await model.doGenerate({ prompt: 'Once upon a time' });
@@ -269,6 +273,81 @@ describe('@localmode/wllama', () => {
 
       expect(result.text).toBe('Hello, world!');
       expect(result.usage.inputTokens).toBe(5);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Uniform user-turn contract: a bare `prompt` on an instruct model goes
+  // through the GGUF chat template (like webllm/transformers/litert), with
+  // real streaming. Raw untemplated completion stays available via
+  // providerOptions.wllama.raw or for GGUFs that ship no template.
+  // ─────────────────────────────────────────────────────────────
+  describe('prompt only on a model WITH a chat template (uniform user-turn contract)', () => {
+    const INSTRUCT_TEMPLATE = '{% for m in messages %}<|{{ m.role }}|>{{ m.content }}{% endfor %}<|assistant|>';
+
+    beforeEach(() => {
+      mockState.getChatTemplate.mockReturnValue(INSTRUCT_TEMPLATE);
+    });
+
+    it('doGenerate() sends the prompt as a single user turn through createChatCompletion', async () => {
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      const result = await model.doGenerate({ prompt: 'Plan the library move.' });
+
+      expect(mockState.createChatCompletion).toHaveBeenCalledTimes(1);
+      expect(mockState.createCompletion).not.toHaveBeenCalled();
+      const callArgs = mockState.createChatCompletion.mock.calls[0][0] as { messages: Array<{ role: string; content: string }> };
+      expect(callArgs.messages).toEqual([{ role: 'user', content: 'Plan the library move.' }]);
+      expect(result.text).toBe('Hello, world!');
+    });
+
+    it('doStream() streams token-by-token for a bare prompt (no single-chunk fallback)', async () => {
+      mockState.createChatCompletion.mockImplementation(async () => streamOf([
+        { choices: [{ delta: { content: 'Week ' } }] },
+        { choices: [{ delta: { content: 'one: ' } }] },
+        { choices: [{ delta: { content: 'label.' }, finish_reason: 'stop' }] },
+      ]));
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      const chunks: string[] = [];
+      for await (const c of model.doStream({ prompt: 'Plan the library move.' })) {
+        if (c.text) chunks.push(c.text);
+      }
+      expect(chunks).toEqual(['Week ', 'one: ', 'label.']);
+      const callArgs = mockState.createChatCompletion.mock.calls[0][0] as Record<string, unknown>;
+      expect(callArgs.stream).toBe(true);
+      expect(mockState.createCompletion).not.toHaveBeenCalled();
+    });
+
+    it('providerOptions.wllama.raw forces untemplated createCompletion even with a template', async () => {
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      await model.doGenerate({ prompt: 'Once upon a time', providerOptions: { wllama: { raw: true } } });
+
+      expect(mockState.createCompletion).toHaveBeenCalledTimes(1);
+      expect(mockState.createChatCompletion).not.toHaveBeenCalled();
+    });
+
+    it('passes cache_prompt through so callers can disable llama.cpp prompt-KV reuse', async () => {
+      // Benchmarks repeat one prompt; with the default prompt cache the second
+      // request skips prefill entirely (observed TTFT 1018ms → 24ms).
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      await model.doGenerate({ prompt: 'Plan the library move.', providerOptions: { wllama: { cache_prompt: false } } });
+      const gen = mockState.createChatCompletion.mock.calls[0][0] as Record<string, unknown>;
+      expect(gen.cache_prompt).toBe(false);
+
+      mockState.createChatCompletion.mockImplementation(async () => streamOf([
+        { choices: [{ delta: { content: 'x' }, finish_reason: 'stop' }] },
+      ]));
+      for await (const _ of model.doStream({ prompt: 'Plan the library move.', providerOptions: { wllama: { cache_prompt: false } } })) { /* drain */ }
+      const stream = mockState.createChatCompletion.mock.calls[1][0] as Record<string, unknown>;
+      expect(stream.cache_prompt).toBe(false);
+    });
+
+    it('a base GGUF without a template keeps the raw completion path', async () => {
+      mockState.getChatTemplate.mockReturnValue(null);
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      await model.doGenerate({ prompt: 'Once upon a time' });
+
+      expect(mockState.createCompletion).toHaveBeenCalledTimes(1);
+      expect(mockState.createChatCompletion).not.toHaveBeenCalled();
     });
   });
 

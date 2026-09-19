@@ -2,8 +2,11 @@
  * Runtime adapters wiring @localmode/bench to the five LLM runtimes and three
  * embedding runtimes. Providers are loaded via dynamic import() (bundle
  * isolation — nothing loads until a benchmark actually runs). Load phase =
- * the provider's preloadModel (download/cache); the runner's untimed warmup
- * then measures first-inference readiness (engine init + shader/JIT compile).
+ * the provider's preloadModel: download-to-cache for wllama; download plus a
+ * first engine/session init that is released again for webllm, litert, and
+ * transformers. The runner's untimed warmup then measures first-inference
+ * readiness (engine init + shader/JIT compile), so cold start = load + warmup
+ * is the figure comparable across runtimes.
  */
 
 import type {
@@ -32,6 +35,37 @@ function normalizeProgress(onProgress?: ProgressCb) {
 async function disposeModel(model: unknown): Promise<void> {
   const unload = (model as { unload?: () => Promise<void> | void }).unload;
   if (typeof unload === 'function') await unload.call(model);
+}
+
+type GenerateOptions = { providerOptions?: Record<string, Record<string, unknown>> };
+
+/**
+ * llama.cpp reuses the prompt's KV cache across requests by default, so a
+ * benchmark that repeats one fixed prompt would skip prefill from the second
+ * iteration on (observed TTFT 1018ms → 24ms). Every timed request must pay
+ * prefill like the other runtimes, so the lane pins `cache_prompt: false`.
+ */
+function withoutPromptCache<T extends { doGenerate: (o: never) => unknown; doStream?: (o: never) => unknown }>(
+  llm: T,
+): T {
+  const pin = <O extends GenerateOptions>(options: O): O => ({
+    ...options,
+    providerOptions: {
+      ...options.providerOptions,
+      wllama: { ...options.providerOptions?.wllama, cache_prompt: false },
+    },
+  });
+  return new Proxy(llm, {
+    get(target, prop, receiver) {
+      if (prop === 'doGenerate') {
+        return (options: GenerateOptions) => target.doGenerate(pin(options) as never);
+      }
+      if (prop === 'doStream' && typeof target.doStream === 'function') {
+        return (options: GenerateOptions) => target.doStream!(pin(options) as never);
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  });
 }
 
 /** WebGPU adapter probe with a 3s guard (isWebGPUSupported() from core is async). */
@@ -67,7 +101,10 @@ function makeTransformersLLMAdapter(device: 'webgpu' | 'wasm'): LLMRuntimeAdapte
     async load(model, { onProgress, abortSignal }): Promise<LoadedLLM> {
       const mod = await import('@localmode/transformers');
       abortSignal?.throwIfAborted();
-      await mod.preloadModel(model.providerModelId, { onProgress: normalizeProgress(onProgress) });
+      // Preload on the lane's own device so the cached artifacts and the
+      // throwaway session match what the timed lane runs (the preload
+      // disposes its session; the runner's warmup builds the real one).
+      await mod.preloadModel(model.providerModelId, { onProgress: normalizeProgress(onProgress), device });
       abortSignal?.throwIfAborted();
       const llm = mod.transformers.languageModel(model.providerModelId, { device });
       return {
@@ -125,7 +162,7 @@ function makeWllamaAdapter(): LLMRuntimeAdapter {
       abortSignal?.throwIfAborted();
       const llm = mod.wllama.languageModel(model.providerModelId, {});
       return {
-        model: llm as unknown as LoadedLLM['model'],
+        model: withoutPromptCache(llm) as unknown as LoadedLLM['model'],
         // WASM by default; gpuAccelerated flips when WebGPU offload engages.
         get resolvedBackend() {
           return (llm as unknown as { gpuAccelerated?: boolean }).gpuAccelerated ? 'webgpu' : 'wasm';
@@ -220,7 +257,7 @@ function makeTransformersEmbedAdapter(device: 'webgpu' | 'wasm'): EmbeddingRunti
     async load(model, { onProgress, abortSignal }): Promise<LoadedEmbedder> {
       const mod = await import('@localmode/transformers');
       abortSignal?.throwIfAborted();
-      await mod.preloadModel(model.providerModelId, { onProgress: normalizeProgress(onProgress) });
+      await mod.preloadModel(model.providerModelId, { onProgress: normalizeProgress(onProgress), device });
       abortSignal?.throwIfAborted();
       const embedder = mod.transformers.embedding(model.providerModelId, { device });
       return {

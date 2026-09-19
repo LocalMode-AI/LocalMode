@@ -46,8 +46,13 @@ describe('runBenchmarkSuite()', () => {
     // Suite-level trace events present.
     expect(result.events.map((e) => e.type)).toContain('suite-start');
     expect(result.events.map((e) => e.type)).toContain('suite-end');
-    // Client summaries computed with the shared code.
-    expect(result.clientSummaries?.[0].ttftMs?.n).toBe(TEST_POLICY.timedRuns);
+    // Client summaries computed with the shared code. The end-to-end rate is
+    // derived for every iteration regardless of chunk timing; TTFT/decode are
+    // gated by stream coherence, which a loaded CI host can flip for a mock
+    // that streams ~15ms of a ~20ms request, so their presence is asserted on
+    // deterministic fixtures in stream-coherence.test.ts instead.
+    expect(result.clientSummaries?.[0].overallCharsPerSec?.n).toBe(TEST_POLICY.timedRuns);
+    expect(typeof result.clientSummaries?.[0].streamIncremental).toBe('boolean');
   });
 
   it('loads a model once across its workloads and disposes it after', async () => {
@@ -120,6 +125,74 @@ describe('runBenchmarkSuite()', () => {
       expect(cell.status).toBe('error');
       expect(cell.error?.message).toBe('mock load failure');
     }
+  });
+
+  it('records the wrapped provider cause on error cells (opaque wrappers are useless for diagnosis)', async () => {
+    const failing = makeMockLLMAdapter({ failLoad: true });
+    const inner = new Error("Can't create a session. ERROR_CODE: 6, ERROR_MESSAGE: std::bad_alloc");
+    const wrapped = new Error('Failed to load model: onnx-community/Qwen3-0.6B-ONNX', { cause: inner });
+    wrapped.name = 'ModelLoadError';
+    failing.load = async () => {
+      throw wrapped;
+    };
+    const result = await runBenchmarkSuite({
+      suite: 'custom',
+      cells: [{ model: MODEL_REF, workload: LLM_WORKLOADS[0] }],
+      policy: TEST_POLICY,
+      llmAdapters: new Map([[failing.runtimeId, failing]]),
+      embedAdapters: new Map(),
+      harness: HARNESS,
+      skipFingerprint: true,
+    });
+    expect(result.cells[0].error).toEqual({
+      name: 'ModelLoadError',
+      message: 'Failed to load model: onnx-community/Qwen3-0.6B-ONNX',
+      cause: "Can't create a session. ERROR_CODE: 6, ERROR_MESSAGE: std::bad_alloc",
+    });
+  });
+
+  it('samples memory at the moment of failure on error cells (ORT bad_alloc correlates with heap size)', async () => {
+    // Stub the legacy Chromium heap API so the runner sees a memory source.
+    const perf = globalThis.performance as unknown as { memory?: { usedJSHeapSize: number } };
+    perf.memory = { usedJSHeapSize: 8_990_000_000 };
+    try {
+      const failing = makeMockLLMAdapter({ failLoad: true });
+      const result = await runBenchmarkSuite({
+        suite: 'custom',
+        cells: [{ model: MODEL_REF, workload: LLM_WORKLOADS[0] }],
+        policy: TEST_POLICY,
+        llmAdapters: new Map([[failing.runtimeId, failing]]),
+        embedAdapters: new Map(),
+        harness: HARNESS,
+        skipFingerprint: true,
+      });
+      const cell = result.cells[0];
+      expect(cell.status).toBe('error');
+      expect(cell.memory?.api).toBe('legacyHeap');
+      expect(cell.memory?.atError).toBe(8_990_000_000);
+    } finally {
+      delete perf.memory;
+    }
+  });
+
+  it('marks a cell invalid when a timed iteration generates a degenerate (near-empty) output', async () => {
+    // An instruct model that answers with EOS almost immediately: a 3-char
+    // "generation" is not a decode measurement, it is a template/tokenizer
+    // failure and must not be scored as a healthy `ok` cell.
+    const empty = makeMockLLMAdapter({ chunkCount: 1, answerText: 'ok.' });
+    const result = await runBenchmarkSuite({
+      suite: 'custom',
+      cells: [{ model: MODEL_REF, workload: LLM_WORKLOADS[0] }],
+      policy: TEST_POLICY,
+      llmAdapters: new Map([[empty.runtimeId, empty]]),
+      embedAdapters: new Map(),
+      harness: HARNESS,
+      skipFingerprint: true,
+    });
+    const cell = result.cells[0];
+    expect(cell.status).toBe('invalid');
+    expect(cell.invalidReasons?.join(' ')).toMatch(/degenerate/i);
+    expect(cell.iterations.every((it) => it.gates.includes('degenerate-output'))).toBe(true);
   });
 
   it('honors AbortSignal with an AbortError', async () => {

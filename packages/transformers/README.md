@@ -290,10 +290,13 @@ const cached = await isModelCached('Xenova/bge-small-en-v1.5');
 
 await preloadModel('Xenova/bge-small-en-v1.5', {
   onProgress: (p) => console.log(`${p.progress}% loaded`),
+  device: 'wasm', // 'webgpu' | 'wasm'; optional. Language models default to 'webgpu' when navigator.gpu is present (else 'wasm'); other pipelines keep Transformers.js's own default unless you pass one
 });
 
 const usage = await getModelStorageUsage();
 ```
+
+`preloadModel()` builds a throwaway session on `device` only to populate the model-file cache and disposes it as soon as the download completes, so a preload leaves no ONNX session resident (ONNX Runtime's WASM heap never shrinks, so a leaked session would stay for the page lifetime). The model you create afterwards builds its own session from the cached files. Pass `device` so the cached artifacts match the device the model will actually run on. Language-model preloads default to WebGPU when `navigator.gpu` is present and WASM otherwise, so a preload never fails on a browser without WebGPU; other pipelines keep Transformers.js's own default unless you pass one.
 
 ### Resilient Model-File Cache
 
@@ -560,10 +563,12 @@ import { embed } from '@localmode/core';
 if (!(await isModelCached('Xenova/bge-small-en-v1.5'))) {
   await preloadModel('Xenova/bge-small-en-v1.5', {
     onProgress: (p) => console.log(`Loading: ${p.progress}%`),
+    device: 'wasm', // optional; see Model Utilities for the defaults
   });
 }
 
-// Subsequent calls are instant (loaded from cache)
+// The preload session is released after the download; this model builds its own
+// session from the cached files, so no network round-trip is needed
 const embeddingModel = transformers.embedding('Xenova/bge-small-en-v1.5');
 const { embedding } = await embed({ model: embeddingModel, value: 'Hello' });
 ```

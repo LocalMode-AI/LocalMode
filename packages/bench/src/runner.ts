@@ -26,7 +26,7 @@ import type {
   LoadedLLM,
 } from './adapter.js';
 import { USAGE_FIDELITY } from './adapter.js';
-import type { RunPolicy } from './protocol.js';
+import { MIN_GENERATED_CHARS, orderCells, type RunPolicy } from './protocol.js';
 import { hrNow, sleep, abortDomException } from './timing.js';
 import { TraceRecorder } from './trace.js';
 import { memoryApiAvailable, sampleMemoryBytes } from './memory.js';
@@ -99,8 +99,9 @@ export async function runBenchmarkSuite(options: RunSuiteOptions): Promise<Bench
 
     const baselineMemory = memApi !== 'none' ? await sampleMemoryBytes() : null;
 
-    // Group cells so each (runtime, model) loads exactly once.
-    const groups = groupCells(options.cells);
+    // Deterministic protocol execution order (reproducibility), then group
+    // cells so each (runtime, model) loads exactly once.
+    const groups = groupCells(orderCells(options.cells));
     const totalCells = options.cells.length;
     let cellIndex = 0;
 
@@ -271,11 +272,20 @@ async function runModelGroup(group: ModelGroup, ctx: GroupContext): Promise<Benc
       if (loaded) await safeDispose(loaded);
       throw error;
     }
+    const atError = ctx.memApi !== 'none' ? await sampleMemoryBytes(5_000) : null;
     for (const workload of group.workloads) {
       const cell = baseCell(workload);
       cell.status = 'error';
       cell.load = loadRecord;
-      cell.error = { name: (error as Error).name ?? 'Error', message: (error as Error).message ?? String(error) };
+      cell.error = describeError(error);
+      if (ctx.memApi !== 'none') {
+        cell.memory = {
+          api: ctx.memApi,
+          baseline: ctx.baselineMemory ?? undefined,
+          postLoad: postLoadMemory ?? undefined,
+          atError: atError ?? undefined,
+        };
+      }
       results.push(finishCell(cell, ctx));
     }
     if (loaded) await safeDispose(loaded);
@@ -310,6 +320,7 @@ async function runModelGroup(group: ModelGroup, ctx: GroupContext): Promise<Benc
           cell.quality = await runMMLUFidelity((loaded as LoadedLLM).model, total, {
             abortSignal: ctx.abortSignal,
             onProgress: (done) => ctx.hooks?.onIteration?.(cell.cellId, done, total),
+            promptSuffix: model.qualityPromptSuffix,
           });
           cell.status = 'ok';
           break;
@@ -330,16 +341,16 @@ async function runModelGroup(group: ModelGroup, ctx: GroupContext): Promise<Benc
         throw error;
       }
       cell.status = 'error';
-      cell.error = { name: (error as Error).name ?? 'Error', message: (error as Error).message ?? String(error) };
+      cell.error = describeError(error);
     }
 
-    if (ctx.memApi !== 'none' && cell.status === 'ok') {
-      const postRun = await sampleMemoryBytes(5_000);
+    if (ctx.memApi !== 'none' && (cell.status === 'ok' || cell.status === 'error')) {
+      const sample = await sampleMemoryBytes(5_000);
       cell.memory = {
         api: ctx.memApi,
         baseline: ctx.baselineMemory ?? undefined,
         postLoad: postLoadMemory ?? undefined,
-        postRun: postRun ?? undefined,
+        ...(cell.status === 'ok' ? { postRun: sample ?? undefined } : { atError: sample ?? undefined }),
       };
     }
     results.push(finishCell(cell, ctx));
@@ -405,6 +416,7 @@ async function runLLMCell(
     );
     const endT = hrNow();
     if (countHidden(ctx.trace) > hiddenBefore) gates.push('hidden-during-run');
+    if (text.length < MIN_GENERATED_CHARS) gates.push('degenerate-output');
 
     iterations.push({
       startT,
@@ -421,7 +433,19 @@ async function runLLMCell(
   cell.iterations = iterations;
   const gated = iterations.some((it) => it.gates.length > 0);
   cell.status = gated ? 'invalid' : 'ok';
-  if (gated) cell.invalidReasons = ['validity gate fired during a timed region'];
+  if (gated) {
+    const reasons = new Set<string>();
+    for (const it of iterations) {
+      for (const gate of it.gates) {
+        reasons.add(
+          gate === 'degenerate-output'
+            ? `degenerate output: fewer than ${MIN_GENERATED_CHARS} generated chars in a timed iteration`
+            : 'validity gate fired during a timed region',
+        );
+      }
+    }
+    cell.invalidReasons = [...reasons];
+  }
 }
 
 /** Timed embedding iterations. */
@@ -528,6 +552,19 @@ function decimate<T>(items: T[], max: number): T[] {
   const step = (items.length - 1) / (max - 1);
   for (let i = 0; i < max; i++) out.push(items[Math.round(i * step)]);
   return out;
+}
+
+/** Serialize an error for a cell, keeping the wrapped provider cause's message. */
+function describeError(error: unknown): NonNullable<BenchCellResult['error']> {
+  const e = error as { name?: string; message?: string; cause?: unknown } | undefined;
+  const cause = e?.cause;
+  const causeMessage =
+    cause instanceof Error ? cause.message : typeof cause === 'string' ? cause : undefined;
+  return {
+    name: e?.name ?? 'Error',
+    message: e?.message ?? String(error),
+    ...(causeMessage ? { cause: causeMessage } : {}),
+  };
 }
 
 function finishCell(cell: BenchCellResult, ctx: GroupContext): BenchCellResult {

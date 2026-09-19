@@ -5,7 +5,7 @@
  */
 
 import type { BenchRunResult, CellSummary } from './types.js';
-import { summarizeRun } from './validate.js';
+import { isIncrementalStream, summarizeRun } from './validate.js';
 import { median } from './stats.js';
 
 /** Device class derived from environment identity signals. */
@@ -29,11 +29,15 @@ export interface LeaderboardRow {
   /** Median-of-medians metrics (only those applicable to the workload). */
   ttftMs?: number;
   decodeCharsPerSec?: number;
+  /** End-to-end chars/s (prefill + decode); the only rate for lanes whose stream is not incremental. */
+  overallCharsPerSec?: number;
   singleLatencyMs?: number;
   batchTextsPerSec?: number;
   loadColdMs?: number;
   loadWarmMs?: number;
   qualityScore?: number;
+  /** Median MMLU parse rate; below 1 the quality score is format-limited. */
+  qualityParseRate?: number;
   resolvedBackends: string[];
   browsers: string[];
   /** True when any contributing submission had a high-variance metric. */
@@ -63,20 +67,24 @@ export function aggregateRuns(
       | 'submissions'
       | 'ttftMs'
       | 'decodeCharsPerSec'
+      | 'overallCharsPerSec'
       | 'singleLatencyMs'
       | 'batchTextsPerSec'
       | 'loadColdMs'
       | 'loadWarmMs'
       | 'qualityScore'
+      | 'qualityParseRate'
       | 'provisional'
     >;
     ttft: number[];
     decode: number[];
+    overall: number[];
     single: number[];
     batch: number[];
     loadCold: number[];
     loadWarm: number[];
     quality: number[];
+    parseRate: number[];
     runIds: Set<string>;
   }
   const buckets = new Map<string, Bucket>();
@@ -106,11 +114,13 @@ export function aggregateRuns(
           },
           ttft: [],
           decode: [],
+          overall: [],
           single: [],
           batch: [],
           loadCold: [],
           loadWarm: [],
           quality: [],
+          parseRate: [],
           runIds: new Set(),
         };
         buckets.set(key, bucket);
@@ -121,12 +131,14 @@ export function aggregateRuns(
       bucket.row.highVariance ||= summary.highVariance;
       if (summary.ttftMs) bucket.ttft.push(summary.ttftMs.median);
       if (summary.decodeCharsPerSec) bucket.decode.push(summary.decodeCharsPerSec.median);
+      if (summary.overallCharsPerSec) bucket.overall.push(summary.overallCharsPerSec.median);
       if (summary.singleLatencyMs) bucket.single.push(summary.singleLatencyMs.median);
       if (summary.batchTextsPerSec) bucket.batch.push(summary.batchTextsPerSec.median);
       if (summary.loadMs !== undefined) {
         (summary.loadCached ? bucket.loadWarm : bucket.loadCold).push(summary.loadMs);
       }
       if (summary.qualityScore !== undefined) bucket.quality.push(summary.qualityScore);
+      if (summary.qualityParseRate !== undefined) bucket.parseRate.push(summary.qualityParseRate);
     }
   }
 
@@ -137,11 +149,13 @@ export function aggregateRuns(
       submissions: bucket.runIds.size,
       ttftMs: maybeMedian(bucket.ttft),
       decodeCharsPerSec: maybeMedian(bucket.decode),
+      overallCharsPerSec: maybeMedian(bucket.overall),
       singleLatencyMs: maybeMedian(bucket.single),
       batchTextsPerSec: maybeMedian(bucket.batch),
       loadColdMs: maybeMedian(bucket.loadCold),
       loadWarmMs: maybeMedian(bucket.loadWarm),
       qualityScore: maybeMedian(bucket.quality),
+      qualityParseRate: maybeMedian(bucket.parseRate),
       provisional: bucket.runIds.size < minSubmissions,
     });
   }
@@ -177,8 +191,8 @@ function csvField(value: unknown): string {
 export function rowsToCSV(rows: readonly LeaderboardRow[]): string {
   const header = [
     'deviceClass', 'runtimeId', 'benchModelId', 'modelName', 'workloadId', 'submissions',
-    'ttftMs', 'decodeCharsPerSec', 'singleLatencyMs', 'batchTextsPerSec',
-    'loadColdMs', 'loadWarmMs', 'qualityScore', 'resolvedBackends', 'browsers',
+    'ttftMs', 'decodeCharsPerSec', 'overallCharsPerSec', 'singleLatencyMs', 'batchTextsPerSec',
+    'loadColdMs', 'loadWarmMs', 'qualityScore', 'qualityParseRate', 'resolvedBackends', 'browsers',
     'highVariance', 'provisional',
   ];
   const lines = [header.join(',')];
@@ -186,8 +200,8 @@ export function rowsToCSV(rows: readonly LeaderboardRow[]): string {
     lines.push(
       [
         r.deviceClass, r.runtimeId, r.benchModelId, r.modelName, r.workloadId, r.submissions,
-        r.ttftMs, r.decodeCharsPerSec, r.singleLatencyMs, r.batchTextsPerSec,
-        r.loadColdMs, r.loadWarmMs, r.qualityScore, r.resolvedBackends.join(';'), r.browsers.join(';'),
+        r.ttftMs, r.decodeCharsPerSec, r.overallCharsPerSec, r.singleLatencyMs, r.batchTextsPerSec,
+        r.loadColdMs, r.loadWarmMs, r.qualityScore, r.qualityParseRate, r.resolvedBackends.join(';'), r.browsers.join(';'),
         r.highVariance, r.provisional,
       ]
         .map(csvField)
@@ -207,7 +221,7 @@ export function runsToLongCSV(runs: readonly BenchRunResult[]): string {
     'gpuArchitecture', 'cores', 'deviceMemoryGB', 'crossOriginIsolated', 'fingerprintMflops',
     'runtimeId', 'runtimeVersion', 'benchModelId', 'providerModelId', 'quantization', 'sizeBytes',
     'workloadId', 'resolvedBackend', 'iteration', 'ttftMs', 'decodeCharsPerSec', 'generatedChars',
-    'durationMs', 'loadMs', 'loadCached', 'status',
+    'overallCharsPerSec', 'streamIncremental', 'durationMs', 'loadMs', 'loadCached', 'status',
   ];
   const lines = [header.join(',')];
   for (const run of runs) {
@@ -227,26 +241,35 @@ export function runsToLongCSV(runs: readonly BenchRunResult[]): string {
         cell.workloadId, cell.resolvedBackend,
       ];
       if (cell.iterations.length === 0) {
-        lines.push([...base, ...cellBase, '', '', '', '', '', loadMs, loadCached, cell.status].map(csvField).join(','));
+        lines.push([...base, ...cellBase, '', '', '', '', '', '', '', loadMs, loadCached, cell.status].map(csvField).join(','));
         continue;
       }
       cell.iterations.forEach((it, i) => {
         let ttft = '';
         let decodeRate = '';
         let chars = '';
+        let overall = '';
+        let incremental = '';
         if ('chunks' in it) {
+          const totalChars = it.chunks.reduce((a, c) => a + c.c, 0);
+          chars = String(totalChars);
+          const totalMs = it.endT - it.startT;
+          if (totalMs > 0 && totalChars > 0) overall = String(round2((totalChars / totalMs) * 1000));
+          // TTFT/decode only from genuinely incremental streams (same rule as
+          // summarizeCell) — a terminal-burst trace carries no decode timing.
+          const isIncremental = isIncrementalStream(it);
+          incremental = String(isIncremental);
           const first = it.chunks.find((c) => c.c > 0);
-          if (first) {
+          if (isIncremental && first) {
             ttft = String(round2(first.t - it.startT));
             const last = it.chunks[it.chunks.length - 1];
-            const decodeChars = it.chunks.reduce((a, c) => a + c.c, 0) - first.c;
+            const decodeChars = totalChars - first.c;
             const ms = last.t - first.t;
             if (ms > 0) decodeRate = String(round2((decodeChars / ms) * 1000));
-            chars = String(it.chunks.reduce((a, c) => a + c.c, 0));
           }
         }
         lines.push(
-          [...base, ...cellBase, i + 1, ttft, decodeRate, chars,
+          [...base, ...cellBase, i + 1, ttft, decodeRate, chars, overall, incremental,
             round2(it.endT - it.startT), loadMs, loadCached, cell.status]
             .map(csvField)
             .join(','),

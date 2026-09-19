@@ -48,7 +48,7 @@ import {
   TableRow,
 } from '@/registry/localmode/ui/table';
 
-const HARNESS_VERSION = '0.1.0';
+const HARNESS_VERSION = '0.2.0';
 
 type Phase = 'idle' | 'running' | 'done' | 'error';
 
@@ -389,6 +389,15 @@ export function BenchRunner() {
               skip the download)
             </span>
           </div>
+          {suite !== 'quick' && (
+            <p className="text-xs text-muted-foreground" role="note">
+              {suite === 'thorough'
+                ? 'Thorough loads several multi-gigabyte models in one page and peaks above 8 GB of browser memory'
+                : 'Standard runs every runtime in one page and peaks near 9 GB of browser memory'}
+              : 16 GB of RAM is recommended, and close other heavy tabs and apps first, or the
+              browser may run out of memory partway through.
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">
             Models download only when you press Run. Keep this tab visible and your device plugged
             in - hidden tabs invalidate timed runs. With publishing on, the result uploads to the
@@ -457,7 +466,16 @@ export function BenchRunner() {
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{formatMs(s.ttftMs?.median)}</TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {s.decodeCharsPerSec ? Math.round(s.decodeCharsPerSec.median) : '-'}
+                          {s.decodeCharsPerSec ? (
+                            Math.round(s.decodeCharsPerSec.median)
+                          ) : s.overallCharsPerSec ? (
+                            <span title="End-to-end rate (prefill + decode): this stream is not incremental, so a pure decode rate cannot be measured.">
+                              {Math.round(s.overallCharsPerSec.median)}
+                              <span className="text-xs text-muted-foreground"> e2e</span>
+                            </span>
+                          ) : (
+                            '-'
+                          )}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {s.singleLatencyMs
@@ -468,6 +486,14 @@ export function BenchRunner() {
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {s.qualityScore !== undefined ? s.qualityScore.toFixed(3) : '-'}
+                          {s.qualityParseRate !== undefined && s.qualityParseRate < 1 && (
+                            <span
+                              className="text-xs text-muted-foreground"
+                              title="Share of items whose answer could be parsed. Unparsed items count as wrong, so a low share means the score is limited by output format, not fidelity."
+                            >
+                              {' '}({Math.round(s.qualityParseRate * 100)}% parsed)
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Badge variant={s.status === 'ok' ? 'default' : 'outline'}>

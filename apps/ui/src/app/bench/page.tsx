@@ -11,6 +11,7 @@ import { SiteFooter } from '@/components/site-footer';
 import { JsonLd } from '@/components/json-ld';
 import { breadcrumbGraph } from '@/lib/structured-data';
 import { ogImageUrl } from '@/lib/og';
+import { BENCH_PROTOCOL_VERSION } from '@localmode/bench';
 import { aggregateIndex, readIndex } from '@/lib/bench/store';
 import { LeaderboardTable } from '@/components/bench/leaderboard-table';
 
@@ -43,7 +44,11 @@ export default async function BenchPage() {
   const repo = process.env.BENCH_GITHUB_REPO ?? null;
   const entries = repo ? await readIndex(repo, { next: { revalidate: 300 } }) : [];
   const rows = aggregateIndex(entries);
-  const verifiedRuns = entries.filter((e) => !e.flagged).length;
+  // Count what the table aggregates: unflagged runs under the current protocol
+  // (archived runs from earlier protocol versions stay in the dataset only).
+  const verifiedRuns = entries.filter(
+    (e) => !e.flagged && e.protocol === BENCH_PROTOCOL_VERSION,
+  ).length;
 
   return (
     <div className="flex w-full flex-1 flex-col">
@@ -106,14 +111,15 @@ export default async function BenchPage() {
           <div className="flex items-baseline justify-between gap-3">
             <h2 className="text-xl font-semibold">Leaderboard</h2>
             <p className="text-sm text-muted-foreground">
-              {verifiedRuns} verified submission{verifiedRuns === 1 ? '' : 's'} · medians of
-              per-device medians · rows need 3+ submissions to leave provisional status
+              {verifiedRuns} verified submission{verifiedRuns === 1 ? '' : 's'} under{' '}
+              {BENCH_PROTOCOL_VERSION} · medians of per-device medians · rows need 3+ submissions
+              to leave provisional status
             </p>
           </div>
           <LeaderboardTable rows={rows} />
           {rows.length === 0 && (
             <p className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-              No submissions yet - be the first:{' '}
+              No submissions yet under the current protocol - be the first:{' '}
               <Link className="underline underline-offset-2" href="/bench/run">
                 run the benchmark on your device
               </Link>

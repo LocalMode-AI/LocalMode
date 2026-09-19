@@ -4,6 +4,7 @@
  */
 
 import { NextResponse } from 'next/server';
+import { BENCH_PROTOCOL_VERSION } from '@localmode/bench';
 import { aggregateIndex, benchStoreConfig, readIndex } from '@/lib/bench/store';
 
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,8 @@ export async function GET(): Promise<NextResponse> {
   const entries = await readIndex(repo, { next: { revalidate: 300 } });
   const rows = aggregateIndex(entries);
   return NextResponse.json(
-    { rows, runs: entries.filter((e) => !e.flagged).length, repo },
+    // Same rule as the rows: only unflagged runs measured under the current protocol.
+    { rows, runs: entries.filter((e) => !e.flagged && e.protocol === BENCH_PROTOCOL_VERSION).length, repo },
     {
       headers: {
         'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600',

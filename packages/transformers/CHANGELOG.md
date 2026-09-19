@@ -1,5 +1,11 @@
 # @localmode/transformers
 
+## 4.1.2
+
+### Patch Changes
+
+- fix: `preloadModel()` no longer leaks a resident ONNX session. It builds a pipeline only to populate the model-file cache, but never disposed it; ONNX Runtime's WASM heap never shrinks, so every preloaded model stayed resident for the page lifetime and, after a few large models, later session creations failed with `std::bad_alloc` (ORT error code 6). The throwaway pipeline/model is now disposed once the download completes (both the `text-generation` path and the Qwen3.5 `AutoModelForCausalLM` path, and the non-LLM pipeline path). Also honors a new `device` option (`'webgpu' | 'wasm'`) instead of hard-coding WebGPU for LLMs, language-model preloads default to WebGPU only when `navigator.gpu` is present (else WASM), so a preload never fails on a WebGPU-less browser; other pipelines forward the device only when one is given (their default is unchanged); the cached artifacts match the device the model will run on. Surfaced by the LocalMode Bench thorough suite. Regression tests: `tests/preload.test.ts`.
+
 ## 4.1.1
 
 ### Patch Changes

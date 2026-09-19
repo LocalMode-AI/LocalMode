@@ -21,7 +21,7 @@ The benchmark itself lives on the LocalMode UI site; this page is a pointer.
     Pick a suite, keep the tab visible, press Run. Models download only behind the explicit Run action; results publish automatically when the run completes (opt out to keep a run local).
   </Card>
   <Card title="Methodology" href="https://localmode.ai/bench/methodology">
-    The versioned protocol (`localmode-bench/1`): metric definitions (TTFT, pp/tg throughput), run policy, statistics, environment capture, and submission-integrity rules.
+    The versioned protocol (`localmode-bench/2`): metric definitions (TTFT, pp/tg throughput), run policy, statistics, environment capture, and submission-integrity rules.
   </Card>
 </Cards>
 
@@ -33,6 +33,8 @@ The benchmark itself lives on the LocalMode UI site; this page is a pointer.
 
 Time-to-first-token, prefill and decode throughput (`pp128`/`pp512`/`tg128`, first token excluded), cold vs warm model loads with the first-inference compile phase separated out, single-query vs batched embedding performance, and an optional quality-fidelity lane (tinyMMLU accuracy, STS-B Spearman) that checks whether each runtime's build of the same weights reproduces expected outputs.
 
+Every runtime receives the fixed prompt as a single user turn through its own chat template, with cross-request prompt caching disabled so each timed iteration pays prefill. TTFT and decode rates are derived only from genuinely incremental streams (at least two chunks spanning at least 20% of the request); a runtime surface that computes the whole generation and flushes it in a terminal burst reports its end-to-end rate instead, marked *e2e*. Quality scores carry a parse rate beside them, so a format-limited result (a build that reasons past the answer budget) is never mistaken for low fidelity. The full metric definitions, integrity rules, and the protocol changelog are on the [methodology page](https://localmode.ai/bench/methodology).
+
 ## Contribute a run
 
-Open [localmode.ai/bench/run](https://localmode.ai/bench/run) on any device and run the quick suite (~10 minutes including downloads); the result publishes to the leaderboard automatically when the run completes, with an opt-out toggle next to Run for keeping a run local. Submissions carry no personal data - the payload is the timing trace, the generated text for the fixed public prompts, and the device environment capture, all documented in the dataset's [schema](https://github.com/LocalMode-AI/LocalMode-Bench/blob/main/SCHEMA.md).
+Open [localmode.ai/bench/run](https://localmode.ai/bench/run) on any device and run the quick suite (~10 minutes including downloads); the result publishes to the leaderboard automatically when the run completes, with an opt-out toggle next to Run for keeping a run local. The thorough suite loads several multi-gigabyte models in one page and peaks above 8 GB of browser memory, so 16 GB of RAM is recommended for it, with other heavy tabs and apps closed first; a cell that runs out of memory is recorded as an error with its cause, never as data. Submissions carry no personal data - the payload is the timing trace, the generated text for the fixed public prompts, and the device environment capture, all documented in the dataset's [schema](https://github.com/LocalMode-AI/LocalMode-Bench/blob/main/SCHEMA.md).

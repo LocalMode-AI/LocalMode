@@ -219,9 +219,16 @@ await preloadModel('Xenova/bge-small-en-v1.5', {
   onProgress: (p) => console.log(`${p.progress}% loaded`),
 });
 
+// Preload a language model on a specific device
+await preloadModel('onnx-community/Qwen3-0.6B-ONNX', {
+  device: 'wasm', // 'webgpu' | 'wasm'; default: 'webgpu' when the browser exposes an adapter, else 'wasm'
+});
+
 // Check storage usage
 const usage = await getModelStorageUsage();
 ```
+
+`preloadModel()` only populates the model-file cache: the session it builds to trigger the download is released once the download completes, so nothing stays resident in memory and the first real inference loads the model from cache. Pass `device` to match the device the model will run on, so the cached artifacts are the ones the real load uses: language-model preloads default to WebGPU when the browser exposes an adapter (else WASM, so the default never fails on a WebGPU-less browser); other pipelines keep Transformers.js's own default unless you pass one.
 
 ### Model Caching & Reliability
 

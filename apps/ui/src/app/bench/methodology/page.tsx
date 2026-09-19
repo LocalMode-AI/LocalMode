@@ -60,12 +60,13 @@ export default function BenchMethodologyPage() {
         <div className="flex flex-col gap-3">
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{TITLE}</h1>
           <p>
-            Protocol <code className="rounded bg-muted px-1 font-mono text-sm">localmode-bench/1</code>.
+            Protocol <code className="rounded bg-muted px-1 font-mono text-sm">localmode-bench/2</code>.
             Any change to prompts, budgets, policy numbers, or integrity rules bumps this version;
             archived runs are never re-scored silently. The reference implementation is the
             open-source <code className="rounded bg-muted px-1 font-mono text-sm">@localmode/bench</code>{' '}
             package - every definition below is executable code, and every published statistic is
-            recomputed server-side from each submission&apos;s raw trace.
+            recomputed server-side from each submission&apos;s raw trace. The changelog at the bottom
+            of this page records what each version changed and why.
           </p>
         </div>
 
@@ -87,15 +88,33 @@ export default function BenchMethodologyPage() {
               post-hoc from the stored generated text.
             </li>
             <li>
+              <strong className="text-foreground">Stream coherence</strong> - TTFT, decode, and
+              prefill rates are derived only when every timed iteration&apos;s chunk trace is
+              genuinely incremental: at least two non-empty chunks whose visible span covers at
+              least 20% of the request wall time. Some runtime
+              surfaces compute the whole generation and flush every chunk in a terminal burst
+              (observed on LiteRT-LM: 128 chunks inside 0.8&nbsp;ms of a 30&nbsp;s request);
+              deriving decode timing from such a trace would report an artifact, so those lanes
+              report the end-to-end rate instead, marked <em>e2e</em>.
+            </li>
+            <li>
+              <strong className="text-foreground">End-to-end rate</strong> - total generated
+              characters over the full request wall time (prefill and decode conflated), reported
+              for every generation lane. It is the only rate lanes with non-incremental streams
+              can honestly claim.
+            </li>
+            <li>
               <strong className="text-foreground">Prefill (pp128 / pp512)</strong> - approximate
               prompt tokens over TTFT, on fixed public prompts (llama-bench naming).
             </li>
             <li>
               <strong className="text-foreground">Model load</strong> - the provider&apos;s
-              download/cache phase, cold (cache probe false) vs warm (probe true) reported
-              separately. The untimed warmup that follows absorbs and records first-inference
-              readiness (engine init, shader/JIT compilation) as its own number - cold start ={' '}
-              load + warmup.
+              preload path, cold (cache probe false) vs warm (probe true) reported separately.
+              This is download-to-cache for wllama, and download plus a first engine/session
+              initialization (then released) for WebLLM, LiteRT, and Transformers.js, so load
+              alone is not comparable across runtimes. The untimed warmup that follows
+              records first-inference readiness (engine init, shader/JIT compilation) as its own
+              number; cold start = load + warmup is the cross-runtime comparable figure.
             </li>
             <li>
               <strong className="text-foreground">Embeddings</strong> - single-query latency
@@ -105,8 +124,8 @@ export default function BenchMethodologyPage() {
             <li>
               <strong className="text-foreground">Memory</strong> -{' '}
               <code className="font-mono text-sm">performance.measureUserAgentSpecificMemory()</code>{' '}
-              deltas at protocol points (baseline → post-load → post-run), Chromium-only, never
-              inside a timed region.
+              deltas at protocol points (baseline → post-load → post-run, plus a failure-time
+              sample on error cells), Chromium-only, never inside a timed region.
             </li>
           </ul>
         </Section>
@@ -115,7 +134,27 @@ export default function BenchMethodologyPage() {
           <ul className="list-disc space-y-2 pl-5">
             <li>Per cell (runtime × model × workload): 1 untimed warmup, then 3 timed runs (5 in the thorough suite).</li>
             <li>Performance runs use temperature 0, a 128-token generation budget, and fixed public prompts.</li>
-            <li>8–10&nbsp;s cool-down between model groups; on Chromium the next group also waits for CPU pressure to recover (30&nbsp;s cap).</li>
+            <li>
+              Every runtime receives the fixed prompt as a single user turn through its own chat
+              template; runtime-native templating is part of what is measured. Cross-request
+              prompt/KV caching is disabled where a runtime enables it by default (wllama&apos;s
+              <code className="font-mono text-sm"> cache_prompt</code>), so each timed iteration
+              pays prefill - with the cache on, a repeated prompt&apos;s TTFT fell from 1,018&nbsp;ms
+              to 24&nbsp;ms from the second iteration.
+            </li>
+            <li>
+              A timed iteration that generates fewer than 16 characters is gated as degenerate
+              output (an instruct model answering with EOS has no decode phase to time) and the
+              cell is marked invalid rather than scored.
+            </li>
+            <li>
+              Deterministic runtime execution order: transformers-webgpu, transformers-wasm,
+              chrome-ai, webllm, mediapipe, litert, wllama. Fixing the order makes runs
+              reproducible (runtime interleaving is not a confounder) and runs the WASM-arena
+              runtimes before the multi-gigabyte-heap runtimes; it is a reproducibility measure,
+              not a correctness fix.
+            </li>
+            <li>5–10&nbsp;s cool-down between model groups (5&nbsp;s quick, 8&nbsp;s standard, 10&nbsp;s thorough); on Chromium the next group also waits for CPU pressure to recover (15&nbsp;s cap in quick, 30&nbsp;s otherwise).</li>
             <li>
               A screen wake lock is held; timed regions overlapping a hidden tab, a wake-lock
               release, or a GPU device loss are invalidated and recorded - never silently retried.
@@ -123,7 +162,14 @@ export default function BenchMethodologyPage() {
             <li>
               Quality-fidelity lane (optional, untimed): tinyMMLU accuracy and STS-B Spearman at
               temperature 0 - these measure whether a runtime&apos;s build of the weights reproduces
-              expected outputs, not model capability.
+              expected outputs, not model capability. MMLU items use a 48-token budget; reasoning
+              blocks (<code className="font-mono text-sm">&lt;think&gt;</code>) are stripped before
+              answer parsing; pairings that ship thinking-mode builds carry a fixed no-think prompt
+              suffix applied identically to every runtime of that pairing; raw per-item outputs and
+              the parse rate are stored so every score is auditable and recomputable. Unparsed
+              items count as wrong, and the parse rate is shown beside the score: a low parse rate
+              marks a format-limited result (a build that reasons out loud past the budget), not
+              low fidelity.
             </li>
           </ul>
         </Section>
@@ -134,7 +180,9 @@ export default function BenchMethodologyPage() {
             the payload. A coefficient of variation above 5% marks the cell high-variance. Geometric
             means are used only within one device&apos;s run; the leaderboard shows the median of
             per-submission medians and marks any (device, runtime, model, workload) group with fewer
-            than 3 submissions provisional.
+            than 3 submissions provisional. Only runs measured under the current protocol version
+            are aggregated: metric definitions change between versions, so archived runs from an
+            earlier protocol stay in the dataset but never mix into a current row.
           </p>
         </Section>
 
@@ -159,12 +207,16 @@ export default function BenchMethodologyPage() {
               that disagree.
             </li>
             <li>
-              Versioned plausibility rules: timestamp monotonicity, decode-rate envelopes by model
-              size, text/chunk-length agreement, timer-quantization-grid conformance, environment
-              cross-field consistency, software/virtual-renderer detection (a GPU-lane result from
-              a SwiftShader/WARP-class adapter is rejected - cloud VMs report CPU numbers as GPU
-              numbers), and a mandatory ~1&nbsp;s deterministic matmul calibration check whose throughput
-              must be plausible for the claimed rates.
+              Versioned plausibility rules: timestamp monotonicity, decode-rate and end-to-end-rate
+              envelopes by model size, text/chunk-length agreement, stream-coherence gating of
+              TTFT/decode claims, rejection of an ok cell whose timed iteration generated fewer
+              than 16 characters (the degenerate-output gate, re-checked server-side), MMLU score
+              recomputation from the stored raw outputs, timer-quantization-grid conformance,
+              environment cross-field consistency,
+              software/virtual-renderer detection (a GPU-lane result from a SwiftShader/WARP-class
+              adapter is rejected - cloud VMs report CPU numbers as GPU numbers), and a mandatory
+              deterministic matmul calibration (at least 600&nbsp;ms of single-threaded f32
+              matmuls) whose recorded throughput must fall within silicon reality.
             </li>
             <li>
               Flagged runs are quarantined publicly (hidden from charts, never deleted). The entire
@@ -173,7 +225,41 @@ export default function BenchMethodologyPage() {
             <li>
               Residual limits, stated honestly: we cannot detect background native load, virtual
               machines, or browser flags; the min-3-submissions rule and median-of-medians limit
-              their influence.
+              their influence. Memory is the other edge: a standard suite peaks near 9&nbsp;GB of
+              browser memory and a thorough suite above 8&nbsp;GB, so on a 16&nbsp;GB machine with
+              other applications open the Transformers.js lanes (one shared ONNX Runtime WASM heap
+              per page, which never shrinks) can fail session creation with{' '}
+              <code className="font-mono text-sm">std::bad_alloc</code>, after which every later
+              Transformers.js cell in that run fails too. Those cells are recorded as errors with
+              their cause and a failure-time memory sample, never as data.
+            </li>
+          </ul>
+        </Section>
+
+        <Section id="changelog" title="Protocol changelog">
+          <ul className="list-disc space-y-2 pl-5">
+            <li>
+              <strong className="text-foreground">localmode-bench/2</strong> (2026-09-19) - from
+              three real-Chrome thorough-suite pilots; the third ran all 51 cells green. (1)
+              Stream-coherence gating - LiteRT-LM&apos;s surface flushed all chunks in a terminal
+              burst, which v1 scored as a 693,902 chars/s decode rate (correctly quarantined by
+              the envelope rule); v2 derives TTFT/decode only from incremental streams and reports
+              the end-to-end rate otherwise. (2) Quality lane rebuilt - the 8-token budget scored
+              thinking-mode builds (Qwen3) at 0 for format reasons, not fidelity; now a 48-token
+              budget, reasoning-block stripping, uniform per-pairing no-think suffixes, stored raw
+              outputs, server-side recomputation, and a surfaced parse rate. (3) Degenerate-output
+              gate. (4) Uniform user-turn contract with cross-request prompt caching disabled
+              (wllama&apos;s prompt-KV reuse had cut repeated-prompt TTFT 40x). (5) A
+              deterministic runtime execution order for reproducibility (not a correctness fix:
+              the Transformers.js failures that motivated it were primarily a session leak in the
+              provider&apos;s preload path, fixed in @localmode/transformers 4.1.2, independent of
+              order; the shared ONNX Runtime heap itself remains fragile under memory pressure, see
+              Residual limits). Archived
+              v1 runs remain published as v1 and are never re-scored.
+            </li>
+            <li>
+              <strong className="text-foreground">localmode-bench/1</strong> (2026-09-18) - initial
+              public protocol.
             </li>
           </ul>
         </Section>

@@ -9,7 +9,13 @@ rules for community submissions, and leaderboard aggregation.
 The public runner + leaderboard live at **https://localmode.ai/bench**.
 The protocol is documented at **https://localmode.ai/bench/methodology**.
 
-## Protocol (`localmode-bench/1`)
+## Protocol (`localmode-bench/2`)
+
+Result schema version 2 (`BENCH_SCHEMA_VERSION`), plausibility rule set 2
+(`PLAUSIBILITY_RULES_VERSION`). Archived v1 runs stay published as v1 and are
+never re-scored; the public leaderboard at localmode.ai aggregates only runs
+measured under the current protocol (`aggregateRuns()` in this package does
+not filter, so hosts partition by `run.protocol` themselves).
 
 - **TTFT** - first non-empty stream chunk minus stream start (`performance.now()`
   wall clock on a cross-origin-isolated page).
@@ -18,14 +24,49 @@ The protocol is documented at **https://localmode.ai/bench/methodology**.
   averaged per-token deltas. Reported as chars/sec (tokenizer-independent);
   exact tok/s is computed post-hoc from the stored generated text.
 - **Prefill (pp128 / pp512)** - approx prompt tokens / TTFT, on fixed public prompts.
+- **Stream coherence** - TTFT/decode/prefill derive only from genuinely
+  incremental streams (>= 2 non-empty chunks spanning >= 20% of the request,
+  `STREAM_COHERENCE_MIN_SPAN_RATIO`; `isIncrementalStream()` is the test and
+  `CellSummary.streamIncremental` records the verdict). Runtime surfaces that
+  flush every chunk in a terminal burst (observed on LiteRT-LM) report the
+  end-to-end rate instead, marked `e2e` in the UI.
+- **End-to-end rate** - total chars / request wall time (prefill + decode
+  conflated); reported for every generation lane as `overallCharsPerSec`
+  beside `totalMs`, and bounded by the `overall-rate-envelope` rule.
 - **Load** - cold (cache-miss) vs warm (cache-hit) reported separately; the
   provider cache is probed before load.
 - **Run policy** - 1 untimed warmup, 3–5 timed runs, cool-down between cells,
   Compute-Pressure gate on Chromium, wake lock held, visibility-gated validity.
+- **Prompt contract** - every runtime receives the fixed prompt as a single
+  user turn through its own chat template; cross-request prompt/KV caching is
+  disabled in the host adapter where a runtime enables it by default (the
+  wllama lane pins `providerOptions.wllama.cache_prompt: false`) so each timed
+  iteration pays prefill.
+- **Degenerate-output gate** - a timed iteration with fewer than 16 generated
+  chars (`MIN_GENERATED_CHARS`) is gated `degenerate-output` and the cell
+  marked `invalid` instead of scored; the validator's `degenerate-generation`
+  rule rejects an `ok` cell that carries one.
+- **Execution order** - deterministic runtime order (`RUNTIME_EXECUTION_ORDER`:
+  transformers-webgpu, transformers-wasm, chrome-ai, webllm, mediapipe, litert,
+  wllama; `orderCells()` applies it and the runner enforces it) for
+  reproducibility, so runtime interleaving is not a confounder across runs. It
+  is a reproducibility measure only, not a memory or correctness fix.
+- **Error cells** - `error.cause` carries the wrapped provider error's message
+  and `memory.atError` a failure-time memory sample; error cells are never
+  data.
 - **Statistics** - median headline; mean ± SD, IQR, 95% CI (Student-t), CV;
   CV > 5% ⇒ high-variance flag; geomean only within a device run.
 - **Quality-fidelity lane** - tinyMMLU (MIT) accuracy + STS-B (CC BY-SA) Spearman,
   temperature 0; measures runtime/quantization fidelity, not model capability.
+  MMLU: 48-token budget (`MMLU_MAX_TOKENS`), `<think>` blocks stripped before
+  parsing (markdown emphasis tolerated; letters are matched case-sensitively
+  after a keyword, so "the answer is a bit" is not answer A; "Option C" and
+  "choice (B)" are accepted), uniform per-pairing `qualityPromptSuffix` for
+  thinking-mode builds, raw per-item `outputs` (capped at 400 chars each,
+  `MMLU_OUTPUT_CAP`; the client scores exactly the capped text) + `parseRate`
+  stored so scores are recomputable server-side (the `quality-details-mismatch`
+  rule rejects disagreement); the parse rate is reported beside the score as
+  `qualityParseRate` (a low parse rate = format-limited, not low fidelity).
 
 ## Usage (host wiring)
 
@@ -43,7 +84,7 @@ const result = await runBenchmarkSuite({
   policy: RUN_POLICIES.quick,
   llmAdapters,      // Map<runtimeId, LLMRuntimeAdapter> - see src/adapter.ts
   embedAdapters,
-  harness: { name: '@localmode/bench', version: '0.1.0' },
+  harness: { name: '@localmode/bench', version: '0.2.0' },
   abortSignal: controller.signal,
 });
 result.digest = await computeRunDigest(result);
@@ -51,8 +92,23 @@ result.digest = await computeRunDigest(result);
 
 Server-side, validate any submission with `validateSubmission(run)` - it
 recomputes every statistic from the raw trace and applies the versioned
-plausibility rules (monotonicity, decode-rate envelopes, timer-grid
-conformance, cross-field environment consistency, calibration-check sanity).
+plausibility rules (monotonicity, decode-rate and end-to-end-rate envelopes,
+stream-coherence gating, the degenerate-generation check, MMLU recomputation
+from stored outputs, timer-grid conformance, cross-field environment
+consistency, calibration-check sanity).
+
+## Known limitation
+
+The Transformers.js lanes share one ONNX Runtime WASM instance per page, and
+its heap never shrinks. Under system memory pressure - a standard suite peaks
+near 9 GB of JS heap and a thorough suite above 8 GB, so a 16 GB machine with
+other applications open is already at the edge - a large-model session
+creation can fail with `std::bad_alloc`, and once one ORT session fails every
+later ORT session in the page fails too. Such cells are recorded as errors
+with their `error.cause` and `memory.atError` sample, never as data. The
+deterministic execution order does not change this. Isolating each
+Transformers.js model in its own worker is the structural fix and is future
+work.
 
 ## Results dataset (GitHub-as-database)
 
@@ -82,7 +138,10 @@ import { aggregateRuns, rowsToCSV, runsToLongCSV } from '@localmode/bench';
 ```
 
 `runsToLongCSV(runs)` emits one row per timed iteration with full device
-identity columns - feed it directly to R/pandas.
+identity columns - feed it directly to R/pandas. It carries
+`overallCharsPerSec` and `streamIncremental` per iteration and leaves TTFT /
+decode blank for non-incremental ones; `rowsToCSV(rows)` (leaderboard rows)
+carries `overallCharsPerSec` and `qualityParseRate`.
 
 ## Dataset licenses
 

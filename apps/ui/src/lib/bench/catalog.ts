@@ -46,6 +46,7 @@ export const BENCH_MODELS: readonly BenchModelRef[] = [
     sizeBytes: 350 * 1024 * 1024,
     contextLength: 4096,
     requiresWebGPU: true,
+    qualityPromptSuffix: ' /no_think',
   },
   {
     benchModelId: 'qwen3-0.6b',
@@ -58,6 +59,7 @@ export const BENCH_MODELS: readonly BenchModelRef[] = [
     sizeBytes: 530 * 1024 * 1024,
     contextLength: 40960,
     url: 'https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf',
+    qualityPromptSuffix: ' /no_think',
   },
   {
     benchModelId: 'qwen3-0.6b',
@@ -70,6 +72,7 @@ export const BENCH_MODELS: readonly BenchModelRef[] = [
     sizeBytes: 614_236_160,
     contextLength: 4096,
     url: 'https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B.litertlm',
+    qualityPromptSuffix: ' /no_think',
   },
   {
     benchModelId: 'qwen3-0.6b',
@@ -82,6 +85,7 @@ export const BENCH_MODELS: readonly BenchModelRef[] = [
     sizeBytes: 570 * 1024 * 1024,
     contextLength: 4096,
     requiresWebGPU: true,
+    qualityPromptSuffix: ' /no_think',
   },
   {
     benchModelId: 'qwen3-0.6b',
@@ -93,6 +97,7 @@ export const BENCH_MODELS: readonly BenchModelRef[] = [
     quantization: 'q4',
     sizeBytes: 570 * 1024 * 1024,
     contextLength: 4096,
+    qualityPromptSuffix: ' /no_think',
   },
 
   // --- Llama 3.2 1B — the 3-runtime mid-size pairing ---

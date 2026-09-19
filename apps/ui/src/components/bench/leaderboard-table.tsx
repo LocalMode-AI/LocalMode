@@ -108,7 +108,16 @@ export function LeaderboardTable({ rows }: { rows: IndexLeaderboardRow[] }) {
                 <TableCell className="font-mono text-xs">{r.workloadId}</TableCell>
                 <TableCell className="text-right tabular-nums">{fmtMs(r.ttftMs)}</TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {r.decodeCharsPerSec !== undefined ? Math.round(r.decodeCharsPerSec) : '—'}
+                  {r.decodeCharsPerSec !== undefined ? (
+                    Math.round(r.decodeCharsPerSec)
+                  ) : r.overallCharsPerSec !== undefined ? (
+                    <span title="End-to-end rate (prefill + decode). This runtime's stream is not incremental, so a pure decode rate cannot be measured.">
+                      {Math.round(r.overallCharsPerSec)}
+                      <span className="text-xs text-muted-foreground"> e2e</span>
+                    </span>
+                  ) : (
+                    '—'
+                  )}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {r.singleLatencyMs !== undefined
@@ -122,6 +131,14 @@ export function LeaderboardTable({ rows }: { rows: IndexLeaderboardRow[] }) {
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {r.qualityScore !== undefined ? r.qualityScore.toFixed(3) : '—'}
+                  {r.qualityParseRate !== undefined && r.qualityParseRate < 1 && (
+                    <span
+                      className="text-xs text-muted-foreground"
+                      title="Share of items whose answer could be parsed. Unparsed items count as wrong, so a low share means the score is limited by output format, not fidelity."
+                    >
+                      {' '}({Math.round(r.qualityParseRate * 100)}% parsed)
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell className="text-right">
                   {r.submissions}

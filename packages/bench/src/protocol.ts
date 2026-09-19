@@ -8,7 +8,12 @@
  * definitions (TTFT; decode rate excludes the first token).
  */
 
-import type { EmbedWorkloadSpec, LLMWorkloadSpec, QualityWorkloadSpec } from './types.js';
+import type {
+  BenchRuntimeId,
+  EmbedWorkloadSpec,
+  LLMWorkloadSpec,
+  QualityWorkloadSpec,
+} from './types.js';
 
 /**
  * ~128-token prompt (measured 512 chars). Original text, public domain.
@@ -54,6 +59,15 @@ const PROMPT_PP512 = [
 
 /** Fixed generation budget for timed lanes (tg128, MLPerf-Client-sized). */
 export const GENERATION_BUDGET = 128;
+
+/**
+ * Minimum generated characters for a timed iteration to count as a decode
+ * measurement (part of the versioned protocol). An instruct model that emits
+ * EOS after a handful of characters - typically an untemplated prompt or a
+ * tokenizer mismatch - produces no decode phase to time; such iterations are
+ * gated `degenerate-output` and the cell is marked invalid rather than scored.
+ */
+export const MIN_GENERATED_CHARS = 16;
 
 /** LLM performance workloads. */
 export const LLM_WORKLOADS: readonly LLMWorkloadSpec[] = [
@@ -133,6 +147,40 @@ export const WORKLOADS_BY_ID: ReadonlyMap<
 > = new Map(
   [...LLM_WORKLOADS, ...EMBED_WORKLOADS, ...QUALITY_WORKLOADS].map((w) => [w.id, w]),
 );
+
+/**
+ * Fixed runtime execution order (part of the versioned protocol). This makes
+ * the order deterministic so runtime interleaving is not a confounder across
+ * runs; it is a reproducibility measure, not a correctness fix. (The
+ * Transformers.js ORT-web lanes fail during session creation regardless of
+ * where they run in the order - a separate open runtime/adapter issue.) The
+ * order runs the WASM-arena runtimes first and the multi-GB-heap runtimes last.
+ * Within a runtime, catalog order is preserved.
+ */
+export const RUNTIME_EXECUTION_ORDER: readonly BenchRuntimeId[] = [
+  'transformers-webgpu',
+  'transformers-wasm',
+  'chrome-ai',
+  'webllm',
+  'mediapipe',
+  'litert',
+  'wllama',
+] as const;
+
+/**
+ * Sort planned cells into the protocol execution order (stable within a
+ * runtime). The runner applies this itself; exported for hosts and tests.
+ */
+export function orderCells<T extends { model: { runtimeId: BenchRuntimeId } }>(
+  cells: readonly T[],
+): T[] {
+  const rank = new Map(RUNTIME_EXECUTION_ORDER.map((id, i) => [id, i]));
+  return [...cells].sort(
+    (a, b) =>
+      (rank.get(a.model.runtimeId) ?? RUNTIME_EXECUTION_ORDER.length) -
+      (rank.get(b.model.runtimeId) ?? RUNTIME_EXECUTION_ORDER.length),
+  );
+}
 
 /** Run policy for a suite (part of the versioned protocol). */
 export interface RunPolicy {

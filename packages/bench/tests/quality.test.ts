@@ -47,6 +47,32 @@ describe('parseMMLUAnswer()', () => {
     expect(parseMMLUAnswer('third option', choices)).toBe(2);
     expect(parseMMLUAnswer('I am not sure about this one', choices)).toBeNull();
   });
+
+  it('strips reasoning blocks before parsing (Qwen3-style thinking output)', () => {
+    expect(parseMMLUAnswer('<think>\n\n</think>\n\nB', choices)).toBe(1);
+    expect(parseMMLUAnswer('<think>Let me weigh each choice carefully.</think> Answer: C', choices)).toBe(2);
+    // An unterminated think block never reached an answer: unparseable.
+    expect(parseMMLUAnswer('<think>The question asks about the second', choices)).toBeNull();
+  });
+
+  it('never mistakes the article "a" for answer A (letters are case-sensitive mid-sentence)', () => {
+    expect(parseMMLUAnswer('the answer is a bit unclear here', choices)).toBeNull();
+    expect(parseMMLUAnswer('Answer: a little of both', choices)).toBeNull();
+    // A bare lowercase letter as the whole reply, or "b)" / "b." at the start, is unambiguous.
+    expect(parseMMLUAnswer('b', choices)).toBe(1);
+    expect(parseMMLUAnswer('c) because of the tides', choices)).toBe(2);
+  });
+
+  it('accepts explicit option/choice phrasing', () => {
+    expect(parseMMLUAnswer('Option C', choices)).toBe(2);
+    expect(parseMMLUAnswer('I would pick choice (B) here.', choices)).toBe(1);
+  });
+
+  it('tolerates markdown emphasis around the letter', () => {
+    expect(parseMMLUAnswer('**B**', choices)).toBe(1);
+    expect(parseMMLUAnswer('The answer is **C**.', choices)).toBe(2);
+    expect(parseMMLUAnswer('`D`', choices)).toBe(3);
+  });
 });
 
 describe('runMMLUFidelity()', () => {
@@ -86,6 +112,73 @@ describe('runMMLUFidelity()', () => {
     expect(prompt).toContain('A. ');
     expect(prompt).toContain('D. ');
     expect(prompt.endsWith('Answer:')).toBe(true);
+  });
+
+  it('scores from the same capped text it stores, so the server recompute can never disagree', async () => {
+    // The letter only appears after the storage cap: the stored output (what
+    // the server re-parses) has no answer, so the client must score it the
+    // same way rather than parsing the full text.
+    const late = 'Let me think this through carefully. '.repeat(12) + 'Answer: A';
+    expect(late.length).toBeGreaterThan(400);
+    const model: BenchLanguageModel = {
+      modelId: 'mock:late',
+      provider: 'mock',
+      async doGenerate() {
+        return { text: late, finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, durationMs: 1 } };
+      },
+    };
+    const result = await runMMLUFidelity(model, 2);
+    expect(result.outputs?.every((o) => o.length <= 400)).toBe(true);
+    expect(result.parseRate).toBe(0);
+    expect(result.score).toBe(0);
+    expect(result.details).toEqual([0, 0]);
+  });
+
+  it('records raw outputs and the parse rate for auditability', async () => {
+    let call = 0;
+    const noisy: BenchLanguageModel = {
+      modelId: 'mock:noisy',
+      provider: 'mock',
+      async doGenerate() {
+        // Every second answer is unparseable prose.
+        const index = call++;
+        const item = TINY_MMLU[index];
+        const text = index % 2 === 0 ? ` ${['A', 'B', 'C', 'D'][item.answer]}` : 'hmm, let me see';
+        return {
+          text,
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, durationMs: 1 },
+        };
+      },
+    };
+    const result = await runMMLUFidelity(noisy, 10);
+    expect(result.score).toBe(0.5);
+    expect(result.parseRate).toBe(0.5);
+    expect(result.outputs).toHaveLength(10);
+    expect(result.outputs?.[1]).toBe('hmm, let me see');
+  });
+
+  it('applies a per-model prompt suffix uniformly to every item', async () => {
+    const seen: string[] = [];
+    const oracle: BenchLanguageModel = {
+      modelId: 'mock:suffix',
+      provider: 'mock',
+      async doGenerate({ prompt }: { prompt: string }) {
+        seen.push(prompt);
+        return {
+          text: ' A',
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, durationMs: 1 },
+        };
+      },
+    };
+    await runMMLUFidelity(oracle, 3, { promptSuffix: ' /no_think' });
+    expect(seen).toHaveLength(3);
+    for (const prompt of seen) {
+      // The suffix joins the instruction line; "Answer:" stays the completion cue.
+      expect(prompt).toContain(' /no_think\nAnswer:');
+      expect(prompt.endsWith('Answer:')).toBe(true);
+    }
   });
 });
 

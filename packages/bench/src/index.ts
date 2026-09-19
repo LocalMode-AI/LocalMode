@@ -53,6 +53,9 @@ export {
   WORKLOADS_BY_ID,
   RUN_POLICIES,
   GENERATION_BUDGET,
+  MIN_GENERATED_CHARS,
+  RUNTIME_EXECUTION_ORDER,
+  orderCells,
 } from './protocol.js';
 export type { RunPolicy } from './protocol.js';
 
@@ -87,11 +90,13 @@ export { median, mean, stddev, quantile, geomean, summarize, spearman } from './
 // Validation + integrity
 export {
   PLAUSIBILITY_RULES_VERSION,
+  STREAM_COHERENCE_MIN_SPAN_RATIO,
   validateRunShape,
   summarizeCell,
   summarizeRun,
   checkPlausibility,
   validateSubmission,
+  isIncrementalStream,
 } from './validate.js';
 export { canonicalJson, sha256Hex, computeRunDigest, verifyRunDigest } from './canonical.js';
 
@@ -106,7 +111,14 @@ export {
 export type { LeaderboardRow } from './aggregate.js';
 
 // Quality-fidelity lane
-export { runMMLUFidelity, runSTSQuality, formatMMLUPrompt, parseMMLUAnswer } from './quality.js';
+export {
+  runMMLUFidelity,
+  runSTSQuality,
+  formatMMLUPrompt,
+  parseMMLUAnswer,
+  MMLU_MAX_TOKENS,
+  MMLU_OUTPUT_CAP,
+} from './quality.js';
 export { TINY_MMLU } from './datasets/tiny-mmlu.js';
 export type { MMLUItem } from './datasets/tiny-mmlu.js';
 export { STSB_SUBSET } from './datasets/stsb/stsb-subset.js';

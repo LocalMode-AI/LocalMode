@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-09-19
+
+Bumps the LocalMode Bench protocol to `localmode-bench/2` after three real-Chrome thorough-suite pilots surfaced measurement defects in the harness and two provider bugs underneath it. The third pilot ran all 51 cells green.
+
+**Released:** `@localmode/bench` 0.2.0 · `@localmode/wllama` 3.2.0 · `@localmode/transformers` 4.1.2.
+
+### Fixed
+
+- **`@localmode/transformers` 4.1.2 - `preloadModel()` leaked a resident ONNX session.** It built a full pipeline only to populate the model-file cache and never disposed it; ONNX Runtime's WASM heap never shrinks, so after a few large models every later session creation failed with `std::bad_alloc` - in the bench this killed all 18 Transformers.js cells of a thorough run regardless of execution order. The throwaway session is now disposed, and a new `device` option replaces the hard-coded WebGPU (defaulting to WebGPU only when `navigator.gpu` is present, else WASM).
+- **`@localmode/wllama` 3.2.0 - a bare `prompt` is now a user turn, like every other provider.** Previously a `prompt` with no `messages`/`systemPrompt` bypassed the GGUF chat template (raw completion) and returned the whole generation as one chunk; instruct models fed untemplated text often emit EOS immediately (SmolLM2-135M produced 0 characters). Bare prompts now go through `createChatCompletion` with real token streaming when the GGUF ships a template; `providerOptions.wllama.raw` keeps raw completion, and base GGUFs without a template use it automatically. `cache_prompt` and `chat_template_kwargs` pass through.
+- **`@localmode/bench` 0.2.0 - protocol `localmode-bench/2`.** Stream-coherence gating (TTFT/decode only from genuinely incremental traces; LiteRT-LM's terminal-burst surface produced an artifact 693,902 chars/s decode rate under v1 and now reports an honest end-to-end rate marked `e2e`); quality lane rebuilt (48-token budget, `<think>` stripping, uniform per-pairing no-think suffixes, stored raw outputs, server-side recomputation, and a surfaced parse rate so a format-limited score is never read as low fidelity); a degenerate-generation gate; the wllama lane pins `cache_prompt: false` so repeated prompts pay prefill every iteration (llama.cpp's prompt-KV reuse had dropped TTFT from 1018 ms to 24 ms from the second iteration on); error causes preserved on cells; and a deterministic runtime execution order for reproducibility. The leaderboard and run pages surface `e2e` rates and `(N% parsed)` annotations; the paper CSV tooling gains `overallCharsPerSec`/`streamIncremental`/`qualityParseRate` columns. The leaderboard aggregates only runs measured under the current protocol, so archived v1 runs stay published as v1 (never re-scored) but leave the leaderboard until v2 submissions arrive. Known limitation, documented rather than fixed: the Transformers.js lanes share one ONNX Runtime WASM heap per page that never shrinks, so under system memory pressure a large-model session can fail with `std::bad_alloc` and later ORT sessions in that page fail too; such cells are recorded as errors (with cause and a failure-time memory sample), never as data, and the execution order does not change this.
+
 ## [2.6.0] - 2026-09-18
 
 Introduces **LocalMode Bench** - an open, cross-runtime benchmark of in-browser AI with a public leaderboard at [localmode.ai/bench](https://localmode.ai/bench) - and fixes a wllama preload crash on encoder-only GGUF models.

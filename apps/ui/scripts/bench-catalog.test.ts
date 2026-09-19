@@ -82,4 +82,19 @@ describe('bench catalog drift guard', () => {
       for (const id of ids) expect(known.has(id), `unknown benchModelId ${id}`).toBe(true);
     }
   });
+
+  it('quality prompt suffixes are uniform across every runtime of a pairing', () => {
+    // Fidelity compares runtimes on identical inputs: a suffix on one lane of
+    // a benchModelId must appear verbatim on every lane of that benchModelId.
+    const byPairing = new Map<string, Set<string | undefined>>();
+    for (const m of BENCH_MODELS.filter((m) => m.task === 'llm')) {
+      (byPairing.get(m.benchModelId) ?? byPairing.set(m.benchModelId, new Set()).get(m.benchModelId)!)
+        .add(m.qualityPromptSuffix);
+    }
+    for (const [id, suffixes] of byPairing) {
+      expect(suffixes.size, `mixed qualityPromptSuffix on ${id}`).toBe(1);
+    }
+    // Qwen3 ships thinking-mode builds: the no-think suffix is load-bearing.
+    expect(byPairing.get('qwen3-0.6b')).toEqual(new Set([' /no_think']));
+  });
 });

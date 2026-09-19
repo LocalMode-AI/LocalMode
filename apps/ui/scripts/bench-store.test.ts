@@ -6,12 +6,14 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RunIndexEntry } from '../src/lib/bench/store';
-import { aggregateIndex } from '../src/lib/bench/store';
+import { aggregateIndex, toIndexEntry } from '../src/lib/bench/store';
+import { summarizeRun, type BenchRunResult } from '@localmode/bench';
 import { issueNonce, verifyNonce, NONCE_MAX_AGE_MS } from '../src/lib/bench/nonce';
 
 function entry(overrides: Partial<RunIndexEntry> & { runId: string }): RunIndexEntry {
   return {
     createdAt: '2026-07-16T00:00:00.000Z',
+    protocol: 'localmode-bench/2',
     suite: 'quick',
     deviceClass: 'macos/apple-metal-3',
     browser: 'Chrome',
@@ -60,12 +62,113 @@ describe('aggregateIndex()', () => {
     expect(rows[0].provisional).toBe(true);
   });
 
+  it('aggregates only runs measured under the current protocol (older or unversioned entries are excluded)', () => {
+    // Metric definitions changed between protocol versions; mixing them in one
+    // row would average incomparable numbers. Pre-v2 index entries carry no
+    // protocol field at all.
+    const v1 = entry({ runId: 'v1' });
+    delete (v1 as Partial<RunIndexEntry>).protocol;
+    const rows = aggregateIndex([
+      entry({ runId: 'current' }),
+      v1,
+      entry({ runId: 'future', protocol: 'localmode-bench/3' }),
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].submissions).toBe(1);
+  });
+
   it('routes warm loads to loadWarmMs', () => {
     const warm = entry({ runId: 'w' });
     warm.cells[0] = { ...warm.cells[0], loadCached: true, loadMs: 900 };
     const rows = aggregateIndex([warm]);
     expect(rows[0].loadWarmMs).toBe(900);
     expect(rows[0].loadColdMs).toBeUndefined();
+  });
+});
+
+describe('toIndexEntry() → aggregateIndex() (protocol v2 fields)', () => {
+  /** A v2 run: one terminal-burst chat cell (LiteRT shape) and one MMLU cell with a parse rate. */
+  function v2Run(): BenchRunResult {
+    const model = {
+      benchModelId: 'qwen3-0.6b',
+      runtimeId: 'litert' as const,
+      providerModelId: 'qwen3-0.6B',
+      displayName: 'Qwen3 0.6B (LiteRT)',
+      task: 'llm' as const,
+      sizeBytes: 614_236_160,
+    };
+    return {
+      protocol: 'localmode-bench/2',
+      schemaVersion: 2,
+      runId: 'run-v2-0001',
+      createdAt: '2026-09-19T00:00:00.000Z',
+      harness: { name: '@localmode/bench', version: '0.2.0' },
+      suite: 'standard',
+      environment: {
+        capturedAt: '2026-09-19T00:00:00.000Z',
+        browser: { name: 'Chrome', version: '145', source: 'ua-ch' },
+        os: { platform: 'macOS', version: '15.5' },
+        hardware: { cores: 10, coresClamped: false, deviceMemoryGB: 8, deviceMemoryCapped: true },
+        gpu: { available: true, vendor: 'apple', architecture: 'metal-3' },
+        webglRenderer: 'Apple M3',
+        flags: { crossOriginIsolated: true, sharedArrayBuffer: true, wasmSimd: true },
+        storage: null,
+        power: { batterySupported: false },
+        pressure: { supported: false },
+        timerResolutionUs: 5,
+        screen: null,
+      },
+      fingerprint: { mflops: 1500, n: 160, iterations: 120, durationMs: 650, checksum: 1.5 },
+      cells: [
+        {
+          cellId: 'litert/qwen3-0.6b/chat-pp128-tg128',
+          runtimeId: 'litert',
+          model,
+          workloadId: 'chat-pp128-tg128',
+          workloadKind: 'llm-generate',
+          resolvedBackend: 'gpu',
+          load: { cached: false, startT: 0, endT: 35_700 },
+          // 600 chars delivered as one chunk 30 s in: non-incremental, 20 chars/s end to end.
+          iterations: [{ startT: 1000, chunks: [{ t: 30_999, c: 600 }], endT: 31_000, text: 'x'.repeat(600), gates: [] }],
+          status: 'ok',
+        },
+        {
+          cellId: 'litert/qwen3-0.6b/quality-mmlu-25',
+          runtimeId: 'litert',
+          model,
+          workloadId: 'quality-mmlu-25',
+          workloadKind: 'quality-mmlu',
+          resolvedBackend: 'gpu',
+          load: null,
+          iterations: [],
+          quality: { taskId: 'tinymmlu-25', score: 0.36, n: 25, parseRate: 0.6 },
+          status: 'ok',
+        },
+      ],
+      events: [],
+    };
+  }
+
+  it('carries protocol, end-to-end rate, stream flag, and parse rate into the index and the leaderboard row', () => {
+    const run = v2Run();
+    const entry = toIndexEntry(run, summarizeRun(run), false, 'runs/2026/09/run-v2-0001.json');
+    expect(entry.protocol).toBe('localmode-bench/2');
+    const chat = entry.cells.find((c) => c.workloadId === 'chat-pp128-tg128')!;
+    expect(chat.streamIncremental).toBe(false);
+    expect(chat.ttftMs).toBeUndefined();
+    expect(chat.decodeCharsPerSec).toBeUndefined();
+    expect(chat.overallCharsPerSec).toBeCloseTo(20, 0);
+    const quality = entry.cells.find((c) => c.workloadId === 'quality-mmlu-25')!;
+    expect(quality.qualityScore).toBe(0.36);
+    expect(quality.qualityParseRate).toBe(0.6);
+
+    const rows = aggregateIndex([entry]);
+    const chatRow = rows.find((r) => r.workloadId === 'chat-pp128-tg128')!;
+    expect(chatRow.decodeCharsPerSec).toBeUndefined();
+    expect(chatRow.overallCharsPerSec).toBeCloseTo(20, 0);
+    const qualityRow = rows.find((r) => r.workloadId === 'quality-mmlu-25')!;
+    expect(qualityRow.qualityScore).toBe(0.36);
+    expect(qualityRow.qualityParseRate).toBe(0.6);
   });
 });
 

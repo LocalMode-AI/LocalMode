@@ -92,13 +92,29 @@ describe('checkPlausibility()', () => {
 
   it('rejects decode rates beyond the model-size envelope', () => {
     const run = makeRun();
-    // Compress all chunk gaps to 0.01ms → ~500k chars/s, far past any envelope.
+    // A genuinely incremental stream (span 90/210ms) claiming 500-char chunks
+    // every 10ms → 50,000 chars/s, far past any envelope. (A burst-compressed
+    // forgery no longer reaches this rule: it derives no decode rate at all.)
     for (const iter of run.cells[0].iterations as LLMIteration[]) {
-      iter.chunks = iter.chunks.map((c, i) => ({ c: c.c, t: iter.startT + 100 + i * 0.01 }));
-      iter.endT = iter.startT + 101;
+      iter.chunks = Array.from({ length: 10 }, (_, i) => ({ c: 500, t: iter.startT + 100 + i * 10 }));
+      iter.endT = iter.startT + 210;
+      iter.text = 'x'.repeat(5000);
     }
     expect(checkPlausibility(run)).toContainEqual(
       expect.objectContaining({ code: 'decode-rate-envelope', severity: 'reject' }),
+    );
+  });
+
+  it('rejects an ok cell whose timed generations are degenerate (client bypassed the gate)', () => {
+    const run = makeRun();
+    for (const iter of run.cells[0].iterations as LLMIteration[]) {
+      // Three characters of output, claimed as a healthy timed iteration.
+      iter.chunks = [{ t: iter.startT + 30, c: 3 }];
+      iter.text = 'ok.';
+      iter.endT = iter.startT + 31;
+    }
+    expect(checkPlausibility(run)).toContainEqual(
+      expect.objectContaining({ code: 'degenerate-generation', severity: 'reject' }),
     );
   });
 

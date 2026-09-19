@@ -47,7 +47,14 @@ in-instance window without it.
 1. `GET https://localmode.ai/api/bench/nonce` → `{ nonce: "…" }` (not `dev.`-prefixed).
 2. Run the quick suite on a real device → Submit → the run file appears in
    `runs/YYYY/MM/` and the leaderboard row shows within ~5 minutes (ISR).
-3. Confirm `index/summary.json` gained the entry.
+3. Confirm `index/summary.json` gained the entry (each entry carries the run's
+   `protocol`).
+
+The leaderboard aggregates only index entries whose `protocol` matches the
+current `BENCH_PROTOCOL_VERSION` (`localmode-bench/2`); entries without the
+field predate v2 and are excluded. After a protocol bump the leaderboard is
+therefore empty until the first run under the new protocol is published.
+Archived runs stay in `runs/` as-is and are never re-scored.
 
 ## Optional integration check (real GitHub API, opt-in)
 

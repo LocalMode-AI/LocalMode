@@ -1,5 +1,12 @@
 # @localmode/wllama
 
+## 3.2.0
+
+### Minor Changes
+
+- fix: a bare `prompt` is now a user turn, exactly as the webllm, transformers, and litert providers treat it. Previously `doGenerate({ prompt })` / `doStream({ prompt })` with no `messages` or `systemPrompt` bypassed the GGUF chat template entirely (raw `createCompletion`) and delivered the whole generation as a single chunk. Instruct models fed an untemplated prompt often emit EOS immediately (SmolLM2-135M-Instruct produced 0 characters for a normal request), and callers got no token streaming. Both paths now route through `createChatCompletion` when the GGUF ships a chat template: templated input and real token-by-token streaming. Raw untemplated completion remains available via `providerOptions: { wllama: { raw: true } }`, and is still the automatic path for base GGUFs that carry no chat template (`getChatTemplate()` is null), where wrapping the prompt would be wrong. Surfaced by the LocalMode Bench pilots, where every wllama chat lane recorded a single terminal chunk. Regression tests: the "uniform user-turn contract" block in `tests/wllama.test.ts`.
+- feat: `providerOptions.wllama.cache_prompt` (boolean) and `providerOptions.wllama.chat_template_kwargs` (object) pass through verbatim to `createChatCompletion` on both the generate and stream paths. `cache_prompt: false` disables llama.cpp's default prompt-KV reuse across requests, so a repeated prompt pays prefill every time (the bench's wllama lane pins it); `chat_template_kwargs` reach the Jinja chat template.
+
 ## 3.1.2
 
 ### Patch Changes

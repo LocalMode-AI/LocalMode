@@ -6,10 +6,10 @@
  */
 
 /** Protocol identifier embedded in every result. Bump only with a spec change. */
-export const BENCH_PROTOCOL_VERSION = 'localmode-bench/1';
+export const BENCH_PROTOCOL_VERSION = 'localmode-bench/2';
 
 /** Result JSON schema version (independent of the protocol semantics version). */
-export const BENCH_SCHEMA_VERSION = 1;
+export const BENCH_SCHEMA_VERSION = 2;
 
 /** Benchmark suite presets. `custom` = user-picked cells. */
 export type BenchSuiteId = 'quick' | 'standard' | 'thorough' | 'custom';
@@ -91,6 +91,12 @@ export interface BenchModelRef {
   /** Direct model URL when applicable (wllama GGUF, litert). */
   url?: string;
   requiresWebGPU?: boolean;
+  /**
+   * Appended to the quality-lane instruction line for every runtime of this
+   * pairing (e.g. " /no_think" to hold Qwen3 in non-thinking mode). Uniform
+   * across runtimes by construction, so fidelity comparisons stay valid.
+   */
+  qualityPromptSuffix?: string;
 }
 
 /** One recorded stream chunk: wall-clock timestamp + delta length in chars. */
@@ -156,6 +162,8 @@ export interface MemorySample {
   baseline?: number;
   postLoad?: number;
   postRun?: number;
+  /** Bytes at the moment a cell errored (load or workload failure). */
+  atError?: number;
   api: 'uaSpecific' | 'legacyHeap' | 'none';
 }
 
@@ -167,6 +175,13 @@ export interface QualityResult {
   n: number;
   /** Per-item correctness or per-pair cosine, for auditability. */
   details?: number[];
+  /**
+   * Raw model outputs per item (MMLU lanes; capped at 400 chars each) so the
+   * score is recomputable server-side and parse failures are auditable.
+   */
+  outputs?: string[];
+  /** Fraction of items whose answer was parseable (MMLU lanes). */
+  parseRate?: number;
 }
 
 export type BenchCellStatus = 'ok' | 'invalid' | 'error' | 'skipped';
@@ -190,7 +205,8 @@ export interface BenchCellResult {
   quality?: QualityResult;
   status: BenchCellStatus;
   invalidReasons?: string[];
-  error?: { name: string; message: string };
+  /** Error that ended the cell; `cause` carries the wrapped provider error's message when present. */
+  error?: { name: string; message: string; cause?: string };
 }
 
 /** Trace events global to the suite run (validity accounting). */
@@ -308,6 +324,16 @@ export interface CellSummary {
   decodeChunksPerSec?: MetricSummary;
   prefillTokPerSecApprox?: MetricSummary;
   generatedChars?: MetricSummary;
+  /** Request wall time (startT → endT), all LLM lanes. */
+  totalMs?: MetricSummary;
+  /** End-to-end chars/s over the whole request (prefill + decode conflated). */
+  overallCharsPerSec?: MetricSummary;
+  /**
+   * False when the chunk trace is not genuinely incremental (single chunk, or
+   * the visible stream spans <20% of the request) — TTFT and decode metrics
+   * are then omitted because they would be timing artifacts, not measurements.
+   */
+  streamIncremental?: boolean;
   /** Embedding lanes. */
   singleLatencyMs?: MetricSummary;
   batchTextsPerSec?: MetricSummary;
@@ -315,6 +341,8 @@ export interface CellSummary {
   loadMs?: number;
   loadCached?: boolean;
   qualityScore?: number;
+  /** Fraction of MMLU items whose answer parsed; a low value marks a format failure, not a fidelity one. */
+  qualityParseRate?: number;
   highVariance: boolean;
 }
 

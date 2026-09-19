@@ -315,9 +315,7 @@ export class WllamaLanguageModel implements LanguageModel {
     const sampling = this.buildSamplingParams(temperature, topP, wllamaOpts);
 
     try {
-      const hasMessages = (messages && messages.length > 0) || !!systemPrompt;
-
-      if (hasMessages) {
+      if (this.useChatPath(wllamaInstance, messages, systemPrompt, wllamaOpts)) {
         const oaiMessages = this.buildOAIMessages(messages, systemPrompt, prompt);
         const responseFormat = wllamaOpts.response_format as Record<string, unknown> | undefined;
 
@@ -325,6 +323,7 @@ export class WllamaLanguageModel implements LanguageModel {
           messages: oaiMessages,
           max_tokens: maxTokens,
           ...(responseFormat ? { response_format: responseFormat } : {}),
+          ...this.buildChatPassthrough(wllamaOpts),
           ...sampling,
         } as never);
 
@@ -371,6 +370,42 @@ export class WllamaLanguageModel implements LanguageModel {
     } catch (error) {
       this.handleGenerationError(error);
     }
+  }
+
+  /**
+   * @internal Non-sampling chat-completion options forwarded verbatim.
+   * `cache_prompt: false` disables llama.cpp's prompt-KV reuse across
+   * requests (on by default), which otherwise makes a repeated prompt skip
+   * prefill entirely; `chat_template_kwargs` reach the Jinja template.
+   */
+  private buildChatPassthrough(wllamaOpts: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    if (typeof wllamaOpts.cache_prompt === 'boolean') out.cache_prompt = wllamaOpts.cache_prompt;
+    if (wllamaOpts.chat_template_kwargs && typeof wllamaOpts.chat_template_kwargs === 'object') {
+      out.chat_template_kwargs = wllamaOpts.chat_template_kwargs;
+    }
+    return out;
+  }
+
+  /**
+   * @internal Decide between the chat-template path (`createChatCompletion`)
+   * and raw untemplated completion (`createCompletion`).
+   *
+   * A bare `prompt` is a user turn, exactly as the webllm, transformers, and
+   * litert providers treat it, so an instruct GGUF gets its chat template
+   * applied and real token streaming. Raw completion is used only when the
+   * caller asks for it (`providerOptions.wllama.raw`) or the GGUF ships no
+   * chat template (a base model), where wrapping the prompt would be wrong.
+   */
+  private useChatPath(
+    wllamaInstance: { getChatTemplate?: () => string | null },
+    messages: DoGenerateOptions['messages'],
+    systemPrompt: string | undefined,
+    wllamaOpts: Record<string, unknown>,
+  ): boolean {
+    if ((messages && messages.length > 0) || !!systemPrompt) return true;
+    if (wllamaOpts.raw === true) return false;
+    return typeof wllamaInstance.getChatTemplate === 'function' && !!wllamaInstance.getChatTemplate();
   }
 
   /** @internal Build OAI-format messages from core messages/systemPrompt/prompt */
@@ -423,8 +458,11 @@ export class WllamaLanguageModel implements LanguageModel {
 
   /**
    * Stream text generation token-by-token via wllama v3's streaming API.
-   * Uses `createChatCompletion({ stream: true })` for real streaming when
-   * messages/systemPrompt are present. Falls back to non-streaming for raw prompts.
+   * Uses `createChatCompletion({ stream: true })` whenever the request goes
+   * through the chat template (messages, a system prompt, or a bare prompt on
+   * a model that ships a template). Raw untemplated completion
+   * (`providerOptions.wllama.raw`, or a base GGUF without a template) has no
+   * streaming surface and is delivered as a single chunk.
    */
   async *doStream(options: DoStreamOptions): AsyncIterable<StreamChunk> {
     const {
@@ -447,9 +485,8 @@ export class WllamaLanguageModel implements LanguageModel {
     const sampling = this.buildSamplingParams(temperature, topP, wllamaOpts);
     const responseFormat = wllamaOpts.response_format as Record<string, unknown> | undefined;
 
-    const hasMessages = (messages && messages.length > 0) || !!systemPrompt;
-
-    if (!hasMessages) {
+    if (!this.useChatPath(wllamaInstance, messages, systemPrompt, wllamaOpts)) {
+      // Raw completion has no streaming surface: deliver the whole text once.
       const result = await this.doGenerate(options);
       if (result.text) yield { text: result.text, done: false };
       yield { text: '', done: true, finishReason: result.finishReason, usage: result.usage };
@@ -464,6 +501,7 @@ export class WllamaLanguageModel implements LanguageModel {
         max_tokens: maxTokens,
         stream: true,
         ...(responseFormat ? { response_format: responseFormat } : {}),
+        ...this.buildChatPassthrough(wllamaOpts),
         ...sampling,
       } as never) as unknown as AsyncIterable<Record<string, unknown>>;
 

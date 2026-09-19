@@ -14,7 +14,7 @@ wllama provider for [LocalMode](https://localmode.dev) -- run any GGUF model in 
 - Run any of the 160,000+ GGUF models from HuggingFace
 - Works in all modern browsers (no WebGPU required, only WASM)
 - 30 curated models: 25 language (including 4 vision-language, 2 reasoning), 3 embedding, 2 reranker
-- **True streaming** via `createChatCompletion({ stream: true })` for real token-by-token output
+- **True streaming** via `createChatCompletion({ stream: true })` for real token-by-token output, for `messages` and bare `prompt` alike
 - **Structured output / JSON mode** via `response_format` (text, json_object, json_schema)
 - **Reranking** via `wllama.reranker()` with cross-encoder GGUF models (Jina, BGE)
 - **Embedding models** via `wllama.embedding()` (nomic-embed, mxbai-embed, bge-small)
@@ -60,7 +60,7 @@ console.log(text);
 
 ## True Streaming
 
-`doStream()` uses `createChatCompletion({ stream: true })` for real token-by-token streaming. Each token is yielded as it arrives from the WASM backend -- no buffering. For prompt-only input (no messages or systemPrompt), it falls back to a single-chunk delivery via `doGenerate()`.
+`doStream()` uses `createChatCompletion({ stream: true })` for real token-by-token streaming. Each token is yielded as it arrives from the WASM backend -- no buffering. A bare `prompt` (no `messages` or `systemPrompt`) is sent as a single user turn through the GGUF's chat template, so it streams the same way. Only raw untemplated completion (`providerOptions.wllama.raw`, or a base GGUF that ships no chat template) has no streaming surface and is delivered as a single chunk via `doGenerate()`. See [Prompt Handling](#prompt-handling).
 
 ```typescript
 import { streamText } from '@localmode/core';
@@ -77,6 +77,44 @@ for await (const chunk of result.stream) {
   process.stdout.write(chunk.text); // real token-by-token output
 }
 ```
+
+## Prompt Handling
+
+A bare `prompt` is one user turn, exactly as the webllm, transformers, and litert providers treat it: `doGenerate()` and `doStream()` wrap it in the GGUF's chat template via `createChatCompletion`, so an instruct model sees the same formatting it was trained on and streams token by token. Raw untemplated completion (`createCompletion`, single-chunk delivery) is used only when you ask for it with `providerOptions.wllama.raw`, or automatically when the GGUF ships no chat template (`getChatTemplate()` is null -- a base model, where wrapping the prompt would be wrong).
+
+```typescript
+import { generateText } from '@localmode/core';
+import { wllama } from '@localmode/wllama';
+
+const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+
+// A bare prompt is a single user turn through the chat template
+const { text } = await generateText({ model, prompt: 'Summarize the plot of Hamlet.' });
+
+// Raw untemplated completion (base models, or a prompt you formatted yourself)
+const { text: continuation } = await generateText({
+  model,
+  prompt: 'Once upon a time',
+  providerOptions: { wllama: { raw: true } },
+});
+```
+
+Two non-sampling chat-completion options pass through `providerOptions.wllama` verbatim on both the generate and stream paths:
+
+```typescript
+const { text } = await generateText({
+  model,
+  prompt: 'Plan the library move.',
+  providerOptions: {
+    wllama: {
+      cache_prompt: false,                              // disable llama.cpp's prompt-KV reuse across requests (on by default)
+      chat_template_kwargs: { enable_thinking: false }, // variables the model's Jinja chat template reads (Qwen3's enable_thinking, for example)
+    },
+  },
+});
+```
+
+`cache_prompt: false` makes a repeated prompt pay prefill on every request instead of reusing the cached KV state -- required for honest latency measurements, unnecessary for normal chat.
 
 ## GGUF Metadata Inspection
 

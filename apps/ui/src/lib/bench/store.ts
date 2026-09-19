@@ -7,12 +7,14 @@
  */
 
 import type { BenchRunResult, CellSummary } from '@localmode/bench';
-import { deviceClassOf, median } from '@localmode/bench';
+import { BENCH_PROTOCOL_VERSION, deviceClassOf, median } from '@localmode/bench';
 
 /** Light per-run entry stored in index/summary.json. */
 export interface RunIndexEntry {
   runId: string;
   createdAt: string;
+  /** Protocol version of the archived run (absent on pre-v2 entries). */
+  protocol?: string;
   suite: string;
   deviceClass: string;
   browser: string;
@@ -30,11 +32,16 @@ export interface RunIndexEntry {
     resolvedBackend: string;
     ttftMs?: number;
     decodeCharsPerSec?: number;
+    /** End-to-end chars/s; the only rate for lanes with non-incremental streams. */
+    overallCharsPerSec?: number;
+    /** False when TTFT/decode were withheld because the stream was a burst. */
+    streamIncremental?: boolean;
     singleLatencyMs?: number;
     batchTextsPerSec?: number;
     loadMs?: number;
     loadCached?: boolean;
     qualityScore?: number;
+    qualityParseRate?: number;
     highVariance: boolean;
   }>;
 }
@@ -49,11 +56,13 @@ export interface IndexLeaderboardRow {
   submissions: number;
   ttftMs?: number;
   decodeCharsPerSec?: number;
+  overallCharsPerSec?: number;
   singleLatencyMs?: number;
   batchTextsPerSec?: number;
   loadColdMs?: number;
   loadWarmMs?: number;
   qualityScore?: number;
+  qualityParseRate?: number;
   resolvedBackends: string[];
   browsers: string[];
   provisional: boolean;
@@ -140,6 +149,7 @@ export function toIndexEntry(
   return {
     runId: run.runId,
     createdAt: run.createdAt,
+    protocol: run.protocol,
     suite: run.suite,
     deviceClass: deviceClassOf(run),
     browser: run.environment.browser.name,
@@ -161,11 +171,14 @@ export function toIndexEntry(
           resolvedBackend: cell.resolvedBackend,
           ttftMs: s?.ttftMs?.median,
           decodeCharsPerSec: s?.decodeCharsPerSec?.median,
+          overallCharsPerSec: s?.overallCharsPerSec?.median,
+          streamIncremental: s?.streamIncremental,
           singleLatencyMs: s?.singleLatencyMs?.median,
           batchTextsPerSec: s?.batchTextsPerSec?.median,
           loadMs: s?.loadMs,
           loadCached: s?.loadCached,
           qualityScore: s?.qualityScore,
+          qualityParseRate: s?.qualityParseRate,
           highVariance: s?.highVariance ?? false,
         };
       }),
@@ -234,8 +247,17 @@ export async function readIndex(
 /** Minimum submissions before a leaderboard row loses its provisional badge. */
 export const INDEX_HEADLINE_MIN = 3;
 
-/** Aggregate index entries into leaderboard rows (median-of-run-medians). */
-export function aggregateIndex(entries: readonly RunIndexEntry[]): IndexLeaderboardRow[] {
+/**
+ * Aggregate index entries into leaderboard rows (median-of-run-medians).
+ * Only runs measured under `protocol` contribute: metric definitions change
+ * between protocol versions, so one row must never mix them. Entries with no
+ * `protocol` field predate v2 and are excluded from the current leaderboard
+ * (they stay in the dataset, published as v1).
+ */
+export function aggregateIndex(
+  entries: readonly RunIndexEntry[],
+  protocol: string = BENCH_PROTOCOL_VERSION,
+): IndexLeaderboardRow[] {
   interface Bucket {
     row: Pick<
       IndexLeaderboardRow,
@@ -248,7 +270,7 @@ export function aggregateIndex(entries: readonly RunIndexEntry[]): IndexLeaderbo
   }
   const buckets = new Map<string, Bucket>();
   for (const entry of entries) {
-    if (entry.flagged) continue;
+    if (entry.flagged || entry.protocol !== protocol) continue;
     for (const cell of entry.cells) {
       if (cell.workloadId === 'warm-reload') {
         // Warm-reload cells contribute the warm load metric to their model's rows.
@@ -280,10 +302,12 @@ export function aggregateIndex(entries: readonly RunIndexEntry[]): IndexLeaderbo
       };
       push('ttftMs', cell.ttftMs);
       push('decodeCharsPerSec', cell.decodeCharsPerSec);
+      push('overallCharsPerSec', cell.overallCharsPerSec);
       push('singleLatencyMs', cell.singleLatencyMs);
       push('batchTextsPerSec', cell.batchTextsPerSec);
       push(cell.loadCached ? 'loadWarmMs' : 'loadColdMs', cell.loadMs);
       push('qualityScore', cell.qualityScore);
+      push('qualityParseRate', cell.qualityParseRate);
     }
   }
   const rows: IndexLeaderboardRow[] = [];
@@ -297,11 +321,13 @@ export function aggregateIndex(entries: readonly RunIndexEntry[]): IndexLeaderbo
       submissions: bucket.runIds.size,
       ttftMs: m('ttftMs'),
       decodeCharsPerSec: m('decodeCharsPerSec'),
+      overallCharsPerSec: m('overallCharsPerSec'),
       singleLatencyMs: m('singleLatencyMs'),
       batchTextsPerSec: m('batchTextsPerSec'),
       loadColdMs: m('loadColdMs'),
       loadWarmMs: m('loadWarmMs'),
       qualityScore: m('qualityScore'),
+      qualityParseRate: m('qualityParseRate'),
       resolvedBackends: [...bucket.backends].sort(),
       browsers: [...bucket.browsers].sort(),
       provisional: bucket.runIds.size < INDEX_HEADLINE_MIN,
