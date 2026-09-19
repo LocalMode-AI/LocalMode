@@ -217,7 +217,7 @@ test.describe('bench real run (WASM lanes)', () => {
     expect(env.locale?.timeZone).toBeTruthy();
     expect(env.network?.online).toBe(true);
     // Runtime versions are stamped at build time from the installed packages.
-    expect(exported.harness.version).toBe('0.3.0');
+    expect(exported.harness.version).toBe('0.3.1');
     expect(exported.harness.runtimeVersions?.['@huggingface/transformers']).toMatch(/^\d+\.\d+\.\d+/);
     expect(exported.harness.runtimeVersions?.['@wllama/wllama']).toMatch(/^\d+\.\d+\.\d+/);
     for (const cell of exported.cells.filter((c) => c.status === 'ok')) {

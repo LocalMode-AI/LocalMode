@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { deriveDeviceType, detectEngine, parseGpuModel, detectWasmFeatures } from '../src/env.js';
+import { deriveDeviceType, detectEngine, parseGpuModel, resolveGpuModel, detectWasmFeatures } from '../src/env.js';
 
 describe('deriveDeviceType()', () => {
   it('uses UA Client Hints form factors and the mobile bit when present', () => {
@@ -45,6 +45,18 @@ describe('parseGpuModel()', () => {
       parseGpuModel('ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)'),
     ).toBe('Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0))');
     expect(parseGpuModel(null)).toBeUndefined();
+  });
+});
+
+describe('resolveGpuModel()', () => {
+  it('prefers a WebGPU description that names a model, else the WebGL renderer parse', () => {
+    // Chromium leaves description empty: WebGL decides.
+    expect(resolveGpuModel({ vendor: 'apple', architecture: 'metal-3', description: undefined }, 'ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)')).toBe('Apple M4');
+    // WebKit on iPhone (run c5b06059) fills description with the bare vendor token; "apple" is not a model.
+    expect(resolveGpuModel({ vendor: 'apple', architecture: 'apple', description: 'apple' }, 'Apple GPU')).toBe('Apple GPU');
+    // A description that carries real information wins over a masked WebGL string.
+    expect(resolveGpuModel({ vendor: 'nvidia', architecture: 'ampere', description: 'NVIDIA GeForce RTX 3060' }, 'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002503) Direct3D11 vs_5_0 ps_5_0, D3D11)')).toBe('NVIDIA GeForce RTX 3060');
+    expect(resolveGpuModel({ vendor: 'apple', architecture: 'apple', description: 'apple' }, null)).toBeUndefined();
   });
 });
 

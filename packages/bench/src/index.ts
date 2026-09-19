@@ -93,6 +93,7 @@ export {
   detectEngine,
   deriveDeviceType,
   parseGpuModel,
+  resolveGpuModel,
   detectWasmFeatures,
 } from './env.js';
 export type { DeviceTypeSignals } from './env.js';

@@ -108,9 +108,7 @@ export async function captureEnvironment(options?: {
     gpu,
     webglRenderer: webgl?.renderer ?? null,
     webgl: webgl ?? undefined,
-    // WebGPU's adapter description is authoritative where a browser fills it in
-    // (Chromium leaves it empty); the WebGL renderer string is the fallback.
-    gpuModel: gpu.description ?? parseGpuModel(webgl?.renderer ?? null),
+    gpuModel: resolveGpuModel(gpu, webgl?.renderer ?? null),
     flags: {
       crossOriginIsolated: typeof crossOriginIsolated !== 'undefined' ? crossOriginIsolated : false,
       sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
@@ -438,6 +436,28 @@ function probeWebGL(): WebGLInfo | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * GPU model for a capture. The WebGPU adapter description wins where a browser
+ * fills it with a real model name (Chromium leaves it empty; WebKit repeats the
+ * bare vendor token, which names nothing); otherwise the WebGL renderer string
+ * is parsed.
+ *
+ * @example
+ * resolveGpuModel({ vendor: 'apple', description: 'apple' }, 'Apple GPU'); // 'Apple GPU'
+ */
+export function resolveGpuModel(
+  gpu: Pick<GPUInfo, 'vendor' | 'architecture' | 'description'>,
+  webglRenderer: string | null | undefined,
+): string | undefined {
+  const description = gpu.description?.trim();
+  if (description) {
+    const bare = description.toLowerCase();
+    const namesNothing = bare === gpu.vendor?.toLowerCase() || bare === gpu.architecture?.toLowerCase();
+    if (!namesNothing) return description;
+  }
+  return parseGpuModel(webglRenderer);
 }
 
 /**

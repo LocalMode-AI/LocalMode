@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.1] - 2026-09-19
+
+**Released:** `@localmode/bench` 0.3.1.
+
+### Fixed
+
+- **`gpuModel` on WebKit read "apple".** WebKit fills the WebGPU adapter description with the bare vendor token and bench 0.3.0 preferred that over the WebGL renderer string, so the first iPhone submission under 0.3.0 (run c5b06059) recorded `gpuModel: "apple"` where the WebGL channel says "Apple GPU". The description is now used only when it names something the vendor and architecture tokens do not (`resolveGpuModel()`), otherwise the WebGL renderer string is parsed as before. Additive; no schema or protocol change.
+
 ## [2.9.0] - 2026-09-19
 
 Makes every benchmark submission record the full device identity the browser discloses (so later analyses never depend on a field that was not kept), stamps runtime versions into runs, and fixes the WebKit isolation and mobile-suite problems surfaced by the first iPhone submissions.
