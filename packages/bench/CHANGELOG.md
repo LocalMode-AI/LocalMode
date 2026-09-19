@@ -1,5 +1,12 @@
 # @localmode/bench
 
+## 0.4.0
+
+- feat: `PlannedCell.skipReason`. A planned cell carrying a reason is recorded as `skipped` with that reason and never touches the adapter, so a host can keep every cell a suite defines in the result (lanes the submitter switched off, or builds the device cannot run) instead of dropping them; the model still loads once for the group's remaining cells. Run 97863956 (a "thorough" run holding only the three Gemini Nano cells) is the case this closes.
+- feat: `RunnerHooks.onEnvironment(environment)` fires after the environment capture and before the fingerprint and the first cell, so a host can persist progress from the start of the run (the localmode.ai runner writes the environment and every finished cell to IndexedDB, and a tab that dies mid-suite leaves an exportable partial record).
+- feat: error cells keep the wrapped provider error's `causeName` and `causeStack` (capped at 4,000 characters) beside `cause`. A WASM runtime abort (wllama's `RuntimeError` "(ABORT) ") names its failing native frame only in the decoded stack; run 7eb25b61 (Dell XPS, Linux, Chrome 144) recorded the empty message and nothing else.
+- fix: `pressure-change` trace events are recorded only when the Compute Pressure state actually changes. The observer samples every second, so a 10-minute thorough run (51876c89) carried 1,662 events, 1,090 of them repeating "nominal"; the pressure gate still reads every sample.
+
 ## 0.3.1
 
 - fix: `gpuModel` no longer degrades to a bare vendor token. WebKit fills the WebGPU adapter `description` with just "apple", which 0.3.0 preferred over the WebGL renderer string (the first iPhone run under 0.3.0, c5b06059, recorded `gpuModel: "apple"` instead of "Apple GPU"). `resolveGpuModel()` (exported) now uses the description only when it differs from the adapter's vendor and architecture tokens, and otherwise parses the WebGL renderer string.

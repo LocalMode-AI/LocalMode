@@ -114,7 +114,11 @@ export default function BenchMethodologyPage() {
               initialization (then released) for WebLLM, LiteRT, and Transformers.js, so load
               alone is not comparable across runtimes. The untimed warmup that follows
               records first-inference readiness (engine init, shader/JIT compilation) as its own
-              number; cold start = load + warmup is the cross-runtime comparable figure.
+              number; cold start = load + warmup is the cross-runtime comparable figure. Chrome
+              Built-in AI is the exception: Chrome downloads Gemini Nano once, browser-wide, and
+              only from a user activation, so the Run click starts that download while the other
+              lanes run; the lane is recorded cold in that case and its load phase measures the
+              remaining wait, not the whole download.
             </li>
             <li>
               <strong className="text-foreground">Embeddings</strong> - single-query latency

@@ -34,7 +34,11 @@ not filter, so hosts partition by `run.protocol` themselves).
   conflated); reported for every generation lane as `overallCharsPerSec`
   beside `totalMs`, and bounded by the `overall-rate-envelope` rule.
 - **Load** - cold (cache-miss) vs warm (cache-hit) reported separately; the
-  provider cache is probed before load.
+  provider cache is probed before load. Chrome Built-in AI is the exception:
+  Chrome downloads Gemini Nano once, browser-wide, only from a user activation,
+  so the host starts that download at the Run click while other lanes run and
+  the lane's cold load measures the remaining wait (the localmode.ai runner does
+  this; see its `chrome-ai-download.ts`).
 - **Run policy** - 1 untimed warmup, 3–5 timed runs, cool-down between cells,
   Compute-Pressure gate on Chromium, wake lock held, visibility-gated validity.
 - **Prompt contract** - every runtime receives the fixed prompt as a single
@@ -51,9 +55,17 @@ not filter, so hosts partition by `run.protocol` themselves).
   wllama; `orderCells()` applies it and the runner enforces it) for
   reproducibility, so runtime interleaving is not a confounder across runs. It
   is a reproducibility measure only, not a memory or correctness fix.
-- **Error cells** - `error.cause` carries the wrapped provider error's message
-  and `memory.atError` a failure-time memory sample; error cells are never
-  data.
+- **Error cells** - `error.cause` carries the wrapped provider error's message,
+  `error.causeName` its name and `error.causeStack` its stack (capped at 4,000
+  characters; a WASM abort names its native frame only there), and
+  `memory.atError` a failure-time memory sample; error cells are never data.
+- **Skipped cells** - a lane the runtime reports unavailable, a lane the
+  submitter switched off, or a build the device cannot run stays in the result
+  as a `skipped` cell with the reason (`PlannedCell.skipReason` for the host's
+  own decisions), so every result lists every cell its suite defines.
+- **Trace events** - visibility, wake lock, GPU device loss, aborts, cool-downs,
+  and compute-pressure transitions (recorded on state change only; the gate
+  itself reads every one-second sample).
 - **Environment capture** (`captureEnvironment()`) - everything the browser
   discloses, recorded whether or not the current analysis uses it, every probe
   guarded so a missing API records nothing for its key: browser (UA-CH brands
@@ -107,7 +119,7 @@ const result = await runBenchmarkSuite({
   policy: RUN_POLICIES.quick,
   llmAdapters,      // Map<runtimeId, LLMRuntimeAdapter> - see src/adapter.ts
   embedAdapters,
-  harness: { name: '@localmode/bench', version: '0.3.0', runtimeVersions: { '@wllama/wllama': '3.5.1' } },
+  harness: { name: '@localmode/bench', version: '0.4.0', runtimeVersions: { '@wllama/wllama': '3.5.1' } },
   abortSignal: controller.signal,
 });
 result.digest = await computeRunDigest(result);

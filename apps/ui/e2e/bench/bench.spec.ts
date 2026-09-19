@@ -170,6 +170,7 @@ test.describe('bench real run (WASM lanes)', () => {
         runtimeId: string;
         runtimeVersion?: string;
         status: string;
+        invalidReasons?: string[];
         iterations: Array<{ chunks?: Array<{ t: number; c: number }>; text?: string; startT: number }>;
       }>;
       clientSummaries?: Array<{
@@ -186,6 +187,12 @@ test.describe('bench real run (WASM lanes)', () => {
     expect(JSON.stringify(exported)).not.toContain('5f3a1c2b4d6e7f8091a2b3c4');
     expect(exported.fingerprint?.mflops).toBeGreaterThan(1);
     expect(exported.cells.some((c) => c.status === 'ok' && c.iterations.length > 0)).toBe(true);
+    // Lanes this device cannot run stay in the result as skipped cells with the
+    // reason (headless Chromium has no WebGPU), so every quick run lists every
+    // quick cell.
+    const webllmCell = exported.cells.find((c) => c.cellId === 'webllm/smollm2-135m/chat-pp128-tg128');
+    expect(webllmCell?.status).toBe('skipped');
+    expect(webllmCell?.invalidReasons?.[0]).toMatch(/^runtime unavailable: no WebGPU/);
 
     // Extended environment capture: the run records the device identity the
     // browser discloses (form factor, engine, GPU model, WASM proposal matrix,
@@ -217,7 +224,7 @@ test.describe('bench real run (WASM lanes)', () => {
     expect(env.locale?.timeZone).toBeTruthy();
     expect(env.network?.online).toBe(true);
     // Runtime versions are stamped at build time from the installed packages.
-    expect(exported.harness.version).toBe('0.3.1');
+    expect(exported.harness.version).toBe('0.4.0');
     expect(exported.harness.runtimeVersions?.['@huggingface/transformers']).toMatch(/^\d+\.\d+\.\d+/);
     expect(exported.harness.runtimeVersions?.['@wllama/wllama']).toMatch(/^\d+\.\d+\.\d+/);
     for (const cell of exported.cells.filter((c) => c.status === 'ok')) {
@@ -267,5 +274,88 @@ test.describe('bench real run (WASM lanes)', () => {
       consoleErrors.filter((e) => !expected503(e)),
       'no console errors during the real run (only the asserted dev-mode 503 is allowed)',
     ).toEqual([]);
+  });
+
+  test('a run that dies mid-suite leaves an exportable partial record on the next page load', async ({ context }) => {
+    // A Standard/Thorough suite can push a tab past its memory ceiling; the tab
+    // dies and nothing is left to diagnose (a Dell XPS lab session lost every
+    // long run this way). Progress is written to IndexedDB cell by cell, so
+    // closing the page mid-run (the closest a test can get to a renderer crash
+    // without faking the boundary) must leave a recoverable partial attempt in
+    // the same browser profile.
+    const first = await context.newPage();
+    const firstErrors: string[] = [];
+    collectConsoleErrors(first, firstErrors);
+    await first.goto('/bench/run');
+    await expect(first.getByRole('region', { name: /unfinished run recovered/i })).toHaveCount(0);
+    const runButton = first.getByRole('button', { name: 'Run benchmark' });
+    await expect(runButton).toBeEnabled({ timeout: 15_000 });
+    await runButton.click();
+    // Wait until real cells have completed (the WASM embedding lanes run
+    // before wllama in the deterministic execution order), then kill the page.
+    const status = first.getByRole('status').first();
+    await expect(status).toContainText(/Running wllama\//, { timeout: 540_000 });
+    expect(firstErrors).toEqual([]);
+    await first.close();
+
+    const page = await context.newPage();
+    const consoleErrors: string[] = [];
+    collectConsoleErrors(page, consoleErrors);
+    await page.goto('/bench/run');
+    const region = page.getByRole('region', { name: /unfinished run recovered/i });
+    await expect(region).toBeVisible({ timeout: 15_000 });
+    await expect(region).toContainText(/quick suite · \d+ of \d+ cells finished/);
+    await expect(region).toContainText(/last cell/);
+
+    const downloadPromise = page.waitForEvent('download');
+    await region.getByRole('button', { name: 'Export partial run' }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/^localmode-bench-partial-.*\.json$/);
+    const { readFileSync } = await import('node:fs');
+    const partial = JSON.parse(readFileSync((await download.path())!, 'utf8')) as {
+      partial: boolean;
+      protocol: string;
+      suite: string;
+      harness: { version: string; runtimeVersions?: Record<string, string> };
+      environment: { browser: { engine?: string }; device?: { type: string } } | null;
+      plannedCells: number;
+      finishedCells: number;
+      unfinishedCellIds: string[];
+      currentCellId: string | null;
+      cells: Array<{ cellId: string; status: string; memory?: { postRun?: number } }>;
+    };
+    expect(partial.partial).toBe(true);
+    expect(partial.protocol).toBe('localmode-bench/2');
+    expect(partial.suite).toBe('quick');
+    expect(partial.harness.version).toBe('0.4.0');
+    // The environment landed before the first cell, so a crash during the first
+    // model load still identifies the device.
+    expect(partial.environment?.browser.engine).toBe('Blink');
+    expect(partial.environment?.device?.type).toBe('desktop');
+    expect(partial.finishedCells).toBe(partial.cells.length);
+    expect(partial.finishedCells).toBeGreaterThan(0);
+    expect(partial.finishedCells).toBeLessThan(partial.plannedCells);
+    expect(partial.unfinishedCellIds.length).toBe(partial.plannedCells - partial.finishedCells);
+    // Real work was recorded, not only the headless WebGPU skips: the WASM
+    // embedding lanes completed with a memory sample.
+    const okCells = partial.cells.filter((c) => c.status === 'ok');
+    expect(okCells.map((c) => c.cellId)).toEqual(
+      expect.arrayContaining(['transformers-wasm/bge-small-en/embed-single', 'mediapipe/use-mediapipe/embed-single']),
+    );
+    expect(okCells[0].memory?.postRun).toBeGreaterThan(0);
+    // The lanes headless Chromium cannot run are present as skipped cells with
+    // their reason, not dropped from the plan.
+    const skipped = partial.cells.find((c) => c.cellId === 'transformers-webgpu/bge-small-en/embed-single');
+    expect(skipped?.status).toBe('skipped');
+    // The cell that was executing when the page died is named.
+    expect(partial.currentCellId).toMatch(/^wllama\//);
+
+    // Discard removes the record, and it stays gone across a reload.
+    await region.getByRole('button', { name: 'Discard' }).click();
+    await expect(page.getByRole('region', { name: /unfinished run recovered/i })).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: /unfinished run recovered/i })).toHaveCount(0);
+    expect(consoleErrors).toEqual([]);
   });
 });

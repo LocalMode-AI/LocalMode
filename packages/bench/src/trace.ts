@@ -65,8 +65,10 @@ export class TraceRecorder {
         const observer = new PressureObserverCtor((records) => {
           const last = records[records.length - 1];
           if (last) {
+            // The observer samples every second; only transitions are events.
+            const changed = last.state !== this.lastPressureState;
             this.lastPressureState = last.state;
-            this.record('pressure-change', last.state);
+            if (changed) this.record('pressure-change', last.state);
           }
         });
         await observer.observe('cpu', { sampleInterval: 1_000 });

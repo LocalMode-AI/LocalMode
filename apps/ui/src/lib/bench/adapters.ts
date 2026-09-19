@@ -18,6 +18,12 @@ import type {
   LoadedLLM,
 } from '@localmode/bench';
 import { runtimeVersionFor } from './runtime-versions';
+import {
+  chromeAIDownloadInFlight,
+  chromeAIDownloadPct,
+  chromeAIStatus,
+  onChromeAIDownloadProgress,
+} from './chrome-ai-download';
 
 type ProgressCb = (p: { pct?: number }) => void;
 
@@ -244,7 +250,15 @@ function makeLiteRTAdapter(): LLMRuntimeAdapter {
   };
 }
 
-/** Chrome Built-in AI lane (Gemini Nano; only when the model is READY). */
+/**
+ * Chrome Built-in AI lane (Gemini Nano). Chrome supplies the model and
+ * downloads it once, browser-wide, but only from a user activation: the Run
+ * click starts that download (`startChromeAIDownload`) and this lane waits
+ * for it, so a device with Gemini Nano merely "downloadable" runs the lane
+ * like any other instead of sitting it out. The lane is cold when the model
+ * had to download; its load phase measures the remaining wait, since the
+ * download began at the click while other lanes ran.
+ */
 function makeChromeAIAdapter(): LLMRuntimeAdapter {
   return {
     runtimeId: 'chrome-ai',
@@ -255,22 +269,31 @@ function makeChromeAIAdapter(): LLMRuntimeAdapter {
       if (!isPromptAPISupported()) {
         return { ok: false, reason: 'Prompt API not supported (needs Chrome 148+ desktop)' };
       }
-      try {
-        const factory = (globalThis as { LanguageModel?: { availability(): Promise<string> } })
-          .LanguageModel;
-        const availability = factory ? await factory.availability() : 'unavailable';
-        return availability === 'available'
-          ? { ok: true }
-          : { ok: false, reason: `Gemini Nano not ready (${availability})` };
-      } catch {
-        return { ok: false, reason: 'availability() probe failed' };
+      const status = await chromeAIStatus();
+      if (status === 'available') return { ok: true };
+      if ((status === 'downloadable' || status === 'downloading') && chromeAIDownloadInFlight()) {
+        return { ok: true };
       }
+      if (status === 'downloadable') {
+        return { ok: false, reason: 'Gemini Nano needs a download that only a click can start' };
+      }
+      return { ok: false, reason: `Gemini Nano not ready (${status})` };
     },
     async isModelCached() {
-      // Chrome owns the model; a READY availability is by definition a warm state.
-      return true;
+      // Chrome owns the model: ready means warm; a download in flight means cold.
+      return (await chromeAIStatus()) === 'available';
     },
-    async load(_model, { abortSignal }): Promise<LoadedLLM> {
+    async load(_model, { onProgress, abortSignal }): Promise<LoadedLLM> {
+      const download = chromeAIDownloadInFlight();
+      if (download) {
+        onProgress?.({ pct: chromeAIDownloadPct() });
+        const unsubscribe = onChromeAIDownloadProgress((pct) => onProgress?.({ pct }));
+        try {
+          await download;
+        } finally {
+          unsubscribe();
+        }
+      }
       const mod = await import('@localmode/chrome-ai');
       abortSignal?.throwIfAborted();
       const llm = mod.chromeAI.languageModel({});

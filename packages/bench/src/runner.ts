@@ -12,6 +12,7 @@ import type {
   BenchSuiteId,
   EmbedIteration,
   EmbedWorkloadSpec,
+  EnvironmentCapture,
   HarnessInfo,
   LLMIteration,
   LLMWorkloadSpec,
@@ -40,10 +41,18 @@ import { runMMLUFidelity, runSTSQuality } from './quality.js';
 export interface PlannedCell {
   model: BenchModelRef;
   workload: LLMWorkloadSpec | EmbedWorkloadSpec | QualityWorkloadSpec;
+  /**
+   * When set, the cell is recorded as `skipped` with this reason and never
+   * touches the adapter (a lane the submitter switched off, or a build the
+   * device cannot run). Keeps every cell a suite defines in the result.
+   */
+  skipReason?: string;
 }
 
 /** Progress callbacks for a host UI. */
 export interface RunnerHooks {
+  /** The environment capture, before the fingerprint and the first cell (lets a host persist partial progress). */
+  onEnvironment?(environment: EnvironmentCapture): void;
   onCellStart?(cellId: string, index: number, total: number): void;
   onCellFinish?(cell: BenchCellResult): void;
   onLoadProgress?(cellId: string, pct: number | undefined): void;
@@ -93,6 +102,7 @@ export async function runBenchmarkSuite(options: RunSuiteOptions): Promise<Bench
     const environment = await captureEnvironment({
       userReportedDevice: options.userReportedDevice,
     });
+    hooks?.onEnvironment?.(environment);
 
     hooks?.onPhase?.('fingerprint');
     throwIfAborted(abortSignal);
@@ -150,7 +160,10 @@ export async function runBenchmarkSuite(options: RunSuiteOptions): Promise<Bench
 interface ModelGroup {
   key: string;
   model: BenchModelRef;
+  /** Workloads that run against the loaded model. */
   workloads: Array<LLMWorkloadSpec | EmbedWorkloadSpec | QualityWorkloadSpec>;
+  /** Planned cells recorded as skipped with a reason, never executed. */
+  skipped: Array<{ workload: LLMWorkloadSpec | EmbedWorkloadSpec | QualityWorkloadSpec; reason: string }>;
 }
 
 function groupCells(cells: PlannedCell[]): ModelGroup[] {
@@ -159,10 +172,11 @@ function groupCells(cells: PlannedCell[]): ModelGroup[] {
     const key = `${cell.model.runtimeId}/${cell.model.benchModelId}/${cell.model.providerModelId}`;
     let group = map.get(key);
     if (!group) {
-      group = { key, model: cell.model, workloads: [] };
+      group = { key, model: cell.model, workloads: [], skipped: [] };
       map.set(key, group);
     }
-    group.workloads.push(cell.workload);
+    if (cell.skipReason) group.skipped.push({ workload: cell.workload, reason: cell.skipReason });
+    else group.workloads.push(cell.workload);
   }
   return [...map.values()];
 }
@@ -196,6 +210,13 @@ async function runModelGroup(group: ModelGroup, ctx: GroupContext): Promise<Benc
     iterations: [],
     status: 'skipped',
   });
+
+  for (const { workload, reason } of group.skipped) {
+    const cell = baseCell(workload);
+    cell.invalidReasons = [reason];
+    results.push(finishCell(cell, ctx));
+  }
+  if (group.workloads.length === 0) return results;
 
   if (!adapter) {
     for (const workload of group.workloads) {
@@ -555,16 +576,30 @@ function decimate<T>(items: T[], max: number): T[] {
   return out;
 }
 
-/** Serialize an error for a cell, keeping the wrapped provider cause's message. */
+/** Longest cause stack kept on a cell; a WASM abort's decoded frames fit well within it. */
+const CAUSE_STACK_CAP = 4_000;
+
+/**
+ * Serialize an error for a cell, keeping the wrapped provider cause's message,
+ * name, and stack: a WASM runtime abort (wllama's `RuntimeError` "(ABORT) ")
+ * names the failing native frame only in its decoded stack.
+ */
 function describeError(error: unknown): NonNullable<BenchCellResult['error']> {
   const e = error as { name?: string; message?: string; cause?: unknown } | undefined;
   const cause = e?.cause;
   const causeMessage =
     cause instanceof Error ? cause.message : typeof cause === 'string' ? cause : undefined;
+  const causeName = cause instanceof Error && cause.name && cause.name !== 'Error' ? cause.name : undefined;
+  const causeStack =
+    cause instanceof Error && typeof cause.stack === 'string' && cause.stack.length > 0
+      ? cause.stack.slice(0, CAUSE_STACK_CAP)
+      : undefined;
   return {
     name: e?.name ?? 'Error',
     message: e?.message ?? String(error),
-    ...(causeMessage ? { cause: causeMessage } : {}),
+    ...(causeMessage !== undefined ? { cause: causeMessage } : {}),
+    ...(causeName ? { causeName } : {}),
+    ...(causeStack ? { causeStack } : {}),
   };
 }
 

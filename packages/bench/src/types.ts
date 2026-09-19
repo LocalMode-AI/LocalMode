@@ -206,7 +206,16 @@ export interface BenchCellResult {
   status: BenchCellStatus;
   invalidReasons?: string[];
   /** Error that ended the cell; `cause` carries the wrapped provider error's message when present. */
-  error?: { name: string; message: string; cause?: string };
+  error?: {
+    name: string;
+    message: string;
+    /** Message of the wrapped provider error, when the thrown error carried a `cause`. */
+    cause?: string;
+    /** `name` of the wrapped provider error (e.g. wllama's `RuntimeError` for a WASM abort). */
+    causeName?: string;
+    /** Stack of the wrapped provider error, capped at 4,000 characters; a WASM abort names its frame only here. */
+    causeStack?: string;
+  };
 }
 
 /** Trace events global to the suite run (validity accounting). */

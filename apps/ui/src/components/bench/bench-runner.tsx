@@ -27,7 +27,21 @@ import {
 } from '@localmode/bench';
 import { BENCH_MODELS, SUITE_MODELS } from '@/lib/bench/catalog';
 import { wllamaAvailability } from '@/lib/bench/adapters';
+import {
+  chromeAIStatus,
+  onChromeAIDownloadProgress,
+  startChromeAIDownload,
+  type ChromeAIStatus,
+} from '@/lib/bench/chrome-ai-download';
 import { benchBuildCommit, benchRuntimeVersions } from '@/lib/bench/runtime-versions';
+import {
+  beginAttempt,
+  finishAttempt,
+  listUnfinishedAttempts,
+  toPartialRunExport,
+  updateAttempt,
+  type PartialAttempt,
+} from '@/lib/bench/partial-run-store';
 import { Button } from '@/registry/localmode/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/registry/localmode/ui/card';
 import { Badge } from '@/registry/localmode/ui/badge';
@@ -50,19 +64,22 @@ import {
   TableRow,
 } from '@/registry/localmode/ui/table';
 
-const HARNESS_VERSION = '0.3.1';
+const HARNESS_VERSION = '0.4.0';
 
 type Phase = 'idle' | 'running' | 'done' | 'error';
 
 interface LaneAvailability {
   ok: boolean;
   reason?: string;
+  /** Shown beside an available lane that needs a caveat (e.g. a one-time browser download on Run). */
+  note?: string;
 }
 
 /** Lightweight availability probes - no provider packages are imported here. */
 async function probeLaneAvailability(): Promise<{
   lanes: Record<string, LaneAvailability>;
   webgpu: boolean;
+  chromeAI: ChromeAIStatus;
 }> {
   let webgpu = false;
   try {
@@ -74,20 +91,17 @@ async function probeLaneAvailability(): Promise<{
   } catch {
     webgpu = false;
   }
-  let chromeAI: LaneAvailability = { ok: false, reason: 'Prompt API not supported' };
-  try {
-    const factory = (globalThis as { LanguageModel?: { availability(): Promise<string> } })
-      .LanguageModel;
-    if (factory) {
-      const availability = await factory.availability();
-      chromeAI =
-        availability === 'available'
-          ? { ok: true }
-          : { ok: false, reason: `Gemini Nano ${availability}` };
-    }
-  } catch {
-    chromeAI = { ok: false, reason: 'availability probe failed' };
-  }
+  // Gemini Nano is a lane whenever Chrome can supply it: ready now, or after
+  // the one-time download the Run click starts (Chrome needs a user activation).
+  const chromeAIState = await chromeAIStatus();
+  const chromeAI: LaneAvailability =
+    chromeAIState === 'available'
+      ? { ok: true }
+      : chromeAIState === 'downloadable' || chromeAIState === 'downloading'
+        ? { ok: true, note: 'Chrome downloads Gemini Nano once when you click Run' }
+        : chromeAIState === 'unavailable'
+          ? { ok: false, reason: 'Gemini Nano unavailable on this device' }
+          : { ok: false, reason: 'Prompt API not supported' };
   const gpuGate: LaneAvailability = webgpu ? { ok: true } : { ok: false, reason: 'no WebGPU' };
   const wllamaGate = await wllamaAvailability();
   return {
@@ -101,6 +115,7 @@ async function probeLaneAvailability(): Promise<{
       mediapipe: { ok: true },
     },
     webgpu,
+    chromeAI: chromeAIState,
   };
 }
 
@@ -163,7 +178,10 @@ export function BenchRunner() {
   const [availability, setAvailability] = useState<{
     lanes: Record<string, LaneAvailability>;
     webgpu: boolean;
+    chromeAI: ChromeAIStatus;
   } | null>(null);
+  /** Gemini Nano download progress while the suite runs (null when no download is in flight). */
+  const [chromeDownloadPct, setChromeDownloadPct] = useState<number | null>(null);
   const [disabledLanes, setDisabledLanes] = useState<Set<string>>(new Set());
   const [includeQuality, setIncludeQuality] = useState(false);
   const [autoSubmit, setAutoSubmit] = useState(true);
@@ -182,6 +200,8 @@ export function BenchRunner() {
   const abortRef = useRef<AbortController | null>(null);
   const [study, setStudy] = useState<StudySession | null>(null);
   const [mobile, setMobile] = useState(false);
+  /** Attempts an earlier page left unfinished (tab crash, closed tab): exportable, never submitted. */
+  const [unfinished, setUnfinished] = useState<PartialAttempt[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -190,6 +210,9 @@ export function BenchRunner() {
     });
     readStudySession().then((s) => {
       if (!cancelled) setStudy(s);
+    });
+    listUnfinishedAttempts().then((attempts) => {
+      if (!cancelled) setUnfinished(attempts);
     });
     setMobile(isMobileDevice());
     return () => {
@@ -206,27 +229,41 @@ export function BenchRunner() {
       const lane = availability?.lanes[model.runtimeId];
       const modelGate = model.requiresWebGPU && availability?.webgpu === false;
       const available = (lane?.ok ?? false) && !modelGate;
-      return { model, available, reason: modelGate ? 'no WebGPU' : lane?.reason };
+      return { model, available, reason: modelGate ? 'no WebGPU' : lane?.reason, note: lane?.note };
     });
   }, [suite, availability]);
 
   const activeLanes = lanes.filter((l) => l.available && !disabledLanes.has(laneKey(l.model)));
   const totalDownload = activeLanes.reduce((acc, l) => acc + (l.model.sizeBytes ?? 0), 0);
 
+  /**
+   * Every lane of the suite becomes cells, so a suite result always lists the
+   * cells the suite defines: lanes the submitter switched off or that this
+   * device cannot run are planned with a skip reason and recorded as skipped,
+   * never dropped (a "thorough" run with three cells says nothing about the
+   * lanes it left out).
+   */
   const buildCells = useCallback((): PlannedCell[] => {
     const cells: PlannedCell[] = [];
     const llmWorkloads = suite === 'quick' ? [LLM_WORKLOADS[0]] : [...LLM_WORKLOADS];
-    for (const { model } of activeLanes) {
+    for (const { model, available, reason } of lanes) {
+      const skipReason = !available
+        ? `runtime unavailable: ${reason ?? 'unknown'}`
+        : disabledLanes.has(laneKey(model))
+          ? 'lane disabled by the submitter'
+          : undefined;
+      const plan = (workload: PlannedCell['workload']) =>
+        cells.push(skipReason ? { model, workload, skipReason } : { model, workload });
       if (model.task === 'llm') {
-        for (const workload of llmWorkloads) cells.push({ model, workload });
-        if (includeQuality) cells.push({ model, workload: QUALITY_WORKLOADS[0] });
+        for (const workload of llmWorkloads) plan(workload);
+        if (includeQuality) plan(QUALITY_WORKLOADS[0]);
       } else {
-        for (const workload of EMBED_WORKLOADS) cells.push({ model, workload });
-        if (includeQuality) cells.push({ model, workload: QUALITY_WORKLOADS[2] });
+        for (const workload of EMBED_WORKLOADS) plan(workload);
+        if (includeQuality) plan(QUALITY_WORKLOADS[2]);
       }
     }
     return cells;
-  }, [activeLanes, suite, includeQuality]);
+  }, [lanes, disabledLanes, suite, includeQuality]);
 
   const submitRun = useCallback(async (run: BenchRunResult) => {
     setSubmitState({ kind: 'submitting' });
@@ -257,6 +294,16 @@ export function BenchRunner() {
   }, []);
 
   const run = useCallback(async () => {
+    // Synchronous part of the click handler: Chrome accepts the Gemini Nano
+    // download request only inside the user activation, before any await.
+    const chromeLaneActive = activeLanes.some((l) => l.model.runtimeId === 'chrome-ai');
+    let unsubscribeDownload: (() => void) | null = null;
+    if (chromeLaneActive && availability && availability.chromeAI !== 'available') {
+      if (startChromeAIDownload()) {
+        setChromeDownloadPct(0);
+        unsubscribeDownload = onChromeAIDownloadProgress((pct) => setChromeDownloadPct(pct));
+      }
+    }
     setPhase('running');
     setResult(null);
     setErrorMessage(null);
@@ -264,6 +311,7 @@ export function BenchRunner() {
     setStatusLine('Preparing…');
     const controller = new AbortController();
     abortRef.current = controller;
+    let attempt: PartialAttempt | null = null;
     try {
       // Nonce first so the whole run is bound to this session.
       let nonce: string | undefined;
@@ -277,27 +325,43 @@ export function BenchRunner() {
       const [{ createLLMAdapters, createEmbedAdapters }] = await Promise.all([
         import('@/lib/bench/adapters'),
       ]);
+      const cells = buildCells();
+      const harness = {
+        name: '@localmode/bench',
+        version: HARNESS_VERSION,
+        appVersion: 'localmode.ai',
+        runtimeVersions: benchRuntimeVersions(),
+        commit: benchBuildCommit(),
+      };
+      // Progress goes to IndexedDB cell by cell, so a tab that dies mid-suite
+      // still leaves an exportable partial record on the next page load.
+      attempt = await beginAttempt({
+        suite,
+        harness,
+        plannedCellIds: cells.map((c) => `${c.model.runtimeId}/${c.model.benchModelId}/${c.workload.id}`),
+      });
       const suiteResult = await runBenchmarkSuite({
         suite,
-        cells: buildCells(),
+        cells,
         policy: RUN_POLICIES[suite],
         llmAdapters: createLLMAdapters(),
         embedAdapters: createEmbedAdapters(),
-        harness: {
-          name: '@localmode/bench',
-          version: HARNESS_VERSION,
-          appVersion: 'localmode.ai',
-          runtimeVersions: benchRuntimeVersions(),
-          commit: benchBuildCommit(),
-        },
+        harness,
         userReportedDevice: study ? `prolific:${study.participantHash}` : undefined,
         abortSignal: controller.signal,
         hooks: {
+          onEnvironment: (environment) => {
+            if (attempt) void updateAttempt(attempt, { environment });
+          },
           onPhase: (p) => setStatusLine(p === 'fingerprint' ? 'Hardware calibration…' : `Phase: ${p}`),
           onCellStart: (cellId, index, total) => {
             setCellProgress({ index: index + 1, total });
             setLoadPct(null);
             setStatusLine(`Running ${cellId}`);
+            if (attempt) void updateAttempt(attempt, { currentCellId: cellId });
+          },
+          onCellFinish: (cell) => {
+            if (attempt) void updateAttempt(attempt, { cells: [...attempt.cells, cell], currentCellId: undefined });
           },
           onLoadProgress: (_cellId, pct) => setLoadPct(pct ?? null),
           onIteration: (cellId, i, total) => setStatusLine(`Running ${cellId} - iteration ${i}/${total}`),
@@ -319,30 +383,98 @@ export function BenchRunner() {
         setErrorMessage((error as Error).message ?? String(error));
       }
     } finally {
+      // The run resolved in-page (complete, cancelled, or failed with a
+      // recorded error): the partial record has served its purpose.
+      if (attempt) void finishAttempt(attempt.attemptId);
+      unsubscribeDownload?.();
+      setChromeDownloadPct(null);
       abortRef.current = null;
       setCellProgress(null);
       setLoadPct(null);
     }
-  }, [suite, buildCells, autoSubmit, submitRun, study]);
+  }, [suite, buildCells, autoSubmit, submitRun, study, activeLanes, availability]);
+
+  const downloadJson = useCallback((data: unknown, filename: string) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const exportPartial = useCallback(
+    (attempt: PartialAttempt) => {
+      downloadJson(toPartialRunExport(attempt), `localmode-bench-partial-${attempt.attemptId}.json`);
+    },
+    [downloadJson],
+  );
+
+  const discardPartial = useCallback(async (attempt: PartialAttempt) => {
+    await finishAttempt(attempt.attemptId);
+    setUnfinished((list) => list.filter((a) => a.attemptId !== attempt.attemptId));
+  }, []);
 
   const cancel = useCallback(() => abortRef.current?.abort(), []);
 
   const exportJson = useCallback(() => {
     if (!result) return;
-    const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `localmode-bench-${result.runId}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [result]);
+    downloadJson(result, `localmode-bench-${result.runId}.json`);
+  }, [result, downloadJson]);
 
   const summaries: CellSummary[] = result?.clientSummaries ?? [];
   const cellById = new Map<string, BenchCellResult>(result?.cells.map((c) => [c.cellId, c]) ?? []);
 
   return (
     <div className="flex flex-col gap-6">
+      {unfinished.length > 0 && (
+        <Card role="region" aria-label="Unfinished run recovered">
+          <CardHeader>
+            <CardTitle>A previous run ended before it finished</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 text-sm">
+            <p className="text-muted-foreground">
+              The page closed or crashed mid-suite (most often the tab ran out of memory on the
+              Standard or Thorough suite). Its progress was saved cell by cell: export it as a
+              partial run for diagnosis. Partial runs are never published.
+            </p>
+            {unfinished.map((attempt) => {
+              const lastCell = attempt.currentCellId ?? attempt.cells[attempt.cells.length - 1]?.cellId;
+              return (
+                <div
+                  key={attempt.attemptId}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3"
+                >
+                  <div>
+                    <div className="font-medium">
+                      {attempt.suite} suite · {attempt.cells.length} of {attempt.plannedCellIds.length} cells
+                      finished
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      started {new Date(attempt.startedAt).toLocaleString()}
+                      {lastCell && (
+                        <>
+                          {' '}
+                          · last cell <span className="font-mono">{lastCell}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => exportPartial(attempt)}>
+                      Export partial run
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => void discardPartial(attempt)}>
+                      Discard
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardHeader>
           <CardTitle>Configure the run</CardTitle>
@@ -391,7 +523,7 @@ export function BenchRunner() {
           </div>
 
           <div className="flex flex-col gap-2" role="group" aria-label="Model lanes">
-            {lanes.map(({ model, available, reason }) => {
+            {lanes.map(({ model, available, reason, note }) => {
               const key = laneKey(model);
               const checked = available && !disabledLanes.has(key);
               return (
@@ -410,6 +542,11 @@ export function BenchRunner() {
                     {!available && (
                       <Badge variant="outline" className="text-muted-foreground">
                         {reason ?? 'unavailable'}
+                      </Badge>
+                    )}
+                    {available && note && (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        {note}
                       </Badge>
                     )}
                     <Switch
@@ -496,6 +633,13 @@ export function BenchRunner() {
                 <span className="text-xs tabular-nums text-muted-foreground">
                   {Math.round(loadPct)}%
                 </span>
+              </div>
+            )}
+            {chromeDownloadPct !== null && chromeDownloadPct < 100 && (
+              <div className="flex items-center gap-3" role="note" aria-label="Gemini Nano download">
+                <span className="text-xs text-muted-foreground">Gemini Nano download (browser-wide, one time)</span>
+                <Progress value={chromeDownloadPct} className="max-w-md" aria-label="Gemini Nano download progress" />
+                <span className="text-xs tabular-nums text-muted-foreground">{Math.round(chromeDownloadPct)}%</span>
               </div>
             )}
             {phase === 'error' && errorMessage && (

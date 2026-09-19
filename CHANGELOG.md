@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.0] - 2026-09-19
+
+Closes the gaps the first laptop and phone submissions exposed: a device whose long runs died with the tab and left nothing to diagnose, a wllama WASM abort recorded without its location, a thorough run that silently held only the lanes its submitter left enabled, and a trace bloated by one pressure sample per second.
+
+**Released:** `@localmode/bench` 0.4.0.
+
+### Added
+
+- **Crash-resilient partial runs.** The runner now writes the environment capture and every finished cell to IndexedDB as the suite progresses (`src/lib/bench/partial-run-store.ts`, over the new `onEnvironment` and existing `onCellFinish` hooks). When a tab dies mid-suite, which is what a Standard or Thorough run does on a machine past its memory ceiling, the next visit to `/bench/run` shows the unfinished attempt (suite, cells finished of planned, the cell that was executing) with "Export partial run" and "Discard". The export is the run-file shape marked `partial: true` with the list of unfinished cells; partial runs are never published. Covered by a bench e2e lane that kills the page mid-run and recovers the record in a fresh page.
+- **Every suite cell is in every result.** Lanes the submitter switches off and lanes the device cannot run (no WebGPU, a GPU-compiled build without a GPU) are planned with a skip reason and recorded as `skipped` cells with that reason, instead of being dropped, so a run's suite label describes what was attempted and what was not (`@localmode/bench` 0.4.0 `PlannedCell.skipReason`).
+- **WASM aborts are diagnosable.** Error cells keep the wrapped provider error's `causeName` and `causeStack` (capped) beside `cause`; wllama's `RuntimeError` "(ABORT) " names the failing llama.cpp frame only in that decoded stack.
+- **Gemini Nano downloads on Run.** The Chrome Built-in AI lane used to be disabled whenever Chrome reported Gemini Nano as merely "downloadable", leaving the submitter to trigger the download by hand. Chrome starts that one-time, browser-wide download only from a user activation, so the Run click now starts it synchronously (`src/lib/bench/chrome-ai-download.ts`) while the other lanes run; the lane is enabled with a "downloads once when you click Run" note, its progress shows in the Progress card, the chrome-ai adapter waits for the download before its cells (recorded cold, load measuring the remaining wait), and a refused or failed download becomes an error cell, never a silent skip. Unit-tested against a fake Prompt API (`scripts/bench-chrome-ai-download.test.ts`); the real download path needs Chrome 148+ with Gemini Nano and stays on the manual real-Chrome sweep.
+
+### Fixed
+
+- **`pressure-change` events fired every second regardless of state**, 1,662 of them in one thorough run; they are now recorded on state transitions only, while the pressure gate still reads every sample.
+
 ## [2.9.1] - 2026-09-19
 
 **Released:** `@localmode/bench` 0.3.1.

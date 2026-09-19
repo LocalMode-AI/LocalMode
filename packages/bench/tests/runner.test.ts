@@ -144,11 +144,109 @@ describe('runBenchmarkSuite()', () => {
       harness: HARNESS,
       skipFingerprint: true,
     });
-    expect(result.cells[0].error).toEqual({
+    expect(result.cells[0].error).toMatchObject({
       name: 'ModelLoadError',
       message: 'Failed to load model: onnx-community/Qwen3-0.6B-ONNX',
       cause: "Can't create a session. ERROR_CODE: 6, ERROR_MESSAGE: std::bad_alloc",
     });
+    // A plain Error cause contributes its stack but no distinguishing name.
+    expect(result.cells[0].error?.causeName).toBeUndefined();
+    expect(result.cells[0].error?.causeStack).toMatch(/^Error: Can't create a session/);
+  });
+
+  it('keeps the provider cause stack on error cells (a WASM abort names its location only there)', async () => {
+    // wllama rejects with a RuntimeError whose message is "(ABORT) " and whose
+    // decoded stack carries the llama.cpp frame; run 7eb25b61 (Dell XPS, Linux)
+    // recorded only the empty message and the abort could not be located.
+    const failing = makeMockLLMAdapter({ failLoad: true });
+    const inner = new Error('(ABORT) ');
+    inner.name = 'RuntimeError';
+    inner.stack = 'abort\n  at llama_model_load (wllama.wasm:0x1234)\n  at ggml_backend_alloc_ctx_tensors (wllama.wasm:0x5678)';
+    const wrapped = new Error('Failed to load model: SmolLM2-135M-Instruct-Q4_K_M', { cause: inner });
+    wrapped.name = 'ModelLoadError';
+    failing.load = async () => {
+      throw wrapped;
+    };
+    const result = await runBenchmarkSuite({
+      suite: 'custom',
+      cells: [{ model: MODEL_REF, workload: LLM_WORKLOADS[0] }],
+      policy: TEST_POLICY,
+      llmAdapters: new Map([[failing.runtimeId, failing]]),
+      embedAdapters: new Map(),
+      harness: HARNESS,
+      skipFingerprint: true,
+    });
+    expect(result.cells[0].error).toEqual({
+      name: 'ModelLoadError',
+      message: 'Failed to load model: SmolLM2-135M-Instruct-Q4_K_M',
+      cause: '(ABORT) ',
+      causeName: 'RuntimeError',
+      causeStack: inner.stack,
+    });
+  });
+
+  it('caps a huge cause stack instead of bloating the run file', async () => {
+    const failing = makeMockLLMAdapter({ failLoad: true });
+    const inner = new Error('boom');
+    inner.stack = 'x'.repeat(50_000);
+    failing.load = async () => {
+      throw new Error('wrapped', { cause: inner });
+    };
+    const result = await runBenchmarkSuite({
+      suite: 'custom',
+      cells: [{ model: MODEL_REF, workload: LLM_WORKLOADS[0] }],
+      policy: TEST_POLICY,
+      llmAdapters: new Map([[failing.runtimeId, failing]]),
+      embedAdapters: new Map(),
+      harness: HARNESS,
+      skipFingerprint: true,
+    });
+    expect(result.cells[0].error?.causeStack?.length).toBe(4_000);
+  });
+
+  it('marks a planned cell skipped with its skipReason without touching the adapter', async () => {
+    // Lanes the submitter switched off, or that a device cannot run (a
+    // GPU-compiled build without WebGPU), stay in the run as skipped cells so a
+    // suite result always lists every cell the suite defines.
+    const adapter = makeMockLLMAdapter();
+    const result = await runBenchmarkSuite({
+      suite: 'custom',
+      cells: [
+        { model: MODEL_REF, workload: LLM_WORKLOADS[0], skipReason: 'lane disabled by the submitter' },
+        { model: MODEL_REF, workload: LLM_WORKLOADS[1] },
+      ],
+      policy: TEST_POLICY,
+      llmAdapters: new Map([[adapter.runtimeId, adapter]]),
+      embedAdapters: new Map(),
+      harness: HARNESS,
+      skipFingerprint: true,
+    });
+    expect(result.cells.map((c) => c.status)).toEqual(['skipped', 'ok']);
+    expect(result.cells[0].invalidReasons).toEqual(['lane disabled by the submitter']);
+    expect(result.cells[0].iterations).toEqual([]);
+    // The skipped cell shares the group with an ok cell: the model still loads once.
+    expect(adapter.loadCalls).toBe(1);
+    expect(validateRunShape(result)).toEqual([]);
+  });
+
+  it('hands the environment capture to the host before the first cell runs', async () => {
+    const adapter = makeMockLLMAdapter();
+    const order: string[] = [];
+    await runBenchmarkSuite({
+      suite: 'custom',
+      cells: [{ model: MODEL_REF, workload: LLM_WORKLOADS[0] }],
+      policy: TEST_POLICY,
+      llmAdapters: new Map([[adapter.runtimeId, adapter]]),
+      embedAdapters: new Map(),
+      harness: HARNESS,
+      skipFingerprint: true,
+      hooks: {
+        onEnvironment: (env) => order.push(`env:${typeof env.capturedAt}`),
+        onCellStart: (cellId) => order.push(`start:${cellId}`),
+      },
+    });
+    expect(order[0]).toBe('env:string');
+    expect(order[1]).toMatch(/^start:/);
   });
 
   it('samples memory at the moment of failure on error cells (ORT bad_alloc correlates with heap size)', async () => {
