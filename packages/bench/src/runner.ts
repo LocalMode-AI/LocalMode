@@ -12,6 +12,7 @@ import type {
   BenchSuiteId,
   EmbedIteration,
   EmbedWorkloadSpec,
+  HarnessInfo,
   LLMIteration,
   LLMWorkloadSpec,
   LoadRecord,
@@ -57,7 +58,7 @@ export interface RunSuiteOptions {
   policy: RunPolicy;
   llmAdapters: ReadonlyMap<string, LLMRuntimeAdapter>;
   embedAdapters: ReadonlyMap<string, EmbeddingRuntimeAdapter>;
-  harness: { name: string; version: string; appVersion?: string };
+  harness: HarnessInfo;
   hooks?: RunnerHooks;
   abortSignal?: AbortSignal;
   /** Skip the fingerprint microbenchmark (tests only; submissions require it). */

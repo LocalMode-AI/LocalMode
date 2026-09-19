@@ -1,5 +1,14 @@
 # @localmode/bench
 
+## 0.3.0
+
+- feat: extended environment capture. Every run now records everything the browser discloses about the device, whether or not the leaderboard uses it yet (additive optional fields on `EnvironmentCapture`; schema version and protocol unchanged, archived runs stay valid): the raw user-agent string, rendering engine, `navigator.vendor`/`webdriver`/`platform`, UA-CH `wow64` + form factors, a derived form factor (`device.type` phone/tablet/desktop/xr/tv via `deriveDeviceType()`, with touch points unmasking iPads that report as Macs), touch/pointer/hover/display-mode signals, the JS heap ceiling and idle usage, WebGPU subgroup sizes, preferred canvas format and WGSL language features plus seven more adapter limits, a full WebGL block (vendor, renderer, GL/GLSL versions, capacity limits, extension count, software-renderer flag) and `gpuModel` parsed from the renderer string (`parseGpuModel()`: `Apple M4`, `NVIDIA GeForce RTX 4070`, `Mali-G78 MP20`, ...), the WebAssembly proposal matrix (`detectWasmFeatures()`, the wasm-feature-detect 1.9.0 detection modules inlined, plus the largest 32-bit memory the engine reserves), API availability presence checks (WebGPU, WebGL2, WebNN, OPFS, persisted storage, IndexedDB, Cache API, service/web workers, OffscreenCanvas, Web Locks, BroadcastChannel, wake lock, Compute Pressure, `performance.memory`, `measureUserAgentSpecificMemory`, `scheduler.yield`, WebCodecs, AudioWorklet, media devices, WebTransport, and the Chrome Built-in AI `availability()` verdicts), storage usage details, battery charging/discharging times, Network Information, a detailed display block (avail size, color depth, orientation, viewport, HDR, wide gamut, extended displays, reduced motion, color scheme), locale/time zone, `secureContext`, page origin and visibility state.
+- feat: `HarnessInfo.runtimeVersions` (package name -> version of every runtime the host bundled, stamped at build time) and `HarnessInfo.commit`; hosts should also set each adapter's `runtimeVersion` so cells name the runtime that produced them. `detectEngine()`, `deriveDeviceType()`, `parseGpuModel()`, `detectWasmFeatures()` are exported and unit-tested (`tests/env-capture.test.ts`).
+
+## 0.2.1
+
+- fix: the UA-parse fallback (every WebKit browser, which has no UA Client Hints) now names Chrome for iOS (`CriOS/`) and Firefox for iOS (`FxiOS/`) instead of reporting `unknown`, and records the iOS version the UA carries (`OS 26_0 like Mac OS X` -> `26.0`) instead of `unknown-frozen`. The first iPhone submissions had arrived as browser `unknown` / OS version `unknown-frozen`. Environment capture only; no protocol or scoring change. `parseUserAgent()` is exported and unit-tested (`tests/env.test.ts`).
+
 ## 0.2.0
 
 Protocol bump to `localmode-bench/2`. Three thorough-suite pilots on real

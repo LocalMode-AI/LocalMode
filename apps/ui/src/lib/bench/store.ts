@@ -19,13 +19,43 @@ export interface RunIndexEntry {
   deviceClass: string;
   browser: string;
   browserVersion: string;
+  /** Rendering engine (Blink / Gecko / WebKit). */
+  engine?: string;
   os: string;
+  /** OS version where the browser discloses one ('unknown-frozen' otherwise). */
+  osVersion?: string;
+  /** CPU architecture from UA-CH (arm / x86) where disclosed. */
+  architecture?: string;
   gpuVendor?: string;
+  gpuArchitecture?: string;
+  /** GPU model parsed from the WebGL renderer string (e.g. "Apple M4"). */
+  gpuModel?: string;
+  /** Form factor: phone / tablet / desktop / xr / tv / unknown. */
+  deviceType?: string;
+  /** UA-CH device model (Android only). */
+  deviceModel?: string;
+  cores?: number;
+  /** navigator.deviceMemory (GB, Chromium-only, capped at 8). */
+  deviceMemoryGB?: number;
+  /** V8 heap ceiling for the tab (Chromium-only). */
+  jsHeapSizeLimitBytes?: number;
+  storageQuotaBytes?: number;
+  crossOriginIsolated?: boolean;
+  webgpu?: boolean;
+  timerResolutionUs?: number;
+  /** navigator.webdriver, true under automation. */
+  webdriver?: boolean;
+  /** Harness version and the runtime package versions that produced the run. */
+  harnessVersion?: string;
+  runtimeVersions?: Record<string, string>;
+  /** Prolific-study runs carry `prolific:<hash>`; lab runs carry a free-text label. */
+  userReportedDevice?: string;
   flagged: boolean;
   path: string;
   cells: Array<{
     cellId: string;
     runtimeId: string;
+    runtimeVersion?: string;
     benchModelId: string;
     modelName: string;
     workloadId: string;
@@ -146,16 +176,35 @@ export function toIndexEntry(
   path: string,
 ): RunIndexEntry {
   const byId = new Map(summaries.map((s) => [s.cellId, s]));
+  const env = run.environment;
   return {
     runId: run.runId,
     createdAt: run.createdAt,
     protocol: run.protocol,
     suite: run.suite,
     deviceClass: deviceClassOf(run),
-    browser: run.environment.browser.name,
-    browserVersion: run.environment.browser.version,
-    os: run.environment.os.platform,
-    gpuVendor: run.environment.gpu.vendor,
+    browser: env.browser.name,
+    browserVersion: env.browser.version,
+    engine: env.browser.engine,
+    os: env.os.platform,
+    osVersion: env.os.version,
+    architecture: env.os.architecture,
+    gpuVendor: env.gpu.vendor,
+    gpuArchitecture: env.gpu.architecture,
+    gpuModel: env.gpuModel,
+    deviceType: env.device?.type,
+    deviceModel: env.os.model || undefined,
+    cores: env.hardware.cores ?? undefined,
+    deviceMemoryGB: env.hardware.deviceMemoryGB ?? undefined,
+    jsHeapSizeLimitBytes: env.hardware.jsHeapSizeLimitBytes,
+    storageQuotaBytes: env.storage?.quotaBytes,
+    crossOriginIsolated: env.flags.crossOriginIsolated,
+    webgpu: env.gpu.available,
+    timerResolutionUs: env.timerResolutionUs ?? undefined,
+    webdriver: env.browser.webdriver,
+    harnessVersion: run.harness.version,
+    runtimeVersions: run.harness.runtimeVersions,
+    userReportedDevice: env.userReportedDevice,
     flagged,
     path,
     cells: run.cells
@@ -165,6 +214,7 @@ export function toIndexEntry(
         return {
           cellId: cell.cellId,
           runtimeId: cell.runtimeId,
+          runtimeVersion: cell.runtimeVersion,
           benchModelId: cell.model.benchModelId,
           modelName: cell.model.displayName,
           workloadId: cell.workloadId,

@@ -233,6 +233,14 @@ export interface BrowserInfo {
   version: string;
   source: 'ua-ch' | 'ua-parse';
   brands?: Array<{ brand: string; version: string }>;
+  /** Rendering engine, derived from the UA (Blink / Gecko / WebKit). */
+  engine?: 'Blink' | 'Gecko' | 'WebKit' | 'unknown';
+  /** `navigator.vendor` (e.g. "Google Inc.", "Apple Computer, Inc."). */
+  vendor?: string;
+  /** `navigator.webdriver` — true under browser automation. */
+  webdriver?: boolean;
+  /** `navigator.pdfViewerEnabled`, a cheap headless/kiosk signal. */
+  pdfViewerEnabled?: boolean;
 }
 
 /** OS identification. Version is 'unknown-frozen' on engines with frozen UAs. */
@@ -241,7 +249,32 @@ export interface OSInfo {
   version: string;
   architecture?: string;
   bitness?: string;
+  /** Device model from UA-CH (Android only; empty elsewhere by spec). */
   model?: string;
+  /** Whether the OS is running in a WoW64-style emulation layer (UA-CH `wow64`). */
+  wow64?: boolean;
+  /** `navigator.platform` (legacy, frozen but still informative: "MacIntel", "Win32", "iPhone"). */
+  navigatorPlatform?: string;
+}
+
+/** Form-factor classification, derived from UA-CH form factors, the UA, and touch. */
+export type DeviceType = 'phone' | 'tablet' | 'desktop' | 'xr' | 'tv' | 'unknown';
+
+/** Device / form-factor signals. */
+export interface DeviceInfo {
+  type: DeviceType;
+  /** UA-CH `mobile` bit (Chromium) or a UA-derived guess elsewhere. */
+  mobile: boolean;
+  /** UA-CH `formFactors` (Chromium 125+): Desktop / Mobile / Tablet / XR / EInk / Watch / Automotive. */
+  formFactors?: string[];
+  /** `navigator.maxTouchPoints`. */
+  maxTouchPoints: number;
+  /** `(pointer: coarse)` media query — primary input is a touch surface. */
+  pointerCoarse?: boolean;
+  /** `(hover: none)` media query — no hover-capable primary input. */
+  hoverNone?: boolean;
+  /** Standalone / fullscreen display mode (installed PWA or kiosk). */
+  displayMode?: string;
 }
 
 /** WebGPU adapter identity + selected limits (all fields may be empty strings). */
@@ -251,12 +284,162 @@ export interface GPUInfo {
   architecture?: string;
   device?: string;
   description?: string;
+  /** Adapter-reported subgroup sizes (Chromium 130+ `info.subgroupMinSize/MaxSize`). */
+  subgroupMinSize?: number;
+  subgroupMaxSize?: number;
   isFallbackAdapter?: boolean;
   features?: string[];
   limits?: Record<string, number>;
+  /** `navigator.gpu.getPreferredCanvasFormat()`. */
+  preferredCanvasFormat?: string;
+  /** WGSL language features the implementation reports (`navigator.gpu.wgslLanguageFeatures`). */
+  wgslLanguageFeatures?: string[];
 }
 
-/** Full environment capture for a run. Clamped fields are labeled as such. */
+/** WebGL identity + capacity signals (a second, older GPU identity channel). */
+export interface WebGLInfo {
+  /** Best context available: 'webgl2', 'webgl', or null when neither creates. */
+  contextKind: 'webgl2' | 'webgl' | null;
+  /** UNMASKED_VENDOR_WEBGL when the debug extension exists, else VENDOR. */
+  vendor?: string;
+  /** UNMASKED_RENDERER_WEBGL when the debug extension exists, else RENDERER. */
+  renderer?: string;
+  version?: string;
+  shadingLanguageVersion?: string;
+  maxTextureSize?: number;
+  maxRenderbufferSize?: number;
+  maxVertexUniformVectors?: number;
+  maxFragmentUniformVectors?: number;
+  /** Number of extensions exposed (identity signal without shipping the whole list). */
+  extensionCount?: number;
+  /** Whether the renderer string names a software rasterizer (SwiftShader, llvmpipe, ...). */
+  softwareRenderer?: boolean;
+}
+
+/**
+ * WebAssembly proposal support, each probed by validating a canonical module
+ * (the same byte sequences `wasm-feature-detect` uses). Missing keys mean the
+ * probe itself failed, not that the feature is absent.
+ */
+export interface WasmFeatureSupport {
+  simd: boolean;
+  relaxedSimd: boolean;
+  threads: boolean;
+  bulkMemory: boolean;
+  exceptions: boolean;
+  /** Exception handling with `exnref` (the newer, standardized form). */
+  exceptionsFinal: boolean;
+  extendedConst: boolean;
+  gc: boolean;
+  memory64: boolean;
+  multiMemory: boolean;
+  multiValue: boolean;
+  mutableGlobals: boolean;
+  referenceTypes: boolean;
+  saturatedFloatToInt: boolean;
+  signExtensions: boolean;
+  tailCall: boolean;
+  typedFunctionReferences: boolean;
+  /** 128-bit wide arithmetic (`i64.add128` family). */
+  wideArithmetic: boolean;
+  /** JavaScript Promise Integration (`WebAssembly.Suspending`). */
+  jspi: boolean;
+  /** Type reflection (`WebAssembly.Function`). */
+  typeReflection: boolean;
+  /** `WebAssembly.compileStreaming` exists. */
+  streamingCompilation: boolean;
+  /** JS String Builtins (`js-string` import module), probed via the imports/builtins option. */
+  jsStringBuiltins: boolean;
+  /** Type-level `WebAssembly.Memory` growth limit reachable in this engine (pages of 64 KiB). */
+  maxMemoryPages?: number;
+}
+
+/**
+ * Availability of the browser APIs the runtimes and the paper care about.
+ * Each entry is a plain presence check (the feature exists on this page),
+ * not a functional test. Chrome Built-in AI is reported by its
+ * `availability()` string where the API exists.
+ */
+export interface APIAvailability {
+  webgpu: boolean;
+  webgl2: boolean;
+  webnn: boolean;
+  /** OPFS: `navigator.storage.getDirectory` exists AND resolved. */
+  opfs: boolean;
+  /** Result of `navigator.storage.persisted()` where supported. */
+  persistedStorage?: boolean;
+  indexedDB: boolean;
+  cacheApi: boolean;
+  serviceWorker: boolean;
+  webWorkers: boolean;
+  offscreenCanvas: boolean;
+  webLocks: boolean;
+  broadcastChannel: boolean;
+  wakeLock: boolean;
+  computePressure: boolean;
+  performanceMemory: boolean;
+  measureUserAgentSpecificMemory: boolean;
+  schedulerYield: boolean;
+  webCodecs: boolean;
+  audioWorklet: boolean;
+  mediaDevices: boolean;
+  webTransport: boolean;
+  /** Chrome Built-in AI (Gemini Nano) surfaces, by `availability()` verdict when reachable. */
+  promptApi?: string;
+  summarizerApi?: string;
+  translatorApi?: string;
+  languageDetectorApi?: string;
+}
+
+/** Network Information API (Chromium + Android) snapshot at capture time. */
+export interface NetworkInfo {
+  supported: boolean;
+  effectiveType?: string;
+  /** Connection type (wifi / cellular / ethernet / ...) where the UA exposes it. */
+  type?: string;
+  downlinkMbps?: number;
+  rttMs?: number;
+  saveData?: boolean;
+  online?: boolean;
+}
+
+/** Display / viewport snapshot. */
+export interface DisplayInfo {
+  width: number;
+  height: number;
+  availWidth?: number;
+  availHeight?: number;
+  dpr: number;
+  colorDepth?: number;
+  orientation?: string;
+  viewportWidth?: number;
+  viewportHeight?: number;
+  /** `(dynamic-range: high)` media query. */
+  hdr?: boolean;
+  /** `(color-gamut: p3)` media query. */
+  wideGamut?: boolean;
+  /** `screen.isExtended` (Window Management API) — more than one display attached. */
+  isExtended?: boolean;
+  /** Reduced-motion / forced-colors preferences, cheap OS-level signals. */
+  prefersReducedMotion?: boolean;
+  prefersColorScheme?: 'light' | 'dark' | 'no-preference';
+}
+
+/** Locale / clock signals. */
+export interface LocaleInfo {
+  timeZone?: string;
+  /** Minutes offset from UTC at capture time (`Date#getTimezoneOffset`). */
+  timeZoneOffsetMinutes?: number;
+  locale?: string;
+  /** `Intl.DateTimeFormat().resolvedOptions().calendar`. */
+  calendar?: string;
+}
+
+/**
+ * Full environment capture for a run. Every field beyond the first block is
+ * additive and best-effort: a probe that fails records nothing for its key and
+ * never affects the others. Clamped or capped fields are labeled as such.
+ */
 export interface EnvironmentCapture {
   capturedAt: string;
   browser: BrowserInfo;
@@ -268,22 +451,58 @@ export interface EnvironmentCapture {
     /** navigator.deviceMemory (GB) — Chromium-only, capped at 8. */
     deviceMemoryGB: number | null;
     deviceMemoryCapped: boolean;
+    /** `performance.memory.jsHeapSizeLimit` (Chromium) — the V8 heap ceiling for this tab. */
+    jsHeapSizeLimitBytes?: number;
+    /** `performance.memory.usedJSHeapSize` at capture (the idle baseline). */
+    jsHeapUsedBytes?: number;
   };
   gpu: GPUInfo;
   /** WebGL renderer string, a secondary GPU identity signal. */
   webglRenderer: string | null;
+  /** Detailed WebGL identity + capacity (superset of `webglRenderer`). */
+  webgl?: WebGLInfo;
+  /**
+   * GPU model parsed from the WebGL renderer string (ANGLE unwrapped),
+   * e.g. "Apple M4", "NVIDIA GeForce RTX 4070", "Mali-G78 MP20". Absent when
+   * no WebGL context could be created.
+   */
+  gpuModel?: string;
   flags: {
     crossOriginIsolated: boolean;
     sharedArrayBuffer: boolean;
     wasmSimd: boolean;
+    /** `window.isSecureContext`. */
+    secureContext?: boolean;
+    /** Full WebAssembly proposal matrix (superset of `wasmSimd`). */
+    wasm?: WasmFeatureSupport;
   };
-  storage: { quotaBytes?: number; usageBytes?: number } | null;
-  power: { batterySupported: boolean; charging?: boolean; level?: number };
+  /** Presence checks for the APIs the runtimes depend on. */
+  apis?: APIAvailability;
+  device?: DeviceInfo;
+  storage: { quotaBytes?: number; usageBytes?: number; usageDetails?: Record<string, number> } | null;
+  power: {
+    batterySupported: boolean;
+    charging?: boolean;
+    level?: number;
+    /** Seconds until full / empty (Infinity serialized as absent). */
+    chargingTimeSec?: number;
+    dischargingTimeSec?: number;
+  };
   pressure: { supported: boolean; lastState?: string };
   /** Inferred performance.now() quantum in microseconds (grid inference). */
   timerResolutionUs: number | null;
   screen: { width: number; height: number; dpr: number } | null;
+  /** Detailed display snapshot (superset of `screen`). */
+  display?: DisplayInfo;
+  network?: NetworkInfo;
+  locale?: LocaleInfo;
   languages?: string[];
+  /** Raw `navigator.userAgent` — kept verbatim so future parsers can re-derive fields. */
+  userAgent?: string;
+  /** Page origin the run executed on (distinguishes production from local/staging). */
+  pageOrigin?: string;
+  /** `document.visibilityState` at capture; a hidden tab is throttled. */
+  visibilityState?: string;
   /** Free-text device self-report — displayed as "user-reported", never trusted. */
   userReportedDevice?: string;
 }
@@ -346,13 +565,29 @@ export interface CellSummary {
   highVariance: boolean;
 }
 
+/** Identity of the software that produced a run. */
+export interface HarnessInfo {
+  name: string;
+  version: string;
+  appVersion?: string;
+  /**
+   * Versions of the runtime packages bundled into the harness at build time
+   * (e.g. `{ "@huggingface/transformers": "4.2.0", "@wllama/wllama": "3.5.1" }`),
+   * keyed by npm package name. Per-cell `runtimeVersion` names the same value
+   * for the runtime that produced that cell.
+   */
+  runtimeVersions?: Record<string, string>;
+  /** Git commit of the harness build where the host exposes it. */
+  commit?: string;
+}
+
 /** The unit of submission: one full suite run on one device. */
 export interface BenchRunResult {
   protocol: typeof BENCH_PROTOCOL_VERSION;
   schemaVersion: typeof BENCH_SCHEMA_VERSION;
   runId: string;
   createdAt: string;
-  harness: { name: string; version: string; appVersion?: string };
+  harness: HarnessInfo;
   suite: BenchSuiteId;
   environment: EnvironmentCapture;
   fingerprint: FingerprintResult | null;

@@ -26,6 +26,8 @@ import {
   runBenchmarkSuite,
 } from '@localmode/bench';
 import { BENCH_MODELS, SUITE_MODELS } from '@/lib/bench/catalog';
+import { wllamaAvailability } from '@/lib/bench/adapters';
+import { benchBuildCommit, benchRuntimeVersions } from '@/lib/bench/runtime-versions';
 import { Button } from '@/registry/localmode/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/registry/localmode/ui/card';
 import { Badge } from '@/registry/localmode/ui/badge';
@@ -48,7 +50,7 @@ import {
   TableRow,
 } from '@/registry/localmode/ui/table';
 
-const HARNESS_VERSION = '0.2.0';
+const HARNESS_VERSION = '0.3.0';
 
 type Phase = 'idle' | 'running' | 'done' | 'error';
 
@@ -87,18 +89,32 @@ async function probeLaneAvailability(): Promise<{
     chromeAI = { ok: false, reason: 'availability probe failed' };
   }
   const gpuGate: LaneAvailability = webgpu ? { ok: true } : { ok: false, reason: 'no WebGPU' };
+  const wllamaGate = await wllamaAvailability();
   return {
     lanes: {
       'transformers-webgpu': gpuGate,
       'transformers-wasm': { ok: true },
       webllm: gpuGate,
-      wllama: { ok: true },
+      wllama: wllamaGate.ok ? { ok: true } : { ok: false, reason: wllamaGate.reason },
       litert: { ok: true },
       'chrome-ai': chromeAI,
       mediapipe: { ok: true },
     },
     webgpu,
   };
+}
+
+/**
+ * Phones and tablets cannot hold the Standard or Thorough suites: those load
+ * several runtimes' multi-hundred-megabyte WASM heaps in one page (the heaps
+ * never shrink) and mobile browsers kill the tab well before that, which lost
+ * the whole run on an iPhone. Mobile devices run the Quick suite.
+ */
+function isMobileDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const uaData = (navigator as { userAgentData?: { mobile?: boolean } }).userAgentData;
+  if (uaData?.mobile === true) return true;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 }
 
 function formatBytes(bytes?: number): string {
@@ -165,6 +181,7 @@ export function BenchRunner() {
   >({ kind: 'idle' });
   const abortRef = useRef<AbortController | null>(null);
   const [study, setStudy] = useState<StudySession | null>(null);
+  const [mobile, setMobile] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -174,6 +191,7 @@ export function BenchRunner() {
     readStudySession().then((s) => {
       if (!cancelled) setStudy(s);
     });
+    setMobile(isMobileDevice());
     return () => {
       cancelled = true;
     };
@@ -265,7 +283,13 @@ export function BenchRunner() {
         policy: RUN_POLICIES[suite],
         llmAdapters: createLLMAdapters(),
         embedAdapters: createEmbedAdapters(),
-        harness: { name: '@localmode/bench', version: HARNESS_VERSION, appVersion: 'localmode.ai' },
+        harness: {
+          name: '@localmode/bench',
+          version: HARNESS_VERSION,
+          appVersion: 'localmode.ai',
+          runtimeVersions: benchRuntimeVersions(),
+          commit: benchBuildCommit(),
+        },
         userReportedDevice: study ? `prolific:${study.participantHash}` : undefined,
         abortSignal: controller.signal,
         hooks: {
@@ -337,8 +361,12 @@ export function BenchRunner() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="quick">Quick (~10 min)</SelectItem>
-                  <SelectItem value="standard">Standard</SelectItem>
-                  <SelectItem value="thorough">Thorough</SelectItem>
+                  <SelectItem value="standard" disabled={mobile}>
+                    Standard{mobile ? ' (desktop only)' : ''}
+                  </SelectItem>
+                  <SelectItem value="thorough" disabled={mobile}>
+                    Thorough{mobile ? ' (desktop only)' : ''}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -420,6 +448,13 @@ export function BenchRunner() {
               skip the download)
             </span>
           </div>
+          {mobile && (
+            <p className="text-xs text-muted-foreground" role="note">
+              Phones and tablets run the Quick suite. Standard and Thorough load several runtimes
+              in one page and need more browser memory than a mobile browser allows; the tab would
+              be killed partway through and the run lost.
+            </p>
+          )}
           {study && (
             <p className="text-xs text-muted-foreground" role="note">
               Paid study session detected: your completion code appears on this page once the run

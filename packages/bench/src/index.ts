@@ -36,6 +36,15 @@ export type {
   BrowserInfo,
   OSInfo,
   GPUInfo,
+  WebGLInfo,
+  DeviceInfo,
+  DeviceType,
+  WasmFeatureSupport,
+  APIAvailability,
+  NetworkInfo,
+  DisplayInfo,
+  LocaleInfo,
+  HarnessInfo,
   EnvironmentCapture,
   FingerprintResult,
   MetricSummary,
@@ -78,7 +87,15 @@ export { runBenchmarkSuite } from './runner.js';
 export type { PlannedCell, RunnerHooks, RunSuiteOptions } from './runner.js';
 
 // Environment + measurement
-export { captureEnvironment } from './env.js';
+export {
+  captureEnvironment,
+  parseUserAgent,
+  detectEngine,
+  deriveDeviceType,
+  parseGpuModel,
+  detectWasmFeatures,
+} from './env.js';
+export type { DeviceTypeSignals } from './env.js';
 export { memoryApiAvailable, sampleMemoryBytes } from './memory.js';
 export { hrNow, inferTimerResolutionUs, sleep } from './timing.js';
 export { runFingerprint } from './fingerprint.js';

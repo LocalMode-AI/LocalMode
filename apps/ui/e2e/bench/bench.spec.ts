@@ -147,10 +147,28 @@ test.describe('bench real run (WASM lanes)', () => {
     const exported = JSON.parse(readFileSync(path!, 'utf8')) as {
       protocol: string;
       digest?: string;
-      environment: { userReportedDevice?: string };
+      harness: { version: string; runtimeVersions?: Record<string, string> };
+      environment: {
+        userReportedDevice?: string;
+        userAgent?: string;
+        pageOrigin?: string;
+        browser: { name: string; engine?: string; webdriver?: boolean; vendor?: string };
+        os: { platform: string; navigatorPlatform?: string };
+        hardware: { cores: number | null; jsHeapSizeLimitBytes?: number };
+        device?: { type: string; maxTouchPoints: number };
+        gpuModel?: string;
+        webgl?: { contextKind: string | null; renderer?: string };
+        flags: { wasm?: Record<string, boolean | number>; secureContext?: boolean };
+        apis?: Record<string, unknown>;
+        display?: { width: number; colorDepth?: number; viewportWidth?: number };
+        locale?: { timeZone?: string };
+        network?: { supported: boolean; online?: boolean };
+      };
       fingerprint: { mflops: number } | null;
       cells: Array<{
         cellId: string;
+        runtimeId: string;
+        runtimeVersion?: string;
         status: string;
         iterations: Array<{ chunks?: Array<{ t: number; c: number }>; text?: string; startT: number }>;
       }>;
@@ -168,6 +186,43 @@ test.describe('bench real run (WASM lanes)', () => {
     expect(JSON.stringify(exported)).not.toContain('5f3a1c2b4d6e7f8091a2b3c4');
     expect(exported.fingerprint?.mflops).toBeGreaterThan(1);
     expect(exported.cells.some((c) => c.status === 'ok' && c.iterations.length > 0)).toBe(true);
+
+    // Extended environment capture: the run records the device identity the
+    // browser discloses (form factor, engine, GPU model, WASM proposal matrix,
+    // API availability, display, locale) and the exact runtime versions.
+    const env = exported.environment;
+    expect(env.userAgent).toContain('Mozilla/5.0');
+    expect(env.pageOrigin).toBe(new URL(page.url()).origin);
+    expect(env.browser.engine).toBe('Blink');
+    expect(env.browser.webdriver, 'Playwright drives this browser, so the capture must say so').toBe(true);
+    expect(env.os.navigatorPlatform).toBeTruthy();
+    expect(env.device?.type).toBe('desktop');
+    expect(env.webgl?.contextKind).toBe('webgl2');
+    expect(env.gpuModel, 'GPU model parsed from the WebGL renderer string').toBeTruthy();
+    expect(env.hardware.jsHeapSizeLimitBytes).toBeGreaterThan(1e9);
+    const wasm = env.flags.wasm!;
+    for (const feature of ['simd', 'threads', 'bulkMemory', 'referenceTypes', 'multiValue', 'exceptions', 'gc', 'tailCall']) {
+      expect(wasm[feature], `wasm.${feature} on current Chrome`).toBe(true);
+    }
+    expect(wasm.maxMemoryPages).toBe(65536);
+    expect(env.flags.secureContext).toBe(true);
+    const apis = env.apis!;
+    expect(apis.indexedDB).toBe(true);
+    expect(apis.cacheApi).toBe(true);
+    expect(apis.webWorkers).toBe(true);
+    expect(apis.opfs).toBe(true);
+    expect(apis.webgl2).toBe(true);
+    expect(env.display?.width).toBeGreaterThan(0);
+    expect(env.display?.colorDepth).toBeGreaterThan(0);
+    expect(env.locale?.timeZone).toBeTruthy();
+    expect(env.network?.online).toBe(true);
+    // Runtime versions are stamped at build time from the installed packages.
+    expect(exported.harness.version).toBe('0.3.0');
+    expect(exported.harness.runtimeVersions?.['@huggingface/transformers']).toMatch(/^\d+\.\d+\.\d+/);
+    expect(exported.harness.runtimeVersions?.['@wllama/wllama']).toMatch(/^\d+\.\d+\.\d+/);
+    for (const cell of exported.cells.filter((c) => c.status === 'ok')) {
+      expect(cell.runtimeVersion, `${cell.cellId} carries its runtime version`).toMatch(/^\d+\.\d+\.\d+/);
+    }
 
     // Regression guards for the wllama lane, all surfaced by the thorough
     // pilots: (a) a bare prompt must go through the chat template - SmolLM2

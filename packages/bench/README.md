@@ -54,6 +54,29 @@ not filter, so hosts partition by `run.protocol` themselves).
 - **Error cells** - `error.cause` carries the wrapped provider error's message
   and `memory.atError` a failure-time memory sample; error cells are never
   data.
+- **Environment capture** (`captureEnvironment()`) - everything the browser
+  discloses, recorded whether or not the current analysis uses it, every probe
+  guarded so a missing API records nothing for its key: browser (UA-CH brands
+  or UA parse, engine, vendor, `webdriver`), OS (platform, version where
+  disclosed, architecture, bitness, model, `navigator.platform`), the raw
+  user-agent string, form factor (`device.type` phone/tablet/desktop from UA-CH
+  form factors, the UA, and touch points; `deriveDeviceType()`), hardware
+  (cores and device memory labeled clamped, JS heap ceiling), WebGPU adapter
+  (`adapter.info`, features, limits, subgroup sizes, preferred canvas format),
+  WebGL (vendor/renderer, versions, capacity limits, software-renderer flag)
+  plus the GPU model parsed out of the renderer string (`parseGpuModel()`,
+  e.g. `Apple M4`), the WebAssembly proposal matrix (`detectWasmFeatures()`;
+  the wasm-feature-detect 1.9.0 modules inlined: SIMD, relaxed SIMD, threads,
+  exceptions and exnref, GC, memory64, multi-memory, tail calls, typed function
+  references, JSPI, JS string builtins, ...) with the largest 32-bit memory the
+  engine reserves, API availability (WebGPU, WebGL2, WebNN, OPFS, persisted
+  storage, IndexedDB, Cache API, workers, OffscreenCanvas, Web Locks, wake lock,
+  Compute Pressure, `performance.memory`, WebCodecs, AudioWorklet, WebTransport,
+  Chrome Built-in AI verdicts), storage quota + usage, battery, network
+  information, display (size, DPR, color depth, orientation, viewport, HDR,
+  wide gamut, color scheme), locale and time zone, page origin, and visibility.
+  `harness.runtimeVersions` stamps the runtime package versions the host
+  bundled and each cell's `runtimeVersion` names the one that produced it.
 - **Statistics** - median headline; mean ± SD, IQR, 95% CI (Student-t), CV;
   CV > 5% ⇒ high-variance flag; geomean only within a device run.
 - **Quality-fidelity lane** - tinyMMLU (MIT) accuracy + STS-B (CC BY-SA) Spearman,
@@ -84,7 +107,7 @@ const result = await runBenchmarkSuite({
   policy: RUN_POLICIES.quick,
   llmAdapters,      // Map<runtimeId, LLMRuntimeAdapter> - see src/adapter.ts
   embedAdapters,
-  harness: { name: '@localmode/bench', version: '0.2.0' },
+  harness: { name: '@localmode/bench', version: '0.3.0', runtimeVersions: { '@wllama/wllama': '3.5.1' } },
   abortSignal: controller.signal,
 });
 result.digest = await computeRunDigest(result);

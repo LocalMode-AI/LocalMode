@@ -17,6 +17,7 @@ import type {
   LoadedEmbedder,
   LoadedLLM,
 } from '@localmode/bench';
+import { runtimeVersionFor } from './runtime-versions';
 
 type ProgressCb = (p: { pct?: number }) => void;
 
@@ -85,10 +86,47 @@ async function hasWebGPUAdapter(): Promise<boolean> {
 
 const NO_WEBGPU: AdapterAvailability = { ok: false, reason: 'no WebGPU adapter' };
 
+/**
+ * wllama's WASM builds (default and Safari compat alike) import a SHARED
+ * memory with a 4 GB maximum, so the runtime needs SharedArrayBuffer (a
+ * cross-origin-isolated page) and a browser willing to reserve that range.
+ * WebKit on iPhone refused with "Out of memory" and every wllama cell errored;
+ * probing the same allocation up front turns that into a skipped lane with the
+ * reason recorded.
+ */
+export async function wllamaAvailability(): Promise<AdapterAvailability> {
+  const isolated = typeof crossOriginIsolated !== 'undefined' && crossOriginIsolated;
+  try {
+    new WebAssembly.Memory({ initial: 16, maximum: 65_536, shared: true });
+  } catch (error) {
+    const detail = (error as Error)?.message ?? String(error);
+    return {
+      ok: false,
+      reason: isolated
+        ? `browser cannot reserve wllama's shared 4 GB WASM memory (${detail})`
+        : `page is not cross-origin isolated (no SharedArrayBuffer), which wllama's shared WASM memory requires (${detail})`,
+    };
+  }
+  // wllama's model cache lives in the Origin Private File System. WebKit
+  // contexts that cannot open it throw DOMException UnknownError ("The
+  // operation failed for an unknown transient reason") before any WASM runs.
+  try {
+    await navigator.storage.getDirectory();
+  } catch (error) {
+    const detail = (error as Error)?.message ?? String(error);
+    return {
+      ok: false,
+      reason: `wllama's model cache needs the Origin Private File System, which this browser context does not provide (${detail})`,
+    };
+  }
+  return { ok: true };
+}
+
 /** Transformers.js lane (device pinned per lane: webgpu or wasm). */
 function makeTransformersLLMAdapter(device: 'webgpu' | 'wasm'): LLMRuntimeAdapter {
   return {
     runtimeId: device === 'webgpu' ? 'transformers-webgpu' : 'transformers-wasm',
+    runtimeVersion: runtimeVersionFor(device === 'webgpu' ? 'transformers-webgpu' : 'transformers-wasm'),
     displayName: `Transformers.js (${device.toUpperCase()})`,
     async isAvailable() {
       if (device === 'webgpu' && !(await hasWebGPUAdapter())) return NO_WEBGPU;
@@ -120,6 +158,7 @@ function makeTransformersLLMAdapter(device: 'webgpu' | 'wasm'): LLMRuntimeAdapte
 function makeWebLLMAdapter(): LLMRuntimeAdapter {
   return {
     runtimeId: 'webllm',
+    runtimeVersion: runtimeVersionFor('webllm'),
     displayName: 'WebLLM (MLC)',
     async isAvailable() {
       return (await hasWebGPUAdapter()) ? { ok: true } : NO_WEBGPU;
@@ -147,9 +186,10 @@ function makeWebLLMAdapter(): LLMRuntimeAdapter {
 function makeWllamaAdapter(): LLMRuntimeAdapter {
   return {
     runtimeId: 'wllama',
+    runtimeVersion: runtimeVersionFor('wllama'),
     displayName: 'wllama (llama.cpp WASM)',
     async isAvailable() {
-      return { ok: true };
+      return wllamaAvailability();
     },
     async isModelCached(model) {
       const { isModelCached } = await import('@localmode/wllama');
@@ -177,6 +217,7 @@ function makeWllamaAdapter(): LLMRuntimeAdapter {
 function makeLiteRTAdapter(): LLMRuntimeAdapter {
   return {
     runtimeId: 'litert',
+    runtimeVersion: runtimeVersionFor('litert'),
     displayName: 'LiteRT-LM',
     async isAvailable() {
       // The catalog's CPU-capable models run without WebGPU; hard-gated models
@@ -207,6 +248,7 @@ function makeLiteRTAdapter(): LLMRuntimeAdapter {
 function makeChromeAIAdapter(): LLMRuntimeAdapter {
   return {
     runtimeId: 'chrome-ai',
+    runtimeVersion: runtimeVersionFor('chrome-ai'),
     displayName: 'Chrome Built-in AI (Gemini Nano)',
     async isAvailable() {
       const { isPromptAPISupported } = await import('@localmode/chrome-ai');
@@ -245,6 +287,7 @@ function makeChromeAIAdapter(): LLMRuntimeAdapter {
 function makeTransformersEmbedAdapter(device: 'webgpu' | 'wasm'): EmbeddingRuntimeAdapter {
   return {
     runtimeId: device === 'webgpu' ? 'transformers-webgpu' : 'transformers-wasm',
+    runtimeVersion: runtimeVersionFor(device === 'webgpu' ? 'transformers-webgpu' : 'transformers-wasm'),
     displayName: `Transformers.js embeddings (${device.toUpperCase()})`,
     async isAvailable() {
       if (device === 'webgpu' && !(await hasWebGPUAdapter())) return NO_WEBGPU;
@@ -273,9 +316,10 @@ function makeTransformersEmbedAdapter(device: 'webgpu' | 'wasm'): EmbeddingRunti
 function makeWllamaEmbedAdapter(): EmbeddingRuntimeAdapter {
   return {
     runtimeId: 'wllama',
+    runtimeVersion: runtimeVersionFor('wllama'),
     displayName: 'wllama embeddings (GGUF)',
     async isAvailable() {
-      return { ok: true };
+      return wllamaAvailability();
     },
     async isModelCached(model) {
       const { isModelCached } = await import('@localmode/wllama');
@@ -300,6 +344,7 @@ function makeWllamaEmbedAdapter(): EmbeddingRuntimeAdapter {
 function makeMediaPipeEmbedAdapter(): EmbeddingRuntimeAdapter {
   return {
     runtimeId: 'mediapipe',
+    runtimeVersion: runtimeVersionFor('mediapipe'),
     displayName: 'MediaPipe Text Embedder (USE)',
     async isAvailable() {
       return { ok: true };

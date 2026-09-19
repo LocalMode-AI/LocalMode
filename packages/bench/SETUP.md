@@ -38,6 +38,13 @@ Behavior without them: `/bench` renders with an empty leaderboard, `/bench/run`
 works fully (export JSON), and `POST /api/bench/submit` answers
 `503 bench-store-unbound` - runs are never lost.
 
+Build-time stamps (no configuration needed): `next.config.mjs` resolves the
+installed versions of the provider packages and the runtimes they wrap (plus
+wllama's CDN pin) into `NEXT_PUBLIC_BENCH_RUNTIME_VERSIONS`, recorded on every
+run as `harness.runtimeVersions`; the build commit comes from
+`VERCEL_GIT_COMMIT_SHA` (set by Vercel), `GITHUB_SHA`, or `BENCH_BUILD_COMMIT`
+and lands in `harness.commit`.
+
 Rate limiting automatically uses the already-bound Upstash Redis
 (`UPSTASH_REDIS_REST_URL/TOKEN` or `KV_REST_API_URL/TOKEN`) and degrades to an
 in-instance window without it.

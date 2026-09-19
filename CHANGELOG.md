@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - 2026-09-19
+
+Makes every benchmark submission record the full device identity the browser discloses (so later analyses never depend on a field that was not kept), stamps runtime versions into runs, and fixes the WebKit isolation and mobile-suite problems surfaced by the first iPhone submissions.
+
+**Released:** `@localmode/bench` 0.3.0 (folds in the unpublished 0.2.1 UA-parse fix).
+
+### Added
+
+- **Every benchmark submission now records everything the browser discloses about the device** (`@localmode/bench` 0.3.0, additive schema fields, no protocol bump; archived runs stay valid). Beyond the device class, a run now carries the raw user-agent string, browser engine/vendor/`webdriver`, OS version, architecture, bitness and model where disclosed, a derived form factor (phone/tablet/desktop; iPads that report as Macs are unmasked by touch points), touch/pointer/display-mode signals, the JS heap ceiling, WebGPU adapter features, limits, subgroup sizes and WGSL language features, a full WebGL identity block and a GPU model parsed out of the renderer string ("Apple M4", "NVIDIA GeForce RTX 4070"), the WebAssembly proposal matrix (22 features probed with the wasm-feature-detect 1.9.0 detection modules, inlined), presence checks for every API the runtimes depend on (WebGPU, WebNN, OPFS, Cache API, workers, Compute Pressure, Chrome Built-in AI verdicts, ...), storage usage details, battery, Network Information, display (color depth, orientation, HDR, wide gamut, color scheme), locale and time zone, page origin and visibility. Verified in real Chrome 145, WebKit 26.5 and Firefox 151 with zero console errors.
+- **Runtime versions are stamped into every run.** `next.config.mjs` resolves the installed versions of the provider packages and the inference runtimes they wrap at build time (and wllama's CDN pin, which is what actually executes), and the runner records them as `harness.runtimeVersions`, each cell as `runtimeVersion`; the build commit is recorded when the host exposes it (`VERCEL_GIT_COMMIT_SHA`). Runner harness version 0.3.0.
+- **`/bench` shows a "Recent submissions" table** with the disclosed device identity per run (form factor, GPU model, browser + engine, OS + architecture, cores, memory, storage quota, isolation, WebGPU) linking to the run's JSON in the dataset; the leaderboard index (`index/summary.json`) carries these fields plus the harness and runtime versions so future analyses do not need to re-read every run file.
+
+### Fixed
+
+- **`hardware.coresClamped` was always true on Chrome.** The label compared the UA-CH brand ("Google Chrome", "Microsoft Edge") against "Chrome"/"Edge" and so marked every Chromium submission's core count as clamped; it now follows the rendering engine (Chromium reports real cores; Gecko and WebKit clamp or randomize).
+- **WebKit browsers were never cross-origin isolated.** Safari, and every browser on iOS, does not implement `Cross-Origin-Embedder-Policy: credentialless`, so the site's pages ran without SharedArrayBuffer there: single-threaded WASM, a 1 ms timer, and wllama unable to create its shared WASM memory. WebKit user agents now receive `require-corp` (Chromium keeps `credentialless`); verified on WebKit 26.5 that the page is isolated, the timer drops to 20 µs, the Transformers.js and MediaPipe WASM lanes run multithreaded, and no cross-origin asset is blocked.
+- **wllama lane on WebKit: honest unavailability instead of five error cells.** wllama's model cache needs the Origin Private File System; WebKit contexts that cannot open it throw `DOMException UnknownError` before any WASM runs (the iPhone runs recorded this as "Out of memory" on every wllama cell). The bench adapter now probes both the shared 4 GB WASM memory wllama imports and OPFS, and marks the lane unavailable with the reason; the runner shows it before Run.
+- **Phones and tablets are gated to the Quick suite.** Standard and Thorough stack several runtimes' WASM heaps in one page and mobile browsers kill the tab first, which lost whole runs on an iPhone; the suite picker now disables them on mobile with an explanation.
+- **`@localmode/bench` 0.2.1:** UA-parse fallback names Chrome/Firefox for iOS and reports the iOS version (submissions had arrived as browser `unknown`).
+
 ## [2.8.0] - 2026-09-19
 
 Adds the paid-study session flow to the bench runner for the crowdsourced data collection and fixes a leaderboard caching lag surfaced by the first live protocol-v2 submission. No npm package releases; `apps/ui` only.

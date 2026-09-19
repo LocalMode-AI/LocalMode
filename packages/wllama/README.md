@@ -652,7 +652,9 @@ wllama v3 requires the WebAssembly Memory64 proposal, which is not yet available
 pnpm add @wllama/wllama-compat
 ```
 
-This package provides a fallback WASM build that works without Memory64. No code changes needed — wllama detects and uses the compat build automatically when available.
+This package provides a fallback WASM build that works without Memory64. No code changes needed — wllama detects and uses the compat build automatically when available (the provider's pinned CDN build already enables the compat resources by default).
+
+Two further WebKit requirements, verified 2026-09-19: the page must be cross-origin isolated (both WASM builds import a shared 4 GB WebAssembly memory, which needs SharedArrayBuffer; Safari does not implement `COEP: credentialless`, so serve `require-corp` to WebKit), and the Origin Private File System must be available (wllama's model cache lives there; a WebKit context that cannot open it fails with `DOMException UnknownError: The operation failed for an unknown transient reason (e.g. out of memory)` before any WASM runs). Probe `navigator.storage.getDirectory()` and `new WebAssembly.Memory({ initial: 16, maximum: 65536, shared: true })` up front to report the lane as unavailable instead of failing every request.
 
 | Browser | Status |
 |---------|--------|

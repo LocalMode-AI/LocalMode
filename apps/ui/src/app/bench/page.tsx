@@ -14,6 +14,7 @@ import { ogImageUrl } from '@/lib/og';
 import { BENCH_PROTOCOL_VERSION } from '@localmode/bench';
 import { aggregateIndex, readIndex } from '@/lib/bench/store';
 import { LeaderboardTable } from '@/components/bench/leaderboard-table';
+import { SubmissionsTable } from '@/components/bench/submissions-table';
 
 const TITLE = 'LocalMode Bench - the browser AI leaderboard';
 const DESCRIPTION =
@@ -46,9 +47,8 @@ export default async function BenchPage() {
   const rows = aggregateIndex(entries);
   // Count what the table aggregates: unflagged runs under the current protocol
   // (archived runs from earlier protocol versions stay in the dataset only).
-  const verifiedRuns = entries.filter(
-    (e) => !e.flagged && e.protocol === BENCH_PROTOCOL_VERSION,
-  ).length;
+  const currentRuns = entries.filter((e) => !e.flagged && e.protocol === BENCH_PROTOCOL_VERSION);
+  const verifiedRuns = currentRuns.length;
 
   return (
     <div className="flex w-full flex-1 flex-col">
@@ -127,6 +127,19 @@ export default async function BenchPage() {
             </p>
           )}
         </section>
+
+        {currentRuns.length > 0 && (
+          <section className="flex flex-col gap-3" aria-label="Recent submissions">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="text-xl font-semibold">Recent submissions</h2>
+              <p className="text-sm text-muted-foreground">
+                What each device disclosed to the browser. The full capture (WebGPU adapter, WebGL,
+                WebAssembly features, API availability, display, network) is in each run&apos;s JSON.
+              </p>
+            </div>
+            <SubmissionsTable entries={currentRuns} repo={repo} />
+          </section>
+        )}
       </main>
       <SiteFooter />
     </div>

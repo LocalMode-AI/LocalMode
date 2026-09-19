@@ -188,13 +188,26 @@ export default function BenchMethodologyPage() {
 
         <Section id="environment" title="Environment capture">
           <p>
-            Chromium reports UA Client Hints (platform, version, architecture, model); Firefox and
-            Safari freeze their user-agent strings by design, so their OS versions are recorded as
-            unknown rather than guessed. WebGPU adapter identity comes from{' '}
-            <code className="font-mono text-sm">adapter.info</code>; core counts and device memory
-            are recorded but labeled clamped (browsers cap or randomize them). Battery charging
-            state and CPU pressure are captured where the APIs exist. The resolved execution
-            backend (WebGPU vs WASM vs CPU) is probed, never assumed from the request.
+            Every run records what the browser discloses about the device, whether or not the
+            leaderboard uses it yet, so later analyses never depend on a field that was not kept.
+            Chromium reports UA Client Hints (platform, version, architecture, bitness, model, form
+            factors); Firefox and Safari freeze their user-agent strings by design, so their OS
+            versions are recorded as unknown rather than guessed, and the raw user-agent string is
+            kept verbatim for future parsers. The form factor (phone, tablet, desktop) is derived
+            from the hints, the user agent, and touch points. WebGPU adapter identity comes from{' '}
+            <code className="font-mono text-sm">adapter.info</code> together with the adapter&apos;s
+            feature list and limits; the WebGL renderer string is kept as a second GPU identity
+            channel and parsed into a GPU model (for example &quot;Apple M4&quot; or &quot;NVIDIA
+            GeForce RTX 4070&quot;). Core counts and device memory are recorded but labeled clamped
+            (browsers cap or randomize them); the JavaScript heap ceiling, storage quota, battery
+            state, CPU pressure support, network type, display, locale and time zone are captured
+            where the APIs exist. The WebAssembly proposal matrix (SIMD, relaxed SIMD, threads,
+            exceptions, GC, memory64, tail calls, JSPI and the rest) is probed by validating
+            canonical modules, and the availability of every API the runtimes depend on (WebGPU,
+            WebNN, OPFS, Cache API, workers, Chrome Built-in AI) is recorded as a presence check.
+            The harness stamps the exact versions of the runtime packages it bundled (and wllama&apos;s
+            CDN pin), per run and per cell. The resolved execution backend (WebGPU vs WASM vs CPU)
+            is probed, never assumed from the request.
           </p>
         </Section>
 

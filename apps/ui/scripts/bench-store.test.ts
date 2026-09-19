@@ -170,6 +170,50 @@ describe('toIndexEntry() → aggregateIndex() (protocol v2 fields)', () => {
     expect(qualityRow.qualityScore).toBe(0.36);
     expect(qualityRow.qualityParseRate).toBe(0.6);
   });
+
+  it('carries the device identity, runtime versions, and self-report into the index entry', () => {
+    const run = v2Run();
+    run.harness = {
+      name: '@localmode/bench',
+      version: '0.3.0',
+      runtimeVersions: { '@litert-lm/core': '0.12.1', '@wllama/wllama': '3.5.1' },
+      commit: 'abc1234',
+    };
+    run.cells[0].runtimeVersion = '0.12.1';
+    run.environment = {
+      ...run.environment,
+      browser: { ...run.environment.browser, engine: 'Blink', webdriver: false },
+      os: { ...run.environment.os, architecture: 'arm', model: '' },
+      hardware: { ...run.environment.hardware, jsHeapSizeLimitBytes: 4_294_705_152 },
+      gpuModel: 'Apple M3',
+      device: { type: 'desktop', mobile: false, maxTouchPoints: 0 },
+      storage: { quotaBytes: 300_000_000_000 },
+      userReportedDevice: 'MacBook Air M3 16GB',
+    };
+    const entry = toIndexEntry(run, summarizeRun(run), false, 'runs/2026/09/run-v2-0001.json');
+    expect(entry).toMatchObject({
+      engine: 'Blink',
+      osVersion: '15.5',
+      architecture: 'arm',
+      gpuArchitecture: 'metal-3',
+      gpuModel: 'Apple M3',
+      deviceType: 'desktop',
+      cores: 10,
+      deviceMemoryGB: 8,
+      jsHeapSizeLimitBytes: 4_294_705_152,
+      storageQuotaBytes: 300_000_000_000,
+      crossOriginIsolated: true,
+      webgpu: true,
+      timerResolutionUs: 5,
+      webdriver: false,
+      harnessVersion: '0.3.0',
+      runtimeVersions: { '@litert-lm/core': '0.12.1', '@wllama/wllama': '3.5.1' },
+      userReportedDevice: 'MacBook Air M3 16GB',
+    });
+    // An empty UA-CH model (every non-Android platform) must not become a "" device model.
+    expect(entry.deviceModel).toBeUndefined();
+    expect(entry.cells[0].runtimeVersion).toBe('0.12.1');
+  });
 });
 
 describe('nonce', () => {
