@@ -116,6 +116,32 @@ function laneKey(model: BenchModelRef): string {
   return `${model.runtimeId}/${model.benchModelId}`;
 }
 
+/**
+ * Paid-study session read from the URL (`?PROLIFIC_PID=<id>&cc=<code>`).
+ * The participant id is never stored or published as-is: the run carries a
+ * short SHA-256 prefix so a payment can be verified against a dataset row
+ * without the dataset revealing who ran it. The completion code is shown only
+ * after the run finishes and the submission attempt has resolved, whether it
+ * succeeded or not (payment is on attempt, never on our infrastructure).
+ */
+interface StudySession {
+  participantHash: string;
+  completionCode: string | null;
+}
+
+const PROLIFIC_COMPLETE_URL = 'https://app.prolific.com/submissions/complete?cc=';
+
+async function readStudySession(): Promise<StudySession | null> {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  const pid = params.get('PROLIFIC_PID')?.trim();
+  if (!pid) return null;
+  const code = params.get('cc')?.trim() || null;
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pid));
+  const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+  return { participantHash: hex.slice(0, 12), completionCode: code && /^[A-Za-z0-9]{4,32}$/.test(code) ? code : null };
+}
+
 export function BenchRunner() {
   const [suite, setSuite] = useState<Exclude<BenchSuiteId, 'custom'>>('quick');
   const [availability, setAvailability] = useState<{
@@ -138,11 +164,15 @@ export function BenchRunner() {
     | { kind: 'failed'; message: string }
   >({ kind: 'idle' });
   const abortRef = useRef<AbortController | null>(null);
+  const [study, setStudy] = useState<StudySession | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     probeLaneAvailability().then((a) => {
       if (!cancelled) setAvailability(a);
+    });
+    readStudySession().then((s) => {
+      if (!cancelled) setStudy(s);
     });
     return () => {
       cancelled = true;
@@ -236,6 +266,7 @@ export function BenchRunner() {
         llmAdapters: createLLMAdapters(),
         embedAdapters: createEmbedAdapters(),
         harness: { name: '@localmode/bench', version: HARNESS_VERSION, appVersion: 'localmode.ai' },
+        userReportedDevice: study ? `prolific:${study.participantHash}` : undefined,
         abortSignal: controller.signal,
         hooks: {
           onPhase: (p) => setStatusLine(p === 'fingerprint' ? 'Hardware calibration…' : `Phase: ${p}`),
@@ -268,7 +299,7 @@ export function BenchRunner() {
       setCellProgress(null);
       setLoadPct(null);
     }
-  }, [suite, buildCells, autoSubmit, submitRun]);
+  }, [suite, buildCells, autoSubmit, submitRun, study]);
 
   const cancel = useCallback(() => abortRef.current?.abort(), []);
 
@@ -389,6 +420,12 @@ export function BenchRunner() {
               skip the download)
             </span>
           </div>
+          {study && (
+            <p className="text-xs text-muted-foreground" role="note">
+              Paid study session detected: your completion code appears on this page once the run
+              finishes and the upload attempt completes. Keep this tab open until then.
+            </p>
+          )}
           {suite !== 'quick' && (
             <p className="text-xs text-muted-foreground" role="note">
               {suite === 'thorough'
@@ -546,6 +583,31 @@ export function BenchRunner() {
                 </p>
               )}
             </div>
+            {study?.completionCode && (submitState.kind === 'done' || submitState.kind === 'failed') && (
+              <div
+                role="region"
+                aria-label="Study completion code"
+                className="rounded-md border border-border bg-muted/40 p-3 text-sm"
+              >
+                <p>
+                  Your Prolific completion code:{' '}
+                  <code className="rounded bg-muted px-1 font-mono text-base">{study.completionCode}</code>
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {submitState.kind === 'failed'
+                    ? 'The upload did not go through, but you are still paid for the attempt: enter the code on Prolific and message the researcher with a screenshot of this page.'
+                    : 'Enter it on Prolific to finish the study.'}{' '}
+                  <a
+                    className="underline underline-offset-2"
+                    href={`${PROLIFIC_COMPLETE_URL}${encodeURIComponent(study.completionCode)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Complete on Prolific
+                  </a>
+                </p>
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">
               Published runs are public raw JSON in the open dataset on GitHub (timings,
               environment, generated text for the fixed public prompts). No personal data is

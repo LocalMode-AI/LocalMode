@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] - 2026-09-19
+
+Adds the paid-study session flow to the bench runner for the crowdsourced data collection and fixes a leaderboard caching lag surfaced by the first live protocol-v2 submission. No npm package releases; `apps/ui` only.
+
+### Added
+
+- **`/bench/run` paid-study session support.** When the page is opened with `?PROLIFIC_PID=<id>&cc=<code>`, the run records `prolific:<first 12 hex of SHA-256(id)>` in `environment.userReportedDevice` (the raw id is never stored or published) and, once the run finishes and the automatic upload attempt has resolved, shows the completion code with a link to Prolific's completion page; if the upload failed, it still shows the code with a note to message the researcher (payment is on attempt). A pre-run note tells the participant the code will appear on this page. Covered by the bench e2e real-run lane, which also asserts the raw id never reaches the exported payload.
+
+### Fixed
+
+- **`/api/bench/leaderboard` could serve a pre-submission copy for up to an hour.** The response allowed `stale-while-revalidate=3600`; the edge kept returning the old aggregate 27 minutes after the first v2 run was published while the ISR page had already refreshed. The stale window is now one revalidation period (300 s), matching the page.
+
 ## [2.7.0] - 2026-09-19
 
 Bumps the LocalMode Bench protocol to `localmode-bench/2` after three real-Chrome thorough-suite pilots surfaced measurement defects in the harness and two provider bugs underneath it. The third pilot ran all 51 cells green.

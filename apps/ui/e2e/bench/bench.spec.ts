@@ -107,14 +107,20 @@ test.describe('bench real run (WASM lanes)', () => {
     const expected503 = (e: string) =>
       e.includes('503') && e.includes('/api/bench/submit');
 
-    await page.goto('/bench/run');
+    // Paid-study contract (prolific-study.md §0): the page reads the study
+    // parameters, tells the participant the code comes after the upload, and
+    // must NOT show the completion code before the run + submit attempt resolve.
+    await page.goto('/bench/run?PROLIFIC_PID=5f3a1c2b4d6e7f8091a2b3c4&cc=TESTCODE1');
     const runButton = page.getByRole('button', { name: 'Run benchmark' });
     await expect(runButton).toBeEnabled({ timeout: 15_000 });
+    await expect(page.getByText(/paid study session detected/i)).toBeVisible();
+    await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
 
     // Headless Chromium: WebGPU lanes must be visibly unavailable, not hidden.
     await expect(page.getByText('no WebGPU').first()).toBeVisible();
 
     await runButton.click();
+    await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
 
     // Live progress surfaces through the status live region.
     const status = page.getByRole('status').first();
@@ -141,6 +147,7 @@ test.describe('bench real run (WASM lanes)', () => {
     const exported = JSON.parse(readFileSync(path!, 'utf8')) as {
       protocol: string;
       digest?: string;
+      environment: { userReportedDevice?: string };
       fingerprint: { mflops: number } | null;
       cells: Array<{
         cellId: string;
@@ -156,6 +163,9 @@ test.describe('bench real run (WASM lanes)', () => {
     };
     expect(exported.protocol).toBe('localmode-bench/2');
     expect(exported.digest).toMatch(/^[0-9a-f]{64}$/);
+    // The dataset row carries a 12-hex SHA-256 prefix of the participant id, never the id.
+    expect(exported.environment.userReportedDevice).toMatch(/^prolific:[0-9a-f]{12}$/);
+    expect(JSON.stringify(exported)).not.toContain('5f3a1c2b4d6e7f8091a2b3c4');
     expect(exported.fingerprint?.mflops).toBeGreaterThan(1);
     expect(exported.cells.some((c) => c.status === 'ok' && c.iterations.length > 0)).toBe(true);
 
@@ -186,6 +196,17 @@ test.describe('bench real run (WASM lanes)', () => {
       timeout: 30_000,
     });
     await expect(page.getByRole('button', { name: 'Retry submission' })).toBeVisible();
+
+    // Pay-on-attempt: the completion code appears now that the submit attempt
+    // resolved (here: failed with the dev-mode 503), with the researcher note.
+    const codeRegion = page.getByRole('region', { name: /study completion code/i });
+    await expect(codeRegion).toBeVisible();
+    await expect(codeRegion).toContainText('TESTCODE1');
+    await expect(codeRegion).toContainText(/still paid for the attempt/i);
+    await expect(codeRegion.getByRole('link', { name: /complete on prolific/i })).toHaveAttribute(
+      'href',
+      'https://app.prolific.com/submissions/complete?cc=TESTCODE1',
+    );
 
     expect(
       consoleErrors.filter((e) => !expected503(e)),

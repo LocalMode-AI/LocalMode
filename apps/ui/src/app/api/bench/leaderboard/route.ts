@@ -25,7 +25,10 @@ export async function GET(): Promise<NextResponse> {
     { rows, runs: entries.filter((e) => !e.flagged && e.protocol === BENCH_PROTOCOL_VERSION).length, repo },
     {
       headers: {
-        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=3600',
+        // Stale window capped to one revalidation period: with an hour of
+        // stale-while-revalidate the edge kept serving a pre-submission copy
+        // for 27 minutes after a run was published (observed 2026-09-19).
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=300',
         'Access-Control-Allow-Origin': '*',
       },
     },
