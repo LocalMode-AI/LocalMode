@@ -349,6 +349,12 @@ const model = wllama.languageModel('my-repo/my-vlm-GGUF:model.gguf', {
 });
 ```
 
+To use a vision model for text only, pass `vision: false`. The language model then loads alone: no projector download (557 MB for Gemma 4 E2B), no projector memory (a 3.46 GB GGUF plus its projector does not fit the CPU-only 4 GB wasm heap), and wllama's model cache stays enabled (it is switched off for multi-file sources, which otherwise re-downloads the weights on every load). `supportsVision` reports false and image parts are rejected.
+
+```typescript
+const textOnly = wllama.languageModel('Gemma-4-E2B-IT-Q4_K_M', { vision: false });
+```
+
 ## Audio Input (Experimental)
 
 Models that accept audio content parts can receive audio alongside text. Audio data is passed as base64-encoded strings and converted to ArrayBuffer internally:

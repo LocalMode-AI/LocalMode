@@ -12,7 +12,7 @@
 export { createWllama, wllama } from './provider.js';
 
 // Model implementations
-export { WllamaLanguageModel, createLanguageModel, resolveGpuLayers, predictGpuAccelerated } from './model.js';
+export { WllamaLanguageModel, createLanguageModel, resolveGpuLayers, predictGpuAccelerated, resolveMmprojUrl } from './model.js';
 export { createOffloadCapturingLogger } from './wllama-loader.js';
 export type { OffloadedLayers, WllamaLoggerLike } from './wllama-loader.js';
 export { WllamaEmbeddingModel } from './embedding.js';

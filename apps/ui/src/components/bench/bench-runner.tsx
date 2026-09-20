@@ -66,7 +66,7 @@ import {
   TableRow,
 } from '@/registry/localmode/ui/table';
 
-const HARNESS_VERSION = '0.5.0';
+const HARNESS_VERSION = '0.6.0';
 
 type Phase = 'idle' | 'running' | 'done' | 'error';
 
@@ -339,6 +339,7 @@ export function BenchRunner() {
   const [finished, setFinished] = useState<Map<string, FinishedCellInfo>>(() => new Map());
   const [currentCellId, setCurrentCellId] = useState<string | null>(null);
   const cellStartRef = useRef<number | null>(null);
+  const currentCellRef = useRef<string | null>(null);
   /** Lanes whose model has been loaded (their first cell has started), for the estimate. */
   const [loadedLanes, setLoadedLanes] = useState<Set<string>>(() => new Set());
   const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
@@ -417,7 +418,12 @@ export function BenchRunner() {
   }, [suite, availability]);
 
   const activeLanes = lanes.filter((l) => l.available && !disabledLanes.has(laneKey(l.model)));
-  const totalDownload = activeLanes.reduce((acc, l) => acc + (l.model.sizeBytes ?? 0), 0);
+  // The two llama.cpp lanes share one GGUF per model (same URL, one provider
+  // cache), so a file is counted once no matter how many lanes load it.
+  const totalDownload = [...new Map(activeLanes.map((l) => [l.model.url ?? laneKey(l.model), l.model.sizeBytes ?? 0])).values()].reduce(
+    (acc, bytes) => acc + bytes,
+    0,
+  );
 
   /**
    * Every lane of the suite becomes cells, so a suite result always lists the
@@ -522,8 +528,10 @@ export function BenchRunner() {
       ]);
       const cells = buildCells();
       // The overlay lists steps in the order the runner executes them.
+      const ordered = orderCells(cells);
+      const orderedIds = ordered.map((c) => `${c.model.runtimeId}/${c.model.benchModelId}/${c.workload.id}`);
       setPlanned(
-        orderCells(cells).map((c) => ({
+        ordered.map((c) => ({
           cellId: `${c.model.runtimeId}/${c.model.benchModelId}/${c.workload.id}`,
           runtimeId: c.model.runtimeId,
           laneKey: laneKey(c.model),
@@ -575,6 +583,7 @@ export function BenchRunner() {
             setActivity(null);
             setCellStartedAt(Date.now());
             setLastActivityAt(Date.now());
+            currentCellRef.current = cellId;
             setCurrentCellId(cellId);
             cellStartRef.current = Date.now();
             const lane = cellId.split('/').slice(0, 2).join('/');
@@ -586,6 +595,28 @@ export function BenchRunner() {
             const at = Date.now();
             setActivity({ ...a, at });
             setLastActivityAt(at);
+            if (a.phase === 'load' || a.phase === 'warmup' || a.phase === 'reload') {
+              // A model group's load and warmup happen before its first timed
+              // cell starts, so the step line follows the lane being loaded
+              // instead of the step that just finished.
+              if (currentCellRef.current !== a.cellId) {
+                currentCellRef.current = a.cellId;
+                setCurrentCellId(a.cellId);
+                const index = orderedIds.indexOf(a.cellId);
+                if (index >= 0) setCellProgress({ index: index + 1, total: orderedIds.length });
+                setCellStartedAt(at);
+                setLoadPct(null);
+              }
+              if (a.phase !== 'load' || a.pct === undefined) {
+                setStatusLine(
+                  a.phase === 'reload'
+                    ? `Reloading ${a.cellId} from the cache`
+                    : a.phase === 'warmup'
+                      ? `Warming up ${a.cellId}`
+                      : `Loading ${a.cellId}`,
+                );
+              }
+            }
             if ((a.phase === 'load' || a.phase === 'reload') && typeof a.pct === 'number') {
               // Download rate from consecutive progress events on the same load.
               const size = cells.find((c) => `${c.model.runtimeId}/${c.model.benchModelId}/${c.workload.id}` === a.cellId)?.model.sizeBytes ?? 0;

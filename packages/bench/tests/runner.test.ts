@@ -90,6 +90,29 @@ describe('runBenchmarkSuite()', () => {
     expect(adapter.loadCalls).toBe(2);
   });
 
+  it('records the warm-reload backend and runtime configuration before the reloaded instance is disposed', async () => {
+    // An adapter may report its backend and configuration lazily off a
+    // provider that forgets its load report on unload; the runner used to
+    // read them after disposing the reloaded instance.
+    const adapter = makeMockLLMAdapter({ cached: false, lazyRuntimeConfig: true });
+    const result = await runBenchmarkSuite({
+      suite: 'custom',
+      cells: [{ model: MODEL_REF, workload: LLM_WORKLOADS[0] }],
+      policy: { ...TEST_POLICY, measureWarmReload: true },
+      llmAdapters: new Map([[adapter.runtimeId, adapter]]),
+      embedAdapters: new Map(),
+      harness: HARNESS,
+      skipFingerprint: true,
+    });
+    const timed = result.cells.find((c) => c.workloadId === LLM_WORKLOADS[0].id);
+    const warm = result.cells.find((c) => c.workloadId === 'warm-reload');
+    expect(timed?.resolvedBackend).toBe('webgpu');
+    expect(timed?.runtimeConfig).toEqual({ n_gpu_layers: -1, offloadedLayers: '31/31' });
+    expect(warm?.resolvedBackend).toBe('webgpu');
+    expect(warm?.runtimeConfig).toEqual({ n_gpu_layers: -1, offloadedLayers: '31/31' });
+    expect(adapter.disposeCalls).toBe(2);
+  });
+
   it('marks cells skipped when the runtime is unavailable, with the reason', async () => {
     const adapter = makeMockLLMAdapter({ available: { ok: false, reason: 'no WebGPU adapter' } });
     const result = await runBenchmarkSuite({
@@ -202,6 +225,30 @@ describe('runBenchmarkSuite()', () => {
       skipFingerprint: true,
     });
     expect(result.cells[0].error?.causeStack?.length).toBe(4_000);
+  });
+
+  it('cools down only after a group that ran something', async () => {
+    // A submitter who switches off most lanes of the Thorough suite leaves
+    // dozens of all-skipped groups; each used to pay the inter-group cooldown
+    // and the pressure gate although nothing had warmed the device.
+    const adapter = makeMockLLMAdapter();
+    const disabled = { ...MODEL_REF, benchModelId: 'disabled-model', providerModelId: 'disabled/model.gguf' };
+    const result = await runBenchmarkSuite({
+      suite: 'custom',
+      cells: [
+        { model: disabled, workload: LLM_WORKLOADS[0], skipReason: 'lane disabled by the submitter' },
+        { model: disabled, workload: LLM_WORKLOADS[1], skipReason: 'lane disabled by the submitter' },
+        { model: MODEL_REF, workload: LLM_WORKLOADS[0] },
+      ],
+      policy: { ...TEST_POLICY, measureWarmReload: false },
+      llmAdapters: new Map([[adapter.runtimeId, adapter]]),
+      embedAdapters: new Map(),
+      harness: HARNESS,
+      skipFingerprint: true,
+    });
+    expect(result.cells.map((c) => c.status)).toEqual(['skipped', 'skipped', 'ok']);
+    expect(result.events.filter((e) => e.type === 'cooldown-start')).toHaveLength(1);
+    expect(result.events.filter((e) => e.type === 'cooldown-end')).toHaveLength(1);
   });
 
   it('marks a planned cell skipped with its skipReason without touching the adapter', async () => {

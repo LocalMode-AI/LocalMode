@@ -58,7 +58,7 @@ in-instance window without it.
    `protocol`).
 
 The leaderboard aggregates only index entries whose `protocol` matches the
-current `BENCH_PROTOCOL_VERSION` (`localmode-bench/3`); entries without the
+current `BENCH_PROTOCOL_VERSION` (`localmode-bench/4`); entries without the
 field predate v2 and are excluded. After a protocol bump the leaderboard is
 therefore empty until the first run under the new protocol is published.
 Archived runs stay in `runs/` as-is and are never re-scored.

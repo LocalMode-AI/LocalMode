@@ -70,7 +70,7 @@ test.describe('bench shell (zero model bytes)', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: /localmode bench methodology/i }),
     ).toBeVisible();
-    await expect(page.getByText('localmode-bench/3').first()).toBeVisible();
+    await expect(page.getByText('localmode-bench/4').first()).toBeVisible();
     for (const section of ['Metric definitions', 'Run policy', 'Statistics', 'Submission integrity']) {
       await expect(page.getByRole('heading', { name: section })).toBeVisible();
     }
@@ -195,7 +195,7 @@ test.describe('bench real run (WASM lanes)', () => {
         decodeCharsPerSec?: { median: number };
       }>;
     };
-    expect(exported.protocol).toBe('localmode-bench/3');
+    expect(exported.protocol).toBe('localmode-bench/4');
     expect(exported.digest).toMatch(/^[0-9a-f]{64}$/);
     // The dataset row carries a 12-hex SHA-256 prefix of the participant id, never the id.
     expect(exported.environment.userReportedDevice).toMatch(/^prolific:[0-9a-f]{12}$/);
@@ -239,7 +239,7 @@ test.describe('bench real run (WASM lanes)', () => {
     expect(env.locale?.timeZone).toBeTruthy();
     expect(env.network?.online).toBe(true);
     // Runtime versions are stamped at build time from the installed packages.
-    expect(exported.harness.version).toBe('0.5.0');
+    expect(exported.harness.version).toBe('0.6.0');
     expect(exported.harness.runtimeVersions?.['@huggingface/transformers']).toMatch(/^\d+\.\d+\.\d+/);
     expect(exported.harness.runtimeVersions?.['@wllama/wllama']).toMatch(/^\d+\.\d+\.\d+/);
     for (const cell of exported.cells.filter((c) => c.status === 'ok')) {
@@ -266,7 +266,7 @@ test.describe('bench real run (WASM lanes)', () => {
     // wherever the browser has it; headless Chromium has none, so the report
     // must still read 0/N and the config must show the CPU pin).
     expect(wllamaChat?.resolvedBackend).toBe('wasm');
-    expect(wllamaChat?.runtimeConfig).toMatchObject({ n_gpu_layers: 0, cache_prompt: false, webgpu_adapter: false });
+    expect(wllamaChat?.runtimeConfig).toMatchObject({ n_gpu_layers: 0, cache_prompt: false, webgpu_adapter: false, mmproj: false });
     // llama.cpp prints its offload line only when it found a GPU device; headless
     // Chromium exposes navigator.gpu but yields no adapter, so the record reads
     // "unreported", which with webgpu_adapter: false is an unambiguous CPU run.
@@ -361,9 +361,9 @@ test.describe('bench real run (WASM lanes)', () => {
       cells: Array<{ cellId: string; status: string; memory?: { postRun?: number } }>;
     };
     expect(partial.partial).toBe(true);
-    expect(partial.protocol).toBe('localmode-bench/3');
+    expect(partial.protocol).toBe('localmode-bench/4');
     expect(partial.suite).toBe('quick');
-    expect(partial.harness.version).toBe('0.5.0');
+    expect(partial.harness.version).toBe('0.6.0');
     // The environment landed before the first cell, so a crash during the first
     // model load still identifies the device.
     expect(partial.environment?.browser.engine).toBe('Blink');

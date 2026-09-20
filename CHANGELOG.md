@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.0] - 2026-09-20
+
+Protocol bump to `localmode-bench/4` from the first two runs measured under v3 (a Quick and a Thorough suite on the M4 Mac mini, both green except the three cells below), plus the runner fixes those runs surfaced.
+
+**Released:** `@localmode/wllama` 3.4.0 · `@localmode/bench` 0.6.0.
+
+### Changed
+
+- **The llama.cpp lanes load every language model as text only** (`@localmode/bench` 0.6.0, protocol `localmode-bench/4`). The wllama provider attaches the vision projector its catalog lists for Gemma 4 E2B, so under v3 both llama.cpp lanes loaded a 557 MB projector the text-only workloads never use: its download and CLIP warmup ran inside the untimed warmup, the provider turned wllama's model cache off for the two-file source (the warmup and the warm reload re-downloaded the 3.46 GB weights), and on the CPU lane the pair did not fit the 4 GB wasm32 heap: `clip_model_loader::warmup` aborted with "insufficient memory (attempted to allocate 157.81 MB)" and all three `wllama/gemma-4-e2b` cells errored, retried, and errored again on the Thorough run. Loaded alone, the same GGUF runs on the CPU lane (36 layers, "offloaded 0/36 layers to GPU", 24 tokens in 2.8 s on the M4). The bench adapters pass the new `vision: false` and record `mmproj: false` in every wllama language cell's `runtimeConfig`. Only the Gemma 4 E2B pairing measured differently under v3; the version is bumped anyway so no leaderboard row mixes the two configurations, and the two v3 runs stay archived as v3.
+- **`@localmode/wllama` 3.4.0: `vision: false`** loads a catalog vision model (Gemma 4 E2B/E4B, Holo2) without its projector: no projector download, no projector memory, wllama's model cache stays enabled, `supportsVision` reports false. `resolveMmprojUrl()` is exported.
+
+### Fixed
+
+- **Warm-reload cells read the reloaded instance's backend and `runtimeConfig` before it is disposed** (`@localmode/bench` 0.6.0); they were read after, which an adapter reporting lazily off a provider that forgets its load report on unload would have turned into stale values. wllama warm-reload cells still carry `offloadedLayers: "unreported"` by design: the warm reload times the provider's preload path (an OPFS cache probe, 340 to 420 ms on the M4), and llama.cpp loads in the untimed warmup of the timed cells, whose `warmupMs` is the real load-from-cache figure.
+- **Skipped lanes cost no cooldown** (`@localmode/bench` 0.6.0). Every model group was followed by the policy cooldown (5 to 10 s) and the pressure gate even when all of its cells were skipped, so a Thorough run with most lanes switched off idled for minutes before its first model loaded.
+- **The download estimate counts a shared model file once.** The two llama.cpp lanes load the same GGUF from one provider cache; the runner's "est. download" summed it twice.
+- **The run overlay's step line follows the model being loaded.** A model group's download and warmup happen before its first timed cell starts, so during a load the overlay kept showing the step that had just finished ("Step 30 of 69: Universal Sentence Encoder" with "downloading 95%" beneath it while LiteRT's Qwen3 was loading); the step line, counter, and status now switch to the lane being loaded, warmed up, or reloaded as soon as its first progress event arrives.
+
 ## [2.11.0] - 2026-09-20
 
 Protocol bump to `localmode-bench/3` after the laptop submissions revealed that the wllama lane had been running on WebGPU while labelled WASM, plus the fixes the same batch of runs asked for.

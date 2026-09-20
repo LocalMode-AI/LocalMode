@@ -225,6 +225,7 @@ function wllamaLoadedInfo(
   llm: { gpuAccelerated?: boolean; offloadedLayers?: { gpu: number; total: number } | null },
   requestedGpuLayers: number,
   webgpuAdapter: boolean,
+  options: { textOnly?: boolean } = {},
 ): { resolvedBackend: string; runtimeConfig: Record<string, string | number | boolean> } {
   const offloaded = llm.offloadedLayers ?? null;
   const gpu = offloaded ? offloaded.gpu > 0 : Boolean(llm.gpuAccelerated);
@@ -238,6 +239,8 @@ function wllamaLoadedInfo(
       webgpu_adapter: webgpuAdapter,
       offloadedLayers: offloaded ? `${offloaded.gpu}/${offloaded.total}` : 'unreported',
       cache_prompt: false,
+      // Language lanes load without a vision projector (see makeWllamaAdapter).
+      ...(options.textOnly ? { mmproj: false } : {}),
     },
   };
 }
@@ -268,12 +271,18 @@ function makeWllamaAdapter(gpu: boolean): LLMRuntimeAdapter {
       abortSignal?.throwIfAborted();
       await mod.preloadModel(model.providerModelId, { onProgress: normalizeProgress(onProgress) });
       abortSignal?.throwIfAborted();
-      const llm = mod.wllama.languageModel(model.providerModelId, { nGpuLayers: requestedGpuLayers });
+      // Text-only workloads: never load a catalog vision projector (Gemma 4
+      // E2B ships one). It is unused, costs a 557 MB download and CLIP warmup,
+      // turns wllama's model cache off for the pair, and does not fit the CPU
+      // lane's 4 GB wasm heap beside the 3.46 GB weights.
+      const llm = mod.wllama.languageModel(model.providerModelId, { nGpuLayers: requestedGpuLayers, vision: false });
       const webgpuAdapter = await hasWebGPUAdapter();
       // The model loads on first use (the runner's untimed warmup), so the
       // backend and offload report are read lazily, after that load.
       const info = () =>
-        wllamaLoadedInfo(llm as unknown as Parameters<typeof wllamaLoadedInfo>[0], requestedGpuLayers, webgpuAdapter);
+        wllamaLoadedInfo(llm as unknown as Parameters<typeof wllamaLoadedInfo>[0], requestedGpuLayers, webgpuAdapter, {
+          textOnly: true,
+        });
       return {
         model: withoutPromptCache(llm) as unknown as LoadedLLM['model'],
         get resolvedBackend() {

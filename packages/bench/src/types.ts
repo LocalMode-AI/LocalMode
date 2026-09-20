@@ -6,7 +6,7 @@
  */
 
 /** Protocol identifier embedded in every result. Bump only with a spec change. */
-export const BENCH_PROTOCOL_VERSION = 'localmode-bench/3';
+export const BENCH_PROTOCOL_VERSION = 'localmode-bench/4';
 
 /** Result JSON schema version (independent of the protocol semantics version). */
 export const BENCH_SCHEMA_VERSION = 2;

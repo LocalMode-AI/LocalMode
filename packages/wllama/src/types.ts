@@ -138,6 +138,19 @@ export interface WllamaModelSettings {
   mmprojUrl?: string;
 
   /**
+   * Load the vision projector so image parts work. Defaults to true, which
+   * loads the catalog's projector for models that ship one (Gemma 4, Holo2)
+   * or an explicit `mmprojUrl`. Set false for text-only use: the language
+   * model loads alone, no projector is downloaded (hundreds of MB), the wasm
+   * heap keeps that memory (a 3.5 GB GGUF plus its projector does not fit the
+   * CPU-only 4 GB heap), and wllama's model cache stays enabled (it is turned
+   * off for multi-file sources), so the load is served from the cache.
+   * `supportsVision` reports false and image parts are rejected.
+   * @default true
+   */
+  vision?: boolean;
+
+  /**
    * Enable reasoning mode (DeepSeek-R1 style thinking).
    */
   reasoning?: boolean;

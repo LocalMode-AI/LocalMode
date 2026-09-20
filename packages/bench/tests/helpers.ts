@@ -108,6 +108,12 @@ export function makeMockLLMAdapter(options?: {
   chunkCount?: number;
   failLoad?: boolean;
   answerText?: string;
+  /**
+   * Report the backend and runtime configuration lazily, and only while the
+   * instance is alive: the wllama adapter reads llama.cpp's offload report
+   * off the provider, which forgets it once the model is unloaded.
+   */
+  lazyRuntimeConfig?: boolean;
 }): LLMRuntimeAdapter & { loadCalls: number; disposeCalls: number } {
   const chunkDelayMs = options?.chunkDelayMs ?? 2;
   const chunkCount = options?.chunkCount ?? 8;
@@ -152,6 +158,22 @@ export function makeMockLLMAdapter(options?: {
           };
         },
       };
+      if (options?.lazyRuntimeConfig) {
+        let alive = true;
+        return {
+          model,
+          get resolvedBackend() {
+            return alive ? 'webgpu' : 'wasm';
+          },
+          get runtimeConfig() {
+            return { n_gpu_layers: -1, offloadedLayers: alive ? '31/31' : 'unreported' };
+          },
+          dispose: async () => {
+            alive = false;
+            adapter.disposeCalls++;
+          },
+        };
+      }
       return {
         model,
         resolvedBackend: 'wasm',

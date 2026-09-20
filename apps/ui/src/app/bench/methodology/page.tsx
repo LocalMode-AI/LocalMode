@@ -60,7 +60,7 @@ export default function BenchMethodologyPage() {
         <div className="flex flex-col gap-3">
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{TITLE}</h1>
           <p>
-            Protocol <code className="rounded bg-muted px-1 font-mono text-sm">localmode-bench/3</code>.
+            Protocol <code className="rounded bg-muted px-1 font-mono text-sm">localmode-bench/4</code>.
             Any change to prompts, budgets, policy numbers, or integrity rules bumps this version;
             archived runs are never re-scored silently. The reference implementation is the
             open-source <code className="rounded bg-muted px-1 font-mono text-sm">@localmode/bench</code>{' '}
@@ -114,7 +114,10 @@ export default function BenchMethodologyPage() {
               initialization (then released) for WebLLM, LiteRT, and Transformers.js, so load
               alone is not comparable across runtimes. The untimed warmup that follows
               records first-inference readiness (engine init, shader/JIT compilation) as its own
-              number; cold start = load + warmup is the cross-runtime comparable figure. Chrome
+              number; cold start = load + warmup is the cross-runtime comparable figure. The
+              warm-reload cell repeats the preload path against a populated cache, so for wllama it
+              times the cache probe and its <code className="font-mono text-sm">offloadedLayers</code>{' '}
+              stays &quot;unreported&quot; (llama.cpp loads in the warmup). Chrome
               Built-in AI is the exception: Chrome downloads Gemini Nano once, browser-wide, and
               only from a user activation, so the Run click starts that download while the other
               lanes run; the lane is recorded cold in that case and its load phase measures the
@@ -179,7 +182,7 @@ export default function BenchMethodologyPage() {
               pressure) fails every later Transformers.js session in the page with the same error,
               which is how an iPhone on iOS 18 lost both Transformers.js lanes to one WebGPU error.
             </li>
-            <li>5–10&nbsp;s cool-down between model groups (5&nbsp;s quick, 8&nbsp;s standard, 10&nbsp;s thorough); on Chromium the next group also waits for CPU pressure to recover (15&nbsp;s cap in quick, 30&nbsp;s otherwise).</li>
+            <li>5–10&nbsp;s cool-down after every model group that ran (5&nbsp;s quick, 8&nbsp;s standard, 10&nbsp;s thorough; a group whose cells were all skipped pays none); on Chromium the next group also waits for CPU pressure to recover (15&nbsp;s cap in quick, 30&nbsp;s otherwise).</li>
             <li>
               A screen wake lock is held; timed regions overlapping a hidden tab, a wake-lock
               release, or a GPU device loss are invalidated and recorded - never silently retried.
@@ -276,6 +279,19 @@ export default function BenchMethodologyPage() {
 
         <Section id="changelog" title="Protocol changelog">
           <ul className="list-disc space-y-2 pl-5">
+            <li>
+              <strong className="text-foreground">localmode-bench/4</strong> (2026-09-20) - the
+              llama.cpp lanes load every language model as text only. The wllama provider attaches
+              the vision projector its catalog lists for Gemma 4 E2B, so under v3 both llama.cpp
+              lanes loaded a 557 MB projector the text-only workloads never use: its download and
+              CLIP warmup ran inside the untimed warmup, the provider turned wllama&apos;s model
+              cache off for the two-file source (so the warmup and the warm reload re-downloaded
+              the 3.46 GB weights), and on the CPU lane the pair did not fit the 4 GB wasm heap,
+              which failed the three Gemma 4 E2B cells on every Thorough run. v4 loads the language
+              model alone (<code className="font-mono text-sm">runtimeConfig.mmproj: false</code>);
+              the other pairings measure exactly as under v3, and the version is bumped so that no
+              leaderboard row mixes the two configurations.
+            </li>
             <li>
               <strong className="text-foreground">localmode-bench/3</strong> (2026-09-20) - the
               wllama lane is split in two. Under v2 the lane was documented and recorded as

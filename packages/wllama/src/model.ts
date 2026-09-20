@@ -102,6 +102,22 @@ export function predictGpuAccelerated(settings: { nGpuLayers?: number; useWebGPU
 }
 
 /**
+ * The vision projector a model loads with: an explicit `mmprojUrl`, else the
+ * catalog's projector for models that ship one, and nothing when the caller
+ * opted out with `vision: false` (text-only: no projector download, no
+ * projector memory, and wllama's model cache stays enabled).
+ */
+export function resolveMmprojUrl(
+  baseModelId: string,
+  settings: Pick<WllamaModelSettings, 'mmprojUrl' | 'vision'>
+): string | undefined {
+  if (settings.vision === false) return undefined;
+  if (settings.mmprojUrl) return settings.mmprojUrl;
+  const entry = (WLLAMA_MODELS as Record<string, { vision?: boolean; mmprojUrl?: string }>)[baseModelId];
+  return entry?.vision && entry?.mmprojUrl ? entry.mmprojUrl : undefined;
+}
+
+/**
  * wllama Language Model implementation.
  *
  * @example
@@ -141,8 +157,7 @@ export class WllamaLanguageModel implements LanguageModel {
     this.modelId = `wllama:${baseModelId}`;
     this.contextLength = settings.contextLength ?? 4096;
 
-    const catalogEntry = (WLLAMA_MODELS as Record<string, { vision?: boolean; mmprojUrl?: string }>)[baseModelId];
-    this.supportsVision = !!(settings.mmprojUrl || (catalogEntry?.vision && catalogEntry?.mmprojUrl));
+    this.supportsVision = resolveMmprojUrl(baseModelId, settings) !== undefined;
   }
 
   /**
@@ -209,7 +224,7 @@ export class WllamaLanguageModel implements LanguageModel {
         const offloadCapture = createOffloadCapturingLogger();
         const wllamaInstance = new Wllama(resolveWasmPath(), { logger: offloadCapture.logger });
 
-        const mmprojUrl = this.settings.mmprojUrl ?? catalogEntry?.mmprojUrl;
+        const mmprojUrl = resolveMmprojUrl(this.baseModelId, this.settings);
         const modelSource = mmprojUrl ? { url: modelUrl, mmprojUrl } : modelUrl;
         const gpuLayers = resolveGpuLayers(this.settings);
 

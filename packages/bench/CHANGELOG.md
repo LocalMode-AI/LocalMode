@@ -1,5 +1,14 @@
 # @localmode/bench
 
+## 0.6.0
+
+Protocol bump to `localmode-bench/4`.
+
+- **llama.cpp lanes load language models as text only.** The host adapters now pass the wllama provider's new `vision: false`, so a GGUF that ships a vision projector in the provider catalog (Gemma 4 E2B) loads without it. Under v3 the projector rode along on both llama.cpp lanes: the text-only workloads never used it, its 557 MB download and CLIP warmup ran inside the untimed warmup, the provider disabled wllama's model cache for the multi-file source (so the warmup and the warm reload re-downloaded the 3.46 GB weights), and on the CPU lane the pair did not fit the 4 GB wasm32 heap (`clip_model_loader::warmup` aborted with "insufficient memory", three error cells on every Thorough run). Only the wllama Gemma 4 E2B cells measured differently under v3; the version is bumped anyway so no leaderboard row mixes the two configurations. wllama lanes record `mmproj: false` in `runtimeConfig`.
+- fix: warm-reload cells read `resolvedBackend` and `runtimeConfig` before the reloaded instance is disposed (they were read after it, so an adapter that reports lazily off a provider which forgets its load report on unload would have recorded stale values). Note that wllama warm-reload cells legitimately carry `offloadedLayers: "unreported"` and the lane's requested backend: the warm reload measures the provider's preload path, an OPFS cache probe, and llama.cpp itself loads in the untimed warmup of the timed cells.
+- fix: a group that ran nothing pays no cooldown. Every model group, including the ones whose cells were all skipped (a lane the submitter switched off, a runtime the browser lacks), was followed by the policy cooldown and the pressure gate; a Thorough run with most lanes switched off spent minutes cooling down after nothing.
+- Schema version stays 2 and plausibility rules stay 2.
+
 ## 0.5.0
 
 Protocol bump to `localmode-bench/3`.

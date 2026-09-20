@@ -117,7 +117,7 @@ vi.mock('@huggingface/gguf', () => ({
 // IMPORTS (after mocks)
 // ═══════════════════════════════════════════════════════════════
 
-import { WllamaLanguageModel, createLanguageModel } from '../src/model.js';
+import { WllamaLanguageModel, createLanguageModel, resolveMmprojUrl } from '../src/model.js';
 import { WllamaEmbeddingModel } from '../src/embedding.js';
 import { createWllama } from '../src/provider.js';
 import { isCrossOriginIsolated, resolveModelUrl } from '../src/utils.js';
@@ -769,6 +769,42 @@ describe('@localmode/wllama', () => {
     it('should set supportsVision=false when no mmprojUrl', () => {
       const model = new WllamaLanguageModel('test-model');
       expect(model.supportsVision).toBe(false);
+    });
+
+    // Catalog vision models attach their projector by default; a text-only
+    // caller (a benchmark lane, a chat app without image input) can opt out.
+    // Without the opt-out, Gemma 4 E2B's 3.46 GB GGUF plus its 557 MB projector
+    // did not fit the CPU-only wasm32 heap and wllama disabled its model cache
+    // for the multi-file source, re-downloading the weights on every load.
+    describe('vision: false (text-only)', () => {
+      it('attaches the catalog projector by default and disables wllama caching for the pair', async () => {
+        const model = new WllamaLanguageModel('Gemma-4-E2B-IT-Q4_K_M');
+        expect(model.supportsVision).toBe(true);
+        await model.doGenerate({ prompt: 'hi' });
+        const [source, opts] = mockState.loadModelFromUrl.mock.calls[0] as [unknown, Record<string, unknown>];
+        expect(source).toEqual({
+          url: WLLAMA_MODELS['Gemma-4-E2B-IT-Q4_K_M'].url,
+          mmprojUrl: WLLAMA_MODELS['Gemma-4-E2B-IT-Q4_K_M'].mmprojUrl,
+        });
+        expect(opts.useCache).toBe(false);
+      });
+
+      it('loads the language model alone with vision: false', async () => {
+        const model = new WllamaLanguageModel('Gemma-4-E2B-IT-Q4_K_M', { vision: false });
+        expect(model.supportsVision).toBe(false);
+        await model.doGenerate({ prompt: 'hi' });
+        const [source, opts] = mockState.loadModelFromUrl.mock.calls[0] as [unknown, Record<string, unknown>];
+        expect(source).toBe(WLLAMA_MODELS['Gemma-4-E2B-IT-Q4_K_M'].url);
+        expect('useCache' in opts).toBe(false);
+      });
+
+      it('vision: false wins over an explicit mmprojUrl', () => {
+        expect(resolveMmprojUrl('test-model', { mmprojUrl: 'https://example.com/mmproj.gguf', vision: false })).toBeUndefined();
+        expect(resolveMmprojUrl('test-model', { mmprojUrl: 'https://example.com/mmproj.gguf' })).toBe('https://example.com/mmproj.gguf');
+        expect(resolveMmprojUrl('Gemma-4-E2B-IT-Q4_K_M', {})).toBe(WLLAMA_MODELS['Gemma-4-E2B-IT-Q4_K_M'].mmprojUrl);
+        expect(resolveMmprojUrl('Gemma-4-E2B-IT-Q4_K_M', { vision: true })).toBe(WLLAMA_MODELS['Gemma-4-E2B-IT-Q4_K_M'].mmprojUrl);
+        expect(resolveMmprojUrl('test-model', {})).toBeUndefined();
+      });
     });
   });
 

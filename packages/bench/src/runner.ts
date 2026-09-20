@@ -159,6 +159,9 @@ export async function runBenchmarkSuite(options: RunSuiteOptions): Promise<Bench
       });
       cells.push(...groupCellsResults);
 
+      // The cooldown lets the device settle after a model ran; a group that
+      // was skipped or unavailable warmed nothing and pays no cooldown.
+      if (!groupCellsResults.some((cell) => cell.status !== 'skipped')) continue;
       trace.record('cooldown-start');
       await sleep(policy.cooldownMs, abortSignal).catch((e) => {
         if ((e as Error).name === 'AbortError') throw e;
@@ -567,6 +570,11 @@ async function runModelGroup(group: ModelGroup, ctx: GroupContext): Promise<Benc
         }
       );
       const end = hrNow();
+      // Read the backend and configuration while the instance is alive: an
+      // adapter may report them lazily off a provider that forgets its load
+      // report once unloaded.
+      const resolvedBackend = reloaded.resolvedBackend;
+      const runtimeConfig = reloaded.runtimeConfig ? { ...reloaded.runtimeConfig } : undefined;
       await safeDispose(reloaded);
       const warmCell: BenchCellResult = {
         cellId: `${model.runtimeId}/${model.benchModelId}/warm-reload`,
@@ -575,8 +583,8 @@ async function runModelGroup(group: ModelGroup, ctx: GroupContext): Promise<Benc
         model,
         workloadId: 'warm-reload',
         workloadKind: 'llm-generate',
-        resolvedBackend: reloaded.resolvedBackend,
-        ...(reloaded.runtimeConfig ? { runtimeConfig: { ...reloaded.runtimeConfig } } : {}),
+        resolvedBackend,
+        ...(runtimeConfig ? { runtimeConfig } : {}),
         load: { cached: true, startT: start, endT: end, declaredBytes: model.sizeBytes },
         iterations: [],
         status: 'ok',

@@ -1,5 +1,11 @@
 # @localmode/wllama
 
+## 3.4.0
+
+### Minor Changes
+
+- feat: `vision: false` loads a vision model as text-only. Catalog vision models (Gemma 4 E2B/E4B, Holo2) attach their projector automatically; the new setting skips it, so no projector is downloaded (557 MB for Gemma 4 E2B), the projector takes no memory, and wllama's model cache stays enabled (the provider turns it off for multi-file sources, which re-downloaded the weights on every load). `supportsVision` reports false. `resolveMmprojUrl()` is exported. Surfaced by the LocalMode Bench: Gemma 4 E2B's 3.46 GB GGUF plus its projector did not fit the CPU-only 4 GB wasm heap (`clip_model_loader::warmup` aborted with "insufficient memory"), and the WebGPU lane paid a second full download inside its warmup.
+
 ## 3.3.0
 
 ### Minor Changes

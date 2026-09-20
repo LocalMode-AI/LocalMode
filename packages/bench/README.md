@@ -9,17 +9,22 @@ rules for community submissions, and leaderboard aggregation.
 The public runner + leaderboard live at **https://localmode.ai/bench**.
 The protocol is documented at **https://localmode.ai/bench/methodology**.
 
-## Protocol (`localmode-bench/3`)
+## Protocol (`localmode-bench/4`)
 
 Result schema version 2 (`BENCH_SCHEMA_VERSION`), plausibility rule set 2
-(`PLAUSIBILITY_RULES_VERSION`). Archived v1 and v2 runs stay published under
-their version and are never re-scored; the public leaderboard at localmode.ai
-aggregates only runs measured under the current protocol (`aggregateRuns()`
-in this package does not filter, so hosts partition by `run.protocol`
-themselves). v3 split the llama.cpp lane: `wllama` is llama.cpp WASM on the
-CPU (`n_gpu_layers: 0`) and `wllama-webgpu` offloads every layer to WebGPU,
-over the same GGUF files; under v2 the single `wllama` lane ran on WebGPU
-wherever the browser had it while recording `wasm` (wllama 3.5's default).
+(`PLAUSIBILITY_RULES_VERSION`). Archived v1, v2, and v3 runs stay published
+under their version and are never re-scored; the public leaderboard at
+localmode.ai aggregates only runs measured under the current protocol
+(`aggregateRuns()` in this package does not filter, so hosts partition by
+`run.protocol` themselves). v3 split the llama.cpp lane: `wllama` is llama.cpp
+WASM on the CPU (`n_gpu_layers: 0`) and `wllama-webgpu` offloads every layer
+to WebGPU, over the same GGUF files; under v2 the single `wllama` lane ran on
+WebGPU wherever the browser had it while recording `wasm` (wllama 3.5's
+default). v4 loads every llama.cpp language model as text only: under v3 the
+Gemma 4 E2B pairing also loaded its 557 MB vision projector (the provider's
+catalog default), which the text-only workloads never use, did not fit the
+CPU lane's 4 GB wasm heap, and disabled wllama's model cache for the pair so
+the warmup and the warm reload re-downloaded the 3.46 GB weights.
 
 - **TTFT** - first non-empty stream chunk minus stream start (`performance.now()`
   wall clock on a cross-origin-isolated page).
