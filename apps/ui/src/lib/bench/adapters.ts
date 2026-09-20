@@ -18,6 +18,7 @@ import type {
   LoadedLLM,
 } from '@localmode/bench';
 import { runtimeVersionFor } from './runtime-versions';
+import { TransformersWorkerLane } from './transformers-worker-client';
 import {
   chromeAIDownloadInFlight,
   chromeAIDownloadPct,
@@ -143,8 +144,27 @@ function makeTransformersLLMAdapter(device: 'webgpu' | 'wasm'): LLMRuntimeAdapte
       return isModelCached(model.providerModelId);
     },
     async load(model, { onProgress, abortSignal }): Promise<LoadedLLM> {
-      const mod = await import('@localmode/transformers');
       abortSignal?.throwIfAborted();
+      if (device === 'wasm') {
+        // The WASM lane runs in a dedicated worker: ONNX Runtime computes on
+        // the calling thread, and a generation on the main thread would leave
+        // the page unable to repaint (and the watchdog unable to fire) until
+        // the request ends. The worker owns its own ONNX runtime instance.
+        const lane = new TransformersWorkerLane();
+        try {
+          await lane.load('llm', model.providerModelId, device, { onProgress: (pct) => onProgress?.({ pct }), abortSignal });
+        } catch (error) {
+          await lane.dispose();
+          throw error;
+        }
+        return {
+          model: lane.languageModel(model.providerModelId) as unknown as LoadedLLM['model'],
+          resolvedBackend: device,
+          runtimeConfig: { device, dtype: model.quantization ?? 'default', worker: true },
+          dispose: () => lane.dispose(),
+        };
+      }
+      const mod = await import('@localmode/transformers');
       // Preload on the lane's own device so the cached artifacts and the
       // throwaway session match what the timed lane runs (the preload
       // disposes its session; the runner's warmup builds the real one).
@@ -154,6 +174,7 @@ function makeTransformersLLMAdapter(device: 'webgpu' | 'wasm'): LLMRuntimeAdapte
       return {
         model: llm as unknown as LoadedLLM['model'],
         resolvedBackend: device,
+        runtimeConfig: { device, dtype: model.quantization ?? 'default', worker: false },
         dispose: () => disposeModel(llm),
       };
     },
@@ -188,13 +209,54 @@ function makeWebLLMAdapter(): LLMRuntimeAdapter {
   };
 }
 
-/** wllama lane (llama.cpp WASM; GPU offload only when explicitly enabled). */
-function makeWllamaAdapter(): LLMRuntimeAdapter {
+/** Thread count the wllama provider uses on an isolated page (its default). */
+function wllamaThreads(): number {
+  return typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : 1;
+}
+
+/**
+ * Backend and configuration record for a loaded wllama model, from what
+ * llama.cpp itself reported at load (`offloaded N/M layers to GPU`), never
+ * from the lane's intent. wllama 3.5 offloads every layer to WebGPU by
+ * default wherever `navigator.gpu` exists, which is why each lane pins
+ * `n_gpu_layers` explicitly: the CPU lane to 0, the WebGPU lane to all.
+ */
+function wllamaLoadedInfo(
+  llm: { gpuAccelerated?: boolean; offloadedLayers?: { gpu: number; total: number } | null },
+  requestedGpuLayers: number,
+  webgpuAdapter: boolean,
+): { resolvedBackend: string; runtimeConfig: Record<string, string | number | boolean> } {
+  const offloaded = llm.offloadedLayers ?? null;
+  const gpu = offloaded ? offloaded.gpu > 0 : Boolean(llm.gpuAccelerated);
   return {
-    runtimeId: 'wllama',
-    runtimeVersion: runtimeVersionFor('wllama'),
-    displayName: 'wllama (llama.cpp WASM)',
+    resolvedBackend: gpu ? 'webgpu' : 'wasm',
+    runtimeConfig: {
+      n_threads: wllamaThreads(),
+      n_gpu_layers: requestedGpuLayers,
+      // llama.cpp prints its offload line only when it found a GPU device, so
+      // "unreported" together with webgpu_adapter: false is an unambiguous CPU run.
+      webgpu_adapter: webgpuAdapter,
+      offloadedLayers: offloaded ? `${offloaded.gpu}/${offloaded.total}` : 'unreported',
+      cache_prompt: false,
+    },
+  };
+}
+
+/**
+ * The two llama.cpp lanes over the same GGUF files: `wllama` runs on the CPU
+ * (WASM SIMD, `n_gpu_layers: 0`) and `wllama-webgpu` offloads every layer
+ * to WebGPU (`n_gpu_layers: -1`). The recorded backend comes from llama.cpp's
+ * own load report, so a lane that did not get what it asked for says so.
+ */
+function makeWllamaAdapter(gpu: boolean): LLMRuntimeAdapter {
+  const runtimeId = gpu ? 'wllama-webgpu' : 'wllama';
+  const requestedGpuLayers = gpu ? -1 : 0;
+  return {
+    runtimeId,
+    runtimeVersion: runtimeVersionFor(runtimeId),
+    displayName: gpu ? 'wllama (llama.cpp WebGPU)' : 'wllama (llama.cpp WASM, CPU)',
     async isAvailable() {
+      if (gpu && !(await hasWebGPUAdapter())) return NO_WEBGPU;
       return wllamaAvailability();
     },
     async isModelCached(model) {
@@ -206,12 +268,19 @@ function makeWllamaAdapter(): LLMRuntimeAdapter {
       abortSignal?.throwIfAborted();
       await mod.preloadModel(model.providerModelId, { onProgress: normalizeProgress(onProgress) });
       abortSignal?.throwIfAborted();
-      const llm = mod.wllama.languageModel(model.providerModelId, {});
+      const llm = mod.wllama.languageModel(model.providerModelId, { nGpuLayers: requestedGpuLayers });
+      const webgpuAdapter = await hasWebGPUAdapter();
+      // The model loads on first use (the runner's untimed warmup), so the
+      // backend and offload report are read lazily, after that load.
+      const info = () =>
+        wllamaLoadedInfo(llm as unknown as Parameters<typeof wllamaLoadedInfo>[0], requestedGpuLayers, webgpuAdapter);
       return {
         model: withoutPromptCache(llm) as unknown as LoadedLLM['model'],
-        // WASM by default; gpuAccelerated flips when WebGPU offload engages.
         get resolvedBackend() {
-          return (llm as unknown as { gpuAccelerated?: boolean }).gpuAccelerated ? 'webgpu' : 'wasm';
+          return info().resolvedBackend;
+        },
+        get runtimeConfig() {
+          return info().runtimeConfig;
         },
         dispose: () => disposeModel(llm),
       };
@@ -321,27 +390,50 @@ function makeTransformersEmbedAdapter(device: 'webgpu' | 'wasm'): EmbeddingRunti
       return isModelCached(model.providerModelId);
     },
     async load(model, { onProgress, abortSignal }): Promise<LoadedEmbedder> {
-      const mod = await import('@localmode/transformers');
       abortSignal?.throwIfAborted();
+      if (device === 'wasm') {
+        const lane = new TransformersWorkerLane();
+        let dimensions: number | undefined;
+        try {
+          ({ dimensions } = await lane.load('embedding', model.providerModelId, device, {
+            onProgress: (pct) => onProgress?.({ pct }),
+            abortSignal,
+          }));
+        } catch (error) {
+          await lane.dispose();
+          throw error;
+        }
+        return {
+          model: lane.embeddingModel(model.providerModelId, dimensions ?? 0) as unknown as LoadedEmbedder['model'],
+          resolvedBackend: device,
+          runtimeConfig: { device, worker: true },
+          dispose: () => lane.dispose(),
+        };
+      }
+      const mod = await import('@localmode/transformers');
       await mod.preloadModel(model.providerModelId, { onProgress: normalizeProgress(onProgress), device });
       abortSignal?.throwIfAborted();
       const embedder = mod.transformers.embedding(model.providerModelId, { device });
       return {
         model: embedder as unknown as LoadedEmbedder['model'],
         resolvedBackend: device,
+        runtimeConfig: { device, worker: false },
         dispose: () => disposeModel(embedder),
       };
     },
   };
 }
 
-/** wllama GGUF embedding lane. */
-function makeWllamaEmbedAdapter(): EmbeddingRuntimeAdapter {
+/** wllama GGUF embedding lanes (CPU-pinned and WebGPU, like the LLM lanes). */
+function makeWllamaEmbedAdapter(gpu: boolean): EmbeddingRuntimeAdapter {
+  const runtimeId = gpu ? 'wllama-webgpu' : 'wllama';
+  const requestedGpuLayers = gpu ? -1 : 0;
   return {
-    runtimeId: 'wllama',
-    runtimeVersion: runtimeVersionFor('wllama'),
-    displayName: 'wllama embeddings (GGUF)',
+    runtimeId,
+    runtimeVersion: runtimeVersionFor(runtimeId),
+    displayName: gpu ? 'wllama embeddings (GGUF, WebGPU)' : 'wllama embeddings (GGUF, CPU)',
     async isAvailable() {
+      if (gpu && !(await hasWebGPUAdapter())) return NO_WEBGPU;
       return wllamaAvailability();
     },
     async isModelCached(model) {
@@ -353,10 +445,18 @@ function makeWllamaEmbedAdapter(): EmbeddingRuntimeAdapter {
       abortSignal?.throwIfAborted();
       await mod.preloadModel(model.providerModelId, { onProgress: normalizeProgress(onProgress) });
       abortSignal?.throwIfAborted();
-      const embedder = mod.wllama.embedding(model.providerModelId, {});
+      const embedder = mod.wllama.embedding(model.providerModelId, { nGpuLayers: requestedGpuLayers });
+      const webgpuAdapter = await hasWebGPUAdapter();
+      const info = () =>
+        wllamaLoadedInfo(embedder as unknown as Parameters<typeof wllamaLoadedInfo>[0], requestedGpuLayers, webgpuAdapter);
       return {
         model: embedder as unknown as LoadedEmbedder['model'],
-        resolvedBackend: 'wasm',
+        get resolvedBackend() {
+          return info().resolvedBackend;
+        },
+        get runtimeConfig() {
+          return info().runtimeConfig;
+        },
         dispose: () => disposeModel(embedder),
       };
     },
@@ -394,7 +494,8 @@ export function createLLMAdapters(): Map<string, LLMRuntimeAdapter> {
     ['transformers-webgpu', makeTransformersLLMAdapter('webgpu')],
     ['transformers-wasm', makeTransformersLLMAdapter('wasm')],
     ['webllm', makeWebLLMAdapter()],
-    ['wllama', makeWllamaAdapter()],
+    ['wllama', makeWllamaAdapter(false)],
+    ['wllama-webgpu', makeWllamaAdapter(true)],
     ['litert', makeLiteRTAdapter()],
     ['chrome-ai', makeChromeAIAdapter()],
   ]);
@@ -405,7 +506,8 @@ export function createEmbedAdapters(): Map<string, EmbeddingRuntimeAdapter> {
   return new Map<string, EmbeddingRuntimeAdapter>([
     ['transformers-webgpu', makeTransformersEmbedAdapter('webgpu')],
     ['transformers-wasm', makeTransformersEmbedAdapter('wasm')],
-    ['wllama', makeWllamaEmbedAdapter()],
+    ['wllama', makeWllamaEmbedAdapter(false)],
+    ['wllama-webgpu', makeWllamaEmbedAdapter(true)],
     ['mediapipe', makeMediaPipeEmbedAdapter()],
   ]);
 }

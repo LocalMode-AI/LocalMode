@@ -229,6 +229,33 @@ describe('runBenchmarkSuite()', () => {
     expect(validateRunShape(result)).toEqual([]);
   });
 
+  it('records the runtime configuration the adapter reports after load on every cell of the group', async () => {
+    // The wllama lanes are told apart by n_gpu_layers and llama.cpp's own
+    // offload report; the run file must carry that, not the lane's intent.
+    const adapter = makeMockLLMAdapter();
+    const original = adapter.load.bind(adapter);
+    adapter.load = async (...args) => ({
+      ...(await original(...args)),
+      runtimeConfig: { n_gpu_layers: 0, n_threads: 10, offloadedLayers: '0/31' },
+    });
+    const result = await runBenchmarkSuite({
+      suite: 'custom',
+      cells: [
+        { model: MODEL_REF, workload: LLM_WORKLOADS[0] },
+        { model: MODEL_REF, workload: LLM_WORKLOADS[1] },
+      ],
+      policy: { ...TEST_POLICY, measureWarmReload: false },
+      llmAdapters: new Map([[adapter.runtimeId, adapter]]),
+      embedAdapters: new Map(),
+      harness: HARNESS,
+      skipFingerprint: true,
+    });
+    for (const cell of result.cells) {
+      expect(cell.runtimeConfig).toEqual({ n_gpu_layers: 0, n_threads: 10, offloadedLayers: '0/31' });
+    }
+    expect(validateRunShape(result)).toEqual([]);
+  });
+
   it('hands the environment capture to the host before the first cell runs', async () => {
     const adapter = makeMockLLMAdapter();
     const order: string[] = [];

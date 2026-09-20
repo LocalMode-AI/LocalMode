@@ -15,7 +15,15 @@ import { ModelLoadError, GenerationError } from '@localmode/core';
 // MOCKS — v3 OAI-compatible API shape
 // ═══════════════════════════════════════════════════════════════
 
-const mockState = {
+const mockState: {
+  logger: { debug: (...a: unknown[]) => void } | null;
+  loadModelFromUrl: ReturnType<typeof vi.fn>;
+  createChatCompletion: ReturnType<typeof vi.fn>;
+  createCompletion: ReturnType<typeof vi.fn>;
+  exit: ReturnType<typeof vi.fn>;
+  getChatTemplate: ReturnType<typeof vi.fn>;
+} = {
+  logger: null,
   loadModelFromUrl: vi.fn().mockResolvedValue(undefined),
   createChatCompletion: vi.fn().mockResolvedValue({
     id: 'chatcmpl-1',
@@ -57,13 +65,15 @@ async function* streamOf(chunks: Array<Record<string, unknown>>) {
   for (const chunk of chunks) yield chunk;
 }
 
-vi.mock('../src/wllama-loader.js', () => ({
+vi.mock('../src/wllama-loader.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/wllama-loader.js')>()),
   WLLAMA_CDN_ESM: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.5.1/esm/index.js',
   WLLAMA_CDN_WASM: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.5.1/src/wasm/wllama.wasm',
   importWllama: async () => ({ Wllama: MockWllama }),
 }));
 
-function MockWllama() {
+function MockWllama(_paths: unknown, config?: { logger?: { debug: (...a: unknown[]) => void } }) {
+    mockState.logger = config?.logger ?? null;
     return {
       loadModelFromUrl: (...args: unknown[]) => mockState.loadModelFromUrl(...args),
       createChatCompletion: (...args: unknown[]) => mockState.createChatCompletion(...args),
@@ -766,18 +776,68 @@ describe('@localmode/wllama', () => {
   // WebGPU settings
   // ─────────────────────────────────────────────────────────────
   describe('WebGPU settings', () => {
-    it('should set gpuAccelerated=false by default', () => {
-      const model = new WllamaLanguageModel('test-model');
-      expect(model.gpuAccelerated).toBe(false);
+    // wllama 3.5 offloads every layer to WebGPU by default (n_gpu_layers 99999)
+    // whenever navigator.gpu exists. The provider's report has to follow what
+    // llama.cpp actually did, and `useWebGPU: false` has to actually turn it off:
+    // a benchmark lane documented as "WASM, CPU" ran on WebGPU on every
+    // WebGPU-capable browser while reporting gpuAccelerated=false.
+    const nav = globalThis.navigator as { gpu?: unknown } | undefined;
+
+    afterEach(() => {
+      if (nav && 'gpu' in nav) delete nav.gpu;
     });
 
-    it('should set gpuAccelerated=true when nGpuLayers is set', () => {
-      const model = new WllamaLanguageModel('test-model', { nGpuLayers: 16 });
-      expect(model.gpuAccelerated).toBe(true);
+    it('predicts gpuAccelerated from WebGPU presence by default (wllama offloads unless told otherwise)', () => {
+      expect(new WllamaLanguageModel('test-model').gpuAccelerated).toBe(false);
+      (globalThis as { navigator: { gpu?: unknown } }).navigator.gpu = {};
+      expect(new WllamaLanguageModel('test-model').gpuAccelerated).toBe(true);
+      expect(new WllamaLanguageModel('test-model', { useWebGPU: 'auto' }).gpuAccelerated).toBe(true);
+      expect(new WllamaLanguageModel('test-model', { useWebGPU: false }).gpuAccelerated).toBe(false);
+    });
+
+    it('should set gpuAccelerated=true when nGpuLayers is set and WebGPU exists (no GPU device, no offload)', () => {
+      expect(new WllamaLanguageModel('test-model', { nGpuLayers: 16 }).gpuAccelerated).toBe(false);
+      (globalThis as { navigator: { gpu?: unknown } }).navigator.gpu = {};
+      expect(new WllamaLanguageModel('test-model', { nGpuLayers: 16 }).gpuAccelerated).toBe(true);
     });
 
     it('should set gpuAccelerated=false when nGpuLayers is 0', () => {
       const model = new WllamaLanguageModel('test-model', { nGpuLayers: 0 });
+      expect(model.gpuAccelerated).toBe(false);
+    });
+
+    it('passes n_gpu_layers: 0 to wllama for useWebGPU: false (wllama would otherwise offload by default)', async () => {
+      (globalThis as { navigator: { gpu?: unknown } }).navigator.gpu = {};
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf', useWebGPU: false });
+      await model.doGenerate({ prompt: 'hi' });
+      const options = mockState.loadModelFromUrl.mock.calls[0][1] as { n_gpu_layers?: number };
+      expect(options.n_gpu_layers).toBe(0);
+    });
+
+    it('leaves n_gpu_layers to wllama by default and reports the offload llama.cpp logged', async () => {
+      (globalThis as { navigator: { gpu?: unknown } }).navigator.gpu = {};
+      mockState.loadModelFromUrl.mockImplementation(async () => {
+        // The provider hands wllama a logger; llama.cpp's load log names the outcome.
+        mockState.logger?.debug('llama_prepare_model_devices: using device WebGPU (WebGPU) (unknown id) - 4096 MiB free');
+        mockState.logger?.debug('load_tensors: offloaded 31/31 layers to GPU');
+      });
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      await model.doGenerate({ prompt: 'hi' });
+      const options = mockState.loadModelFromUrl.mock.calls[0][1] as { n_gpu_layers?: number };
+      expect(options.n_gpu_layers).toBeUndefined();
+      expect(model.offloadedLayers).toEqual({ gpu: 31, total: 31 });
+      expect(model.gpuAccelerated).toBe(true);
+    });
+
+    it('reports gpuAccelerated=false after a load that offloaded nothing, whatever was predicted', async () => {
+      (globalThis as { navigator: { gpu?: unknown } }).navigator.gpu = {};
+      mockState.loadModelFromUrl.mockImplementation(async () => {
+        mockState.logger?.debug('load_tensors: offloaded 0/31 layers to GPU');
+      });
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      expect(model.gpuAccelerated).toBe(true);
+      await model.doGenerate({ prompt: 'hi' });
+      expect(model.offloadedLayers).toEqual({ gpu: 0, total: 31 });
       expect(model.gpuAccelerated).toBe(false);
     });
   });

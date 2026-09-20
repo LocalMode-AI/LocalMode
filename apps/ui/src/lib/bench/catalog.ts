@@ -7,8 +7,12 @@
 
 import type { BenchModelRef, BenchSuiteId } from '@localmode/bench';
 
-/** All benchmarkable model lanes. */
-export const BENCH_MODELS: readonly BenchModelRef[] = [
+/**
+ * The lanes authored by hand. The `wllama` entries are the CPU lane; the
+ * `wllama-webgpu` lane is derived from them below (same GGUF files, every
+ * layer offloaded to WebGPU), so the two llama.cpp lanes can never drift.
+ */
+const AUTHORED_MODELS: readonly BenchModelRef[] = [
   // --- SmolLM2 135M — the quick-suite tiny pairing ---
   {
     benchModelId: 'smollm2-135m',
@@ -232,6 +236,19 @@ export const BENCH_MODELS: readonly BenchModelRef[] = [
     parameterCount: '~110M',
   },
 ] as const;
+
+/** The llama.cpp WebGPU lane: the wllama entries with all layers offloaded to the GPU. */
+const WLLAMA_WEBGPU_MODELS: readonly BenchModelRef[] = AUTHORED_MODELS.filter(
+  (m) => m.runtimeId === 'wllama',
+).map((m) => ({
+  ...m,
+  runtimeId: 'wllama-webgpu',
+  displayName: m.displayName.replace('(GGUF', '(GGUF WebGPU,'),
+  requiresWebGPU: true,
+}));
+
+/** All benchmarkable model lanes. */
+export const BENCH_MODELS: readonly BenchModelRef[] = [...AUTHORED_MODELS, ...WLLAMA_WEBGPU_MODELS];
 
 /** Model lanes per suite preset (custom suites pick freely). */
 export const SUITE_MODELS: Record<Exclude<BenchSuiteId, 'custom'>, string[]> = {

@@ -1,5 +1,17 @@
 # @localmode/bench
 
+## 0.5.0
+
+Protocol bump to `localmode-bench/3`.
+
+- **The wllama lane ran on WebGPU while labelled WASM.** wllama 3.5 offloads every layer to WebGPU by default (`n_gpu_layers` 99999) wherever the browser exposes `navigator.gpu`, and the host adapter never pinned it; llama.cpp's own load log on the pilot machine reads "offloaded 31/31 layers to GPU" while every v2 run file records `resolvedBackend: "wasm"` for the lane. On an Apple M4 the mislabelled "WASM" SmolLM2 decode was 612 chars/s where the CPU path measures 279 (TTFT 71 ms vs 668 ms). v3 defines `wllama` as llama.cpp on the CPU (`n_gpu_layers: 0`) and adds the `wllama-webgpu` runtime lane (every layer offloaded) over the same GGUF files; `BenchRuntimeId` gains `'wllama-webgpu'`, `RUNTIME_EXECUTION_ORDER` runs it just before `wllama`, `USAGE_FIDELITY` covers it. Archived v2 runs stay published as v2; read their wllama cells as WebGPU wherever `environment.gpu.available` is true.
+- feat: `runtimeConfig` on cells. Adapters may return `runtimeConfig` (a flat record: thread count, GPU layers requested, llama.cpp's offload report, dtype, device, ...) from `load()`, and the runner copies it onto every cell of the group and onto warm-reload cells: the per-cell equal-care record the methodology asks for. The localmode.ai adapters read the wllama backend from llama.cpp's offload report, never from the lane's request.
+- `RUNTIME_EXECUTION_ORDER` now runs `transformers-wasm` before `transformers-webgpu`. Transformers.js 4.2 serializes every ONNX session creation on one promise chain (`webInitChain = webInitChain.then(load)`) and never catches a rejection on it, so the first session that fails to create fails every later Transformers.js session in the page with the same error; an iPhone on iOS 18.7 (run d0568952) lost all six Transformers.js cells to one WebGPU `webgpuInit is not a function`, and the earlier "ORT heap exhaustion cascade" on the 16 GB Mac has the same shape. The WASM lane now measures before any WebGPU failure can poison the chain; the upstream bug is reported separately.
+- feat: the runner never hangs. Every load, warmup, timed iteration, embedding call, and quality lane runs under a watchdog (`RunPolicy.loadStallMs`/`loadTimeoutMs`/`chunkStallMs`/`iterationTimeoutMs`/`qualityTimeoutMs`): a stream that delivers nothing for 2 minutes, a load that reports no progress for 3, or a call that outlives its absolute budget is aborted with a `TimeoutError` (recorded as a `cell-timeout` trace event), the cell is retried up to `RunPolicy.maxAttempts` (2), and then recorded as an error while the run moves on. Failed attempts stay on the cell in `attempts` (`cell-retry` trace event); nothing is retried silently. The stall check compares progress timestamps when a timer fires, so a main thread blocked by WASM compute is judged on the progress it reports once it yields.
+- feat: `RunnerHooks.onActivity` reports every observable step (phase starts, load progress, each streamed chunk with running character and chunk counts, each quality item) and `RunnerHooks.onCellRetry` every retry, so a host can show at a glance whether a run is alive.
+- feat: hidden-tab recovery. A timed iteration the tab was hidden during used to invalidate the whole cell and the run moved on. Browsers deprioritize background tabs (throttled timers, lower process priority, throttled GPU work, suspended tabs on iOS), so such an iteration measures browser scheduling, not the runtime; it is now kept on the cell in `discardedIterations` with its gates, the runner waits for the tab to be visible again (`RunPolicy.visibilityWaitMs`, 10 minutes; a `waiting-visible` activity tells the host), and repeats the iteration, up to `maxAttempts` times per iteration (`iteration-redo` trace event). Before any timed iteration starts on a hidden tab the runner waits the same way. A tab that stays hidden leaves the cell `invalid` with the reason, as before. `RunSuiteOptions.trace` lets tests inject a trace recorder with driven visibility.
+- Schema version stays 2 (additive fields) and plausibility rules stay 2 (no rule changed).
+
 ## 0.4.0
 
 - feat: `PlannedCell.skipReason`. A planned cell carrying a reason is recorded as `skipped` with that reason and never touches the adapter, so a host can keep every cell a suite defines in the result (lanes the submitter switched off, or builds the device cannot run) instead of dropping them; the model still loads once for the group's remaining cells. Run 97863956 (a "thorough" run holding only the three Gemini Nano cells) is the case this closes.
@@ -112,6 +124,6 @@ Initial release - protocol `localmode-bench/1`.
   annotated), deterministic matmul calibration check.
 - Canonical JSON + SHA-256 run digests; leaderboard aggregation with
   median-of-medians and min-3-submission provisional flags; long-format CSV
-  export for paper analysis (`scripts/analyze.ts`).
+  export for offline analysis (`scripts/analyze.ts`).
 - Quality-fidelity lane: tinyMMLU-100 (MIT) accuracy + STS-B-100 (CC BY-SA,
   isolated directory) Spearman, temperature 0.

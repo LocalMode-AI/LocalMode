@@ -23,7 +23,13 @@ import { WLLAMA_MODELS } from './models.js';
 import { isCrossOriginIsolated, resolveModelUrl } from './utils.js';
 import { parseGGUFMetadata } from './gguf.js';
 
-import { importWllama, WLLAMA_CDN_WASM, type WllamaInstance } from './wllama-loader.js';
+import {
+  createOffloadCapturingLogger,
+  importWllama,
+  WLLAMA_CDN_WASM,
+  type OffloadedLayers,
+  type WllamaInstance,
+} from './wllama-loader.js';
 
 let corsWarningEmitted = false;
 
@@ -61,32 +67,38 @@ export function resolveWasmPath(): { default: string } {
   return { default: WLLAMA_CDN_WASM };
 }
 
+/** Whether the page exposes WebGPU (wllama offloads to it by default when it does). */
+function webgpuPresent(): boolean {
+  return typeof navigator !== 'undefined' && 'gpu' in navigator && Boolean((navigator as { gpu?: unknown }).gpu);
+}
+
 /**
- * Resolve n_gpu_layers from settings and WebGPU availability.
+ * Resolve the `n_gpu_layers` to hand wllama. wllama 3.5 offloads every layer
+ * to WebGPU by default (n_gpu_layers 99999) whenever `navigator.gpu` exists,
+ * so `undefined` here means "wllama's default, GPU when available";
+ * `useWebGPU: false` must pin 0 explicitly or it changes nothing.
  * @internal
  */
-function resolveGpuLayers(settings: WllamaModelSettings): number | undefined {
-  if (settings.nGpuLayers !== undefined) {
-    return settings.nGpuLayers;
-  }
+export function resolveGpuLayers(settings: {
+  nGpuLayers?: number;
+  useWebGPU?: boolean | 'auto';
+}): number | undefined {
+  if (settings.nGpuLayers !== undefined) return settings.nGpuLayers;
+  if (settings.useWebGPU === false) return 0;
   if (settings.useWebGPU === true) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports -- optional peer dep probed synchronously; import() would force this sync helper async
-      const { isWebGPUSupported } = require('@localmode/core') as { isWebGPUSupported: () => boolean };
-      if (isWebGPUSupported()) return -1;
-    } catch { /* core not available */ }
+    if (webgpuPresent()) return -1;
     console.warn('[wllama] WebGPU requested but not available, falling back to WASM');
-    return undefined;
+    return 0;
   }
-  if (settings.useWebGPU === 'auto') {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports -- optional peer dep probed synchronously; import() would force this sync helper async
-      const { isWebGPUSupported } = require('@localmode/core') as { isWebGPUSupported: () => boolean };
-      if (isWebGPUSupported()) return -1;
-    } catch { /* core not available */ }
-    return undefined;
-  }
+  // 'auto' and unset: wllama decides (GPU when navigator.gpu exists).
   return undefined;
+}
+
+/** What a load will do before it has happened: GPU unless pinned off or absent. */
+export function predictGpuAccelerated(settings: { nGpuLayers?: number; useWebGPU?: boolean | 'auto' }): boolean {
+  const layers = resolveGpuLayers(settings);
+  if (layers !== undefined) return layers !== 0 && webgpuPresent();
+  return webgpuPresent();
 }
 
 /**
@@ -110,7 +122,13 @@ export class WllamaLanguageModel implements LanguageModel {
   readonly provider = 'wllama';
   readonly supportsVision: boolean;
   contextLength: number;
-  readonly gpuAccelerated: boolean;
+
+  /**
+   * Layers llama.cpp reported offloading to the GPU once the model loaded
+   * (`load_tensors: offloaded N/M layers to GPU`), null before load or when
+   * the runtime printed no such line.
+   */
+  offloadedLayers: OffloadedLayers | null = null;
 
   private wllamaInstance: WllamaInstance | null = null;
   private loadPromise: Promise<WllamaInstance> | null = null;
@@ -125,9 +143,17 @@ export class WllamaLanguageModel implements LanguageModel {
 
     const catalogEntry = (WLLAMA_MODELS as Record<string, { vision?: boolean; mmprojUrl?: string }>)[baseModelId];
     this.supportsVision = !!(settings.mmprojUrl || (catalogEntry?.vision && catalogEntry?.mmprojUrl));
+  }
 
-    const gpuLayers = resolveGpuLayers(settings);
-    this.gpuAccelerated = gpuLayers !== undefined && gpuLayers !== 0;
+  /**
+   * Whether inference runs on WebGPU. After the model loads this follows what
+   * llama.cpp reported (any layer offloaded); before that it is the prediction
+   * from the settings and `navigator.gpu`. wllama offloads by default when
+   * WebGPU exists, so only `useWebGPU: false` or `nGpuLayers: 0` keep it off.
+   */
+  get gpuAccelerated(): boolean {
+    if (this.offloadedLayers) return this.offloadedLayers.gpu > 0;
+    return predictGpuAccelerated(this.settings);
   }
 
   /** @internal */
@@ -180,7 +206,8 @@ export class WllamaLanguageModel implements LanguageModel {
           text: `Loading GGUF model: ${this.baseModelId}`,
         });
 
-        const wllamaInstance = new Wllama(resolveWasmPath());
+        const offloadCapture = createOffloadCapturingLogger();
+        const wllamaInstance = new Wllama(resolveWasmPath(), { logger: offloadCapture.logger });
 
         const mmprojUrl = this.settings.mmprojUrl ?? catalogEntry?.mmprojUrl;
         const modelSource = mmprojUrl ? { url: modelUrl, mmprojUrl } : modelUrl;
@@ -223,6 +250,8 @@ export class WllamaLanguageModel implements LanguageModel {
             }
           },
         });
+
+        this.offloadedLayers = offloadCapture.offloaded;
 
         this.settings.onProgress?.({
           status: 'ready',

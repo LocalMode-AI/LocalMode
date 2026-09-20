@@ -96,9 +96,9 @@ export async function captureEnvironment(options?: {
     os,
     hardware: {
       cores: nav?.hardwareConcurrency ?? null,
-      // Chromium reports the real logical core count; Gecko and WebKit clamp or
-      // randomize it, so the label follows the engine, not the brand name.
-      coresClamped: engine !== 'Blink',
+      // Chromium and Firefox (without resist-fingerprinting) report the real
+      // logical core count; WebKit clamps it (8 on macOS, 4 on iOS).
+      coresClamped: engine === 'WebKit' || engine === 'unknown',
       deviceMemoryGB:
         nav && 'deviceMemory' in nav ? ((nav as { deviceMemory?: number }).deviceMemory ?? null) : null,
       deviceMemoryCapped: true,
@@ -272,19 +272,32 @@ export interface DeviceTypeSignals {
   formFactors?: string[];
   /** UA-CH `mobile` bit. */
   mobile?: boolean;
+  /** UA-CH `platform` (e.g. "Android"), which survives a "desktop site" UA rewrite. */
+  platform?: string;
 }
 
 /**
- * Derive a form factor. UA-CH form factors win when present; otherwise the UA
- * decides, with `maxTouchPoints` unmasking an iPad that reports itself as a
- * Mac (iPadOS 13+ default) and separating Android tablets (no `Mobile` token)
- * from phones.
+ * Derive a form factor. A mobile operating system settles it first: Android
+ * and iOS devices are phones or tablets whatever the form-factor hint says (an
+ * unfolded Galaxy Z Fold sends `formFactors: ["Desktop"]` with a tablet-style
+ * UA). Then UA-CH form factors; then the UA, with `maxTouchPoints` unmasking
+ * an iPad that reports itself as a Mac (iPadOS 13+ default) and separating
+ * Android tablets (no `Mobile` token) from phones.
  *
  * @example
  * deriveDeviceType({ ua: navigator.userAgent, maxTouchPoints: navigator.maxTouchPoints });
  */
 export function deriveDeviceType(signals: DeviceTypeSignals): DeviceType {
-  const { ua, maxTouchPoints, formFactors, mobile } = signals;
+  const { ua, maxTouchPoints, formFactors, mobile, platform } = signals;
+  const mobileOs = platform === 'Android' || platform === 'iOS' || /Android|iPhone|iPad|iPod/.test(ua);
+  if (mobileOs) {
+    if (/iPad/.test(ua)) return 'tablet';
+    if (/iPhone|iPod/.test(ua)) return 'phone';
+    // Android: the Mobile token separates phones from tablets; a "desktop site"
+    // rewrite drops both tokens, and a multi-touch device without them is a tablet.
+    if (/Mobile/.test(ua) || mobile === true) return 'phone';
+    return maxTouchPoints > 1 ? 'tablet' : 'phone';
+  }
   if (formFactors && formFactors.length > 0) {
     const set = new Set(formFactors.map((f) => f.toLowerCase()));
     if (set.has('xr')) return 'xr';
@@ -315,7 +328,7 @@ function probeDevice(
     const maxTouchPoints = typeof nav.maxTouchPoints === 'number' ? nav.maxTouchPoints : 0;
     const formFactors = uaData?.formFactorsHint;
     const mobileBit = uaData?.mobile;
-    const type = deriveDeviceType({ ua, maxTouchPoints, formFactors, mobile: mobileBit });
+    const type = deriveDeviceType({ ua, maxTouchPoints, formFactors, mobile: mobileBit, platform: uaData?.platform });
     const mq = (q: string): boolean | undefined =>
       typeof matchMedia === 'function' ? attempt(() => matchMedia(q).matches) : undefined;
     const displayMode = ['fullscreen', 'standalone', 'minimal-ui', 'browser'].find(

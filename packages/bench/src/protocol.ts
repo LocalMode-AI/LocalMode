@@ -151,19 +151,26 @@ export const WORKLOADS_BY_ID: ReadonlyMap<
 /**
  * Fixed runtime execution order (part of the versioned protocol). This makes
  * the order deterministic so runtime interleaving is not a confounder across
- * runs; it is a reproducibility measure, not a correctness fix. (The
- * Transformers.js ORT-web lanes fail during session creation regardless of
- * where they run in the order - a separate open runtime/adapter issue.) The
- * order runs the WASM-arena runtimes first and the multi-GB-heap runtimes last.
- * Within a runtime, catalog order is preserved.
+ * runs; it is a reproducibility measure, not a correctness fix. The order runs
+ * the WASM-arena runtimes first and the multi-GB-heap runtimes last; within a
+ * runtime, catalog order is preserved.
+ *
+ * The Transformers.js WASM lane runs before its WebGPU lane: Transformers.js
+ * serializes every ONNX session creation on one promise chain and never
+ * catches a rejection on it, so the first session that fails to create (a
+ * WebGPU execution provider the browser cannot initialize, an allocation
+ * failure under memory pressure) fails every later Transformers.js session in
+ * the page with the same error. Running the WASM lane first keeps a WebGPU
+ * failure from taking the CPU measurement with it.
  */
 export const RUNTIME_EXECUTION_ORDER: readonly BenchRuntimeId[] = [
-  'transformers-webgpu',
   'transformers-wasm',
+  'transformers-webgpu',
   'chrome-ai',
   'webllm',
   'mediapipe',
   'litert',
+  'wllama-webgpu',
   'wllama',
 ] as const;
 
@@ -198,7 +205,51 @@ export interface RunPolicy {
   measureWarmReload: boolean;
   /** CV above this fraction marks a summary metric as high-variance. */
   highVarianceCv: number;
+  /**
+   * Watchdog: a load that reports no progress for this long is aborted as a
+   * timeout (stall-based, so a slow link keeps downloading as long as bytes
+   * arrive).
+   */
+  loadStallMs: number;
+  /** Watchdog: absolute cap on one load attempt. */
+  loadTimeoutMs: number;
+  /**
+   * Watchdog: a generation (warmup or timed iteration) whose stream delivers
+   * nothing for this long is aborted as a timeout. A runtime surface that
+   * flushes every chunk in a terminal burst (LiteRT-LM) stays silent for the
+   * whole request, so this is well above a full request.
+   */
+  chunkStallMs: number;
+  /** Watchdog: absolute cap on one generation or embedding call. */
+  iterationTimeoutMs: number;
+  /** Watchdog: absolute cap on one quality-lane cell (many generations). */
+  qualityTimeoutMs: number;
+  /**
+   * Attempts per cell (and per model load) before the cell is recorded as an
+   * error and the run moves on. Every failed attempt stays on the cell in
+   * `attempts`; retries are never silent.
+   */
+  maxAttempts: number;
+  /**
+   * How long the runner waits for a hidden tab to become visible again before
+   * a timed iteration starts, or before it repeats an iteration the tab hid
+   * during. An iteration measured while hidden is kept on the cell in
+   * `discardedIterations` and repeated (up to `maxAttempts` times per
+   * iteration); a tab that stays hidden past this wait leaves the cell invalid.
+   */
+  visibilityWaitMs: number;
 }
+
+/** Watchdog budgets shared by every shipped policy. */
+const WATCHDOG = {
+  loadStallMs: 180_000,
+  loadTimeoutMs: 45 * 60_000,
+  chunkStallMs: 120_000,
+  iterationTimeoutMs: 10 * 60_000,
+  qualityTimeoutMs: 30 * 60_000,
+  maxAttempts: 2,
+  visibilityWaitMs: 10 * 60_000,
+} as const;
 
 /** Policies per suite preset. */
 export const RUN_POLICIES: Record<'quick' | 'standard' | 'thorough', RunPolicy> = {
@@ -210,6 +261,7 @@ export const RUN_POLICIES: Record<'quick' | 'standard' | 'thorough', RunPolicy> 
     pressureGateTimeoutMs: 15_000,
     measureWarmReload: false,
     highVarianceCv: 0.05,
+    ...WATCHDOG,
   },
   standard: {
     warmupRuns: 1,
@@ -219,6 +271,7 @@ export const RUN_POLICIES: Record<'quick' | 'standard' | 'thorough', RunPolicy> 
     pressureGateTimeoutMs: 30_000,
     measureWarmReload: true,
     highVarianceCv: 0.05,
+    ...WATCHDOG,
   },
   thorough: {
     warmupRuns: 1,
@@ -228,5 +281,9 @@ export const RUN_POLICIES: Record<'quick' | 'standard' | 'thorough', RunPolicy> 
     pressureGateTimeoutMs: 30_000,
     measureWarmReload: true,
     highVarianceCv: 0.05,
+    ...WATCHDOG,
+    // Thorough cells run five timed iterations of multi-GB models on slow devices.
+    iterationTimeoutMs: 15 * 60_000,
+    qualityTimeoutMs: 45 * 60_000,
   },
 };

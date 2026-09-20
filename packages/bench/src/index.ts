@@ -84,7 +84,7 @@ export { USAGE_FIDELITY } from './adapter.js';
 
 // Runner
 export { runBenchmarkSuite } from './runner.js';
-export type { PlannedCell, RunnerHooks, RunSuiteOptions } from './runner.js';
+export type { PlannedCell, RunnerActivity, RunnerHooks, RunSuiteOptions } from './runner.js';
 
 // Environment + measurement
 export {
@@ -118,7 +118,7 @@ export {
 } from './validate.js';
 export { canonicalJson, sha256Hex, computeRunDigest, verifyRunDigest } from './canonical.js';
 
-// Aggregation (leaderboard + paper tooling)
+// Aggregation (leaderboard + analysis tooling)
 export {
   aggregateRuns,
   deviceClassOf,

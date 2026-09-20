@@ -17,9 +17,14 @@ import type { WllamaEmbeddingSettings, WllamaLoadProgress } from './types.js';
 import { WLLAMA_MODELS } from './models.js';
 import { isCrossOriginIsolated, resolveModelUrl } from './utils.js';
 import { parseGGUFMetadata } from './gguf.js';
-import { resolveWasmPath } from './model.js';
+import { predictGpuAccelerated, resolveGpuLayers, resolveWasmPath } from './model.js';
 
-import { importWllama, type WllamaInstance } from './wllama-loader.js';
+import {
+  createOffloadCapturingLogger,
+  importWllama,
+  type OffloadedLayers,
+  type WllamaInstance,
+} from './wllama-loader.js';
 
 /**
  * wllama Embedding Model implementation.
@@ -45,10 +50,19 @@ export class WllamaEmbeddingModel implements EmbeddingModel {
   readonly maxEmbeddingsPerCall = 1;
   readonly supportsParallelCalls = false;
 
+  /** Layers llama.cpp reported offloading to the GPU at load (null before load or without the log line). */
+  offloadedLayers: OffloadedLayers | null = null;
+
   private wllamaInstance: WllamaInstance | null = null;
   private loadPromise: Promise<WllamaInstance> | null = null;
   private baseModelId: string;
   private settings: WllamaEmbeddingSettings;
+
+  /** Whether embeddings run on WebGPU: what llama.cpp reported after load, the settings prediction before. */
+  get gpuAccelerated(): boolean {
+    if (this.offloadedLayers) return this.offloadedLayers.gpu > 0;
+    return predictGpuAccelerated(this.settings);
+  }
 
   constructor(baseModelId: string, settings: WllamaEmbeddingSettings = {}) {
     this.baseModelId = baseModelId;
@@ -98,19 +112,10 @@ export class WllamaEmbeddingModel implements EmbeddingModel {
           text: `Loading embedding model: ${this.baseModelId}`,
         });
 
-        const wllamaInstance = new Wllama(resolveWasmPath());
+        const offloadCapture = createOffloadCapturingLogger();
+        const wllamaInstance = new Wllama(resolveWasmPath(), { logger: offloadCapture.logger });
 
-        // Resolve GPU layers
-        let nGpuLayers: number | undefined;
-        if (this.settings.nGpuLayers !== undefined) {
-          nGpuLayers = this.settings.nGpuLayers;
-        } else if (this.settings.useWebGPU === true || this.settings.useWebGPU === 'auto') {
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports -- optional peer dep probed synchronously; import() would force this sync helper async
-            const { isWebGPUSupported } = require('@localmode/core') as { isWebGPUSupported: () => boolean };
-            if (isWebGPUSupported()) nGpuLayers = -1;
-          } catch { /* core not available */ }
-        }
+        const nGpuLayers = resolveGpuLayers(this.settings);
 
         await wllamaInstance.loadModelFromUrl(modelUrl, {
           n_threads: numThreads,
@@ -137,6 +142,7 @@ export class WllamaEmbeddingModel implements EmbeddingModel {
           text: 'Embedding model ready',
         });
 
+        this.offloadedLayers = offloadCapture.offloaded;
         this.wllamaInstance = wllamaInstance;
         return wllamaInstance;
       } catch (error) {

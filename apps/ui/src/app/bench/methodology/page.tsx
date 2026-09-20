@@ -60,7 +60,7 @@ export default function BenchMethodologyPage() {
         <div className="flex flex-col gap-3">
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{TITLE}</h1>
           <p>
-            Protocol <code className="rounded bg-muted px-1 font-mono text-sm">localmode-bench/2</code>.
+            Protocol <code className="rounded bg-muted px-1 font-mono text-sm">localmode-bench/3</code>.
             Any change to prompts, budgets, policy numbers, or integrity rules bumps this version;
             archived runs are never re-scored silently. The reference implementation is the
             open-source <code className="rounded bg-muted px-1 font-mono text-sm">@localmode/bench</code>{' '}
@@ -137,6 +137,22 @@ export default function BenchMethodologyPage() {
         <Section id="policy" title="Run policy">
           <ul className="list-disc space-y-2 pl-5">
             <li>Per cell (runtime × model × workload): 1 untimed warmup, then 3 timed runs (5 in the thorough suite).</li>
+            <li>
+              Watchdog: a load that reports no progress for 3 minutes, a generation that streams
+              nothing for 2 minutes, or a call that outlives its absolute budget (10 to 15 minutes
+              per iteration, 30 to 45 per quality lane) is aborted as a timeout; the cell is retried
+              once with the failed attempt kept on the cell, then recorded as an error, and the run
+              continues. Nothing is retried silently. The Transformers.js WASM lane runs in a
+              dedicated worker so the page stays responsive during inference.
+            </li>
+            <li>
+              Hidden tab: browsers throttle background tabs (timers, process priority, GPU work; iOS
+              can suspend the tab), so a timed iteration the tab was hidden during measures the
+              browser&apos;s scheduling, not the runtime. It is set aside on the cell, the runner waits
+              up to 10 minutes for the tab to be visible again, and the iteration is repeated (twice
+              at most); a tab that stays hidden leaves the cell invalid with the reason. Iterations
+              never start while the tab is hidden.
+            </li>
             <li>Performance runs use temperature 0, a 128-token generation budget, and fixed public prompts.</li>
             <li>
               Every runtime receives the fixed prompt as a single user turn through its own chat
@@ -152,11 +168,16 @@ export default function BenchMethodologyPage() {
               cell is marked invalid rather than scored.
             </li>
             <li>
-              Deterministic runtime execution order: transformers-webgpu, transformers-wasm,
-              chrome-ai, webllm, mediapipe, litert, wllama. Fixing the order makes runs
-              reproducible (runtime interleaving is not a confounder) and runs the WASM-arena
+              Deterministic runtime execution order: transformers-wasm, transformers-webgpu,
+              chrome-ai, webllm, mediapipe, litert, wllama-webgpu, wllama. Fixing the order makes
+              runs reproducible (runtime interleaving is not a confounder) and runs the WASM-arena
               runtimes before the multi-gigabyte-heap runtimes; it is a reproducibility measure,
-              not a correctness fix.
+              not a correctness fix. The Transformers.js WASM lane runs before its WebGPU lane
+              because Transformers.js serializes every ONNX session creation on one promise chain
+              that never catches a rejection: the first session that fails to create (a WebGPU
+              execution provider the browser cannot initialize, an allocation failure under memory
+              pressure) fails every later Transformers.js session in the page with the same error,
+              which is how an iPhone on iOS 18 lost both Transformers.js lanes to one WebGPU error.
             </li>
             <li>5–10&nbsp;s cool-down between model groups (5&nbsp;s quick, 8&nbsp;s standard, 10&nbsp;s thorough); on Chromium the next group also waits for CPU pressure to recover (15&nbsp;s cap in quick, 30&nbsp;s otherwise).</li>
             <li>
@@ -255,6 +276,23 @@ export default function BenchMethodologyPage() {
 
         <Section id="changelog" title="Protocol changelog">
           <ul className="list-disc space-y-2 pl-5">
+            <li>
+              <strong className="text-foreground">localmode-bench/3</strong> (2026-09-20) - the
+              wllama lane is split in two. Under v2 the lane was documented and recorded as
+              llama.cpp on the CPU (WASM), but wllama 3.5 offloads every layer to WebGPU by
+              default whenever the browser exposes it, and llama.cpp&apos;s own load log on those
+              runs reads &quot;offloaded 31/31 layers to GPU&quot;: every v2 wllama cell measured on a
+              WebGPU-capable browser is a llama.cpp-WebGPU number labelled &quot;wasm&quot;, and
+              its comparison against the Transformers.js WASM lane was GPU against CPU. v3 pins
+              the <code className="font-mono text-sm">wllama</code> lane to the CPU (n_gpu_layers 0)
+              and adds <code className="font-mono text-sm">wllama-webgpu</code> (every layer
+              offloaded) over the same GGUF files; every cell now carries a{' '}
+              <code className="font-mono text-sm">runtimeConfig</code> with the thread count, the
+              GPU layers requested, and llama.cpp&apos;s offload report, and the recorded backend
+              follows that report, not the request. Archived v2 runs remain published as v2; read
+              their wllama cells as WebGPU wherever{' '}
+              <code className="font-mono text-sm">environment.gpu.available</code> is true.
+            </li>
             <li>
               <strong className="text-foreground">localmode-bench/2</strong> (2026-09-19) - from
               three real-Chrome thorough-suite pilots; the third ran all 51 cells green. (1)

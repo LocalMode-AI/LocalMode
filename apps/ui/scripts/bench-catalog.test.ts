@@ -23,6 +23,7 @@ function providerEntry(runtimeId: string, providerModelId: string): CatalogEntry
     case 'webllm':
       return (WEBLLM_MODELS as Record<string, CatalogEntry>)[providerModelId];
     case 'wllama':
+    case 'wllama-webgpu':
       return (WLLAMA_MODELS as Record<string, CatalogEntry>)[providerModelId];
     case 'litert':
       return (LITERT_MODELS as Record<string, CatalogEntry>)[providerModelId];
@@ -52,7 +53,24 @@ describe('bench catalog drift guard', () => {
       'transformers-webgpu',
       'webllm',
       'wllama',
+      'wllama-webgpu',
     ]);
+  });
+
+  it('the wllama-webgpu lane mirrors every wllama entry exactly, with WebGPU required', () => {
+    // Protocol v3 splits llama.cpp into a CPU lane and a WebGPU lane over the
+    // same GGUF files; the WebGPU lane is derived so the two cannot drift.
+    const cpu = BENCH_MODELS.filter((m) => m.runtimeId === 'wllama');
+    const gpu = BENCH_MODELS.filter((m) => m.runtimeId === 'wllama-webgpu');
+    expect(gpu.map((m) => m.providerModelId)).toEqual(cpu.map((m) => m.providerModelId));
+    for (const g of gpu) {
+      const c = cpu.find((m) => m.providerModelId === g.providerModelId)!;
+      expect(g.requiresWebGPU).toBe(true);
+      expect(g.displayName).toContain('WebGPU');
+      const { runtimeId: _r, displayName: _d, requiresWebGPU: _w, ...gRest } = g;
+      const { runtimeId: _r2, displayName: _d2, requiresWebGPU: _w2, ...cRest } = c;
+      expect(gRest).toEqual(cRest);
+    }
   });
 
   it.each(catalogBacked.map((m) => [m.runtimeId, m.providerModelId, m] as const))(

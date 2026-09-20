@@ -70,7 +70,7 @@ test.describe('bench shell (zero model bytes)', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: /localmode bench methodology/i }),
     ).toBeVisible();
-    await expect(page.getByText('localmode-bench/2').first()).toBeVisible();
+    await expect(page.getByText('localmode-bench/3').first()).toBeVisible();
     for (const section of ['Metric definitions', 'Run policy', 'Statistics', 'Submission integrity']) {
       await expect(page.getByRole('heading', { name: section })).toBeVisible();
     }
@@ -122,6 +122,17 @@ test.describe('bench real run (WASM lanes)', () => {
     await runButton.click();
     await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
 
+    // While the run is in progress everything a participant needs is in one
+    // modal over the page: the keep-this-tab-open instruction, overall
+    // progress with a time estimate, the live step, and the per-model checklist.
+    const dialog = page.getByRole('dialog', { name: /benchmark running/i });
+    await expect(dialog).toBeVisible({ timeout: 20_000 });
+    await expect(dialog.getByRole('alert')).toContainText(/keep this tab open, visible, and in front/i);
+    await expect(dialog).toContainText(/completion code appears on this page/i);
+    await expect(dialog).toContainText(/Estimated time remaining|Estimating the remaining time/);
+    await expect(dialog.getByRole('list', { name: /model lanes progress/i })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Cancel run' })).toBeVisible();
+
     // Live progress surfaces through the status live region.
     const status = page.getByRole('status').first();
     await expect(status).toContainText(/calibration|running/i, { timeout: 60_000 });
@@ -129,6 +140,8 @@ test.describe('bench real run (WASM lanes)', () => {
     // Real model download + inference across the available quick lanes
     // (wllama GGUF LLM + WASM embedding lanes). Generous budget: real network.
     await expect(status).toContainText('Suite complete', { timeout: 540_000 });
+    // The overlay leaves with the run; the results are on the page underneath.
+    await expect(page.getByRole('dialog')).toHaveCount(0);
 
     // Results table has rows with real numbers.
     const table = page.getByRole('table');
@@ -169,6 +182,8 @@ test.describe('bench real run (WASM lanes)', () => {
         cellId: string;
         runtimeId: string;
         runtimeVersion?: string;
+        resolvedBackend: string;
+        runtimeConfig?: Record<string, string | number | boolean>;
         status: string;
         invalidReasons?: string[];
         iterations: Array<{ chunks?: Array<{ t: number; c: number }>; text?: string; startT: number }>;
@@ -180,7 +195,7 @@ test.describe('bench real run (WASM lanes)', () => {
         decodeCharsPerSec?: { median: number };
       }>;
     };
-    expect(exported.protocol).toBe('localmode-bench/2');
+    expect(exported.protocol).toBe('localmode-bench/3');
     expect(exported.digest).toMatch(/^[0-9a-f]{64}$/);
     // The dataset row carries a 12-hex SHA-256 prefix of the participant id, never the id.
     expect(exported.environment.userReportedDevice).toMatch(/^prolific:[0-9a-f]{12}$/);
@@ -224,7 +239,7 @@ test.describe('bench real run (WASM lanes)', () => {
     expect(env.locale?.timeZone).toBeTruthy();
     expect(env.network?.online).toBe(true);
     // Runtime versions are stamped at build time from the installed packages.
-    expect(exported.harness.version).toBe('0.4.0');
+    expect(exported.harness.version).toBe('0.5.0');
     expect(exported.harness.runtimeVersions?.['@huggingface/transformers']).toMatch(/^\d+\.\d+\.\d+/);
     expect(exported.harness.runtimeVersions?.['@wllama/wllama']).toMatch(/^\d+\.\d+\.\d+/);
     for (const cell of exported.cells.filter((c) => c.status === 'ok')) {
@@ -246,6 +261,27 @@ test.describe('bench real run (WASM lanes)', () => {
     const wllamaSummary = exported.clientSummaries?.find((s) => s.cellId === wllamaChat!.cellId);
     expect(wllamaSummary?.streamIncremental).toBe(true);
     expect(wllamaSummary?.decodeCharsPerSec?.median).toBeGreaterThan(0);
+    // Protocol v3: the wllama lane is llama.cpp on the CPU, recorded from
+    // llama.cpp's own offload report (wllama 3.5 offloads to WebGPU by default
+    // wherever the browser has it; headless Chromium has none, so the report
+    // must still read 0/N and the config must show the CPU pin).
+    expect(wllamaChat?.resolvedBackend).toBe('wasm');
+    expect(wllamaChat?.runtimeConfig).toMatchObject({ n_gpu_layers: 0, cache_prompt: false, webgpu_adapter: false });
+    // llama.cpp prints its offload line only when it found a GPU device; headless
+    // Chromium exposes navigator.gpu but yields no adapter, so the record reads
+    // "unreported", which with webgpu_adapter: false is an unambiguous CPU run.
+    // The "0/31" form is asserted by the manual real-Chrome sweep.
+    expect(wllamaChat?.runtimeConfig?.offloadedLayers).toBe('unreported');
+    expect(wllamaChat?.runtimeConfig?.n_threads).toBeGreaterThan(0);
+    // The Transformers.js WASM lane ran inside its worker (the page stays live
+    // during ONNX inference) and recorded so.
+    const tfWasm = exported.cells.find((c) => c.cellId === 'transformers-wasm/bge-small-en/embed-single');
+    expect(tfWasm?.status).toBe('ok');
+    expect(tfWasm?.runtimeConfig).toMatchObject({ device: 'wasm', worker: true });
+    // The WebGPU llama.cpp lane exists in every quick run and is skipped here for want of WebGPU.
+    const wllamaGpu = exported.cells.find((c) => c.cellId === 'wllama-webgpu/smollm2-135m/chat-pp128-tg128');
+    expect(wllamaGpu?.status).toBe('skipped');
+    expect(wllamaGpu?.invalidReasons?.[0]).toMatch(/no WebGPU/);
     const ttfts = wllamaChat!.iterations.map((it) => it.chunks!.find((ch) => ch.c > 0)!.t - it.startT);
     const [first, ...rest] = ttfts;
     for (const t of rest) {
@@ -325,9 +361,9 @@ test.describe('bench real run (WASM lanes)', () => {
       cells: Array<{ cellId: string; status: string; memory?: { postRun?: number } }>;
     };
     expect(partial.partial).toBe(true);
-    expect(partial.protocol).toBe('localmode-bench/2');
+    expect(partial.protocol).toBe('localmode-bench/3');
     expect(partial.suite).toBe('quick');
-    expect(partial.harness.version).toBe('0.4.0');
+    expect(partial.harness.version).toBe('0.5.0');
     // The environment landed before the first cell, so a crash during the first
     // model load still identifies the device.
     expect(partial.environment?.browser.engine).toBe('Blink');

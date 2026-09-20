@@ -1,6 +1,6 @@
 /**
  * Environment capture helpers. Everything a browser will disclose about the
- * device is recorded even where the paper does not use it yet; these are the
+ * device is recorded even where the analysis does not use it yet; these are the
  * pure, node-testable parts of that capture.
  */
 
@@ -12,6 +12,18 @@ describe('deriveDeviceType()', () => {
     expect(deriveDeviceType({ formFactors: ['Tablet'], mobile: false, ua: '', maxTouchPoints: 5 })).toBe('tablet');
     expect(deriveDeviceType({ formFactors: ['Mobile'], mobile: true, ua: '', maxTouchPoints: 5 })).toBe('phone');
     expect(deriveDeviceType({ formFactors: ['Desktop'], mobile: false, ua: '', maxTouchPoints: 0 })).toBe('desktop');
+  });
+
+  it('never derives desktop for an Android or iOS device, whatever the form-factor hint says', () => {
+    // A Galaxy Z Fold unfolded (run 76df1e6d) sent UA-CH formFactors ["Desktop"]
+    // with a tablet-style UA (no Mobile token) and five touch points.
+    const foldUnfolded = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36';
+    expect(deriveDeviceType({ ua: foldUnfolded, maxTouchPoints: 5, formFactors: ['Desktop'], mobile: false, platform: 'Android' })).toBe('tablet');
+    const androidPhone = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Mobile Safari/537.36';
+    expect(deriveDeviceType({ ua: androidPhone, maxTouchPoints: 5, formFactors: ['Desktop'], mobile: false, platform: 'Android' })).toBe('phone');
+    // "Request desktop site" on Android rewrites the UA to a Linux desktop one; the UA-CH platform still says Android.
+    const desktopSite = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36';
+    expect(deriveDeviceType({ ua: desktopSite, maxTouchPoints: 5, formFactors: ['Desktop'], mobile: false, platform: 'Android' })).toBe('tablet');
   });
 
   it('falls back to the UA string on WebKit, where hints are absent', () => {

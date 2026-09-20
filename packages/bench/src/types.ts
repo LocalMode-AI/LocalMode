@@ -6,7 +6,7 @@
  */
 
 /** Protocol identifier embedded in every result. Bump only with a spec change. */
-export const BENCH_PROTOCOL_VERSION = 'localmode-bench/2';
+export const BENCH_PROTOCOL_VERSION = 'localmode-bench/3';
 
 /** Result JSON schema version (independent of the protocol semantics version). */
 export const BENCH_SCHEMA_VERSION = 2;
@@ -16,13 +16,16 @@ export type BenchSuiteId = 'quick' | 'standard' | 'thorough' | 'custom';
 
 /**
  * A benchmark runtime lane. Transformers.js is split into two lanes because
- * WebGPU vs WASM is the paper's core comparison axis.
+ * WebGPU vs WASM is the core comparison axis.
  */
 export type BenchRuntimeId =
   | 'transformers-webgpu'
   | 'transformers-wasm'
   | 'webllm'
+  /** llama.cpp WASM on the CPU (`n_gpu_layers: 0`); before protocol v3 this lane silently ran on WebGPU where available. */
   | 'wllama'
+  /** llama.cpp WASM with every layer offloaded to WebGPU. */
+  | 'wllama-webgpu'
   | 'litert'
   | 'chrome-ai'
   | 'mediapipe';
@@ -197,14 +200,31 @@ export interface BenchCellResult {
   workloadKind: BenchWorkloadKind;
   /** Backend actually used (probed, never the requested one). */
   resolvedBackend: string;
+  /**
+   * Runtime configuration the adapter reports once the model is loaded
+   * (thread count, GPU layers requested and llama.cpp's offload report,
+   * dtype, ...): the equal-care record for the lane, per cell.
+   */
+  runtimeConfig?: Record<string, string | number | boolean>;
   load: LoadRecord | null;
   /** Untimed warmup duration (ms), when a warmup ran. */
   warmupMs?: number;
   iterations: LLMIteration[] | EmbedIteration[];
+  /**
+   * Timed iterations the tab was hidden during, kept with their gates for
+   * auditability and repeated once the tab was visible again; never scored.
+   */
+  discardedIterations?: Array<LLMIteration | EmbedIteration>;
   memory?: MemorySample;
   quality?: QualityResult;
   status: BenchCellStatus;
   invalidReasons?: string[];
+  /**
+   * Failed attempts that preceded the recorded outcome (a watchdog timeout, a
+   * provider error), oldest first. The runner retries a cell up to the
+   * policy's `maxAttempts`; nothing is retried silently.
+   */
+  attempts?: Array<{ error: NonNullable<BenchCellResult['error']>; at: number }>;
   /** Error that ended the cell; `cause` carries the wrapped provider error's message when present. */
   error?: {
     name: string;
@@ -232,6 +252,9 @@ export interface TraceEvent {
     | 'gpu-device-lost'
     | 'cooldown-start'
     | 'cooldown-end'
+    | 'cell-timeout'
+    | 'cell-retry'
+    | 'iteration-redo'
     | 'abort';
   detail?: string;
 }
@@ -364,7 +387,7 @@ export interface WasmFeatureSupport {
 }
 
 /**
- * Availability of the browser APIs the runtimes and the paper care about.
+ * Availability of the browser APIs the runtimes and the analysis care about.
  * Each entry is a plain presence check (the feature exists on this page),
  * not a functional test. Chrome Built-in AI is reported by its
  * `availability()` string where the API exists.
@@ -454,7 +477,7 @@ export interface EnvironmentCapture {
   browser: BrowserInfo;
   os: OSInfo;
   hardware: {
-    /** navigator.hardwareConcurrency — clamped/randomized on Gecko/WebKit. */
+    /** navigator.hardwareConcurrency — WebKit clamps it (8 on macOS, 4 on iOS); Chromium and Firefox report the real count. */
     cores: number | null;
     coresClamped: boolean;
     /** navigator.deviceMemory (GB) — Chromium-only, capped at 8. */

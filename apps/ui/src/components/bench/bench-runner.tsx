@@ -16,11 +16,13 @@ import type {
   BenchSuiteId,
   CellSummary,
   PlannedCell,
+  RunnerActivity,
 } from '@localmode/bench';
 import {
   computeRunDigest,
   EMBED_WORKLOADS,
   LLM_WORKLOADS,
+  orderCells,
   QUALITY_WORKLOADS,
   RUN_POLICIES,
   runBenchmarkSuite,
@@ -64,7 +66,7 @@ import {
   TableRow,
 } from '@/registry/localmode/ui/table';
 
-const HARNESS_VERSION = '0.4.0';
+const HARNESS_VERSION = '0.5.0';
 
 type Phase = 'idle' | 'running' | 'done' | 'error';
 
@@ -110,6 +112,7 @@ async function probeLaneAvailability(): Promise<{
       'transformers-wasm': { ok: true },
       webllm: gpuGate,
       wllama: wllamaGate.ok ? { ok: true } : { ok: false, reason: wllamaGate.reason },
+      'wllama-webgpu': !webgpu ? gpuGate : wllamaGate.ok ? { ok: true } : { ok: false, reason: wllamaGate.reason },
       litert: { ok: true },
       'chrome-ai': chromeAI,
       mediapipe: { ok: true },
@@ -127,8 +130,11 @@ async function probeLaneAvailability(): Promise<{
  */
 function isMobileDevice(): boolean {
   if (typeof navigator === 'undefined') return false;
-  const uaData = (navigator as { userAgentData?: { mobile?: boolean } }).userAgentData;
+  const uaData = (navigator as { userAgentData?: { mobile?: boolean; platform?: string } }).userAgentData;
   if (uaData?.mobile === true) return true;
+  // A foldable unfolded or a "desktop site" request drops the Mobile token and
+  // can rewrite the UA to a Linux desktop one; the UA-CH platform still says Android.
+  if (uaData?.platform === 'Android') return true;
   return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 }
 
@@ -141,6 +147,134 @@ function formatBytes(bytes?: number): string {
 function formatMs(ms?: number): string {
   if (ms === undefined) return '-';
   return ms >= 10_000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
+}
+
+/** Elapsed wall time as "1 m 12 s" / "45 s". */
+function formatElapsed(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(total / 60);
+  const sec = total % 60;
+  return m > 0 ? `${m} m ${sec} s` : `${sec} s`;
+}
+
+/** One planned cell as the overlay tracks it. */
+interface PlannedCellInfo {
+  cellId: string;
+  runtimeId: string;
+  laneKey: string;
+  laneName: string;
+  workloadLabel: string;
+  kind: 'llm-generate' | 'embed' | 'quality-mmlu' | 'quality-sts';
+  sizeBytes: number;
+  skipped: boolean;
+}
+
+/** Outcome of a finished cell, as the overlay tracks it. */
+interface FinishedCellInfo {
+  status: string;
+  durationMs: number;
+}
+
+/**
+ * Time priors per cell kind (ms) for the remaining-time estimate before this
+ * run has measured a cell of that kind; taken from the lab runs on laptops.
+ */
+const CELL_PRIOR_MS: Record<PlannedCellInfo['kind'], number> = {
+  'llm-generate': 60_000,
+  embed: 15_000,
+  'quality-mmlu': 120_000,
+  'quality-sts': 30_000,
+};
+/** Download rate assumed until this run has observed one (bytes per second). */
+const DOWNLOAD_PRIOR_BPS = 15 * 1024 * 1024;
+/** Engine and session initialization per model group, on top of the download. */
+const LOAD_INIT_PRIOR_MS = 20_000;
+
+function medianOf(values: number[]): number | undefined {
+  if (values.length === 0) return undefined;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * Remaining wall time for the run: measured durations of same-kind cells in
+ * this run where available (same lane first), priors otherwise, plus a
+ * download + initialization allowance for every model group not loaded yet
+ * and the cool-down between groups. An approximation by design; the overlay
+ * labels it as one.
+ */
+function estimateRemainingMs(input: {
+  planned: PlannedCellInfo[];
+  finished: Map<string, FinishedCellInfo>;
+  currentCellId: string | null;
+  currentCellElapsedMs: number;
+  downloadBps: number | null;
+  loadedLanes: Set<string>;
+  cooldownMs: number;
+}): { remainingMs: number; measured: boolean } {
+  const { planned, finished, currentCellId, currentCellElapsedMs, downloadBps, loadedLanes, cooldownMs } = input;
+  const byLaneKind = new Map<string, number[]>();
+  const byKind = new Map<string, number[]>();
+  for (const cell of planned) {
+    const f = finished.get(cell.cellId);
+    if (!f || cell.skipped || f.status === 'skipped') continue;
+    const laneKindKey = `${cell.laneKey}|${cell.kind}`;
+    byLaneKind.set(laneKindKey, [...(byLaneKind.get(laneKindKey) ?? []), f.durationMs]);
+    byKind.set(cell.kind, [...(byKind.get(cell.kind) ?? []), f.durationMs]);
+  }
+  let measured = false;
+  let remaining = 0;
+  const lanesCounted = new Set<string>();
+  for (const cell of planned) {
+    if (finished.has(cell.cellId)) continue;
+    if (cell.skipped) continue;
+    const own = medianOf(byLaneKind.get(`${cell.laneKey}|${cell.kind}`) ?? []);
+    const kind = medianOf(byKind.get(cell.kind) ?? []);
+    const expected = own ?? kind ?? CELL_PRIOR_MS[cell.kind];
+    if (own !== undefined || kind !== undefined) measured = true;
+    remaining += cell.cellId === currentCellId ? Math.max(expected - currentCellElapsedMs, expected * 0.1) : expected;
+    if (!loadedLanes.has(cell.laneKey) && !lanesCounted.has(cell.laneKey)) {
+      lanesCounted.add(cell.laneKey);
+      remaining += cell.sizeBytes / (downloadBps ?? DOWNLOAD_PRIOR_BPS) * 1000 + LOAD_INIT_PRIOR_MS + cooldownMs;
+    }
+  }
+  return { remainingMs: remaining, measured };
+}
+
+/** "about 12 minutes" / "under a minute" / "about 1 hour 5 minutes". */
+function formatEta(ms: number): string {
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 1) return 'under a minute';
+  if (minutes < 60) return `about ${minutes} minute${minutes === 1 ? '' : 's'}`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `about ${h} hour${h === 1 ? '' : 's'}${m > 0 ? ` ${m} minute${m === 1 ? '' : 's'}` : ''}`;
+}
+
+/** Silence long enough to explain; the watchdog itself acts at the policy's stall budget (2 min, 3 for loads). */
+const STALL_WARNING_MS = 45_000;
+
+/** Phases where silence is the runtime building a session, not a stall. */
+const QUIET_PHASES = new Set<RunnerActivity['phase']>(['load', 'warmup', 'reload']);
+
+function describeActivity(a: RunnerActivity): string {
+  switch (a.phase) {
+    case 'load':
+      return a.pct !== undefined ? `downloading ${Math.round(a.pct)}%` : 'loading (cache probe, download, session)';
+    case 'warmup':
+      return a.chars !== undefined ? `warmup · ${a.chars} chars streamed` : 'warmup';
+    case 'iteration':
+      return `iteration ${a.iteration ?? '?'}/${a.total ?? '?'}${
+        a.chars !== undefined ? ` · ${a.chars} chars in ${a.chunks ?? 0} chunks` : ''
+      }`;
+    case 'quality':
+      return `quality item ${a.iteration ?? '?'}/${a.total ?? '?'}`;
+    case 'reload':
+      return a.pct !== undefined ? `warm reload · ${Math.round(a.pct)}%` : 'warm reload (loading from cache)';
+    case 'waiting-visible':
+      return 'paused until this tab is in front';
+  }
 }
 
 function laneKey(model: BenchModelRef): string {
@@ -189,6 +323,30 @@ export function BenchRunner() {
   const [statusLine, setStatusLine] = useState('');
   const [cellProgress, setCellProgress] = useState<{ index: number; total: number } | null>(null);
   const [loadPct, setLoadPct] = useState<number | null>(null);
+  /** Latest observable step inside the running cell, stamped with wall-clock time. */
+  const [activity, setActivity] = useState<(RunnerActivity & { at: number }) | null>(null);
+  /** Wall-clock time the current cell started; drives the elapsed counter. */
+  const [cellStartedAt, setCellStartedAt] = useState<number | null>(null);
+  /** Wall-clock time of the last observable event of any kind (heartbeat source). */
+  const [lastActivityAt, setLastActivityAt] = useState<number | null>(null);
+  /** Ticks every 500 ms while a run is in progress; it stops when the main thread is busy. */
+  const [now, setNow] = useState<number>(() => Date.now());
+  /** Watchdog verdicts and retries, newest last, kept for the whole run. */
+  const [retryNotices, setRetryNotices] = useState<string[]>([]);
+  /** The cells this run planned, in execution order, for the overlay's checklist and estimate. */
+  const [planned, setPlanned] = useState<PlannedCellInfo[]>([]);
+  /** Finished cells by id with their outcome and wall duration. */
+  const [finished, setFinished] = useState<Map<string, FinishedCellInfo>>(() => new Map());
+  const [currentCellId, setCurrentCellId] = useState<string | null>(null);
+  const cellStartRef = useRef<number | null>(null);
+  /** Lanes whose model has been loaded (their first cell has started), for the estimate. */
+  const [loadedLanes, setLoadedLanes] = useState<Set<string>>(() => new Set());
+  const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
+  /** Observed download rate (bytes per second) from load progress events, for the estimate. */
+  const [downloadBps, setDownloadBps] = useState<number | null>(null);
+  const downloadObs = useRef<{ t: number; pct: number; bytes: number } | null>(null);
+  /** Times the tab went to the background during the run (those iterations are marked invalid). */
+  const [hiddenCount, setHiddenCount] = useState(0);
   const [result, setResult] = useState<BenchRunResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submitState, setSubmitState] = useState<
@@ -219,6 +377,31 @@ export function BenchRunner() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (phase !== 'running') return;
+    const id = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(id);
+  }, [phase]);
+
+  // A hidden tab invalidates timed iterations (the harness records it); the
+  // overlay counts the events so the participant sees the consequence. Leaving
+  // the page mid-run loses it, so the browser asks first.
+  useEffect(() => {
+    if (phase !== 'running') return;
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') setHiddenCount((n) => n + 1);
+    };
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+    };
+  }, [phase]);
 
   /** Model lanes for the selected suite, annotated with availability.
    *  A runtime lane can be usable while a specific model still needs WebGPU
@@ -309,6 +492,18 @@ export function BenchRunner() {
     setErrorMessage(null);
     setSubmitState({ kind: 'idle' });
     setStatusLine('Preparing…');
+    setActivity(null);
+    setCellStartedAt(Date.now());
+    setLastActivityAt(Date.now());
+    setRetryNotices([]);
+    setFinished(new Map());
+    setCurrentCellId(null);
+    cellStartRef.current = null;
+    setLoadedLanes(new Set());
+    setRunStartedAt(Date.now());
+    setDownloadBps(null);
+    downloadObs.current = null;
+    setHiddenCount(0);
     const controller = new AbortController();
     abortRef.current = controller;
     let attempt: PartialAttempt | null = null;
@@ -326,6 +521,26 @@ export function BenchRunner() {
         import('@/lib/bench/adapters'),
       ]);
       const cells = buildCells();
+      // The overlay lists steps in the order the runner executes them.
+      setPlanned(
+        orderCells(cells).map((c) => ({
+          cellId: `${c.model.runtimeId}/${c.model.benchModelId}/${c.workload.id}`,
+          runtimeId: c.model.runtimeId,
+          laneKey: laneKey(c.model),
+          laneName: c.model.displayName,
+          workloadLabel: c.workload.label,
+          kind:
+            c.workload.kind === 'llm-generate'
+              ? 'llm-generate'
+              : c.workload.kind === 'quality-mmlu'
+                ? 'quality-mmlu'
+                : c.workload.kind === 'quality-sts'
+                  ? 'quality-sts'
+                  : 'embed',
+          sizeBytes: c.model.sizeBytes ?? 0,
+          skipped: Boolean(c.skipReason),
+        })),
+      );
       const harness = {
         name: '@localmode/bench',
         version: HARNESS_VERSION,
@@ -357,14 +572,56 @@ export function BenchRunner() {
           onCellStart: (cellId, index, total) => {
             setCellProgress({ index: index + 1, total });
             setLoadPct(null);
+            setActivity(null);
+            setCellStartedAt(Date.now());
+            setLastActivityAt(Date.now());
+            setCurrentCellId(cellId);
+            cellStartRef.current = Date.now();
+            const lane = cellId.split('/').slice(0, 2).join('/');
+            setLoadedLanes((prev) => (prev.has(lane) ? prev : new Set(prev).add(lane)));
             setStatusLine(`Running ${cellId}`);
             if (attempt) void updateAttempt(attempt, { currentCellId: cellId });
           },
+          onActivity: (a) => {
+            const at = Date.now();
+            setActivity({ ...a, at });
+            setLastActivityAt(at);
+            if ((a.phase === 'load' || a.phase === 'reload') && typeof a.pct === 'number') {
+              // Download rate from consecutive progress events on the same load.
+              const size = cells.find((c) => `${c.model.runtimeId}/${c.model.benchModelId}/${c.workload.id}` === a.cellId)?.model.sizeBytes ?? 0;
+              const prev = downloadObs.current;
+              if (prev && prev.bytes === size && a.pct > prev.pct && at - prev.t >= 1_000) {
+                const bps = ((a.pct - prev.pct) / 100) * size / ((at - prev.t) / 1000);
+                if (bps > 0) setDownloadBps((cur) => (cur === null ? bps : cur * 0.7 + bps * 0.3));
+              }
+              downloadObs.current = { t: at, pct: a.pct, bytes: size };
+            }
+          },
+          onCellRetry: (cellId, attemptNo, error) => {
+            setRetryNotices((list) => [
+              ...list,
+              `${cellId}: attempt ${attemptNo} after ${error.name}: ${error.message}${error.cause ? ` (${error.cause})` : ''}`,
+            ]);
+            setLastActivityAt(Date.now());
+          },
           onCellFinish: (cell) => {
+            const at = Date.now();
+            setFinished((prev) => {
+              const next = new Map(prev);
+              next.set(cell.cellId, { status: cell.status, durationMs: Math.max(0, at - (cellStartRef.current ?? at)) });
+              return next;
+            });
+            cellStartRef.current = at;
             if (attempt) void updateAttempt(attempt, { cells: [...attempt.cells, cell], currentCellId: undefined });
           },
-          onLoadProgress: (_cellId, pct) => setLoadPct(pct ?? null),
-          onIteration: (cellId, i, total) => setStatusLine(`Running ${cellId} - iteration ${i}/${total}`),
+          onLoadProgress: (_cellId, pct) => {
+            setLoadPct(pct ?? null);
+            setLastActivityAt(Date.now());
+          },
+          onIteration: (cellId, i, total) => {
+            setStatusLine(`Running ${cellId} - iteration ${i}/${total}`);
+            setLastActivityAt(Date.now());
+          },
         },
       });
       suiteResult.nonce = nonce;
@@ -575,11 +832,6 @@ export function BenchRunner() {
             <Button onClick={run} disabled={phase === 'running' || activeLanes.length === 0}>
               {phase === 'running' ? 'Running…' : 'Run benchmark'}
             </Button>
-            {phase === 'running' && (
-              <Button variant="outline" onClick={cancel}>
-                Cancel
-              </Button>
-            )}
             <span className="text-sm text-muted-foreground">
               {activeLanes.length} lanes · est. download {formatBytes(totalDownload)} (cached models
               skip the download)
@@ -617,7 +869,32 @@ export function BenchRunner() {
         </CardContent>
       </Card>
 
-      {(phase === 'running' || statusLine) && (
+      {phase === 'running' && (
+        <RunOverlay
+          suite={suite}
+          statusLine={statusLine}
+          cellProgress={cellProgress}
+          planned={planned}
+          finished={finished}
+          currentCellId={currentCellId}
+          loadedLanes={loadedLanes}
+          activity={activity}
+          cellStartedAt={cellStartedAt}
+          lastActivityAt={lastActivityAt}
+          runStartedAt={runStartedAt}
+          now={now}
+          loadPct={loadPct}
+          chromeDownloadPct={chromeDownloadPct}
+          downloadBps={downloadBps}
+          retryNotices={retryNotices}
+          hiddenCount={hiddenCount}
+          study={study}
+          autoSubmit={autoSubmit}
+          onCancel={cancel}
+        />
+      )}
+
+      {phase !== 'running' && statusLine && (
         <Card>
           <CardHeader>
             <CardTitle>Progress</CardTitle>
@@ -625,23 +902,7 @@ export function BenchRunner() {
           <CardContent className="flex flex-col gap-3">
             <p role="status" className="text-sm">
               {statusLine}
-              {cellProgress ? ` (cell ${cellProgress.index}/${cellProgress.total})` : ''}
             </p>
-            {loadPct !== null && (
-              <div className="flex items-center gap-3">
-                <Progress value={loadPct} className="max-w-md" aria-label="Model download progress" />
-                <span className="text-xs tabular-nums text-muted-foreground">
-                  {Math.round(loadPct)}%
-                </span>
-              </div>
-            )}
-            {chromeDownloadPct !== null && chromeDownloadPct < 100 && (
-              <div className="flex items-center gap-3" role="note" aria-label="Gemini Nano download">
-                <span className="text-xs text-muted-foreground">Gemini Nano download (browser-wide, one time)</span>
-                <Progress value={chromeDownloadPct} className="max-w-md" aria-label="Gemini Nano download progress" />
-                <span className="text-xs tabular-nums text-muted-foreground">{Math.round(chromeDownloadPct)}%</span>
-              </div>
-            )}
             {phase === 'error' && errorMessage && (
               <p className="text-sm text-destructive">Benchmark failed: {errorMessage}</p>
             )}
@@ -716,6 +977,15 @@ export function BenchRunner() {
                             {s.status}
                             {s.highVariance ? ' · high variance' : ''}
                           </Badge>
+                          {cell?.attempts && cell.attempts.length > 0 && (
+                            <Badge
+                              variant="outline"
+                              className="ml-1 text-muted-foreground"
+                              title={cell.attempts.map((a) => `${a.error.name}: ${a.error.message}`).join('\n')}
+                            >
+                              retried ×{cell.attempts.length}
+                            </Badge>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
@@ -798,3 +1068,259 @@ export function BenchRunner() {
     </div>
   );
 }
+
+/** Everything a participant needs while the run is in progress, over the page. */
+function RunOverlay(props: {
+  suite: string;
+  statusLine: string;
+  cellProgress: { index: number; total: number } | null;
+  planned: PlannedCellInfo[];
+  finished: Map<string, FinishedCellInfo>;
+  currentCellId: string | null;
+  loadedLanes: Set<string>;
+  activity: (RunnerActivity & { at: number }) | null;
+  cellStartedAt: number | null;
+  lastActivityAt: number | null;
+  runStartedAt: number | null;
+  now: number;
+  loadPct: number | null;
+  chromeDownloadPct: number | null;
+  downloadBps: number | null;
+  retryNotices: string[];
+  hiddenCount: number;
+  study: StudySession | null;
+  autoSubmit: boolean;
+  onCancel: () => void;
+}) {
+  const {
+    suite,
+    statusLine,
+    cellProgress,
+    planned,
+    finished,
+    currentCellId,
+    loadedLanes,
+    activity,
+    cellStartedAt,
+    lastActivityAt,
+    runStartedAt,
+    now,
+    loadPct,
+    chromeDownloadPct,
+    downloadBps,
+    retryNotices,
+    hiddenCount,
+    study,
+    autoSubmit,
+    onCancel,
+  } = props;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    dialogRef.current?.focus();
+  }, []);
+
+  const total = planned.length;
+  const done = planned.filter((c) => finished.has(c.cellId)).length;
+  const pct = total > 0 ? (done / total) * 100 : 0;
+  const cooldownMs = RUN_POLICIES[suite as keyof typeof RUN_POLICIES]?.cooldownMs ?? 5_000;
+  const eta =
+    total > 0
+      ? estimateRemainingMs({
+          planned,
+          finished,
+          currentCellId,
+          currentCellElapsedMs: cellStartedAt !== null ? now - cellStartedAt : 0,
+          downloadBps,
+          loadedLanes,
+          cooldownMs,
+        })
+      : null;
+  const finishAt = eta ? new Date(now + eta.remainingMs) : null;
+
+  // Lane checklist: one row per (runtime, model), in execution order.
+  const lanes: Array<{ key: string; name: string; runtimeId: string; cells: PlannedCellInfo[] }> = [];
+  for (const cell of planned) {
+    let lane = lanes.find((l) => l.key === cell.laneKey);
+    if (!lane) {
+      lane = { key: cell.laneKey, name: cell.laneName, runtimeId: cell.runtimeId, cells: [] };
+      lanes.push(lane);
+    }
+    lane.cells.push(cell);
+  }
+  const laneState = (lane: (typeof lanes)[number]): 'done' | 'running' | 'pending' | 'skipped' => {
+    if (lane.cells.every((c) => c.skipped)) return 'skipped';
+    if (lane.cells.every((c) => finished.has(c.cellId))) return 'done';
+    if (lane.cells.some((c) => c.cellId === currentCellId) || loadedLanes.has(lane.key)) return 'running';
+    return 'pending';
+  };
+  const current = planned.find((c) => c.cellId === currentCellId);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-background/95 p-4 sm:items-center sm:p-6">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bench-run-title"
+        tabIndex={-1}
+        className="flex w-full max-w-2xl flex-col gap-5 rounded-lg border border-border bg-card p-5 shadow-lg outline-none sm:p-6"
+      >
+        <div className="flex flex-col gap-1">
+          <h2 id="bench-run-title" className="text-xl font-semibold">
+            Benchmark running
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {suite === 'quick' ? 'Quick' : suite === 'standard' ? 'Standard' : 'Thorough'} suite ·{' '}
+            {done} of {total} steps done
+            {runStartedAt !== null ? ` · running for ${formatElapsed(now - runStartedAt)}` : ''}
+          </p>
+        </div>
+
+        <div
+          role="alert"
+          className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+        >
+          <p className="font-medium">Please keep this tab open, visible, and in front until the run finishes.</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">
+            <li>Do not switch to another tab, minimize or cover this window, lock the screen, or close this page.</li>
+            <li>Keep the device plugged in; the screen is kept awake for you while the run is in progress.</li>
+            <li>Browsers slow down background tabs, so a measurement taken while this tab is hidden is set aside and repeated once the tab is back in front; if the tab stays hidden, that step is marked invalid.</li>
+            {study && <li>Your completion code appears on this page as soon as the run and its upload finish.</li>}
+          </ul>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <div className="flex items-baseline justify-between gap-3 text-sm">
+            <span className="font-medium">Overall progress</span>
+            <span className="tabular-nums text-muted-foreground">{Math.round(pct)}%</span>
+          </div>
+          <Progress value={pct} aria-label="Overall benchmark progress" />
+          <p className="text-sm" aria-live="polite">
+            {eta ? (
+              <>
+                Estimated time remaining: <strong>{formatEta(eta.remainingMs)}</strong>
+                {finishAt && (
+                  <span className="text-muted-foreground">
+                    {' '}
+                    (around {finishAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })})
+                  </span>
+                )}
+                {!eta.measured && (
+                  <span className="text-muted-foreground"> · a rough estimate until the first models have run</span>
+                )}
+              </>
+            ) : (
+              'Estimating the remaining time…'
+            )}
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+          {current ? (
+            <p className="text-sm font-medium">
+              Step {cellProgress?.index ?? '?'} of {cellProgress?.total ?? total}: {current.laneName} ·{' '}
+              {current.workloadLabel}
+            </p>
+          ) : (
+            <p className="text-sm font-medium">Preparing the run</p>
+          )}
+          <p role="status" className="font-mono text-xs text-muted-foreground">
+            {statusLine}
+            {cellProgress ? ` (step ${cellProgress.index} of ${cellProgress.total})` : ''}
+          </p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground" aria-label="Live activity">
+            <span className="inline-flex items-center gap-1.5">
+              <span aria-hidden className="inline-block size-2 animate-pulse rounded-full bg-primary" title="Pulses even while the page is busy" />
+              alive
+            </span>
+            {cellStartedAt !== null && <span>elapsed in this step {formatElapsed(now - cellStartedAt)}</span>}
+            {activity && <span>{describeActivity(activity)}</span>}
+            {lastActivityAt !== null && <span>last progress {formatElapsed(now - lastActivityAt)} ago</span>}
+          </div>
+          {loadPct !== null && (
+            <div className="flex items-center gap-3">
+              <Progress value={loadPct} className="max-w-md" aria-label="Model download progress" />
+              <span className="text-xs tabular-nums text-muted-foreground">{Math.round(loadPct)}%</span>
+            </div>
+          )}
+          {chromeDownloadPct !== null && chromeDownloadPct < 100 && (
+            <div className="flex items-center gap-3" role="note" aria-label="Gemini Nano download">
+              <span className="text-xs text-muted-foreground">Gemini Nano download (browser-wide, one time)</span>
+              <Progress value={chromeDownloadPct} className="max-w-md" aria-label="Gemini Nano download progress" />
+              <span className="text-xs tabular-nums text-muted-foreground">{Math.round(chromeDownloadPct)}%</span>
+            </div>
+          )}
+          {lastActivityAt !== null && now - lastActivityAt >= STALL_WARNING_MS && (
+            <p role="note" className="text-xs text-amber-700 dark:text-amber-400">
+              No progress for {formatElapsed(now - lastActivityAt)}.{' '}
+              {activity && QUIET_PHASES.has(activity.phase)
+                ? 'The model is being loaded into memory and its engine prepared, which reports nothing until it finishes and can take a minute or two for a large model. '
+                : ''}
+              If this counter keeps climbing, the run aborts the step after 2 minutes without progress (3 for a
+              download), retries it once, then skips it and continues. If the counter itself has frozen, the page is busy
+              computing and will update as soon as it can. Nothing is needed from you.
+            </p>
+          )}
+          {retryNotices.length > 0 && (
+            <ul className="list-disc pl-5 text-xs text-muted-foreground" aria-label="Watchdog retries">
+              {retryNotices.map((n, i) => (
+                <li key={i}>{n}</li>
+              ))}
+            </ul>
+          )}
+          {activity?.phase === 'waiting-visible' && (
+            <p role="alert" className="text-xs text-destructive">
+              Paused: this tab is not in front. The run waits for it to be visible again (up to 10 minutes)
+              before it times anything else.
+            </p>
+          )}
+          {hiddenCount > 0 && (
+            <p role="alert" className="text-xs text-destructive">
+              This tab went to the background {hiddenCount === 1 ? 'once' : `${hiddenCount} times`}. Any
+              measurement taken while it was hidden is set aside and repeated once the tab is back in front;
+              the rest of the run is unaffected. Please keep it in front.
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-medium">Models in this run</p>
+          <ul className="grid grid-cols-1 gap-x-4 gap-y-1 text-xs sm:grid-cols-2" aria-label="Model lanes progress">
+            {lanes.map((lane) => {
+              const state = laneState(lane);
+              const laneDone = lane.cells.filter((c) => finished.has(c.cellId)).length;
+              const errors = lane.cells.filter((c) => finished.get(c.cellId)?.status === 'error').length;
+              return (
+                <li key={lane.key} className="flex items-center gap-2">
+                  <span aria-hidden className="w-4 text-center">
+                    {state === 'done' ? (errors > 0 ? '!' : '✓') : state === 'running' ? '▶' : state === 'skipped' ? '–' : '○'}
+                  </span>
+                  <span className={state === 'pending' || state === 'skipped' ? 'text-muted-foreground' : ''}>
+                    {lane.name}
+                    <span className="text-muted-foreground">
+                      {' '}
+                      · {state === 'skipped' ? 'not run on this device' : `${laneDone}/${lane.cells.length}`}
+                      {errors > 0 ? ` · ${errors} failed` : ''}
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            {autoSubmit
+              ? 'When the run finishes, the result uploads to the public dataset automatically and the results table appears here.'
+              : 'When the run finishes, the results table appears here; publishing is off for this run.'}
+          </p>
+          <Button variant="outline" onClick={onCancel}>
+            Cancel run
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+

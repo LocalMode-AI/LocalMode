@@ -14,6 +14,7 @@ import { WLLAMA_MODELS } from './models.js';
 import { isCrossOriginIsolated, resolveModelUrl } from './utils.js';
 
 import { importWllama, WLLAMA_CDN_WASM, type WllamaInstance } from './wllama-loader.js';
+import { resolveGpuLayers } from './model.js';
 
 
 
@@ -71,10 +72,12 @@ export class WllamaRerankerModel implements RerankerModel {
         });
 
         const wllamaInstance = new Wllama({ default: WLLAMA_CDN_WASM });
+        const nGpuLayers = resolveGpuLayers(this.settings);
 
         await wllamaInstance.loadModelFromUrl(modelUrl, {
           n_threads: numThreads,
           n_ctx: this.settings.contextLength ?? 1024,
+          ...(nGpuLayers !== undefined ? { n_gpu_layers: nGpuLayers } : {}),
           // createRerank requires the context to be created in reranking mode:
           // embeddings enabled with llama.cpp's 'rank' pooling (per wllama docs).
           embeddings: true,

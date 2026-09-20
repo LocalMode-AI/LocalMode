@@ -1,5 +1,12 @@
 # @localmode/wllama
 
+## 3.3.0
+
+### Minor Changes
+
+- fix: `useWebGPU: false` now actually keeps inference on the CPU. wllama 3.5 offloads every layer to WebGPU by default (`n_gpu_layers` 99999) whenever `navigator.gpu` exists, and the provider forwarded nothing for `false`, so the setting changed nothing; it now passes `n_gpu_layers: 0`. The documented default becomes `'auto'` (wllama's own behavior). Surfaced by the LocalMode Bench, whose wllama lane was documented and recorded as WASM/CPU while llama.cpp logged "offloaded 31/31 layers to GPU" on every WebGPU-capable browser.
+- fix: `gpuAccelerated` reports the truth. Before the model loads it is the prediction from the settings and `navigator.gpu` (offload unless pinned off or no WebGPU); once loaded it follows llama.cpp's own `load_tensors: offloaded N/M layers to GPU` line, captured through a logger passed to wllama (`createOffloadCapturingLogger`, exported). New `offloadedLayers: { gpu, total } | null` on `WllamaLanguageModel` and `WllamaEmbeddingModel`; the embedding model gains `gpuAccelerated`; the reranker now honors `useWebGPU`/`nGpuLayers` too. `resolveGpuLayers()` and `predictGpuAccelerated()` are exported.
+
 ## 3.2.0
 
 ### Minor Changes

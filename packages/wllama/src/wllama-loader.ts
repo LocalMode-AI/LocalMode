@@ -34,8 +34,58 @@ export type WllamaInstance = InstanceType<
   Awaited<typeof import('@wllama/wllama')>['Wllama']
 >;
 
+/** wllama's logger hooks (console-compatible). */
+export interface WllamaLoggerLike {
+  debug: (...args: unknown[]) => void;
+  log: (...args: unknown[]) => void;
+  warn: (...args: unknown[]) => void;
+  error: (...args: unknown[]) => void;
+}
+
 /** Constructor shape of the wllama runtime class. */
-export type WllamaCtor = new (config: { default: string }) => WllamaInstance;
+export type WllamaCtor = new (
+  config: { default: string },
+  wllamaConfig?: { logger?: WllamaLoggerLike; suppressNativeLog?: boolean },
+) => WllamaInstance;
+
+/** Layers llama.cpp reported offloading to the GPU at load, from its own log line. */
+export interface OffloadedLayers {
+  gpu: number;
+  total: number;
+}
+
+/**
+ * A wllama logger that forwards everything to the console and records what
+ * llama.cpp says about GPU offload while a model loads. wllama 3.5 offloads
+ * every layer to WebGPU by default when `navigator.gpu` exists, and nothing
+ * but this log line says whether it happened.
+ *
+ * @example
+ * const capture = createOffloadCapturingLogger();
+ * new Wllama(paths, { logger: capture.logger });
+ * // after loadModelFromUrl(): capture.offloaded -> { gpu: 31, total: 31 }
+ */
+export function createOffloadCapturingLogger(): { logger: WllamaLoggerLike; readonly offloaded: OffloadedLayers | null } {
+  let offloaded: OffloadedLayers | null = null;
+  const scan = (args: unknown[]) => {
+    for (const a of args) {
+      if (typeof a !== 'string') continue;
+      const m = a.match(/offloaded (\d+)\/(\d+) layers to GPU/);
+      if (m) offloaded = { gpu: Number(m[1]), total: Number(m[2]) };
+    }
+  };
+  return {
+    logger: {
+      debug: (...args) => { scan(args); console.debug(...args); },
+      log: (...args) => { scan(args); console.log(...args); },
+      warn: (...args) => { scan(args); console.warn(...args); },
+      error: (...args) => { scan(args); console.error(...args); },
+    },
+    get offloaded() {
+      return offloaded;
+    },
+  };
+}
 
 /**
  * Minimal shape of wllama's ModelManager: downloads GGUF files into the OPFS

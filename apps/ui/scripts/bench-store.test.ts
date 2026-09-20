@@ -13,7 +13,7 @@ import { issueNonce, verifyNonce, NONCE_MAX_AGE_MS } from '../src/lib/bench/nonc
 function entry(overrides: Partial<RunIndexEntry> & { runId: string }): RunIndexEntry {
   return {
     createdAt: '2026-07-16T00:00:00.000Z',
-    protocol: 'localmode-bench/2',
+    protocol: 'localmode-bench/3',
     suite: 'quick',
     deviceClass: 'macos/apple-metal-3',
     browser: 'Chrome',
@@ -71,7 +71,8 @@ describe('aggregateIndex()', () => {
     const rows = aggregateIndex([
       entry({ runId: 'current' }),
       v1,
-      entry({ runId: 'future', protocol: 'localmode-bench/3' }),
+      entry({ runId: 'archived-v2', protocol: 'localmode-bench/2' }),
+      entry({ runId: 'future', protocol: 'localmode-bench/4' }),
     ]);
     expect(rows).toHaveLength(1);
     expect(rows[0].submissions).toBe(1);
@@ -98,7 +99,7 @@ describe('toIndexEntry() → aggregateIndex() (protocol v2 fields)', () => {
       sizeBytes: 614_236_160,
     };
     return {
-      protocol: 'localmode-bench/2',
+      protocol: 'localmode-bench/3',
       schemaVersion: 2,
       runId: 'run-v2-0001',
       createdAt: '2026-09-19T00:00:00.000Z',
@@ -152,7 +153,7 @@ describe('toIndexEntry() → aggregateIndex() (protocol v2 fields)', () => {
   it('carries protocol, end-to-end rate, stream flag, and parse rate into the index and the leaderboard row', () => {
     const run = v2Run();
     const entry = toIndexEntry(run, summarizeRun(run), false, 'runs/2026/09/run-v2-0001.json');
-    expect(entry.protocol).toBe('localmode-bench/2');
+    expect(entry.protocol).toBe('localmode-bench/3');
     const chat = entry.cells.find((c) => c.workloadId === 'chat-pp128-tg128')!;
     expect(chat.streamIncremental).toBe(false);
     expect(chat.ttftMs).toBeUndefined();

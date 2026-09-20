@@ -1,6 +1,6 @@
 /**
- * Paper analysis CLI: aggregate a directory of raw run JSONs (a clone of the
- * results dataset repo, or locally exported runs) into paper-ready CSVs.
+ * Analysis CLI: aggregate a directory of raw run JSONs (a clone of the
+ * results dataset repo, or locally exported runs) into analysis-ready CSVs.
  *
  * Usage:
  *   npx tsx packages/bench/scripts/analyze.ts <runs-dir> [out-dir]

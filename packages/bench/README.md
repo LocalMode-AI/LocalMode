@@ -9,13 +9,17 @@ rules for community submissions, and leaderboard aggregation.
 The public runner + leaderboard live at **https://localmode.ai/bench**.
 The protocol is documented at **https://localmode.ai/bench/methodology**.
 
-## Protocol (`localmode-bench/2`)
+## Protocol (`localmode-bench/3`)
 
 Result schema version 2 (`BENCH_SCHEMA_VERSION`), plausibility rule set 2
-(`PLAUSIBILITY_RULES_VERSION`). Archived v1 runs stay published as v1 and are
-never re-scored; the public leaderboard at localmode.ai aggregates only runs
-measured under the current protocol (`aggregateRuns()` in this package does
-not filter, so hosts partition by `run.protocol` themselves).
+(`PLAUSIBILITY_RULES_VERSION`). Archived v1 and v2 runs stay published under
+their version and are never re-scored; the public leaderboard at localmode.ai
+aggregates only runs measured under the current protocol (`aggregateRuns()`
+in this package does not filter, so hosts partition by `run.protocol`
+themselves). v3 split the llama.cpp lane: `wllama` is llama.cpp WASM on the
+CPU (`n_gpu_layers: 0`) and `wllama-webgpu` offloads every layer to WebGPU,
+over the same GGUF files; under v2 the single `wllama` lane ran on WebGPU
+wherever the browser had it while recording `wasm` (wllama 3.5's default).
 
 - **TTFT** - first non-empty stream chunk minus stream start (`performance.now()`
   wall clock on a cross-origin-isolated page).
@@ -50,9 +54,28 @@ not filter, so hosts partition by `run.protocol` themselves).
   chars (`MIN_GENERATED_CHARS`) is gated `degenerate-output` and the cell
   marked `invalid` instead of scored; the validator's `degenerate-generation`
   rule rejects an `ok` cell that carries one.
+- **Watchdog** - every load, warmup, timed iteration, embedding call, and
+  quality lane is guarded (`RunPolicy` `loadStallMs` 3 min, `chunkStallMs`
+  2 min, `iterationTimeoutMs` 10 to 15 min, `qualityTimeoutMs` 30 to 45 min):
+  a stall or an overrun aborts the call with a `TimeoutError`, the cell is
+  retried (`maxAttempts` 2) and then recorded as an error while the run
+  continues, so a suite always finishes and can be submitted. Every failed
+  attempt stays on the cell in `attempts`; retries are never silent.
+- **Hidden tab** - a timed iteration the tab was hidden during (browsers
+  throttle background tabs) is set aside on the cell in `discardedIterations`
+  and repeated once the tab is visible again (the runner waits up to
+  `visibilityWaitMs`, 10 minutes, and up to `maxAttempts` repeats per
+  iteration); a tab that stays hidden leaves the cell `invalid`.
+- **Runtime configuration** - a cell carries `runtimeConfig` when its adapter
+  reports one after load (thread count, GPU layers requested, llama.cpp's
+  `offloaded N/M layers` report, device, dtype): the equal-care record per
+  cell. `resolvedBackend` is what the runtime did, never what the lane asked.
 - **Execution order** - deterministic runtime order (`RUNTIME_EXECUTION_ORDER`:
-  transformers-webgpu, transformers-wasm, chrome-ai, webllm, mediapipe, litert,
-  wllama; `orderCells()` applies it and the runner enforces it) for
+  transformers-wasm, transformers-webgpu, chrome-ai, webllm, mediapipe, litert,
+  wllama-webgpu, wllama; `orderCells()` applies it and the runner enforces it;
+  the Transformers.js WASM lane goes first because Transformers.js chains every
+  ONNX session creation on one uncaught promise, so a failed WebGPU session
+  would fail the CPU lane's sessions too) for
   reproducibility, so runtime interleaving is not a confounder across runs. It
   is a reproducibility measure only, not a memory or correctness fix.
 - **Error cells** - `error.cause` carries the wrapped provider error's message,
@@ -119,7 +142,7 @@ const result = await runBenchmarkSuite({
   policy: RUN_POLICIES.quick,
   llmAdapters,      // Map<runtimeId, LLMRuntimeAdapter> - see src/adapter.ts
   embedAdapters,
-  harness: { name: '@localmode/bench', version: '0.4.0', runtimeVersions: { '@wllama/wllama': '3.5.1' } },
+  harness: { name: '@localmode/bench', version: '0.5.0', runtimeVersions: { '@wllama/wllama': '3.5.1' } },
   abortSignal: controller.signal,
 });
 result.digest = await computeRunDigest(result);
@@ -166,7 +189,7 @@ Environment variables for the submission API (see `apps/ui`):
 Without a token the API answers 503 and the runner still offers local JSON
 export - runs are never lost.
 
-## Paper tooling
+## Analysis tooling
 
 ```ts
 import { aggregateRuns, rowsToCSV, runsToLongCSV } from '@localmode/bench';

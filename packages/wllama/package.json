@@ -1,6 +1,6 @@
 {
   "name": "@localmode/wllama",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "description": "wllama provider for @localmode - GGUF model inference via llama.cpp WASM with metadata inspection and browser compatibility checking",
   "license": "MIT",
   "author": "LocalMode",

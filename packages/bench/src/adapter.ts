@@ -72,6 +72,8 @@ export interface LoadedLLM {
   model: BenchLanguageModel;
   /** Backend actually in use — 'webgpu' | 'wasm' | 'gpu' | 'cpu' | 'chrome-builtin'. */
   resolvedBackend: string;
+  /** Post-load runtime configuration worth recording on every cell (threads, GPU layers, dtype, ...). */
+  runtimeConfig?: Record<string, string | number | boolean>;
   dispose(): Promise<void>;
 }
 
@@ -79,6 +81,7 @@ export interface LoadedLLM {
 export interface LoadedEmbedder {
   model: BenchEmbeddingModel;
   resolvedBackend: string;
+  runtimeConfig?: Record<string, string | number | boolean>;
   dispose(): Promise<void>;
 }
 
@@ -118,6 +121,7 @@ export const USAGE_FIDELITY: Record<BenchRuntimeId, ProviderUsage['fidelity']> =
   'transformers-wasm': 'estimated',
   webllm: 'chunk-count',
   wllama: 'estimated',
+  'wllama-webgpu': 'estimated',
   litert: 'estimated',
   'chrome-ai': 'estimated',
   mediapipe: 'estimated',

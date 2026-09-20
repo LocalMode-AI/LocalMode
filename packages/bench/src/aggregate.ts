@@ -1,5 +1,5 @@
 /**
- * Aggregation for the public leaderboard and for paper analysis. Runs group
+ * Aggregation for the public leaderboard and for offline analysis. Runs group
  * into device-class rows; medians are taken per submission first, then across
  * submissions (median-of-medians). Nothing is ever averaged across devices.
  */
@@ -212,7 +212,7 @@ export function rowsToCSV(rows: readonly LeaderboardRow[]): string {
 }
 
 /**
- * Long-format per-iteration CSV for paper analysis (one row per timed
+ * Long-format per-iteration CSV for offline analysis (one row per timed
  * iteration, with full environment identity columns) — feed to R/pandas.
  */
 export function runsToLongCSV(runs: readonly BenchRunResult[]): string {

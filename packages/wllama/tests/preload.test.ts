@@ -19,7 +19,8 @@ const mockState = {
   wllamaConstructed: 0,
 };
 
-vi.mock('../src/wllama-loader.js', () => ({
+vi.mock('../src/wllama-loader.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/wllama-loader.js')>()),
   WLLAMA_CDN_ESM: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.5.1/esm/index.js',
   WLLAMA_CDN_WASM: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.5.1/src/wasm/wllama.wasm',
   importWllama: async () => ({

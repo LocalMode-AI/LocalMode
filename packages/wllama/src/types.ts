@@ -115,11 +115,13 @@ export interface WllamaModelSettings {
   useJinja?: boolean;
 
   /**
-   * Enable WebGPU acceleration for inference.
-   * - `true`: enable GPU offload (falls back to WASM if WebGPU unavailable)
-   * - `'auto'`: enable only when WebGPU is detected
-   * - `false` or omitted: pure WASM mode
-   * @default false
+   * WebGPU offload for inference. wllama itself offloads every layer to WebGPU
+   * whenever `navigator.gpu` exists, so the effective default is `'auto'`:
+   * - `true`: offload all layers (pure WASM if WebGPU is unavailable)
+   * - `'auto'` or omitted: offload when WebGPU is available (wllama's default)
+   * - `false`: pure WASM on the CPU (`n_gpu_layers: 0`)
+   * `gpuAccelerated` on the model reports what llama.cpp actually did once loaded.
+   * @default 'auto'
    */
   useWebGPU?: boolean | 'auto';
 
@@ -221,10 +223,10 @@ export interface WllamaEmbeddingSettings {
   /** Embedding vector dimensions. Auto-detected from GGUF metadata if not set. */
   dimensions?: number;
 
-  /** Enable WebGPU acceleration. @default false */
+  /** WebGPU offload: `'auto'` (wllama's default, GPU when available) or omitted, `true`, or `false` for pure WASM. @default 'auto' */
   useWebGPU?: boolean | 'auto';
 
-  /** Number of transformer layers to offload to GPU. */
+  /** Number of transformer layers to offload to GPU (0 pins the CPU). */
   nGpuLayers?: number;
 }
 
@@ -244,10 +246,10 @@ export interface WllamaRerankerSettings {
   /** Context length for this model. @default 1024 */
   contextLength?: number;
 
-  /** Enable WebGPU acceleration. @default false */
+  /** WebGPU offload: `'auto'` (wllama's default, GPU when available) or omitted, `true`, or `false` for pure WASM. @default 'auto' */
   useWebGPU?: boolean | 'auto';
 
-  /** Number of transformer layers to offload to GPU. */
+  /** Number of transformer layers to offload to GPU (0 pins the CPU). */
   nGpuLayers?: number;
 }
 

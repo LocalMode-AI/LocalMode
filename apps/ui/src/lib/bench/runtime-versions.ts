@@ -27,6 +27,7 @@ const RUNTIME_PACKAGE_BY_LANE: Record<string, string> = {
   'transformers-wasm': '@huggingface/transformers',
   webllm: '@mlc-ai/web-llm',
   wllama: '@wllama/wllama',
+  'wllama-webgpu': '@wllama/wllama',
   litert: '@litert-lm/core',
   mediapipe: '@mediapipe/tasks-text',
 };

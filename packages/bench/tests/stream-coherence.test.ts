@@ -129,7 +129,7 @@ describe('checkPlausibility() — v2 stream/overall rules', () => {
   });
 });
 
-describe('orderCells() — protocol v2 execution order', () => {
+describe('orderCells() — protocol v3 execution order', () => {
   it('sorts cells into the fixed, deterministic runtime order (stable within a runtime)', () => {
     const cell = (runtimeId: string, benchModelId: string): PlannedCell => ({
       model: { ...MODEL_REF, runtimeId: runtimeId as PlannedCell['model']['runtimeId'], benchModelId },
@@ -145,16 +145,22 @@ describe('orderCells() — protocol v2 execution order', () => {
       cell('webllm', 'llama-3.2-1b'),
       cell('wllama', 'llama-3.2-1b'),
       cell('transformers-webgpu', 'llama-3.2-1b'),
+      cell('wllama-webgpu', 'qwen3-0.6b'),
     ];
     const ordered = orderCells(input);
     const runtimes = ordered.map((c) => c.model.runtimeId);
+    // The Transformers.js WASM lane runs before its WebGPU lane: Transformers.js
+    // chains every session creation on one uncaught promise, so a failed WebGPU
+    // session would otherwise fail the CPU lane's sessions too. The llama.cpp
+    // WebGPU lane precedes the CPU lane so the WASM heap is the last thing built.
     expect(runtimes).toEqual([
-      'transformers-webgpu',
-      'transformers-webgpu',
       'transformers-wasm',
+      'transformers-webgpu',
+      'transformers-webgpu',
       'webllm',
       'webllm',
       'litert',
+      'wllama-webgpu',
       'wllama',
       'wllama',
     ]);

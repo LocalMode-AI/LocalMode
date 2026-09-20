@@ -18,7 +18,7 @@ wllama provider for [LocalMode](https://localmode.dev) -- run any GGUF model in 
 - **Structured output / JSON mode** via `response_format` (text, json_object, json_schema)
 - **Reranking** via `wllama.reranker()` with cross-encoder GGUF models (Jina, BGE)
 - **Embedding models** via `wllama.embedding()` (nomic-embed, mxbai-embed, bge-small)
-- **WebGPU acceleration** with `useWebGPU` and `nGpuLayers` settings
+- **WebGPU acceleration** on by default where WebGPU exists (`useWebGPU: false` pins the CPU; `nGpuLayers` for layer counts; `gpuAccelerated`/`offloadedLayers` report what llama.cpp did)
 - **Tool calling** via `providerOptions.wllama.tools` and `tool_choice`
 - **Vision/multimodal** input with `mmprojUrl` for VLMs (Holo2 4B/8B, Gemma 4 E2B/E4B)
 - **Reasoning mode** for DeepSeek-R1 style chain-of-thought thinking
@@ -375,27 +375,34 @@ const { text } = await generateText({
 
 ## WebGPU Acceleration
 
-Enable WebGPU to offload transformer layers to the GPU for faster inference:
+wllama 3.5 offloads every transformer layer to WebGPU **by default** whenever
+the browser exposes `navigator.gpu`; a page that never mentions WebGPU is
+already running llama.cpp's WebGPU backend on a WebGPU-capable browser. The
+settings decide, and the model reports what llama.cpp actually did:
 
 ```typescript
-const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M', {
-  useWebGPU: true, // enable GPU offload; falls back to WASM if unavailable
+// Default ('auto'): GPU when WebGPU is available, WASM on the CPU otherwise
+const model = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+
+// Pure WASM on the CPU, even on a WebGPU browser (n_gpu_layers: 0)
+const cpuModel = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M', {
+  useWebGPU: false,
 });
 
-// Or auto-detect WebGPU availability
-const model2 = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M', {
-  useWebGPU: 'auto',
-});
-
-// Fine-grained control: offload specific number of layers
+// Fine-grained control: offload a specific number of layers
 const model3 = wllama.languageModel('Llama-3.2-1B-Instruct-Q4_K_M', {
-  nGpuLayers: 20, // offload 20 layers; use -1 for all layers
+  nGpuLayers: 20, // offload 20 layers; use -1 for all layers, 0 for none
 });
 
-// gpuAccelerated is available on the concrete WllamaLanguageModel class
+// gpuAccelerated and offloadedLayers are on the concrete classes. Before the
+// model loads, gpuAccelerated is the prediction from the settings and
+// navigator.gpu; after the load it follows llama.cpp's own report
+// ("load_tensors: offloaded 31/31 layers to GPU").
 import { WllamaLanguageModel } from '@localmode/wllama';
-const wllamaModel = new WllamaLanguageModel('Llama-3.2-1B-Instruct-Q4_K_M', { useWebGPU: true });
-console.log(wllamaModel.gpuAccelerated); // true when WebGPU is active
+const wllamaModel = new WllamaLanguageModel('Llama-3.2-1B-Instruct-Q4_K_M');
+await wllamaModel.doGenerate({ prompt: 'hi' });
+console.log(wllamaModel.gpuAccelerated); // true when layers were offloaded
+console.log(wllamaModel.offloadedLayers); // { gpu: 17, total: 17 } or null
 ```
 
 WebGPU settings also work with embedding models:
