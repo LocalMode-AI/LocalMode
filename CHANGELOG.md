@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.2] - 2026-09-21
+
+**Released:** `@localmode/bench` 0.6.1.
+
+### Fixed
+
+- **"Too many submissions" during a multi-device batch.** The submit endpoint allowed 5 submissions per hour per client address, and every device in a household (or an office, or a campus) shares one address, so the sixth run of a lab batch was refused. The limit is now 20 per hour per address (`SUBMIT_RATE_LIMIT`; the nonce, digest, shape, and plausibility checks are what keep the dataset honest, this only bounds volume), a refusal carries `Retry-After` and `retryAfterSec` with a message that names the wait, and the runner keeps the run and resubmits it by itself when the window opens, with a live countdown ("Retrying automatically in 12 m 30 s"); "Retry submission" and Export JSON stay available meanwhile.
+- **"Cancel run" reacts on the first click** (`@localmode/bench` 0.6.1). The runner's watchdog raced each unit of work only against its own timeout, so a cancel during work that ignores its abort signal (a model download in flight, a generation inside a runtime with no stop) waited for that work to finish: several seconds and repeated clicks on a download. The parent abort now rejects the watchdog immediately, the abandoned work's late outcome is discarded quietly, and a model that finishes loading after its cell was cancelled is released instead of leaking a runtime. The button switches to "Stopping…" on the click itself. Measured in real Chrome on the dev build: overlay gone 203 ms after a click during a model load and 98 ms during a WebLLM generation, no unhandled rejections.
+- **The run overlay never extends past the viewport and scrolls inside itself.** On windows at least 640 px wide the overlay centered the dialog in a flex box, so a dialog taller than the window was cut off at the top (unreachable by scrolling) and at the bottom, and the page behind it kept its own scrollbar. The dialog is now capped at the viewport minus its margins and scrolls internally, and the page scroll is locked while the overlay is open, so there is one scrollbar. Measured in real Chrome at 1100x560: dialog from 24 px to 536 px, 708 px of content scrolling in a 510 px box, page scroll locked and restored on close. Taking focus on open no longer scrolls the top margin away.
+- **`pnpm run dev` and the new `pnpm run dev:bench` watch the workspace packages.** The root `dev` ran the packages' `tsup --watch` sequentially, so the first watcher blocked everything after it and an edit to `@localmode/bench` or `@localmode/wllama` reached the app only after a manual build; `dev` is now parallel, and `dev:bench` runs the two package watchers with the ui dev server.
+
+- **The overlay's retry notices are one plain sentence each.** A retry showed the raw error with its stack fragment (a Windows run listed five lines of "Failed to execute 'requestDevice' on 'GPUAdapter': D3D12 create command queue failed with DXGI_ERROR_DEVICE_REMOVED (0x887A0005) at CheckHRESULTImpl (..\\..\\third_party\\dawn\\...)"). The overlay now says "<lane> · <workload>: the GPU device was lost; trying again (attempt 2)", with the memory, download, and stall cases named the same way, shows the last three, and leaves the full error, cause, and stack on the cell's `attempts` in the run record.
+
+- **Crash diagnostics carry the page's memory at the last phase change.** Where the browser exposes it (Chromium), the saved attempt records the page memory sampled when the running lane's phase began, and Copy diagnostics prints it ("page memory when that phase began 1.95 GB"), so a page killed during a model load on an 8 GB machine can be told apart from a GPU crash.
+
+- **A runtime's own `AbortError` no longer ends the run as "Cancelled"** (`@localmode/bench` 0.6.1). The runner and the page equated any `AbortError` with the Cancel button, so when a browser dropped a model download mid-suite (an Android phone did this on every attempt) the overlay closed with "Cancelled" and every finished cell was discarded. A cancel is now recognised only from the page's own abort signal; a runtime-raised AbortError is a cell error, recorded with its message and retried once, and the run continues.
+
 ## [2.12.1] - 2026-09-20
 
 Phone fixes for `/bench/run` from the first iPhone attempts under v4 (site only; no package changes).

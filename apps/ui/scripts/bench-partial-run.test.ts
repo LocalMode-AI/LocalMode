@@ -49,6 +49,7 @@ const attempt: PartialAttempt = {
   ],
   currentCellId: 'webllm/smollm2-135m/chat-pp128-tg128',
   currentPhase: 'load',
+  memoryBytesAtPhase: 1_950_000_000,
   pageOrigin: 'https://localmode.ai',
 };
 
@@ -58,6 +59,7 @@ describe('partial run record', () => {
     expect(out.partial).toBe(true);
     expect(out.currentCellId).toBe('webllm/smollm2-135m/chat-pp128-tg128');
     expect(out.currentPhase).toBe('load');
+    expect(out.memoryBytesAtPhase).toBe(1_950_000_000);
     expect(out.finishedCells).toBe(2);
     expect(out.unfinishedCellIds).toEqual(['webllm/smollm2-135m/chat-pp128-tg128', 'mediapipe/use-mediapipe/embed-single']);
   });
@@ -66,7 +68,7 @@ describe('partial run record', () => {
     const text = partialRunDiagnostics(attempt);
     expect(text).toContain('quick suite · harness 0.6.0 · https://localmode.ai');
     expect(text).toContain('finished 2 of 4 cells (1 ok, 1 error)');
-    expect(text).toContain('running when the page ended: webllm/smollm2-135m/chat-pp128-tg128 · phase load');
+    expect(text).toContain('running when the page ended: webllm/smollm2-135m/chat-pp128-tg128 · phase load · page memory when that phase began 1.95 GB');
     expect(text).toContain('not run: webllm/smollm2-135m/chat-pp128-tg128, mediapipe/use-mediapipe/embed-single');
     expect(text).toContain('device: Safari 27.0 · iOS 18.7 · phone · 4 cores');
     expect(text).toContain('webgpu yes · quota 1 GB');

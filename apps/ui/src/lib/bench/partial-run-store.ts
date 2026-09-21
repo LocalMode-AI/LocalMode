@@ -41,6 +41,12 @@ export interface PartialAttempt {
    * A page that dies during a load names the model that did not fit.
    */
   currentPhase?: 'load' | 'warmup' | 'reload' | 'iteration' | 'quality' | 'waiting-visible';
+  /**
+   * Page memory (bytes) sampled when the current phase began, where the
+   * browser exposes it. A page that dies during a load with 3 GB already
+   * held reads differently from one killed at 300 MB.
+   */
+  memoryBytesAtPhase?: number;
   pageOrigin?: string;
 }
 
@@ -157,6 +163,7 @@ export function toPartialRunExport(attempt: PartialAttempt): Record<string, unkn
     finishedCells: attempt.cells.length,
     currentCellId: attempt.currentCellId ?? null,
     currentPhase: attempt.currentPhase ?? null,
+    memoryBytesAtPhase: attempt.memoryBytesAtPhase ?? null,
     unfinishedCellIds: attempt.plannedCellIds.filter((id) => !finished.has(id)),
     cells: attempt.cells,
   };
@@ -183,7 +190,7 @@ export function partialRunDiagnostics(attempt: PartialAttempt): string {
       .join(', ')})`,
     `running when the page ended: ${attempt.currentCellId ?? 'nothing (between cells)'}${
       attempt.currentPhase ? ` · phase ${attempt.currentPhase}` : ''
-    }`,
+    }${attempt.memoryBytesAtPhase ? ` · page memory when that phase began ${(attempt.memoryBytesAtPhase / 1e9).toFixed(2)} GB` : ''}`,
     `not run: ${attempt.plannedCellIds.filter((id) => !finished.has(id)).join(', ') || 'none'}`,
   ];
   if (env) {

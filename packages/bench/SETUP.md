@@ -47,7 +47,11 @@ and lands in `harness.commit`.
 
 Rate limiting automatically uses the already-bound Upstash Redis
 (`UPSTASH_REDIS_REST_URL/TOKEN` or `KV_REST_API_URL/TOKEN`) and degrades to an
-in-instance window without it.
+in-instance window without it. The submit endpoint allows 20 submissions per
+hour per client address (`SUBMIT_RATE_LIMIT` in `apps/ui/src/lib/bench/store.ts`;
+rejected attempts count too), sized for several devices behind one NAT; a 429
+carries `Retry-After` and `retryAfterSec`, and the runner keeps the run and
+resubmits it by itself when the window opens.
 
 ## 4. Verify after deploy
 

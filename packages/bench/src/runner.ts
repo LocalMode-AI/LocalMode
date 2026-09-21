@@ -164,7 +164,7 @@ export async function runBenchmarkSuite(options: RunSuiteOptions): Promise<Bench
       if (!groupCellsResults.some((cell) => cell.status !== 'skipped')) continue;
       trace.record('cooldown-start');
       await sleep(policy.cooldownMs, abortSignal).catch((e) => {
-        if ((e as Error).name === 'AbortError') throw e;
+        if (abortSignal?.aborted) throw e;
       });
       if (policy.pressureGate)
         await waitForPressure(trace, policy.pressureGateTimeoutMs, abortSignal);
@@ -294,20 +294,23 @@ async function runModelGroup(group: ModelGroup, ctx: GroupContext): Promise<Benc
       ctx.hooks?.onActivity?.({ cellId: firstCellId, phase: 'load' });
       loaded = await withWatchdog<LoadedLLM | LoadedEmbedder>(
         (signal, kick) =>
-          adapter.load(model, {
-            abortSignal: signal,
-            onProgress: (p) => {
-              kick();
-              if (
-                typeof p.pct === 'number' &&
-                (progress.length === 0 || p.pct - progress[progress.length - 1].pct >= 2)
-              ) {
-                progress.push({ t: hrNow(), pct: Math.round(p.pct * 100) / 100 });
-              }
-              ctx.hooks?.onLoadProgress?.(firstCellId, p.pct);
-              ctx.hooks?.onActivity?.({ cellId: firstCellId, phase: 'load', pct: p.pct });
-            },
-          }),
+          disposeIfLate(
+            adapter.load(model, {
+              abortSignal: signal,
+              onProgress: (p) => {
+                kick();
+                if (
+                  typeof p.pct === 'number' &&
+                  (progress.length === 0 || p.pct - progress[progress.length - 1].pct >= 2)
+                ) {
+                  progress.push({ t: hrNow(), pct: Math.round(p.pct * 100) / 100 });
+                }
+                ctx.hooks?.onLoadProgress?.(firstCellId, p.pct);
+                ctx.hooks?.onActivity?.({ cellId: firstCellId, phase: 'load', pct: p.pct });
+              },
+            }),
+            signal
+          ),
         {
           parent: ctx.abortSignal,
           stallMs: ctx.policy.loadStallMs,
@@ -379,9 +382,12 @@ async function runModelGroup(group: ModelGroup, ctx: GroupContext): Promise<Benc
       }
       break;
     } catch (error) {
-      if ((error as Error).name === 'AbortError') {
+      // Only the submitter's signal is a cancel. A runtime raises AbortError
+      // of its own (a fetch the browser dropped, an internal timeout), and
+      // that is a cell error like any other.
+      if (ctx.abortSignal?.aborted) {
         if (loaded) await safeDispose(loaded);
-        throw error;
+        throw abortDomException();
       }
       if (loaded) await safeDispose(loaded);
       loaded = null;
@@ -508,9 +514,9 @@ async function runModelGroup(group: ModelGroup, ctx: GroupContext): Promise<Benc
         await runOnce();
         break;
       } catch (error) {
-        if ((error as Error).name === 'AbortError') {
+        if (ctx.abortSignal?.aborted) {
           await safeDispose(loaded);
-          throw error;
+          throw abortDomException();
         }
         const described = describeError(error);
         if (described.name === 'TimeoutError')
@@ -555,13 +561,16 @@ async function runModelGroup(group: ModelGroup, ctx: GroupContext): Promise<Benc
       const start = hrNow();
       const reloaded = await withWatchdog<LoadedLLM | LoadedEmbedder>(
         (signal, kick) =>
-          adapter.load(model, {
-            abortSignal: signal,
-            onProgress: (p) => {
-              kick();
-              ctx.hooks?.onActivity?.({ cellId: reloadCellId, phase: 'reload', pct: p.pct });
-            },
-          }),
+          disposeIfLate(
+            adapter.load(model, {
+              abortSignal: signal,
+              onProgress: (p) => {
+                kick();
+                ctx.hooks?.onActivity?.({ cellId: reloadCellId, phase: 'reload', pct: p.pct });
+              },
+            }),
+            signal
+          ),
         {
           parent: ctx.abortSignal,
           stallMs: ctx.policy.loadStallMs,
@@ -590,8 +599,8 @@ async function runModelGroup(group: ModelGroup, ctx: GroupContext): Promise<Benc
         status: 'ok',
       };
       results.push(finishCell(warmCell, ctx));
-    } catch (error) {
-      if ((error as Error).name === 'AbortError') throw error;
+    } catch {
+      if (ctx.abortSignal?.aborted) throw abortDomException();
       // Warm-reload is auxiliary; a failure here never invalidates the group.
     }
   }
@@ -855,17 +864,25 @@ async function withWatchdog<T>(
   budget: { parent?: AbortSignal; stallMs: number; timeoutMs: number; what: string }
 ): Promise<T> {
   const controller = new AbortController();
-  const onParentAbort = () => controller.abort(budget.parent?.reason);
+  let rejectTimeout: (error: Error) => void = () => {};
+  const timeout = new Promise<never>((_, reject) => {
+    rejectTimeout = reject;
+  });
+  // A cancel unwinds immediately. The work is told to stop through the child
+  // signal, but work that cannot be interrupted (a download in flight, a
+  // generation inside a runtime that has no stop) would otherwise hold the
+  // cancel until it finished; the runner moves on and the late result is
+  // discarded.
+  const onParentAbort = () => {
+    controller.abort(budget.parent?.reason);
+    rejectTimeout(abortDomException());
+  };
   if (budget.parent?.aborted) onParentAbort();
   budget.parent?.addEventListener('abort', onParentAbort, { once: true });
 
   const startedAt = hrNow();
   let lastKick = startedAt;
   let settled = false;
-  let rejectTimeout: (error: Error) => void = () => {};
-  const timeout = new Promise<never>((_, reject) => {
-    rejectTimeout = reject;
-  });
   const fail = (message: string) => {
     if (settled) return;
     settled = true;
@@ -893,7 +910,11 @@ async function withWatchdog<T>(
     lastKick = hrNow();
   };
   try {
-    return await Promise.race([work(controller.signal, kick), timeout]);
+    const pending = work(controller.signal, kick);
+    // If the race is lost to a cancel or a timeout, the work's own outcome
+    // is nobody's concern any more.
+    pending.catch(() => {});
+    return await Promise.race([pending, timeout]);
   } finally {
     settled = true;
     clearInterval(interval);
@@ -962,6 +983,22 @@ function describeError(error: unknown): NonNullable<BenchCellResult['error']> {
 function finishCell(cell: BenchCellResult, ctx: GroupContext): BenchCellResult {
   ctx.hooks?.onCellFinish?.(cell);
   return cell;
+}
+
+/**
+ * A load that finishes after its cell was cancelled or timed out delivers a
+ * model nobody will use: release it instead of leaking a runtime.
+ */
+async function disposeIfLate(
+  pending: Promise<LoadedLLM> | Promise<LoadedEmbedder>,
+  signal: AbortSignal
+): Promise<LoadedLLM | LoadedEmbedder> {
+  const loaded = await pending;
+  if (signal.aborted) {
+    await safeDispose(loaded);
+    throw abortDomException();
+  }
+  return loaded;
 }
 
 async function safeDispose(loaded: LoadedLLM | LoadedEmbedder): Promise<void> {

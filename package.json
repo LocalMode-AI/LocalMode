@@ -1,6 +1,6 @@
 {
   "name": "LocalMode",
-  "version": "2.12.1",
+  "version": "2.12.2",
   "repository": {
     "type": "git",
     "url": "https://github.com/LocalMode-AI/LocalMode.git"
@@ -27,7 +27,8 @@
   "private": true,
   "scripts": {
     "build": "pnpm -r build",
-    "dev": "pnpm -r dev",
+    "dev": "pnpm -r --parallel dev",
+    "dev:bench": "pnpm --parallel --filter @localmode/bench --filter @localmode/wllama --filter ui run dev",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

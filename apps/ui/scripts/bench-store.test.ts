@@ -6,7 +6,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RunIndexEntry } from '../src/lib/bench/store';
-import { aggregateIndex, toIndexEntry } from '../src/lib/bench/store';
+import { aggregateIndex, rateLimitWithRetry, SUBMIT_RATE_LIMIT, SUBMIT_RATE_WINDOW_SEC, toIndexEntry } from '../src/lib/bench/store';
 import { summarizeRun, type BenchRunResult } from '@localmode/bench';
 import { issueNonce, verifyNonce, NONCE_MAX_AGE_MS } from '../src/lib/bench/nonce';
 
@@ -245,5 +245,36 @@ describe('nonce', () => {
     expect(verifyNonce(dev)).toBe(true);
     vi.stubEnv('BENCH_NONCE_SECRET', 'now-set');
     expect(verifyNonce(dev)).toBe(false);
+  });
+});
+
+describe('rateLimitWithRetry() (in-instance window)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    delete process.env.UPSTASH_REDIS_REST_URL;
+    delete process.env.KV_REST_API_URL;
+  });
+
+  it('allows a batch of devices behind one address and then names the wait', async () => {
+    // A household running the lab batch, or an office, shares one client
+    // address; the earlier limit of 5 per hour rejected the fifth device.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-21T14:00:00.000Z'));
+    const key = `submit:test-${Math.random()}`;
+    expect(SUBMIT_RATE_LIMIT).toBeGreaterThanOrEqual(20);
+    for (let i = 0; i < SUBMIT_RATE_LIMIT; i++) {
+      const v = await rateLimitWithRetry(key);
+      expect(v.allowed).toBe(true);
+    }
+    vi.setSystemTime(new Date('2026-09-21T14:10:00.000Z'));
+    const rejected = await rateLimitWithRetry(key);
+    expect(rejected.allowed).toBe(false);
+    // 50 minutes remain of the hour that started with the first attempt.
+    expect(rejected.retryAfterSec).toBe(50 * 60);
+    // The window opens again exactly when it says.
+    vi.setSystemTime(new Date('2026-09-21T15:00:00.001Z'));
+    const again = await rateLimitWithRetry(key);
+    expect(again.allowed).toBe(true);
+    expect(again.retryAfterSec).toBe(SUBMIT_RATE_WINDOW_SEC);
   });
 });

@@ -26,6 +26,8 @@ import {
   QUALITY_WORKLOADS,
   RUN_POLICIES,
   runBenchmarkSuite,
+  memoryApiAvailable,
+  sampleMemoryBytes,
 } from '@localmode/bench';
 import { BENCH_MODELS, SUITE_MODELS } from '@/lib/bench/catalog';
 import { wllamaAvailability } from '@/lib/bench/adapters';
@@ -36,6 +38,7 @@ import {
   type ChromeAIStatus,
 } from '@/lib/bench/chrome-ai-download';
 import { benchBuildCommit, benchRuntimeVersions } from '@/lib/bench/runtime-versions';
+import { describeRetryCause } from '@/lib/bench/overlay-text';
 import {
   beginAttempt,
   finishAttempt,
@@ -67,7 +70,7 @@ import {
   TableRow,
 } from '@/registry/localmode/ui/table';
 
-const HARNESS_VERSION = '0.6.0';
+const HARNESS_VERSION = '0.6.1';
 
 type Phase = 'idle' | 'running' | 'done' | 'error';
 
@@ -355,7 +358,7 @@ export function BenchRunner() {
     | { kind: 'idle' }
     | { kind: 'submitting' }
     | { kind: 'done'; flagged: boolean; url?: string }
-    | { kind: 'failed'; message: string }
+    | { kind: 'failed'; message: string; retryAt?: number }
   >({ kind: 'idle' });
   const abortRef = useRef<AbortController | null>(null);
   const [study, setStudy] = useState<StudySession | null>(null);
@@ -469,19 +472,39 @@ export function BenchRunner() {
         url?: string;
         message?: string;
         code?: string;
+        retryAfterSec?: number;
       };
       if (body.ok) {
         setSubmitState({ kind: 'done', flagged: body.flagged ?? false, url: body.url });
       } else {
+        // A shared network address (a household or office behind one NAT)
+        // can exhaust the hourly window; the run is kept and resubmitted
+        // by itself once the window opens, as long as the page stays open.
+        const retryAfterSec =
+          body.code === 'rate-limited' && typeof body.retryAfterSec === 'number' ? body.retryAfterSec : undefined;
         setSubmitState({
           kind: 'failed',
           message: body.message ?? body.code ?? `Submission failed (${res.status})`,
+          ...(retryAfterSec ? { retryAt: Date.now() + retryAfterSec * 1000 } : {}),
         });
       }
     } catch {
       setSubmitState({ kind: 'failed', message: 'Network error during submission.' });
     }
   }, []);
+
+  // Automatic resubmission after a rate-limited attempt; a tick keeps the
+  // countdown live once the run overlay's own clock has stopped.
+  const retryAt = submitState.kind === 'failed' ? submitState.retryAt : undefined;
+  useEffect(() => {
+    if (!retryAt || !result) return;
+    const tick = setInterval(() => setNow(Date.now()), 1_000);
+    const timer = setTimeout(() => void submitRun(result), Math.max(0, retryAt - Date.now()) + 1_000);
+    return () => {
+      clearInterval(tick);
+      clearTimeout(timer);
+    };
+  }, [retryAt, result, submitRun]);
 
   const run = useCallback(async () => {
     // Synchronous part of the click handler: Chrome accepts the Gemini Nano
@@ -513,6 +536,7 @@ export function BenchRunner() {
     setHiddenCount(0);
     const controller = new AbortController();
     abortRef.current = controller;
+    setCancelling(false);
     let attempt: PartialAttempt | null = null;
     try {
       // Nonce first so the whole run is bound to this session.
@@ -614,7 +638,15 @@ export function BenchRunner() {
               // A page that dies while a model loads (memory) leaves the lane
               // and phase in the saved attempt for the recovery card.
               if (attempt && (attempt.currentCellId !== a.cellId || attempt.currentPhase !== a.phase)) {
-                void updateAttempt(attempt, { currentCellId: a.cellId, currentPhase: a.phase });
+                const snapshot = attempt;
+                void updateAttempt(snapshot, { currentCellId: a.cellId, currentPhase: a.phase });
+                if (memoryApiAvailable() !== 'none') {
+                  void sampleMemoryBytes(5_000).then((bytes) => {
+                    if (bytes !== null && snapshot.currentCellId === a.cellId && snapshot.currentPhase === a.phase) {
+                      void updateAttempt(snapshot, { memoryBytesAtPhase: bytes });
+                    }
+                  });
+                }
               }
               if (a.phase !== 'load' || a.pct === undefined) {
                 setStatusLine(
@@ -638,10 +670,11 @@ export function BenchRunner() {
             }
           },
           onCellRetry: (cellId, attemptNo, error) => {
-            setRetryNotices((list) => [
-              ...list,
-              `${cellId}: attempt ${attemptNo} after ${error.name}: ${error.message}${error.cause ? ` (${error.cause})` : ''}`,
-            ]);
+            // One readable line per retry; the full error, cause, and stack are
+            // on the cell's `attempts` in the run record, not on the overlay.
+            const lane = cells.find((c) => `${c.model.runtimeId}/${c.model.benchModelId}/${c.workload.id}` === cellId);
+            const what = lane ? `${lane.model.displayName} · ${lane.workload.label}` : cellId;
+            setRetryNotices((list) => [...list, `${what}: ${describeRetryCause(error)}; trying again (attempt ${attemptNo}).`]);
             setLastActivityAt(Date.now());
           },
           onCellFinish: (cell) => {
@@ -672,7 +705,9 @@ export function BenchRunner() {
       // Publishing was disclosed next to the Run button; opt-out via the toggle.
       if (autoSubmit) void submitRun(suiteResult);
     } catch (error) {
-      if ((error as Error).name === 'AbortError') {
+      // "Cancelled" only when this page's Cancel button fired; any other
+      // AbortError is a failure to show, not a cancel.
+      if (controller.signal.aborted) {
         setPhase('idle');
         setStatusLine('Cancelled');
       } else {
@@ -727,7 +762,14 @@ export function BenchRunner() {
     setUnfinished((list) => list.filter((a) => a.attemptId !== attempt.attemptId));
   }, []);
 
-  const cancel = useCallback(() => abortRef.current?.abort(), []);
+  const [cancelling, setCancelling] = useState(false);
+  const cancel = useCallback(() => {
+    // The click registers at once; the runner finishes unwinding the step it
+    // is in (a download or generation that cannot be interrupted keeps
+    // running in the background and is discarded).
+    setCancelling(true);
+    abortRef.current?.abort();
+  }, []);
 
   const exportJson = useCallback(() => {
     if (!result) return;
@@ -962,6 +1004,7 @@ export function BenchRunner() {
           study={study}
           autoSubmit={autoSubmit}
           onCancel={cancel}
+          cancelling={cancelling}
         />
       )}
 
@@ -1100,6 +1143,13 @@ export function BenchRunner() {
               {submitState.kind === 'failed' && (
                 <p role="status" className="text-sm text-destructive">
                   {submitState.message}
+                  {submitState.retryAt !== undefined && (
+                    <span className="text-muted-foreground">
+                      {' '}
+                      Retrying automatically in {formatElapsed(Math.max(0, submitState.retryAt - now))}. Keep this page
+                      open: the run lives only in this tab (Export JSON keeps a copy).
+                    </span>
+                  )}
                 </p>
               )}
             </div>
@@ -1162,6 +1212,7 @@ function RunOverlay(props: {
   study: StudySession | null;
   autoSubmit: boolean;
   onCancel: () => void;
+  cancelling: boolean;
 }) {
   const {
     suite,
@@ -1184,10 +1235,17 @@ function RunOverlay(props: {
     study,
     autoSubmit,
     onCancel,
+    cancelling,
   } = props;
   const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    dialogRef.current?.focus();
+    dialogRef.current?.focus({ preventScroll: true });
+    // One scrollbar: the page behind the overlay stays put; only the dialog scrolls.
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
   }, []);
 
   const total = planned.length;
@@ -1227,14 +1285,16 @@ function RunOverlay(props: {
   const current = planned.find((c) => c.cellId === currentCellId);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-background/95 p-4 sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 p-4 sm:p-6">
+      {/* The dialog never grows past the viewport: it is capped at the padded
+          box and scrolls inside itself, while the page behind it is locked. */}
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="bench-run-title"
         tabIndex={-1}
-        className="flex w-full max-w-2xl flex-col gap-5 rounded-lg border border-border bg-card p-5 shadow-lg outline-none sm:p-6"
+        className="flex max-h-full w-full max-w-2xl flex-col gap-5 overflow-y-auto rounded-lg border border-border bg-card p-5 shadow-lg outline-none sm:p-6"
       >
         <div className="flex flex-col gap-1">
           <h2 id="bench-run-title" className="text-xl font-semibold">
@@ -1296,7 +1356,7 @@ function RunOverlay(props: {
             <p className="text-sm font-medium">Preparing the run</p>
           )}
           <p role="status" className="font-mono text-xs text-muted-foreground">
-            {statusLine}
+            {cancelling ? 'Stopping the run; releasing the current model' : statusLine}
             {cellProgress ? ` (step ${cellProgress.index} of ${cellProgress.total})` : ''}
           </p>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums text-muted-foreground" aria-label="Live activity">
@@ -1334,7 +1394,8 @@ function RunOverlay(props: {
           )}
           {retryNotices.length > 0 && (
             <ul className="list-disc pl-5 text-xs text-muted-foreground" aria-label="Watchdog retries">
-              {retryNotices.map((n, i) => (
+              {retryNotices.length > 3 && <li>{retryNotices.length - 3} earlier retries (in the run record)</li>}
+              {retryNotices.slice(-3).map((n, i) => (
                 <li key={i}>{n}</li>
               ))}
             </ul>
@@ -1386,8 +1447,8 @@ function RunOverlay(props: {
               ? 'When the run finishes, the result uploads to the public dataset automatically and the results table appears here.'
               : 'When the run finishes, the results table appears here; publishing is off for this run.'}
           </p>
-          <Button variant="outline" onClick={onCancel}>
-            Cancel run
+          <Button variant="outline" onClick={onCancel} disabled={cancelling} aria-busy={cancelling}>
+            {cancelling ? 'Stopping…' : 'Cancel run'}
           </Button>
         </div>
       </div>

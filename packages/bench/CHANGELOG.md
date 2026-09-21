@@ -1,5 +1,10 @@
 # @localmode/bench
 
+## 0.6.1
+
+- fix: only the submitter's abort signal is a cancel. The runner treated every `AbortError` as the cancel, so an AbortError a runtime raised on its own (a fetch the browser dropped, an internal timeout) ended the whole run as cancelled and discarded every finished cell; an Android phone lost every attempt this way. Such an error is now a cell error like any other, recorded with its message, retried once, and the run continues.
+- fix: a cancel unwinds at once. The watchdog raced each unit of work only against its own timeout, so a cancel during work that ignores its abort signal (a model download in flight, a generation inside a runtime with no stop) waited for that work to finish; a "Cancel run" click during a 30 s download looked like a button that does nothing. The parent abort now rejects the watchdog immediately, the late outcome of the abandoned work is discarded quietly (no unhandled rejection), and a model that finishes loading after its cell was cancelled or timed out is released instead of leaking a runtime.
+
 ## 0.6.0
 
 Protocol bump to `localmode-bench/4`.

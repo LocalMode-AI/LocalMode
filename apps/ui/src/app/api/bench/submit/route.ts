@@ -14,7 +14,8 @@ import {
   BenchStoreError,
   benchStoreConfig,
   commitRun,
-  rateLimit,
+  rateLimitWithRetry,
+  SUBMIT_RATE_LIMIT,
   toIndexEntry,
 } from '@/lib/bench/store';
 
@@ -41,10 +42,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
     request.headers.get('x-real-ip') ??
     'unknown';
-  if (!(await rateLimit(`submit:${ip}`))) {
+  const verdict = await rateLimitWithRetry(`submit:${ip}`);
+  if (!verdict.allowed) {
+    const minutes = Math.max(1, Math.ceil(verdict.retryAfterSec / 60));
     return NextResponse.json(
-      { ok: false, code: 'rate-limited', message: 'Too many submissions; try again later.' },
-      { status: 429 },
+      {
+        ok: false,
+        code: 'rate-limited',
+        retryAfterSec: verdict.retryAfterSec,
+        message: `The dataset accepts ${SUBMIT_RATE_LIMIT} submissions per hour from one network address; this run can be submitted again in about ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+      },
+      { status: 429, headers: { 'Retry-After': String(verdict.retryAfterSec) } },
     );
   }
 

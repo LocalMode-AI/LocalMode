@@ -398,8 +398,32 @@ export function aggregateIndex(
 
 const memoryHits = new Map<string, { count: number; resetAt: number }>();
 
-/** Allow `limit` submissions per `windowSec` per key. Fails open on errors. */
-export async function rateLimit(key: string, limit = 5, windowSec = 3600): Promise<boolean> {
+/**
+ * Submissions allowed per client address per hour. Devices behind one NAT
+ * (a household running a lab batch, a campus, an office) share an address,
+ * so the window is sized for a batch of devices, not a single browser; the
+ * nonce, digest, shape, and plausibility checks are what keep the dataset
+ * honest, this only bounds volume.
+ */
+export const SUBMIT_RATE_LIMIT = 20;
+export const SUBMIT_RATE_WINDOW_SEC = 3600;
+
+/** A rate-limit verdict with the seconds until the window opens again. */
+export interface RateLimitVerdict {
+  allowed: boolean;
+  retryAfterSec: number;
+}
+
+/**
+ * Count one attempt against `key` and allow it while the window holds at most
+ * `limit` attempts. Uses Upstash when bound, else a best-effort in-instance
+ * window; fails open on errors. Rejected attempts count too.
+ */
+export async function rateLimitWithRetry(
+  key: string,
+  limit = SUBMIT_RATE_LIMIT,
+  windowSec = SUBMIT_RATE_WINDOW_SEC,
+): Promise<RateLimitVerdict> {
   const url = process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
   if (url && token) {
@@ -411,11 +435,14 @@ export async function rateLimit(key: string, limit = 5, windowSec = 3600): Promi
         body: JSON.stringify([
           ['INCR', redisKey],
           ['EXPIRE', redisKey, String(windowSec), 'NX'],
+          ['TTL', redisKey],
         ]),
       });
       if (res.ok) {
-        const [{ result }] = (await res.json()) as Array<{ result: number }>;
-        return Number(result) <= limit;
+        const rows = (await res.json()) as Array<{ result: number }>;
+        const count = Number(rows[0]?.result);
+        const ttl = Number(rows[2]?.result);
+        return { allowed: count <= limit, retryAfterSec: ttl > 0 ? ttl : windowSec };
       }
     } catch {
       // Fall through to the in-memory window.
@@ -425,8 +452,13 @@ export async function rateLimit(key: string, limit = 5, windowSec = 3600): Promi
   const hit = memoryHits.get(key);
   if (!hit || hit.resetAt < now) {
     memoryHits.set(key, { count: 1, resetAt: now + windowSec * 1000 });
-    return true;
+    return { allowed: true, retryAfterSec: windowSec };
   }
   hit.count++;
-  return hit.count <= limit;
+  return { allowed: hit.count <= limit, retryAfterSec: Math.max(1, Math.ceil((hit.resetAt - now) / 1000)) };
+}
+
+/** Allow `limit` submissions per `windowSec` per key. Fails open on errors. */
+export async function rateLimit(key: string, limit = SUBMIT_RATE_LIMIT, windowSec = SUBMIT_RATE_WINDOW_SEC): Promise<boolean> {
+  return (await rateLimitWithRetry(key, limit, windowSec)).allowed;
 }

@@ -207,6 +207,88 @@ function drivenTrace() {
   return trace;
 }
 
+describe('cancellation', () => {
+  it('unwinds at once when the current work cannot be interrupted', async () => {
+    // A model download or a generation that ignores its abort signal used
+    // to hold the cancel until it finished: the watchdog raced the work
+    // against its own timeout only, so a cancel during a 30 s download
+    // looked like a button that does nothing.
+    const calls = { disposed: 0 };
+    let releaseLoad: () => void = () => {};
+    const adapter = {
+      ...makeMockLLMAdapter(),
+      async load(): Promise<LoadedLLM> {
+        // Ignores the signal on purpose: a fetch that cannot be aborted.
+        await new Promise<void>((resolve) => {
+          releaseLoad = resolve;
+        });
+        return {
+          model: { modelId: 'wllama:x', provider: 'wllama', async doGenerate() { return { text: 'x', finishReason: 'stop' }; } },
+          resolvedBackend: 'wasm',
+          dispose: async () => {
+            calls.disposed += 1;
+          },
+        } as unknown as LoadedLLM;
+      },
+    };
+    const controller = new AbortController();
+    const started = Date.now();
+    const run = runBenchmarkSuite({
+      suite: 'custom',
+      cells: [{ model: MODEL_REF, workload: LLM_WORKLOADS[0] }],
+      policy: TEST_POLICY,
+      llmAdapters: new Map([[adapter.runtimeId, adapter]]),
+      embedAdapters: new Map(),
+      harness: HARNESS,
+      skipFingerprint: true,
+      abortSignal: controller.signal,
+    });
+    // Let the run reach the (stuck) load, then cancel.
+    await new Promise((r) => setTimeout(r, 50));
+    controller.abort(Object.assign(new Error('cancelled'), { name: 'AbortError' }));
+    await expect(run).rejects.toMatchObject({ name: 'AbortError' });
+    // The cancel returned without waiting for the download that never ended.
+    expect(Date.now() - started).toBeLessThan(1_000);
+    // The late-finishing work is discarded quietly (no unhandled rejection,
+    // nothing recorded, the model released when it finally arrives).
+    releaseLoad();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(calls.disposed).toBe(1);
+  });
+});
+
+describe('a runtime AbortError is not a cancel', () => {
+  it('records an AbortError the runtime raised on its own as a cell error and keeps going', async () => {
+    // Browsers abort fetches on their own (memory pressure, a download the
+    // network stack dropped), and runtimes raise AbortError from timeouts of
+    // their own. The runner equated any AbortError with the submitter's
+    // cancel, so a phone whose download was aborted mid-suite ended the
+    // whole run as "Cancelled" and lost every finished cell.
+    let calls = 0;
+    const adapter = {
+      ...makeMockLLMAdapter(),
+      async load(): Promise<LoadedLLM> {
+        calls += 1;
+        throw Object.assign(new Error('The user aborted a request.'), { name: 'AbortError' });
+      },
+    };
+    const result = await runBenchmarkSuite({
+      suite: 'custom',
+      cells: [{ model: MODEL_REF, workload: LLM_WORKLOADS[0] }],
+      policy: TEST_POLICY,
+      llmAdapters: new Map([[adapter.runtimeId, adapter]]),
+      embedAdapters: new Map(),
+      harness: HARNESS,
+      skipFingerprint: true,
+    });
+    expect(result.cells).toHaveLength(1);
+    expect(result.cells[0].status).toBe('error');
+    expect(result.cells[0].error?.name).toBe('AbortError');
+    expect(result.cells[0].attempts).toHaveLength(1);
+    expect(calls).toBe(2);
+  });
+});
+
 describe('hidden-tab recovery', () => {
   it('repeats an iteration the tab hid during, once the tab is visible again, and keeps the discarded one on record', async () => {
     const trace = drivenTrace();
