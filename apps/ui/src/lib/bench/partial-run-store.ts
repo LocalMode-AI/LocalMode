@@ -35,6 +35,12 @@ export interface PartialAttempt {
   cells: BenchCellResult[];
   /** The cell that had started when the record was last updated, if any. */
   currentCellId?: string;
+  /**
+   * What the runner was doing when the record was last updated: the phase of
+   * the current cell's lane (load, warmup, reload) or the timed work itself.
+   * A page that dies during a load names the model that did not fit.
+   */
+  currentPhase?: 'load' | 'warmup' | 'reload' | 'iteration' | 'quality' | 'waiting-visible';
   pageOrigin?: string;
 }
 
@@ -150,7 +156,48 @@ export function toPartialRunExport(attempt: PartialAttempt): Record<string, unkn
     plannedCells: attempt.plannedCellIds.length,
     finishedCells: attempt.cells.length,
     currentCellId: attempt.currentCellId ?? null,
+    currentPhase: attempt.currentPhase ?? null,
     unfinishedCellIds: attempt.plannedCellIds.filter((id) => !finished.has(id)),
     cells: attempt.cells,
   };
+}
+
+/**
+ * A short plain-text account of an unfinished attempt for pasting into a
+ * message: what ran, what was running when the page died, and the device.
+ * Phones rarely make a file download convenient; the clipboard always is.
+ */
+export function partialRunDiagnostics(attempt: PartialAttempt): string {
+  const env = attempt.environment;
+  const finished = new Set(attempt.cells.map((c) => c.cellId));
+  const counts = attempt.cells.reduce<Record<string, number>>((acc, c) => {
+    acc[c.status] = (acc[c.status] ?? 0) + 1;
+    return acc;
+  }, {});
+  const lines = [
+    `LocalMode Bench partial run ${attempt.attemptId}`,
+    `${attempt.suite} suite · harness ${attempt.harness.version} · ${attempt.pageOrigin ?? ''}`,
+    `started ${attempt.startedAt} · last update ${attempt.updatedAt}`,
+    `finished ${attempt.cells.length} of ${attempt.plannedCellIds.length} cells (${Object.entries(counts)
+      .map(([k, v]) => `${v} ${k}`)
+      .join(', ')})`,
+    `running when the page ended: ${attempt.currentCellId ?? 'nothing (between cells)'}${
+      attempt.currentPhase ? ` · phase ${attempt.currentPhase}` : ''
+    }`,
+    `not run: ${attempt.plannedCellIds.filter((id) => !finished.has(id)).join(', ') || 'none'}`,
+  ];
+  if (env) {
+    lines.push(
+      `device: ${env.browser?.name ?? '?'} ${env.browser?.version ?? ''} · ${env.os?.platform ?? '?'} ${env.os?.version ?? ''} · ${
+        env.device?.type ?? '?'
+      } · ${env.hardware?.cores ?? '?'} cores · ${env.hardware?.deviceMemoryGB ?? '?'} GB · gpu ${env.gpuModel ?? env.gpu?.vendor ?? '?'} · webgpu ${
+        env.gpu?.available ? 'yes' : 'no'
+      } · quota ${env.storage?.quotaBytes ? Math.round(env.storage.quotaBytes / 1e9) + ' GB' : '?'}`,
+    );
+  }
+  for (const c of attempt.cells) {
+    const err = c.error ? ` · ${c.error.name}: ${c.error.message}${c.error.cause ? ` (${c.error.cause})` : ''}` : '';
+    lines.push(`  ${c.cellId}: ${c.status}${err}`);
+  }
+  return lines.join('\n');
 }

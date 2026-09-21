@@ -341,7 +341,8 @@ test.describe('bench real run (WASM lanes)', () => {
     const region = page.getByRole('region', { name: /unfinished run recovered/i });
     await expect(region).toBeVisible({ timeout: 15_000 });
     await expect(region).toContainText(/quick suite · \d+ of \d+ cells finished/);
-    await expect(region).toContainText(/last cell/);
+    await expect(region).toContainText(/ended during wllama\//);
+    await expect(region.getByRole('button', { name: 'Copy diagnostics' })).toBeVisible();
 
     const downloadPromise = page.waitForEvent('download');
     await region.getByRole('button', { name: 'Export partial run' }).click();
@@ -358,6 +359,7 @@ test.describe('bench real run (WASM lanes)', () => {
       finishedCells: number;
       unfinishedCellIds: string[];
       currentCellId: string | null;
+      currentPhase: string | null;
       cells: Array<{ cellId: string; status: string; memory?: { postRun?: number } }>;
     };
     expect(partial.partial).toBe(true);
@@ -383,8 +385,9 @@ test.describe('bench real run (WASM lanes)', () => {
     // their reason, not dropped from the plan.
     const skipped = partial.cells.find((c) => c.cellId === 'transformers-webgpu/bge-small-en/embed-single');
     expect(skipped?.status).toBe('skipped');
-    // The cell that was executing when the page died is named.
+    // The cell that was executing when the page died is named, with its phase.
     expect(partial.currentCellId).toMatch(/^wllama\//);
+    expect(['load', 'warmup', 'iteration']).toContain(partial.currentPhase);
 
     // Discard removes the record, and it stays gone across a reload.
     await region.getByRole('button', { name: 'Discard' }).click();

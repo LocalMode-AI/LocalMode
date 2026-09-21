@@ -110,8 +110,8 @@ export async function wllamaAvailability(): Promise<AdapterAvailability> {
     return {
       ok: false,
       reason: isolated
-        ? `browser cannot reserve wllama's shared 4 GB WASM memory (${detail})`
-        : `page is not cross-origin isolated (no SharedArrayBuffer), which wllama's shared WASM memory requires (${detail})`,
+        ? `this browser cannot reserve the shared 4 GB WASM memory wllama needs (${detail})`
+        : `page is not cross-origin isolated, so wllama has no shared WASM memory (${detail})`,
     };
   }
   // wllama's model cache lives in the Origin Private File System. WebKit
@@ -123,7 +123,7 @@ export async function wllamaAvailability(): Promise<AdapterAvailability> {
     const detail = (error as Error)?.message ?? String(error);
     return {
       ok: false,
-      reason: `wllama's model cache needs the Origin Private File System, which this browser context does not provide (${detail})`,
+      reason: `no Origin Private File System for wllama's model cache in this browser (${detail})`,
     };
   }
   return { ok: true };

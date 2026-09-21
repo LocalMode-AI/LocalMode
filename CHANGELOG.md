@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.12.1] - 2026-09-20
+
+Phone fixes for `/bench/run` from the first iPhone attempts under v4 (site only; no package changes).
+
+### Fixed
+
+- **The runner page fits a phone again.** A lane's unavailability reason (on iOS Safari, the sentence explaining that wllama's model cache needs the Origin Private File System, with the browser's error inside) was rendered in a no-wrap badge inside a non-shrinking column, so the row and the whole page grew to about three viewport widths and nothing wrapped. Reasons and notes now wrap under the lane name, the badge only says "unavailable", lane names wrap instead of truncating, and the wllama reasons are shorter. Verified in WebKit at the iPhone 15 viewport: page width 393 px, no element past the edge (the badge had reached 1123 px).
+- **A run that ends with a page reload can be diagnosed from the phone.** The saved attempt now records the phase of the lane that was running (load, warmup, reload, or the timed work) as well as its id, the recovery card says "ended during `<cell>` (`<phase>`)", and a "Copy diagnostics" button puts a plain-text summary (suite, harness, finished cells with their errors, the cell and phase running when the page ended, browser, OS, GPU, WebGPU, storage quota) on the clipboard, with an inline text box as the fallback. Mobile browsers reload a page that exceeds its memory budget without leaving a trace; the iPhone reload reported today happened on every attempt, with and without the quality lane, and this is the record needed to pin it to a lane.
+- **The overlay's step number follows the checklist.** "Step N of M" came from the runner's cell counter, which does not count skipped cells or warm reloads, so it drifted from the "done" counter (the M4 Thorough run showed "Step 60 of 69" beside "62 of 69 steps done"); it now uses the same ordered plan as the checklist, and a warm reload keeps the group's step in the header with a "Reloading … from the cache" status line instead of "Preparing the run".
+
 ## [2.12.0] - 2026-09-20
 
 Protocol bump to `localmode-bench/4` from the first two runs measured under v3 (a Quick and a Thorough suite on the M4 Mac mini, both green except the three cells below), plus the runner fixes those runs surfaced.

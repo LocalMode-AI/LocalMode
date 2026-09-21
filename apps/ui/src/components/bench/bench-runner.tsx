@@ -40,6 +40,7 @@ import {
   beginAttempt,
   finishAttempt,
   listUnfinishedAttempts,
+  partialRunDiagnostics,
   toPartialRunExport,
   updateAttempt,
   type PartialAttempt,
@@ -578,7 +579,10 @@ export function BenchRunner() {
           },
           onPhase: (p) => setStatusLine(p === 'fingerprint' ? 'Hardware calibration…' : `Phase: ${p}`),
           onCellStart: (cellId, index, total) => {
-            setCellProgress({ index: index + 1, total });
+            // Number steps by the overlay's plan (what the checklist shows), not
+            // the runner's counter, which skips warm reloads and skipped cells.
+            const planned = orderedIds.indexOf(cellId);
+            setCellProgress(planned >= 0 ? { index: planned + 1, total: orderedIds.length } : { index: index + 1, total });
             setLoadPct(null);
             setActivity(null);
             setCellStartedAt(Date.now());
@@ -589,7 +593,7 @@ export function BenchRunner() {
             const lane = cellId.split('/').slice(0, 2).join('/');
             setLoadedLanes((prev) => (prev.has(lane) ? prev : new Set(prev).add(lane)));
             setStatusLine(`Running ${cellId}`);
-            if (attempt) void updateAttempt(attempt, { currentCellId: cellId });
+            if (attempt) void updateAttempt(attempt, { currentCellId: cellId, currentPhase: 'iteration' });
           },
           onActivity: (a) => {
             const at = Date.now();
@@ -599,13 +603,18 @@ export function BenchRunner() {
               // A model group's load and warmup happen before its first timed
               // cell starts, so the step line follows the lane being loaded
               // instead of the step that just finished.
-              if (currentCellRef.current !== a.cellId) {
+              const index = orderedIds.indexOf(a.cellId);
+              if (index >= 0 && currentCellRef.current !== a.cellId) {
                 currentCellRef.current = a.cellId;
                 setCurrentCellId(a.cellId);
-                const index = orderedIds.indexOf(a.cellId);
-                if (index >= 0) setCellProgress({ index: index + 1, total: orderedIds.length });
+                setCellProgress({ index: index + 1, total: orderedIds.length });
                 setCellStartedAt(at);
                 setLoadPct(null);
+              }
+              // A page that dies while a model loads (memory) leaves the lane
+              // and phase in the saved attempt for the recovery card.
+              if (attempt && (attempt.currentCellId !== a.cellId || attempt.currentPhase !== a.phase)) {
+                void updateAttempt(attempt, { currentCellId: a.cellId, currentPhase: a.phase });
               }
               if (a.phase !== 'load' || a.pct === undefined) {
                 setStatusLine(
@@ -643,7 +652,7 @@ export function BenchRunner() {
               return next;
             });
             cellStartRef.current = at;
-            if (attempt) void updateAttempt(attempt, { cells: [...attempt.cells, cell], currentCellId: undefined });
+            if (attempt) void updateAttempt(attempt, { cells: [...attempt.cells, cell], currentCellId: undefined, currentPhase: undefined });
           },
           onLoadProgress: (_cellId, pct) => {
             setLoadPct(pct ?? null);
@@ -699,6 +708,20 @@ export function BenchRunner() {
     [downloadJson],
   );
 
+  const [copiedAttempt, setCopiedAttempt] = useState<string | null>(null);
+  const [shownDiagnostics, setShownDiagnostics] = useState<{ attemptId: string; text: string } | null>(null);
+  const copyDiagnostics = useCallback(async (attempt: PartialAttempt) => {
+    const text = partialRunDiagnostics(attempt);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedAttempt(attempt.attemptId);
+      setTimeout(() => setCopiedAttempt(null), 2_000);
+    } catch {
+      // Clipboard denied: show the text so it can be selected by hand.
+      setShownDiagnostics({ attemptId: attempt.attemptId, text });
+    }
+  }, []);
+
   const discardPartial = useCallback(async (attempt: PartialAttempt) => {
     await finishAttempt(attempt.attemptId);
     setUnfinished((list) => list.filter((a) => a.attemptId !== attempt.attemptId));
@@ -723,9 +746,11 @@ export function BenchRunner() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3 text-sm">
             <p className="text-muted-foreground">
-              The page closed or crashed mid-suite (most often the tab ran out of memory on the
-              Standard or Thorough suite). Its progress was saved cell by cell: export it as a
-              partial run for diagnosis. Partial runs are never published.
+              The page closed or crashed mid-suite (most often the tab ran out of memory: the
+              Standard or Thorough suite on a laptop, or any suite on a phone, where the browser
+              reloads the page when it exceeds its memory budget). Its progress was saved cell by
+              cell: copy the diagnostics or export the partial run so the cause can be found.
+              Partial runs are never published.
             </p>
             {unfinished.map((attempt) => {
               const lastCell = attempt.currentCellId ?? attempt.cells[attempt.cells.length - 1]?.cellId;
@@ -739,17 +764,21 @@ export function BenchRunner() {
                       {attempt.suite} suite · {attempt.cells.length} of {attempt.plannedCellIds.length} cells
                       finished
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="break-words text-xs text-muted-foreground">
                       started {new Date(attempt.startedAt).toLocaleString()}
                       {lastCell && (
                         <>
                           {' '}
-                          · last cell <span className="font-mono">{lastCell}</span>
+                          · ended during <span className="font-mono">{lastCell}</span>
+                          {attempt.currentPhase ? ` (${attempt.currentPhase})` : ''}
                         </>
                       )}
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" onClick={() => void copyDiagnostics(attempt)}>
+                      {copiedAttempt === attempt.attemptId ? 'Copied' : 'Copy diagnostics'}
+                    </Button>
                     <Button size="sm" variant="outline" onClick={() => exportPartial(attempt)}>
                       Export partial run
                     </Button>
@@ -757,6 +786,15 @@ export function BenchRunner() {
                       Discard
                     </Button>
                   </div>
+                  {shownDiagnostics?.attemptId === attempt.attemptId && (
+                    <textarea
+                      readOnly
+                      aria-label="Partial run diagnostics"
+                      className="w-full rounded-md border border-border bg-muted/40 p-2 font-mono text-xs"
+                      rows={8}
+                      value={shownDiagnostics.text}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -820,21 +858,23 @@ export function BenchRunner() {
                   className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
                 >
                   <div className="flex min-w-0 flex-col">
-                    <span className="truncate text-sm font-medium">{model.displayName}</span>
+                    <span className="break-words text-sm font-medium">{model.displayName}</span>
                     <span className="text-xs text-muted-foreground">
                       {model.runtimeId} · {formatBytes(model.sizeBytes)}
                       {model.quantization ? ` · ${model.quantization}` : ''}
                     </span>
+                    {/* Reasons and notes can run to a sentence with a browser error inside;
+                        they wrap here, inside the shrinking column, so a phone-width row
+                        never grows past the viewport. */}
+                    {!available && (
+                      <span className="break-words text-xs text-muted-foreground">{reason ?? 'unavailable'}</span>
+                    )}
+                    {available && note && <span className="break-words text-xs text-muted-foreground">{note}</span>}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     {!available && (
                       <Badge variant="outline" className="text-muted-foreground">
-                        {reason ?? 'unavailable'}
-                      </Badge>
-                    )}
-                    {available && note && (
-                      <Badge variant="outline" className="text-muted-foreground">
-                        {note}
+                        unavailable
                       </Badge>
                     )}
                     <Switch
