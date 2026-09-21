@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.0] - 2026-09-21
+
+Privacy pass on the published run files, from a review of what a public run carries.
+
+**Released:** `@localmode/bench` 0.7.0 (result schema 3; protocol unchanged at `localmode-bench/4`).
+
+### Changed
+
+- **A public run file no longer carries anything that locates or tracks a person.** The capture dropped the time zone, UTC offset and calendar (a city-sized location), the language list, the battery's exact percentage and time-to-full (a device-tracking signal; the level is kept to the quarter, plus whether it is charging), and display preferences; the submission nonce is stripped by the server and the digest no longer covers it, so a published file verifies as submitted; the submitter's network address was never written and the README now says so. `scrubRunForPublication()` is the one rule, applied on every submission (a payload from a page built before schema 3 is cleaned, its digest recomputed and `scrubbedAt` stamped) and by the dataset repository's `tools/scrub-publication.mjs`, which rewrote every file published earlier on 2026-09-21. The methodology page states what a public file does not carry.
+- **A session nonce fronts one submission.** Nonces are valid for six hours and were reusable, so a nonce copied from a fresh public run could front fabricated submissions until it expired; the server now consumes each nonce once (Redis `SET NX EX` when bound, in-instance set otherwise) and answers 409 `nonce-used` on a repeat. Route-level tests drive the real handler with only GitHub stubbed: clean submission published minus the nonce with the client digest intact, pre-schema-3 payload scrubbed with a recomputed digest, nonce refused on second use, wrong digest refused before anything is stored.
+- **Phone guidance on the runner page names the memory precondition.** The first crash record from an iPhone under 2.12.2 showed the pattern: the page started short on memory (the Transformers.js WASM worker could not get a heap for a 35 MB model, "[wasm] RangeError: Out of memory"), and the browser killed the page twelve seconds later during WebLLM's first inference; the same phone had completed four Quick runs earlier in the day. The note under the suite picker now tells phone users to close other tabs and apps first, and that a run whose first model fails with "out of memory" rarely survives the next one.
+
 ## [2.12.2] - 2026-09-21
 
 **Released:** `@localmode/bench` 0.6.1.

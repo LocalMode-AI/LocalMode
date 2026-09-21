@@ -15,7 +15,7 @@ import type {
   PlausibilityFlag,
   ValidationReport,
 } from './types.js';
-import { BENCH_PROTOCOL_VERSION, BENCH_SCHEMA_VERSION } from './types.js';
+import { BENCH_PROTOCOL_VERSION, ACCEPTED_SCHEMA_VERSIONS } from './types.js';
 import { summarize } from './stats.js';
 import { parseMMLUAnswer } from './quality.js';
 import { TINY_MMLU } from './datasets/tiny-mmlu.js';
@@ -71,7 +71,8 @@ export function validateRunShape(value: unknown): string[] {
   const run = value as Record<string, unknown>;
 
   if (run.protocol !== BENCH_PROTOCOL_VERSION) push(`protocol must be "${BENCH_PROTOCOL_VERSION}"`);
-  if (run.schemaVersion !== BENCH_SCHEMA_VERSION) push(`schemaVersion must be ${BENCH_SCHEMA_VERSION}`);
+  if (!ACCEPTED_SCHEMA_VERSIONS.includes(run.schemaVersion as number))
+    push(`schemaVersion must be one of ${ACCEPTED_SCHEMA_VERSIONS.join(', ')}`);
   if (typeof run.runId !== 'string' || run.runId.length < 8 || run.runId.length > 64) {
     push('runId must be a string (8-64 chars)');
   }

@@ -9,7 +9,10 @@
 export const BENCH_PROTOCOL_VERSION = 'localmode-bench/4';
 
 /** Result JSON schema version (independent of the protocol semantics version). */
-export const BENCH_SCHEMA_VERSION = 2;
+export const BENCH_SCHEMA_VERSION = 3;
+
+/** Schema versions a submission may carry: the current one and the one a page built before the last schema change still sends. */
+export const ACCEPTED_SCHEMA_VERSIONS: readonly number[] = [2, 3];
 
 /** Benchmark suite presets. `custom` = user-picked cells. */
 export type BenchSuiteId = 'quick' | 'standard' | 'thorough' | 'custom';
@@ -452,19 +455,15 @@ export interface DisplayInfo {
   wideGamut?: boolean;
   /** `screen.isExtended` (Window Management API) — more than one display attached. */
   isExtended?: boolean;
-  /** Reduced-motion / forced-colors preferences, cheap OS-level signals. */
-  prefersReducedMotion?: boolean;
-  prefersColorScheme?: 'light' | 'dark' | 'no-preference';
 }
 
-/** Locale / clock signals. */
+/**
+ * Locale signal: the BCP 47 tag only (`en-US`). The time zone, UTC offset,
+ * and calendar a page can also read place a device in a city, which a public
+ * dataset has no use for, so they are not captured (schema 3).
+ */
 export interface LocaleInfo {
-  timeZone?: string;
-  /** Minutes offset from UTC at capture time (`Date#getTimezoneOffset`). */
-  timeZoneOffsetMinutes?: number;
   locale?: string;
-  /** `Intl.DateTimeFormat().resolvedOptions().calendar`. */
-  calendar?: string;
 }
 
 /**
@@ -515,10 +514,12 @@ export interface EnvironmentCapture {
   power: {
     batterySupported: boolean;
     charging?: boolean;
+    /**
+     * Battery level rounded to a quarter (0, 0.25, 0.5, 0.75, 1). Low levels
+     * bring power saving, which matters; the exact percentage would track a
+     * device across runs and is not kept (schema 3).
+     */
     level?: number;
-    /** Seconds until full / empty (Infinity serialized as absent). */
-    chargingTimeSec?: number;
-    dischargingTimeSec?: number;
   };
   pressure: { supported: boolean; lastState?: string };
   /** Inferred performance.now() quantum in microseconds (grid inference). */
@@ -528,7 +529,6 @@ export interface EnvironmentCapture {
   display?: DisplayInfo;
   network?: NetworkInfo;
   locale?: LocaleInfo;
-  languages?: string[];
   /** Raw `navigator.userAgent` — kept verbatim so future parsers can re-derive fields. */
   userAgent?: string;
   /** Page origin the run executed on (distinguishes production from local/staging). */
@@ -627,10 +627,19 @@ export interface BenchRunResult {
   events: TraceEvent[];
   /** Client-computed summaries (advisory; server recomputes from the trace). */
   clientSummaries?: CellSummary[];
-  /** Server-issued anti-forgery nonce (verified tier only). */
+  /**
+   * Server-issued anti-forgery nonce (verified tier only). Present on the
+   * submission, never in the published file: the server strips it.
+   */
   nonce?: string;
-  /** SHA-256 of the canonical JSON of this object without `digest`. */
+  /** SHA-256 of the canonical JSON of this object without `digest` and `nonce`. */
   digest?: string;
+  /**
+   * ISO time at which the published file was rewritten by the publication
+   * scrub (fields removed under a later schema, digest recomputed); absent
+   * when the file is exactly what the client submitted.
+   */
+  scrubbedAt?: string;
 }
 
 /** A plausibility/integrity finding attached by validation. */

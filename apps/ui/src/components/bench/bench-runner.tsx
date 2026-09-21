@@ -70,7 +70,7 @@ import {
   TableRow,
 } from '@/registry/localmode/ui/table';
 
-const HARNESS_VERSION = '0.6.1';
+const HARNESS_VERSION = '0.7.0';
 
 type Phase = 'idle' | 'running' | 'done' | 'error';
 
@@ -954,7 +954,10 @@ export function BenchRunner() {
             <p className="text-xs text-muted-foreground" role="note">
               Phones and tablets run the Quick suite. Standard and Thorough load several runtimes
               in one page and need more browser memory than a mobile browser allows; the tab would
-              be killed partway through and the run lost.
+              be killed partway through and the run lost. Even the Quick suite needs the page to
+              start with memory to spare: close other tabs and apps first (a page that is short on
+              memory is killed by the browser without warning, and a run that begins with an
+              &quot;out of memory&quot; error on its first model rarely survives the next one).
             </p>
           )}
           {study && (

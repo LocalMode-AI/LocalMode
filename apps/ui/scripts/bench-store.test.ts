@@ -101,7 +101,7 @@ describe('toIndexEntry() → aggregateIndex() (protocol v2 fields)', () => {
     };
     return {
       protocol: 'localmode-bench/4',
-      schemaVersion: 2,
+      schemaVersion: 3,
       runId: 'run-v2-0001',
       createdAt: '2026-09-19T00:00:00.000Z',
       harness: { name: '@localmode/bench', version: '0.2.0' },

@@ -1,5 +1,14 @@
 # @localmode/bench
 
+## 0.7.0
+
+Result schema 3 (protocol unchanged at `localmode-bench/4`: nothing measured changes).
+
+- **The environment capture no longer reads what could identify a device** Dropped: `locale.timeZone`, `timeZoneOffsetMinutes`, `calendar` (a city-sized location; only the BCP 47 `locale` tag stays), `languages`, `power.chargingTimeSec` / `dischargingTimeSec`, `display.prefersReducedMotion` / `prefersColorScheme`; `power.level` is rounded to the quarter (`coarseBatteryLevel()`, exported). The device model, GPU, browser, screen size, storage quota, network type, and runtime configuration stay: they are the dataset.
+- feat: `scrubRunForPublication(run)`, the one rule for what a public file may carry. Strips the submission nonce and, for a run captured under an earlier schema, removes the fields above; `changed` tells the caller to recompute the digest and stamp `scrubbedAt` (new optional field on `BenchRunResult`). The localmode.ai server applies it on every submission; the dataset repository's tool applies it to files published earlier.
+- **The run digest no longer covers the nonce** (`computeRunDigest` omits `digest` and `nonce`), so a published file, which never contains the nonce, verifies as submitted. `verifyRunDigest` falls back to the pre-schema-3 rule (`computeLegacyRunDigest`, exported) for files that still carry a nonce.
+- `validateRunShape` accepts schema versions 2 and 3 (`ACCEPTED_SCHEMA_VERSIONS`), so a page built before the change still submits; its payload is scrubbed to schema 3 on the server.
+
 ## 0.6.1
 
 - fix: only the submitter's abort signal is a cancel. The runner treated every `AbortError` as the cancel, so an AbortError a runtime raised on its own (a fetch the browser dropped, an internal timeout) ended the whole run as cancelled and discarded every finished cell; an Android phone lost every attempt this way. Such an error is now a cell error like any other, recorded with its message, retried once, and the run continues.

@@ -7,13 +7,14 @@
 
 import { NextResponse, type NextRequest } from 'next/server';
 import type { BenchRunResult } from '@localmode/bench';
-import { validateSubmission, verifyRunDigest } from '@localmode/bench';
+import { computeRunDigest, scrubRunForPublication, validateSubmission, verifyRunDigest } from '@localmode/bench';
 import { verifyNonce } from '@/lib/bench/nonce';
 import {
   appendToIndex,
   BenchStoreError,
   benchStoreConfig,
   commitRun,
+  consumeNonce,
   rateLimitWithRetry,
   SUBMIT_RATE_LIMIT,
   toIndexEntry,
@@ -101,9 +102,29 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
   const flagged = !report.ok;
 
+  // A nonce fronts one submission. Checked after the cheap rejections so a
+  // malformed payload does not burn the page's nonce.
+  if (!(await consumeNonce(run.nonce as string))) {
+    return NextResponse.json(
+      { ok: false, code: 'nonce-used', message: 'This session nonce was already used. Reload the bench page to run again.' },
+      { status: 409 },
+    );
+  }
+
+  // Publish only what a public file may carry: the nonce never, and none of
+  // the fields a page built before schema 3 still captures. When the scrub
+  // changed anything, the client's digest no longer applies and the file
+  // carries a recomputed one plus the time of the rewrite.
+  const scrub = scrubRunForPublication(run);
+  let published = scrub.run;
+  if (scrub.changed) {
+    published = { ...scrub.run, scrubbedAt: new Date().toISOString() };
+    published.digest = await computeRunDigest(published);
+  }
+
   try {
-    const path = await commitRun(config, run, flagged);
-    await appendToIndex(config, toIndexEntry(run, report.summaries, flagged, path));
+    const path = await commitRun(config, published, flagged);
+    await appendToIndex(config, toIndexEntry(published, report.summaries, flagged, path));
     return NextResponse.json({
       ok: true,
       flagged,

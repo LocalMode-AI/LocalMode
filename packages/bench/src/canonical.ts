@@ -46,18 +46,35 @@ export async function sha256Hex(text: string): Promise<string> {
 
 /**
  * Compute the run digest: SHA-256 of the canonical JSON of the result with
- * `digest` removed.
+ * `digest` and `nonce` removed. The nonce is a submission credential the
+ * server strips before publishing, so it cannot be part of what the
+ * published file attests to.
  *
  * @example
  * result.digest = await computeRunDigest(result);
  */
 export async function computeRunDigest(result: BenchRunResult): Promise<string> {
+  const { digest: _omitted, nonce: _nonce, ...rest } = result;
+  return sha256Hex(canonicalJson(rest));
+}
+
+/**
+ * The digest rule of files published before schema 3, which covered the
+ * nonce; kept so those files still verify.
+ */
+export async function computeLegacyRunDigest(result: BenchRunResult): Promise<string> {
   const { digest: _omitted, ...rest } = result;
   return sha256Hex(canonicalJson(rest));
 }
 
-/** Verify a result's embedded digest. Returns false when absent or wrong. */
+/**
+ * Verify a result's embedded digest under the current rule, else under the
+ * legacy rule when the result still carries a nonce. Returns false when
+ * absent or wrong.
+ */
 export async function verifyRunDigest(result: BenchRunResult): Promise<boolean> {
   if (!result.digest) return false;
-  return (await computeRunDigest(result)) === result.digest;
+  if ((await computeRunDigest(result)) === result.digest) return true;
+  if (result.nonce !== undefined) return (await computeLegacyRunDigest(result)) === result.digest;
+  return false;
 }

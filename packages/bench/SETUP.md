@@ -51,7 +51,11 @@ in-instance window without it. The submit endpoint allows 20 submissions per
 hour per client address (`SUBMIT_RATE_LIMIT` in `apps/ui/src/lib/bench/store.ts`;
 rejected attempts count too), sized for several devices behind one NAT; a 429
 carries `Retry-After` and `retryAfterSec`, and the runner keeps the run and
-resubmits it by itself when the window opens.
+resubmits it by itself when the window opens. A session nonce fronts one
+submission (`consumeNonce`; Redis `SET NX EX` when bound, in-instance set
+otherwise), and the published file never contains it: the server applies
+`scrubRunForPublication` before committing, recomputing the digest and
+stamping `scrubbedAt` when a pre-schema-3 page's payload had to be cleaned.
 
 ## 4. Verify after deploy
 

@@ -128,7 +128,6 @@ export async function captureEnvironment(options?: {
     display: screenInfo ?? undefined,
     network: probeNetwork(nav),
     locale: probeLocale(),
-    languages: nav?.languages ? [...nav.languages].slice(0, 3) : undefined,
     userAgent: ua || undefined,
     pageOrigin: attempt(() => (typeof location !== 'undefined' ? location.origin : undefined)),
     visibilityState: attempt(() =>
@@ -717,11 +716,6 @@ function probeScreen(): DisplayInfo | null {
   try {
     const mq = (q: string): boolean | undefined =>
       typeof matchMedia === 'function' ? attempt(() => matchMedia(q).matches) : undefined;
-    const scheme = mq('(prefers-color-scheme: dark)')
-      ? 'dark'
-      : mq('(prefers-color-scheme: light)')
-        ? 'light'
-        : 'no-preference';
     return {
       width: screen.width,
       height: screen.height,
@@ -735,8 +729,6 @@ function probeScreen(): DisplayInfo | null {
       hdr: mq('(dynamic-range: high)'),
       wideGamut: mq('(color-gamut: p3)'),
       isExtended: attempt(() => (screen as unknown as { isExtended?: boolean }).isExtended),
-      prefersReducedMotion: mq('(prefers-reduced-motion: reduce)'),
-      prefersColorScheme: scheme,
     };
   } catch {
     return null;
@@ -764,17 +756,15 @@ function probeNetwork(nav: Navigator | undefined): NetworkInfo | undefined {
   });
 }
 
-/** Time zone + locale from Intl; the offset from Date. */
+/** The BCP 47 locale tag from Intl. The time zone, offset, and calendar are deliberately not read. */
 function probeLocale(): LocaleInfo | undefined {
-  return attempt(() => {
-    const resolved = Intl.DateTimeFormat().resolvedOptions();
-    return {
-      timeZone: str(resolved.timeZone),
-      timeZoneOffsetMinutes: new Date().getTimezoneOffset(),
-      locale: str(resolved.locale),
-      calendar: str(resolved.calendar),
-    };
-  });
+  return attempt(() => ({ locale: str(Intl.DateTimeFormat().resolvedOptions().locale) }));
+}
+
+/** Battery level rounded to a quarter: enough to see power saving, too coarse to track a device. */
+export function coarseBatteryLevel(level: number | undefined): number | undefined {
+  if (typeof level !== 'number' || !Number.isFinite(level)) return undefined;
+  return Math.min(1, Math.max(0, Math.round(level * 4) / 4));
 }
 
 async function probeStorage(
@@ -808,14 +798,10 @@ async function probeBattery(nav: Navigator | undefined): Promise<EnvironmentCapt
       : undefined;
     if (!getBattery) return { batterySupported: false };
     const battery = await getBattery.call(nav);
-    const finite = (v: number | undefined): number | undefined =>
-      typeof v === 'number' && Number.isFinite(v) ? v : undefined;
     return {
       batterySupported: true,
       charging: battery.charging,
-      level: battery.level,
-      chargingTimeSec: finite(battery.chargingTime),
-      dischargingTimeSec: finite(battery.dischargingTime),
+      level: coarseBatteryLevel(battery.level),
     };
   } catch {
     return { batterySupported: false };

@@ -173,6 +173,21 @@ deterministic execution order does not change this. Isolating each
 Transformers.js model in its own worker is the structural fix and is future
 work.
 
+## What a public run file may carry
+
+The environment capture reads what the browser discloses about the device,
+but a public file must not identify a device. Schema 3 therefore
+does not capture the time zone, UTC offset or calendar (only the BCP 47
+locale tag), the language list, the battery's exact level or time-to-full
+(the level is kept to the quarter, plus whether it is charging), or display
+preferences. `scrubRunForPublication(run)` is the one rule for this: it
+strips the submission nonce and, for a run captured under an earlier schema,
+removes those fields (`changed` tells the caller to recompute the digest and
+stamp `scrubbedAt`). The run digest covers everything except `digest` and
+`nonce`, so a published file verifies without the credential it was
+submitted with; `verifyRunDigest` also accepts the pre-schema-3 rule for
+files that still carry a nonce.
+
 ## Results dataset (GitHub-as-database)
 
 Community submissions are stored in a public GitHub repository:

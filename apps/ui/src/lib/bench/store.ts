@@ -458,6 +458,43 @@ export async function rateLimitWithRetry(
   return { allowed: hit.count <= limit, retryAfterSec: Math.max(1, Math.ceil((hit.resetAt - now) / 1000)) };
 }
 
+/** Seconds a consumed nonce stays remembered: the nonce's own validity window. */
+export const NONCE_CONSUMED_TTL_SEC = 6 * 3600;
+
+const consumedNonces = new Map<string, number>();
+
+/**
+ * Mark a nonce as used; false when it was used before. A nonce is issued per
+ * page load and is valid for six hours, so without this a nonce copied out
+ * of a fresh submission could front any number of fabricated runs until it
+ * expired. Uses Upstash when bound (all instances agree), else an in-instance
+ * set. Fails open on errors.
+ */
+export async function consumeNonce(nonce: string, ttlSec = NONCE_CONSUMED_TTL_SEC): Promise<boolean> {
+  const url = process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
+  if (url && token) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(['SET', `bench:nonce:${nonce}`, '1', 'NX', 'EX', String(ttlSec)]),
+      });
+      if (res.ok) {
+        const { result } = (await res.json()) as { result: string | null };
+        return result === 'OK';
+      }
+    } catch {
+      // Fall through to the in-instance set.
+    }
+  }
+  const now = Date.now();
+  for (const [key, expiresAt] of consumedNonces) if (expiresAt < now) consumedNonces.delete(key);
+  if (consumedNonces.has(nonce)) return false;
+  consumedNonces.set(nonce, now + ttlSec * 1000);
+  return true;
+}
+
 /** Allow `limit` submissions per `windowSec` per key. Fails open on errors. */
 export async function rateLimit(key: string, limit = SUBMIT_RATE_LIMIT, windowSec = SUBMIT_RATE_WINDOW_SEC): Promise<boolean> {
   return (await rateLimitWithRetry(key, limit, windowSec)).allowed;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalJson, computeRunDigest, sha256Hex, verifyRunDigest } from '../src/canonical.js';
+import { canonicalJson, computeLegacyRunDigest, computeRunDigest, sha256Hex, verifyRunDigest } from '../src/canonical.js';
 import type { BenchRunResult } from '../src/types.js';
 import { makeRun } from './helpers.js';
 
@@ -49,5 +49,27 @@ describe('run digests', () => {
     run.digest = d1;
     const d2 = await computeRunDigest(run);
     expect(d2).toBe(d1);
+  });
+});
+
+describe('digest and the submission nonce', () => {
+  it('does not cover the nonce, so the published file (nonce stripped) still verifies', async () => {
+    // The server strips the nonce before publishing; a digest that covered
+    // it would fail on every public file, and a nonce inside a public file
+    // stays valid for six hours for anyone who copies it.
+    const run = makeRun({ nonce: '1790000000000.abcdef' });
+    run.digest = await computeRunDigest(run);
+    const { nonce: _stripped, ...published } = run;
+    expect(await verifyRunDigest(published as BenchRunResult)).toBe(true);
+    expect(await verifyRunDigest(run)).toBe(true);
+  });
+
+  it('still verifies a file digested under the legacy rule that covered the nonce', async () => {
+    const legacy = makeRun({ nonce: '1790000000000.abcdef' });
+    legacy.digest = await computeLegacyRunDigest(legacy);
+    expect(await verifyRunDigest(legacy)).toBe(true);
+    // A tampered legacy file fails both rules.
+    legacy.suite = 'thorough';
+    expect(await verifyRunDigest(legacy)).toBe(false);
   });
 });

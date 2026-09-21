@@ -228,14 +228,24 @@ export default function BenchMethodologyPage() {
             channel and parsed into a GPU model (for example &quot;Apple M4&quot; or &quot;NVIDIA
             GeForce RTX 4070&quot;). Core counts and device memory are recorded but labeled clamped
             (browsers cap or randomize them); the JavaScript heap ceiling, storage quota, battery
-            state, CPU pressure support, network type, display, locale and time zone are captured
-            where the APIs exist. The WebAssembly proposal matrix (SIMD, relaxed SIMD, threads,
+            state, CPU pressure support, network type, display and locale tag are captured where the
+            APIs exist. The WebAssembly proposal matrix (SIMD, relaxed SIMD, threads,
             exceptions, GC, memory64, tail calls, JSPI and the rest) is probed by validating
             canonical modules, and the availability of every API the runtimes depend on (WebGPU,
             WebNN, OPFS, Cache API, workers, Chrome Built-in AI) is recorded as a presence check.
             The harness stamps the exact versions of the runtime packages it bundled (and wllama&apos;s
             CDN pin), per run and per cell. The resolved execution backend (WebGPU vs WASM vs CPU)
             is probed, never assumed from the request.
+          </p>
+          <p>
+            What a public run file does not carry (schema 3): the time zone, UTC offset and
+            calendar (they place a device in a city), the language list, the exact battery
+            percentage and time-to-full (they track a device across runs; the level is kept to the
+            quarter, and whether it is charging), display preferences such as color scheme, the
+            submission nonce, and the submitter&apos;s network address, which the server uses only
+            as a rate-limit key and never writes down. A file published before schema 3 that
+            carried any of these was rewritten without them and carries{' '}
+            <code className="font-mono text-sm">scrubbedAt</code> with a recomputed digest.
           </p>
         </Section>
 

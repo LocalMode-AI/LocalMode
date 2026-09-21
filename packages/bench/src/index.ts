@@ -13,6 +13,7 @@
 export {
   BENCH_PROTOCOL_VERSION,
   BENCH_SCHEMA_VERSION,
+  ACCEPTED_SCHEMA_VERSIONS,
 } from './types.js';
 export type {
   BenchSuiteId,
@@ -95,6 +96,7 @@ export {
   parseGpuModel,
   resolveGpuModel,
   detectWasmFeatures,
+  coarseBatteryLevel,
 } from './env.js';
 export type { DeviceTypeSignals } from './env.js';
 export { memoryApiAvailable, sampleMemoryBytes } from './memory.js';
@@ -116,7 +118,11 @@ export {
   validateSubmission,
   isIncrementalStream,
 } from './validate.js';
-export { canonicalJson, sha256Hex, computeRunDigest, verifyRunDigest } from './canonical.js';
+export { canonicalJson, sha256Hex, computeRunDigest, computeLegacyRunDigest, verifyRunDigest } from './canonical.js';
+
+// Publication scrub (what a public run file may carry)
+export { scrubRunForPublication } from './publication.js';
+export type { PublicationScrub } from './publication.js';
 
 // Aggregation (leaderboard + analysis tooling)
 export {

@@ -159,6 +159,7 @@ test.describe('bench real run (WASM lanes)', () => {
     const { readFileSync } = await import('node:fs');
     const exported = JSON.parse(readFileSync(path!, 'utf8')) as {
       protocol: string;
+      schemaVersion: number;
       digest?: string;
       harness: { version: string; runtimeVersions?: Record<string, string> };
       environment: {
@@ -174,7 +175,9 @@ test.describe('bench real run (WASM lanes)', () => {
         flags: { wasm?: Record<string, boolean | number>; secureContext?: boolean };
         apis?: Record<string, unknown>;
         display?: { width: number; colorDepth?: number; viewportWidth?: number };
-        locale?: { timeZone?: string };
+        locale?: { timeZone?: string; locale?: string };
+        languages?: string[];
+        power?: { level?: number; chargingTimeSec?: number };
         network?: { supported: boolean; online?: boolean };
       };
       fingerprint: { mflops: number } | null;
@@ -236,10 +239,17 @@ test.describe('bench real run (WASM lanes)', () => {
     expect(apis.webgl2).toBe(true);
     expect(env.display?.width).toBeGreaterThan(0);
     expect(env.display?.colorDepth).toBeGreaterThan(0);
-    expect(env.locale?.timeZone).toBeTruthy();
+    // Schema 3: the locale tag is kept; the time zone, the language list, and
+    // the exact battery figures (they locate or track a device) are not captured.
+    expect(env.locale?.locale).toBeTruthy();
+    expect(env.locale?.timeZone).toBeUndefined();
+    expect(env.languages).toBeUndefined();
+    expect(env.power?.chargingTimeSec).toBeUndefined();
+    if (typeof env.power?.level === 'number') expect(env.power.level % 0.25).toBe(0);
+    expect(exported.schemaVersion).toBe(3);
     expect(env.network?.online).toBe(true);
     // Runtime versions are stamped at build time from the installed packages.
-    expect(exported.harness.version).toBe('0.6.1');
+    expect(exported.harness.version).toBe('0.7.0');
     expect(exported.harness.runtimeVersions?.['@huggingface/transformers']).toMatch(/^\d+\.\d+\.\d+/);
     expect(exported.harness.runtimeVersions?.['@wllama/wllama']).toMatch(/^\d+\.\d+\.\d+/);
     for (const cell of exported.cells.filter((c) => c.status === 'ok')) {
@@ -365,7 +375,7 @@ test.describe('bench real run (WASM lanes)', () => {
     expect(partial.partial).toBe(true);
     expect(partial.protocol).toBe('localmode-bench/4');
     expect(partial.suite).toBe('quick');
-    expect(partial.harness.version).toBe('0.6.1');
+    expect(partial.harness.version).toBe('0.7.0');
     // The environment landed before the first cell, so a crash during the first
     // model load still identifies the device.
     expect(partial.environment?.browser.engine).toBe('Blink');
