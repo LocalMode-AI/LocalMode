@@ -2,13 +2,16 @@
 
 /**
  * @file leaderboard-table.tsx
- * @description Filterable leaderboard table for the /bench page. Pure
- * presentation over pre-aggregated rows; filters are client-side.
+ * @description Filterable, paginated leaderboard table for the /bench page.
+ * Pure presentation over pre-aggregated rows; filters and paging are
+ * client-side (25 rows a page by default; a filter change returns to page 1).
  */
 
 import { useMemo, useState } from 'react';
 import type { IndexLeaderboardRow } from '@/lib/bench/store';
+import { LEADERBOARD_DEFAULT_PAGE_SIZE, LEADERBOARD_PAGE_SIZES, pageWindow } from '@/lib/bench/paginate';
 import { Badge } from '@/registry/localmode/ui/badge';
+import { Button } from '@/registry/localmode/ui/button';
 import { Label } from '@/registry/localmode/ui/label';
 import {
   Select,
@@ -38,6 +41,13 @@ export function LeaderboardTable({ rows }: { rows: IndexLeaderboardRow[] }) {
   const [device, setDevice] = useState(ALL);
   const [runtime, setRuntime] = useState(ALL);
   const [model, setModel] = useState(ALL);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(LEADERBOARD_DEFAULT_PAGE_SIZE);
+  // A filter change starts from page 1; the window also clamps if the list shrinks.
+  const filterSetter = (set: (v: string) => void) => (v: string) => {
+    set(v);
+    setPage(1);
+  };
 
   // Newest protocol first; rows never mix versions, so the filter is exact.
   const protocols = useMemo(
@@ -56,6 +66,9 @@ export function LeaderboardTable({ rows }: { rows: IndexLeaderboardRow[] }) {
       (model === ALL || r.benchModelId === model),
   );
 
+  const win = pageWindow(filtered.length, page, pageSize);
+  const pageRows = filtered.slice(win.start, win.end);
+
   if (rows.length === 0) return null;
 
   return (
@@ -63,10 +76,10 @@ export function LeaderboardTable({ rows }: { rows: IndexLeaderboardRow[] }) {
       <div className="flex flex-wrap gap-3">
         {(
           [
-            ['Protocol', protocol, setProtocol, protocols],
-            ['Device', device, setDevice, devices],
-            ['Runtime', runtime, setRuntime, runtimes],
-            ['Model', model, setModel, models],
+            ['Protocol', protocol, filterSetter(setProtocol), protocols],
+            ['Device', device, filterSetter(setDevice), devices],
+            ['Runtime', runtime, filterSetter(setRuntime), runtimes],
+            ['Model', model, filterSetter(setModel), models],
           ] as const
         ).map(([label, value, setter, options]) => (
           <div key={label} className="flex items-center gap-2">
@@ -106,7 +119,7 @@ export function LeaderboardTable({ rows }: { rows: IndexLeaderboardRow[] }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((r) => (
+            {pageRows.map((r) => (
               <TableRow key={`${r.protocol}|${r.deviceSubclass}|${r.runtimeId}|${r.benchModelId}|${r.workloadId}`}>
                 <TableCell className="font-mono text-xs">{r.protocol.replace('localmode-bench/', 'v')}</TableCell>
                 <TableCell className="font-mono text-xs">
@@ -170,6 +183,58 @@ export function LeaderboardTable({ rows }: { rows: IndexLeaderboardRow[] }) {
           </TableBody>
         </Table>
       </div>
+
+      <nav aria-label="Leaderboard pages" className="flex flex-wrap items-center justify-between gap-3 text-sm">
+        <p role="status" aria-live="polite" className="text-muted-foreground">
+          {win.label}
+          {win.pageCount > 1 && ` · page ${win.page} of ${win.pageCount}`}
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="bench-page-size">Rows per page</Label>
+            <Select
+              value={String(pageSize)}
+              onValueChange={(v) => {
+                setPageSize(Number(v));
+                setPage(1);
+              }}
+            >
+              <SelectTrigger id="bench-page-size" className="w-24">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LEADERBOARD_PAGE_SIZES.map((n) => (
+                  <SelectItem key={n} value={String(n)}>
+                    {n}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(win.page - 1)}
+              disabled={win.page <= 1}
+              aria-label="Previous page"
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(win.page + 1)}
+              disabled={win.page >= win.pageCount}
+              aria-label="Next page"
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      </nav>
     </div>
   );
 }

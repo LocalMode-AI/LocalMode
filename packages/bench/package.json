@@ -1,6 +1,6 @@
 {
   "name": "@localmode/bench",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Cross-runtime benchmark harness for in-browser AI — MLPerf-Client-compatible metrics (TTFT, prefill/decode throughput), raw trace capture, integrity checks, and leaderboard aggregation for LLM and embedding inference across browser ML runtimes",
   "license": "MIT",
   "author": "LocalMode",

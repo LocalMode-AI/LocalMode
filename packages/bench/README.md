@@ -20,9 +20,12 @@ the previous one) in separate rows that never mix (`aggregateRuns()` groups by
 v5 changes only the llama.cpp lanes: they request half the browser's logical
 thread count (at least two) instead of all of it, because a pool over every
 logical thread ran at half speed with high variance on hybrid and SMT
-processors, and load with a 2,048-token context so the Gemma 4 E2B GGUF's KV
-cache fits the CPU lane's 4 GB wasm heap; `n_ctx`, `n_threads`, `multithread`
-and `n_threads_used` are recorded per cell. v3 split the llama.cpp lane: `wllama` is llama.cpp
+processors, and load with a 2,048-token context sized to the workloads (about
+700 tokens) instead of the provider's 8,192 default, which shrinks the KV
+cache of the 3.46 GB Gemma 4 E2B GGUF inside the CPU lane's 4 GB wasm heap
+(that lane's Gemma quality cell still fails there on the per-request state
+allocation, recorded as an error as under v4); `n_ctx`, `n_threads`,
+`multithread` and `n_threads_used` are recorded per cell. v3 split the llama.cpp lane: `wllama` is llama.cpp
 WASM on the CPU (`n_gpu_layers: 0`) and `wllama-webgpu` offloads every layer
 to WebGPU, over the same GGUF files; under v2 the single `wllama` lane ran on
 WebGPU wherever the browser had it while recording `wasm` (wllama 3.5's

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.14.1] - 2026-09-22
+
+**Released:** `@localmode/bench` 0.8.1 (docs only).
+
+### Added
+
+- **bench:** the leaderboard table is paginated: 25 rows a page (25 / 50 / 100 selectable), Previous / Next buttons with accessible names, a live "Showing x to y of n rows · page p of q" status, and a return to page 1 whenever a filter changes (a page past the end after a filter shrinks the list clamps to the last page). The arithmetic is a pure helper (`src/lib/bench/paginate.ts`) with unit tests; the table now holds 672 rows across two protocols, which was one long scroll.
+
+### Changed
+
+- **bench (docs):** the v5 wording on the 2,048-token context overstated its effect. The first v5 Thorough run on the 16 GB M4 shows the llama.cpp CPU lane's Gemma 4 E2B chat cells running as before while its quality cell still fails on the per-request state allocation (`std::bad_alloc`) with the 3.46 GB weights resident in the 4 GB wasm heap; it is recorded as an error exactly as under v4. The methodology page's v5 entry and the bench README now say so. No code change; the protocol is unchanged.
+
 ## [2.14.0] - 2026-09-22
 
 Protocol `localmode-bench/5`: the llama.cpp lanes' thread count and context size, and a leaderboard that shows v4 beside v5.

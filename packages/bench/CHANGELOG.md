@@ -1,5 +1,9 @@
 # @localmode/bench
 
+## 0.8.1
+
+- docs: the v5 note on the 2,048-token context claimed more than the first v5 Thorough run bears out. The smaller context shrinks the Gemma 4 E2B KV cache inside the CPU lane's 4 GB wasm heap, but that lane's Gemma quality cell still fails on the per-request state allocation (`std::bad_alloc`) with the 3.46 GB weights resident, and is recorded as an error exactly as under v4. README corrected; no code change.
+
 ## 0.8.0
 
 Protocol `localmode-bench/5`.

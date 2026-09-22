@@ -329,11 +329,14 @@ export default function BenchMethodologyPage() {
               M1 Pro&apos;s 10. The browser exposes no core topology, so half the logical count is
               the rule; it lands on the performance or physical cores on every lab device, and both
               the requested count and the pool the runtime built are recorded on the cell. The
-              context change keeps the KV cache of the 3.46 GB Gemma 4 E2B GGUF inside the CPU
-              lane&apos;s 4 GB wasm heap, where the provider&apos;s 8,192 default failed the quality
-              cell on every v4 run (the workloads need at most about 700 tokens). Every other lane
-              measures exactly as under v4, so the leaderboard shows v4 rows beside v5 rows; nothing
-              is re-scored.
+              context change sizes the KV cache to what the workloads need (at most about 700
+              tokens) instead of the provider&apos;s 8,192 default, which matters most for the
+              3.46 GB Gemma 4 E2B GGUF inside the CPU lane&apos;s 4 GB wasm heap. It does not
+              rescue that lane&apos;s Gemma quality cell: with the weights resident, the per-request
+              state allocation still fails (<code className="font-mono text-sm">std::bad_alloc</code>)
+              and the cell is recorded as an error, as it was under v4. Every other lane measures
+              exactly as under v4, so the leaderboard shows v4 rows beside v5 rows; nothing is
+              re-scored.
             </li>
             <li>
               <strong className="text-foreground">localmode-bench/4</strong> (2026-09-20) - the
