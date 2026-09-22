@@ -22,8 +22,13 @@ const mockState: {
   createCompletion: ReturnType<typeof vi.fn>;
   exit: ReturnType<typeof vi.fn>;
   getChatTemplate: ReturnType<typeof vi.fn>;
+  /** What the mock runtime's `isMultithread()` / `getNumThreads()` answer; undefined = methods absent. */
+  multithread: boolean | undefined;
+  numThreads: number | undefined;
 } = {
   logger: null,
+  multithread: undefined,
+  numThreads: undefined,
   loadModelFromUrl: vi.fn().mockResolvedValue(undefined),
   createChatCompletion: vi.fn().mockResolvedValue({
     id: 'chatcmpl-1',
@@ -87,6 +92,10 @@ function MockWllama(_paths: unknown, config?: { logger?: { debug: (...a: unknown
       exit: (...args: unknown[]) => mockState.exit(...args),
       getChatTemplate: () => mockState.getChatTemplate(),
       cacheManager: { open: vi.fn().mockResolvedValue(null), list: vi.fn().mockResolvedValue([]) },
+      // wllama 3.x answers these after load; a runtime without them (older build) simply lacks the methods.
+      ...(mockState.multithread === undefined
+        ? {}
+        : { isMultithread: () => mockState.multithread, getNumThreads: () => mockState.numThreads }),
     };
 }
 
@@ -875,6 +884,41 @@ describe('@localmode/wllama', () => {
       await model.doGenerate({ prompt: 'hi' });
       expect(model.offloadedLayers).toEqual({ gpu: 0, total: 31 });
       expect(model.gpuAccelerated).toBe(false);
+    });
+
+    // Firefox ran the llama.cpp lanes at single-thread speed with 10 threads
+    // requested; the request is recorded, the achieved thread mode was not.
+    it('reports the thread pool wllama actually built once the model loaded', async () => {
+      mockState.multithread = true;
+      mockState.numThreads = 10;
+      try {
+        const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf', numThreads: 10 });
+        expect(model.threadPool).toBeNull();
+        await model.doGenerate({ prompt: 'hi' });
+        expect(model.threadPool).toEqual({ multithread: true, threads: 10 });
+      } finally {
+        mockState.multithread = undefined;
+        mockState.numThreads = undefined;
+      }
+    });
+
+    it('reports a single-thread pool when the runtime fell back to it', async () => {
+      mockState.multithread = false;
+      mockState.numThreads = 1;
+      try {
+        const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf', numThreads: 10 });
+        await model.doGenerate({ prompt: 'hi' });
+        expect(model.threadPool).toEqual({ multithread: false, threads: 1 });
+      } finally {
+        mockState.multithread = undefined;
+        mockState.numThreads = undefined;
+      }
+    });
+
+    it('leaves threadPool null when the runtime does not expose it', async () => {
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      await model.doGenerate({ prompt: 'hi' });
+      expect(model.threadPool).toBeNull();
     });
   });
 

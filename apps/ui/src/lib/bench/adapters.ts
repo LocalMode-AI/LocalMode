@@ -222,17 +222,25 @@ function wllamaThreads(): number {
  * `n_gpu_layers` explicitly: the CPU lane to 0, the WebGPU lane to all.
  */
 function wllamaLoadedInfo(
-  llm: { gpuAccelerated?: boolean; offloadedLayers?: { gpu: number; total: number } | null },
+  llm: {
+    gpuAccelerated?: boolean;
+    offloadedLayers?: { gpu: number; total: number } | null;
+    threadPool?: { multithread: boolean; threads: number } | null;
+  },
   requestedGpuLayers: number,
   webgpuAdapter: boolean,
   options: { textOnly?: boolean } = {},
 ): { resolvedBackend: string; runtimeConfig: Record<string, string | number | boolean> } {
   const offloaded = llm.offloadedLayers ?? null;
   const gpu = offloaded ? offloaded.gpu > 0 : Boolean(llm.gpuAccelerated);
+  const pool = llm.threadPool ?? null;
   return {
     resolvedBackend: gpu ? 'webgpu' : 'wasm',
     runtimeConfig: {
       n_threads: wllamaThreads(),
+      // What wllama built, from its own report: a lane whose pool fell back to
+      // one thread says so here whatever n_threads asked for.
+      ...(pool ? { multithread: pool.multithread, n_threads_used: pool.threads } : {}),
       n_gpu_layers: requestedGpuLayers,
       // llama.cpp prints its offload line only when it found a GPU device, so
       // "unreported" together with webgpu_adapter: false is an unambiguous CPU run.

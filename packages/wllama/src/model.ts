@@ -26,6 +26,7 @@ import { parseGGUFMetadata } from './gguf.js';
 import {
   createOffloadCapturingLogger,
   importWllama,
+  readThreadPool,
   WLLAMA_CDN_WASM,
   type OffloadedLayers,
   type WllamaInstance,
@@ -145,6 +146,15 @@ export class WllamaLanguageModel implements LanguageModel {
    * the runtime printed no such line.
    */
   offloadedLayers: OffloadedLayers | null = null;
+
+  /**
+   * The thread pool wllama actually built once the model loaded: whether the
+   * multi-threaded build ran (it needs cross-origin isolation and workers the
+   * browser lets it spawn) and the thread count in use. Null before load, or
+   * when the runtime does not report it. A pool that fell back to one thread
+   * runs at single-thread speed whatever `numThreads` asked for.
+   */
+  threadPool: { multithread: boolean; threads: number } | null = null;
 
   private wllamaInstance: WllamaInstance | null = null;
   private loadPromise: Promise<WllamaInstance> | null = null;
@@ -267,6 +277,7 @@ export class WllamaLanguageModel implements LanguageModel {
         });
 
         this.offloadedLayers = offloadCapture.offloaded;
+        this.threadPool = readThreadPool(wllamaInstance);
 
         this.settings.onProgress?.({
           status: 'ready',

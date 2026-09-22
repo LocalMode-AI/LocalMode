@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.3] - 2026-09-22
+
+**Released:** `@localmode/wllama` 3.4.2.
+
+### Added
+
+- **wllama, bench:** the llama.cpp lanes record the thread pool wllama actually built. `WllamaLanguageModel` and `WllamaEmbeddingModel` expose `threadPool` (`{ multithread, threads }` from the runtime's own `isMultithread()` / `getNumThreads()`), and the bench adapters write it into each wllama cell's `runtimeConfig` as `multithread` and `n_threads_used` beside the requested `n_threads`. Firefox 156 ran both llama.cpp lanes at single-thread speed with 10 threads requested and the run files could not say why; from now on a pool that fell back to one thread is recorded as such. Metadata only, no measurement changes; the protocol version is unchanged.
+
 ## [2.13.2] - 2026-09-22
 
 **Released:** `@localmode/wllama` 3.4.1.

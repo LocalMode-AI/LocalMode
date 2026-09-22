@@ -22,6 +22,7 @@ import { predictGpuAccelerated, resolveGpuLayers, resolveWasmPath } from './mode
 import {
   createOffloadCapturingLogger,
   importWllama,
+  readThreadPool,
   type OffloadedLayers,
   type WllamaInstance,
 } from './wllama-loader.js';
@@ -52,6 +53,13 @@ export class WllamaEmbeddingModel implements EmbeddingModel {
 
   /** Layers llama.cpp reported offloading to the GPU at load (null before load or without the log line). */
   offloadedLayers: OffloadedLayers | null = null;
+
+  /**
+   * The thread pool wllama actually built once the model loaded (multi-thread
+   * build or single-thread fallback, and the thread count); null before load
+   * or when the runtime does not report it.
+   */
+  threadPool: { multithread: boolean; threads: number } | null = null;
 
   private wllamaInstance: WllamaInstance | null = null;
   private loadPromise: Promise<WllamaInstance> | null = null;
@@ -143,6 +151,7 @@ export class WllamaEmbeddingModel implements EmbeddingModel {
         });
 
         this.offloadedLayers = offloadCapture.offloaded;
+        this.threadPool = readThreadPool(wllamaInstance);
         this.wllamaInstance = wllamaInstance;
         return wllamaInstance;
       } catch (error) {

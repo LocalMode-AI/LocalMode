@@ -1,5 +1,11 @@
 # @localmode/wllama
 
+## 3.4.2
+
+### Patch Changes
+
+- feat: `threadPool` on `WllamaLanguageModel` and `WllamaEmbeddingModel`: the thread pool wllama actually built once the model loaded, from the runtime's own `isMultithread()` / `getNumThreads()` (`{ multithread, threads }`; null before load or when the runtime does not report it). The requested `numThreads` was the only record so far, and a lane whose pool fell back to a single thread (Firefox ran llama.cpp at single-thread speed with 10 threads requested) could not be told from one that got what it asked for. `readThreadPool()` is exported from the loader module.
+
 ## 3.4.1
 
 ### Patch Changes

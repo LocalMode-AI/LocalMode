@@ -34,6 +34,22 @@ export type WllamaInstance = InstanceType<
   Awaited<typeof import('@wllama/wllama')>['Wllama']
 >;
 
+/**
+ * The thread pool a loaded wllama instance actually built, from the runtime's
+ * own `isMultithread()` / `getNumThreads()`; null when the runtime does not
+ * expose them. Recorded next to the requested thread count so a lane that
+ * fell back to one thread says so.
+ */
+export function readThreadPool(
+  instance: Partial<Pick<WllamaInstance, 'isMultithread' | 'getNumThreads'>>,
+): { multithread: boolean; threads: number } | null {
+  if (typeof instance.isMultithread !== 'function' || typeof instance.getNumThreads !== 'function') return null;
+  const multithread = instance.isMultithread();
+  const threads = instance.getNumThreads();
+  if (typeof multithread !== 'boolean' || typeof threads !== 'number') return null;
+  return { multithread, threads };
+}
+
 /** wllama's logger hooks (console-compatible). */
 export interface WllamaLoggerLike {
   debug: (...args: unknown[]) => void;
