@@ -112,8 +112,9 @@ export default async function BenchPage() {
             <h2 className="text-xl font-semibold">Leaderboard</h2>
             <p className="text-sm text-muted-foreground">
               {verifiedRuns} verified submission{verifiedRuns === 1 ? '' : 's'} under{' '}
-              {BENCH_PROTOCOL_VERSION} · medians of per-device medians · rows need 3+ submissions
-              to leave provisional status
+              {BENCH_PROTOCOL_VERSION} · medians of per-device medians · devices grouped by GPU model
+              where the browser names one, otherwise by platform and WebGPU architecture · rows need 3+
+              submissions to leave provisional status
             </p>
           </div>
           <LeaderboardTable rows={rows} />

@@ -145,7 +145,10 @@ export default function BenchMethodologyPage() {
               nothing for 2 minutes, or a call that outlives its absolute budget (10 to 15 minutes
               per iteration, 30 to 45 per quality lane) is aborted as a timeout; the cell is retried
               once with the failed attempt kept on the cell, then recorded as an error, and the run
-              continues. Nothing is retried silently. The Transformers.js WASM lane runs in a
+              continues. Nothing is retried silently. An abort a runtime raises on its own (a
+              WebGPU buffer that can no longer be mapped, a failed fetch) is an error with its
+              cause and the same single retry, never a cancellation: only the submitter&apos;s
+              Cancel ends a run, and it ends it at once. The Transformers.js WASM lane runs in a
               dedicated worker so the page stays responsive during inference.
             </li>
             <li>
@@ -208,7 +211,19 @@ export default function BenchMethodologyPage() {
             the payload. A coefficient of variation above 5% marks the cell high-variance. Geometric
             means are used only within one device&apos;s run; the leaderboard shows the median of
             per-submission medians and marks any (device, runtime, model, workload) group with fewer
-            than 3 submissions provisional. Only runs measured under the current protocol version
+            than 3 submissions provisional. Devices group by what the browser discloses, at two
+            levels: the coarse class is the platform plus the WebGPU adapter&apos;s vendor and
+            architecture (<code className="font-mono text-sm">macos/apple-metal-3</code>,{' '}
+            <code className="font-mono text-sm">windows/amd-rdna-2</code>, or{' '}
+            <code className="font-mono text-sm">no-webgpu</code>), which every browser can supply
+            and which is the unit for cross-device rollups; the subclass splits a class by the GPU
+            model where the browser names a specific part (
+            <code className="font-mono text-sm">macos/apple-m1-pro</code>,{' '}
+            <code className="font-mono text-sm">android/adreno-650</code>) and equals the class
+            where it names nothing more specific (Safari&apos;s &quot;Apple GPU&quot;, a
+            generation-less &quot;AMD Radeon(TM) Graphics&quot;, Firefox&apos;s masked
+            &quot;..., or similar&quot; buckets). Leaderboard rows are subclass rows; the class is
+            shown beneath. Nothing typed by a submitter enters either. Only runs measured under the current protocol version
             are aggregated: metric definitions change between versions, so archived runs from an
             earlier protocol stay in the dataset but never mix into a current row.
           </p>
@@ -221,13 +236,19 @@ export default function BenchMethodologyPage() {
             Chromium reports UA Client Hints (platform, version, architecture, bitness, model, form
             factors); Firefox and Safari freeze their user-agent strings by design, so their OS
             versions are recorded as unknown rather than guessed, and the raw user-agent string is
-            kept verbatim for future parsers. The form factor (phone, tablet, desktop) is derived
+            kept verbatim for future parsers. That now includes iPhones: Safari 27 on iOS 27
+            advertises &quot;iPhone OS 18_7&quot; (WebKit froze the token there, as macOS froze at
+            10_15_7), so a Safari or Firefox for iOS run whose token reads 18_7 under a Safari
+            version of 26 or higher is recorded as unknown, while Chrome for iOS still writes the
+            real version. The form factor (phone, tablet, desktop) is derived
             from the hints, the user agent, and touch points. WebGPU adapter identity comes from{' '}
             <code className="font-mono text-sm">adapter.info</code> together with the adapter&apos;s
             feature list and limits; the WebGL renderer string is kept as a second GPU identity
             channel and parsed into a GPU model (for example &quot;Apple M4&quot; or &quot;NVIDIA
             GeForce RTX 4070&quot;). Core counts and device memory are recorded but labeled clamped
-            (browsers cap or randomize them); the JavaScript heap ceiling, storage quota, battery
+            (browsers cap or randomize them: Chrome reports memory as a bucket capped at 8 GB on
+            Android and older desktop builds and at 32 GB on current desktop builds, so the value
+            is a floor, never the size; Safari clamps core counts); the JavaScript heap ceiling, storage quota, battery
             state, CPU pressure support, network type, display and locale tag are captured where the
             APIs exist. The WebAssembly proposal matrix (SIMD, relaxed SIMD, threads,
             exceptions, GC, memory64, tail calls, JSPI and the rest) is probed by validating
@@ -251,7 +272,13 @@ export default function BenchMethodologyPage() {
 
         <Section id="integrity" title="Submission integrity">
           <ul className="list-disc space-y-2 pl-5">
-            <li>Verified-tier runs happen on this site and carry a server-issued, time-boxed session nonce.</li>
+            <li>
+              Verified-tier runs happen on this site and carry a server-issued, time-boxed session
+              nonce that accepts exactly one submission (a second upload under the same nonce is
+              refused; reloading the page issues a new one). Submissions are limited to 20 per hour
+              per network address; a refused upload is retried by the page after the wait the
+              server states, and nothing about the run is lost in between.
+            </li>
             <li>
               Submissions contain the raw per-chunk timestamp trace and the full generated text;
               the server recomputes every statistic from the trace and rejects client summaries

@@ -5,6 +5,7 @@
  * cores, memory, form factor). Server-renderable; no client state.
  */
 
+import { refineDeviceClass } from '@localmode/bench';
 import type { RunIndexEntry } from '@/lib/bench/store';
 import {
   Table,
@@ -75,7 +76,14 @@ export function SubmissionsTable({
                   <span className="block text-muted-foreground">{when}</span>
                 </TableCell>
                 <TableCell>{e.suite}</TableCell>
-                <TableCell className="font-mono text-xs">{e.deviceClass}</TableCell>
+                <TableCell className="font-mono text-xs">
+                  {e.deviceSubclass ?? refineDeviceClass(e.deviceClass, e.gpuModel)}
+                  {(e.deviceSubclass ?? refineDeviceClass(e.deviceClass, e.gpuModel)) !== e.deviceClass && (
+                    <span className="block text-muted-foreground" title="Coarse class: platform and WebGPU vendor-architecture">
+                      {e.deviceClass}
+                    </span>
+                  )}
+                </TableCell>
                 <TableCell>
                   {e.deviceType ?? '—'}
                   {e.deviceModel && <span className="block text-xs text-muted-foreground">{e.deviceModel}</span>}

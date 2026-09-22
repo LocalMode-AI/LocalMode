@@ -37,4 +37,28 @@ describe('parseUserAgent()', () => {
     expect(parseUserAgent(CHROME_ANDROID).os).toEqual({ platform: 'Android', version: 'unknown-frozen' });
     expect(parseUserAgent(SAFARI_MAC).os.platform).toBe('macOS');
   });
+
+  // Safari 27 on an iOS 27 phone advertises "CPU iPhone OS 18_7": WebKit froze
+  // the OS token at 18_7 the way macOS froze at 10_15_7. Chrome for iOS on the
+  // same phone still writes the real version. A Safari that really runs iOS
+  // 18.7 says so with a Version/18.x token, so only the frozen pairing is
+  // marked unknown.
+  it('marks the WebKit-frozen 18_7 iOS token as unknown instead of reporting iOS 18.7', () => {
+    const SAFARI_27_FROZEN =
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1';
+    const FIREFOX_IOS_FROZEN =
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/156.0 Mobile/15E148 Safari/605.1.15';
+    const CHROME_IOS_27 =
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 27_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/153.0.8010.24 Mobile/15E148 Safari/604.1';
+    const SAFARI_REAL_18_7 =
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.7 Mobile/15E148 Safari/604.1';
+    const CHROME_IOS_REAL_18_7 =
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/153.0.8010.24 Mobile/15E148 Safari/604.1';
+    expect(parseUserAgent(SAFARI_27_FROZEN).os).toEqual({ platform: 'iOS', version: 'unknown-frozen' });
+    expect(parseUserAgent(SAFARI_27_FROZEN).browser).toMatchObject({ name: 'Safari', version: '27.0' });
+    expect(parseUserAgent(FIREFOX_IOS_FROZEN).os).toEqual({ platform: 'iOS', version: 'unknown-frozen' });
+    expect(parseUserAgent(CHROME_IOS_27).os).toEqual({ platform: 'iOS', version: '27.0' });
+    expect(parseUserAgent(SAFARI_REAL_18_7).os).toEqual({ platform: 'iOS', version: '18.7' });
+    expect(parseUserAgent(CHROME_IOS_REAL_18_7).os).toEqual({ platform: 'iOS', version: '18.7' });
+  });
 });

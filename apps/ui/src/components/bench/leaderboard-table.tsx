@@ -38,13 +38,13 @@ export function LeaderboardTable({ rows }: { rows: IndexLeaderboardRow[] }) {
   const [runtime, setRuntime] = useState(ALL);
   const [model, setModel] = useState(ALL);
 
-  const devices = useMemo(() => [...new Set(rows.map((r) => r.deviceClass))].sort(), [rows]);
+  const devices = useMemo(() => [...new Set(rows.map((r) => r.deviceSubclass))].sort(), [rows]);
   const runtimes = useMemo(() => [...new Set(rows.map((r) => r.runtimeId))].sort(), [rows]);
   const models = useMemo(() => [...new Set(rows.map((r) => r.benchModelId))].sort(), [rows]);
 
   const filtered = rows.filter(
     (r) =>
-      (device === ALL || r.deviceClass === device) &&
+      (device === ALL || r.deviceSubclass === device) &&
       (runtime === ALL || r.runtimeId === runtime) &&
       (model === ALL || r.benchModelId === model),
   );
@@ -98,8 +98,15 @@ export function LeaderboardTable({ rows }: { rows: IndexLeaderboardRow[] }) {
           </TableHeader>
           <TableBody>
             {filtered.map((r) => (
-              <TableRow key={`${r.deviceClass}|${r.runtimeId}|${r.benchModelId}|${r.workloadId}`}>
-                <TableCell className="font-mono text-xs">{r.deviceClass}</TableCell>
+              <TableRow key={`${r.deviceSubclass}|${r.runtimeId}|${r.benchModelId}|${r.workloadId}`}>
+                <TableCell className="font-mono text-xs">
+                  {r.deviceSubclass}
+                  {r.deviceSubclass !== r.deviceClass && (
+                    <span className="block text-muted-foreground" title="Coarse class: platform and WebGPU vendor-architecture">
+                      {r.deviceClass}
+                    </span>
+                  )}
+                </TableCell>
                 <TableCell>{r.modelName}</TableCell>
                 <TableCell>
                   {r.runtimeId}

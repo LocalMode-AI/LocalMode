@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.1] - 2026-09-22
+
+**Released:** `@localmode/bench` 0.7.1.
+
+### Added
+
+- **bench:** device subclass on the leaderboard. Rows grouped by the coarse device class (platform + WebGPU vendor-architecture) put every Apple Silicon generation in one `macos/apple-metal-3` row. `refineDeviceClass()` splits a class by the GPU model where the browser names a specific part (`macos/apple-m1-pro`, `macos/apple-m4-max`, `android/adreno-650`) and leaves it alone where the browser names nothing more specific (WebKit's `Apple GPU`, the generation-less `AMD Radeon(TM) Graphics`, Firefox's masked buckets) or where there is no WebGPU. The leaderboard and the recent-submissions table show the subclass with the coarse class beneath it; index entries written from now on carry `deviceSubclass`, and older entries derive it from their `gpuModel` at aggregation time, so the archive is not rewritten. CSV exports gain a `deviceSubclass` column.
+
+### Changed
+
+- **bench:** the methodology page now states the two device groupings (coarse class and GPU-model subclass, with what each browser can supply), the frozen iOS 18_7 token, Chrome's capped memory buckets, the single-use nonce and the 20-per-hour submission limit, and that a runtime-raised abort is an error with a retry while only the submitter's Cancel ends a run.
+
+### Fixed
+
+- **bench:** iOS runs from Safari 27 reported `os.version: "18.7"`. WebKit froze the OS token in the UA at `18_7`, so an iPhone on iOS 27 reads as iOS 18.7 in Safari and in Firefox for iOS, while Chrome for iOS on the same phone writes the real version. The capture marks the frozen pairing `unknown-frozen` (a Safari with a `Version/18.x` token keeps its real 18.x); the Safari version stays the signal for the OS generation. Harness 0.7.1. Archived runs are unchanged.
+
 ## [2.13.0] - 2026-09-21
 
 Privacy pass on the published run files, from a review of what a public run carries.

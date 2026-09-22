@@ -128,6 +128,8 @@ export type { PublicationScrub } from './publication.js';
 export {
   aggregateRuns,
   deviceClassOf,
+  deviceSubclassOf,
+  refineDeviceClass,
   rowsToCSV,
   runsToLongCSV,
   HEADLINE_MIN_SUBMISSIONS,

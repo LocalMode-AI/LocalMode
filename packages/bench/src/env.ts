@@ -230,7 +230,12 @@ function parseUABrowser(ua: string): BrowserInfo {
 
 /**
  * OS from the UA. Chromium's reduced UA freezes desktop and Android versions,
- * so those stay 'unknown-frozen'; iOS UAs carry the real OS version.
+ * so those stay 'unknown-frozen'. iOS UAs carried the real OS version through
+ * iOS 26; WebKit then froze the token at "18_7" (as macOS froze at 10_15_7),
+ * so Safari 27 on an iOS 27 phone reads "CPU iPhone OS 18_7". Chrome for iOS
+ * writes its own UA with the real version, and a Safari that really runs iOS
+ * 18.7 carries a Version/18.x token, so only the frozen pairing (18_7 with a
+ * Version/26+ token or a WebKit-shell browser) is marked unknown.
  */
 function parseUAOS(ua: string): OSInfo {
   let platform = 'unknown';
@@ -242,9 +247,29 @@ function parseUAOS(ua: string): OSInfo {
   else if (/Linux/.test(ua)) platform = 'Linux';
   if (platform === 'iOS') {
     const m = ua.match(/OS (\d+(?:[_.]\d+)*) like Mac OS X/);
-    if (m) return { platform, version: m[1].replace(/_/g, '.') };
+    if (m) {
+      const version = m[1].replace(/_/g, '.');
+      if (version === IOS_FROZEN_VERSION && !iosUAVersionIsReal(ua)) return { platform, version: 'unknown-frozen' };
+      return { platform, version };
+    }
   }
   return { platform, version: 'unknown-frozen' };
+}
+
+/** The OS token WebKit reports on every iOS release from the freeze onward. */
+const IOS_FROZEN_VERSION = '18.7';
+
+/**
+ * Whether an iOS UA that reads 18_7 is believable: Chrome for iOS writes the
+ * real version, and Safari's own Version/ token tracks the OS major, so a
+ * Version/18.x token means the phone really runs iOS 18. Safari 26+ over an
+ * 18_7 token, and the WebKit shells without a Version/ token (Firefox), are
+ * the frozen cases.
+ */
+function iosUAVersionIsReal(ua: string): boolean {
+  if (/CriOS\//.test(ua)) return true;
+  const safari = ua.match(/Version\/(\d+)/);
+  return safari !== null && Number(safari[1]) < 26;
 }
 
 /**

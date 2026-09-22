@@ -249,7 +249,7 @@ test.describe('bench real run (WASM lanes)', () => {
     expect(exported.schemaVersion).toBe(3);
     expect(env.network?.online).toBe(true);
     // Runtime versions are stamped at build time from the installed packages.
-    expect(exported.harness.version).toBe('0.7.0');
+    expect(exported.harness.version).toBe('0.7.1');
     expect(exported.harness.runtimeVersions?.['@huggingface/transformers']).toMatch(/^\d+\.\d+\.\d+/);
     expect(exported.harness.runtimeVersions?.['@wllama/wllama']).toMatch(/^\d+\.\d+\.\d+/);
     for (const cell of exported.cells.filter((c) => c.status === 'ok')) {
@@ -375,7 +375,7 @@ test.describe('bench real run (WASM lanes)', () => {
     expect(partial.partial).toBe(true);
     expect(partial.protocol).toBe('localmode-bench/4');
     expect(partial.suite).toBe('quick');
-    expect(partial.harness.version).toBe('0.7.0');
+    expect(partial.harness.version).toBe('0.7.1');
     // The environment landed before the first cell, so a crash during the first
     // model load still identifies the device.
     expect(partial.environment?.browser.engine).toBe('Blink');

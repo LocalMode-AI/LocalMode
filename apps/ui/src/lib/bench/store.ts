@@ -7,7 +7,7 @@
  */
 
 import type { BenchRunResult, CellSummary } from '@localmode/bench';
-import { BENCH_PROTOCOL_VERSION, deviceClassOf, median } from '@localmode/bench';
+import { BENCH_PROTOCOL_VERSION, deviceClassOf, deviceSubclassOf, median, refineDeviceClass } from '@localmode/bench';
 
 /** Light per-run entry stored in index/summary.json. */
 export interface RunIndexEntry {
@@ -16,7 +16,13 @@ export interface RunIndexEntry {
   /** Protocol version of the archived run (absent on pre-v2 entries). */
   protocol?: string;
   suite: string;
+  /** Coarse class: platform + WebGPU vendor-architecture. */
   deviceClass: string;
+  /**
+   * Class refined by the GPU model where the browser names one (absent on
+   * entries written before it existed; `indexEntrySubclass()` derives it).
+   */
+  deviceSubclass?: string;
   browser: string;
   browserVersion: string;
   /** Rendering engine (Blink / Gecko / WebKit). */
@@ -78,7 +84,10 @@ export interface RunIndexEntry {
 
 /** One leaderboard row aggregated from index entries. */
 export interface IndexLeaderboardRow {
+  /** Coarse class (platform + WebGPU vendor-architecture), for rollups. */
   deviceClass: string;
+  /** Class refined by GPU model where the browser names one; else the class. */
+  deviceSubclass: string;
   runtimeId: string;
   benchModelId: string;
   modelName: string;
@@ -96,6 +105,15 @@ export interface IndexLeaderboardRow {
   resolvedBackends: string[];
   browsers: string[];
   provisional: boolean;
+}
+
+/**
+ * Subclass of an index entry: the stored one, or, for entries written before
+ * the field existed, the same derivation from the entry's coarse class and
+ * GPU model (present on entries since bench 0.3.0; older entries stay coarse).
+ */
+export function indexEntrySubclass(entry: Pick<RunIndexEntry, 'deviceClass' | 'deviceSubclass' | 'gpuModel'>): string {
+  return entry.deviceSubclass ?? refineDeviceClass(entry.deviceClass, entry.gpuModel);
 }
 
 export interface BenchStoreConfig {
@@ -183,6 +201,7 @@ export function toIndexEntry(
     protocol: run.protocol,
     suite: run.suite,
     deviceClass: deviceClassOf(run),
+    deviceSubclass: deviceSubclassOf(run),
     browser: env.browser.name,
     browserVersion: env.browser.version,
     engine: env.browser.engine,
@@ -311,7 +330,7 @@ export function aggregateIndex(
   interface Bucket {
     row: Pick<
       IndexLeaderboardRow,
-      'deviceClass' | 'runtimeId' | 'benchModelId' | 'modelName' | 'workloadId'
+      'deviceClass' | 'deviceSubclass' | 'runtimeId' | 'benchModelId' | 'modelName' | 'workloadId'
     >;
     metrics: Record<string, number[]>;
     backends: Set<string>;
@@ -321,16 +340,18 @@ export function aggregateIndex(
   const buckets = new Map<string, Bucket>();
   for (const entry of entries) {
     if (entry.flagged || entry.protocol !== protocol) continue;
+    const deviceSubclass = indexEntrySubclass(entry);
     for (const cell of entry.cells) {
       if (cell.workloadId === 'warm-reload') {
         // Warm-reload cells contribute the warm load metric to their model's rows.
       }
-      const key = [entry.deviceClass, cell.runtimeId, cell.benchModelId, cell.workloadId].join('|');
+      const key = [deviceSubclass, cell.runtimeId, cell.benchModelId, cell.workloadId].join('|');
       let bucket = buckets.get(key);
       if (!bucket) {
         bucket = {
           row: {
             deviceClass: entry.deviceClass,
+            deviceSubclass,
             runtimeId: cell.runtimeId,
             benchModelId: cell.benchModelId,
             modelName: cell.modelName,
@@ -386,6 +407,7 @@ export function aggregateIndex(
   rows.sort(
     (a, b) =>
       a.deviceClass.localeCompare(b.deviceClass) ||
+      a.deviceSubclass.localeCompare(b.deviceSubclass) ||
       a.benchModelId.localeCompare(b.benchModelId) ||
       a.runtimeId.localeCompare(b.runtimeId) ||
       a.workloadId.localeCompare(b.workloadId),

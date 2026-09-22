@@ -8,7 +8,12 @@ import type { BenchRunResult, CellSummary } from './types.js';
 import { isIncrementalStream, summarizeRun } from './validate.js';
 import { median } from './stats.js';
 
-/** Device class derived from environment identity signals. */
+/**
+ * Coarse device class: platform + WebGPU adapter vendor-architecture
+ * (`macos/apple-metal-3`, `windows/amd-rdna-2`, `linux/no-webgpu`). Every
+ * browser exposes these signals, so the class is the honest unit for
+ * cross-device rollups; it never changes for an archived run.
+ */
 export function deviceClassOf(run: BenchRunResult): string {
   const env = run.environment;
   const gpu = env.gpu.available
@@ -17,9 +22,47 @@ export function deviceClassOf(run: BenchRunResult): string {
   return [env.os.platform.toLowerCase().replace(/\s+/g, '-'), gpu].join('/');
 }
 
-/** One leaderboard row: a (deviceClass, runtime, model, workload) group. */
+/**
+ * Device subclass: the coarse class split by the GPU model where the browser
+ * names a specific part (`macos/apple-m1-pro`, `android/adreno-650`). The
+ * WebGPU architecture alone puts every Apple Silicon generation in one class;
+ * Chromium's WebGL renderer string separates them. Where the model names
+ * nothing more specific than the class (WebKit's `Apple GPU`, Windows'
+ * generation-less `AMD Radeon(TM) Graphics`, Firefox's masked `..., or
+ * similar` buckets) or the device has no WebGPU, the subclass is the class.
+ *
+ * @example
+ * refineDeviceClass('macos/apple-metal-3', 'Apple M1 Pro'); // 'macos/apple-m1-pro'
+ * refineDeviceClass('ios/apple-apple', 'Apple GPU'); // 'ios/apple-apple'
+ */
+export function refineDeviceClass(deviceClass: string, gpuModel: string | null | undefined): string {
+  const model = gpuModel?.trim();
+  if (!model || deviceClass.endsWith('/no-webgpu')) return deviceClass;
+  if (/or similar/i.test(model)) return deviceClass;
+  // A part number is the one signal that the string names a specific GPU.
+  if (!/\d/.test(model)) return deviceClass;
+  const slug = model
+    .toLowerCase()
+    .replace(/\((tm|r|c)\)/g, '')
+    .replace(/^mesa\s+/, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (!slug) return deviceClass;
+  const platform = deviceClass.split('/')[0];
+  return `${platform}/${slug}`;
+}
+
+/** Device subclass of a run: its coarse class refined by the captured GPU model. */
+export function deviceSubclassOf(run: BenchRunResult): string {
+  return refineDeviceClass(deviceClassOf(run), run.environment.gpuModel);
+}
+
+/** One leaderboard row: a (deviceSubclass, runtime, model, workload) group. */
 export interface LeaderboardRow {
+  /** Coarse class (platform + WebGPU vendor-architecture), for rollups. */
   deviceClass: string;
+  /** Class refined by GPU model where the browser names one; else the class. */
+  deviceSubclass: string;
   runtimeId: string;
   benchModelId: string;
   modelName: string;
@@ -91,6 +134,7 @@ export function aggregateRuns(
 
   for (const run of runs) {
     const deviceClass = deviceClassOf(run);
+    const deviceSubclass = refineDeviceClass(deviceClass, run.environment.gpuModel);
     const summaries = run.clientSummaries ?? summarizeRun(run);
     const byCellId = new Map<string, CellSummary>(summaries.map((s) => [s.cellId, s]));
 
@@ -98,12 +142,13 @@ export function aggregateRuns(
       if (cell.status !== 'ok') continue;
       const summary = byCellId.get(cell.cellId);
       if (!summary) continue;
-      const key = [deviceClass, cell.runtimeId, cell.model.benchModelId, cell.workloadId].join('|');
+      const key = [deviceSubclass, cell.runtimeId, cell.model.benchModelId, cell.workloadId].join('|');
       let bucket = buckets.get(key);
       if (!bucket) {
         bucket = {
           row: {
             deviceClass,
+            deviceSubclass,
             runtimeId: cell.runtimeId,
             benchModelId: cell.model.benchModelId,
             modelName: cell.model.displayName,
@@ -162,6 +207,7 @@ export function aggregateRuns(
   rows.sort(
     (a, b) =>
       a.deviceClass.localeCompare(b.deviceClass) ||
+      a.deviceSubclass.localeCompare(b.deviceSubclass) ||
       a.benchModelId.localeCompare(b.benchModelId) ||
       a.runtimeId.localeCompare(b.runtimeId) ||
       a.workloadId.localeCompare(b.workloadId),
@@ -190,7 +236,7 @@ function csvField(value: unknown): string {
 /** Leaderboard rows as CSV. */
 export function rowsToCSV(rows: readonly LeaderboardRow[]): string {
   const header = [
-    'deviceClass', 'runtimeId', 'benchModelId', 'modelName', 'workloadId', 'submissions',
+    'deviceClass', 'deviceSubclass', 'runtimeId', 'benchModelId', 'modelName', 'workloadId', 'submissions',
     'ttftMs', 'decodeCharsPerSec', 'overallCharsPerSec', 'singleLatencyMs', 'batchTextsPerSec',
     'loadColdMs', 'loadWarmMs', 'qualityScore', 'qualityParseRate', 'resolvedBackends', 'browsers',
     'highVariance', 'provisional',
@@ -199,7 +245,7 @@ export function rowsToCSV(rows: readonly LeaderboardRow[]): string {
   for (const r of rows) {
     lines.push(
       [
-        r.deviceClass, r.runtimeId, r.benchModelId, r.modelName, r.workloadId, r.submissions,
+        r.deviceClass, r.deviceSubclass, r.runtimeId, r.benchModelId, r.modelName, r.workloadId, r.submissions,
         r.ttftMs, r.decodeCharsPerSec, r.overallCharsPerSec, r.singleLatencyMs, r.batchTextsPerSec,
         r.loadColdMs, r.loadWarmMs, r.qualityScore, r.qualityParseRate, r.resolvedBackends.join(';'), r.browsers.join(';'),
         r.highVariance, r.provisional,
@@ -217,7 +263,7 @@ export function rowsToCSV(rows: readonly LeaderboardRow[]): string {
  */
 export function runsToLongCSV(runs: readonly BenchRunResult[]): string {
   const header = [
-    'runId', 'createdAt', 'suite', 'deviceClass', 'browser', 'browserVersion', 'os', 'gpuVendor',
+    'runId', 'createdAt', 'suite', 'deviceClass', 'deviceSubclass', 'browser', 'browserVersion', 'os', 'gpuVendor',
     'gpuArchitecture', 'cores', 'deviceMemoryGB', 'crossOriginIsolated', 'fingerprintMflops',
     'runtimeId', 'runtimeVersion', 'benchModelId', 'providerModelId', 'quantization', 'sizeBytes',
     'workloadId', 'resolvedBackend', 'iteration', 'ttftMs', 'decodeCharsPerSec', 'generatedChars',
@@ -227,7 +273,7 @@ export function runsToLongCSV(runs: readonly BenchRunResult[]): string {
   for (const run of runs) {
     const env = run.environment;
     const base = [
-      run.runId, run.createdAt, run.suite, deviceClassOf(run), env.browser.name,
+      run.runId, run.createdAt, run.suite, deviceClassOf(run), deviceSubclassOf(run), env.browser.name,
       env.browser.version, env.os.platform, env.gpu.vendor ?? '', env.gpu.architecture ?? '',
       env.hardware.cores ?? '', env.hardware.deviceMemoryGB ?? '', env.flags.crossOriginIsolated,
       run.fingerprint ? round2(run.fingerprint.mflops) : '',

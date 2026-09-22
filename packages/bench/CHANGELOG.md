@@ -1,5 +1,10 @@
 # @localmode/bench
 
+## 0.7.1
+
+- feat: `refineDeviceClass(deviceClass, gpuModel)` and `deviceSubclassOf(run)`. The coarse device class (platform + WebGPU vendor-architecture) put every Apple Silicon generation in one `macos/apple-metal-3` row; the subclass splits a class by the GPU model where the browser names a specific part (`macos/apple-m1-pro`, `macos/apple-m4-max`, `android/adreno-650`) and equals the class where it names nothing more specific (WebKit's `Apple GPU`, Windows' generation-less `AMD Radeon(TM) Graphics`, Firefox's masked `..., or similar` buckets) or where there is no WebGPU. `aggregateRuns` groups by subclass and each row carries both; `rowsToCSV` and `runsToLongCSV` gain a `deviceSubclass` column. `deviceClassOf` is unchanged, so archived classes and cross-device rollups keep their meaning.
+- fix: iOS runs from Safari 27 no longer report `os.version: "18.7"`. WebKit froze the iOS token in the UA at `18_7` (the way macOS froze at `10_15_7`), so a phone on iOS 27 reads "CPU iPhone OS 18_7" in Safari and in the WebKit-shell browsers without a `Version/` token (Firefox for iOS), while Chrome for iOS still writes the real version. The capture now marks that pairing `unknown-frozen`, as it already does for macOS, Android and desktop Chromium; a Safari that really runs iOS 18 carries a `Version/18.x` token and keeps its version. `browser.version` (Safari 27.0) remains the honest signal for the OS generation. Archived iOS runs are not rewritten: read a Safari or Firefox iOS run whose `os.version` is `18.7` and whose Safari version is 26 or higher as frozen.
+
 ## 0.7.0
 
 Result schema 3 (protocol unchanged at `localmode-bench/4`: nothing measured changes).

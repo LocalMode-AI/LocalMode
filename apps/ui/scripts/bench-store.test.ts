@@ -42,6 +42,21 @@ function entry(overrides: Partial<RunIndexEntry> & { runId: string }): RunIndexE
 }
 
 describe('aggregateIndex()', () => {
+  it('groups by the GPU-model subclass, derived for entries written before it existed', () => {
+    const rows = aggregateIndex([
+      entry({ runId: 'm1a', gpuModel: 'Apple M1 Pro' }),
+      entry({ runId: 'm1b', gpuModel: 'Apple M1 Pro', deviceSubclass: 'macos/apple-m1-pro' }),
+      entry({ runId: 'm4', gpuModel: 'Apple M4 Max' }),
+      // No GPU model at all (pre-0.3.0 entry): stays in the coarse class.
+      entry({ runId: 'old' }),
+    ]);
+    expect(rows.map((r) => [r.deviceClass, r.deviceSubclass, r.submissions])).toEqual([
+      ['macos/apple-metal-3', 'macos/apple-m1-pro', 2],
+      ['macos/apple-metal-3', 'macos/apple-m4-max', 1],
+      ['macos/apple-metal-3', 'macos/apple-metal-3', 1],
+    ]);
+  });
+
   it('groups by (device, runtime, model, workload) and medians across runs', () => {
     const rows = aggregateIndex([
       entry({ runId: 'a' }),
@@ -199,6 +214,7 @@ describe('toIndexEntry() → aggregateIndex() (protocol v2 fields)', () => {
       architecture: 'arm',
       gpuArchitecture: 'metal-3',
       gpuModel: 'Apple M3',
+      deviceSubclass: 'macos/apple-m3',
       deviceType: 'desktop',
       cores: 10,
       deviceMemoryGB: 8,
