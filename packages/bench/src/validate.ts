@@ -62,7 +62,18 @@ const SOFTWARE_RENDERER_PATTERNS: readonly RegExp[] = [
  * (empty array = shape ok). Deliberately hand-rolled: this package is
  * zero-dependency and the checks double as executable schema documentation.
  */
-export function validateRunShape(value: unknown): string[] {
+/** Shape-validation options. */
+export interface ValidateOptions {
+  /**
+   * Accept any `localmode-bench/<n>` protocol identifier instead of only the
+   * current one. Submissions never set this; offline analysis of the archive
+   * does, because every archived version stays readable and each row carries
+   * its version.
+   */
+  anyProtocol?: boolean;
+}
+
+export function validateRunShape(value: unknown, options: ValidateOptions = {}): string[] {
   const errors: string[] = [];
   const push = (msg: string) => {
     if (errors.length < 50) errors.push(msg);
@@ -70,7 +81,10 @@ export function validateRunShape(value: unknown): string[] {
   if (typeof value !== 'object' || value === null) return ['result must be an object'];
   const run = value as Record<string, unknown>;
 
-  if (run.protocol !== BENCH_PROTOCOL_VERSION) push(`protocol must be "${BENCH_PROTOCOL_VERSION}"`);
+  if (options.anyProtocol) {
+    if (typeof run.protocol !== 'string' || !/^localmode-bench\/\d+$/.test(run.protocol))
+      push('protocol must be a "localmode-bench/<n>" identifier');
+  } else if (run.protocol !== BENCH_PROTOCOL_VERSION) push(`protocol must be "${BENCH_PROTOCOL_VERSION}"`);
   if (!ACCEPTED_SCHEMA_VERSIONS.includes(run.schemaVersion as number))
     push(`schemaVersion must be one of ${ACCEPTED_SCHEMA_VERSIONS.join(', ')}`);
   if (typeof run.runId !== 'string' || run.runId.length < 8 || run.runId.length > 64) {
@@ -467,8 +481,8 @@ export function checkPlausibility(run: BenchRunResult): PlausibilityFlag[] {
  * summary recompute, client-summary agreement (>1% relative disagreement on
  * medians is flagged), and plausibility rules.
  */
-export function validateSubmission(run: BenchRunResult): ValidationReport {
-  const shapeErrors = validateRunShape(run);
+export function validateSubmission(run: BenchRunResult, options: ValidateOptions = {}): ValidationReport {
+  const shapeErrors = validateRunShape(run, options);
   if (shapeErrors.length > 0) {
     return { ok: false, shapeErrors, flags: [], summaries: [] };
   }

@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.14.2] - 2026-09-22
+
+**Released:** `@localmode/chrome-ai` 2.2.1, `@localmode/bench` 0.8.2.
+
+### Fixed
+
+- **chrome-ai:** a response Chrome cuts at its output cap ("The response exceeded output limits and was truncated.", a `QuotaExceededError` on Chrome 153) was reported as an oversized input and, in `doStream()`, the text already streamed was discarded. `doStream()` now keeps that text and ends with `finishReason: 'length'`; `doGenerate()` fails with the new code `chrome-ai-output-truncated`. Found by the bench's Gemini Nano long-context cell failing intermittently on two Apple laptops after Chrome 153; from now on that cell records a truncated answer instead of an error.
+- **bench (analysis tooling):** `scripts/analyze.ts` analysed only runs of the current protocol (it validated each file as a submission). `validateSubmission(run, { anyProtocol: true })` accepts every archived protocol identifier; the CLI uses it and now covers the whole dataset, each row labelled by `protocol`.
+
 ## [2.14.1] - 2026-09-22
 
 **Released:** `@localmode/bench` 0.8.1 (docs only).

@@ -394,6 +394,59 @@ describe('ChromeAILanguageModel', () => {
     });
   });
 
+  // Chrome 153 ends a long answer with a QuotaExceededError ("The response
+  // exceeded output limits and was truncated.") after streaming the text up to
+  // its output cap. That is a truncated output, not an oversized input: the
+  // text Chrome produced is kept and the stream ends with finishReason 'length'.
+  it('doStream keeps the text streamed before Chrome truncates the response and ends with finishReason length', async () => {
+    const { session } = setupMockSession();
+    session.promptStreaming.mockImplementation(() =>
+      (async function* () {
+        yield 'The council should ';
+        yield 'proceed with the replacement';
+        const err = new Error('The response exceeded output limits and was truncated.');
+        err.name = 'QuotaExceededError';
+        throw err;
+      })(),
+    );
+    const model = new ChromeAILanguageModel();
+    const chunks = [];
+    for await (const chunk of model.doStream({ prompt: 'Write a memo' })) chunks.push(chunk);
+    expect(chunks.filter((c) => !c.done).map((c) => c.text).join('')).toBe('The council should proceed with the replacement');
+    const last = chunks[chunks.length - 1];
+    expect(last.done).toBe(true);
+    expect(last.finishReason).toBe('length');
+    expect(last.usage?.outputTokens).toBeGreaterThan(0);
+  });
+
+  it('doStream still fails when Chrome truncates before any text arrived', async () => {
+    const { session } = setupMockSession();
+    session.promptStreaming.mockImplementation(() =>
+      (async function* () {
+        const err = new Error('The response exceeded output limits and was truncated.');
+        err.name = 'QuotaExceededError';
+        throw err;
+        yield '';
+      })(),
+    );
+    const model = new ChromeAILanguageModel();
+    const iterate = async () => {
+      for await (const _ of model.doStream({ prompt: 'x' })) void _;
+    };
+    await expect(iterate()).rejects.toMatchObject({ code: 'chrome-ai-output-truncated' });
+  });
+
+  it('doGenerate maps the output-truncation error to chrome-ai-output-truncated, not to an input error', async () => {
+    const { session } = setupMockSession();
+    const err = new Error('The response exceeded output limits and was truncated.');
+    err.name = 'QuotaExceededError';
+    session.prompt.mockRejectedValue(err);
+    const model = new ChromeAILanguageModel();
+    await expect(model.doGenerate({ prompt: 'x' })).rejects.toMatchObject({
+      code: 'chrome-ai-output-truncated',
+    });
+  });
+
   it('warmUp() calls LanguageModel.create() once and sets isReady() true', async () => {
     const { factory } = setupMockSession();
     const model = new ChromeAILanguageModel();

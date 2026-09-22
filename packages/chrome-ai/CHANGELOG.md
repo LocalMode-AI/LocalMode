@@ -1,5 +1,11 @@
 # @localmode/chrome-ai
 
+## 2.2.1
+
+### Patch Changes
+
+- fix: a response Chrome cuts at its output cap is no longer reported as an oversized input. Chrome 153 ends such an answer by rejecting the prompt with a `QuotaExceededError` reading "The response exceeded output limits and was truncated."; the provider mapped it to `chrome-ai-quota-exceeded` ("input exceeded Gemini Nano's token budget") and, in `doStream()`, threw away the text Chrome had already streamed. Now `doStream()` keeps that text and ends with `finishReason: 'length'` (a truncated answer, like every other runtime at its token limit), and `doGenerate()`, where Chrome delivers nothing, fails with the new code `chrome-ai-output-truncated` and a hint to stream or ask for a shorter answer. An input that really is too long still maps to `chrome-ai-quota-exceeded`. Seen in the wild on two Apple laptops running the LocalMode Bench long-context lane on Chrome 153, intermittently.
+
 ## 2.2.0
 
 ### Minor Changes

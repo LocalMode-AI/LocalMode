@@ -1,5 +1,9 @@
 # @localmode/bench
 
+## 0.8.2
+
+- feat: `validateRunShape(run, { anyProtocol: true })` / `validateSubmission(run, { anyProtocol: true })` accept any `localmode-bench/<n>` identifier instead of only the current protocol. Submissions never set it; the analysis CLI (`scripts/analyze.ts`) does, so a clone of the dataset is analysed whole: 90 of 90 runs across five protocol versions instead of the 13 current-protocol runs it kept before, each `leaderboard.csv` / `iterations.csv` row labelled by `protocol` and never mixed.
+
 ## 0.8.1
 
 - docs: the v5 note on the 2,048-token context claimed more than the first v5 Thorough run bears out. The smaller context shrinks the Gemma 4 E2B KV cache inside the CPU lane's 4 GB wasm heap, but that lane's Gemma quality cell still fails on the per-request state allocation (`std::bad_alloc`) with the 3.46 GB weights resident, and is recorded as an error exactly as under v4. README corrected; no code change.
