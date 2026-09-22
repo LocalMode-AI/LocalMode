@@ -13,7 +13,7 @@ import { issueNonce, verifyNonce, NONCE_MAX_AGE_MS } from '../src/lib/bench/nonc
 function entry(overrides: Partial<RunIndexEntry> & { runId: string }): RunIndexEntry {
   return {
     createdAt: '2026-07-16T00:00:00.000Z',
-    protocol: 'localmode-bench/4',
+    protocol: 'localmode-bench/5',
     suite: 'quick',
     deviceClass: 'macos/apple-metal-3',
     browser: 'Chrome',
@@ -42,6 +42,19 @@ function entry(overrides: Partial<RunIndexEntry> & { runId: string }): RunIndexE
 }
 
 describe('aggregateIndex()', () => {
+  it('shows the current and the previous protocol side by side, never mixed, and nothing older', () => {
+    const rows = aggregateIndex([
+      entry({ runId: 'a5', protocol: 'localmode-bench/5' }),
+      entry({ runId: 'b5', protocol: 'localmode-bench/5' }),
+      entry({ runId: 'a4', protocol: 'localmode-bench/4' }),
+      entry({ runId: 'a3', protocol: 'localmode-bench/3' }),
+    ]);
+    expect(rows.map((r) => [r.protocol, r.submissions])).toEqual([
+      ['localmode-bench/5', 2],
+      ['localmode-bench/4', 1],
+    ]);
+  });
+
   it('groups by the GPU-model subclass, derived for entries written before it existed', () => {
     const rows = aggregateIndex([
       entry({ runId: 'm1a', gpuModel: 'Apple M1 Pro' }),
@@ -77,10 +90,10 @@ describe('aggregateIndex()', () => {
     expect(rows[0].provisional).toBe(true);
   });
 
-  it('aggregates only runs measured under the current protocol (older or unversioned entries are excluded)', () => {
+  it('aggregates only the leaderboard protocols (older or unversioned entries are excluded)', () => {
     // Metric definitions changed between protocol versions; mixing them in one
     // row would average incomparable numbers. Pre-v2 index entries carry no
-    // protocol field at all.
+    // protocol field at all. v4 stays beside v5 in its own rows.
     const v1 = entry({ runId: 'v1' });
     delete (v1 as Partial<RunIndexEntry>).protocol;
     const rows = aggregateIndex([
@@ -88,10 +101,12 @@ describe('aggregateIndex()', () => {
       v1,
       entry({ runId: 'archived-v2', protocol: 'localmode-bench/2' }),
       entry({ runId: 'archived-v3', protocol: 'localmode-bench/3' }),
-      entry({ runId: 'future', protocol: 'localmode-bench/5' }),
+      entry({ runId: 'previous', protocol: 'localmode-bench/4' }),
     ]);
-    expect(rows).toHaveLength(1);
-    expect(rows[0].submissions).toBe(1);
+    expect(rows.map((r) => [r.protocol, r.submissions])).toEqual([
+      ['localmode-bench/5', 1],
+      ['localmode-bench/4', 1],
+    ]);
   });
 
   it('routes warm loads to loadWarmMs', () => {
@@ -115,7 +130,7 @@ describe('toIndexEntry() → aggregateIndex() (protocol v2 fields)', () => {
       sizeBytes: 614_236_160,
     };
     return {
-      protocol: 'localmode-bench/4',
+      protocol: 'localmode-bench/5',
       schemaVersion: 3,
       runId: 'run-v2-0001',
       createdAt: '2026-09-19T00:00:00.000Z',
@@ -169,7 +184,7 @@ describe('toIndexEntry() → aggregateIndex() (protocol v2 fields)', () => {
   it('carries protocol, end-to-end rate, stream flag, and parse rate into the index and the leaderboard row', () => {
     const run = v2Run();
     const entry = toIndexEntry(run, summarizeRun(run), false, 'runs/2026/09/run-v2-0001.json');
-    expect(entry.protocol).toBe('localmode-bench/4');
+    expect(entry.protocol).toBe('localmode-bench/5');
     const chat = entry.cells.find((c) => c.workloadId === 'chat-pp128-tg128')!;
     expect(chat.streamIncremental).toBe(false);
     expect(chat.ttftMs).toBeUndefined();

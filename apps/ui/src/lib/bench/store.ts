@@ -7,7 +7,7 @@
  */
 
 import type { BenchRunResult, CellSummary } from '@localmode/bench';
-import { BENCH_PROTOCOL_VERSION, deviceClassOf, deviceSubclassOf, median, refineDeviceClass } from '@localmode/bench';
+import { LEADERBOARD_PROTOCOL_VERSIONS, deviceClassOf, deviceSubclassOf, median, refineDeviceClass } from '@localmode/bench';
 
 /** Light per-run entry stored in index/summary.json. */
 export interface RunIndexEntry {
@@ -84,6 +84,8 @@ export interface RunIndexEntry {
 
 /** One leaderboard row aggregated from index entries. */
 export interface IndexLeaderboardRow {
+  /** Protocol version every contributing run was measured under; rows never mix versions. */
+  protocol: string;
   /** Coarse class (platform + WebGPU vendor-architecture), for rollups. */
   deviceClass: string;
   /** Class refined by GPU model where the browser names one; else the class. */
@@ -325,12 +327,12 @@ export const INDEX_HEADLINE_MIN = 3;
  */
 export function aggregateIndex(
   entries: readonly RunIndexEntry[],
-  protocol: string = BENCH_PROTOCOL_VERSION,
+  protocols: readonly string[] = LEADERBOARD_PROTOCOL_VERSIONS,
 ): IndexLeaderboardRow[] {
   interface Bucket {
     row: Pick<
       IndexLeaderboardRow,
-      'deviceClass' | 'deviceSubclass' | 'runtimeId' | 'benchModelId' | 'modelName' | 'workloadId'
+      'protocol' | 'deviceClass' | 'deviceSubclass' | 'runtimeId' | 'benchModelId' | 'modelName' | 'workloadId'
     >;
     metrics: Record<string, number[]>;
     backends: Set<string>;
@@ -339,17 +341,19 @@ export function aggregateIndex(
   }
   const buckets = new Map<string, Bucket>();
   for (const entry of entries) {
-    if (entry.flagged || entry.protocol !== protocol) continue;
+    if (entry.flagged || !entry.protocol || !protocols.includes(entry.protocol)) continue;
+    const protocol = entry.protocol;
     const deviceSubclass = indexEntrySubclass(entry);
     for (const cell of entry.cells) {
       if (cell.workloadId === 'warm-reload') {
         // Warm-reload cells contribute the warm load metric to their model's rows.
       }
-      const key = [deviceSubclass, cell.runtimeId, cell.benchModelId, cell.workloadId].join('|');
+      const key = [protocol, deviceSubclass, cell.runtimeId, cell.benchModelId, cell.workloadId].join('|');
       let bucket = buckets.get(key);
       if (!bucket) {
         bucket = {
           row: {
+            protocol,
             deviceClass: entry.deviceClass,
             deviceSubclass,
             runtimeId: cell.runtimeId,
@@ -406,6 +410,8 @@ export function aggregateIndex(
   }
   rows.sort(
     (a, b) =>
+      // Newest protocol first ("localmode-bench/5" before "/4"), then by device.
+      b.protocol.localeCompare(a.protocol, undefined, { numeric: true }) ||
       a.deviceClass.localeCompare(b.deviceClass) ||
       a.deviceSubclass.localeCompare(b.deviceSubclass) ||
       a.benchModelId.localeCompare(b.benchModelId) ||

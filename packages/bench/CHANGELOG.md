@@ -1,5 +1,12 @@
 # @localmode/bench
 
+## 0.8.0
+
+Protocol `localmode-bench/5`.
+
+- **The llama.cpp lanes change their thread count and context size** (the host adapters carry the settings; the package carries the version and the leaderboard rule). Threads: half the browser's logical thread count, at least two, instead of all of it. Under v4 a pool over every logical thread ran at half speed with high variance on hybrid and SMT processors (natively on an M1 Pro, tg128 178 ± 42 tokens/s at 10 threads against 395 ± 16 at 8; in the browser the M4 Max's 16-thread pool decoded a third as fast as the M1 Pro's 10). Context: 2,048 tokens for the language lanes (the workloads need about 700), which keeps the Gemma 4 E2B KV cache inside the CPU lane's 4 GB wasm heap where the 8,192 default failed the quality cell on every v4 run. Both the requested thread count and the pool the runtime built (`multithread`, `n_threads_used`) and `n_ctx` are recorded per cell. Every other lane measures exactly as under v4.
+- feat: `LEADERBOARD_PROTOCOL_VERSIONS` (`['localmode-bench/5', 'localmode-bench/4']`): the protocol versions the public leaderboard shows, newest first. `aggregateRuns` groups by protocol as well as subclass and each `LeaderboardRow` carries `protocol`; `rowsToCSV` and `runsToLongCSV` gain the column. Rows never mix versions; v4 stays beside v5 because only the llama.cpp lanes changed. Archived runs are never re-scored.
+
 ## 0.7.1
 
 - feat: `refineDeviceClass(deviceClass, gpuModel)` and `deviceSubclassOf(run)`. The coarse device class (platform + WebGPU vendor-architecture) put every Apple Silicon generation in one `macos/apple-metal-3` row; the subclass splits a class by the GPU model where the browser names a specific part (`macos/apple-m1-pro`, `macos/apple-m4-max`, `android/adreno-650`) and equals the class where it names nothing more specific (WebKit's `Apple GPU`, Windows' generation-less `AMD Radeon(TM) Graphics`, Firefox's masked `..., or similar` buckets) or where there is no WebGPU. `aggregateRuns` groups by subclass and each row carries both; `rowsToCSV` and `runsToLongCSV` gain a `deviceSubclass` column. `deviceClassOf` is unchanged, so archived classes and cross-device rollups keep their meaning.

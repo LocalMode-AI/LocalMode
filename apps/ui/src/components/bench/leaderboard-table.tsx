@@ -34,16 +34,23 @@ function fmtMs(v?: number): string {
 }
 
 export function LeaderboardTable({ rows }: { rows: IndexLeaderboardRow[] }) {
+  const [protocol, setProtocol] = useState(ALL);
   const [device, setDevice] = useState(ALL);
   const [runtime, setRuntime] = useState(ALL);
   const [model, setModel] = useState(ALL);
 
+  // Newest protocol first; rows never mix versions, so the filter is exact.
+  const protocols = useMemo(
+    () => [...new Set(rows.map((r) => r.protocol))].sort((a, b) => b.localeCompare(a, undefined, { numeric: true })),
+    [rows],
+  );
   const devices = useMemo(() => [...new Set(rows.map((r) => r.deviceSubclass))].sort(), [rows]);
   const runtimes = useMemo(() => [...new Set(rows.map((r) => r.runtimeId))].sort(), [rows]);
   const models = useMemo(() => [...new Set(rows.map((r) => r.benchModelId))].sort(), [rows]);
 
   const filtered = rows.filter(
     (r) =>
+      (protocol === ALL || r.protocol === protocol) &&
       (device === ALL || r.deviceSubclass === device) &&
       (runtime === ALL || r.runtimeId === runtime) &&
       (model === ALL || r.benchModelId === model),
@@ -56,6 +63,7 @@ export function LeaderboardTable({ rows }: { rows: IndexLeaderboardRow[] }) {
       <div className="flex flex-wrap gap-3">
         {(
           [
+            ['Protocol', protocol, setProtocol, protocols],
             ['Device', device, setDevice, devices],
             ['Runtime', runtime, setRuntime, runtimes],
             ['Model', model, setModel, models],
@@ -84,6 +92,7 @@ export function LeaderboardTable({ rows }: { rows: IndexLeaderboardRow[] }) {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Protocol</TableHead>
               <TableHead>Device class</TableHead>
               <TableHead>Model</TableHead>
               <TableHead>Runtime</TableHead>
@@ -98,7 +107,8 @@ export function LeaderboardTable({ rows }: { rows: IndexLeaderboardRow[] }) {
           </TableHeader>
           <TableBody>
             {filtered.map((r) => (
-              <TableRow key={`${r.deviceSubclass}|${r.runtimeId}|${r.benchModelId}|${r.workloadId}`}>
+              <TableRow key={`${r.protocol}|${r.deviceSubclass}|${r.runtimeId}|${r.benchModelId}|${r.workloadId}`}>
+                <TableCell className="font-mono text-xs">{r.protocol.replace('localmode-bench/', 'v')}</TableCell>
                 <TableCell className="font-mono text-xs">
                   {r.deviceSubclass}
                   {r.deviceSubclass !== r.deviceClass && (

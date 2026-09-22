@@ -4,7 +4,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { BENCH_PROTOCOL_VERSION } from '@localmode/bench';
+import { LEADERBOARD_PROTOCOL_VERSIONS } from '@localmode/bench';
 import { aggregateIndex, benchStoreConfig, readIndex } from '@/lib/bench/store';
 
 export const dynamic = 'force-dynamic';
@@ -21,8 +21,13 @@ export async function GET(): Promise<NextResponse> {
   const entries = await readIndex(repo, { next: { revalidate: 300 } });
   const rows = aggregateIndex(entries);
   return NextResponse.json(
-    // Same rule as the rows: only unflagged runs measured under the current protocol.
-    { rows, runs: entries.filter((e) => !e.flagged && e.protocol === BENCH_PROTOCOL_VERSION).length, repo },
+    // Same rule as the rows: unflagged runs measured under a protocol the leaderboard shows.
+    {
+      rows,
+      runs: entries.filter((e) => !e.flagged && !!e.protocol && LEADERBOARD_PROTOCOL_VERSIONS.includes(e.protocol)).length,
+      protocols: LEADERBOARD_PROTOCOL_VERSIONS,
+      repo,
+    },
     {
       headers: {
         // Stale window capped to one revalidation period: with an hour of

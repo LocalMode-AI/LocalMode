@@ -6,7 +6,16 @@
  */
 
 /** Protocol identifier embedded in every result. Bump only with a spec change. */
-export const BENCH_PROTOCOL_VERSION = 'localmode-bench/4';
+export const BENCH_PROTOCOL_VERSION = 'localmode-bench/5';
+
+/**
+ * Protocol versions the public leaderboard aggregates, newest first. Rows never
+ * mix versions; each row carries its own. v4 stays beside v5 because v5 changed
+ * only the llama.cpp lanes' thread count and context size, so every other lane
+ * measures identically under both and the v4 archive remains readable next to
+ * the current rows.
+ */
+export const LEADERBOARD_PROTOCOL_VERSIONS: readonly string[] = ['localmode-bench/5', 'localmode-bench/4'];
 
 /** Result JSON schema version (independent of the protocol semantics version). */
 export const BENCH_SCHEMA_VERSION = 3;

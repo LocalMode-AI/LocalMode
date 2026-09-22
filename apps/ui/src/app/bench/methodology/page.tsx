@@ -60,7 +60,7 @@ export default function BenchMethodologyPage() {
         <div className="flex flex-col gap-3">
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{TITLE}</h1>
           <p>
-            Protocol <code className="rounded bg-muted px-1 font-mono text-sm">localmode-bench/4</code>.
+            Protocol <code className="rounded bg-muted px-1 font-mono text-sm">localmode-bench/5</code>.
             Any change to prompts, budgets, policy numbers, or integrity rules bumps this version;
             archived runs are never re-scored silently. The reference implementation is the
             open-source <code className="rounded bg-muted px-1 font-mono text-sm">@localmode/bench</code>{' '}
@@ -223,9 +223,11 @@ export default function BenchMethodologyPage() {
             where it names nothing more specific (Safari&apos;s &quot;Apple GPU&quot;, a
             generation-less &quot;AMD Radeon(TM) Graphics&quot;, Firefox&apos;s masked
             &quot;..., or similar&quot; buckets). Leaderboard rows are subclass rows; the class is
-            shown beneath. Nothing typed by a submitter enters either. Only runs measured under the current protocol version
-            are aggregated: metric definitions change between versions, so archived runs from an
-            earlier protocol stay in the dataset but never mix into a current row.
+            shown beneath. Nothing typed by a submitter enters either. Rows never mix protocol
+            versions: every row carries the version its runs were measured under, and the
+            leaderboard shows the current protocol and the previous one side by side (v5 beside v4,
+            because v5 changed only the llama.cpp lanes and every other lane measures identically).
+            Older archived runs stay in the dataset and never enter a leaderboard row.
           </p>
         </Section>
 
@@ -316,6 +318,23 @@ export default function BenchMethodologyPage() {
 
         <Section id="changelog" title="Protocol changelog">
           <ul className="list-disc space-y-2 pl-5">
+            <li>
+              <strong className="text-foreground">localmode-bench/5</strong> (2026-09-22) - the
+              llama.cpp lanes request half the browser&apos;s logical thread count (at least two)
+              instead of all of it, and load with a 2,048-token context. Under v4 the CPU lane asked
+              for every logical thread, and on hybrid and SMT processors a pool that spans the
+              efficiency cores or the second hardware threads runs at half speed with high variance:
+              natively on an M1 Pro, tg128 was 178 ± 42 tokens/s at 10 threads against 395 ± 16 at
+              8, and in the browser the M4 Max&apos;s 16-thread pool decoded a third as fast as the
+              M1 Pro&apos;s 10. The browser exposes no core topology, so half the logical count is
+              the rule; it lands on the performance or physical cores on every lab device, and both
+              the requested count and the pool the runtime built are recorded on the cell. The
+              context change keeps the KV cache of the 3.46 GB Gemma 4 E2B GGUF inside the CPU
+              lane&apos;s 4 GB wasm heap, where the provider&apos;s 8,192 default failed the quality
+              cell on every v4 run (the workloads need at most about 700 tokens). Every other lane
+              measures exactly as under v4, so the leaderboard shows v4 rows beside v5 rows; nothing
+              is re-scored.
+            </li>
             <li>
               <strong className="text-foreground">localmode-bench/4</strong> (2026-09-20) - the
               llama.cpp lanes load every language model as text only. The wllama provider attaches

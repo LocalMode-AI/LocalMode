@@ -12,6 +12,7 @@
 // Protocol types + constants
 export {
   BENCH_PROTOCOL_VERSION,
+  LEADERBOARD_PROTOCOL_VERSIONS,
   BENCH_SCHEMA_VERSION,
   ACCEPTED_SCHEMA_VERSIONS,
 } from './types.js';

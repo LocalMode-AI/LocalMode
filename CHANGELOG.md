@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.14.0] - 2026-09-22
+
+Protocol `localmode-bench/5`: the llama.cpp lanes' thread count and context size, and a leaderboard that shows v4 beside v5.
+
+**Released:** `@localmode/bench` 0.8.0.
+
+### Changed
+
+- **bench (protocol v5):** the two llama.cpp lanes request half the browser's logical thread count (at least two) instead of all of it, and load with a 2,048-token context (embedding lane: 512). Under v4 the CPU lane asked for every logical thread; on hybrid and SMT processors that pool runs at half speed with high variance (native M1 Pro sweep: tg128 178 ± 42 tokens/s at 10 threads, 395 ± 16 at 8; browser: the M4 Max's 16-thread pool decoded a third as fast as the M1 Pro's 10). The browser exposes no core topology, so half the logical count is the rule; it lands on the performance or physical cores on every lab device. The smaller context keeps the Gemma 4 E2B GGUF's KV cache inside the CPU lane's 4 GB wasm heap, where the 8,192 default failed the quality cell on every v4 run. `n_ctx` joins `n_threads`, `multithread` and `n_threads_used` on each cell's `runtimeConfig`. Every other lane measures exactly as under v4. Harness 0.8.0.
+- **bench (leaderboard):** rows carry their protocol version and never mix versions; the leaderboard shows the current protocol and the previous one side by side (`LEADERBOARD_PROTOCOL_VERSIONS`), with a Protocol column and filter, so the v4 archive stays visible next to v5 instead of disappearing on the bump. The API's `runs` count and the page caption follow the same rule; the methodology page documents it and carries the v5 changelog entry.
+
 ## [2.13.3] - 2026-09-22
 
 **Released:** `@localmode/wllama` 3.4.2.

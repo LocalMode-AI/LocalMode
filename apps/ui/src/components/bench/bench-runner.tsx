@@ -70,7 +70,7 @@ import {
   TableRow,
 } from '@/registry/localmode/ui/table';
 
-const HARNESS_VERSION = '0.7.1';
+const HARNESS_VERSION = '0.8.0';
 
 type Phase = 'idle' | 'running' | 'done' | 'error';
 

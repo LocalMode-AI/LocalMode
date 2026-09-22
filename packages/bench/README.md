@@ -9,14 +9,20 @@ rules for community submissions, and leaderboard aggregation.
 The public runner + leaderboard live at **https://localmode.ai/bench**.
 The protocol is documented at **https://localmode.ai/bench/methodology**.
 
-## Protocol (`localmode-bench/4`)
+## Protocol (`localmode-bench/5`)
 
-Result schema version 2 (`BENCH_SCHEMA_VERSION`), plausibility rule set 2
-(`PLAUSIBILITY_RULES_VERSION`). Archived v1, v2, and v3 runs stay published
-under their version and are never re-scored; the public leaderboard at
-localmode.ai aggregates only runs measured under the current protocol
-(`aggregateRuns()` in this package does not filter, so hosts partition by
-`run.protocol` themselves). v3 split the llama.cpp lane: `wllama` is llama.cpp
+Result schema version 3 (`BENCH_SCHEMA_VERSION`), plausibility rule set 2
+(`PLAUSIBILITY_RULES_VERSION`). Archived runs stay published under their
+version and are never re-scored; the public leaderboard at localmode.ai shows
+the protocol versions in `LEADERBOARD_PROTOCOL_VERSIONS` (the current one and
+the previous one) in separate rows that never mix (`aggregateRuns()` groups by
+`run.protocol` and each row carries it; hosts choose which versions to show).
+v5 changes only the llama.cpp lanes: they request half the browser's logical
+thread count (at least two) instead of all of it, because a pool over every
+logical thread ran at half speed with high variance on hybrid and SMT
+processors, and load with a 2,048-token context so the Gemma 4 E2B GGUF's KV
+cache fits the CPU lane's 4 GB wasm heap; `n_ctx`, `n_threads`, `multithread`
+and `n_threads_used` are recorded per cell. v3 split the llama.cpp lane: `wllama` is llama.cpp
 WASM on the CPU (`n_gpu_layers: 0`) and `wllama-webgpu` offloads every layer
 to WebGPU, over the same GGUF files; under v2 the single `wllama` lane ran on
 WebGPU wherever the browser had it while recording `wasm` (wllama 3.5's

@@ -11,7 +11,7 @@ import { SiteFooter } from '@/components/site-footer';
 import { JsonLd } from '@/components/json-ld';
 import { breadcrumbGraph } from '@/lib/structured-data';
 import { ogImageUrl } from '@/lib/og';
-import { BENCH_PROTOCOL_VERSION } from '@localmode/bench';
+import { LEADERBOARD_PROTOCOL_VERSIONS } from '@localmode/bench';
 import { aggregateIndex, readIndex } from '@/lib/bench/store';
 import { LeaderboardTable } from '@/components/bench/leaderboard-table';
 import { SubmissionsTable } from '@/components/bench/submissions-table';
@@ -47,7 +47,9 @@ export default async function BenchPage() {
   const rows = aggregateIndex(entries);
   // Count what the table aggregates: unflagged runs under the current protocol
   // (archived runs from earlier protocol versions stay in the dataset only).
-  const currentRuns = entries.filter((e) => !e.flagged && e.protocol === BENCH_PROTOCOL_VERSION);
+  const currentRuns = entries.filter(
+    (e) => !e.flagged && !!e.protocol && LEADERBOARD_PROTOCOL_VERSIONS.includes(e.protocol),
+  );
   const verifiedRuns = currentRuns.length;
 
   return (
@@ -112,9 +114,11 @@ export default async function BenchPage() {
             <h2 className="text-xl font-semibold">Leaderboard</h2>
             <p className="text-sm text-muted-foreground">
               {verifiedRuns} verified submission{verifiedRuns === 1 ? '' : 's'} under{' '}
-              {BENCH_PROTOCOL_VERSION} · medians of per-device medians · devices grouped by GPU model
-              where the browser names one, otherwise by platform and WebGPU architecture · rows need 3+
-              submissions to leave provisional status
+              {LEADERBOARD_PROTOCOL_VERSIONS.join(' and ')} (rows never mix versions; the previous
+              protocol stays beside the current one because only the llama.cpp lanes changed) ·
+              medians of per-device medians · devices grouped by GPU model where the browser names
+              one, otherwise by platform and WebGPU architecture · rows need 3+ submissions to leave
+              provisional status
             </p>
           </div>
           <LeaderboardTable rows={rows} />

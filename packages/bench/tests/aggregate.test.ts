@@ -61,6 +61,17 @@ describe('refineDeviceClass()', () => {
 });
 
 describe('aggregateRuns()', () => {
+  it('never mixes protocol versions: one row per protocol, newest first, each carrying its own', () => {
+    const v5 = makeRun({ runId: 'v5', protocol: 'localmode-bench/5' });
+    const v4 = makeRun({ runId: 'v4', protocol: 'localmode-bench/4' });
+    const rows = aggregateRuns([v4, v5]);
+    expect(rows.map((r) => [r.protocol, r.submissions])).toEqual([
+      ['localmode-bench/5', 1],
+      ['localmode-bench/4', 1],
+    ]);
+    expect(rowsToCSV(rows).split('\n')[0]).toMatch(/^protocol,deviceClass,deviceSubclass,/);
+  });
+
   it('rows split by subclass and keep the coarse class for the rollup', () => {
     const m1 = makeRun({ runId: 'm1' });
     m1.environment.gpuModel = 'Apple M1 Pro';

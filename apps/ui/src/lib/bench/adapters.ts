@@ -209,10 +209,31 @@ function makeWebLLMAdapter(): LLMRuntimeAdapter {
   };
 }
 
-/** Thread count the wllama provider uses on an isolated page (its default). */
-function wllamaThreads(): number {
-  return typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : 1;
+/**
+ * Thread count the llama.cpp lanes request: half the logical threads the
+ * browser reports, at least two. A pool over every logical thread ran at half
+ * speed with high variance wherever the CPU is hybrid or SMT (measured natively
+ * on an M1 Pro: tg128 178 ± 42 tokens/s at 10 threads against 395 ± 16 at 8,
+ * and in the browser on the M4 Max, whose 16-thread pool ran a third as fast
+ * as the M1 Pro's 10). Half the logical count lands on the performance cores
+ * or the physical cores on every lab device; the browser exposes no topology
+ * to do better. The requested count and the pool the runtime built are both
+ * recorded on the cell.
+ */
+export function wllamaThreads(): number {
+  const logical = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : 1;
+  return Math.max(2, Math.ceil((logical || 1) / 2));
 }
+
+/**
+ * Context sizes the llama.cpp lanes load with. The language workloads need at
+ * most ~700 tokens (pp512 + 128 generated + template); 2048 leaves room while
+ * keeping the KV cache small enough for the 3.46 GB Gemma 4 E2B GGUF inside
+ * the CPU lane's 4 GB wasm heap, where the provider's 8192 default failed the
+ * quality cell on every run. The embedding model's context is its own 512.
+ */
+export const WLLAMA_BENCH_CONTEXT_LLM = 2048;
+export const WLLAMA_BENCH_CONTEXT_EMBED = 512;
 
 /**
  * Backend and configuration record for a loaded wllama model, from what
@@ -229,7 +250,7 @@ function wllamaLoadedInfo(
   },
   requestedGpuLayers: number,
   webgpuAdapter: boolean,
-  options: { textOnly?: boolean } = {},
+  options: { textOnly?: boolean; nCtx?: number } = {},
 ): { resolvedBackend: string; runtimeConfig: Record<string, string | number | boolean> } {
   const offloaded = llm.offloadedLayers ?? null;
   const gpu = offloaded ? offloaded.gpu > 0 : Boolean(llm.gpuAccelerated);
@@ -241,6 +262,7 @@ function wllamaLoadedInfo(
       // What wllama built, from its own report: a lane whose pool fell back to
       // one thread says so here whatever n_threads asked for.
       ...(pool ? { multithread: pool.multithread, n_threads_used: pool.threads } : {}),
+      ...(options.nCtx !== undefined ? { n_ctx: options.nCtx } : {}),
       n_gpu_layers: requestedGpuLayers,
       // llama.cpp prints its offload line only when it found a GPU device, so
       // "unreported" together with webgpu_adapter: false is an unambiguous CPU run.
@@ -283,13 +305,19 @@ function makeWllamaAdapter(gpu: boolean): LLMRuntimeAdapter {
       // E2B ships one). It is unused, costs a 557 MB download and CLIP warmup,
       // turns wllama's model cache off for the pair, and does not fit the CPU
       // lane's 4 GB wasm heap beside the 3.46 GB weights.
-      const llm = mod.wllama.languageModel(model.providerModelId, { nGpuLayers: requestedGpuLayers, vision: false });
+      const llm = mod.wllama.languageModel(model.providerModelId, {
+        nGpuLayers: requestedGpuLayers,
+        vision: false,
+        numThreads: wllamaThreads(),
+        contextLength: WLLAMA_BENCH_CONTEXT_LLM,
+      });
       const webgpuAdapter = await hasWebGPUAdapter();
       // The model loads on first use (the runner's untimed warmup), so the
       // backend and offload report are read lazily, after that load.
       const info = () =>
         wllamaLoadedInfo(llm as unknown as Parameters<typeof wllamaLoadedInfo>[0], requestedGpuLayers, webgpuAdapter, {
           textOnly: true,
+          nCtx: WLLAMA_BENCH_CONTEXT_LLM,
         });
       return {
         model: withoutPromptCache(llm) as unknown as LoadedLLM['model'],
@@ -462,10 +490,16 @@ function makeWllamaEmbedAdapter(gpu: boolean): EmbeddingRuntimeAdapter {
       abortSignal?.throwIfAborted();
       await mod.preloadModel(model.providerModelId, { onProgress: normalizeProgress(onProgress) });
       abortSignal?.throwIfAborted();
-      const embedder = mod.wllama.embedding(model.providerModelId, { nGpuLayers: requestedGpuLayers });
+      const embedder = mod.wllama.embedding(model.providerModelId, {
+        nGpuLayers: requestedGpuLayers,
+        numThreads: wllamaThreads(),
+        contextLength: WLLAMA_BENCH_CONTEXT_EMBED,
+      });
       const webgpuAdapter = await hasWebGPUAdapter();
       const info = () =>
-        wllamaLoadedInfo(embedder as unknown as Parameters<typeof wllamaLoadedInfo>[0], requestedGpuLayers, webgpuAdapter);
+        wllamaLoadedInfo(embedder as unknown as Parameters<typeof wllamaLoadedInfo>[0], requestedGpuLayers, webgpuAdapter, {
+          nCtx: WLLAMA_BENCH_CONTEXT_EMBED,
+        });
       return {
         model: embedder as unknown as LoadedEmbedder['model'],
         get resolvedBackend() {

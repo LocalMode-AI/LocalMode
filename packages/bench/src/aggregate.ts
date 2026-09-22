@@ -57,8 +57,10 @@ export function deviceSubclassOf(run: BenchRunResult): string {
   return refineDeviceClass(deviceClassOf(run), run.environment.gpuModel);
 }
 
-/** One leaderboard row: a (deviceSubclass, runtime, model, workload) group. */
+/** One leaderboard row: a (protocol, deviceSubclass, runtime, model, workload) group. */
 export interface LeaderboardRow {
+  /** Protocol version every contributing run was measured under; rows never mix versions. */
+  protocol: string;
   /** Coarse class (platform + WebGPU vendor-architecture), for rollups. */
   deviceClass: string;
   /** Class refined by GPU model where the browser names one; else the class. */
@@ -133,6 +135,7 @@ export function aggregateRuns(
   const buckets = new Map<string, Bucket>();
 
   for (const run of runs) {
+    const protocol = run.protocol;
     const deviceClass = deviceClassOf(run);
     const deviceSubclass = refineDeviceClass(deviceClass, run.environment.gpuModel);
     const summaries = run.clientSummaries ?? summarizeRun(run);
@@ -142,11 +145,12 @@ export function aggregateRuns(
       if (cell.status !== 'ok') continue;
       const summary = byCellId.get(cell.cellId);
       if (!summary) continue;
-      const key = [deviceSubclass, cell.runtimeId, cell.model.benchModelId, cell.workloadId].join('|');
+      const key = [protocol, deviceSubclass, cell.runtimeId, cell.model.benchModelId, cell.workloadId].join('|');
       let bucket = buckets.get(key);
       if (!bucket) {
         bucket = {
           row: {
+            protocol,
             deviceClass,
             deviceSubclass,
             runtimeId: cell.runtimeId,
@@ -206,6 +210,8 @@ export function aggregateRuns(
   }
   rows.sort(
     (a, b) =>
+      // Newest protocol first ("localmode-bench/5" before "/4"), then by device.
+      b.protocol.localeCompare(a.protocol, undefined, { numeric: true }) ||
       a.deviceClass.localeCompare(b.deviceClass) ||
       a.deviceSubclass.localeCompare(b.deviceSubclass) ||
       a.benchModelId.localeCompare(b.benchModelId) ||
@@ -236,7 +242,7 @@ function csvField(value: unknown): string {
 /** Leaderboard rows as CSV. */
 export function rowsToCSV(rows: readonly LeaderboardRow[]): string {
   const header = [
-    'deviceClass', 'deviceSubclass', 'runtimeId', 'benchModelId', 'modelName', 'workloadId', 'submissions',
+    'protocol', 'deviceClass', 'deviceSubclass', 'runtimeId', 'benchModelId', 'modelName', 'workloadId', 'submissions',
     'ttftMs', 'decodeCharsPerSec', 'overallCharsPerSec', 'singleLatencyMs', 'batchTextsPerSec',
     'loadColdMs', 'loadWarmMs', 'qualityScore', 'qualityParseRate', 'resolvedBackends', 'browsers',
     'highVariance', 'provisional',
@@ -245,7 +251,7 @@ export function rowsToCSV(rows: readonly LeaderboardRow[]): string {
   for (const r of rows) {
     lines.push(
       [
-        r.deviceClass, r.deviceSubclass, r.runtimeId, r.benchModelId, r.modelName, r.workloadId, r.submissions,
+        r.protocol, r.deviceClass, r.deviceSubclass, r.runtimeId, r.benchModelId, r.modelName, r.workloadId, r.submissions,
         r.ttftMs, r.decodeCharsPerSec, r.overallCharsPerSec, r.singleLatencyMs, r.batchTextsPerSec,
         r.loadColdMs, r.loadWarmMs, r.qualityScore, r.qualityParseRate, r.resolvedBackends.join(';'), r.browsers.join(';'),
         r.highVariance, r.provisional,
@@ -263,7 +269,7 @@ export function rowsToCSV(rows: readonly LeaderboardRow[]): string {
  */
 export function runsToLongCSV(runs: readonly BenchRunResult[]): string {
   const header = [
-    'runId', 'createdAt', 'suite', 'deviceClass', 'deviceSubclass', 'browser', 'browserVersion', 'os', 'gpuVendor',
+    'runId', 'createdAt', 'protocol', 'suite', 'deviceClass', 'deviceSubclass', 'browser', 'browserVersion', 'os', 'gpuVendor',
     'gpuArchitecture', 'cores', 'deviceMemoryGB', 'crossOriginIsolated', 'fingerprintMflops',
     'runtimeId', 'runtimeVersion', 'benchModelId', 'providerModelId', 'quantization', 'sizeBytes',
     'workloadId', 'resolvedBackend', 'iteration', 'ttftMs', 'decodeCharsPerSec', 'generatedChars',
@@ -273,7 +279,7 @@ export function runsToLongCSV(runs: readonly BenchRunResult[]): string {
   for (const run of runs) {
     const env = run.environment;
     const base = [
-      run.runId, run.createdAt, run.suite, deviceClassOf(run), deviceSubclassOf(run), env.browser.name,
+      run.runId, run.createdAt, run.protocol, run.suite, deviceClassOf(run), deviceSubclassOf(run), env.browser.name,
       env.browser.version, env.os.platform, env.gpu.vendor ?? '', env.gpu.architecture ?? '',
       env.hardware.cores ?? '', env.hardware.deviceMemoryGB ?? '', env.flags.crossOriginIsolated,
       run.fingerprint ? round2(run.fingerprint.mflops) : '',

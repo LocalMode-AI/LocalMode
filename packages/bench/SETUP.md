@@ -65,11 +65,13 @@ stamping `scrubbedAt` when a pre-schema-3 page's payload had to be cleaned.
 3. Confirm `index/summary.json` gained the entry (each entry carries the run's
    `protocol`).
 
-The leaderboard aggregates only index entries whose `protocol` matches the
-current `BENCH_PROTOCOL_VERSION` (`localmode-bench/4`); entries without the
-field predate v2 and are excluded. After a protocol bump the leaderboard is
-therefore empty until the first run under the new protocol is published.
-Archived runs stay in `runs/` as-is and are never re-scored.
+The leaderboard aggregates index entries whose `protocol` is one of
+`LEADERBOARD_PROTOCOL_VERSIONS` (the current `localmode-bench/5` and the
+previous `localmode-bench/4`), in separate rows that never mix; entries
+without the field predate v2 and are excluded. After a protocol bump the
+previous version's rows therefore stay on the leaderboard beside the new
+version's as those runs arrive. Archived runs stay in `runs/` as-is and are
+never re-scored.
 
 ## Optional integration check (real GitHub API, opt-in)
 
