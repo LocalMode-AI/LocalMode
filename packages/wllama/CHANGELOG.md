@@ -1,5 +1,11 @@
 # @localmode/wllama
 
+## 3.4.1
+
+### Patch Changes
+
+- fix: declared sizes of five catalog GGUFs now match the files on Hugging Face (measured by download and confirmed by `Content-Length`): SmolLM2 135M Q4_K_M 105,454,432 bytes (was declared 70 MB), Qwen3 0.6B Q4_K_M 396,705,472 (was 530 MB), Llama 3.2 1B Q4_K_M 807,694,464 (was 750 MB), Gemma 4 E2B Q4_K_M 3,462,680,032 (was 3.46 GiB), bge-small-en-v1.5 Q8_0 36,806,944 (was 35 MiB). `sizeBytes` and the `size` labels feed download estimates and storage checks; no runtime behavior changes.
+
 ## 3.4.0
 
 ### Minor Changes

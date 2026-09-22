@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.13.2] - 2026-09-22
+
+**Released:** `@localmode/wllama` 3.4.1.
+
+### Fixed
+
+- **wllama, bench:** the declared sizes of five GGUFs were wrong in both the provider catalog and the bench pairing catalog, found when the native baseline downloaded the same files: SmolLM2 135M Q4_K_M is 105 MB (declared 70), Qwen3 0.6B Q4_K_M is 397 MB (declared 530), Llama 3.2 1B Q4_K_M 808 MB (declared 750), Gemma 4 E2B Q4_K_M 3.46 GB decimal (declared 3.46 GiB), bge-small-en-v1.5 Q8_0 36.8 MB (declared 35 MiB). The runner's download estimate and the docs tables now say the real sizes. The declared size also selects a cell's decode-rate envelope class at validation: Qwen3 moves from the "under 1 GB" class to the "under 500 MB" class (a looser bound, 4,000 chars/s instead of 2,500; the highest Qwen3 decode ever recorded is 550). Archived runs carry their own declared sizes and are validated as they were; the envelope table itself is unchanged, so the protocol version is not.
+
 ## [2.13.1] - 2026-09-22
 
 **Released:** `@localmode/bench` 0.7.1.

@@ -88,7 +88,7 @@ import { detectCapabilities } from '@localmode/core';
 
 const caps = await detectCapabilities();
 const modelId = caps.hardware.memory && caps.hardware.memory < 4096
-  ? 'SmolLM2-135M-Instruct-Q4_K_M'  // 70MB, safe for 2-4GB devices
+  ? 'SmolLM2-135M-Instruct-Q4_K_M'  // 105MB, safe for 2-4GB devices
   : 'Qwen2.5-0.5B-Instruct-Q4_K_M'; // 386MB, needs 4GB+ RAM
 ```
 

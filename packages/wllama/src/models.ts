@@ -74,8 +74,8 @@ export const WLLAMA_MODELS = {
   'SmolLM2-135M-Instruct-Q4_K_M': {
     name: 'SmolLM2 135M',
     contextLength: 8192,
-    sizeBytes: 70 * 1024 * 1024, // ~70MB
-    size: '70MB',
+    sizeBytes: 105_454_432,
+    size: '105MB',
     description: 'Tiniest GGUF model, instant loading, good for testing',
     url: 'https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/main/SmolLM2-135M-Instruct-Q4_K_M.gguf',
     architecture: 'llama',
@@ -121,8 +121,8 @@ export const WLLAMA_MODELS = {
   'Llama-3.2-1B-Instruct-Q4_K_M': {
     name: 'Llama 3.2 1B',
     contextLength: 131072,
-    sizeBytes: 750 * 1024 * 1024, // ~750MB
-    size: '750MB',
+    sizeBytes: 807_694_464,
+    size: '808MB',
     description: 'Llama 3.2 1B, great for simple tasks with huge context',
     url: 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
     architecture: 'llama',
@@ -266,8 +266,8 @@ export const WLLAMA_MODELS = {
   'Qwen3-0.6B-Q4_K_M': {
     name: 'Qwen3 0.6B',
     contextLength: 40960,
-    sizeBytes: 530 * 1024 * 1024,
-    size: '530MB',
+    sizeBytes: 396_705_472,
+    size: '397MB',
     description: 'Qwen3 0.6B, fast multilingual reasoning with hybrid thinking',
     url: 'https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf',
     architecture: 'qwen3',
@@ -330,7 +330,7 @@ export const WLLAMA_MODELS = {
   'Gemma-4-E2B-IT-Q4_K_M': {
     name: 'Gemma 4 E2B IT',
     contextLength: 131072,
-    sizeBytes: 3.46 * 1024 * 1024 * 1024,
+    sizeBytes: 3_462_680_032,
     size: '3.46GB',
     description: 'Google Gemma 4 E2B, 2.3B effective params (PLE), strong multilingual + reasoning + vision',
     url: 'https://huggingface.co/bartowski/google_gemma-4-E2B-it-GGUF/resolve/main/google_gemma-4-E2B-it-Q4_K_M.gguf',
@@ -416,8 +416,8 @@ export const WLLAMA_MODELS = {
   'bge-small-en-v1.5-Q8_0': {
     name: 'BGE Small EN v1.5',
     contextLength: 512,
-    sizeBytes: 35 * 1024 * 1024,
-    size: '35MB',
+    sizeBytes: 36_806_944,
+    size: '37MB',
     description: 'BAAI BGE Small, lightweight English embeddings, great for on-device semantic search',
     url: 'https://huggingface.co/CompendiumLabs/bge-small-en-v1.5-gguf/resolve/main/bge-small-en-v1.5-q8_0.gguf',
     architecture: 'bert',
