@@ -1,6 +1,6 @@
 {
   "name": "@localmode/chrome-ai",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "Chrome AI provider for @localmode - on-device inference via Chrome's built-in Gemini Nano",
   "license": "MIT",
   "author": "LocalMode",

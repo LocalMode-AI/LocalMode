@@ -31,6 +31,21 @@ describe('validateRunShape()', () => {
   });
 });
 
+describe('archived-protocol analysis', () => {
+  // Submissions must carry the current protocol; offline analysis of the
+  // dataset (every archived version, each row labelled) must not.
+  it('validateSubmission({ anyProtocol: true }) validates an archived run instead of rejecting its version', () => {
+    const archived = makeRun({ protocol: 'localmode-bench/4' });
+    expect(validateSubmission(archived).shapeErrors).toEqual(['protocol must be "localmode-bench/5"']);
+    const report = validateSubmission(archived, { anyProtocol: true });
+    expect(report.shapeErrors).toEqual([]);
+    expect(report.summaries.length).toBeGreaterThan(0);
+    // The protocol still has to be a protocol identifier.
+    const junk = makeRun({ protocol: 'not-a-protocol' });
+    expect(validateRunShape(junk, { anyProtocol: true })).toEqual(['protocol must be a "localmode-bench/<n>" identifier']);
+  });
+});
+
 describe('summarizeCell() — the metric definitions', () => {
   it('computes TTFT and decode rate exactly from the trace', () => {
     const run = makeRun();

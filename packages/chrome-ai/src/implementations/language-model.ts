@@ -88,6 +88,19 @@ interface SessionKeyPayload {
  *   - `chrome-ai-multimodal-not-supported` — `ImagePart` was supplied
  *   - `chrome-ai-quota-exceeded` — input exceeded Gemini Nano's token budget
  */
+/**
+ * Chrome ends a response that hits its output cap by rejecting the prompt
+ * (streaming or not) with a `QuotaExceededError` whose message reads "The
+ * response exceeded output limits and was truncated." (seen on Chrome 153).
+ * That is a truncated output, not an oversized input, and in the streaming
+ * path the text up to the cut has already been delivered.
+ */
+function isOutputTruncationError(err: unknown): boolean {
+  const e = err as { name?: string; message?: string } | null;
+  const msg = e?.message ?? String(err);
+  return /response exceeded output limits|output limits? and was truncated/i.test(msg);
+}
+
 export class ChromeAILanguageModel implements LanguageModel {
   readonly modelId = 'chrome-ai:gemini-nano';
   readonly provider = 'chrome-ai';
@@ -413,6 +426,14 @@ export class ChromeAILanguageModel implements LanguageModel {
     if (e?.name === 'AbortError') {
       return e;
     }
+    if (isOutputTruncationError(err)) {
+      return this.createError(
+        `Gemini Nano's response exceeded Chrome's output limit and was cut off: ${msg}`,
+        'chrome-ai-output-truncated',
+        'Ask for a shorter answer, or stream with doStream(): the text Chrome produced before the cut is kept and the stream ends with finishReason "length".',
+        e,
+      );
+    }
     if (/quota|too long|input.*too|exceed/i.test(msg)) {
       return this.createError(
         `Chrome AI input exceeded Gemini Nano's token budget: ${msg}`,
@@ -611,6 +632,7 @@ export class ChromeAILanguageModel implements LanguageModel {
     }
 
     let accumulated = '';
+    let truncatedByChrome = false;
 
     try {
       // Browser ReadableStreams are async-iterable in modern Chrome but the
@@ -635,7 +657,13 @@ export class ChromeAILanguageModel implements LanguageModel {
         }
       }
     } catch (err) {
-      throw this.mapError(err);
+      // Chrome's output cap: the text up to the cut has been delivered, so the
+      // stream ends as a truncated answer. With nothing delivered it is an error.
+      if (isOutputTruncationError(err) && accumulated.length > 0) {
+        truncatedByChrome = true;
+      } else {
+        throw this.mapError(err);
+      }
     }
 
     const durationMs = performance.now() - startTime;
@@ -646,7 +674,7 @@ export class ChromeAILanguageModel implements LanguageModel {
         : estimateTokens(prompt) + (systemPrompt ? estimateTokens(systemPrompt) : 0);
     const outputTokens = estimateTokens(accumulated);
 
-    const finishReason: FinishReason = 'stop';
+    const finishReason: FinishReason = truncatedByChrome ? 'length' : 'stop';
     const usage: GenerationUsage = {
       inputTokens,
       outputTokens,

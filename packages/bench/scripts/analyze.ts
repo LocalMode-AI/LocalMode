@@ -48,7 +48,9 @@ function main(): void {
   for (const file of files) {
     try {
       const run = JSON.parse(readFileSync(file, 'utf8')) as BenchRunResult;
-      const report = validateSubmission(run);
+      // Every archived protocol version is analysed; rows carry `protocol`
+      // and never mix, so the reader partitions by it.
+      const report = validateSubmission(run, { anyProtocol: true });
       reportLines.push(
         `${file}: shape=${report.shapeErrors.length === 0 ? 'ok' : 'ERRORS'} ` +
           `flags=[${report.flags.map((f) => `${f.severity}:${f.code}`).join(', ')}]`,
