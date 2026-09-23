@@ -119,6 +119,7 @@ export {
   validateSubmission,
   isIncrementalStream,
 } from './validate.js';
+export type { ValidateOptions } from './validate.js';
 export { canonicalJson, sha256Hex, computeRunDigest, computeLegacyRunDigest, verifyRunDigest } from './canonical.js';
 
 // Publication scrub (what a public run file may carry)
@@ -133,6 +134,9 @@ export {
   refineDeviceClass,
   rowsToCSV,
   runsToLongCSV,
+  runsToCellsCSV,
+  runsToRunsCSV,
+  runtimeVersionColumn,
   HEADLINE_MIN_SUBMISSIONS,
 } from './aggregate.js';
 export type { LeaderboardRow } from './aggregate.js';

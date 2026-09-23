@@ -6,9 +6,14 @@
  *   npx tsx packages/bench/scripts/analyze.ts <runs-dir> [out-dir]
  *
  * Emits into out-dir (default: <runs-dir>/../analysis):
- *   leaderboard.csv  — aggregated rows (median-of-medians, min-N flags)
- *   iterations.csv   — long format, one row per timed iteration (R/pandas-ready)
- *   validation.txt   — per-run validation report (shape + plausibility)
+ *   leaderboard.csv  - aggregated rows (median-of-medians, min-N flags)
+ *   iterations.csv   - long format, one row per timed iteration (R/pandas-ready)
+ *   cells.csv        - one row per cell: warmup, load record, runtime config, memory, quality, error
+ *   runs.csv         - one row per run: harness, environment, cell counts, validation, runtime versions
+ *   validation.txt   - per-run validation report (shape + plausibility)
+ *
+ * Run files are read in sorted path order, so every output is deterministic.
+ * The columns of each CSV are documented in packages/bench/README.md (Analysis tooling).
  */
 
 import { readdirSync, readFileSync, mkdirSync, writeFileSync, statSync } from 'node:fs';
@@ -16,14 +21,16 @@ import { join, resolve } from 'node:path';
 import {
   aggregateRuns,
   rowsToCSV,
+  runsToCellsCSV,
   runsToLongCSV,
+  runsToRunsCSV,
   validateSubmission,
   type BenchRunResult,
 } from '../src/index.js';
 
 function collectJsonFiles(dir: string): string[] {
   const out: string[] = [];
-  for (const name of readdirSync(dir)) {
+  for (const name of readdirSync(dir).sort()) {
     const full = join(dir, name);
     const st = statSync(full);
     if (st.isDirectory()) out.push(...collectJsonFiles(full));
@@ -63,6 +70,8 @@ function main(): void {
 
   writeFileSync(join(outDir, 'leaderboard.csv'), rowsToCSV(aggregateRuns(runs)));
   writeFileSync(join(outDir, 'iterations.csv'), runsToLongCSV(runs));
+  writeFileSync(join(outDir, 'cells.csv'), runsToCellsCSV(runs));
+  writeFileSync(join(outDir, 'runs.csv'), runsToRunsCSV(runs, { anyProtocol: true }));
   writeFileSync(join(outDir, 'validation.txt'), reportLines.join('\n') + '\n');
   console.log(`analyzed ${runs.length}/${files.length} runs -> ${outDir}`);
 }

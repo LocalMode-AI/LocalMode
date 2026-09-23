@@ -221,7 +221,7 @@ export - runs are never lost.
 ## Analysis tooling
 
 ```ts
-import { aggregateRuns, rowsToCSV, runsToLongCSV } from '@localmode/bench';
+import { aggregateRuns, rowsToCSV, runsToLongCSV, runsToCellsCSV, runsToRunsCSV } from '@localmode/bench';
 ```
 
 `runsToLongCSV(runs)` emits one row per timed iteration with full device
@@ -229,6 +229,72 @@ identity columns - feed it directly to R/pandas. It carries
 `overallCharsPerSec` and `streamIncremental` per iteration and leaves TTFT /
 decode blank for non-incremental ones; `rowsToCSV(rows)` (leaderboard rows)
 carries `overallCharsPerSec` and `qualityParseRate`.
+
+`npx tsx packages/bench/scripts/analyze.ts <runs-dir> [out-dir]` writes all of
+them for a clone of the dataset: `leaderboard.csv` (`rowsToCSV`),
+`iterations.csv` (`runsToLongCSV`), `cells.csv` (`runsToCellsCSV`),
+`runs.csv` (`runsToRunsCSV`) and `validation.txt`. Run files are read in
+sorted path order; rows follow run order, then cell order, then iteration
+order. A field the record does not carry is an empty string, never zero.
+
+### CSV columns
+
+New columns are only ever appended, so a reader that addresses columns by
+name or by position keeps working.
+
+**iterations.csv**, appended after `status` (one row per timed iteration; a
+cell without timed iterations keeps one placeholder row):
+
+| Column | Meaning |
+| --- | --- |
+| `cellId` | `runtime/model/workload`; joins to `cells.csv` with `runId` |
+| `chunkCount` | Chunks in the trace, empty chunks included (LLM lanes) |
+| `generatedTokensApprox` | `providerUsage.outputTokens`, when the runtime reported usage |
+| `generatedTokensFidelity` | `providerUsage.fidelity`: `measured`, `estimated` or `chunk-count` |
+| `tokensPerSecApprox` | Chunks after the first visible chunk over the decode window (first visible chunk to last chunk), one chunk counted as one token. The per-iteration value whose median the cell summary reports as `decodeChunksPerSec`; empty unless every iteration of the cell passes the stream-coherence gate, the rule the leaderboard applies |
+| `finishReason` | The runtime's finish reason (`length`, `stop`, ...) |
+| `gates` | Validity gates that fired during the iteration, joined with `\|` |
+| `embedCount` | Texts embedded in the iteration (embedding lanes) |
+
+**cells.csv**, one row per cell, every status:
+
+| Column | Meaning |
+| --- | --- |
+| `runId`, `protocol`, `cellId`, `runtimeId`, `runtimeVersion`, `benchModelId`, `workloadId`, `workloadKind`, `resolvedBackend`, `status` | Cell identity and outcome |
+| `invalidReasons` | Why the cell is invalid or skipped, joined with `\|` |
+| `iterationCount`, `discardedIterationCount`, `attemptCount` | Timed iterations kept, iterations discarded for a hidden tab, failed attempts before the recorded outcome |
+| `warmupMs` | Untimed warmup duration |
+| `loadMs` | Load duration (`load.endT - load.startT`); empty when the cell reused a loaded model |
+| `loadCached` | Cache probe before the load: `true` warm, `false` cold, empty when unknown |
+| `loadDeclaredBytes` | Catalog-declared download size |
+| `loadProgressEvents` | Number of load progress samples recorded |
+| `loadProgressSpanMs` | Time from the first to the last progress sample |
+| `n_threads`, `n_threads_used`, `multithread`, `n_ctx`, `n_gpu_layers`, `offloadedLayers`, `webgpu_adapter`, `cache_prompt`, `mmproj` | The llama.cpp lanes' `runtimeConfig` (requested threads, the pool built, context size, GPU layers requested and llama.cpp's offload report, ...) |
+| `dtype`, `device`, `worker` | The Transformers.js lanes' `runtimeConfig` |
+| `memoryBaseline`, `memoryPostLoad`, `memoryPostRun`, `memoryAtError` | Memory samples in bytes at the protocol points and when the cell errored |
+| `memoryApi` | The API that measured them: `uaSpecific`, `legacyHeap` or `none` |
+| `qualityTaskId`, `qualityScore`, `qualityN`, `qualityParseRate` | Quality-lane result |
+| `errorName`, `errorMessage`, `errorCause` | The error that ended the cell |
+
+**runs.csv**, one row per run:
+
+| Column | Meaning |
+| --- | --- |
+| `runId`, `createdAt`, `protocol`, `schemaVersion` | Run identity |
+| `harnessName`, `harnessVersion`, `harnessAppVersion`, `harnessCommit` | The build that produced the run |
+| `suite` | `quick`, `standard`, `thorough` or `custom` |
+| `qualityLane` | Whether the run planned any quality cell |
+| `deviceClass`, `deviceSubclass` | As in the leaderboard |
+| `browser`, `browserVersion`, `browserEngine`, `os`, `osVersion`, `osArchitecture`, `deviceType` | Browser, OS and form factor |
+| `hardwareConcurrency`, `coresClamped`, `deviceMemoryGB`, `deviceMemoryCapped` | CPU and memory signals, with their clamp and cap flags |
+| `screenWidth`, `screenHeight`, `screenDpr` | Screen size and pixel ratio |
+| `gpuAvailable`, `gpuVendor`, `gpuArchitecture`, `gpuDevice`, `gpuDescription`, `gpuIsFallbackAdapter`, `gpuModel` | WebGPU adapter identity and the GPU model from the WebGL renderer |
+| `crossOriginIsolated`, `timerResolutionUs`, `fingerprintMflops` | Page isolation, timer grid, hardware fingerprint |
+| `cellsTotal`, `cellsOk`, `cellsInvalid`, `cellsError`, `cellsSkipped` | Cell counts by status |
+| `suiteDurationMs` | `suite-end` minus `suite-start` |
+| `scrubbedAt` | When the publication scrub rewrote the file, if it did |
+| `validationOk`, `validationFlags` | `validateSubmission` verdict and its flags as `severity:code`, joined with `\|` |
+| `rv_*` | One column per runtime package in `harness.runtimeVersions` across all runs, named by `runtimeVersionColumn()` (`@huggingface/transformers` becomes `rv_huggingface_transformers`), sorted by name |
 
 ## Dataset licenses
 

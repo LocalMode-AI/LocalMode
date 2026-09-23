@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.3] - 2026-09-23
+
+**Released:** `@localmode/bench` 0.8.3.
+
+### Added
+
+- **bench:** the analysis tooling (`scripts/analyze.ts`) exports the per-cell and per-run records the CSVs did not carry, as additive columns and two new files; every existing column keeps its name, position and value (checked row for row against the previous output on the full dataset clone: 101 runs, 1,025 leaderboard rows, 8,780 iteration rows). `iterations.csv` gains `cellId`, `chunkCount`, `generatedTokensApprox` and `generatedTokensFidelity` (provider-reported output tokens and how they were counted), `tokensPerSecApprox` (decode chunks per second, one chunk counted as one token, empty unless every iteration of the cell passes the stream-coherence gate, the same rule the leaderboard applies), `finishReason`, `gates` and `embedCount`. The new `cells.csv` has one row per cell with the warmup duration, the load record (duration, cache probe, declared bytes, progress-sample count and span), every `runtimeConfig` field the llama.cpp and Transformers.js lanes record (`n_threads`, `n_threads_used`, `multithread`, `n_ctx`, `n_gpu_layers`, `offloadedLayers`, `webgpu_adapter`, `cache_prompt`, `mmproj`, `dtype`, `device`, `worker`), the memory samples (`memoryBaseline`, `memoryPostLoad`, `memoryPostRun`, `memoryAtError`, `memoryApi`), the quality result and the error. The new `runs.csv` has one row per run with the harness build, suite, device class, browser, OS, cores, memory, screen, WebGPU adapter, cell counts by status, suite duration, the validation verdict and flags, and one `rv_*` column per runtime package version. New exports `runsToCellsCSV`, `runsToRunsCSV` and `runtimeVersionColumn`; the columns are documented in the package README. Run files are now read in sorted path order. The protocol (`localmode-bench/5`), the plausibility rules, the scoring and the leaderboard are unchanged.
+
 ## [2.15.2] - 2026-09-23
 
 **Released:** no npm package; the `/bench` site only.

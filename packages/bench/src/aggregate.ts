@@ -4,8 +4,8 @@
  * submissions (median-of-medians). Nothing is ever averaged across devices.
  */
 
-import type { BenchRunResult, CellSummary } from './types.js';
-import { isIncrementalStream, summarizeRun } from './validate.js';
+import type { BenchCellResult, BenchRunResult, CellSummary, EmbedIteration, LLMIteration } from './types.js';
+import { isIncrementalStream, summarizeRun, validateSubmission, type ValidateOptions } from './validate.js';
 import { median } from './stats.js';
 
 /**
@@ -274,6 +274,9 @@ export function runsToLongCSV(runs: readonly BenchRunResult[]): string {
     'runtimeId', 'runtimeVersion', 'benchModelId', 'providerModelId', 'quantization', 'sizeBytes',
     'workloadId', 'resolvedBackend', 'iteration', 'ttftMs', 'decodeCharsPerSec', 'generatedChars',
     'overallCharsPerSec', 'streamIncremental', 'durationMs', 'loadMs', 'loadCached', 'status',
+    // Additive columns: appended so the legacy columns keep their positions.
+    'cellId', 'chunkCount', 'generatedTokensApprox', 'generatedTokensFidelity', 'tokensPerSecApprox',
+    'finishReason', 'gates', 'embedCount',
   ];
   const lines = [header.join(',')];
   for (const run of runs) {
@@ -293,9 +296,19 @@ export function runsToLongCSV(runs: readonly BenchRunResult[]): string {
         cell.workloadId, cell.resolvedBackend,
       ];
       if (cell.iterations.length === 0) {
-        lines.push([...base, ...cellBase, '', '', '', '', '', '', '', loadMs, loadCached, cell.status].map(csvField).join(','));
+        lines.push(
+          [...base, ...cellBase, '', '', '', '', '', '', '', loadMs, loadCached, cell.status,
+            cell.cellId, '', '', '', '', '', '', '']
+            .map(csvField)
+            .join(','),
+        );
         continue;
       }
+      // Decode validity is a cell-level verdict, exactly as summarizeCell
+      // (and therefore the leaderboard) decides it: every iteration must pass
+      // the stream-coherence gate before any decode rate is derived.
+      const cellIncremental =
+        'chunks' in cell.iterations[0] && (cell.iterations as LLMIteration[]).every(isIncrementalStream);
       cell.iterations.forEach((it, i) => {
         let ttft = '';
         let decodeRate = '';
@@ -322,12 +335,199 @@ export function runsToLongCSV(runs: readonly BenchRunResult[]): string {
         }
         lines.push(
           [...base, ...cellBase, i + 1, ttft, decodeRate, chars, overall, incremental,
-            round2(it.endT - it.startT), loadMs, loadCached, cell.status]
+            round2(it.endT - it.startT), loadMs, loadCached, cell.status,
+            cell.cellId, ...iterationExtras(it, cellIncremental)]
             .map(csvField)
             .join(','),
         );
       });
     }
+  }
+  return lines.join('\n') + '\n';
+}
+
+/**
+ * The additive iterations.csv fields of one iteration: chunk count, provider
+ * token count and its fidelity, decode tokens/s, finish reason, validity
+ * gates, and the embedding batch size.
+ *
+ * `tokensPerSecApprox` treats one stream chunk as one token: it is the
+ * chunk count after the first visible chunk over the decode window (first
+ * visible chunk to last chunk), the per-iteration value whose median
+ * `summarizeCell` reports as `decodeChunksPerSec`. It is empty unless the
+ * whole cell passes the stream-coherence gate (`cellIncremental`), so no
+ * rate is ever derived from an incoherent trace.
+ */
+function iterationExtras(it: LLMIteration | EmbedIteration, cellIncremental: boolean): unknown[] {
+  if (!('chunks' in it)) return ['', '', '', '', '', it.gates.join('|'), it.count];
+  let tokensPerSec: unknown = '';
+  const first = it.chunks.find((c) => c.c > 0);
+  if (cellIncremental && first) {
+    const totalChars = it.chunks.reduce((a, c) => a + c.c, 0);
+    const decodeMs = it.chunks[it.chunks.length - 1].t - first.t;
+    if (decodeMs > 0 && totalChars - first.c > 0) {
+      tokensPerSec = round2(((it.chunks.length - 1) / decodeMs) * 1000);
+    }
+  }
+  return [
+    it.chunks.length,
+    it.providerUsage?.outputTokens ?? '',
+    it.providerUsage?.fidelity ?? '',
+    tokensPerSec,
+    it.finishReason ?? '',
+    it.gates.join('|'),
+    '',
+  ];
+}
+
+/** `runtimeConfig` keys exported as cells.csv columns, in column order. */
+const RUNTIME_CONFIG_COLUMNS = [
+  // llama.cpp lanes (wllama, wllama-webgpu)
+  'n_threads', 'n_threads_used', 'multithread', 'n_ctx', 'n_gpu_layers', 'offloadedLayers', 'webgpu_adapter',
+  'cache_prompt', 'mmproj',
+  // Transformers.js lanes
+  'dtype', 'device', 'worker',
+] as const;
+
+/**
+ * Per-cell CSV for offline analysis: one row per cell (every status), in run
+ * order then cell order, carrying the per-cell records iterations.csv does
+ * not: warmup, the load record (cache probe, declared bytes, progress
+ * events), the runtime configuration, the memory samples, the quality
+ * score, and the error. Joins to iterations.csv on (`runId`, `cellId`) and
+ * to runs.csv on `runId`. Missing fields are empty strings, never zero.
+ *
+ * @param runs - Validated run results.
+ * @returns CSV text with a header line.
+ * @example
+ * writeFileSync('cells.csv', runsToCellsCSV(runs));
+ */
+export function runsToCellsCSV(runs: readonly BenchRunResult[]): string {
+  const header = [
+    'runId', 'protocol', 'cellId', 'runtimeId', 'runtimeVersion', 'benchModelId', 'workloadId', 'workloadKind',
+    'resolvedBackend', 'status', 'invalidReasons', 'iterationCount', 'discardedIterationCount', 'attemptCount',
+    'warmupMs', 'loadMs', 'loadCached', 'loadDeclaredBytes', 'loadProgressEvents', 'loadProgressSpanMs',
+    ...RUNTIME_CONFIG_COLUMNS,
+    'memoryBaseline', 'memoryPostLoad', 'memoryPostRun', 'memoryAtError', 'memoryApi',
+    'qualityTaskId', 'qualityScore', 'qualityN', 'qualityParseRate', 'errorName', 'errorMessage', 'errorCause',
+  ];
+  const lines = [header.join(',')];
+  for (const run of runs) {
+    for (const cell of run.cells) {
+      lines.push(cellRow(run, cell).map(csvField).join(','));
+    }
+  }
+  return lines.join('\n') + '\n';
+}
+
+function cellRow(run: BenchRunResult, cell: BenchCellResult): unknown[] {
+  const load = cell.load;
+  const progress = load?.progress;
+  const config = cell.runtimeConfig ?? {};
+  const memory = cell.memory;
+  return [
+    run.runId, run.protocol, cell.cellId, cell.runtimeId, cell.runtimeVersion, cell.model.benchModelId,
+    cell.workloadId, cell.workloadKind, cell.resolvedBackend, cell.status, (cell.invalidReasons ?? []).join('|'),
+    cell.iterations.length, cell.discardedIterations?.length ?? 0, cell.attempts?.length ?? 0,
+    cell.warmupMs === undefined ? '' : round2(cell.warmupMs),
+    load ? round2(load.endT - load.startT) : '',
+    load && load.cached !== undefined ? String(load.cached) : '',
+    load?.declaredBytes,
+    progress?.length,
+    progress && progress.length > 0 ? round2(progress[progress.length - 1].t - progress[0].t) : '',
+    ...RUNTIME_CONFIG_COLUMNS.map((key) => config[key]),
+    memory?.baseline, memory?.postLoad, memory?.postRun, memory?.atError, memory?.api,
+    cell.quality?.taskId, cell.quality?.score, cell.quality?.n, cell.quality?.parseRate,
+    cell.error?.name, cell.error?.message, cell.error?.cause,
+  ];
+}
+
+/**
+ * The runs.csv column name for a runtime package's version:
+ * `rv_` plus the npm name with the scope `@` dropped and every other
+ * non-alphanumeric run turned into `_`.
+ *
+ * @example
+ * runtimeVersionColumn('@huggingface/transformers'); // 'rv_huggingface_transformers'
+ */
+export function runtimeVersionColumn(packageName: string): string {
+  return (
+    'rv_' +
+    packageName
+      .toLowerCase()
+      .replace(/^@/, '')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+  );
+}
+
+/**
+ * Per-run CSV for offline analysis: one row per run, in input order, with the
+ * run's identity, harness build, suite, environment (device class, browser,
+ * OS, cores, memory, screen, WebGPU adapter), cell counts by status, suite
+ * duration (`suite-end` minus `suite-start`), and the validation verdict and
+ * flags `validateSubmission` reports. Runtime package versions follow as one
+ * `rv_*` column per package in the union of all runs, sorted by column name.
+ *
+ * @param runs - Run results that passed shape validation.
+ * @param validateOptions - Passed to `validateSubmission`; defaults to
+ *   `{ anyProtocol: true }`, the archive analysis setting.
+ * @returns CSV text with a header line.
+ * @example
+ * writeFileSync('runs.csv', runsToRunsCSV(runs));
+ */
+export function runsToRunsCSV(
+  runs: readonly BenchRunResult[],
+  validateOptions: ValidateOptions = { anyProtocol: true },
+): string {
+  const versionColumns = new Map<string, string>();
+  for (const run of runs) {
+    for (const pkg of Object.keys(run.harness.runtimeVersions ?? {})) {
+      const column = runtimeVersionColumn(pkg);
+      if (!versionColumns.has(column)) versionColumns.set(column, pkg);
+    }
+  }
+  const rvColumns = [...versionColumns.keys()].sort();
+  const header = [
+    'runId', 'createdAt', 'protocol', 'schemaVersion', 'harnessName', 'harnessVersion', 'harnessAppVersion',
+    'harnessCommit', 'suite', 'qualityLane', 'deviceClass', 'deviceSubclass', 'browser', 'browserVersion',
+    'browserEngine', 'os', 'osVersion', 'osArchitecture', 'deviceType', 'hardwareConcurrency', 'coresClamped',
+    'deviceMemoryGB', 'deviceMemoryCapped', 'screenWidth', 'screenHeight', 'screenDpr', 'gpuAvailable', 'gpuVendor',
+    'gpuArchitecture', 'gpuDevice', 'gpuDescription', 'gpuIsFallbackAdapter', 'gpuModel', 'crossOriginIsolated',
+    'timerResolutionUs', 'fingerprintMflops', 'cellsTotal', 'cellsOk', 'cellsInvalid', 'cellsError', 'cellsSkipped',
+    'suiteDurationMs', 'scrubbedAt', 'validationOk', 'validationFlags',
+    ...rvColumns,
+  ];
+  const lines = [header.join(',')];
+  for (const run of runs) {
+    const env = run.environment;
+    const count = (status: BenchCellResult['status']) => run.cells.filter((c) => c.status === status).length;
+    const start = run.events.find((e) => e.type === 'suite-start');
+    const end = [...run.events].reverse().find((e) => e.type === 'suite-end');
+    const report = validateSubmission(run, validateOptions);
+    const versions = run.harness.runtimeVersions ?? {};
+    const byColumn = new Map(Object.entries(versions).map(([pkg, v]) => [runtimeVersionColumn(pkg), v]));
+    lines.push(
+      [
+        run.runId, run.createdAt, run.protocol, run.schemaVersion, run.harness.name, run.harness.version,
+        run.harness.appVersion, run.harness.commit, run.suite,
+        run.cells.some((c) => c.workloadKind.startsWith('quality-')),
+        deviceClassOf(run), deviceSubclassOf(run), env.browser.name, env.browser.version, env.browser.engine,
+        env.os.platform, env.os.version, env.os.architecture, env.device?.type,
+        env.hardware.cores, env.hardware.coresClamped, env.hardware.deviceMemoryGB, env.hardware.deviceMemoryCapped,
+        env.screen?.width, env.screen?.height, env.screen?.dpr,
+        env.gpu.available, env.gpu.vendor, env.gpu.architecture, env.gpu.device, env.gpu.description,
+        env.gpu.isFallbackAdapter, env.gpuModel, env.flags.crossOriginIsolated, env.timerResolutionUs,
+        run.fingerprint ? round2(run.fingerprint.mflops) : '',
+        run.cells.length, count('ok'), count('invalid'), count('error'), count('skipped'),
+        start && end ? round2(end.t - start.t) : '',
+        run.scrubbedAt, report.ok,
+        report.flags.map((f) => `${f.severity}:${f.code}`).join('|'),
+        ...rvColumns.map((column) => byColumn.get(column)),
+      ]
+        .map(csvField)
+        .join(','),
+    );
   }
   return lines.join('\n') + '\n';
 }

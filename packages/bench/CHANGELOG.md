@@ -1,5 +1,9 @@
 # @localmode/bench
 
+## 0.8.3
+
+- feat: the analysis exports carry the per-cell and per-run records the CSVs did not. `runsToLongCSV` appends `cellId`, `chunkCount`, `generatedTokensApprox`, `generatedTokensFidelity`, `tokensPerSecApprox`, `finishReason`, `gates` and `embedCount`; every existing column keeps its name, position and value. `tokensPerSecApprox` is decode chunks per second over the decode window (one chunk counted as one token), the per-iteration value whose median `summarizeCell` reports as `decodeChunksPerSec`, and is empty unless every iteration of the cell passes the stream-coherence gate. New `runsToCellsCSV(runs)`: one row per cell with warmup, the load record (duration, cache probe, declared bytes, progress-sample count and span), the `runtimeConfig` fields, the memory samples, the quality result and the error. New `runsToRunsCSV(runs, validateOptions?)`: one row per run with the harness build, suite, environment, cell counts by status, suite duration, the `validateSubmission` verdict and flags, and one `rv_*` column per runtime package (`runtimeVersionColumn()`). `ValidateOptions` is now exported. The analysis CLI writes `cells.csv` and `runs.csv` beside the existing files and reads run files in sorted path order. The README documents every column. Protocol, validation, scoring and the leaderboard are unchanged.
+
 ## 0.8.2
 
 - feat: `validateRunShape(run, { anyProtocol: true })` / `validateSubmission(run, { anyProtocol: true })` accept any `localmode-bench/<n>` identifier instead of only the current protocol. Submissions never set it; the analysis CLI (`scripts/analyze.ts`) does, so a clone of the dataset is analysed whole: 90 of 90 runs across five protocol versions instead of the 13 current-protocol runs it kept before, each `leaderboard.csv` / `iterations.csv` row labelled by `protocol` and never mixed.
