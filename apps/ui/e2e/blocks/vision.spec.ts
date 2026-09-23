@@ -1,8 +1,8 @@
 /**
  * @file vision.spec.ts
- * @description E2E for the `vision` category (split-vision-lab Wave 2) — the
+ * @description E2E for the `vision` category — the
  * `object-detector` block at /blocks/vision/object-detector. Supersedes the
- * Detect lanes of the retired vision-lab.spec.ts; the phase0 DETR + BlazeFace
+ * Detect lanes of the retired vision-lab.spec.ts; the original DETR + BlazeFace
  * lanes are preserved verbatim. The `live-tracker` block's tracker lanes live
  * in the sibling `vision-track.spec.ts` because Playwright only allows
  * `test.use({ launchOptions })` at file level and the tracker needs a DIFFERENT
@@ -94,7 +94,7 @@ const CONSOLE_ERROR_ALLOWLIST: ReadonlyArray<{
     // tokenizer_config.json when loading a model; Xenova/detr-resnet-50 ships no
     // tokenizer, HF answers 404, the library handles it (detection succeeds).
     // Chrome still logs the 404 as a console error.
-    // WHO/WHEN: root-caused 2026-06-12 (ui-elements-media-vision 4.9); carried
+    // WHO/WHEN: root-caused 2026-06-12 in the media-vision primitives; carried
     // over verbatim through the vision-lab suite this file supersedes.
     // SCOPE: only 404-style errors whose source URL is the tokenizer_config.json
     // probe on a HuggingFace host.

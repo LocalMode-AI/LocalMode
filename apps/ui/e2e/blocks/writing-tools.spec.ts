@@ -1,6 +1,6 @@
 /**
  * @file writing-tools.spec.ts
- * @description E2E for the split writing-tools category (split-writing-text).
+ * @description E2E for the split writing-tools category.
  * Drives the four single-block routes /blocks/writing-tools/{write,translate,
  * summarize,complete} (+ the category page) via accessibility selectors, with
  * REAL model downloads and REAL inference — no mocked model boundary, and
@@ -24,11 +24,20 @@
  * Console-error policy: hard fail on any console error / pageerror; the
  * allowlist below is narrow and documented (benign HuggingFace optional-file
  * 404 probes). Specs drive accessibility selectors (getByRole / getByLabel /
- * getByText) only — no `data-testid` (Wave-4 UX pass); the sole structural hook
+ * getByText) only — no `data-testid`; the sole structural hook
  * is `[data-block-preview]` (the BlockShell preview panel), which scopes every
  * lookup to the live block and away from site chrome. Provider/model witnesses
  * read the visible ProviderBadge text; the proposed-edit and top-prediction
  * witnesses read named `role="status"` regions the block exposes.
+ *
+ * CHROME BUILT-IN AI FLAGS: playwright.config.ts disables the Chrome Built-in AI
+ * features for every other file; this file re-enables them with a file-level
+ * `test.use({ launchOptions })` so the lanes see Chrome's real availability().
+ * Documented gap: run it HEADLESS. Headed (`--headed`) runs of this file still
+ * crash the renderer on repeated navigation, because Playwright's Chromium
+ * exposes the LanguageModel/Summarizer/Translator globals with no on-device model
+ * service behind them. The Chrome AI path itself is verified in a real Chrome
+ * with the built-in models downloaded, not in Playwright's Chromium.
  */
 import { expect, test, type ConsoleMessage, type Page, type Request } from '@playwright/test';
 
@@ -187,6 +196,16 @@ function collectModelRequests(page: Page, sink: string[]) {
 
 let allMessages: string[];
 let consoleErrors: CapturedError[];
+
+// The config turns Chrome Built-in AI off for every other file; this file
+// asserts against Chrome's REAL availability() for the Summarizer, Translator
+// and Prompt APIs, so it keeps them on. test.use REPLACES the config's
+// launchOptions, so the remaining base flags are repeated here.
+test.use({
+  launchOptions: {
+    args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--unlimited-storage'],
+  },
+});
 
 test.beforeEach(({ page }) => {
   allMessages = [];

@@ -1,9 +1,8 @@
 /**
  * @file audio.spec.ts
- * @description E2E for the `audio` category (split-vision-lab Wave 2) — the
- * regrouped `audio-classifier` block at /blocks/audio/audio-classifier
- * (formerly the vision-lab Audio tab). `split-audio-studio` (Wave 3) adds its
- * blocks' lanes to THIS file as it grows the audio category.
+ * @description E2E for the `audio` category's `audio-classifier` block at
+ * /blocks/audio/audio-classifier (formerly the vision-lab Audio tab). The five
+ * other audio blocks are covered by `audio-blocks.spec.ts`.
  *
  * REAL: Chromium's fake microphone plays the committed `voice-fixture.wav` (real
  * spoken English, "The quick brown fox…"). This file performs real MediaPipe

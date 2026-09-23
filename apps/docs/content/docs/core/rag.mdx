@@ -697,7 +697,7 @@ for await (const chunk of stream) {
 
 ## Document Loaders
 
-Load documents from various formats:
+Load documents from various formats. Each loader takes default options in its constructor (options passed to `load()` win), and `load()` returns `LoadedDocument[]` (`{ id, text, metadata }`):
 
 ```typescript
 import { TextLoader, JSONLoader, CSVLoader, HTMLLoader } from '@localmode/core';
@@ -705,24 +705,26 @@ import { PDFLoader } from '@localmode/pdfjs';
 
 // Text files
 const textLoader = new TextLoader();
-const { documents: textDocs } = await textLoader.load(textBlob);
+const textDocs = await textLoader.load(textBlob);
 
 // JSON
-const jsonLoader = new JSONLoader({ textField: 'content' });
-const { documents: jsonDocs } = await jsonLoader.load(jsonBlob);
+const jsonLoader = new JSONLoader({ textFields: ['content'] });
+const jsonDocs = await jsonLoader.load(jsonBlob);
 
 // CSV
 const csvLoader = new CSVLoader({ textColumn: 'description' });
-const { documents: csvDocs } = await csvLoader.load(csvBlob);
+const csvDocs = await csvLoader.load(csvBlob);
 
 // HTML
 const htmlLoader = new HTMLLoader({ selector: 'article' });
-const { documents: htmlDocs } = await htmlLoader.load(htmlBlob);
+const htmlDocs = await htmlLoader.load(htmlBlob);
 
 // PDF
 const pdfLoader = new PDFLoader({ splitByPage: true });
-const { documents: pdfDocs } = await pdfLoader.load(pdfBlob);
+const pdfDocs = await pdfLoader.load(pdfBlob);
 ```
+
+See [Document Loaders](/docs/core/document-loaders) for every option and for `loadDocument()` auto-detection.
 
 ## Streaming Semantic Search
 

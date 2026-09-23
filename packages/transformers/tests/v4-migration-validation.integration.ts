@@ -16,6 +16,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 interface PipelineResult {
   ok: boolean;
@@ -90,7 +91,7 @@ describe('TJS v4 Post-Migration Smoke Tests', () => {
     const result = runIsolated(`
       const fs = await import('node:fs');
       const path = await import('node:path');
-      const dir = '${process.cwd()}/packages/transformers/src';
+      const dir = ${JSON.stringify(fileURLToPath(new URL('../src', import.meta.url)))};
       const walk = (d) => {
         let files = [];
         for (const f of fs.readdirSync(d)) {

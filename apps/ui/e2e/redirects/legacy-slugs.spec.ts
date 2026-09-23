@@ -1,12 +1,12 @@
 /**
  * @file legacy-slugs.spec.ts
- * @description Redirect-walk E2E for the 34 legacy slugs
- * (blocks-deprecate-showcase task 2.3 / design D2, D8). Imports the SAME
+ * @description Redirect-walk E2E for the 34 legacy slugs of the retired
+ * showcase app. Imports the SAME
  * `LEGACY_REDIRECTS` module that `next.config.mjs` consumes, so the deployed
  * redirect map and this test cannot drift.
  *
  * REAL: full production app over HTTP (`next start` on :3000, or E2E_BASE_URL
- * for a deployed host — task 2.4), real navigation through the permanent
+ * for a deployed host), real navigation through the permanent
  * redirect, real render of the landed block page. No mocked boundary.
  *
  * For every entry it: navigates `/<slug>`, asserts the browser followed the
@@ -16,23 +16,21 @@
  * Console-error policy: hard fail on ANY console error; the allowlist is EMPTY
  * (matching platform.spec.ts).
  *
- * Red-first (task 2.3): temporarily change one entry's `blockPath` in
- * `src/lib/legacy-redirects.ts` (WITHOUT rebuilding — the running server keeps
+ * Red-first: temporarily change one entry's `blockPath` in
+ * `src/lib/legacy-redirects.mts` (WITHOUT rebuilding — the running server keeps
  * the correct baked redirect while the spec re-reads the mutated module), run
  * this spec, and watch the URL assertion for that slug fail (expected the wrong
  * block, server sent the right one). Restore the entry and it goes green. This
  * proves the assertion compares expected-vs-actual and is not a no-op.
  */
 import { expect, test, type ConsoleMessage, type Page } from '@playwright/test';
-import { LEGACY_REDIRECTS } from '../../src/lib/legacy-redirects';
+import { LEGACY_REDIRECTS } from '../../src/lib/legacy-redirects.mjs';
 
 /**
  * Live block routes the map is allowed to target. Includes the category-page
  * routes (single-block categories keep `/blocks/<name>`) AND the deepened
- * `/blocks/<category>/<block>` routes introduced by the Wave-2 split changes.
- * split-writing-text deepens the 7 writing/text-insights slugs to their exact
- * block routes; the entries are additive so the map stays green in both the
- * pre- and post-central-deepening states.
+ * `/blocks/<category>/<block>` routes of the split categories. The 7
+ * writing/text-insights slugs target their exact block routes.
  */
 const KNOWN_BLOCKS = new Set([
   '/blocks/chat',
@@ -58,7 +56,7 @@ const KNOWN_BLOCKS = new Set([
   '/blocks/audio/audiobook-reader',
   '/blocks/vision/object-detector',
   '/blocks/vision/live-tracker',
-  // split-writing-text deepened routes (design D7).
+  // writing-tools and text-insights block routes.
   '/blocks/writing-tools/write',
   '/blocks/writing-tools/translate',
   '/blocks/writing-tools/summarize',

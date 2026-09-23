@@ -1,6 +1,6 @@
 /**
  * @file speculation-rules.tsx
- * @description Speculation Rules API (seo.md §11.3) for near-instant navigation.
+ * @description Speculation Rules API for near-instant navigation.
  * IMPORTANT: only `/docs/*` is prerendered (static content, safe to execute
  * ahead of time). Block pages are deliberately NOT prerendered — prerendering a
  * /blocks page would run its effects and could spin up WebGPU/WASM/model logic

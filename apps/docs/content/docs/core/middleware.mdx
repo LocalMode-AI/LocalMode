@@ -11,7 +11,12 @@ import { Accordions, Accordion } from 'fumadocs-ui/components/accordion';
 import { TypeTable } from 'fumadocs-ui/components/type-table';
 
 
-Middleware lets you extend and modify the behavior of embedding models and vector databases.
+Middleware lets you extend and modify the behavior of embedding models and vector databases. There are two kinds, and each built-in middleware belongs to exactly one of them:
+
+| Kind | Wrap with | Built-in middleware |
+| --- | --- | --- |
+| Embedding model middleware | `wrapEmbeddingModel({ model, middleware })` | `retryMiddleware`, `rateLimitMiddleware`, `piiRedactionMiddleware`, `dpEmbeddingMiddleware` |
+| VectorDB middleware | `wrapVectorDB({ db, middleware })` | `cachingMiddleware`, `loggingMiddleware`, `validationMiddleware`, `encryptionMiddleware` |
 
 <Callout type="info" title="See it in action">
   Try the [PII Redactor block](https://localmode.ai/blocks/privacy/pii-redactor) for a working demo of these APIs.
@@ -19,139 +24,39 @@ Middleware lets you extend and modify the behavior of embedding models and vecto
 
 ## Embedding Model Middleware
 
-Wrap embedding models with middleware:
+Wrap an embedding model with a single middleware object. To stack several, combine them with `composeEmbeddingMiddleware()` (see [Middleware Composition](#middleware-composition)):
 
-```ts {5-8}
-import { wrapEmbeddingModel, cachingMiddleware, loggingMiddleware } from '@localmode/core';
+```ts
+import { wrapEmbeddingModel, retryMiddleware } from '@localmode/core';
 import { transformers } from '@localmode/transformers';
 
 const baseModel = transformers.embedding('Xenova/bge-small-en-v1.5');
 
-const model = wrapEmbeddingModel(baseModel, [
-  cachingMiddleware({ maxSize: 1000 }),
-  loggingMiddleware({ logger: console.log }),
-]);
+const model = wrapEmbeddingModel({
+  model: baseModel,
+  middleware: retryMiddleware({ maxRetries: 3 }),
+});
 ```
-
-## Available Middleware
 
 <Accordions>
 
-<Accordion title="Caching Middleware">
-
-Cache embeddings to avoid recomputation:
-
-```ts
-import { cachingMiddleware } from '@localmode/core';
-
-const model = wrapEmbeddingModel(baseModel, [
-  cachingMiddleware({
-    maxSize: 1000, // Maximum cache entries
-    ttl: 60 * 60 * 1000, // Time-to-live: 1 hour
-    storage: 'memory', // 'memory' or 'indexeddb'
-  }),
-]);
-
-// First call computes embedding
-const { embedding: e1 } = await embed({ model, value: 'Hello' });
-
-// Second call returns from cache (instant)
-const { embedding: e2 } = await embed({ model, value: 'Hello' });
-```
-
-**Persistent Cache:**
-
-```ts
-const model = wrapEmbeddingModel(baseModel, [
-  cachingMiddleware({
-    storage: 'indexeddb',
-    dbName: 'embedding-cache',
-    maxSize: 10000,
-  }),
-]);
-// Cache persists across page reloads
-```
-
-<TypeTable
-  type={{
-    maxSize: {
-      description: 'Maximum cache entries',
-      type: 'number',
-      default: '1000',
-    },
-    ttl: {
-      description: 'Time-to-live in milliseconds',
-      type: 'number',
-    },
-    storage: {
-      description: 'Storage backend',
-      type: "'memory' | 'indexeddb'",
-      default: "'memory'",
-    },
-    dbName: {
-      description: 'IndexedDB database name',
-      type: 'string',
-    },
-  }}
-/>
-
-</Accordion>
-
-<Accordion title="Logging Middleware">
-
-Log all operations:
-
-```ts
-import { loggingMiddleware } from '@localmode/core';
-
-const model = wrapEmbeddingModel(baseModel, [
-  loggingMiddleware({
-    logger: (event) => {
-      console.log(`[${event.type}] ${event.duration}ms`);
-      console.log(`  Inputs: ${event.inputCount}`);
-      console.log(`  Tokens: ${event.tokens}`);
-    },
-  }),
-]);
-```
-
-**Log to Analytics:**
-
-```ts
-const model = wrapEmbeddingModel(baseModel, [
-  loggingMiddleware({
-    logger: (event) => {
-      analytics.track('embedding', {
-        model: event.modelId,
-        duration: event.duration,
-        tokens: event.tokens,
-      });
-    },
-  }),
-]);
-```
-
-</Accordion>
-
 <Accordion title="Retry Middleware">
 
-Automatically retry on failures:
+Retry failed embedding calls with exponential backoff:
 
 ```ts
-import { retryMiddleware } from '@localmode/core';
+import { wrapEmbeddingModel, retryMiddleware, RetryPredicates } from '@localmode/core';
 
-const model = wrapEmbeddingModel(baseModel, [
-  retryMiddleware({
+const model = wrapEmbeddingModel({
+  model: baseModel,
+  middleware: retryMiddleware({
     maxRetries: 3,
-    delay: 1000, // Initial delay
-    backoff: 'exponential', // 'linear' or 'exponential'
-    maxDelay: 10000, // Maximum delay
-    retryOn: (error) => {
-      // Only retry on transient errors
-      return error.code === 'NETWORK_ERROR';
-    },
+    initialDelayMs: 100,
+    maxDelayMs: 5000,
+    backoffMultiplier: 2,
+    shouldRetry: RetryPredicates.networkErrors, // or (error, attempt) => boolean
   }),
-]);
+});
 ```
 
 <TypeTable
@@ -161,46 +66,54 @@ const model = wrapEmbeddingModel(baseModel, [
       type: 'number',
       default: '3',
     },
-    delay: {
-      description: 'Initial delay in milliseconds',
+    initialDelayMs: {
+      description: 'Delay before the first retry, in milliseconds',
       type: 'number',
-      default: '1000',
+      default: '100',
     },
-    backoff: {
-      description: 'Backoff strategy',
-      type: "'linear' | 'exponential'",
-      default: "'exponential'",
-    },
-    maxDelay: {
-      description: 'Maximum delay in milliseconds',
+    maxDelayMs: {
+      description: 'Upper bound on the delay between retries, in milliseconds',
       type: 'number',
-      default: '10000',
+      default: '5000',
     },
-    retryOn: {
-      description: 'Custom function to determine if retry should occur',
-      type: '(error: Error) => boolean',
+    backoffMultiplier: {
+      description: 'Factor the delay grows by after each attempt',
+      type: 'number',
+      default: '2',
+    },
+    jitter: {
+      description: 'Randomize each delay by ±25%',
+      type: 'boolean',
+      default: 'true',
+    },
+    shouldRetry: {
+      description: 'Return true to retry the failed attempt (default: retry every error)',
+      type: '(error: Error, attempt: number) => boolean',
     },
   }}
 />
+
+`RetryPredicates` provides ready-made `shouldRetry` functions: `networkErrors`, `rateLimitErrors`, `serverErrors`, `always`, and `never`.
 
 </Accordion>
 
 <Accordion title="Rate Limit Middleware">
 
-Limit request rate:
+Limit how many embedding calls run per time window. Calls over the limit wait until the window frees up:
 
 ```ts
-import { rateLimitMiddleware } from '@localmode/core';
+import { wrapEmbeddingModel, rateLimitMiddleware } from '@localmode/core';
 
-const model = wrapEmbeddingModel(baseModel, [
-  rateLimitMiddleware({
+const model = wrapEmbeddingModel({
+  model: baseModel,
+  middleware: rateLimitMiddleware({
     maxRequests: 10, // Max requests
     windowMs: 1000, // Per second
-    onLimit: () => {
-      console.warn('Rate limit hit, waiting...');
+    onRateLimit: (waitMs) => {
+      console.warn(`Rate limit hit, waiting ${waitMs}ms`);
     },
   }),
-]);
+});
 ```
 
 <TypeTable
@@ -208,55 +121,26 @@ const model = wrapEmbeddingModel(baseModel, [
     maxRequests: {
       description: 'Maximum requests per window',
       type: 'number',
-      required: true,
+      default: '100',
     },
     windowMs: {
-      description: 'Time window in milliseconds',
+      description: 'Window size in milliseconds',
       type: 'number',
-      required: true,
+      default: '1000',
     },
-    onLimit: {
-      description: 'Callback when rate limit is hit',
-      type: '() => void',
+    queue: {
+      description: 'Queue over-limit calls (processed in order) instead of having each wait independently',
+      type: 'boolean',
+      default: 'false',
     },
-  }}
-/>
-
-</Accordion>
-
-<Accordion title="Validation Middleware">
-
-Validate inputs:
-
-```ts
-import { validationMiddleware } from '@localmode/core';
-
-const model = wrapEmbeddingModel(baseModel, [
-  validationMiddleware({
-    maxLength: 8192, // Max characters per input
-    maxBatchSize: 100, // Max inputs per batch
-    validateInput: (input) => {
-      if (input.trim().length === 0) {
-        throw new Error('Empty input');
-      }
-    },
-  }),
-]);
-```
-
-<TypeTable
-  type={{
-    maxLength: {
-      description: 'Maximum characters per input',
+    maxQueueSize: {
+      description: 'Maximum queued calls; a call beyond this throws',
       type: 'number',
+      default: '1000',
     },
-    maxBatchSize: {
-      description: 'Maximum inputs per batch',
-      type: 'number',
-    },
-    validateInput: {
-      description: 'Custom validation function',
-      type: '(input: string) => void',
+    onRateLimit: {
+      description: 'Called with the wait time whenever the limit is hit',
+      type: '(waitMs: number) => void',
     },
   }}
 />
@@ -268,34 +152,235 @@ const model = wrapEmbeddingModel(baseModel, [
 Redact sensitive information before embedding:
 
 ```ts
-import { piiRedactionMiddleware } from '@localmode/core';
+import { embed, wrapEmbeddingModel, piiRedactionMiddleware } from '@localmode/core';
 
-const model = wrapEmbeddingModel(baseModel, [
-  piiRedactionMiddleware({
-    patterns: ['email', 'phone', 'ssn', 'creditCard'],
-    replacement: '[REDACTED]',
-  }),
-]);
+const model = wrapEmbeddingModel({
+  model: baseModel,
+  middleware: piiRedactionMiddleware({ emails: true, phones: true }),
+});
 
 // Emails, phone numbers, etc. are redacted before embedding
 const { embedding } = await embed({
   model,
   value: 'Contact john@example.com or call 555-123-4567',
 });
-// Actually embeds: "Contact [REDACTED] or call [REDACTED]"
+// Actually embeds: "Contact [EMAIL_REDACTED] or call [PHONE_REDACTED]"
 ```
 
 <TypeTable
   type={{
-    patterns: {
-      description: 'PII patterns to redact',
-      type: "('email' | 'phone' | 'ssn' | 'creditCard')[]",
-      required: true,
+    emails: { description: 'Redact email addresses', type: 'boolean', default: 'true' },
+    phones: { description: 'Redact phone numbers', type: 'boolean', default: 'true' },
+    ssn: { description: 'Redact SSN patterns', type: 'boolean', default: 'true' },
+    creditCards: { description: 'Redact credit card numbers', type: 'boolean', default: 'true' },
+    ipAddresses: { description: 'Redact IP addresses', type: 'boolean', default: 'false' },
+    dates: { description: 'Redact dates', type: 'boolean', default: 'false' },
+    customPatterns: {
+      description: 'Extra patterns to redact',
+      type: 'Array<{ pattern: RegExp; replacement: string }>',
     },
     replacement: {
-      description: 'Replacement text',
+      description: 'One replacement for every category (default: a per-category tag such as [EMAIL_REDACTED])',
       type: 'string',
-      default: "'[REDACTED]'",
+    },
+    replacements: {
+      description: 'Per-category replacements, used when replacement is not set',
+      type: '{ email?, phone?, ssn?, creditCard?, ipAddress?, date?: string }',
+    },
+  }}
+/>
+
+</Accordion>
+
+</Accordions>
+
+For differentially private embeddings, see `dpEmbeddingMiddleware` in [Differential Privacy](/docs/core/differential-privacy).
+
+## Vector DB Middleware
+
+Wrap a vector database with one middleware object or an array of them. The wrapped database has the same `VectorDB` interface as the original:
+
+```typescript
+import { createVectorDB, wrapVectorDB } from '@localmode/core';
+
+const baseDB = await createVectorDB({ name: 'db', dimensions: 384 });
+
+const db = wrapVectorDB({
+  db: baseDB,
+  middleware: {
+    beforeAdd: async (doc) => {
+      console.log('Adding', doc.id);
+      return doc;
+    },
+    beforeSearch: async (query, options) => {
+      console.log('Searching with k =', options.k);
+      return { query, options };
+    },
+    afterSearch: async (results) => {
+      console.log('Found', results.length, 'results');
+      return results;
+    },
+    beforeDelete: async (id) => {
+      console.log('Deleting', id);
+      return true; // return false to cancel the delete
+    },
+  },
+});
+```
+
+<Accordions>
+
+<Accordion title="Caching Middleware">
+
+Answer repeated `search()` and `get()` calls from an in-memory LRU cache. Any write through the wrapped database (`add`, `addMany`, `update`, `delete`, `deleteMany`, `deleteWhere`, `import`, `clear`) invalidates the cache, so results never go stale:
+
+```ts
+import { wrapVectorDB, cachingMiddleware } from '@localmode/core';
+
+const db = wrapVectorDB({
+  db: baseDB,
+  middleware: cachingMiddleware({
+    maxSearchResults: 100, // Maximum cached entries
+    ttlMs: 60_000, // Time-to-live: 1 minute
+  }),
+});
+
+// First search runs against the index
+const r1 = await db.search(queryVector, { k: 5 });
+
+// The same search again is answered from the cache
+const r2 = await db.search(queryVector, { k: 5 });
+```
+
+<TypeTable
+  type={{
+    maxSearchResults: {
+      description: 'Maximum cached entries (applies to the search cache and the document cache separately)',
+      type: 'number',
+      default: '100',
+    },
+    ttlMs: {
+      description: 'Time-to-live in milliseconds',
+      type: 'number',
+      default: '60000',
+    },
+    cacheSearchResults: {
+      description: 'Cache search() results',
+      type: 'boolean',
+      default: 'true',
+    },
+    cacheDocuments: {
+      description: 'Cache get() results',
+      type: 'boolean',
+      default: 'true',
+    },
+  }}
+/>
+
+The search cache key covers the full query vector plus `k`, `filter`, `threshold`, and `includeVectors`, so different searches never share an entry. The cache only sees writes made through the wrapped database; writes made directly on the unwrapped instance are not observed.
+
+<Callout type="info">
+  To cache embeddings or LLM responses instead of vector searches, see [Semantic Cache](/docs/core/semantic-cache).
+</Callout>
+
+</Accordion>
+
+<Accordion title="Logging Middleware">
+
+Log database operations:
+
+```ts
+import { wrapVectorDB, loggingMiddleware } from '@localmode/core';
+
+const db = wrapVectorDB({
+  db: baseDB,
+  middleware: loggingMiddleware({
+    level: 'info',
+    operations: ['add', 'search'],
+    timing: true,
+  }),
+});
+// [VectorDB:INFO] search:start { k: 5, hasFilter: false, dimensions: 384 }
+// [VectorDB:INFO] search:complete { resultCount: 5, topScore: 0.91, durationMs: 1.2 }
+```
+
+<TypeTable
+  type={{
+    logger: {
+      description: 'Log function',
+      type: '(...args: unknown[]) => void',
+      default: 'console.log',
+    },
+    level: {
+      description: 'Level shown in the log prefix',
+      type: "'debug' | 'info' | 'warn' | 'error'",
+      default: "'info'",
+    },
+    timing: {
+      description: 'Include durationMs in completion entries',
+      type: 'boolean',
+      default: 'true',
+    },
+    operations: {
+      description: 'Operations to log',
+      type: "Array<'add' | 'get' | 'delete' | 'search' | 'clear'>",
+      default: 'all',
+    },
+    formatter: {
+      description: 'Format each entry as a single string passed to logger',
+      type: '(operation: string, data: Record<string, unknown>) => string',
+    },
+  }}
+/>
+
+</Accordion>
+
+<Accordion title="Validation Middleware">
+
+Reject malformed documents before they are stored:
+
+```ts
+import { wrapVectorDB, validationMiddleware } from '@localmode/core';
+
+const db = wrapVectorDB({
+  db: baseDB,
+  middleware: validationMiddleware({
+    dimensions: 384,
+    validateValues: true, // Reject NaN / Infinity
+    customValidator: (doc) => (doc.metadata?.source ? true : 'metadata.source is required'),
+  }),
+});
+```
+
+<TypeTable
+  type={{
+    dimensions: {
+      description: 'Required vector length',
+      type: 'number',
+    },
+    validateValues: {
+      description: 'Reject NaN and Infinity vector values',
+      type: 'boolean',
+      default: 'true',
+    },
+    validateMetadata: {
+      description: 'Enforce maxMetadataSize',
+      type: 'boolean',
+      default: 'true',
+    },
+    maxMetadataSize: {
+      description: 'Maximum serialized metadata size in bytes',
+      type: 'number',
+      default: '1048576 (1MB)',
+    },
+    maxTextLength: {
+      description: 'Maximum length of the __text metadata field',
+      type: 'number',
+      default: '102400 (100KB)',
+    },
+    customValidator: {
+      description: 'Return true to accept, or a string error message to reject',
+      type: '(document: Document) => boolean | string',
     },
   }}
 />
@@ -304,169 +389,95 @@ const { embedding } = await embed({
 
 <Accordion title="Encryption Middleware">
 
-Encrypt embeddings before storage:
+Encrypt document metadata before it reaches storage; it is decrypted again on `get()` and in search results:
 
 ```ts
-import { encryptionMiddleware, deriveEncryptionKey } from '@localmode/core';
+import { createVectorDB, wrapVectorDB, encryptionMiddleware, deriveEncryptionKey } from '@localmode/core';
 
-const { key } = await deriveEncryptionKey('user-password', 'salt');
+const { key } = await deriveEncryptionKey('user-password');
 
-const model = wrapEmbeddingModel(baseModel, [
-  encryptionMiddleware({
+const db = wrapVectorDB({
+  db: await createVectorDB({ name: 'secure', dimensions: 384 }),
+  middleware: encryptionMiddleware({
     key,
-    // Embeddings are encrypted before being returned
+    excludeFields: ['category'], // keep filterable fields in plaintext
   }),
-]);
+});
 ```
 
 <Callout type="warn">
-  Encryption uses Web Crypto API. Make sure to store the key securely—if lost, encrypted embeddings
-  cannot be decrypted.
+  Vectors stay in plaintext: the index computes distances over them, so it can neither store nor
+  search ciphertext. `encryptVectors` must be omitted or `false`; passing `true` throws a
+  `ValidationError`. To protect vectors at rest, encrypt an exported snapshot with `encryptVector()`.
+  Store the key securely: if it is lost, encrypted metadata cannot be decrypted.
 </Callout>
+
+See [Security](/docs/core/security) for key derivation and the full option list.
 
 </Accordion>
 
 </Accordions>
 
-## Combining Middleware
-
-Stack multiple middleware:
-
-```typescript
-const model = wrapEmbeddingModel(baseModel, [
-  validationMiddleware({ maxLength: 8192 }),
-  piiRedactionMiddleware({ patterns: ['email', 'phone'] }),
-  cachingMiddleware({ maxSize: 1000 }),
-  retryMiddleware({ maxRetries: 3 }),
-  loggingMiddleware({ logger: console.log }),
-]);
-```
-
-<Callout type="info" title="Middleware Order">
-  Middleware executes in order. Place validation first, caching before expensive operations, and
-  logging last.
-</Callout>
-
-## Vector DB Middleware
-
-Wrap vector databases:
-
-```typescript
-import { wrapVectorDB } from '@localmode/core';
-
-const baseDB = await createVectorDB({ name: 'db', dimensions: 384 });
-
-const db = wrapVectorDB(baseDB, {
-  beforeAdd: async (docs) => {
-    console.log('Adding', docs.length, 'documents');
-    return docs;
-  },
-  afterAdd: async (docs) => {
-    console.log('Added', docs.length, 'documents');
-  },
-  beforeSearch: async (vector, options) => {
-    console.log('Searching with k =', options.k);
-    return { vector, options };
-  },
-  afterSearch: async (results) => {
-    console.log('Found', results.length, 'results');
-    return results;
-  },
-  beforeDelete: async (id) => {
-    console.log('Deleting', id);
-    return id;
-  },
-  afterDelete: async () => {
-    console.log('Deleted');
-  },
-});
-```
-
 ### Vector DB Middleware Interface
+
+Every hook is optional:
 
 ```typescript
 interface VectorDBMiddleware {
-  beforeAdd?: (docs: Document[]) => Promise<Document[]>;
-  afterAdd?: (docs: Document[]) => Promise<void>;
+  beforeAdd?: (document: Document) => Document | Promise<Document>;
+  afterAdd?: (document: Document) => void | Promise<void>;
+  wrapGet?: (options: {
+    doGet: () => Promise<Document | null>;
+    id: string;
+  }) => Promise<Document | null>;
+  afterGet?: (document: Document | undefined) => Document | undefined | Promise<Document | undefined>;
+  beforeDelete?: (id: string) => boolean | Promise<boolean>; // false cancels
+  afterDelete?: (id: string) => void | Promise<void>;
   beforeSearch?: (
-    vector: Float32Array,
+    query: Float32Array,
     options: SearchOptions
-  ) => Promise<{ vector: Float32Array; options: SearchOptions }>;
-  afterSearch?: (results: SearchResult[]) => Promise<SearchResult[]>;
-  beforeDelete?: (id: string) => Promise<string>;
-  afterDelete?: () => Promise<void>;
-  beforeClear?: () => Promise<void>;
-  afterClear?: () => Promise<void>;
+  ) => { query: Float32Array; options: SearchOptions } | Promise<{ query: Float32Array; options: SearchOptions }>;
+  wrapSearch?: (options: {
+    doSearch: () => Promise<SearchResult[]>;
+    query: Float32Array;
+    options: SearchOptions;
+  }) => Promise<SearchResult[]>;
+  afterSearch?: (results: SearchResult[]) => SearchResult[] | Promise<SearchResult[]>;
+  afterUpdate?: (id: string) => void | Promise<void>;
+  afterDeleteWhere?: (deletedCount: number) => void | Promise<void>;
+  afterImport?: () => void | Promise<void>;
+  beforeClear?: () => boolean | Promise<boolean>; // false cancels
+  afterClear?: () => void | Promise<void>;
+  onError?: (error: Error, operation: string) => boolean | void | Promise<boolean | void>;
 }
 ```
 
-## Custom Middleware
+`wrapSearch` and `wrapGet` wrap the operation itself: call `doSearch()` / `doGet()` to run it (through any inner middleware), or return a value without calling it to answer from elsewhere, such as a cache. For a search the order is `beforeSearch` → `wrapSearch` → `afterSearch`; for a get it is `wrapGet` → `afterGet`. `afterUpdate`, `afterDeleteWhere`, and `afterImport` fire after `update()`, `deleteWhere()`, and `import()` complete, which is where a middleware that keeps derived state (like the caching middleware) invalidates it.
 
-Create your own middleware:
+### Error Handling
+
+`onError` receives every error thrown by a wrapped operation (`add`, `addMany`, `get`, `update`, `delete`, `deleteMany`, `deleteWhere`, `search`, `clear`, `import`) together with the operation name. Return `true` to suppress the error: the operation then resolves with a neutral value instead of rejecting. Return `false` or nothing to let the original error propagate.
+
+| Operation | Resolves with when suppressed |
+| --- | --- |
+| `get` | `null` |
+| `search` | `[]` |
+| `deleteWhere` | `0` |
+| `add`, `addMany`, `update`, `delete`, `deleteMany`, `clear`, `import` | `undefined` |
 
 ```typescript
-import type { EmbeddingModelMiddleware } from '@localmode/core';
-
-function myCustomMiddleware(options: { threshold: number }): EmbeddingModelMiddleware {
-  return {
-    transformParams: async ({ values }) => {
-      // Transform input values
-      const filtered = values.filter((v) => v.length > options.threshold);
-      return { values: filtered };
+const db = wrapVectorDB({
+  db: baseDB,
+  middleware: {
+    onError: (error, operation) => {
+      console.error(`VectorDB ${operation} failed:`, error);
+      return operation === 'search'; // a failed search yields [], every other failure still throws
     },
-    wrapEmbed: async ({ doEmbed, values, model }) => {
-      const start = Date.now();
-
-      // Call the actual embedding function
-      const result = await doEmbed({ values });
-
-      const duration = Date.now() - start;
-      console.log(`Embedded ${values.length} values in ${duration}ms`);
-
-      return result;
-    },
-  };
-}
-
-const model = wrapEmbeddingModel(baseModel, [myCustomMiddleware({ threshold: 10 })]);
-```
-
-## Middleware Factory Functions
-
-Factory functions create pre-configured middleware instances:
-
-```typescript
-import {
-  createCachingMiddleware,
-  createLoggingMiddleware,
-  createValidationMiddleware,
-  createRetryMiddleware,
-  createRateLimitMiddleware,
-} from '@localmode/core';
-```
-
-| Factory | Options Type | Description |
-| --- | --- | --- |
-| `createCachingMiddleware(options)` | `CachingMiddlewareOptions` | Caches search results with configurable TTL and max entries |
-| `createLoggingMiddleware(options)` | `LoggingMiddlewareOptions` | Logs VectorDB operations with custom logger |
-| `createValidationMiddleware(options)` | `ValidationMiddlewareOptions` | Validates vectors, metadata, and search params |
-| `createRetryMiddleware(options)` | `RetryMiddlewareOptions` | Retries failed operations with backoff |
-| `createRateLimitMiddleware(options)` | `RateLimitMiddlewareOptions` | Rate limits operations with token bucket |
-
-```typescript
-// Example: Create caching middleware with custom TTL
-const caching = createCachingMiddleware({
-  maxEntries: 1000,
-  ttlMs: 60_000, // 1 minute cache
-});
-
-// Example: Create retry middleware with backoff
-const retry = createRetryMiddleware({
-  maxRetries: 3,
-  initialDelayMs: 100,
-  backoffMultiplier: 2,
+  },
 });
 ```
+
+With several middleware, the first one whose `onError` returns `true` suppresses the error. The built-in `loggingMiddleware` logs errors and never suppresses them.
 
 ## Middleware Composition
 
@@ -482,39 +493,85 @@ import { composeEmbeddingMiddleware, composeVectorDBMiddleware } from '@localmod
 import {
   composeEmbeddingMiddleware,
   piiRedactionMiddleware,
-  encryptionMiddleware,
+  retryMiddleware,
   wrapEmbeddingModel,
 } from '@localmode/core';
 
 const combined = composeEmbeddingMiddleware([
-  piiRedactionMiddleware({ patterns: ['email', 'phone'] }),
-  encryptionMiddleware({ key }),
+  piiRedactionMiddleware({ emails: true, phones: true }),
+  retryMiddleware({ maxRetries: 3 }),
 ]);
 
-const secureModel = wrapEmbeddingModel(baseModel, [combined]);
+const secureModel = wrapEmbeddingModel({ model: baseModel, middleware: combined });
 ```
 
 ### Composing VectorDB Middleware
 
+`wrapVectorDB` accepts an array directly (it composes it for you), or you can compose explicitly with `composeVectorDBMiddleware`:
+
 ```typescript
 import {
   composeVectorDBMiddleware,
-  createCachingMiddleware,
-  createLoggingMiddleware,
-  createValidationMiddleware,
+  cachingMiddleware,
+  loggingMiddleware,
+  validationMiddleware,
   wrapVectorDB,
 } from '@localmode/core';
 
 const combined = composeVectorDBMiddleware([
-  createValidationMiddleware({ maxDimensions: 1536 }),
-  createCachingMiddleware({ maxEntries: 500 }),
-  createLoggingMiddleware({ logger: console.log }),
+  validationMiddleware({ dimensions: 384 }),
+  loggingMiddleware({ operations: ['search'] }),
+  cachingMiddleware({ maxSearchResults: 500 }),
 ]);
 
-const wrappedDB = wrapVectorDB(db, [combined]);
+const wrappedDB = wrapVectorDB({ db, middleware: combined });
 ```
 
+<Callout type="info" title="Middleware Order">
+  `before*` and `after*` hooks run in array order. `wrapSearch` / `wrapGet` nest with the first
+  middleware outermost, so in the example above the logger records every search, including the ones
+  the cache answers. Put the logger after the cache to log only searches that reach the index.
+</Callout>
+
+## Factory Aliases
+
+Each built-in middleware also has a `create*` alias with the same signature and behavior:
+
+| Factory | Same as | Options Type |
+| --- | --- | --- |
+| `createCachingMiddleware(options)` | `cachingMiddleware` | `CachingMiddlewareOptions` |
+| `createLoggingMiddleware(options)` | `loggingMiddleware` | `LoggingMiddlewareOptions` |
+| `createValidationMiddleware(options)` | `validationMiddleware` | `ValidationMiddlewareOptions` |
+| `createRetryMiddleware(options)` | `retryMiddleware` | `RetryMiddlewareOptions` |
+| `createRateLimitMiddleware(options)` | `rateLimitMiddleware` | `RateLimitMiddlewareOptions` |
+
 ## Custom Middleware
+
+### Custom Embedding Middleware
+
+```typescript
+import { wrapEmbeddingModel, type EmbeddingModelMiddleware } from '@localmode/core';
+
+function timingMiddleware(): EmbeddingModelMiddleware {
+  return {
+    transformParams: async ({ values }) => {
+      // Transform input values
+      return { values: values.map((v) => v.trim()) };
+    },
+    wrapEmbed: async ({ doEmbed, values, model }) => {
+      const start = Date.now();
+
+      // Call the actual embedding function
+      const result = await doEmbed();
+
+      console.log(`Embedded ${values.length} values with ${model.modelId} in ${Date.now() - start}ms`);
+      return result;
+    },
+  };
+}
+
+const model = wrapEmbeddingModel({ model: baseModel, middleware: timingMiddleware() });
+```
 
 ### Custom VectorDB Middleware
 
@@ -528,40 +585,32 @@ function analyticsMiddleware(): VectorDBMiddleware {
   let addCount = 0;
 
   return {
-    beforeSearch: async ({ query, k }) => {
+    wrapSearch: async ({ doSearch, options }) => {
       searchCount++;
-      console.log(`Search #${searchCount}: k=${k}`);
-      return { query, k };
-    },
-
-    afterSearch: async ({ results, durationMs }) => {
-      console.log(`Found ${results.length} results in ${durationMs}ms`);
+      const start = performance.now();
+      const results = await doSearch();
+      console.log(
+        `Search #${searchCount} (k=${options.k ?? 10}): ${results.length} results in ${performance.now() - start}ms`
+      );
       return results;
     },
 
-    beforeAdd: async ({ documents }) => {
-      addCount += documents.length;
-      return { documents };
-    },
-
     afterAdd: async () => {
+      addCount++;
       console.log(`Total documents added: ${addCount}`);
     },
   };
 }
 ```
 
-Available hooks: `beforeAdd`, `afterAdd`, `beforeSearch`, `afterSearch`, `beforeDelete`, `afterDelete`, `beforeClear`, `afterClear`.
-
 ## Best Practices
 
 <Callout type="tip" title="Middleware Tips">
-  1. **Order matters** - Validation first, caching early, logging last
-  2. **Keep middleware focused** - One concern per middleware
-  3. **Handle errors** - Middleware can throw; handle gracefully
-  4. **Consider performance** - Each middleware adds overhead
-  5. **Use composition** - Use `composeVectorDBMiddleware` to combine related middleware
-  6. **Use factories** - Prefer `createCachingMiddleware()` over `cachingMiddleware()` for configurable instances
+  1. **Use the right wrapper** - Embedding middleware goes to `wrapEmbeddingModel`, VectorDB middleware to `wrapVectorDB`
+  2. **Order matters** - Validation first; decide whether logging sits outside or inside the cache
+  3. **Keep middleware focused** - One concern per middleware
+  4. **Write through the wrapper** - Middleware only sees operations made on the wrapped instance
+  5. **Consider performance** - Each middleware adds overhead
 </Callout>
 
 ## Next Steps

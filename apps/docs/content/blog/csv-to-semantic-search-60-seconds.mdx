@@ -127,7 +127,7 @@ const { results } = await semanticSearch({
 
 ## 3. HTML: Strip the Tags, Keep the Meaning
 
-Saved web pages, documentation exports, scraped content - HTML is noisy. The `HTMLLoader` strips scripts, styles, navigation, and tags, leaving clean text.
+Saved web pages, documentation exports, scraped content - HTML is noisy. The `HTMLLoader` strips scripts, styles, embedded media, and tags, leaving clean text.
 
 ```ts
 import { HTMLLoader } from '@localmode/core';
@@ -150,13 +150,13 @@ const { results } = await semanticSearch({
 });
 ```
 
-The `selector` option accepts CSS selectors - `#main`, `.post-body`, `article` - so you can skip headers, footers, and sidebars. Without a selector, it extracts text from the entire `<body>`. In browser environments it uses `DOMParser` for accurate extraction; in other environments it falls back to a regex-based parser that handles the common cases.
+The `selector` option accepts CSS selectors - `#main`, `.post-body`, `article` - so you can skip headers, footers, and sidebars (or drop them everywhere with `ignoreTags: ['script', 'style', 'nav', 'header', 'footer']`; the list replaces the default one, so keep `script` and `style` in it). Without a selector, it extracts text from the entire `<body>`. In browser environments it uses `DOMParser` for accurate extraction; in other environments it falls back to a regex-based parser that handles the common cases.
 
 ---
 
 ## 4. PDF: Pages to Searchable Chunks
 
-PDFs require the `@localmode/pdfjs` package, which wraps PDF.js for browser-native extraction.
+PDFs require the `@localmode/pdfjs` package, which wraps PDF.js for browser-native extraction. It runs on PDF.js 6, which needs Chrome 125+ or Safari 18+ in the browser (and Node.js 22.13+ if you extract on the server).
 
 ```ts
 import { extractPDFText } from '@localmode/pdfjs';
@@ -167,7 +167,7 @@ const { text, pageCount } = await extractPDFText(pdfFile);
 // Turn extracted text into a source document
 const docs = [{ id: 'report-q3', text, metadata: { source: pdfFile.name } }];
 
-// Ingest with markdown-aware chunking (good for structured PDFs)
+// Ingest with recursive chunking (splits on paragraphs, then lines, then sentences)
 await ingest(db, docs, {
   chunking: { strategy: 'recursive', size: 500, overlap: 50 },
   generateEmbeddings: true,
@@ -211,7 +211,7 @@ await ingest(db, docs, {
 });
 ```
 
-It checks the `File` object's name and MIME type, or inspects the string content for CSV commas, JSON braces, or HTML tags. For multiple files at once, use `loadDocuments()`:
+It checks the `File` object's name and MIME type. For a string it tries, in order: JSON (it must actually parse as an object or array), HTML (`<html`, `<!doctype`, `<head`, or `<body`), CSV (a header plus data rows with the same two-or-more comma-separated columns), and finally plain text, so prose that happens to contain commas or start with a bracket is not misread. To skip detection, pass the loader and its options together, e.g. `loadDocument(csvString, { loader: 'csv', textColumn: 'description' })`. For multiple files at once, use `loadDocuments()`:
 
 ```ts
 import { loadDocuments } from '@localmode/core';

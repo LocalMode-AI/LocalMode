@@ -12,10 +12,8 @@ import {
   requestPersistence,
   cleanup,
   estimateCleanupSize,
-  runMigrations,
-  WAL,
 } from '../src/index.js';
-import type { StorageQuota, CleanupOptions, StorageAdapter } from '../src/index.js';
+import type { StorageAdapter } from '../src/index.js';
 
 describe('StorageAdapter interface', () => {
   it('IndexedDBStorage satisfies StorageAdapter', () => {
@@ -183,24 +181,75 @@ describe('createStorage()', () => {
 });
 
 describe('Storage Quota', () => {
+  // getStorageQuota() reads navigator.storage.estimate(). jsdom ships no
+  // StorageManager, so the browser API itself is installed for the duration of
+  // a test and removed afterwards. Only that boundary is substituted:
+  // getStorageQuota() and checkQuotaWithWarnings() run unmodified.
+  let storageInstalled = false;
+
+  function installStorage(storage: Record<string, unknown>): void {
+    Object.defineProperty(navigator, 'storage', { configurable: true, value: storage });
+    storageInstalled = true;
+  }
+
+  function installEstimate(usage: number, quota: number, persisted = false): void {
+    installStorage({
+      estimate: async () => ({ usage, quota }),
+      persisted: async () => persisted,
+    });
+  }
+
+  afterEach(() => {
+    if (storageInstalled) {
+      Reflect.deleteProperty(navigator, 'storage');
+      storageInstalled = false;
+    }
+  });
+
   describe('getStorageQuota()', () => {
-    it('returns quota info or null', async () => {
+    it('returns null when the Storage API is unavailable', async () => {
+      expect((navigator as { storage?: unknown }).storage).toBeUndefined();
+
+      await expect(getStorageQuota()).resolves.toBeNull();
+    });
+
+    it('reports usage, quota and the derived fields from the Storage API', async () => {
+      installEstimate(250, 1000, true);
+
       const quota = await getStorageQuota();
 
-      // May be null if navigator.storage is not available
-      if (quota !== null) {
-        expect(quota).toHaveProperty('usedBytes');
-        expect(quota).toHaveProperty('quotaBytes');
-        expect(quota).toHaveProperty('percentUsed');
-        expect(typeof quota.usedBytes).toBe('number');
-        expect(typeof quota.quotaBytes).toBe('number');
-        expect(typeof quota.percentUsed).toBe('number');
-      }
+      expect(quota).toEqual({
+        usedBytes: 250,
+        quotaBytes: 1000,
+        percentUsed: 25,
+        isPersisted: true,
+        availableBytes: 750,
+      });
+    });
+
+    it('reports 0% and no available bytes when the browser reports no quota', async () => {
+      installEstimate(0, 0);
+
+      const quota = await getStorageQuota();
+
+      expect(quota?.percentUsed).toBe(0);
+      expect(quota?.availableBytes).toBe(0);
+    });
+
+    it('returns null when the Storage API throws', async () => {
+      installStorage({
+        estimate: async () => {
+          throw new Error('estimate denied');
+        },
+      });
+
+      await expect(getStorageQuota()).resolves.toBeNull();
     });
   });
 
   describe('checkQuotaWithWarnings()', () => {
-    it('returns quota status', async () => {
+    it("returns 'ok' and calls neither callback below the warning threshold", async () => {
+      installEstimate(500, 1000);
       const onWarning = vi.fn();
       const onCritical = vi.fn();
 
@@ -211,50 +260,187 @@ describe('Storage Quota', () => {
         onCritical,
       });
 
-      expect(['ok', 'warning', 'critical', 'unknown']).toContain(status);
+      expect(status).toBe('ok');
+      expect(onWarning).not.toHaveBeenCalled();
+      expect(onCritical).not.toHaveBeenCalled();
     });
 
-    it('calls onWarning when threshold exceeded', async () => {
-      // Mock getStorageQuota to return high usage
-      const originalQuota = getStorageQuota;
-      vi.mock('../src/storage/quota.js', async () => {
-        const actual = await vi.importActual('../src/storage/quota.js');
-        return {
-          ...actual,
-          getStorageQuota: vi.fn().mockResolvedValue({
-            usedBytes: 85,
-            quotaBytes: 100,
-            percentUsed: 85,
-          }),
-        };
+    it('calls onWarning with the quota once usage reaches warnAt', async () => {
+      installEstimate(85, 100);
+      const onWarning = vi.fn();
+      const onCritical = vi.fn();
+
+      const status = await checkQuotaWithWarnings({
+        warnAt: 80,
+        criticalAt: 95,
+        onWarning,
+        onCritical,
       });
 
-      // Note: This is a simplified test; actual behavior depends on getStorageQuota result
+      expect(status).toBe('warning');
+      expect(onWarning).toHaveBeenCalledTimes(1);
+      expect(onWarning).toHaveBeenCalledWith(
+        expect.objectContaining({ usedBytes: 85, quotaBytes: 100, percentUsed: 85 })
+      );
+      expect(onCritical).not.toHaveBeenCalled();
+    });
+
+    it('calls only onCritical once usage reaches criticalAt', async () => {
+      installEstimate(96, 100);
+      const onWarning = vi.fn();
+      const onCritical = vi.fn();
+
+      const status = await checkQuotaWithWarnings({
+        warnAt: 80,
+        criticalAt: 95,
+        onWarning,
+        onCritical,
+      });
+
+      expect(status).toBe('critical');
+      expect(onCritical).toHaveBeenCalledTimes(1);
+      expect(onCritical).toHaveBeenCalledWith(expect.objectContaining({ percentUsed: 96 }));
+      expect(onWarning).not.toHaveBeenCalled();
+    });
+
+    it('applies the documented default thresholds', async () => {
+      installEstimate(81, 100);
+      const onWarning = vi.fn();
+
+      const status = await checkQuotaWithWarnings({ onWarning });
+
+      expect(status).toBe('warning');
+      expect(onWarning).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns 'ok' without calling back when the Storage API is unavailable", async () => {
+      const onWarning = vi.fn();
+
+      const status = await checkQuotaWithWarnings({ warnAt: 1, onWarning });
+
+      expect(status).toBe('ok');
+      expect(onWarning).not.toHaveBeenCalled();
     });
   });
 
   describe('requestPersistence()', () => {
-    it('returns boolean', async () => {
-      const result = await requestPersistence();
-      expect(typeof result).toBe('boolean');
+    it('returns false when the Storage API is unavailable', async () => {
+      await expect(requestPersistence()).resolves.toBe(false);
+    });
+
+    it('returns what the browser grants', async () => {
+      installStorage({ persist: async () => true });
+
+      await expect(requestPersistence()).resolves.toBe(true);
+    });
+
+    it('returns false when the persist request throws', async () => {
+      installStorage({
+        persist: async () => {
+          throw new Error('persist denied');
+        },
+      });
+
+      await expect(requestPersistence()).resolves.toBe(false);
     });
   });
 });
 
-// Cleanup tests require VectorDB instance, not raw storage
-describe.skip('Cleanup', () => {
-  // cleanup() and estimateCleanupSize() work with VectorDB instances
-  // These should be tested in vectordb.test.ts or integration tests
-});
+describe('cleanup()', () => {
+  const DAY = 24 * 60 * 60 * 1000;
 
-// WAL tests require IndexedDB and are tested in integration tests
-describe.skip('WAL (Write-Ahead Log)', () => {
-  // WAL is tested via IndexedDBStorage integration tests
-});
+  // An in-memory CleanupableDB: documents with creation times, plus a record
+  // of every deleteMany() batch.
+  function createCleanupableDB(ages: Array<{ id: string; ageDays: number; sizeBytes?: number }>) {
+    const now = Date.now();
+    const docs = new Map(
+      ages.map((d) => [d.id, { id: d.id, createdAt: now - d.ageDays * DAY, sizeBytes: d.sizeBytes }])
+    );
+    const batches: string[][] = [];
+    return {
+      batches,
+      remaining: () => [...docs.keys()].sort(),
+      async getDocumentsWithTimestamps() {
+        return [...docs.values()].map((d) => ({ ...d }));
+      },
+      async deleteMany(ids: string[]) {
+        batches.push(ids);
+        for (const id of ids) docs.delete(id);
+      },
+      async count() {
+        return docs.size;
+      },
+    };
+  }
 
-// Migration tests require IndexedDB transaction and are tested in integration tests
-describe.skip('Migrations', () => {
-  // Migrations are tested via IndexedDBStorage integration tests
-  // runMigrations() requires IDBDatabase and IDBTransaction which are not available in unit tests
+  it('deletes documents older than maxAge', async () => {
+    const db = createCleanupableDB([
+      { id: 'old', ageDays: 40, sizeBytes: 500 },
+      { id: 'mid', ageDays: 10, sizeBytes: 500 },
+      { id: 'new', ageDays: 1, sizeBytes: 500 },
+    ]);
+
+    const result = await cleanup(db, { maxAge: '30d' });
+
+    expect(result.deletedCount).toBe(1);
+    expect(result.freedBytes).toBe(500);
+    expect(db.remaining()).toEqual(['mid', 'new']);
+  });
+
+  it('keeps the newest keepMinCount documents even when they are too old', async () => {
+    const db = createCleanupableDB([
+      { id: 'a', ageDays: 50 },
+      { id: 'b', ageDays: 40 },
+      { id: 'c', ageDays: 35 },
+    ]);
+
+    const result = await cleanup(db, { maxAge: '30d', keepMinCount: 2 });
+
+    expect(result.deletedCount).toBe(1);
+    expect(result.freedBytes).toBe(1024); // 1 KB estimate when size is unknown
+    expect(db.remaining()).toEqual(['b', 'c']);
+  });
+
+  it('reports without deleting on a dry run, and estimateCleanupSize() matches it', async () => {
+    const db = createCleanupableDB([
+      { id: 'a', ageDays: 10, sizeBytes: 100 },
+      { id: 'b', ageDays: 9, sizeBytes: 200 },
+      { id: 'c', ageDays: 1, sizeBytes: 300 },
+      { id: 'd', ageDays: 0, sizeBytes: 400 },
+    ]);
+
+    const dry = await cleanup(db, { maxAge: '7d', dryRun: true });
+    const estimate = await estimateCleanupSize(db, { maxAge: '7d' });
+
+    expect(dry.deletedIds).toEqual(['a', 'b']);
+    expect(dry.deletedCount).toBe(2);
+    expect(dry.freedBytes).toBe(300);
+    expect(db.batches).toEqual([]);
+    expect(estimate).toEqual({ documentCount: 2, estimatedBytes: 300, percentageOfTotal: 50 });
+  });
+
+  it('removes the oldest share for targetUsagePercent, in batches, reporting progress', async () => {
+    const db = createCleanupableDB(
+      Array.from({ length: 10 }, (_, i) => ({ id: `doc-${i}`, ageDays: 10 - i }))
+    );
+    const phases: string[] = [];
+
+    const result = await cleanup(db, {
+      targetUsagePercent: 70,
+      batchSize: 2,
+      onProgress: (p) => phases.push(`${p.phase}:${p.deletedCount}`),
+    });
+
+    expect(result.deletedCount).toBe(3);
+    expect(db.batches).toEqual([['doc-0', 'doc-1'], ['doc-2']]);
+    expect(phases).toEqual(['analyzing:0', 'deleting:2', 'deleting:3', 'complete:3']);
+  });
+
+  it('rejects an invalid maxAge', async () => {
+    const db = createCleanupableDB([{ id: 'a', ageDays: 1 }]);
+
+    await expect(cleanup(db, { maxAge: 'soon' })).rejects.toThrow('Invalid duration format: "soon"');
+    expect(db.remaining()).toEqual(['a']);
+  });
 });
 

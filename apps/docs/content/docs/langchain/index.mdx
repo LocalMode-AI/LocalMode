@@ -33,6 +33,10 @@ pnpm install @localmode/langchain @localmode/core @localmode/transformers
 pnpm install @localmode/webllm
 ```
 
+### Supported `@langchain/core` versions
+
+`@localmode/langchain` accepts `@langchain/core` **0.3.80 or later on the 0.3 line, and 1.1.0 or later on the 1.x line**. Versions below 0.3.80 have a serialization-injection flaw that can leak secrets, and 1.0.0 through 1.0.6 shipped a `dist/` without the top-level entry points that `moduleResolution: "node"` projects need. The adapters extend `Embeddings`, `VectorStore`, `BaseChatModel`, and `BaseDocumentCompressor`, which are identical across both supported lines, so the adapter examples on these pages run unchanged on either. (Classes from the separate `langchain` package can move between its majors; see the `ContextualCompressionRetriever` note in the [Migration Guide](/docs/langchain/migration#reranker).) If your app already depends on `@langchain/core`, make sure it resolves inside that range so a single copy is installed.
+
 ## Quick Start â€” Full RAG Chain
 
 ```typescript
@@ -130,8 +134,8 @@ The frozen contract and full `KnowledgeBaseEngine` API reference live in core â€
 | Property | Value |
 |----------|-------|
 | Package | `@localmode/langchain` |
-| Dependencies | `@langchain/core` (>=0.3.0) |
-| Peer Dependencies | `@localmode/core` (>=1.0.0) |
+| Dependencies | `@langchain/core` (`>=0.3.80 <1.0.0 \|\| >=1.1.0 <2.0.0`) |
+| Peer Dependencies | `@localmode/core` (>=2.3.0) |
 | Bundle | ESM + CJS, tree-shakeable |
 | Side Effects | None |
 

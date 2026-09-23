@@ -76,15 +76,24 @@ class LRUCache<K, V> {
 
 /**
  * Create a cache key from search parameters.
+ *
+ * Uses every component of the query and every option that affects the result,
+ * so two different searches never share an entry.
  */
 function createSearchCacheKey(query: Float32Array, options: SearchOptions): string {
-  // Use first few elements + k + filter hash
-  const queryHash = Array.from(query.slice(0, 8))
-    .map((v) => v.toFixed(4))
-    .join(',');
   const k = options.k ?? 10;
-  const filterHash = options.filter ? JSON.stringify(options.filter) : '';
-  return `search:${queryHash}:${k}:${filterHash}`;
+  const filter = options.filter ? JSON.stringify(options.filter) : '';
+  const threshold = options.threshold ?? '';
+  const includeVectors = options.includeVectors ? 1 : 0;
+  return `search:${k}:${threshold}:${includeVectors}:${filter}:${Array.from(query).join(',')}`;
+}
+
+/**
+ * Shallow-copy search results so callers and later middleware cannot mutate
+ * cached entries.
+ */
+function copyResults(results: SearchResult[]): SearchResult[] {
+  return results.map((result) => ({ ...result }));
 }
 
 /**
@@ -100,6 +109,7 @@ function createSearchCacheKey(query: Float32Array, options: SearchOptions): stri
  *   db,
  *   middleware: cachingMiddleware({
  *     maxSearchResults: 100,
+ *     maxEmbeddings: 1000, // documents (with their vectors) kept for get()
  *     ttlMs: 60000, // 1 minute
  *   }),
  * });
@@ -109,68 +119,67 @@ export function cachingMiddleware(options: CachingMiddlewareOptions = {}): Vecto
   const {
     maxSearchResults = 100,
     ttlMs = 60000,
+    maxEmbeddings = 1000,
     cacheSearchResults = true,
     cacheDocuments = true,
   } = options;
 
   const searchCache = new LRUCache<string, SearchResult[]>(maxSearchResults, ttlMs);
-  const documentCache = new LRUCache<string, Document>(maxSearchResults, ttlMs);
+  const documentCache = new LRUCache<string, Document>(maxEmbeddings, ttlMs);
+
+  const invalidateAll = (): void => {
+    searchCache.clear();
+    documentCache.clear();
+  };
+
+  const invalidateDocument = (id: string): void => {
+    // Any change can alter search results, so the search cache always goes.
+    searchCache.clear();
+    documentCache.delete(id);
+  };
 
   return {
-    // Cache document after get
-    afterGet: async (doc: Document | undefined) => {
-      if (cacheDocuments && doc) {
-        documentCache.set(doc.id, doc);
-      }
-      return doc;
-    },
-
-    // Invalidate cache on add
-    afterAdd: async (doc: Document) => {
-      // Invalidate search cache as new document might affect results
-      searchCache.clear();
-      // Cache the new document
-      if (cacheDocuments) {
-        documentCache.set(doc.id, doc);
-      }
-    },
-
-    // Invalidate cache on delete
-    afterDelete: async (id: string) => {
-      searchCache.clear();
-      documentCache.delete(id);
-    },
-
-    // Check cache before search
-    beforeSearch: async (query: Float32Array, searchOptions: SearchOptions) => {
+    // Answer repeated searches from the cache
+    wrapSearch: async ({ doSearch, query, options: searchOptions }) => {
       if (!cacheSearchResults) {
-        return { query, options: searchOptions };
+        return doSearch();
       }
 
       const key = createSearchCacheKey(query, searchOptions);
       const cached = searchCache.get(key);
-
       if (cached) {
-        // Store in options for afterSearch to detect
-        (searchOptions as Record<string, unknown>).__cacheHit = true;
-        (searchOptions as Record<string, unknown>).__cachedResults = cached;
+        return copyResults(cached);
       }
 
-      return { query, options: searchOptions };
-    },
-
-    // Return cached results or cache new results
-    afterSearch: async (results: SearchResult[]) => {
-      // This is a simplified implementation
-      // In a real implementation, we'd need to intercept before the actual search
+      const results = await doSearch();
+      searchCache.set(key, copyResults(results));
       return results;
     },
 
-    // Clear all caches on clear
-    afterClear: async () => {
-      searchCache.clear();
-      documentCache.clear();
+    // Answer repeated gets from the cache
+    wrapGet: async ({ doGet, id }) => {
+      if (!cacheDocuments) {
+        return doGet();
+      }
+
+      const cached = documentCache.get(id);
+      if (cached) {
+        return { ...cached };
+      }
+
+      const doc = await doGet();
+      if (doc) {
+        documentCache.set(id, { ...doc });
+      }
+      return doc;
     },
+
+    afterAdd: async (doc: Document) => invalidateDocument(doc.id),
+    afterUpdate: async (id: string) => invalidateDocument(id),
+    afterDelete: async (id: string) => invalidateDocument(id),
+    afterDeleteWhere: async () => invalidateAll(),
+    afterImport: async () => invalidateAll(),
+    afterClear: async () => invalidateAll(),
   };
 }
 

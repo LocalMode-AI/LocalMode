@@ -1,6 +1,6 @@
 /**
  * @file text.spec.ts
- * @description E2E for the `text` category (split-vision-lab Wave 2) — the
+ * @description E2E for the `text` category — the
  * regrouped `language-detector` block at /blocks/text/language-detector
  * (formerly the vision-lab Language tab). No capture device is needed.
  *
@@ -12,7 +12,7 @@
  * Console-error policy: hard fail on any console error / pageerror; the
  * allowlist has exactly ONE documented entry (MediaPipe WASM `INFO:` logs via
  * Emscripten printErr). Specs drive accessibility selectors (getByRole /
- * getByLabel / getByText) only — no `data-testid` (Wave-4 UX pass); the sole
+ * getByLabel / getByText) only — no `data-testid`; the sole
  * structural hook is `[data-block-preview]` (the BlockShell preview panel).
  */
 import { expect, test, type ConsoleMessage, type Page, type Request } from '@playwright/test';

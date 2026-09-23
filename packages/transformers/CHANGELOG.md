@@ -1,5 +1,12 @@
 # @localmode/transformers
 
+## 4.1.3
+
+### Patch Changes
+
+- fix: `@huggingface/transformers` is pinned to `~4.2.0`. Transformers.js 4.3.0 pins onnxruntime-web `1.31.0-dev.20260914`, whose WebGPU 4-bit `MatMulNBits` kernel fails on Apple Silicon Chrome 145 with `No cached or pending pipeline for deferred dispatch: SubgroupMatrixMatMulNBits`, so every language model on WebGPU (the default `dtype: 'q4'` path) died in `OrtRun` while encoders and the WASM path kept working. A fresh install under the previous `^4.2.0` range already picked 4.3.0 up. Verified by A/B in real Chrome: 4.2.0 answers, 4.3.0 fails, 4.3.0 on WASM or fp32 works. The runtime is unchanged from 4.1.2 (onnxruntime-web 1.26.0-dev, onnxruntime-node 1.24.3).
+- chore: `test:validate` (the model-downloading integration suite) runs through a dedicated `vitest.integration.config.ts`; vitest 4 removed the `--include` flag the script used, and the suite's source scan resolved its directory from the working directory instead of the test file, so it could not pass under `pnpm --filter`.
+
 ## 4.1.2
 
 ### Patch Changes

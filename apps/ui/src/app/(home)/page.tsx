@@ -38,7 +38,7 @@ export const metadata: Metadata = {
 
 /**
  * Homepage FAQ — natural-query questions with self-contained, factual answers
- * (seo.md §3.4/§8.2). Rendered as a visible <dl> AND emitted as FAQPage JSON-LD
+ * Rendered as a visible <dl> AND emitted as FAQPage JSON-LD
  * (an AI-citation signal; Google retired FAQ rich results, so no SERP accordion).
  */
 const FAQ = [

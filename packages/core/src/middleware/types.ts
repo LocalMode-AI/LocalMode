@@ -54,6 +54,16 @@ export interface VectorDBMiddleware {
   afterAdd?: (document: Document) => void | Promise<void>;
 
   /**
+   * Wrap document retrieval. Call `doGet()` to read from the database (through
+   * any inner middleware), or return a document without calling it to answer
+   * from elsewhere. Runs before `afterGet`.
+   */
+  wrapGet?: (options: {
+    doGet: () => Promise<Document | null>;
+    id: string;
+  }) => Promise<Document | null>;
+
+  /**
    * Transform document after retrieval from the database.
    * Return modified document or undefined to filter out.
    */
@@ -79,9 +89,35 @@ export interface VectorDBMiddleware {
   ) => { query: Float32Array; options: SearchOptions } | Promise<{ query: Float32Array; options: SearchOptions }>;
 
   /**
+   * Wrap the search itself. Call `doSearch()` to run it (through any inner
+   * middleware), or return results without calling it to answer from
+   * elsewhere, e.g. a cache. Runs after `beforeSearch` and before `afterSearch`.
+   */
+  wrapSearch?: (options: {
+    doSearch: () => Promise<SearchResult[]>;
+    query: Float32Array;
+    options: SearchOptions;
+  }) => Promise<SearchResult[]>;
+
+  /**
    * Transform search results after search execution.
    */
   afterSearch?: (results: SearchResult[]) => SearchResult[] | Promise<SearchResult[]>;
+
+  /**
+   * Called after a document is updated.
+   */
+  afterUpdate?: (id: string) => void | Promise<void>;
+
+  /**
+   * Called after `deleteWhere()` with the number of documents it deleted.
+   */
+  afterDeleteWhere?: (deletedCount: number) => void | Promise<void>;
+
+  /**
+   * Called after `import()` completes.
+   */
+  afterImport?: () => void | Promise<void>;
 
   /**
    * Called before database clear operation.
@@ -95,8 +131,13 @@ export interface VectorDBMiddleware {
   afterClear?: () => void | Promise<void>;
 
   /**
-   * Error handler for any operation.
-   * Return true to suppress the error.
+   * Error handler for any wrapped operation (`add`, `addMany`, `get`, `update`,
+   * `delete`, `deleteMany`, `deleteWhere`, `search`, `clear`, `import`).
+   *
+   * Return `true` to suppress the error: the operation then resolves with a
+   * neutral value instead of rejecting (`get` → `null`, `search` → `[]`,
+   * `deleteWhere` → `0`, every other operation → `undefined`). Return `false`
+   * or nothing to let the original error propagate.
    */
   onError?: (error: Error, operation: string) => boolean | void | Promise<boolean | void>;
 }
@@ -115,7 +156,11 @@ export interface CachingMiddlewareOptions {
   /** Cache TTL in milliseconds (default: 60000 = 1 minute) */
   ttlMs?: number;
 
-  /** Maximum number of cached embeddings (default: 1000) */
+  /**
+   * Maximum number of cached documents returned by `get()`, each held with its
+   * embedding vector (default: 1000). The least recently used entry is evicted
+   * once the bound is exceeded.
+   */
   maxEmbeddings?: number;
 
   /** Whether to cache search results (default: true) */
@@ -218,13 +263,20 @@ export interface EncryptionMiddlewareOptions {
   /** Encryption key (CryptoKey) */
   key: CryptoKey;
 
-  /** Whether to encrypt vectors (default: true) */
+  /**
+   * Must be omitted or `false`. Vectors stay in plaintext because the index
+   * computes distances over them; passing `true` throws a `ValidationError`.
+   */
   encryptVectors?: boolean;
 
   /** Whether to encrypt metadata (default: true) */
   encryptMetadata?: boolean;
 
-  /** Whether to encrypt text content (default: true) */
+  /**
+   * Whether to encrypt string metadata values (default: true). When `false`,
+   * string fields are stored in plaintext (and stay filterable) while numbers,
+   * booleans, and objects are still encrypted.
+   */
   encryptText?: boolean;
 
   /** Fields to exclude from encryption */

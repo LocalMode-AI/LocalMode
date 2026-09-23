@@ -84,7 +84,7 @@ import type { ConsoleMessage, Page, TestInfo, WebError } from '@playwright/test'
 /** Fixed prompt so the expected turn shape is stable across runs. */
 const PROMPT = 'Reply with exactly one short sentence about the sky.';
 
-/** The chat block's default model (phase0-proven; loaded via `load-model`). */
+/** The chat block's default model (loaded via `load-model`). */
 const DEFAULT_MODEL_ID = 'onnx-community/granite-4.0-350m-ONNX-web';
 
 /**

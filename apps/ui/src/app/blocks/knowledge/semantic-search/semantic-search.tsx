@@ -59,7 +59,7 @@ import { cn } from '@/lib/utils';
 
 /* ─────────────────────────────── constants ────────────────────────────── */
 
-/** Default embedding model (D5); the Ingest tab may switch it. */
+/** Default embedding model; the Ingest tab may switch it. */
 const DEFAULT_EMBEDDING_MODEL_ID = 'Xenova/bge-small-en-v1.5';
 
 /**
@@ -73,7 +73,7 @@ const ANSWER_MODEL_ID = 'onnx-community/granite-4.0-350m-ONNX-web';
 /** Generation budget for the (unused) LangChain grounded-answer path. */
 const ANSWER_MAX_TOKENS = 512;
 
-/** Display metadata for the embedding models the block recommends (D5). */
+/** Display metadata for the embedding models the block recommends. */
 const EMBEDDING_MODEL_META: Record<string, { name: string; size: string }> = {
   'Xenova/bge-small-en-v1.5': { name: 'BGE Small EN v1.5', size: '34 MB' },
   'Xenova/all-MiniLM-L6-v2': { name: 'all-MiniLM-L6-v2', size: '23 MB' },

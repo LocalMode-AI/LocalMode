@@ -300,7 +300,7 @@ function ChatApp() {
 
 | Feature | Functions | Description |
 | ------- | --------- | ----------- |
-| **Encryption** | `encrypt()`, `decrypt()`, `deriveKey()` | Web Crypto API encryption, PBKDF2 key derivation |
+| **Encryption** | `encrypt()`, `decrypt()`, `deriveEncryptionKey()` | Web Crypto API encryption, PBKDF2 key derivation |
 | **PII Redaction** | `redactPII()`, `piiRedactionMiddleware()` | Named entity based PII detection and redaction |
 | **Differential Privacy** | `dpEmbeddingMiddleware()`, `createPrivacyBudget()` | DP noise injection for embeddings and classification |
 | **Drift Detection** | `checkModelCompatibility()`, `reindexCollection()` | Detect model changes, auto-reindex collections |
@@ -382,16 +382,16 @@ See LocalMode in action at [localmode.ai/blocks](https://localmode.ai/blocks) �
 
 | Browser     | WebGPU  | WASM | IndexedDB | Workers | Chrome AI |
 | ----------- | ------- | ---- | --------- | ------- | --------- |
-| Chrome 138+ | Yes     | Yes  | Yes       | Yes     | Yes       |
-| Edge 138+   | Yes     | Yes  | Yes       | Yes     | Yes       |
-| Firefox 75+ | Nightly | Yes  | Yes       | Yes     | No        |
+| Chrome 138+ | Yes     | Yes  | Yes       | Yes     | Summarizer + Translator (138+); Prompt API (148+ desktop) |
+| Edge 113+   | Yes     | Yes  | Yes       | Yes     | No (Gemini Nano is Chrome-only; falls back to Transformers.js) |
+| Firefox 75+ | 141+ (Windows), 147+ (macOS Apple Silicon) | Yes  | Yes       | Yes     | No        |
 | Safari 26+  | Yes     | Yes  | Yes       | Partial | No        |
 
 <Callout type="warn" title="Platform Notes">
-  - **Chrome AI**: Zero-download inference via Gemini Nano (fallback to Transformers.js)
+  - **Chrome AI**: Zero-download inference via Gemini Nano (fallback to Transformers.js). The Summarizer and Translator APIs need Chrome 138+; the Prompt API (`chromeAI.languageModel()`) needs Chrome 148+ on desktop (Chrome 138 shipped it for extensions only), so gate it with `isPromptAPISupported()`
   - **WebGPU**: 3-5x faster inference (fallback to WASM)
   - **Safari/iOS**: Private browsing blocks IndexedDB — use `MemoryStorage` fallback
-  - **Firefox**: WebGPU only in Nightly — WASM fallback is automatic
+  - **Firefox**: WebGPU ships in 141+ on Windows and 147+ on macOS Apple Silicon; elsewhere the WASM fallback is automatic
   - **SharedArrayBuffer**: Requires cross-origin isolation for some features
 </Callout>
 

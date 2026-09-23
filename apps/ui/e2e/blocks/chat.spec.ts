@@ -67,7 +67,7 @@ const CONSOLE_ERROR_ALLOWLIST: ReadonlyArray<{
     // SCOPE: text must start with "INFO: " or "WARNING: " AND the source
     // location must be the @litert-lm wasm bundle — real errors from the same
     // bundle (no INFO/WARNING prefix) still fail the run.
-    // DECIDED BY: blocks-chat task 7.1 verification run, 2026-07-02.
+    // DECIDED BY: the chat block's verification run, 2026-07-02.
     // UPSTREAM: Emscripten printErr default → console.error
     // (https://emscripten.org/docs/api_reference/module.html#Module.printErr);
     // no LiteRT-LM (github.com/google-ai-edge/LiteRT-LM) issue exists yet for
@@ -384,7 +384,7 @@ test.describe('blocks/chat', () => {
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * EXTENDED PROVIDER LANES — blocks-chat tasks 6.3–6.12 (design D10 lane table)
+ * EXTENDED PROVIDER LANES
  *
  * Every lane below drives the REAL block UI through accessibility selectors
  * (grounded in src/app/blocks/chat/chat.tsx's named roles/labels plus the
@@ -394,13 +394,13 @@ test.describe('blocks/chat', () => {
  * console error via the replicated afterEach below.
  *
  * MODEL CHOICES (grounded in the provider catalogs on 2026-07-02):
- * - wllama lane (6.3):    SmolLM2-135M-Instruct-Q4_K_M   ~70MB   (smallest language GGUF, packages/wllama/src/models.ts)
- * - litert lane (6.4):    qwen3-0.6B                     614MB   (the one litert entry WITHOUT requiresWebGPU)
- * - litert gate (6.4):    gemma-4-E2B                    no download (requiresWebGPU: true — gate path only)
- * - webllm lane (6.5):    SmolLM2-135M-Instruct-q0f16-MLC ~78MB  (smallest MLC entry; WebGPU runners only)
- * - vision lane (6.6):    onnx-community/Qwen3.5-0.8B-ONNX ~900MB on WASM (smallest transformers vision:true entry; q8 embed/vision + q4 decoder — the WASM-executable dtype mix)
- * - reasoning lane (6.8): DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M ~1.1GB (wllama supportsReasoning)
- * - agent lane (6.10):    litert qwen3-0.6B (614MB ≥ the 500MB agent gate) — run INSIDE the litert
+ * - wllama lane:          SmolLM2-135M-Instruct-Q4_K_M   ~70MB   (smallest language GGUF, packages/wllama/src/models.ts)
+ * - litert lane:          qwen3-0.6B                     614MB   (the one litert entry WITHOUT requiresWebGPU)
+ * - litert gate:          gemma-4-E2B                    no download (requiresWebGPU: true — gate path only)
+ * - webllm lane:          SmolLM2-135M-Instruct-q0f16-MLC ~78MB  (smallest MLC entry; WebGPU runners only)
+ * - vision lane:          onnx-community/Qwen3.5-0.8B-ONNX ~900MB on WASM (smallest transformers vision:true entry; q8 embed/vision + q4 decoder — the WASM-executable dtype mix)
+ * - reasoning lane:       DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M ~1.1GB (wllama supportsReasoning)
+ * - agent lane:           litert qwen3-0.6B (614MB ≥ the 500MB agent gate) — run INSIDE the litert
  *                         lane's test so the already-downloaded weights are reused (0 extra bytes).
  *
  * MODEL-REUSE CONSTRAINT (why some lanes share one test):
@@ -408,9 +408,9 @@ test.describe('blocks/chat', () => {
  * weights live in per-context storage (Cache API / IndexedDB / OPFS), so a
  * download in one test can NEVER be reused by another test. Reuse is only
  * possible within a single test on a single page. Therefore:
- * - 6.7 (semantic cache) runs as steps of the wllama lane test (design D10:
- *   "semantic cache: any loaded lane") — reuses the loaded SmolLM2-135M.
- * - 6.10 (agent mode) runs as steps of the litert lane test — reuses the
+ * - semantic cache runs as steps of the wllama lane test (it works on any
+ *   loaded model) — reuses the loaded SmolLM2-135M.
+ * - agent mode runs as steps of the litert lane test — reuses the
  *   loaded qwen3-0.6B (the smallest agent-capable model already paid for).
  *
  * STORAGE CONSTRAINT (why the reasoning lane runs in a persistent context):
@@ -430,7 +430,7 @@ test.describe('blocks/chat', () => {
  * - custom-URL lane:       ~70MB GGUF re-download (fresh context) + ~8KB metadata
  * - provider-switch lane:  ~70MB GGUF + ~120MB Granite (switch-back is cached in-context)
  * - bundle isolation:      ~8KB metadata only
- * ≈ 2.6GB total without WebGPU, ≈ 2.7GB with (plus the phase0 Granite lane's ~120MB).
+ * ≈ 2.6GB total without WebGPU, ≈ 2.7GB with (plus the `blocks/chat` describe's ~120MB Granite).
  *
  * HARDWARE-GATED BRANCHES: WebGPU is probed at runtime with the SAME adapter
  * probe the block and the capability-gate primitive use (requestAdapter() —
@@ -499,7 +499,7 @@ const REASONING_MODEL = {
   key: 'wllama:DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M',
 } as const;
 
-/** provider-switch lane's second model (phase0's proven Granite, ~120MB). */
+/** provider-switch lane's second model (the Granite model the `blocks/chat` describe loads, ~120MB). */
 const GRANITE = {
   rowText: 'Granite 4.0 350M (ONNX)',
   key: 'transformers:onnx-community/granite-4.0-350m-ONNX-web',
@@ -617,8 +617,8 @@ function attachExtendedCollectors(context: BrowserContext): void {
 }
 
 /**
- * Replicates the phase0 harness hooks for the extended-lane describe (the
- * phase0 describe's beforeEach/afterEach are scoped to it and must stay
+ * Replicates the `blocks/chat` describe's harness hooks for the extended-lane describe
+ * (that describe's beforeEach/afterEach are scoped to it and must stay
  * byte-identical, so they cannot be shared). Identical semantics: collectors
  * reset + attached before assertions, empty allowlist, hard fail on any
  * console error or uncaught page error — plus a model-host request collector
@@ -887,7 +887,7 @@ test.describe('blocks/chat extended lanes (6.3–6.12)', () => {
   });
 
   test('litert lane: Gemma 4 WebGPU gate, qwen3-0.6B real load + inference, agent mode (6.4 + 6.10)', async ({ page }, testInfo) => {
-    // Two design-D10 lanes share this test ON PURPOSE: the agent lane (6.10)
+    // Two lanes share this test ON PURPOSE: the agent lane
     // needs a ≥500MB model, and litert qwen3-0.6B (614MB ≥ the 500MB gate) is
     // already downloaded here — fresh contexts cannot share downloads, so
     // running the agent on this page costs 0 extra bytes. The Gemma 4 gate
@@ -923,8 +923,8 @@ test.describe('blocks/chat extended lanes (6.3–6.12)', () => {
       } else {
         // WebGPU branch: the gate is OPEN — the real chat surface renders
         // with the explicit Load affordance. The multi-GB Gemma 4 download is
-        // DELIBERATELY not performed (documented gap; design D10 marks the
-        // full Gemma download as optional on capable hardware).
+        // DELIBERATELY not performed (documented gap: the full Gemma download
+        // is optional on capable hardware).
         await expect(page.getByRole('button', { name: 'Load model' })).toBeVisible({ timeout: 30_000 });
         await expect(page.getByRole('button', { name: 'Load model' })).toHaveText('Load model');
         await expect(page.getByRole('status', { name: 'Model load status' })).toHaveText('idle');
@@ -986,7 +986,7 @@ test.describe('blocks/chat extended lanes (6.3–6.12)', () => {
       await send.click();
       await expect(page.locator('[data-slot="message"][data-role="user"]')).toHaveCount(1, { timeout: 30_000 });
       // The transient 'running' flag is deliberately NOT asserted — same
-      // rationale as the phase0 streaming-flag note: with /no_think
+      // rationale as the `blocks/chat` streaming-flag note: with /no_think
       // suppressing Qwen3's thinking, the whole ReAct run (two short action
       // generations + a KB lookup) can start and settle between expect polls,
       // so the intermediate state is not reliably observable. The durable
@@ -1245,7 +1245,7 @@ test.describe('blocks/chat extended lanes (6.3–6.12)', () => {
     }
   });
 
-  /** The reasoning-display assertions (design D5's two valid outcomes). */
+  /** The reasoning-display assertions (the two valid outcomes). */
   async function runReasoningAssertions(page: Page, testInfo: TestInfo): Promise<void> {
     await test.step('thinking renders separately from the answer (or lossless fallback)', async () => {
       const reply = await completeChatTurn(page, REASONING_PROMPT, {
@@ -1257,7 +1257,7 @@ test.describe('blocks/chat extended lanes (6.3–6.12)', () => {
       const reasoningBlock = lastAssistant.getByRole('region', { name: 'Model reasoning' });
       const hasThinkingBlock = (await reasoningBlock.count()) > 0;
 
-      // Design D5 defines EXACTLY two valid outcomes — both are asserted for
+      // There are EXACTLY two valid outcomes — both are asserted for
       // real and the branch that ran is recorded. Never a bare pass.
       if (hasThinkingBlock) {
         testInfo.annotations.push({
@@ -1393,7 +1393,7 @@ test.describe('blocks/chat extended lanes (6.3–6.12)', () => {
 
   test('provider switch hygiene: wllama → transformers → back to wllama, conversation clears, zero console errors (6.11)', async ({ page }, testInfo) => {
     // ~70MB + ~120MB cold; the switch-back wllama load is served from THIS
-    // context's provider cache (same page session), exercising the design-D8
+    // context's provider cache (same page session), exercising the
     // dispose-on-switch + registry singleton re-init path. Teardown itself has
     // no DOM witness — its observable contract is: conversation cleared, the
     // next provider loads and answers, and the run stays console-error-free

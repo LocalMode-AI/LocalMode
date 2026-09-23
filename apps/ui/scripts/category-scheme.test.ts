@@ -1,14 +1,13 @@
 /**
  * @file category-scheme.test.ts
  * @description Synthetic N>1 witness + map-driven regression guard for the block
- * category scheme (design Decision 3 / blocks-category-scheme spec). Imports
+ * category scheme. Imports
  * ONLY the dependency-free `category-map` module, so it runs in the node-env
  * Vitest without alias/DOM config. Proves the multi-block (N>1) route/naming
  * mechanism structurally with a synthetic fixture and asserts the CURRENT map's
  * invariants derived from the map itself (flat categories keep `/blocks/<slug>`;
- * multi-block categories, introduced by Wave-2 split changes, expose deep
- * `/blocks/<category>/<slug>` routes) — robust to any category being flipped to
- * N>1 or renamed by a concurrent split change.
+ * multi-block categories expose deep `/blocks/<category>/<slug>` routes) —
+ * robust to any category gaining blocks or being renamed.
  */
 import { describe, it, expect } from 'vitest';
 import {

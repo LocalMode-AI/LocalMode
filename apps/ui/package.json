@@ -47,7 +47,7 @@
     "fumadocs-typescript": "^4.0.7",
     "fumadocs-ui": "16.7.4",
     "lucide-react": "^0.577.0",
-    "next": "16.2.1",
+    "next": "16.3.6",
     "radix-ui": "^1.4.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -65,14 +65,14 @@
     "@types/react-dom": "^19.2.3",
     "esbuild": "^0.25.0",
     "eslint": "^9.39.2",
-    "eslint-config-next": "16.2.1",
-    "postcss": "^8.5.8",
+    "eslint-config-next": "16.3.6",
+    "postcss": "^8.5.23",
     "shadcn": "^4.9.0",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.4",
     "tailwindcss": "^4.2.2",
     "ts-morph": "^28.0.0",
-    "tsx": "^4.20.6",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.11"
   }
 }

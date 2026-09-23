@@ -29,6 +29,15 @@ HuggingFace Transformers.js provider for LocalMode. Run ML models locally in the
   <Tab value="bun">```bash bun add @localmode/transformers @localmode/core ```</Tab>
 </Tabs>
 
+<Callout type="warn" title="Transformers.js is pinned to 4.2.x">
+  `@localmode/transformers` depends on `@huggingface/transformers` `~4.2.0` and installs it for you. Do not
+  force 4.3.0 into your app (a direct dependency, `overrides`, or `resolutions`): Transformers.js 4.3.0 ships an
+  onnxruntime-web build whose WebGPU 4-bit `MatMulNBits` kernel fails on Apple Silicon Chrome with
+  `No cached or pending pipeline for deferred dispatch: SubgroupMatrixMatMulNBits`, so every language model on
+  the default WebGPU `q4` path fails during inference. Encoder models and the WASM path are unaffected. If your
+  app imports `@huggingface/transformers` directly, keep it on `~4.2.0` so one copy is installed.
+</Callout>
+
 ## Quick Start
 
 ```typescript

@@ -1,6 +1,6 @@
 /**
  * @file audio-blocks.spec.ts
- * @description E2E for the five split `audio` blocks (split-audio-studio Wave 3)
+ * @description E2E for the five split `audio` blocks
  * — the successor to the dissolved audio-studio.spec.ts. Drives the five
  * single-block routes /blocks/audio/{voice-notes,live-transcription,
  * meeting-assistant,voice-explorer,audiobook-reader} (+ the /blocks/audio
@@ -41,12 +41,12 @@
  * REAL: no model boundary is mocked — every lane downloads real models from
  * HuggingFace on a cold cache and runs real inference.
  *
- * GAP (documented, per design AD8): the "microphone" audio comes from Chromium's
+ * GAP (documented): the "microphone" audio comes from Chromium's
  * fake capture file (`--use-file-for-fake-audio-capture`), not physical
  * hardware — the full `getUserMedia → (VAD) → recorder/chunker → Whisper` path
  * IS exercised, but real device enumeration/permission UX and analog capture
  * quality are NOT. That gap is closed by the mandatory MANUAL real-microphone
- * hardware sweep (task 8.5). Turn-taking mode and the Silero VAD download are
+ * hardware sweep. Turn-taking mode and the Silero VAD download are
  * likewise manual-sweep surfaces — they need interactive conversational timing
  * the looping fixture cannot provide deterministically.
  *
@@ -215,7 +215,7 @@ test('redirects: /blocks/audio-studio and /blocks/voice both 308 to /blocks/audi
   const modelRequests: string[] = [];
   collectModelRequests(page, modelRequests);
 
-  // Legacy category route + the phase0 voice chain both land on /blocks/audio.
+  // Legacy category route + the legacy /blocks/voice chain both land on /blocks/audio.
   await page.goto('/blocks/audio-studio');
   await expect(page).toHaveURL(/\/blocks\/audio$/);
   await page.goto('/blocks/voice');
@@ -241,7 +241,7 @@ test('voice-notes: records fake-mic speech, Whisper transcribes it, and note sea
   const noteItems = page.getByRole('list', { name: 'Saved notes' }).getByRole('listitem');
   await expect(status).toHaveAttribute('data-status', 'idle');
 
-  // ── record → transcribe (phase0 record scenario, preserved verbatim) ──
+  // ── record → transcribe (the original voice-block record scenario, preserved verbatim) ──
   // VoiceButton is push-to-talk (onPointerDown starts); its accessible name is
   // "Hold to talk" at rest — press the real button; the separate "Stop &
   // transcribe" button ends the take.

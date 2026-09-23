@@ -27,7 +27,7 @@ The minimum setup requires `@localmode/core` and at least one provider:
   <Tab value="bun">```bash bun add @localmode/core @localmode/transformers ```</Tab>
 </Tabs>
 
-All underlying ML dependencies (like `@huggingface/transformers`) are automatically installed with the provider packages.
+All underlying ML dependencies (like `@huggingface/transformers`) are automatically installed with the provider packages. `@localmode/transformers` pins Transformers.js to 4.2.x; see the [Transformers overview](/docs/transformers#installation) before overriding that version.
 
 ### Optional packages
 
@@ -49,11 +49,13 @@ pnpm install @localmode/mediapipe       # MediaPipe Tasks — hand/pose/face tra
 pnpm install @localmode/ai-sdk          # Vercel AI SDK compatibility
 pnpm install @localmode/langchain       # LangChain.js adapters
 pnpm install @localmode/chrome-ai       # Chrome Built-in AI (Gemini Nano)
-pnpm install @localmode/devtools        # In-app DevTools widget
+pnpm install @localmode/devtools        # DevTools observability (bridge + React hooks)
 
 # Storage adapters
 pnpm install @localmode/dexie           # Dexie.js storage
-pnpm install @localmode/pdfjs           # PDF text extraction
+
+# Documents
+pnpm install @localmode/pdfjs           # PDF text extraction (Chrome 125+, Safari 18+, Node.js 22.13+)
 ```
 
 ### Configure bundler (if needed)

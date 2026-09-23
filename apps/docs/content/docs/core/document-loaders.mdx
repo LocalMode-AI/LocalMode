@@ -24,6 +24,34 @@ const csvDocs = await loadDocument(csvFile, { loader: 'csv', textColumn: 'conten
 const allDocs = await loadDocuments([file1, file2, file3]);
 ```
 
+### Auto-detection
+
+Without a `loader` option, `loadDocument()` asks each built-in loader in turn whether it can load the source and uses the first that says yes, in this order:
+
+1. **JSON** — a `.json` file / `application/json` blob, or a string that starts with `{` or `[` **and parses** as a JSON object or array (bracketed prose such as `"[Note] ..."` falls through).
+2. **HTML** — a `.html`/`.htm` file / `text/html` blob, or a string containing `<html`, `<!doctype`, `<head`, or `<body` (case-insensitive). A bare fragment such as `<p>…</p>` is not detected as HTML; pass `loader: 'html'` for fragments.
+3. **CSV** — a `.csv` file / `text/csv` blob, or a string with a header plus at least one data row where every non-empty row has the same number of (two or more) comma-separated fields. Prose that merely contains commas and line breaks is not treated as CSV.
+4. **Text** — everything else (plain-text files, empty-type blobs, and any string).
+
+Pass `loader: 'text' | 'json' | 'csv' | 'html'` to skip detection. Any loader-specific option can be passed alongside it and is type-checked against the loader options:
+
+```typescript
+const docs = await loadDocument(csvString, { loader: 'csv', textColumn: 'body', idColumn: 'id' });
+```
+
+### Loader defaults
+
+Every loader accepts its options in the constructor (and the `create*Loader()` factories pass them through). Constructor options apply to every `load()` call; options passed to `load()` override them for that call:
+
+```typescript
+import { CSVLoader } from '@localmode/core';
+
+const loader = new CSVLoader({ textColumn: 'content', idColumn: 'id' });
+
+const docs = await loader.load(csvFile); // uses textColumn: 'content'
+const titles = await loader.load(csvFile, { textColumn: 'title' }); // per-call option wins
+```
+
 ## Built-in Loaders
 
 ### TextLoader
@@ -36,16 +64,22 @@ import { TextLoader, createTextLoader } from '@localmode/core';
 const loader = new TextLoader();
 const docs = await loader.load('Hello world');
 
-// Or with options
+// Or with default options (same as new TextLoader({ ... }))
 const loader2 = createTextLoader({ trim: true, separator: '\n\n' });
 ```
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `separator` | `string` | - | Split text by separator into multiple documents |
-| `trim` | `boolean` | `false` | Trim whitespace from content |
+| `trim` | `boolean` | `true` | Trim whitespace from content |
+
+All loaders also accept the shared options:
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
 | `encoding` | `string` | `'utf-8'` | Text encoding |
 | `maxSize` | `number` | - | Maximum file size in bytes |
+| `generateId` | `(source, index) => string` | - | Custom document ID generator |
 | `abortSignal` | `AbortSignal` | - | Cancellation signal |
 
 ### JSONLoader
@@ -70,7 +104,7 @@ const loader2 = createJSONLoader({
 | --- | --- | --- | --- |
 | `textFields` | `string[]` | - | Fields to extract text from |
 | `extractAllStrings` | `boolean` | `false` | Extract from all string fields |
-| `fieldSeparator` | `string` | `' '` | Separator when combining fields |
+| `fieldSeparator` | `string` | `'\n'` | Separator when combining fields |
 | `recordsPath` | `string` | - | Path to array of records (e.g., `'data.items'`) |
 
 ### CSVLoader
@@ -97,7 +131,7 @@ const docs = await loader.load(csvFile);
 | `columnDelimiter` | `string` | `','` | Column delimiter |
 | `rowDelimiter` | `string` | `'\n'` | Row delimiter |
 | `hasHeader` | `boolean` | `true` | First row is header |
-| `skipEmpty` | `boolean` | `false` | Skip empty rows |
+| `skipEmpty` | `boolean` | `true` | Skip empty rows |
 
 ### HTMLLoader
 
@@ -118,9 +152,11 @@ const docs = await loader.load(htmlString);
 | --- | --- | --- | --- |
 | `selector` | `string` | - | CSS selector to extract from |
 | `selectors` | `string[]` | - | Multiple selectors |
-| `extractMetadata` | `boolean` | `false` | Extract metadata from `<head>` |
-| `preserveFormatting` | `boolean` | `false` | Preserve paragraph breaks |
-| `ignoreTags` | `string[]` | - | Tags to ignore |
+| `extractMetadata` | `boolean` | `true` | Extract metadata from `<head>` |
+| `preserveFormatting` | `boolean` | `false` | Keep line breaks between blocks instead of collapsing all whitespace to single spaces |
+| `ignoreTags` | `string[]` | `script`, `style`, `noscript`, … | Tags whose content is dropped |
+
+In the browser (DOMParser path) block elements such as `<p>`, `<div>`, `<li>`, `<h1>`–`<h6>`, `<tr>`, and `<td>` start a new line, so `<p>a</p><p>b</p>` never merges into `ab`. With `preserveFormatting: true` each block stays on its own line; otherwise whitespace is collapsed and blocks are separated by a single space.
 
 ## DocumentLoader Interface
 
@@ -169,16 +205,16 @@ interface LoadedDocument {
 
 ## Loader Registry
 
-Create a custom registry with your own loaders for automatic format detection:
+Create a custom registry with your own loaders for automatic format detection. The registry uses the first loader whose `canLoad()` accepts the source, so list the most specific loaders first; `TextLoader` accepts every string and belongs last:
 
 ```typescript
 import { createLoaderRegistry, TextLoader, JSONLoader, CSVLoader } from '@localmode/core';
 
 const registry = createLoaderRegistry([
-  new TextLoader(),
-  new JSONLoader(),
-  new CSVLoader(),
   new MyCustomLoader(), // Your custom loader
+  new JSONLoader(),
+  new CSVLoader({ textColumn: 'content' }),
+  new TextLoader(),
 ]);
 
 // Auto-detect format
@@ -193,16 +229,16 @@ const loader = registry.getLoader(someFile);
 
 ## Accepted Source Types
 
-All loaders accept these source types:
+A `LoaderSource` is one of:
 
 | Source Type | Description |
 | --- | --- |
 | `string` | Raw text content |
 | `Blob` | Binary blob |
-| `ArrayBuffer` | Raw binary data |
+| `ArrayBuffer` | Raw binary data (decoded with `encoding`) |
 | `File` | Browser File object (from input or drag-and-drop) |
-| `{ type: 'url', url: string }` | URL to fetch |
-| `{ type: 'custom', data: unknown }` | Custom source data |
+| `{ type: 'url', url: string }` | URL to fetch. No built-in loader's `canLoad()` claims a URL, so `loadDocument()` loads it as text unless you pass `loader` |
+| `{ type: 'custom', data: unknown }` | Data for a custom loader. The built-in loaders throw on it |
 
 ## Next Steps
 

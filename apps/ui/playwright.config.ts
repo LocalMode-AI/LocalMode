@@ -9,11 +9,21 @@
  * Run: pnpm --filter ui test:e2e            (headless Chromium)
  *      pnpm --filter ui test:e2e -- --headed (headed, for debugging)
  *
+ * Chrome Built-in AI is switched off in the base launchOptions (see
+ * CHROME_AI_DISABLE_ARGS), so every block resolves to its Transformers.js
+ * fallback. writing-tools.spec.ts re-enables it at file level and must run
+ * headless: headed, that file still crashes the renderer.
+ *
  * Real model downloads are slow on first run; timeouts are sized for a cold
  * cache. The webServer reuses an existing `next start` (or dev) on :3000 so
  * local iteration doesn't rebuild each time.
  */
 import { defineConfig, devices } from '@playwright/test';
+
+/** Chromium flags that remove the Chrome Built-in AI surface (see launchOptions). */
+const CHROME_AI_DISABLE_ARGS = [
+  '--disable-features=AIPromptAPI,AISummarizationAPI,AITranslationAPI,TranslationAPI,OptimizationGuideOnDeviceModel',
+];
 
 export default defineConfig({
   testDir: './e2e',
@@ -68,6 +78,15 @@ export default defineConfig({
         // adapter (they take the blocks' documented hardware-gap path and fetch
         // no weights).
         '--unlimited-storage',
+        // Turn off Chrome Built-in AI. Playwright's Chromium exposes the
+        // LanguageModel/Summarizer/Translator globals but runs no on-device model
+        // service behind them, and in headed mode repeated navigation to a page
+        // that probes them (/blocks/writing-tools) crashes the renderer. With the
+        // features off the globals are absent, the blocks resolve to their
+        // Transformers.js fallback, and no page can reach the broken service.
+        // writing-tools.spec.ts asserts against Chrome's real availability() and
+        // re-enables them at file level.
+        ...CHROME_AI_DISABLE_ARGS,
       ],
     },
   },

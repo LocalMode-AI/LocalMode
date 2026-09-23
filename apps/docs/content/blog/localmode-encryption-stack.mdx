@@ -1,16 +1,16 @@
 ---
 title: "The LocalMode Encryption Stack: PBKDF2 Key Derivation, AES-256-GCM, and Encrypted Embeddings"
-description: "A deep technical walkthrough of LocalMode's zero-knowledge encryption pipeline. From PBKDF2 key derivation with configurable iterations to AES-256-GCM authenticated encryption of vectors, metadata, and text -- all running entirely in the browser via the Web Crypto API. No server ever sees a plaintext byte."
+description: "A deep technical walkthrough of LocalMode's zero-knowledge encryption pipeline. From PBKDF2 key derivation with configurable iterations to AES-256-GCM authenticated encryption of metadata, text, and exported vectors -- all running entirely in the browser via the Web Crypto API. No server ever sees a plaintext byte."
 author: LocalMode
 date: 2026-02-03
 dateModified: "2026-07-04"
 faq:
   - question: "How does LocalMode encrypt embedding vectors in the browser?"
-    answer: "LocalMode uses AES-256-GCM encryption via the Web Crypto API. Vectors are encrypted by passing the Float32Array buffer directly to AES-GCM with a fresh 12-byte IV per operation. The IV is prepended to the ciphertext and the result is stored as a padded Float32Array in IndexedDB."
+    answer: "encryptVector() passes the Float32Array buffer directly to AES-256-GCM via the Web Crypto API, with a fresh salt and 12-byte IV per call. It is meant for vectors kept outside the live index, such as an exported snapshot. The VectorDB encryptionMiddleware encrypts metadata but leaves stored vectors in plaintext, because the index must read them to store and search them; passing encryptVectors: true throws a ValidationError."
   - question: "What key derivation does LocalMode use for encryption?"
     answer: "LocalMode uses PBKDF2 with HMAC-SHA-256 to derive a 256-bit AES-GCM CryptoKey from a user password. The default is 100,000 iterations with a 128-bit random salt. The CryptoKey is non-extractable -- raw key bytes never enter JavaScript memory."
   - question: "Can you search encrypted vectors with similarity search?"
-    answer: "Not directly. Encrypted vectors are ciphertext with no mathematical relationship to the originals, so HNSW similarity search will not return meaningful results. The practical pattern is to decrypt vectors into memory during an active session, search against plaintext in memory, and encrypt only at rest."
+    answer: "No. Encrypted vectors are ciphertext with no mathematical relationship to the originals, so an HNSW index can neither store nor search them. That is why encryptionMiddleware keeps the indexed vectors in plaintext and encrypts the metadata (the text, names, and other fields) instead. To protect vectors at rest outside the live index, encrypt an exported snapshot with encryptVector()."
   - question: "What is the encryption overhead for embedding vectors?"
     answer: "For a 384-dimensional embedding (1,536 bytes), the encrypted output adds roughly 44 bytes of overhead -- 16 bytes for the authentication tag, 12 bytes for the IV, and 16 bytes for the salt -- under 3% total overhead."
   - question: "Does LocalMode's encryption work in all browsers?"
@@ -21,7 +21,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 Most "privacy-first" AI libraries mean one thing: they do not phone home. Your data stays on the device during inference. That is necessary, but it is not sufficient. If your embedding vectors sit in IndexedDB as raw Float32Arrays, anyone with access to the device -- a shared laptop, a stolen phone, a compromised browser extension -- can read them. Worse, research has shown that [embedding vectors can be inverted](https://medium.com/@himansusaha/embedding-inversion-encrypted-vector-db-the-future-of-privacy-aware-rag-e0caf0985ee1) to reconstruct the original text with surprising accuracy.
 
-LocalMode ships a complete encryption stack that closes this gap. Every layer -- key derivation, authenticated encryption, persistent key management, vector encryption middleware -- runs in the browser through the [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API). No external cryptography libraries. No server round-trips. Zero knowledge by construction.
+LocalMode ships an encryption stack that addresses this: document metadata is encrypted at rest, exported vectors can be encrypted, and the vectors the live index must keep readable can be stripped of PII and noised before they are stored. Every layer -- key derivation, authenticated encryption, persistent key management, VectorDB encryption middleware -- runs in the browser through the [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API). No external cryptography libraries. No server round-trips. Zero knowledge by construction.
 
 This post walks through every layer of that stack, from the raw cryptographic primitives to the high-level middleware that encrypts your VectorDB transparently.
 
@@ -104,9 +104,9 @@ This matters because IndexedDB is not a tamper-proof store. A malicious extensio
 The `encrypt()` function accepts strings or raw `ArrayBuffer` data:
 
 ```typescript
-// Note: encrypt/decryptString are internal utilities used by encryptionMiddleware.
-// For most use cases, use encryptionMiddleware() or deriveEncryptionKey() directly.
-import { deriveEncryptionKey, encryptionMiddleware } from '@localmode/core';
+// Password-based helpers: each call derives its own key from the password.
+// Inside a VectorDB, encryptionMiddleware() with deriveEncryptionKey() does this for you.
+import { encrypt, decryptString } from '@localmode/core';
 
 // Encrypt a string
 const encrypted = await encrypt('Sensitive medical record', 'user-password');
@@ -145,8 +145,11 @@ AES-GCM has one absolute requirement: **the (key, IV) pair must never repeat**. 
 Beyond string encryption, the crypto module provides type-specific wrappers:
 
 ```typescript
-// Vector and metadata encryption is handled automatically by encryptionMiddleware.
-// The low-level encryptVector/decryptVector functions are internal to the middleware.
+import { encryptVector, decryptVector, encryptJSON, decryptJSON } from '@localmode/core';
+
+// Metadata encryption inside a VectorDB is handled automatically by encryptionMiddleware.
+// encryptVector/decryptVector are standalone helpers for vectors kept outside the live
+// index (for example an exported snapshot); the index itself needs plaintext vectors.
 
 // Encrypt a Float32Array (embedding vector)
 const vector = new Float32Array([0.1, 0.2, 0.3, /* ... 384 dimensions */]);
@@ -199,9 +202,8 @@ This is not a full timing-attack-proof implementation (JavaScript's runtime char
 Raw encryption functions are low-level primitives. The `Keystore` class provides the session management layer that applications actually interact with:
 
 ```typescript
-// Keystore is used internally by the Encrypted Vault block.
-// For production use, the encryptionMiddleware + deriveEncryptionKey pattern is recommended.
-import { deriveEncryptionKey, hashPassphrase, verifyPassphrase } from '@localmode/core';
+// For encrypting a VectorDB, the encryptionMiddleware + deriveEncryptionKey pattern is recommended.
+import { createKeystore } from '@localmode/core';
 
 const keystore = createKeystore();
 
@@ -253,7 +255,7 @@ const hasEncryption = await keystore.hasEncryption('my-db');
 
 ## Layer 5: The Encryption Middleware -- Transparent VectorDB Encryption
 
-The layers above are building blocks. The `encryptionMiddleware` ties everything together into a single VectorDB middleware that encrypts documents on write and decrypts them on read -- completely transparently to application code.
+The layers above are building blocks. The `encryptionMiddleware` ties everything together into a single VectorDB middleware that encrypts document metadata on write and decrypts it on read -- completely transparently to application code.
 
 ```typescript
 import {
@@ -287,20 +289,20 @@ await encryptedDb.add({
   metadata: { title: 'Medical Note', content: 'Patient diagnosed with...' },
 });
 
-// 5. Search works normally -- results are decrypted automatically
-const results = await encryptedDb.search(queryVector, { topK: 5 });
+// 5. Search works normally -- result metadata is decrypted automatically
+const results = await encryptedDb.search(queryVector, { k: 5 });
 // results[0].metadata.content === 'Patient diagnosed with...' (decrypted)
 ```
 
 ### What Gets Encrypted
 
-The middleware encrypts three categories of data independently, each controlled by a configuration flag:
+The middleware encrypts document metadata; the vector stays in plaintext:
 
 | Data | Flag | Default | Method |
 |------|------|---------|--------|
-| **Vectors** | `encryptVectors` | `true` | AES-GCM on raw Float32Array bytes; IV prepended to ciphertext; result stored as padded Float32Array |
-| **Metadata strings** | `encryptText` | `true` | AES-GCM per field; result stored as `{ __encrypted: true, ciphertext, iv }` |
-| **Metadata objects** | `encryptMetadata` | `true` | JSON-serialized then encrypted as string |
+| **Vectors** | `encryptVectors` | `false` (must stay `false`) | Not encrypted: the index computes distances over them. Passing `true` throws a `ValidationError` |
+| **Metadata strings** | `encryptText` | `true` | AES-GCM per field; result stored as `{ __encrypted: true, ciphertext, iv }`. With `encryptText: false`, strings stay plaintext (and filterable) |
+| **Metadata objects, numbers, booleans** | `encryptMetadata` | `true` | JSON-serialized then encrypted as string (also when `encryptText` is `false`) |
 
 You can exclude specific metadata fields from encryption -- useful for fields that need to remain filterable:
 
@@ -316,31 +318,23 @@ const encryptedDb = wrapVectorDB({
 });
 ```
 
-### How Vector Encryption Works
+### Why Vectors Stay in Plaintext
 
-Vector encryption deserves special attention because embedding vectors are `Float32Array` values that need to remain storable in IndexedDB. The middleware handles this by:
+An HNSW index stores each vector and computes distances over it on every search. AES-GCM ciphertext is a different length from the original `Float32Array` and bears no mathematical relationship to it, so a ciphertext vector could neither be stored in a collection with fixed dimensions nor searched. The middleware therefore leaves vectors untouched and encrypts everything else about the document; `encryptVectors: true` is rejected with a `ValidationError` rather than silently producing a database that cannot be written to.
 
-1. Generating a fresh 12-byte IV via `crypto.getRandomValues()`
-2. Encrypting the raw `Float32Array` buffer with AES-GCM
-3. Prepending the IV to the ciphertext
-4. Padding the combined bytes to a multiple of 4 bytes
-5. Wrapping the result as a new `Float32Array` for storage compatibility
-
-On retrieval, the process reverses: the first 12 bytes are extracted as the IV, the remainder is decrypted, and the original `Float32Array` is reconstructed.
-
-<Callout type="warn" title="Encrypted vectors and similarity search">
-  When `encryptVectors` is enabled, the encrypted vectors are ciphertext -- they bear no mathematical relationship to the original embeddings. This means HNSW index-based similarity search over encrypted vectors will not return meaningful results. The vectors are protected at rest, but search queries must operate on plaintext vectors in memory. For full encrypted search, you need a separate architecture: embed the query, search against plaintext vectors held in memory for the duration of the session, and encrypt only at rest. The middleware's `afterSearch` hook automatically decrypts metadata in search results.
+<Callout type="warn" title="Plaintext vectors and embedding inversion">
+  Because the indexed vectors are plaintext, they are readable to anyone with access to the device's IndexedDB, and embeddings can be partially inverted. Reduce what they can leak: redact PII before embedding (Layer 6 below) and consider differential-privacy noise on the embeddings (`dpEmbeddingMiddleware`). To protect vectors at rest outside the live index, encrypt an exported snapshot with `encryptVector()`.
 </Callout>
 
-### The Practical Pattern: Encrypt at Rest, Search in Memory
+### The Practical Pattern: Encrypted Metadata, Sanitized Vectors
 
-The most common architecture for encrypted semantic search in LocalMode is:
+The most common architecture for private semantic search in LocalMode is:
 
-1. **On unlock**: derive the key, load encrypted documents, decrypt vectors into memory
-2. **During session**: search against in-memory plaintext vectors; all results pass through `afterSearch` for metadata decryption
-3. **On lock**: clear in-memory vectors and the derived key
+1. **On unlock**: derive the key and wrap the VectorDB with `encryptionMiddleware`
+2. **During session**: add and search as usual; metadata is encrypted on write, and `get()` and search results come back decrypted
+3. **On lock**: drop the wrapped database and the derived key
 
-This gives you zero-knowledge storage (nothing readable on disk without the password) while maintaining full-speed HNSW search during active sessions. The [Encrypted Vault block](https://localmode.ai/blocks/privacy/encrypted-vault) demonstrates this pattern.
+This keeps the readable content of every document -- its text, names, and other fields -- unreadable on disk without the password, while HNSW search runs at full speed over the plaintext vectors. The [Encrypted Vault block](https://localmode.ai/blocks/privacy/encrypted-vault) demonstrates the passphrase lock/unlock lifecycle.
 
 ---
 
@@ -371,17 +365,17 @@ You can also combine it with PII redaction on the embedding model side for defen
 ```typescript
 import { wrapEmbeddingModel, piiRedactionMiddleware } from '@localmode/core';
 
-// Redact PII before embedding, encrypt vectors after embedding
+// Redact PII before embedding; encryptionMiddleware encrypts metadata before storage
 const safeModel = wrapEmbeddingModel({
   model: transformers.embedding('Xenova/bge-small-en-v1.5'),
   middleware: piiRedactionMiddleware({ emails: true, phones: true, ssn: true }),
 });
 
 // PII is stripped before it reaches the model
-// Vectors are encrypted before they reach storage
+// Metadata is encrypted before it reaches storage
 ```
 
-This two-layer approach means that even if the encryption is somehow bypassed, the stored embeddings do not encode any PII -- because it was redacted before the embedding model ever saw it.
+This two-layer approach means the stored embeddings -- which the index keeps in plaintext -- do not encode any PII, because it was redacted before the embedding model ever saw it.
 
 ---
 
@@ -451,20 +445,20 @@ import { transformers } from '@localmode/transformers';
 // Derive key from password
 const { key, salt } = await deriveEncryptionKey('master-password');
 
-// Create encrypted VectorDB
+// Create a VectorDB with encrypted metadata
 const db = await createVectorDB({ name: 'private-notes', dimensions: 384 });
 const encryptedDb = wrapVectorDB({
   db,
   middleware: encryptionMiddleware({ key }),
 });
 
-// Embed and store -- encryption is automatic
+// Embed and store -- metadata encryption is automatic
 const model = transformers.embedding('Xenova/bge-small-en-v1.5');
 const { embedding } = await embed({ model, value: 'Confidential document text' });
 await encryptedDb.add({ id: '1', vector: embedding, metadata: { text: 'Confidential document text' } });
 
-// Search results are decrypted transparently
-const results = await encryptedDb.search(embedding, { topK: 5 });
+// Search result metadata is decrypted transparently
+const results = await encryptedDb.search(embedding, { k: 5 });
 ```
 
 For a complete working application, explore the [Encrypted Vault block](https://localmode.ai/blocks/privacy/encrypted-vault), which demonstrates vault creation, password-based unlock, entry encryption/decryption, and locking -- all built on the stack described in this post.

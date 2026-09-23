@@ -22,7 +22,7 @@ pnpm --filter ui build             # prebuild runs registry:build, then next bui
 pnpm --filter ui types:check       # fumadocs-mdx + next typegen + tsc --noEmit
 pnpm --filter ui lint              # eslint
 
-pnpm --filter ui test:unit         # vitest - build-script helpers (aggregates, snippet strip, markdown)
+pnpm --filter ui test:unit         # vitest - build-script and lib helpers (aggregates, snippet strip, markdown, docs prop tables, bench)
 pnpm --filter ui test:portability  # consumer install test: primitives stay zero-@localmode
 pnpm --filter ui test:blocks       # consumer install test: blocks land + resolve their @localmode deps
 pnpm --filter ui test:e2e          # Playwright - /blocks pages with real model downloads + inference
@@ -81,7 +81,7 @@ Primitives are **presentational and portable to any React AI app** - local-first
 
 A block (`ui/blocks/*`) is a full working surface - chat, semantic search, voice notes, object detection - that composes primitives **and** runs real on-device models. Blocks are the wiring done for the consumer, so they are the **only** registry items allowed to declare `@localmode/*` packages in `dependencies`. Because blocks are excluded from aggregates, a consumer only opts into `@localmode/*` by installing a block explicitly. Every block gates its model download behind an explicit in-block action - nothing downloads on page load. Block sources are testid-free; E2E selects via role/label/text. `pnpm --filter ui test:blocks` pins this boundary.
 
-Category names changed during development, so `next.config.mjs` 308-redirects the earlier `/blocks/<name>` routes to their category page, and permanently redirects the 34 `localmode.ai/<slug>` URLs the retired showcase app served to the block that absorbed each one. Both tables live in `src/lib/legacy-redirects.ts`, shared with the redirect-walk E2E spec so config and test cannot drift.
+Category names changed during development, so `next.config.mjs` 308-redirects the earlier `/blocks/<name>` routes to their category page, and permanently redirects the 34 `localmode.ai/<slug>` URLs the retired showcase app served to the block that absorbed each one. Both tables live in `src/lib/legacy-redirects.mts`, shared with the redirect-walk E2E spec so config and test cannot drift.
 
 
 ## How to add a component

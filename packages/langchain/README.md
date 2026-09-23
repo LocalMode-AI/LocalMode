@@ -17,6 +17,10 @@ LangChain.js adapters for [LocalMode](https://localmode.dev) — drop-in local i
 pnpm install @localmode/langchain @localmode/core @localmode/transformers
 ```
 
+### LangChain compatibility
+
+`@langchain/core` is a dependency with the range `>=0.3.80 <1.0.0 || >=1.1.0 <2.0.0`, so the adapters work with both the 0.3 line and 1.x. Versions below 0.3.80 are excluded for a serialization-injection flaw that can leak secrets, and 1.0.0–1.0.6 because their `dist/` lacks the top-level entry shims that `moduleResolution: "node"` projects need. If your app already depends on `@langchain/core`, keep it inside that range so one copy is shared. The package is developed and tested against 1.2.12.
+
 ## Adapters
 
 | LangChain Class | LocalMode Adapter | Wraps |
@@ -100,6 +104,7 @@ const { answer, sources } = await engine.ask('How is data encrypted?');
 + import { ChatLocalMode, LocalModeEmbeddings, LocalModeVectorStore } from '@localmode/langchain';
 + import { transformers } from '@localmode/transformers';
 + import { webllm } from '@localmode/webllm';
++ import { createVectorDB } from '@localmode/core';
 
 - const llm = new ChatOpenAI({ modelName: 'gpt-4o-mini' });
 - const embeddings = new OpenAIEmbeddings();
@@ -111,6 +116,8 @@ const { answer, sources } = await engine.ask('How is data encrypted?');
 ```
 
 The chain code (`RetrievalQAChain.fromLLM`) is identical. Only provider instantiation changes.
+
+`RetrievalQAChain` is a legacy chain: it is exported from `langchain/chains` in `langchain` 0.3; with LangChain 1.x import it from `@langchain/classic/chains` instead. The adapters themselves are the same on both lines.
 
 ## Documentation
 

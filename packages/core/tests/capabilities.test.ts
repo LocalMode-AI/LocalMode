@@ -2,7 +2,7 @@
  * @fileoverview Tests for capability detection system
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import {
   detectCapabilities,
   checkFeatureSupport,
@@ -33,7 +33,7 @@ import {
   createCapabilityReport,
   formatCapabilityReport,
 } from '../src/index.js';
-import type { DeviceCapabilities, ModelSupportResult } from '../src/index.js';
+import type { CapabilityReport, DeviceCapabilities } from '../src/index.js';
 
 describe('Feature Detection Functions', () => {
   describe('isWASMSupported()', () => {
@@ -105,9 +105,31 @@ describe('Feature Detection Functions', () => {
   });
 
   describe('isOPFSSupported()', () => {
+    afterEach(() => {
+      Reflect.deleteProperty(navigator, 'storage');
+    });
+
     it('returns boolean', async () => {
       const result = await isOPFSSupported();
       expect(typeof result).toBe('boolean');
+    });
+
+    it('is false when the Storage API has no getDirectory()', () => {
+      Object.defineProperty(navigator, 'storage', {
+        configurable: true,
+        value: { estimate: async () => ({}) },
+      });
+
+      expect(isOPFSSupported()).toBe(false);
+    });
+
+    it('is true when navigator.storage.getDirectory() exists', () => {
+      Object.defineProperty(navigator, 'storage', {
+        configurable: true,
+        value: { estimate: async () => ({}), getDirectory: async () => ({}) },
+      });
+
+      expect(isOPFSSupported()).toBe(true);
     });
   });
 });
@@ -346,6 +368,22 @@ describe('getBrowserRecommendations()', () => {
 });
 
 describe('Capability Report', () => {
+  const GB = 1024 * 1024 * 1024;
+
+  function installStorage(usage: number, quota: number, persisted: boolean): void {
+    Object.defineProperty(navigator, 'storage', {
+      configurable: true,
+      value: {
+        estimate: async () => ({ usage, quota }),
+        persisted: async () => persisted,
+      },
+    });
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'storage');
+  });
+
   describe('createCapabilityReport()', () => {
     it('creates comprehensive report', async () => {
       const report = await createCapabilityReport();
@@ -353,19 +391,99 @@ describe('Capability Report', () => {
       expect(report).toHaveProperty('timestamp');
       expect(report).toHaveProperty('capabilities');
       expect(report).toHaveProperty('recommendations');
-      // summary structure may vary
     });
 
-    it.skip('includes summary assessment', async () => {
-      // Report structure may vary - skip for now
+    it('includes summary scores computed from the detected storage', async () => {
+      // 20 GB quota (+40), 5% used (+30), persisted (+20), no OPFS (+0).
+      installStorage(1 * GB, 20 * GB, true);
+
+      const report = await createCapabilityReport();
+
+      expect(report.capabilities.storage).toEqual({
+        quotaBytes: 20 * GB,
+        usedBytes: 1 * GB,
+        availableBytes: 19 * GB,
+        isPersisted: true,
+      });
+      expect(report.scores.storageCapacity).toBe(90);
+      for (const score of Object.values(report.scores)) {
+        expect(Number.isInteger(score)).toBe(true);
+        expect(score).toBeGreaterThanOrEqual(0);
+        expect(score).toBeLessThanOrEqual(100);
+      }
+      expect(typeof report.liveTranscribe.getUserMedia).toBe('boolean');
+      expect(typeof report.liveTranscribe.audioWorklet).toBe('boolean');
     });
 
-    it.skip('includes warnings for missing features', async () => {
-      // Report structure may vary - skip for now
+    it('includes warnings and recommendations for missing features', async () => {
+      expect('gpu' in navigator).toBe(false);
+      // 95% used and not persisted.
+      installStorage(19 * GB, 20 * GB, false);
+
+      const report = await createCapabilityReport();
+
+      expect(report.capabilities.features.webgpu).toBe(false);
+      expect(report.issues).toContainEqual({
+        severity: 'warning',
+        message: 'No GPU acceleration available',
+        suggestion: 'ML inference will use CPU only, which is slower',
+      });
+      expect(report.recommendations).toContain(
+        'Request persistent storage to prevent data loss: navigator.storage.persist()'
+      );
+      expect(report.recommendations).toContain(
+        'Storage is over 80% full. Consider cleaning up old data.'
+      );
     });
   });
 
   describe('formatCapabilityReport()', () => {
+    function fixtureReport(overrides: Partial<CapabilityReport> = {}): CapabilityReport {
+      const capabilities: DeviceCapabilities = {
+        browser: { name: 'Chrome', version: '150', engine: 'Blink' },
+        device: { type: 'desktop', os: 'macOS', osVersion: '15' },
+        hardware: { cores: 8, memory: 16, gpu: 'Apple M4' },
+        features: {
+          webgpu: true,
+          webnn: false,
+          wasm: true,
+          simd: true,
+          threads: true,
+          indexeddb: true,
+          opfs: true,
+          webworkers: true,
+          sharedarraybuffer: true,
+          crossOriginisolated: true,
+          serviceworker: true,
+          broadcastchannel: true,
+          weblocks: true,
+          chromeAI: false,
+          chromeAISummarizer: false,
+          chromeAITranslator: false,
+        },
+        storage: {
+          quotaBytes: 20 * GB,
+          usedBytes: 1 * GB,
+          availableBytes: 19 * GB,
+          isPersisted: true,
+        },
+      };
+      return {
+        timestamp: new Date('2026-01-02T03:04:05.000Z'),
+        capabilities,
+        scores: { mlReadiness: 90, storageCapacity: 100, performancePotential: 45 },
+        recommendations: ['Use a smaller model'],
+        issues: [{ severity: 'warning', message: 'Something to watch', suggestion: 'Do this' }],
+        liveTranscribe: {
+          getUserMedia: true,
+          audioWorklet: true,
+          scriptProcessor: true,
+          crossOriginIsolated: true,
+        },
+        ...overrides,
+      };
+    }
+
     it('formats report as string', async () => {
       const report = await createCapabilityReport();
       const formatted = formatCapabilityReport(report);
@@ -374,16 +492,37 @@ describe('Capability Report', () => {
       expect(formatted.length).toBeGreaterThan(0);
     });
 
-    it.skip('includes section headers', async () => {
-      // Formatting details may vary - skip for now
+    it('includes every section with the report values', () => {
+      const lines = formatCapabilityReport(fixtureReport()).split('\n');
+
+      expect(lines).toContain('Generated: 2026-01-02T03:04:05.000Z');
+      for (const header of [
+        'BROWSER & DEVICE',
+        'FEATURES',
+        'STORAGE',
+        'SCORES',
+        'ISSUES',
+        'RECOMMENDATIONS',
+      ]) {
+        expect(lines.some((line) => line.startsWith('│ ' + header))).toBe(true);
+      }
+      expect(lines).toContain('  Browser:  Chrome 150 (Blink)');
+      expect(lines).toContain('  GPU:      Apple M4');
+      expect(lines).toContain(`  ✓ ${'WebGPU'.padEnd(22)} supported`);
+      expect(lines).toContain(`  ✗ ${'WebNN'.padEnd(22)} not available`);
+      expect(lines).toContain('  Quota:     20 GB');
+      expect(lines).toContain('  ML Readiness:        █████████░ 90%');
+      expect(lines).toContain('  ⚠️ [WARNING] Something to watch');
+      expect(lines).toContain('     → Do this');
+      expect(lines).toContain('  • Use a smaller model');
     });
 
-    it.skip('formats as markdown when specified', async () => {
-      // Format options may not be implemented yet - skip for now
-    });
+    it('omits the issues and recommendations sections when both are empty', () => {
+      const formatted = formatCapabilityReport(fixtureReport({ issues: [], recommendations: [] }));
 
-    it.skip('formats as JSON when specified', async () => {
-      // Format options may not be implemented yet - skip for now
+      expect(formatted).not.toContain('ISSUES');
+      expect(formatted).not.toContain('RECOMMENDATIONS');
+      expect(formatted).toContain('SCORES');
     });
   });
 });

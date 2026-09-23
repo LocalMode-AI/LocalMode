@@ -46,7 +46,7 @@ Install everything you need in one line:
 pnpm install @localmode/langchain @localmode/core @localmode/transformers @localmode/webllm
 ```
 
-`@localmode/langchain` depends on `@langchain/core` (>=0.3.0) as a regular dependency, and `@localmode/core` (>=1.0.0) as a peer dependency. The provider packages (`@localmode/transformers`, `@localmode/webllm`) supply the actual models.
+`@localmode/langchain` depends on `@langchain/core` as a regular dependency (supported range `>=0.3.80 <1.0.0 || >=1.1.0 <2.0.0`: releases before 0.3.80 carry a serialization-injection flaw, and 1.0.0 through 1.0.6 shipped a broken build), and on `@localmode/core` (>=2.3.0) as a peer dependency. The provider packages (`@localmode/transformers`, `@localmode/webllm`) supply the actual models.
 
 ---
 

@@ -393,24 +393,29 @@ const db = await createVectorDB({
 
 ## Middleware
 
-Add middleware for logging, encryption, etc.:
+Add middleware for caching, logging, encryption, etc. `wrapVectorDB` takes one middleware object or an array:
 
 ```typescript
-import { wrapVectorDB, loggingMiddleware } from '@localmode/core';
+import { createVectorDB, wrapVectorDB, cachingMiddleware, loggingMiddleware } from '@localmode/core';
 
 const baseDB = await createVectorDB({ name: 'db', dimensions: 384 });
 
-const db = wrapVectorDB(baseDB, {
-  beforeSearch: async (vector, options) => {
-    console.log('Searching with k =', options.k);
-    return { vector, options };
-  },
-  afterSearch: async (results) => {
-    console.log('Found', results.length, 'results');
-    return results;
-  },
+const db = wrapVectorDB({
+  db: baseDB,
+  middleware: [
+    loggingMiddleware({ operations: ['search'] }),
+    cachingMiddleware({ ttlMs: 60_000 }), // repeated searches/gets answered from cache
+    {
+      afterSearch: async (results) => {
+        console.log('Found', results.length, 'results');
+        return results;
+      },
+    },
+  ],
 });
 ```
+
+See [Middleware](/docs/core/middleware) for every hook and built-in middleware.
 
 ## Type Safety
 

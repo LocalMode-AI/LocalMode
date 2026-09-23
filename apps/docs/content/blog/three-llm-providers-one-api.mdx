@@ -118,7 +118,7 @@ WebLLM compiles models through the MLC (Machine Learning Compilation) pipeline i
 
 **Package**: `@localmode/transformers` | **Engine**: [HuggingFace Transformers.js v4](https://github.com/huggingface/transformers.js) | **Runtime**: WebGPU with WASM fallback
 
-Transformers.js v4 runs ONNX-format models using ONNX Runtime Web. It prefers WebGPU when available but automatically falls back to WASM, meaning it works on every modern browser. All `@localmode/transformers` implementations - embeddings, classification, speech-to-text, text generation, and more - use a unified `@huggingface/transformers@^4.2.0` dependency.
+Transformers.js v4 runs ONNX-format models using ONNX Runtime Web. It prefers WebGPU when available but automatically falls back to WASM, meaning it works on every modern browser. All `@localmode/transformers` implementations - embeddings, classification, speech-to-text, text generation, and more - use a unified `@huggingface/transformers@~4.2.0` dependency.
 
 **How it works**: Models are loaded from HuggingFace Hub in ONNX format with q4 quantization. For standard text models (SmolLM2, Phi, Qwen3, Granite), TJS v4 uses its `text-generation` pipeline. For multimodal models (Qwen3.5, Gemma 4), it uses dedicated model classes with a split architecture (embed_tokens, vision_encoder, decoder). The loading strategy is auto-detected from the model ID.
 

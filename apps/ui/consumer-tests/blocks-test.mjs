@@ -1,75 +1,65 @@
 /**
  * Blocks-lane consumer tests for @localmode/ui.
  *
- * Every block is a single-purpose item under its category. The split blocks are
- * driven by the `SPLIT_BLOCK_LANES` spec-table + the generic `splitBlockLane`
- * near the bottom of this file; `devtools-drawer` has its own KEEP lane. `chat`
- * is covered by the committed Playwright E2E harness (`e2e/blocks/chat.spec.ts`),
- * not this install lane.
+ * Blocks (`ui/blocks/*`) are the WIRING layer: unlike primitives, they
+ * legitimately depend on `@localmode/*` npm packages (the documented carve-out
+ * from the portability invariant). This lane proves the carve-out works through
+ * the REAL install path: serve the freshly built registry, run the REAL `shadcn`
+ * CLI (`shadcn@4.9.0 add`) into scratch consumers, and witness the result.
  *
- * Blocks (`ui/blocks/*`) are the WIRING layer — unlike primitives, they
- * legitimately depend on `@localmode/*` npm packages (the documented
- * carve-out from the portability invariant). This lane proves the carve-out
- * works through the REAL install path: it serves the prebuilt registry
- * (`public/r/`), runs the REAL `shadcn` CLI to install a representative block
- * into a scratch consumer, then verifies:
+ * Order of a run (`main()`):
  *
- *   A. every block file lands at its declared target under
- *      `src/components/blocks/<category>/` and all composed primitives land as
- *      FLAT components under `src/components/`,
- *   B. the consumer's package.json now DOES contain the six `@localmode/*`
- *      packages (`core`, `react`, `transformers`, `wllama`, `langchain`,
- *      `pdfjs`) plus `lucide-react`, the `@localmode/*` packages resolve in
- *      `node_modules`, and the installed block files DO reference every
- *      carve-out package (statically or via dynamic `import()` — pdfjs is
- *      loaded lazily inside the Ingest tab) — the exact inverse of the
- *      primitives lane's witnesses A + B,
- *   C. real `tsc --noEmit` exits 0 against the packed WORKSPACE tarballs,
- *   D. the real installed block server-renders its initial (pre-Start) state
- *      — KnowledgeBaseBlock gates its model download behind explicit actions
- *      (Start / ingest / engine or model switch), so mounting it must produce
- *      the idle status line, the gated Start button, and the "not loaded"
- *      embedding-model line with no model fetch.
+ *   1. `registry:build` ALWAYS runs, with NEXT_PUBLIC_REGISTRY_ORIGIN set to
+ *      http://localhost:4601 so every absolutized `registryDependencies` URL
+ *      points at the build under test, not production. The run then fails if any
+ *      of 13 payloads (devtools-drawer + a representative for each of the 11
+ *      deep-routed categories, two for audio) is missing from
+ *      `public/r/ui/blocks/`.
+ *   2. `serve-registry.mjs` serves `public/` on port 4601 in a child process.
+ *   3. DRAWER lane: `ui/blocks/devtools-drawer` into
+ *      `$TMPDIR/lm-ui-drawer-consumer`.
+ *   4. SPLIT_BLOCK_LANES, one scratch consumer each (`$TMPDIR/<tmp>`), in order:
+ *      writing-tools/translate, text-insights/model-evaluator,
+ *      image-studio/background-remover, privacy/encrypted-vault,
+ *      vision/live-tracker, audio/audio-classifier, text/language-detector,
+ *      knowledge/rag-chat (the `primary` lane), photo/duplicate-finder,
+ *      audio/voice-notes, agents/data-extractor, device/gguf-explorer.
+ *   5. The two red-first negatives, run on the primary (knowledge/rag-chat)
+ *      consumer. If that consumer is unavailable, the run records a failure.
  *
- * A red-first plumbing check then corrupts ONE primitive import specifier
- * inside the scratch consumer's installed knowledge-base.tsx, asserts `tsc`
- * now FAILS on exactly that specifier (proving the type gate actually gates),
- * restores the file, and asserts `tsc` passes again.
+ * Witnesses per lane (the drawer lane follows the same order):
  *
- * DRAWER lane: a separate scratch consumer installs `ui/blocks/devtools-drawer`
- * (the devtools observability drawer — carve-out dep: `@localmode/devtools`)
- * and asserts both drawer files land at `components/blocks/devtools-drawer/`,
- * the six composed primitives land flat, `@localmode/devtools` is declared,
- * installs, and resolves (its `@localmode/core` peer satisfied from the
- * packed workspace core tarball), `tsc --noEmit` passes, and the SHIPPED
- * framework-agnostic host renders its closed state — the toggle button only,
- * with no drawer body and no devtools activation (the body and the devtools
- * package sit behind a `React.lazy` dynamic import that never runs while
- * closed).
+ *   A. every block file lands at its declared `components/blocks/<category>/…`
+ *      target, and every composed `@localmode/ui/*` registry dependency lands
+ *      (flat under `src/components/`, or under `src/lib/`, `src/hooks/`,
+ *      `src/components/ui/` by item type),
+ *   hygiene. the LANDED (stripped) block files contain zero `data-testid`, zero
+ *      QA/E2E comment markers, and an `@file` header of at most 3 lines,
+ *   B. the consumer's package.json declares the item's exact npm
+ *      `dependencies`; the installed block files reference each imported
+ *      `@localmode/*` package (static or dynamic `import()`; `importedLocalmode`
+ *      pins the subset when a declared package is only a peer or is reached
+ *      through a hook); those packages plus the `@localmode/core` peer are
+ *      re-pointed to `npm pack`ed WORKSPACE tarballs, installed by real npm,
+ *      and must resolve in node_modules,
+ *   C. real `tsc --noEmit` exits 0 against the stripped install and the packed
+ *      tarballs,
+ *   D. `react-dom/server` renders the real installed block (via tsx) and every
+ *      lane's text/role witnesses hold (`all` substrings present, `none`
+ *      absent), proving the idle first paint needs no model. The drawer lane
+ *      renders `DevToolsDrawerHost` closed: toggle present, no `role="dialog"`
+ *      body, no drawer surfaces.
  *
- * VISION-LAB lane: a FOURTH scratch consumer installs `ui/blocks/vision-lab`
- * (the vision lab that grew from `ui/blocks/vision`; blocks-vision-lab task
- * 4.3) and asserts all eight block files land at
- * `components/blocks/vision-lab/`, the ten composed primitives land flat
- * (+ use-environment via capability-gate), the four `@localmode/*` deps —
- * including `@localmode/mediapipe` — are declared, install, and resolve,
- * `tsc --noEmit` passes against the packed workspace tarballs, and the
- * SHIPPED shell renders its initial four-tab state (Detect active; every
- * engine gated behind explicit in-block actions, tabs behind `next/dynamic`,
- * so no model fetch is reachable from the render).
+ * Red-first negatives (primary consumer only; each restores the file):
  *
- * AUDIO-STUDIO lane: a FIFTH scratch consumer installs
- * `ui/blocks/audio-studio` (the five-tab audio workbench that grew from
- * `ui/blocks/voice`; blocks-audio-studio task 3.3 — knowledge-base stays the
- * representative install because it is the larger surface in the landed
- * catalog, so audio-studio gets this dedicated lane, mirroring vision-lab)
- * and asserts all seven block files land at `components/blocks/audio-studio/`
- * (shell + models.ts + tabs/), the seventeen composed primitives land flat
- * (+ utils/browser-utils libs), the three `@localmode/*` deps are declared,
- * install, and resolve, `tsc --noEmit` passes against the packed workspace
- * tarballs, and the SHIPPED shell renders its initial five-tab state (Notes
- * active; every model gated behind explicit in-tab actions, tab surfaces
- * behind `next/dynamic`, so no model fetch is reachable from the render).
+ *   - type gate: corrupt the first `@/components/<primitive>` import in the
+ *     rag-chat entry file to `…-REDFIRST-BROKEN`; `tsc` must FAIL on exactly
+ *     that specifier, then pass again after restore.
+ *   - hygiene: the baseline scan must be clean; plant a `data-testid` at the
+ *     first `className="`; the scan must FLAG it, then be clean after restore.
+ *
+ * `chat` is not installed here; the committed Playwright E2E harness
+ * (`e2e/blocks/chat.spec.ts`) covers it.
  *
  * Package boundary (test-integrity): witnesses B–D resolve the `@localmode/*`
  * packages from `npm pack`ed WORKSPACE tarballs (the exact artifact of the
@@ -81,18 +71,17 @@
  * behavior) is still asserted against the real CLI BEFORE the re-point, so a
  * block that forgets to declare its `@localmode/*` deps still fails here.
  * Whether npm-latest has caught up to the workspace is release engineering:
- * shipping the blocks change requires publishing the current workspace
+ * shipping a blocks change requires publishing the current workspace
  * package versions (see consumer-tests/README.md).
  *
  * Render boundary (test-integrity): witness D renders the real installed
- * block with `react-dom/server` — it is NOT a stub. The full Start → index →
- * search flow with a real model download in real Chrome is the committed
- * Playwright E2E harness's job (`e2e/blocks/`); this autonomous environment
- * has no browser binary, so the automated witness is the install + type +
+ * block with `react-dom/server`; it is NOT a stub. Real model downloads and
+ * inference in real Chrome are the committed Playwright E2E harness's job
+ * (`e2e/blocks/`); this lane's automated witness is the install + type +
  * initial-render boundary. See consumer-tests/README.md.
  *
- * Run: `pnpm --filter ui test:blocks` (requires `registry:build` first; the
- * script runs it if `public/r/ui/blocks` is missing).
+ * Run: `pnpm --filter ui test:blocks` (always runs `registry:build` first,
+ * which rewrites `public/r/`).
  */
 
 import { spawnSync, spawn } from 'node:child_process';
@@ -114,11 +103,11 @@ const REGISTRY_ORIGIN = `http://localhost:${PORT}`;
 const REGISTRY_URL = `${REGISTRY_ORIGIN}/r/{name}.json`;
 
 /* ── The split blocks are driven by the SPLIT_BLOCK_LANES spec-table at the
- * bottom of this file. The only real-block KEEP lane is devtools-drawer. ── */
+ * bottom of this file; devtools-drawer has its own lane. ── */
 
 /* ── devtools-drawer mini-lane constants ─────────────────────────────────── */
 
-/** The devtools drawer block (blocks-devtools-observability change). */
+/** The devtools drawer block. */
 const DRAWER_ITEM = 'ui/blocks/devtools-drawer';
 /** Where the drawer's two files must land (per the item's declared `target`s). */
 const DRAWER_DIR = path.join('src', 'components', 'blocks', 'devtools-drawer');
@@ -163,9 +152,9 @@ async function ensureRegistryBuilt() {
   // Presence check spans the surviving KEEP real block and one representative
   // split block per category, so a stale build triggers a rebuild.
   const required = [
-    // Surviving KEEP real block (did not split)
+    // The global observability drawer
     'devtools-drawer',
-    // Wave-2 split blocks (representatives per category)
+    // Split-block representatives per category
     'writing-tools/write',
     'text-insights/sentiment-analyzer',
     'image-studio/background-remover',
@@ -173,7 +162,6 @@ async function ensureRegistryBuilt() {
     'vision/object-detector',
     'audio/audio-classifier',
     'text/language-detector',
-    // Wave-3 split blocks (representatives per new category)
     'knowledge/rag-chat',
     'photo/duplicate-finder',
     'audio/voice-notes',
@@ -312,7 +300,7 @@ function tscNoEmit(dir) {
  * and return a map of package name → tarball path. These tarballs are the exact
  * next-publish artifacts (dist + types, packed by real npm); packages are built
  * first if their dist is missing (clean checkout reproducibility). The explicit
- * set is the UNION of every carve-out across all Wave-1/2/3 lanes + the peers
+ * set is the UNION of every lane's carve-out packages + the peers
  * (`@localmode/core` is a runtime peer of react/transformers/mediapipe/wllama/
  * webllm, so it is always available for a real render even when a block declares
  * only, say, `@localmode/wllama`).
@@ -325,9 +313,9 @@ const ALL_WORKSPACE_PACKAGES = [
   '@localmode/langchain', // knowledge/semantic-search + rag-chat engine toggle
   '@localmode/pdfjs', // knowledge/* PDF ingest
   '@localmode/webllm', // agents/* (research-agent + data-extractor)
-  '@localmode/mediapipe', // vision/audio/text split blocks + vision-lab composite
-  '@localmode/chrome-ai', // writing-tools split blocks + composite
-  '@localmode/devtools', // devtools-drawer KEEP lane
+  '@localmode/mediapipe', // vision/audio/text split blocks
+  '@localmode/chrome-ai', // writing-tools split blocks
+  '@localmode/devtools', // devtools-drawer lane
 ];
 let packedTarballs = null;
 async function packWorkspacePackages() {
@@ -355,10 +343,9 @@ async function packWorkspacePackages() {
 /**
  * Re-point the consumer's `@localmode/*` deps at the packed workspace
  * tarballs (next-publish artifacts), run the real `npm install`, and assert
- * every listed package resolved into node_modules. `packages` defaults to the
- * knowledge-base carve-out six; the drawer lane passes its own list (and may
- * include packages not yet in the consumer's package.json — peers — which
- * are ADDED as file: deps).
+ * every listed package resolved into node_modules. Each lane passes its own
+ * list, which may include packages not yet in the consumer's package.json —
+ * peers — which are ADDED as file: deps.
  */
 async function installWorkspaceTarballs(dir, pkg, packages = []) {
   console.log('  re-pointing @localmode/* to packed workspace tarballs (next-publish artifacts)…');
@@ -410,7 +397,7 @@ async function assertDeclaredDeps(dir, label, { npmDeps = [] } = {}) {
   return pkg;
 }
 
-/* ── Shipped-file hygiene witness (blocks-snippet-hygiene acceptance criterion) ──
+/* ── Shipped-file hygiene witness (the shipped-block acceptance criterion) ──
  *
  * The registry:build strip transform (scripts/strip-block-snippets.ts) removes
  * every `data-testid` and all dev/QA comments (keeping only a ≤3-line @file
@@ -426,9 +413,6 @@ async function assertDeclaredDeps(dir, label, { npmDeps = [] } = {}) {
  * QA/E2E comment markers the strip transform removes. Each is verified present
  * in the block SOURCES and absent from the stripped payloads (2026-07-04), so a
  * survivor here means a dev/QA comment leaked into the shipped surface.
- * NOTE: `phase0` is deliberately NOT a marker — it legitimately appears inside a
- * kept `@description` header line (audio-studio notes-tab), so it is not
- * evidence of a leaked comment.
  */
 const QA_COMMENT_MARKERS = [
   'Driver contract',
@@ -620,9 +604,9 @@ async function hygieneRedFirstTest(consumerDir, entryRel, blockFiles) {
 }
 
 /**
- * Devtools-drawer mini-lane (blocks-devtools-observability change): the SAME
- * real install path proves the drawer carve-out — `shadcn add
- * ui/blocks/devtools-drawer` into a THIRD scratch consumer must land both
+ * Devtools-drawer lane: the SAME real install path proves the drawer
+ * carve-out — `shadcn add ui/blocks/devtools-drawer` into its own scratch
+ * consumer must land both
  * drawer files at their `components/blocks/devtools-drawer/` targets plus the
  * six composed primitives flat under `src/components/` (+ three lib files),
  * declare and resolve `@localmode/devtools` (with its `@localmode/core` peer
@@ -779,7 +763,7 @@ console.log('RENDER_OK length=' + html.length);
 }
 
 /**
- * One representative split block per NEW category. `blockTargets` are the item's
+ * One representative split block per category (two for audio). `blockTargets` are the item's
  * declared file `target`s (the `src/` prefix is added); `registryDeps` are the
  * composed primitives/libs/hooks that must land; `npmDeps` is the item's exact
  * declared npm `dependencies` (the @localmode subset is import-checked +
@@ -932,10 +916,8 @@ const SPLIT_BLOCK_LANES = [
     ],
   },
 
-  // ── Wave-3 split blocks (one representative per NEW category) ────────────
-  // knowledge-base → knowledge/*, photo-search → photo/*, audio-studio →
-  // audio/*, agent-structured-data → agents/*, device-model-lab → device/*.
-  // Nested per-block dir targets `components/blocks/<category>/<slug>/<file>`.
+  // Blocks below install into nested per-block dirs:
+  // `components/blocks/<category>/<slug>/<file>`.
   {
     // The `primary` split block: red-first + hygiene-red-first re-anchor here.
     item: 'ui/blocks/knowledge/rag-chat',
@@ -1100,13 +1082,13 @@ const SPLIT_BLOCK_LANES = [
 ];
 
 /**
- * Generic split-block install lane (family (a)): real `shadcn add` of ONE split
+ * Generic split-block install lane: real `shadcn add` of ONE split
  * block, then witnesses A (files + primitives landed) → hygiene (stripped) →
  * B (carve-out declared + imported + resolves from packed tarballs) →
  * C (`tsc --noEmit`) → D (stripped idle render on real text/role observables).
  */
 async function splitBlockLane(spec, laneLabel) {
-  console.log(`\n${laneLabel} ${spec.item} (Wave-2 split block install → idle render on real observables)`);
+  console.log(`\n${laneLabel} ${spec.item} (split block install → idle render on real observables)`);
   const dir = path.join(os.tmpdir(), spec.tmp);
   await scaffold(dir, makeRenderCheck(spec.importPath, spec.componentName, spec.witnesses));
 
@@ -1190,10 +1172,10 @@ async function main() {
   await ensureRegistryBuilt();
   const server = await startServer();
   try {
-    // ── KEEP lane (the ONLY real block that did NOT split) ────────────────
+    // ── devtools-drawer lane ──────────────────────────────────────────────
     await drawerTest(); // devtools-drawer
 
-    // ── (a) Wave-2 + Wave-3 split-block representative install lanes ───────
+    // ── split-block representative install lanes ──────────────────────────
     // Capture the primary (knowledge/rag-chat) consumer so the red-first type
     // gate + hygiene-red-first plumbing checks re-anchor onto a real install.
     let primary = null;

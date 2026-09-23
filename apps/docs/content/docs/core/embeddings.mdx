@@ -313,23 +313,52 @@ console.log('Dot product:', dot);
 
 ## Middleware
 
-Wrap embedding models with middleware for caching, logging, etc.:
+Wrap embedding models with middleware for retries, rate limiting, PII redaction, and more:
 
 ```typescript
-import { wrapEmbeddingModel, cachingMiddleware, loggingMiddleware } from '@localmode/core';
+import {
+  embed,
+  wrapEmbeddingModel,
+  composeEmbeddingMiddleware,
+  piiRedactionMiddleware,
+  retryMiddleware,
+} from '@localmode/core';
 
 const baseModel = transformers.embedding('Xenova/bge-small-en-v1.5');
 
-const model = wrapEmbeddingModel(baseModel, [
-  cachingMiddleware({ maxSize: 1000 }),
-  loggingMiddleware({ logger: console.log }),
-]);
+const model = wrapEmbeddingModel({
+  model: baseModel,
+  middleware: composeEmbeddingMiddleware([
+    piiRedactionMiddleware({ emails: true, phones: true }),
+    retryMiddleware({ maxRetries: 3 }),
+  ]),
+});
 
-// Now all embed calls will be cached and logged
+// Every embed call is PII-redacted and retried on failure
 const { embedding } = await embed({ model, value: 'Hello' });
 ```
 
-See [Middleware](/docs/core/middleware) for more details.
+There is no built-in embedding cache middleware (`cachingMiddleware` caches VectorDB searches and is used with `wrapVectorDB`). To skip recomputing repeated inputs, write a small `wrapEmbed` middleware:
+
+```typescript
+import { wrapEmbeddingModel, type EmbeddingModelMiddleware } from '@localmode/core';
+
+const cache = new Map<string, unknown>();
+
+const embeddingCache: EmbeddingModelMiddleware = {
+  wrapEmbed: async ({ doEmbed, values }) => {
+    const key = values.join('\u0000');
+    if (cache.has(key)) return cache.get(key) as Awaited<ReturnType<typeof doEmbed>>;
+    const result = await doEmbed();
+    cache.set(key, result);
+    return result;
+  },
+};
+
+const cachedModel = wrapEmbeddingModel({ model: baseModel, middleware: embeddingCache });
+```
+
+See [Middleware](/docs/core/middleware) for every built-in middleware, and [Semantic Cache](/docs/core/semantic-cache) for similarity-based response caching.
 
 ## Implementing Custom Models
 
@@ -368,7 +397,7 @@ const { embedding } = await embed({ model, value: 'Hello' });
 
 <Callout type="tip" title="Performance Tips">
   1. **Batch embeddings** - Use `embedMany()` instead of multiple `embed()` calls
-  2. **Use caching** - Add `cachingMiddleware()` for repeated queries
+  2. **Cache repeated inputs** - Add a `wrapEmbed` cache middleware (see [Middleware](#middleware)) for repeated queries
   3. **Choose the right model** - Smaller models (MiniLM-L6) are faster, larger ones more accurate
   4. **Preload models** - Load models during app initialization
 </Callout>

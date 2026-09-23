@@ -1,7 +1,7 @@
 /**
  * @file image-studio.spec.ts
  * @description E2E for the three split image blocks under the image-studio
- * category (split-image-privacy Wave 2), driving each block's canonical route
+ * category, driving each block's canonical route
  * (`/blocks/image-studio/<block>`) via accessibility selectors
  * (`getByRole`/`getByLabel`/`getByText`) ONLY — no `data-testid` — against a
  * production build in real Chromium. Every model boundary is REAL — no mocks:
@@ -100,7 +100,7 @@ const CONSOLE_ERROR_ALLOWLIST: ReadonlyArray<{
     // cleanly (real segmentation/SR/captioning succeed — the correctness
     // assertions prove it). Chrome still logs the 404 as a console error.
     // SCOPE: only resource errors whose URL is a HuggingFace host + a .json/.txt
-    // sidecar. WHO/WHEN: root-caused during blocks-image-studio task 5.2, same
+    // sidecar. WHO/WHEN: root-caused during the image-studio block's verification, same
     // mechanism documented in vision-lab.spec.ts + photo-search.spec.ts.
     reason: 'benign HF 404: optional model sidecar-file probe (library falls back)',
     matches: (e) =>
@@ -369,7 +369,7 @@ test('background-remover: cancel mid-run, then real SegFormer removal → transp
     contentType: 'application/json',
   });
   // Real background removal: a meaningful transparent-background fraction AND an
-  // opaque subject — coarse invariants (design D6), not an exact mask.
+  // opaque subject — coarse invariants, not an exact mask.
   expect(stats.transparentFraction, 'background actually removed (transparent pixels)').toBeGreaterThan(0.03);
   expect(stats.transparentFraction, 'not the whole image transparented').toBeLessThan(0.97);
   expect(stats.opaqueFraction, 'subject stays opaque').toBeGreaterThan(0.03);
@@ -420,7 +420,7 @@ test('image-enhancer: real Swin2SR 2x round-trip + exact dimensions + download, 
   await expect(result).toHaveAttribute('data-height', String(SR_INPUT_H * 4));
   await page.screenshot({ path: 'e2e-artifacts/screenshots/image-studio-enhance-4x.png', fullPage: true });
 
-  // ── Restore (gated: design D3 verified this variant in real Chrome) ─────────
+  // ── Restore (gated: this variant was verified in real Chrome) ─────────
   await page.getByRole('button', { name: 'Restore' }).click();
   await expect(page.getByRole('button', { name: 'Restore' })).toHaveAttribute('aria-pressed', 'true');
   // Restore is also 4×; wait for the fresh run to settle on the restore result.

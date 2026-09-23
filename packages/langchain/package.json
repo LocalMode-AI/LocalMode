@@ -1,6 +1,6 @@
 {
   "name": "@localmode/langchain",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "LangChain.js adapters for @localmode — drop-in local inference for existing LangChain apps",
   "license": "MIT",
   "author": "LocalMode",
@@ -58,16 +58,16 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@langchain/core": ">=0.3.0"
+    "@langchain/core": ">=0.3.80 <1.0.0 || >=1.1.0 <2.0.0"
   },
   "peerDependencies": {
     "@localmode/core": ">=2.3.0"
   },
   "devDependencies": {
-    "@langchain/core": "^0.3.0",
+    "@langchain/core": "^1.2.12",
     "@localmode/core": "workspace:*",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.3"
+    "vitest": "^4.1.11"
   }
 }

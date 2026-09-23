@@ -202,6 +202,37 @@ function parseHTML(
 }
 
 /**
+ * Elements whose content forms its own line of text. Their boundaries become
+ * line breaks, so adjacent blocks such as `<p>a</p><p>b</p>` do not merge into
+ * a single word the way `textContent` merges them.
+ */
+const BLOCK_TAGS = new Set([
+  'address', 'article', 'aside', 'blockquote', 'br', 'caption', 'dd', 'details',
+  'div', 'dl', 'dt', 'fieldset', 'figcaption', 'figure', 'footer', 'form',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hr', 'li', 'main', 'nav',
+  'ol', 'p', 'pre', 'section', 'summary', 'table', 'tbody', 'td', 'tfoot',
+  'th', 'thead', 'tr', 'ul',
+]);
+
+/**
+ * Collect the text of a DOM node, with a line break at every block boundary.
+ */
+function collectText(node: Node): string {
+  let out = '';
+  node.childNodes.forEach((child) => {
+    if (child.nodeType === 3) {
+      out += child.textContent ?? '';
+    } else if (child.nodeType === 1) {
+      const isBlock = BLOCK_TAGS.has((child as Element).tagName.toLowerCase());
+      if (isBlock) out += '\n';
+      out += collectText(child);
+      if (isBlock) out += '\n';
+    }
+  });
+  return out;
+}
+
+/**
  * Parse HTML using DOMParser (browser).
  */
 function parseHTMLWithDOM(
@@ -237,18 +268,18 @@ function parseHTMLWithDOM(
   let content: string;
   if (options.selector) {
     const element = doc.querySelector(options.selector);
-    content = element?.textContent ?? '';
+    content = element ? collectText(element) : '';
   } else if (options.selectors && options.selectors.length > 0) {
     const texts: string[] = [];
     for (const selector of options.selectors) {
       const element = doc.querySelector(selector);
-      if (element?.textContent) {
-        texts.push(element.textContent);
+      if (element) {
+        texts.push(collectText(element));
       }
     }
     content = texts.join('\n\n');
   } else {
-    content = doc.body?.textContent ?? '';
+    content = doc.body ? collectText(doc.body) : '';
   }
 
   // Normalize whitespace
@@ -295,6 +326,13 @@ export class HTMLLoader implements DocumentLoader<HTMLLoaderOptions> {
   readonly supports = ['.html', '.htm', 'text/html', 'application/xhtml+xml'];
 
   /**
+   * Create a loader.
+   *
+   * @param defaults - Options applied to every `load()` call; options passed to `load()` take precedence.
+   */
+  constructor(private readonly defaults: HTMLLoaderOptions = {}) {}
+
+  /**
    * Check if this loader can handle the source.
    */
   canLoad(source: LoaderSource): boolean {
@@ -314,7 +352,8 @@ export class HTMLLoader implements DocumentLoader<HTMLLoaderOptions> {
   /**
    * Load documents from HTML source.
    */
-  async load(source: LoaderSource, options: HTMLLoaderOptions = {}): Promise<LoadedDocument[]> {
+  async load(source: LoaderSource, callOptions: HTMLLoaderOptions = {}): Promise<LoadedDocument[]> {
+    const options: HTMLLoaderOptions = { ...this.defaults, ...callOptions };
     const { generateId: customGenerateId, abortSignal, extractMetadata = true } = options;
 
     // Check for cancellation
@@ -434,9 +473,9 @@ export class HTMLLoader implements DocumentLoader<HTMLLoaderOptions> {
 }
 
 /**
- * Create an HTML loader with default options.
+ * Create an HTML loader whose options apply to every `load()` call.
  */
-export function createHTMLLoader(_options?: HTMLLoaderOptions): HTMLLoader {
-  return new HTMLLoader();
+export function createHTMLLoader(options?: HTMLLoaderOptions): HTMLLoader {
+  return new HTMLLoader(options);
 }
 

@@ -41,7 +41,7 @@ Building this feature with on-device inference provides three structural advanta
 
 | Package | Purpose |
 | --- | --- |
-| `@localmode/core` | piiRedactionMiddleware(), createVectorDB(), wrapEmbeddingModel() |
+| `@localmode/core` | piiRedactionMiddleware(), wrapEmbeddingModel(), createVectorDB(), wrapVectorDB(), encryptionMiddleware(), deriveEncryptionKey() |
 | `@localmode/transformers` | On-device embedding and classification models |
 
 Install the required packages:
@@ -53,7 +53,15 @@ npm install @localmode/core @localmode/transformers
 ## Implementation
 
 ```typescript
-import { embed, wrapEmbeddingModel, piiRedactionMiddleware, createVectorDB } from '@localmode/core';
+import {
+  embed,
+  wrapEmbeddingModel,
+  piiRedactionMiddleware,
+  createVectorDB,
+  wrapVectorDB,
+  encryptionMiddleware,
+  deriveEncryptionKey,
+} from '@localmode/core';
 import { transformers } from '@localmode/transformers';
 
 // 1. PII redaction before embedding
@@ -63,17 +71,20 @@ const model = wrapEmbeddingModel({
   middleware: piiRedactionMiddleware(), // Strips emails, phones, SSNs, etc.
 });
 
-// 2. Encrypted vector storage
-const db = await createVectorDB({
-  name: 'gdpr-safe',
-  dimensions: 384,
-  encryption: { enabled: true, passphrase: userProvidedKey }, // AES-256-GCM
+// 2. Encrypted metadata at rest (AES-256-GCM, key derived from the user's passphrase).
+// Vectors stay in plaintext because the index computes distances over them.
+const { key } = await deriveEncryptionKey(userPassphrase, storedSalt);
+const db = wrapVectorDB({
+  db: await createVectorDB({ name: 'gdpr-safe', dimensions: 384 }),
+  middleware: encryptionMiddleware({ key }),
 });
 
 // 3. All processing on-device - no GDPR data processor relationship
 const { embedding } = await embed({ model, value: userText });
-await db.add({ id: '1', vector: embedding, metadata: { text: '[REDACTED]' } });
+await db.add({ id: '1', vector: embedding, metadata: { text: userText } }); // text is encrypted before IndexedDB
 ```
+
+The encryption middleware protects the metadata (the text and any other fields) on disk. The stored vector is not encrypted, which is why the PII redaction in step 1 matters: the embedding never encodes an email, phone number, or SSN in the first place. To protect vectors at rest outside the live index, encrypt an exported snapshot with `encryptVector()`.
 
 ### How This Works
 
@@ -109,7 +120,7 @@ When deploying this solution to production, consider these factors:
 
 ## Methodology
 
-This guide is based on LocalMode's documented APIs and source code in `packages/core/src/security/` (verified against `piiRedactionMiddleware`, `createVectorDB` with `EncryptionOptions`, and the no-telemetry policy). GDPR Article numbers, Article 28 processor obligations, Article 35 DPIA triggers, and Chapter V transfer mechanisms were verified against the official GDPR text at gdpr-info.eu. This is general information only, not legal advice - GDPR compliance depends on your specific data flows, jurisdictions, and processing activities; consult a qualified data protection attorney for guidance on your situation.
+This guide is based on LocalMode's documented APIs and source code in `packages/core/src/security/` (verified against `piiRedactionMiddleware`, `encryptionMiddleware` with `deriveEncryptionKey`, and the no-telemetry policy). GDPR Article numbers, Article 28 processor obligations, Article 35 DPIA triggers, and Chapter V transfer mechanisms were verified against the official GDPR text at gdpr-info.eu. This is general information only, not legal advice - GDPR compliance depends on your specific data flows, jurisdictions, and processing activities; consult a qualified data protection attorney for guidance on your situation.
 
 ## Sources
 

@@ -1,11 +1,11 @@
 /**
  * @file indexnow.ts
- * @description IndexNow submitter (seo.md §10) — pings Bing/Yandex/IndexNow with
+ * @description IndexNow submitter — pings Bing/Yandex/IndexNow with
  * the site's URLs for near-instant (re)indexing. Env-gated: does nothing unless
  * INDEXNOW_KEY is set. Run manually after a deploy: `INDEXNOW_KEY=… tsx scripts/indexnow.ts`.
  *
  * Setup (one-time): generate a key (`uuidgen`), then serve it verbatim at
- * `public/<INDEXNOW_KEY>.txt` (the file's only content is the key). See seo.md §10.1.
+ * `public/<INDEXNOW_KEY>.txt` (the file's only content is the key).
  */
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://localmode.ai';
 const INDEXNOW_KEY = process.env.INDEXNOW_KEY;

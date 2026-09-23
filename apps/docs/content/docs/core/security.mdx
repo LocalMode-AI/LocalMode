@@ -177,20 +177,42 @@ interface KeyMetadata {
   hardware-backed keys via WebAuthn.
 </Callout>
 
-## Encrypting Embeddings
+## Encrypting Stored Documents
 
-Encrypt embeddings before storage using middleware:
+`encryptionMiddleware` is a VectorDB middleware: wrap the database with `wrapVectorDB`. It encrypts each document's metadata before it reaches storage and decrypts it on `get()` and in search results:
 
 ```typescript
-import { wrapEmbeddingModel, encryptionMiddleware, deriveEncryptionKey } from '@localmode/core';
+import { createVectorDB, wrapVectorDB, encryptionMiddleware, deriveEncryptionKey } from '@localmode/core';
 
-const { key } = await deriveEncryptionKey('user-password');
+const { key, salt } = await deriveEncryptionKey('user-password');
+// Persist `salt` (it is not secret) to derive the same key next session
 
-const model = wrapEmbeddingModel(baseModel, [encryptionMiddleware({ key })]);
+const db = wrapVectorDB({
+  db: await createVectorDB({ name: 'notes', dimensions: 384 }),
+  middleware: encryptionMiddleware({
+    key,
+    excludeFields: ['category'], // stays plaintext so it can be filtered on
+  }),
+});
 
-// Embeddings are automatically encrypted
-const { embedding } = await embed({ model, value: 'sensitive text' });
+await db.add({ id: 'n1', vector: embedding, metadata: { text: 'sensitive text', category: 'medical' } });
+const results = await db.search(queryVector, { k: 5 }); // metadata decrypted
 ```
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `key` | `CryptoKey` | required | AES-GCM key, e.g. from `deriveEncryptionKey()` |
+| `encryptMetadata` | `boolean` | `true` | Encrypt metadata fields |
+| `encryptText` | `boolean` | `true` | Encrypt string metadata values. With `false`, strings stay plaintext (and filterable) while numbers, booleans, and objects are still encrypted |
+| `excludeFields` | `string[]` | `[]` | Metadata fields left in plaintext |
+| `encryptVectors` | `boolean` | `false` | Must be omitted or `false`; `true` throws a `ValidationError` |
+
+<Callout type="warn" title="Vectors stay in plaintext">
+  The index computes distances over the stored vectors, so it can neither store nor search ciphertext.
+  To keep embeddings from leaking sensitive content, redact PII before embedding (below) and consider
+  [differential privacy](#differential-privacy). To protect vectors at rest outside the live index,
+  encrypt an exported snapshot with `encryptVector()`.
+</Callout>
 
 ## PII Redaction
 
@@ -202,7 +224,8 @@ import { redactPII } from '@localmode/core';
 const text = 'Contact John at john@example.com or call 555-123-4567';
 
 const redacted = redactPII(text, {
-  patterns: ['email', 'phone'],
+  emails: true,
+  phones: true,
   replacement: '[REDACTED]',
 });
 
@@ -210,29 +233,26 @@ console.log(redacted);
 // 'Contact John at [REDACTED] or call [REDACTED]'
 ```
 
-### Available Patterns
+### Available Categories
 
-| Pattern      | Description             | Example             |
-| ------------ | ----------------------- | ------------------- |
-| `email`      | Email addresses         | john@example.com    |
-| `phone`      | Phone numbers           | 555-123-4567        |
-| `ssn`        | Social Security numbers | 123-45-6789         |
-| `creditCard` | Credit card numbers     | 4111-1111-1111-1111 |
-| `ip`         | IP addresses            | 192.168.1.1         |
-| `address`    | Street addresses        | 123 Main St         |
+| Option        | Default | Description             | Example             | Default replacement |
+| ------------- | ------- | ----------------------- | ------------------- | ------------------- |
+| `emails`      | `true`  | Email addresses         | john@example.com    | `[EMAIL_REDACTED]`  |
+| `phones`      | `true`  | Phone numbers           | 555-123-4567        | `[PHONE_REDACTED]`  |
+| `ssn`         | `true`  | Social Security numbers | 123-45-6789         | `[SSN_REDACTED]`    |
+| `creditCards` | `true`  | Credit card numbers     | 4111-1111-1111-1111 | `[CARD_REDACTED]`   |
+| `ipAddresses` | `false` | IP addresses            | 192.168.1.1         | `[IP_REDACTED]`     |
+| `dates`       | `false` | Dates                   | 01/15/2024          | `[DATE_REDACTED]`   |
+
+`replacement` overrides every category; `replacements` (e.g. `{ email: '<email>' }`) overrides individual ones.
 
 ### Custom Patterns
 
 ```typescript
 const redacted = redactPII(text, {
-  patterns: ['email', 'phone'],
-  custom: [
-    {
-      name: 'employeeId',
-      regex: /EMP-\d{6}/g,
-    },
-  ],
-  replacement: (match, pattern) => `[${pattern.toUpperCase()}]`,
+  emails: true,
+  phones: true,
+  customPatterns: [{ pattern: /EMP-\d{6}/g, replacement: '[EMPLOYEE_ID]' }],
 });
 ```
 
@@ -243,19 +263,17 @@ Automatically redact PII before embedding:
 ```typescript
 import { wrapEmbeddingModel, piiRedactionMiddleware } from '@localmode/core';
 
-const model = wrapEmbeddingModel(baseModel, [
-  piiRedactionMiddleware({
-    patterns: ['email', 'phone', 'ssn'],
-    replacement: '[REDACTED]',
-  }),
-]);
+const model = wrapEmbeddingModel({
+  model: baseModel,
+  middleware: piiRedactionMiddleware({ emails: true, phones: true, ssn: true }),
+});
 
 // PII is automatically redacted before embedding
 const { embedding } = await embed({
   model,
   value: 'Email me at john@example.com',
 });
-// Actually embeds: 'Email me at [REDACTED]'
+// Actually embeds: 'Email me at [EMAIL_REDACTED]'
 ```
 
 ## Feature Detection
@@ -288,27 +306,32 @@ if (!isCrossOriginIsolated()) {
 
 ```typescript
 import {
+  embed,
+  createVectorDB,
   wrapEmbeddingModel,
+  wrapVectorDB,
   piiRedactionMiddleware,
   encryptionMiddleware,
   deriveEncryptionKey,
 } from '@localmode/core';
 
-// Setup secure model
-const { key } = await deriveEncryptionKey(userPassword);
+const { key } = await deriveEncryptionKey(userPassword, storedSalt);
 
-const secureModel = wrapEmbeddingModel(baseModel, [
-  piiRedactionMiddleware({
-    patterns: ['email', 'phone', 'ssn', 'creditCard'],
-  }),
-  encryptionMiddleware({ key }),
-]);
-
-// All embeddings are PII-redacted and encrypted
-const { embedding } = await embed({
-  model: secureModel,
-  value: userInput,
+// Embedding model: redact PII before embedding
+const secureModel = wrapEmbeddingModel({
+  model: baseModel,
+  middleware: piiRedactionMiddleware({ emails: true, phones: true, ssn: true, creditCards: true }),
 });
+
+// Vector DB: encrypt metadata before storage
+const db = wrapVectorDB({
+  db: await createVectorDB({ name: 'secure-rag', dimensions: 384 }),
+  middleware: encryptionMiddleware({ key }),
+});
+
+// The embedding is computed from PII-redacted text; the stored text is encrypted
+const { embedding } = await embed({ model: secureModel, value: userInput });
+await db.add({ id: crypto.randomUUID(), vector: embedding, metadata: { text: userInput } });
 ```
 
 ## Differential Privacy
@@ -469,26 +492,22 @@ if (crossOriginIsolated) {
 
 ## Audit Logging
 
-Log security-relevant events:
+Log VectorDB operations with `loggingMiddleware` (a VectorDB middleware; it logs IDs, counts, and timings, never vectors or metadata values):
 
 ```typescript
-import { wrapEmbeddingModel, loggingMiddleware } from '@localmode/core';
+import { wrapVectorDB, loggingMiddleware } from '@localmode/core';
 
-const model = wrapEmbeddingModel(baseModel, [
-  loggingMiddleware({
-    logger: (event) => {
-      // Log to secure audit trail
-      auditLog.log({
-        timestamp: new Date().toISOString(),
-        action: 'embedding',
-        model: event.modelId,
-        inputCount: event.inputCount,
-        // Don't log actual input values!
-      });
-    },
+const db = wrapVectorDB({
+  db: baseDB,
+  middleware: loggingMiddleware({
+    operations: ['add', 'delete', 'clear'],
+    formatter: (operation, data) => JSON.stringify({ at: new Date().toISOString(), operation, ...data }),
+    logger: (line) => securityLog.push(String(line)),
   }),
-]);
+});
 ```
+
+For a tamper-evident, hash-chained record, see [Audit Log](/docs/core/audit-log).
 
 ## Next Steps
 

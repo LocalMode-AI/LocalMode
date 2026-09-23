@@ -1,6 +1,6 @@
 {
   "name": "@localmode/pdfjs",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "PDF text extraction for @localmode using PDF.js",
   "license": "MIT",
   "author": "LocalMode",
@@ -36,7 +36,7 @@
     "clean": "rm -rf dist node_modules"
   },
   "dependencies": {
-    "pdfjs-dist": "^5.5.207"
+    "pdfjs-dist": "^6.3.289"
   },
   "peerDependencies": {
     "@localmode/core": ">=2.0.0"

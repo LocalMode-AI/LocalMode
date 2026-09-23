@@ -120,34 +120,14 @@ console.log('  s1-s3:', cosineSimilarity(qualityEmbeddings[0], qualityEmbeddings
 
 ## Caching Embeddings
 
-Use caching middleware to avoid recomputation:
-
-```typescript
-import { wrapEmbeddingModel, cachingMiddleware } from '@localmode/core';
-
-const baseModel = transformers.embedding('Xenova/bge-small-en-v1.5');
-
-const model = wrapEmbeddingModel(baseModel, [
-  cachingMiddleware({
-    maxSize: 10000,
-    storage: 'indexeddb',
-    dbName: 'embedding-cache',
-  }),
-]);
-
-// First call computes embedding
-const { embedding: e1 } = await embed({ model, value: 'Hello' });
-
-// Second call returns from cache (instant)
-const { embedding: e2 } = await embed({ model, value: 'Hello' });
-```
+`@localmode/transformers` caches model files, not embeddings. To avoid recomputing embeddings for repeated inputs, wrap the model with a small `wrapEmbed` cache middleware; the pattern is shown in [Core Embeddings: Middleware](/docs/core/embeddings#middleware).
 
 ## Best Practices
 
 <Callout type="tip" title="Embedding Tips">
   1. **Match dimensions** — Ensure your vector DB dimensions match the model
   2. **Batch when possible** — `embedMany()` is more efficient than multiple `embed()` calls
-  3. **Cache embeddings** — Use caching middleware for repeated queries
+  3. **Cache embeddings** — Wrap the model with a `wrapEmbed` cache middleware for repeated queries
   4. **Normalize if needed** — Some models benefit from L2 normalization
   5. **Choose model wisely** — Balance quality vs speed for your use case
 </Callout>

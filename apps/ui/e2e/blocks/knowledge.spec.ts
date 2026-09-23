@@ -1,10 +1,10 @@
 /**
  * @file knowledge.spec.ts
  * @description E2E suite for the four `ui/blocks/knowledge/*` blocks (split from
- * the retired `knowledge-base` monolith, split-knowledge-photo Wave 3). Preserves
+ * the retired `knowledge-base` monolith). Preserves
  * every lane of the retired 9-lane `knowledge-base.spec.ts` at full assertion
  * strength, re-homed onto the per-block deep routes. Role/label/text selectors
- * ONLY (blocks-ux-pass Wave 4 — zero `data-testid`); REAL model downloads + real
+ * ONLY (zero `data-testid`); REAL model downloads + real
  * in-browser inference — no mocked model boundary.
  *
  * REAL: embedding (Xenova/bge-small-en-v1.5), reranking (Xenova/ms-marco-

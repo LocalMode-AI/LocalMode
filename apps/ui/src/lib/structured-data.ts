@@ -1,8 +1,8 @@
 /**
  * @file structured-data.ts
  * @description JSON-LD builders (schema.org) for localmode.ai — the homepage
- * `@graph` (Organization + WebSite + SoftwareApplication, seo.md §3.1/§3.6/§3.8),
- * BreadcrumbList (§3.3), a homepage FAQPage (§3.4), and per-block
+ * `@graph` (Organization + WebSite + SoftwareApplication),
+ * BreadcrumbList, a homepage FAQPage, and per-block
  * SoftwareApplication. External identities (Wikidata, X handle) are env-gated so
  * they simply fall out of `sameAs` until provided. WebSite SearchAction is
  * intentionally omitted — the site search is a client cmdk dialog with no

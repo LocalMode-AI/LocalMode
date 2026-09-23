@@ -20,6 +20,38 @@ import { createGenerator } from 'fumadocs-typescript';
 
 const generator = createGenerator();
 
+/**
+ * Source files are read here and handed to the generator as content, and every
+ * read joins a LITERAL root directory. A `path.join(process.cwd(), dynamic)` read
+ * makes the server bundler trace the whole app directory (public/, e2e/,
+ * content/, …) into every route that imports this module; a literal root limits
+ * the trace to that directory, which is exactly what request-time rendering
+ * (e.g. the markdown export route) needs on disk.
+ */
+const REGISTRY_PREFIX = 'registry/';
+
+/** Read a registry source file (`registry/...`); rejects paths outside `registry/`. */
+function readRegistrySource(sourcePath: string): string {
+  const normalized = path.posix.normalize(sourcePath.replaceAll('\\', '/'));
+  if (!normalized.startsWith(REGISTRY_PREFIX)) {
+    throw new Error(`Type-table source must live under ${REGISTRY_PREFIX}: "${sourcePath}"`);
+  }
+  const root = path.join(process.cwd(), 'registry');
+  const file = path.join(process.cwd(), 'registry', normalized.slice(REGISTRY_PREFIX.length));
+  const relative = path.relative(root, file);
+  if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error(`Type-table source escapes ${REGISTRY_PREFIX}: "${sourcePath}"`);
+  }
+  return readFileSync(file, 'utf8');
+}
+
+/** Resolve `name` from already-read `content`, failing like `generateTypeTable` on a missing type. */
+function generateFromContent(filePath: string, content: string, name: string) {
+  const docs = generator.generateDocumentation({ path: filePath, content }, name);
+  if (docs.length === 0) throw new Error(`${name} in ${filePath} doesn't exist`);
+  return docs;
+}
+
 /** Baseline native-element types (see `dom-baseline.ts`), keyed by element tag. */
 const BASELINE_PATH = 'src/lib/dom-baseline.ts';
 const BASELINE_BY_ELEMENT: Record<string, string> = {
@@ -45,10 +77,17 @@ function getBaselines(): Promise<Map<string, Set<string>>> {
   if (!baselinesPromise) {
     baselinesPromise = (async () => {
       const map = new Map<string, Set<string>>();
+      let baselineSource: string | null = null;
+      try {
+        baselineSource = readFileSync(path.join(process.cwd(), 'src', 'lib', 'dom-baseline.ts'), 'utf8');
+      } catch {
+        /* a missing baseline file shouldn't break the tables */
+      }
       for (const [element, typeName] of Object.entries(BASELINE_BY_ELEMENT)) {
         const set = new Set<string>();
         try {
-          const docs = await generator.generateTypeTable({ path: BASELINE_PATH, name: typeName });
+          if (baselineSource === null) throw new Error('dom-baseline.ts unavailable');
+          const docs = generateFromContent(BASELINE_PATH, baselineSource, typeName);
           for (const doc of docs) for (const entry of doc.entries) set.add(entry.name);
         } catch {
           /* a missing baseline type shouldn't break the tables */
@@ -145,13 +184,7 @@ interface FilterSpec {
 }
 
 /** Compute the filter spec (inherited attrs to hide + own body props to keep). */
-async function filterSpecFor(sourcePath: string, typeName: string): Promise<FilterSpec> {
-  let source = '';
-  try {
-    source = readFileSync(path.join(process.cwd(), sourcePath), 'utf8');
-  } catch {
-    return { excluded: new Set(), own: new Set(), filtering: false };
-  }
+async function filterSpecFor(source: string, typeName: string): Promise<FilterSpec> {
   const elements = extendedElements(source, typeName);
   const own = bodyPropNames(source, typeName);
   if (elements.length === 0) return { excluded: new Set(), own, filtering: false }; // standalone → keep all
@@ -216,10 +249,9 @@ export interface PropDoc {
  * so an empty array means the component exposes no configurable props.
  */
 export async function getOwnPropDocs({ path: sourcePath, name }: TypeTableRef): Promise<PropDoc[]> {
-  const [docs, spec] = await Promise.all([
-    generator.generateTypeTable({ path: sourcePath, name }),
-    filterSpecFor(sourcePath, name),
-  ]);
+  const source = readRegistrySource(sourcePath);
+  const docs = generateFromContent(sourcePath, source, name);
+  const spec = await filterSpecFor(source, name);
 
   const result: PropDoc[] = [];
   for (const doc of docs) {

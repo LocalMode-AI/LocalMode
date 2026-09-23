@@ -1,5 +1,27 @@
 # @localmode/core
 
+## 2.5.0
+
+### Minor Changes
+
+- **`VectorDBMiddleware` gains `wrapSearch`, `wrapGet`, `afterUpdate`, `afterDeleteWhere` and `afterImport`** (all optional; `wrapVectorDB` and `composeVectorDBMiddleware` wire them, first middleware outermost). The wrap hooks receive a `doSearch()` / `doGet()` continuation, so a middleware can answer without touching the database.
+- **`TextLoader`, `JSONLoader`, `CSVLoader` and `HTMLLoader` accept constructor options**, and `createTextLoader(options)` and friends pass them through; per-call options still win. Before this the factories discarded their options and `new CSVLoader({ textColumn })` did nothing.
+
+### Fixed
+
+- **`cachingMiddleware` never cached.** It stored nothing, skipped no search, and wrote `__cacheHit` into the caller's options object. It now answers repeated `search()` and `get()` calls from its cache (the key covers the whole query vector plus `k`, `threshold`, `filter` and `includeVectors`; the old key used only the first 8 components) and invalidates on add, update, delete, `deleteWhere`, import and clear.
+- **`loggingMiddleware`** never logged search timing and wrote `__searchId` into the caller's options; it now logs `durationMs` and leaves options alone.
+- **`encryptionMiddleware` failed every `add()` with default options** ("Vector dimension mismatch") because `encryptVectors` defaulted to `true` and a vector index cannot store or search ciphertext. `encryptVectors` now defaults to `false`; passing `true` throws a `ValidationError` with a hint. Metadata encryption is unchanged.
+- **`loadDocument()` auto-detection sent every string to the text loader** (the text loader was checked first and accepts any string). Detection now runs JSON → HTML → CSV → text; JSON must parse, CSV needs a consistent column count of two or more on every row, so prose with commas or a `[Note] …` line stays text. `loadDocument(src, { loader: 'csv', textColumn })` now type-checks.
+- **HTML loaded in a browser merged adjacent blocks** (`<p>First</p><p>Second</p>` became `FirstSecond`); block boundaries are now line breaks.
+- **`isOPFSSupported()` returned true for any `navigator.storage`**; it now requires `getDirectory()`.
+- **`encryptionMiddleware({ encryptText: false })` did nothing**: string metadata was still encrypted. Strings now stay plaintext (and filterable) when `encryptText` is false; numbers, booleans and objects are encrypted as before.
+- **`createVectorDB()`'s `encryption` option was never read**, so `encryption: { enabled: true, passphrase }` stored everything in plaintext while looking encrypted. The option is deprecated; `enabled: true` now throws a `ValidationError` whose hint shows the working path: `deriveEncryptionKey()` + `wrapVectorDB({ db, middleware: [encryptionMiddleware({ key })] })`. `enabled: false` or omitting it is unchanged.
+- **`CachingMiddlewareOptions.maxEmbeddings` was never read**; the document cache now honours it (least-recently-used eviction, default 1000), independently of `maxSearchResults`.
+- The `encryptionMiddleware` JSDoc example imported `deriveKey` but called `deriveEncryptionKey` and treated its `{ key, salt }` result as the key; it now compiles against the real signatures.
+- **`wrapVectorDB`'s `onError` never suppressed**: its JSDoc, `composeVectorDBMiddleware` and `loggingMiddleware` all assumed "return `true` to suppress", but `handleError` always rethrew. A handler returning exactly `true` now makes the operation resolve with a neutral value (`get` → `null`, `search` → `[]`, `deleteWhere` → `0`, `undefined` for the writes); anything else rethrows.
+- **Tests:** the 49 stale skipped tests in `tests/{loaders,middleware,capabilities,security}.test.ts` are rewritten as real tests against the public exports (the fixes above came out of that), the retry and rate-limit tests apply those middleware to an embedding model as designed, and `tests/security.test.fixed.ts` (a duplicate that never ran) is removed.
+
 ## 2.4.2
 
 ### Patch Changes

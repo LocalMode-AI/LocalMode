@@ -1,9 +1,9 @@
 /**
  * @file platform.spec.ts
- * @description Platform-level E2E for the /blocks category-grid gallery
- * (blocks-split-platform Wave 0): legacy-URL redirects, the two-level category
- * grid (category sections + presentational BlockCards), the flat category/block
- * route semantics at Wave 0, homepage teaser + bundle isolation, and the hard
+ * @description Platform-level E2E for the /blocks category-grid gallery:
+ * legacy-URL redirects, the two-level category grid (category sections +
+ * presentational BlockCards), the flat and deep category/block route
+ * semantics, homepage teaser + bundle isolation, and the hard
  * no-model-download-on-page-load invariant on the gallery AND every block page.
  *
  * DRIFT-PROOF: the expected cards/routes are derived by importing the SAME
@@ -88,7 +88,7 @@ test.describe('blocks platform', () => {
 
   // ── Structural guards ───────────────────────────────────────────────────────
   // Cheap, navigation-free, and they catch drift between the gallery card model
-  // and the route map (and a broken Wave-0 flat-route invariant) before any
+  // and the route map (and a broken flat-route invariant) before any
   // browser work runs.
   test('gallery card model and category route map agree on the 11 flat blocks', () => {
     // 11 route-served blocks, unique slugs.
@@ -108,14 +108,14 @@ test.describe('blocks platform', () => {
     expect(BLOCK_NAMES).not.toContain('devtools-drawer');
     expect(routeMapSlugs).not.toContain('devtools-drawer');
 
-    // Wave-0 flat-route semantics: every card links to the block's canonical
+    // Flat-route semantics: every card links to the block's canonical
     // route, which is the flat `/blocks/<slug>` (single-block category ⇒ no
     // `<category>/<slug>` stutter), and the category page route collapses onto
     // that same flat route.
     for (const card of BLOCK_CARDS) {
       expect(card.route, `${card.slug} card links to its canonical route`).toBe(canonicalRoute(card.slug));
     }
-    // Wave-agnostic category semantics: a flat category's page route IS its single
+    // Category semantics: a flat category's page route IS its single
     // block's route; a deep category's page route hosts routes prefixed by it.
     for (const cat of routeServedCategories()) {
       if (isFlatCategory(cat)) {
@@ -139,7 +139,7 @@ test.describe('blocks platform', () => {
     await page.goto('/demos');
     await expect(page).toHaveURL(/\/blocks$/);
 
-    // Wave-agnostic: the `/demos/:name` + `/test-lab/:name` rules map to the flat
+    // The `/demos/:name` + `/test-lab/:name` rules map to the flat
     // `/blocks/:name` SEGMENT — post-split, the top-level `/blocks/<segment>`
     // pages are the category pages (deep categories) + the flat single-block
     // pages. Derive that segment set from the route map (a flat category's
@@ -251,7 +251,7 @@ test.describe('blocks platform', () => {
       const modelRequests: string[] = [];
       collectModelRequests(page, modelRequests);
 
-      // Wave-agnostic route semantics: a single-block (flat) category's canonical
+      // Route semantics: a single-block (flat) category's canonical
       // block route is the flat `/blocks/<slug>` route AND doubles as the category
       // page; a split (deep) category's canonical route is
       // `/blocks/<category>/<block>`. Either way it must resolve DIRECTLY, with no

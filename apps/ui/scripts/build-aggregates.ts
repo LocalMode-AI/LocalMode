@@ -66,7 +66,7 @@ export function isInternal(item: RegistryItem) {
 /** Blocks (`ui/blocks/*`) are composed wiring-layer items, not primitives —
  * they are excluded from `ui/all` and family aggregates by design. The check
  * keys on the item NAME prefix, so it holds regardless of the block's
- * `categories` tags (a Wave-0 block carries `["blocks", "<category>"]`). */
+ * `categories` tags (a block carries `["blocks", "<category>"]`). */
 export function isBlock(item: RegistryItem) {
   return item.name.startsWith('ui/blocks/');
 }

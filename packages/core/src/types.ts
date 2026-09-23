@@ -4,6 +4,12 @@ import type { HNSWGPUOptions } from './hnsw/gpu/types.js';
 
 /**
  * Encryption configuration options.
+ *
+ * @deprecated `createVectorDB()` never implemented encryption at rest, and it
+ * now throws a `ValidationError` when `enabled: true` is passed rather than
+ * silently storing plaintext. Encrypt document metadata with
+ * `wrapVectorDB({ db, middleware: [encryptionMiddleware({ key })] })`, deriving
+ * the key with `deriveEncryptionKey()`. The type is kept for compatibility.
  */
 export interface EncryptionOptions {
   /** Enable encryption at rest */
@@ -49,7 +55,14 @@ export interface VectorDBConfig<TMetadata extends Record<string, unknown> = Reco
   /** HNSW index configuration options */
   indexOptions?: HNSWOptions;
 
-  /** Encryption configuration */
+  /**
+   * Encryption configuration.
+   *
+   * @deprecated Not implemented: `createVectorDB()` throws a `ValidationError`
+   * when `encryption.enabled` is `true`; `enabled: false` is a no-op. Use
+   * `wrapVectorDB({ db, middleware: [encryptionMiddleware({ key })] })` with a
+   * key from `deriveEncryptionKey()` instead.
+   */
   encryption?: EncryptionOptions;
 
   /** Sync and recovery options */

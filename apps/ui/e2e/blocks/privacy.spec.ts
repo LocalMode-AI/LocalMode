@@ -1,7 +1,7 @@
 /**
  * @file privacy.spec.ts
  * @description Real-Chrome E2E for the two split privacy blocks under the renamed
- * `privacy` category (split-image-privacy Wave 2). Drives each block's canonical
+ * `privacy` category. Drives each block's canonical
  * route (`/blocks/privacy/<block>`) via accessibility selectors
  * (`getByRole`/`getByLabel`/`getByText`) ONLY — no `data-testid` — with NO mocked
  * model or crypto boundary:

@@ -85,7 +85,7 @@ async function loadPDF(file: File) {
 }
 ```
 
-`extractPDFText` returns the full text, an array of per-page content, and PDF metadata (title, author, creation date). For large documents you can limit extraction with `maxPages` and cancel with an `AbortSignal`.
+`extractPDFText` returns the full text, the page count, an array of per-page content, and PDF metadata (title, author, creation date). Metadata is optional: if a document's information dictionary cannot be read, you still get the text, and the reason is reported on `metadataError`. For large documents you can limit extraction with `maxPages` and cancel with an `AbortSignal`. The package runs on PDF.js 6, which needs Chrome 125+ or Safari 18+.
 
 ---
 
@@ -358,7 +358,7 @@ This architecture provides privacy properties that no cloud RAG solution can mat
 - **Zero network requests** after model download - verified by checking the Network tab
 - **No telemetry** - the `@localmode/core` package has zero dependencies and makes no outbound calls
 - **Data stays in IndexedDB** - vectors and metadata never leave the browser's origin-scoped storage
-- **Optional encryption** - `createVectorDB` supports AES-GCM encryption via the Web Crypto API
+- **Optional encryption** - wrap the VectorDB with `encryptionMiddleware` to encrypt document metadata (the chunk text) with AES-GCM via the Web Crypto API; vectors stay in plaintext so the index can search them
 - **PII redaction** - built-in `piiRedactionMiddleware` can scrub sensitive text before embedding
 
 For regulated industries (healthcare, legal, finance), browser-local RAG eliminates the compliance burden of sending documents to third-party APIs entirely.

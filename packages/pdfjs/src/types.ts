@@ -53,8 +53,17 @@ export interface PDFExtractResult {
   /** Text content per page */
   pages: PDFPageContent[];
 
-  /** PDF metadata */
+  /** PDF metadata. PDF.js supplies an information object even when the document has no `/Info` dictionary, so this is present with every field undefined in that case; it is absent only when reading the dictionary failed (see `metadataError`). */
   metadata?: PDFMetadata;
+
+  /**
+   * Why the metadata could not be read, when reading it failed.
+   *
+   * Metadata is optional, so a document whose information dictionary cannot be
+   * parsed still yields text. Present only when `metadata` is absent because
+   * of an error, never when the document simply has no metadata.
+   */
+  metadataError?: string;
 }
 
 /**
@@ -142,7 +151,12 @@ export interface LoadedPDFDocument extends LoadedDocument {
     /** Total pages in the PDF */
     totalPages?: number;
 
-    /** PDF-specific metadata */
+    /**
+     * PDF-specific metadata read from the document information (`/Info`)
+     * dictionary. Present whenever the dictionary was read (with every field
+     * undefined when the PDF has none); absent when reading it failed, in which
+     * case `metadataError` says why.
+     */
     pdf?: PDFMetadata;
   };
 }

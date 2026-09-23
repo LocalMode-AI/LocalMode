@@ -2,7 +2,8 @@
  * @file seo-pwa.spec.ts
  * @description Regression guard for the site-level SEO + PWA surfaces added to
  * localmode.ai (apps/ui): robots.txt (3-tier crawler policy), sitemap.xml,
- * manifest.webmanifest, the /api/og social-share image, the service worker + PWA
+ * manifest.webmanifest, the /api/og social-share image (block and docs pages; the
+ * homepage uses the static 1200x630 og-default.png cover), the service worker + PWA
  * icons, COOP/COEP cross-origin-isolation headers, the custom 404, and the
  * per-page canonicals / OpenGraph / JSON-LD structured data.
  *
@@ -43,6 +44,14 @@ function expectedBlockRoutes(): string[] {
 function sampleDeepBlockRoute(): string {
   const deep = routeServedCategories().find((c) => !isFlatCategory(c));
   return deep ? canonicalRoute(deep.blocks[0].slug) : '/blocks/chat';
+}
+
+/** Width/height from a PNG's IHDR chunk; throws if the bytes are not a PNG. */
+function pngSize(buf: Buffer): { width: number; height: number } {
+  const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  if (buf.length < 24 || !signature.every((b, i) => buf[i] === b)) throw new Error('not a PNG');
+  if (buf.toString('latin1', 12, 16) !== 'IHDR') throw new Error('PNG does not start with IHDR');
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
 }
 
 /** Read the concatenated JSON-LD of a loaded page, retrying (some is client-rendered). */
@@ -147,11 +156,20 @@ test.describe('site platform — SEO + PWA surfaces', () => {
     expect(canonical).toMatch(/^https?:\/\//);
     await expect(page.locator('link[rel="manifest"]')).toHaveCount(1);
 
+    // The homepage uses the static brand cover (`DEFAULT_OG` in src/lib/og.ts),
+    // not a generated /api/og card, resolved against the same metadataBase as the
+    // canonical. The declared 1200x630 must match the file actually served.
+    const expectedOg = new URL('/og-default.png', canonical!).href;
     const ogImage = await page.locator('meta[property="og:image"]').first().getAttribute('content');
-    expect(ogImage).toMatch(/^https?:\/\/.*\/api\/og\?/);
+    expect(ogImage).toBe(expectedOg);
     expect(await page.locator('meta[property="og:image:width"]').first().getAttribute('content')).toBe('1200');
     expect(await page.locator('meta[property="og:image:height"]').first().getAttribute('content')).toBe('630');
-    expect(await page.locator('meta[name="twitter:image"]').first().getAttribute('content')).toContain('/api/og');
+    expect(await page.locator('meta[name="twitter:image"]').first().getAttribute('content')).toBe(expectedOg);
+
+    const img = await page.request.get(new URL(expectedOg).pathname);
+    expect(img.status(), 'default OG image served').toBe(200);
+    expect(img.headers()['content-type']).toBe('image/png');
+    expect(pngSize(await img.body()), 'served default OG image dimensions').toEqual({ width: 1200, height: 630 });
 
     const ld = await jsonLd(page);
     for (const type of ['Organization', 'WebSite', 'SoftwareApplication', 'FAQPage']) {

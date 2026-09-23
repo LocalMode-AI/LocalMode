@@ -52,7 +52,7 @@ LocalMode is a monorepo of packages for building AI-powered applications that ru
 | [`@localmode/langchain`](./packages/langchain/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/langchain.svg)](https://www.npmjs.com/package/@localmode/langchain) | LangChain.js adapters -- drop-in local embeddings, chat, vector store, and reranker for existing LangChain apps, plus `createLangChainKnowledgeBaseEngine` (the `KnowledgeBaseEngine` contract over LangChain adapters) |
 | [`@localmode/devtools`](./packages/devtools/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/devtools.svg)](https://www.npmjs.com/package/@localmode/devtools) | In-app AI observability -- 9 React hooks via the `@localmode/devtools/react` subpath for model cache, VectorDB stats, and inference queue data (the bundled DevTools widget UI was **removed in v3.0.0** in favor of the hooks + the `ui/devtools` registry family and `ui/blocks/devtools-drawer` at localmode.ai) |
 | [`@localmode/bench`](./packages/bench/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/bench.svg)](https://www.npmjs.com/package/@localmode/bench) | LocalMode Bench harness -- cross-runtime browser-AI benchmarking with MLPerf-Client-compatible metrics (TTFT, pp/tg throughput), raw trace capture, versioned submission-integrity rules, and leaderboard aggregation; powers the public leaderboard at [localmode.ai/bench](https://localmode.ai/bench) |
-| [`@localmode/pdfjs`](./packages/pdfjs/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/pdfjs.svg)](https://www.npmjs.com/package/@localmode/pdfjs) | PDF text extraction with PDF.js |
+| [`@localmode/pdfjs`](./packages/pdfjs/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/pdfjs.svg)](https://www.npmjs.com/package/@localmode/pdfjs) | PDF text extraction with PDF.js, in the browser and Node.js |
 | [`@localmode/dexie`](./packages/dexie/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/dexie.svg)](https://www.npmjs.com/package/@localmode/dexie) | Dexie.js storage adapter with schema versioning and transactions |
 | [`@localmode/idb`](./packages/idb/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/idb.svg)](https://www.npmjs.com/package/@localmode/idb) | Minimal IndexedDB storage adapter using the idb library |
 | [`@localmode/localforage`](./packages/localforage/README.md) | [![npm](https://img.shields.io/npm/v/@localmode/localforage.svg)](https://www.npmjs.com/package/@localmode/localforage) | Cross-browser storage adapter with automatic fallback |
@@ -315,6 +315,7 @@ await tracker.start();
 | ------- | --------- | ----------- |
 | **Chunking** | `chunk()`, `semanticChunk()`, `codeChunk()`, `markdownChunk()` | Recursive, semantic, code-aware, and markdown chunking |
 | **Ingestion** | `ingest()`, `createIngestPipeline()` | End-to-end document ingestion with progress tracking |
+| **Document Loaders** | `loadDocument()`, `createLoaderRegistry()` | Text, JSON, CSV, and HTML loaders with auto-detection; PDF via `@localmode/pdfjs` |
 | **Pipelines** | `createPipeline()` | Composable multi-step workflows with 10 built-in step types |
 | **Inference Queue** | `createInferenceQueue()` | Priority-based task scheduling with concurrency control |
 | **Semantic Cache** | `createSemanticCache()` | Cache LLM responses using embedding similarity |
@@ -335,7 +336,7 @@ await tracker.start();
 | Feature | Functions | Description |
 | ------- | --------- | ----------- |
 | **Encryption** | `encrypt()`, `decrypt()`, `deriveKey()` | Web Crypto API encryption, PBKDF2 key derivation |
-| **PII Redaction** | `redactPII()`, `piiRedactionMiddleware()` | Named entity based PII detection and redaction |
+| **PII Redaction** | `redactPII()`, `piiRedactionMiddleware()` | Regex-pattern PII redaction (emails, phones, SSNs, credit cards by default; IP addresses, dates, and custom patterns opt-in) |
 | **Differential Privacy** | `dpEmbeddingMiddleware()`, `createPrivacyBudget()` | DP noise injection for embeddings and classification |
 | **Drift Detection** | `checkModelCompatibility()`, `reindexCollection()` | Detect model changes, auto-reindex collections |
 | **Audit Log** | `createAuditLog()` | Hash-chained, signed, append-only tamper-evident audit log (IndexedDB-backed) |
@@ -346,7 +347,7 @@ await tracker.start();
 | ------- | --------- | ----------- |
 | **Model Cache** | `createModelLoader()` | Chunked downloads, LRU eviction, cross-tab coordination, offline resume |
 | **Storage** | `IndexedDBStorage`, `MemoryStorage` | Built-in persistent and in-memory storage |
-| **Middleware** | `wrapEmbeddingModel()`, `wrapLanguageModel()`, `wrapVectorDB()` | Caching, logging, retry, validation, encryption, DP |
+| **Middleware** | `wrapEmbeddingModel()`, `wrapLanguageModel()`, `wrapVectorDB()` | VectorDB result caching, logging, retry, validation, metadata encryption, DP |
 | **Capabilities** | `isWebGPUSupported()`, `detectCapabilities()` | Browser feature detection with automatic fallbacks |
 | **Cross-Tab Sync** | `createBroadcaster()`, `createLockManager()` | BroadcastChannel sync with Web Locks coordination |
 | **Network Status** | `getNetworkStatus()`, `waitForOnline()` | Offline-first with network awareness |
@@ -483,7 +484,7 @@ packages/
   mediapipe/       # MediaPipe Tasks provider (landmarks, gestures, vision/audio/text)
   chrome-ai/       # Chrome Built-in AI provider (Gemini Nano)
   langchain/       # LangChain.js adapters (embeddings, chat, vector store, reranker)
-  devtools/        # DevTools observability (/react hooks; widget UI deprecated)
+  devtools/        # DevTools observability (/react hooks; widget UI removed in v3.0.0)
   pdfjs/           # PDF text extraction
   dexie/           # Dexie.js storage adapter
   idb/             # idb storage adapter

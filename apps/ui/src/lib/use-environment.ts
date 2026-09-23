@@ -136,7 +136,11 @@ function isIndexedDBSupported(): boolean {
 }
 
 function isOPFSSupported(): boolean {
-  return typeof navigator !== 'undefined' && 'storage' in navigator;
+  // The Storage API predates OPFS; only getDirectory() gives access to it.
+  return (
+    typeof navigator !== 'undefined' &&
+    typeof (navigator.storage as { getDirectory?: unknown } | undefined)?.getDirectory === 'function'
+  );
 }
 
 function isWebWorkersSupported(): boolean {

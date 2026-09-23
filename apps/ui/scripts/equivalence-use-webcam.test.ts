@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 /**
  * @file equivalence-use-webcam.test.ts
- * @description Group-10 equivalence gate (blocks-shared-promotions, task 10.2)
- * for the promoted `ui/media-vision/use-webcam` registry hook. It was promoted
+ * @description Equivalence gate for the promoted `ui/media-vision/use-webcam` registry hook. It was promoted
  * verbatim from `vision-lab/use-webcam.ts` (born clean — only the file header
  * changed), so both are driven through the SAME real state machine here:
  * start() acquires a stream, a second start() is a no-op, stop() + unmount
@@ -13,7 +12,7 @@
  * jsdom (the layer BELOW the hook). The real-hardware camera path is a
  * documented gap closed by the vision E2E + the manual real-hardware sweep.
  *
- * 2026-07-04 (split-vision-lab): the block-local `vision-lab/use-webcam` copy
+ * 2026-07-04: the block-local `vision-lab/use-webcam` copy
  * was DISSOLVED — the promoted registry hook is now the single source consumed
  * by the vision blocks, so the dual-variant comparison collapsed to the
  * promoted hook alone (same scenarios, same assertions).

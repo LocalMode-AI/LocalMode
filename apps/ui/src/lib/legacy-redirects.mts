@@ -1,10 +1,16 @@
 /**
- * @file legacy-redirects.ts
+ * @file legacy-redirects.mts
  * @description Single source of truth for the 34 legacy slug → block redirects.
  * This module is imported by BOTH `next.config.mjs`'s `redirects()` (emitting
  * `permanent: true` entries) AND the redirect-walk E2E spec
  * (`e2e/redirects/legacy-slugs.spec.ts`), so the deployed config and the test
  * that verifies it cannot drift.
+ *
+ * The extension is `.mts`, not `.ts`: `next.config.mjs` is loaded by Node, which
+ * strips the types itself. A plain `.ts` file has no declared module type here
+ * (the app's package.json sets none), so Node parses it as CommonJS, fails, and
+ * re-parses it as ESM with a MODULE_TYPELESS_PACKAGE_JSON warning. `.mts` is
+ * unambiguously ESM. Importers written in TypeScript use the `.mjs` specifier.
  *
  * Retired app `apps/showcase-nextjs` served 34 slugs at `localmode.ai/<slug>`;
  * each is permanently redirected to the `/blocks/<name>` route that absorbed its

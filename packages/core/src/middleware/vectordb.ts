@@ -67,6 +67,18 @@ export function composeVectorDBMiddleware(
       }
     },
 
+    wrapGet: async ({ doGet, id }) => {
+      let run = doGet;
+      for (let i = middlewares.length - 1; i >= 0; i--) {
+        const wrapGet = middlewares[i].wrapGet;
+        if (wrapGet) {
+          const next = run;
+          run = () => wrapGet({ doGet: next, id });
+        }
+      }
+      return run();
+    },
+
     afterGet: async (doc: Document | undefined) => {
       let result = doc;
       for (const mw of middlewares) {
@@ -108,6 +120,18 @@ export function composeVectorDBMiddleware(
       return { query: q, options: opts };
     },
 
+    wrapSearch: async ({ doSearch, query, options }) => {
+      let run = doSearch;
+      for (let i = middlewares.length - 1; i >= 0; i--) {
+        const wrapSearch = middlewares[i].wrapSearch;
+        if (wrapSearch) {
+          const next = run;
+          run = () => wrapSearch({ doSearch: next, query, options });
+        }
+      }
+      return run();
+    },
+
     afterSearch: async (results: SearchResult[]) => {
       let r = results;
       for (const mw of middlewares) {
@@ -116,6 +140,30 @@ export function composeVectorDBMiddleware(
         }
       }
       return r;
+    },
+
+    afterUpdate: async (id: string) => {
+      for (const mw of middlewares) {
+        if (mw.afterUpdate) {
+          await mw.afterUpdate(id);
+        }
+      }
+    },
+
+    afterDeleteWhere: async (deletedCount: number) => {
+      for (const mw of middlewares) {
+        if (mw.afterDeleteWhere) {
+          await mw.afterDeleteWhere(deletedCount);
+        }
+      }
+    },
+
+    afterImport: async () => {
+      for (const mw of middlewares) {
+        if (mw.afterImport) {
+          await mw.afterImport();
+        }
+      }
     },
 
     beforeClear: async () => {
@@ -182,10 +230,11 @@ export function wrapVectorDB<TMetadata extends Record<string, unknown> = Record<
     ? composeVectorDBMiddleware(options.middleware)
     : options.middleware;
 
-  // Helper to handle errors
-  const handleError = async (error: Error, operation: string): Promise<never> => {
-    if (middleware.onError) {
-      await middleware.onError(error, operation);
+  // Reports the error to onError; returns `fallback` when the handler
+  // suppresses it (returns true), otherwise rethrows the original error.
+  const handleError = async <T>(error: Error, operation: string, fallback: T): Promise<T> => {
+    if (middleware.onError && (await middleware.onError(error, operation)) === true) {
+      return fallback;
     }
     throw error;
   };
@@ -204,7 +253,7 @@ export function wrapVectorDB<TMetadata extends Record<string, unknown> = Record<
           await middleware.afterAdd(doc as Document);
         }
       } catch (error) {
-        await handleError(error as Error, 'add');
+        await handleError(error as Error, 'add', undefined);
       }
     },
 
@@ -225,30 +274,36 @@ export function wrapVectorDB<TMetadata extends Record<string, unknown> = Record<
           }
         }
       } catch (error) {
-        await handleError(error as Error, 'addMany');
+        await handleError(error as Error, 'addMany', undefined);
       }
     },
 
     // Wrap get with middleware
     async get(id: string): Promise<(Document<TMetadata> & { metadata?: TMetadata }) | null> {
       try {
-        const result = await db.get(id);
+        const doGet = () => db.get(id) as Promise<Document | null>;
+        const result = middleware.wrapGet
+          ? ((await middleware.wrapGet({ doGet, id })) as Document<TMetadata> | null)
+          : await db.get(id);
         if (middleware.afterGet && result) {
           const processed = await middleware.afterGet(result as Document);
           return (processed as (Document<TMetadata> & { metadata?: TMetadata })) ?? null;
         }
         return result;
       } catch (error) {
-        return handleError(error as Error, 'get');
+        return handleError(error as Error, 'get', null);
       }
     },
 
-    // Wrap update (pass-through)
+    // Wrap update
     async update(id: string, updates: Partial<Omit<Document<TMetadata>, 'id'>>): Promise<void> {
       try {
         await db.update(id, updates);
+        if (middleware.afterUpdate) {
+          await middleware.afterUpdate(id);
+        }
       } catch (error) {
-        await handleError(error as Error, 'update');
+        await handleError(error as Error, 'update', undefined);
       }
     },
 
@@ -264,7 +319,7 @@ export function wrapVectorDB<TMetadata extends Record<string, unknown> = Record<
           await middleware.afterDelete(id);
         }
       } catch (error) {
-        await handleError(error as Error, 'delete');
+        await handleError(error as Error, 'delete', undefined);
       }
     },
 
@@ -287,13 +342,21 @@ export function wrapVectorDB<TMetadata extends Record<string, unknown> = Record<
           }
         }
       } catch (error) {
-        await handleError(error as Error, 'deleteMany');
+        await handleError(error as Error, 'deleteMany', undefined);
       }
     },
 
-    // Wrap deleteWhere (pass-through)
+    // Wrap deleteWhere
     async deleteWhere(filter: TypedFilterQuery<TMetadata>): Promise<number> {
-      return db.deleteWhere(filter);
+      try {
+        const deletedCount = await db.deleteWhere(filter);
+        if (middleware.afterDeleteWhere) {
+          await middleware.afterDeleteWhere(deletedCount);
+        }
+        return deletedCount;
+      } catch (error) {
+        return handleError(error as Error, 'deleteWhere', 0);
+      }
     },
 
     // Wrap search with middleware
@@ -308,7 +371,12 @@ export function wrapVectorDB<TMetadata extends Record<string, unknown> = Record<
           opts = result.options;
         }
 
-        let results = await db.search(q, opts as SearchOptions<TMetadata>);
+        const doSearch = () => db.search(q, opts as SearchOptions<TMetadata>) as Promise<SearchResult[]>;
+        let results = (
+          middleware.wrapSearch
+            ? await middleware.wrapSearch({ doSearch, query: q, options: opts })
+            : await doSearch()
+        ) as SearchResult<TMetadata>[];
 
         if (middleware.afterSearch) {
           results = await middleware.afterSearch(results as SearchResult[]) as SearchResult<TMetadata>[];
@@ -316,7 +384,7 @@ export function wrapVectorDB<TMetadata extends Record<string, unknown> = Record<
 
         return results;
       } catch (error) {
-        return handleError(error as Error, 'search');
+        return handleError(error as Error, 'search', []);
       }
     },
 
@@ -342,7 +410,7 @@ export function wrapVectorDB<TMetadata extends Record<string, unknown> = Record<
           await middleware.afterClear();
         }
       } catch (error) {
-        await handleError(error as Error, 'clear');
+        await handleError(error as Error, 'clear', undefined);
       }
     },
 
@@ -356,9 +424,16 @@ export function wrapVectorDB<TMetadata extends Record<string, unknown> = Record<
       return db.export(exportOptions);
     },
 
-    // Wrap import (pass-through)
+    // Wrap import
     async import(data: Blob, importOptions?: ImportOptions): Promise<void> {
-      return db.import(data, importOptions);
+      try {
+        await db.import(data, importOptions);
+        if (middleware.afterImport) {
+          await middleware.afterImport();
+        }
+      } catch (error) {
+        await handleError(error as Error, 'import', undefined);
+      }
     },
 
     // Pass-through for recalibrate

@@ -16,20 +16,40 @@ export { JSONLoader, createJSONLoader } from './json.js';
 export { CSVLoader, createCSVLoader } from './csv.js';
 export { HTMLLoader, createHTMLLoader } from './html.js';
 
-import type { LoaderSource, LoadedDocument, DocumentLoader, LoaderOptions } from './types.js';
+import type {
+  LoaderSource,
+  LoadedDocument,
+  DocumentLoader,
+  LoaderOptions,
+  TextLoaderOptions,
+  JSONLoaderOptions,
+  CSVLoaderOptions,
+  HTMLLoaderOptions,
+} from './types.js';
 import { TextLoader } from './text.js';
 import { JSONLoader } from './json.js';
 import { CSVLoader } from './csv.js';
 import { HTMLLoader } from './html.js';
 
 /**
- * Registry of built-in loaders.
+ * Options for `loadDocument()` / `loadDocuments()`: the shared loader options,
+ * any loader-specific option (passed through to the loader that runs), and an
+ * optional explicit `loader`.
+ */
+type LoadDocumentOptions = LoaderOptions &
+  Partial<TextLoaderOptions & JSONLoaderOptions & CSVLoaderOptions & HTMLLoaderOptions> & {
+    loader?: 'text' | 'json' | 'csv' | 'html';
+  };
+
+/**
+ * Registry of built-in loaders, in auto-detection order.
  */
 const LOADERS: DocumentLoader<LoaderOptions>[] = [
-  new TextLoader(),
+  // Most specific first: TextLoader accepts every string, so it must come last.
   new JSONLoader(),
-  new CSVLoader(),
   new HTMLLoader(),
+  new CSVLoader(),
+  new TextLoader(),
 ];
 
 /**
@@ -51,7 +71,7 @@ const LOADERS: DocumentLoader<LoaderOptions>[] = [
  */
 export async function loadDocument(
   source: LoaderSource,
-  options?: LoaderOptions & { loader?: 'text' | 'json' | 'csv' | 'html' }
+  options?: LoadDocumentOptions
 ): Promise<LoadedDocument[]> {
   const { loader: loaderType, ...loaderOptions } = options ?? {};
 
@@ -77,7 +97,7 @@ export async function loadDocument(
  */
 export async function loadDocuments(
   sources: LoaderSource[],
-  options?: LoaderOptions & { loader?: 'text' | 'json' | 'csv' | 'html' }
+  options?: LoadDocumentOptions
 ): Promise<LoadedDocument[]> {
   const results = await Promise.all(sources.map((source) => loadDocument(source, options)));
   return results.flat();

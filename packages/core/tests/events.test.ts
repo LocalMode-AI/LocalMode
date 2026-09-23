@@ -7,8 +7,10 @@ import {
   createEventEmitter,
   EventEmitter,
   createVectorDB,
+  wrapVectorDB,
+  eventMiddleware,
 } from '../src/index.js';
-import type { VectorDBEvents, EventCallback } from '../src/index.js';
+import type { VectorDBEvents } from '../src/index.js';
 
 describe('EventEmitter', () => {
   let emitter: EventEmitter<VectorDBEvents>;
@@ -187,11 +189,38 @@ describe('VectorDB Events', () => {
     }
   });
 
-  // VectorDB event tests - events are implemented via middleware
-  describe.skip('VectorDB events via eventMiddleware', () => {
-    // VectorDB does not have built-in event emission
-    // Events are implemented using eventMiddleware() wrapper
-    // See: wrapVectorDB({ db, middleware: eventMiddleware(emitter) })
+  describe('eventMiddleware()', () => {
+    it('emits add, delete and clear events for operations on the wrapped DB', async () => {
+      const events = createEventEmitter<VectorDBEvents>();
+      const received: Array<[string, unknown]> = [];
+      events.on('add', (e) => received.push(['add', e]));
+      events.on('delete', (e) => received.push(['delete', e]));
+      events.on('clear', (e) => received.push(['clear', e]));
+      const wrapped = wrapVectorDB({ db, middleware: eventMiddleware(events) });
+
+      await wrapped.add({ id: 'doc1', vector: new Float32Array(384).fill(0.1), metadata: { collection: 'notes' } });
+      await wrapped.delete('doc1');
+      await wrapped.clear();
+
+      expect(received).toEqual([
+        ['add', { id: 'doc1', collection: 'notes' }],
+        ['delete', { id: 'doc1' }],
+        ['clear', { documentCount: 0 }],
+      ]);
+    });
+
+    it('emits nothing for an add the database rejects', async () => {
+      const events = createEventEmitter<VectorDBEvents>();
+      const onAdd = vi.fn();
+      events.on('add', onAdd);
+      const wrapped = wrapVectorDB({ db, middleware: eventMiddleware(events) });
+
+      await expect(
+        wrapped.add({ id: 'bad', vector: new Float32Array(3), metadata: {} })
+      ).rejects.toThrow(/dimension/i);
+
+      expect(onAdd).not.toHaveBeenCalled();
+    });
   });
 });
 

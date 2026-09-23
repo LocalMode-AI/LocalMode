@@ -28,8 +28,8 @@
  * environment has no browser binary, so the automated witness uses server
  * render. See consumer-tests/README.md.
  *
- * Run: `pnpm --filter ui test:portability` (requires `registry:build` first;
- * the script runs it if `public/r` is missing).
+ * Run: `pnpm --filter ui test:portability` (always runs `registry:build`
+ * first, which rewrites `public/r/`).
  */
 
 import { spawnSync, spawn } from 'node:child_process';
@@ -91,8 +91,8 @@ const ITEMS = [
   'ui/security-privacy/passphrase-gate',
   'ui/security-privacy/vault-item-card',
   'ui/security-privacy/lock-status-badge',
-  // The five shared primitives + one registry hook promoted by
-  // blocks-shared-promotions (Wave 1). Each is a shipped file that MUST be BORN
+  // The five shared primitives + one registry hook promoted out of the blocks
+  // into the shared catalog. Each is a shipped file that MUST be BORN
   // CLEAN (no data-testid, no QA/E2E comments, ≤3-line header — the promotion,
   // not the block strip transform, cleans them) and stay zero-@localmode.
   // provider-badge composes provider-fallback-badge and system-prompt-editor
@@ -107,7 +107,7 @@ const ITEMS = [
   'ui/media-vision/use-webcam',
 ];
 
-// The shipped files the six Wave-1 promotions land, and the born-clean
+// The shipped files the six promoted items land, and the born-clean
 // invariant each must satisfy in its INSTALLED form. `src/hooks/use-webcam.ts`
 // is the registry:hook install target; the rest land flat under src/components.
 const BORN_CLEAN_FILES = [
@@ -432,7 +432,7 @@ if (failed.length > 0) {
 console.log('SECURITY_RENDER_OK length=' + (gateHtml.length + cardHtml.length + badgeHtml.length));
 `;
 
-// Promoted-primitives render witness (blocks-shared-promotions Wave 1): the five
+// Promoted-primitives render witness: the five
 // new primitives render fixture data with zero @localmode packages installed.
 // provider-badge composes provider-fallback-badge and system-prompt-editor
 // composes option-list through @/components/<item> sibling imports, so a
@@ -572,7 +572,7 @@ async function positiveTest(server) {
     );
   }
 
-  // Born-clean witnesses (blocks-shared-promotions Wave 1): the six promoted
+  // Born-clean witnesses: the six promoted
   // shipped files (five primitives + the registry hook) must land BORN CLEAN —
   // zero data-testid, zero QA/E2E scaffolding comments, and a ≤3-line file
   // header — inspected on the REAL installed copies, not the registry source.

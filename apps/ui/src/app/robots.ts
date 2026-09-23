@@ -3,7 +3,7 @@ import type { MetadataRoute } from 'next';
 const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://localmode.ai';
 
 /**
- * Three-tier crawler policy (seo.md §6.1), kept in sync with /ai.txt
+ * Three-tier crawler policy, kept in sync with /ai.txt
  * (Allow-Training: No, Allow-RAG/Inference: Yes):
  *  1. ALLOW retrieval/answer bots that cite sources (ChatGPT/Claude/Perplexity search).
  *  2. DISALLOW training-only crawlers.

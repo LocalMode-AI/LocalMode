@@ -77,12 +77,16 @@ The wrapped model preserves `modelId`, `provider`, and `contextLength` from the 
 Compose multiple middleware into one:
 
 ```typescript
-import { composeLanguageModelMiddleware, wrapLanguageModel } from '@localmode/core';
+import {
+  composeLanguageModelMiddleware,
+  semanticCacheMiddleware,
+  wrapLanguageModel,
+} from '@localmode/core';
 
 const composed = composeLanguageModelMiddleware([
-  guardrailsMiddleware,  // Outermost: runs first/last
-  cachingMiddleware,      // Middle
-  loggingMiddleware,      // Innermost: closest to model
+  guardrailsMiddleware,           // Outermost: runs first/last
+  semanticCacheMiddleware(cache), // Middle (cache from createSemanticCache(), see below)
+  loggingMiddleware,              // Innermost: closest to model
 ]);
 
 const model = wrapLanguageModel({
@@ -102,6 +106,8 @@ Generate: guardrails.wrapGenerate -> caching.wrapGenerate -> logging.wrapGenerat
 ```
 
 ## Examples
+
+The middleware on this page (`loggingMiddleware`, `guardrailsMiddleware`, `outputFilterMiddleware`) are plain `LanguageModelMiddleware` objects you define in your own code, shown in full below. They are not the `@localmode/core` exports of the same name: core's `cachingMiddleware()` and `loggingMiddleware()` are VectorDB middleware for `wrapVectorDB()` (see [Middleware](/docs/core/middleware)) and cannot wrap a language model. The built-in language-model middleware is `semanticCacheMiddleware()`.
 
 ### Logging middleware
 
@@ -179,7 +185,7 @@ The two middleware systems follow the same pattern. If you know one, you know th
 <Callout title="Middleware vs VectorDB Middleware">
   `LanguageModelMiddleware` uses the **wrap pattern** (`wrapGenerate`, `wrapStream`) which gives middleware full control over whether the underlying operation executes. This is essential for caching (skip the model entirely on cache hit).
 
-  `VectorDBMiddleware` uses the **hook pattern** (`beforeAdd`, `afterAdd`) which always executes the operation and lets middleware run before/after.
+  `VectorDBMiddleware` mostly uses the **hook pattern** (`beforeAdd`, `afterAdd`, `afterSearch`, …), which always executes the operation and lets middleware run before/after it. For reads it also offers the wrap pattern: `wrapSearch` and `wrapGet` can answer without touching the database, which is how the VectorDB `cachingMiddleware()` serves repeated searches.
 
   The wrap pattern is more powerful but the hook pattern is simpler for logging and validation.
 </Callout>

@@ -39,6 +39,13 @@ export class TextLoader implements DocumentLoader<TextLoaderOptions> {
   readonly supports = ['.txt', '.text', 'text/plain'];
 
   /**
+   * Create a loader.
+   *
+   * @param defaults - Options applied to every `load()` call; options passed to `load()` take precedence.
+   */
+  constructor(private readonly defaults: TextLoaderOptions = {}) {}
+
+  /**
    * Check if this loader can handle the source.
    */
   canLoad(source: LoaderSource): boolean {
@@ -61,7 +68,8 @@ export class TextLoader implements DocumentLoader<TextLoaderOptions> {
   /**
    * Load documents from text source.
    */
-  async load(source: LoaderSource, options: TextLoaderOptions = {}): Promise<LoadedDocument[]> {
+  async load(source: LoaderSource, callOptions: TextLoaderOptions = {}): Promise<LoadedDocument[]> {
+    const options: TextLoaderOptions = { ...this.defaults, ...callOptions };
     const { generateId: customGenerateId, separator, trim = true, abortSignal } = options;
 
     // Check for cancellation
@@ -167,8 +175,8 @@ export class TextLoader implements DocumentLoader<TextLoaderOptions> {
 }
 
 /**
- * Create a text loader with default options.
+ * Create a text loader whose options apply to every `load()` call.
  */
-export function createTextLoader(_options?: TextLoaderOptions): TextLoader {
-  return new TextLoader();
+export function createTextLoader(options?: TextLoaderOptions): TextLoader {
+  return new TextLoader(options);
 }

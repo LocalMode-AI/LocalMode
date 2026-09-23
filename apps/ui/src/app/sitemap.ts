@@ -13,8 +13,8 @@ const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://localmode.ai';
  * Sitemap for localmode.ai. Drift-proof: block routes come from the same
  * `category-map` the gallery renders, and docs pages from the same `source` the
  * docs render — so adding/splitting a block or doc updates the sitemap for free.
- * Priorities follow seo.md §2.3 (homepage 1.0, hubs 0.9, category 0.8, tool/doc
- * pages 0.7). No dated frontmatter exists yet, so `lastModified` is build time.
+ * Priorities: homepage 1.0, hubs 0.9, category 0.8, tool/doc
+ * pages 0.7. No dated frontmatter exists yet, so `lastModified` is build time.
  */
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();

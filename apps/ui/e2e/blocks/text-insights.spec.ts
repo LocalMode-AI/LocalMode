@@ -1,6 +1,6 @@
 /**
  * @file text-insights.spec.ts
- * @description E2E for the split text-insights category (split-writing-text).
+ * @description E2E for the split text-insights category.
  * Drives the four single-block routes /blocks/text-insights/{sentiment-analyzer,
  * text-classifier,model-evaluator,threshold-calibrator} (+ the category page)
  * via accessibility selectors (getByRole / getByLabel / getByText), with REAL

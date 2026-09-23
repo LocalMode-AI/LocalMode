@@ -59,7 +59,7 @@ npx shadcn@latest add @localmode/ui/data-documents/file-dropzone
 
 Every RAG pipeline starts with a file. The [`FileDropzone`](https://localmode.ai/docs/data-documents/file-dropzone) is a generic, format-agnostic drag-and-drop and click-to-browse zone built specifically for non-image files — PDFs to index, CSV/JSON vector exports to migrate, audio to transcribe. It is deliberately separate from the image-preview dropzone in the media family: no thumbnails, no image semantics, just accept-list and size validation.
 
-It runs every dropped file through `validateFile()` from `@localmode/react` against your `accept` MIME list and a `maxSize`, then emits only the valid files via `onUpload`. Rejected files go to `onReject` with a reason, so you can show the user exactly why a file bounced.
+It runs every dropped file through the copy-owned `validateFile()` helper (installed with it from `@localmode/ui/lib/browser-utils`) against your `accept` MIME list and a `maxSize`, then emits only the valid files via `onUpload`. Rejected files go to `onReject` with a reason, so you can show the user exactly why a file bounced.
 
 ```tsx
 import { FileDropzone } from '@/components/file-dropzone';

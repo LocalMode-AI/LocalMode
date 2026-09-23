@@ -27,6 +27,8 @@ Use the Vercel AI SDK interface you already know with models running entirely in
   <Tab value="bun">```bash bun add @localmode/ai-sdk @localmode/core ai ```</Tab>
 </Tabs>
 
+`@localmode/ai-sdk` implements the AI SDK 6 provider interfaces (`LanguageModelV3`, `EmbeddingModelV3`): it needs `ai` 6.0.0 or later, alongside `@ai-sdk/provider` and `@ai-sdk/provider-utils` as peer dependencies, and is tested against `ai` 6.0.287.
+
 Plus at least one LocalMode provider:
 
 <Tabs items={['LLM (WebLLM)', 'Embeddings (Transformers)']}>

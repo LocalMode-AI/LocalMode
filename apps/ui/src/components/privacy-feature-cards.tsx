@@ -32,7 +32,7 @@ const FEATURES: Feature[] = [
     icon: Lock,
     stat: 'Secure',
     title: 'Local Storage',
-    description: 'Encrypted on-device',
+    description: 'On-device, optionally encrypted',
   },
   {
     icon: CircleOff,

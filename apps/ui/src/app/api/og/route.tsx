@@ -1,6 +1,6 @@
 /**
  * @file route.tsx
- * @description Dynamic 1200×630 social-share image (seo.md §2.6) rendered with
+ * @description Dynamic 1200×630 social-share image rendered with
  * next/og. Every page points `openGraph.images` / `twitter.images` at
  * `/api/og?title=…&desc=…&eyebrow=…` via `@/lib/og`. Uses real Inter (the site
  * font) in three weights for a crisp, on-brand card; falls back to the built-in

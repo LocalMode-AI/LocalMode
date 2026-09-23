@@ -105,13 +105,27 @@ export class JSONLoader implements DocumentLoader<JSONLoaderOptions> {
   readonly supports = ['.json', 'application/json', 'text/json'];
 
   /**
+   * Create a loader.
+   *
+   * @param defaults - Options applied to every `load()` call; options passed to `load()` take precedence.
+   */
+  constructor(private readonly defaults: JSONLoaderOptions = {}) {}
+
+  /**
    * Check if this loader can handle the source.
    */
   canLoad(source: LoaderSource): boolean {
     if (typeof source === 'string') {
-      // Basic heuristic: starts with { or [
+      // An object or array literal that actually parses; bracketed prose such
+      // as "[Note] ..." is left to the text loader.
       const trimmed = source.trim();
-      return trimmed.startsWith('{') || trimmed.startsWith('[');
+      if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return false;
+      try {
+        const parsed: unknown = JSON.parse(trimmed);
+        return typeof parsed === 'object' && parsed !== null;
+      } catch {
+        return false;
+      }
     }
     if (source instanceof File) {
       return source.name.endsWith('.json') || source.type === 'application/json';
@@ -125,7 +139,8 @@ export class JSONLoader implements DocumentLoader<JSONLoaderOptions> {
   /**
    * Load documents from JSON source.
    */
-  async load(source: LoaderSource, options: JSONLoaderOptions = {}): Promise<LoadedDocument[]> {
+  async load(source: LoaderSource, callOptions: JSONLoaderOptions = {}): Promise<LoadedDocument[]> {
+    const options: JSONLoaderOptions = { ...this.defaults, ...callOptions };
     const {
       generateId: customGenerateId,
       textFields,
@@ -314,8 +329,8 @@ export class JSONLoader implements DocumentLoader<JSONLoaderOptions> {
 }
 
 /**
- * Create a JSON loader with default options.
+ * Create a JSON loader whose options apply to every `load()` call.
  */
-export function createJSONLoader(_options?: JSONLoaderOptions): JSONLoader {
-  return new JSONLoader();
+export function createJSONLoader(options?: JSONLoaderOptions): JSONLoader {
+  return new JSONLoader(options);
 }

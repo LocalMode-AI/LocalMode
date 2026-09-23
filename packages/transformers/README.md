@@ -26,8 +26,10 @@ pnpm install @localmode/transformers @localmode/core
 
 | Package | Purpose |
 | ------- | ------- |
-| `@huggingface/transformers` (^4.2.0) | ML inference via ONNX Runtime (WebGPU/WASM) |
+| `@huggingface/transformers` (~4.2.0) | ML inference via ONNX Runtime (WebGPU/WASM) |
 | `phonemizer` | eSpeak-NG WASM for Kokoro TTS text-to-phoneme conversion |
+
+`@huggingface/transformers` is pinned to the 4.2.x line (patch updates only). Transformers.js 4.3.0 ships an onnxruntime-web build whose WebGPU 4-bit `MatMulNBits` kernel fails on Apple Silicon Chrome, which breaks every language model on WebGPU (the default `q4` path) while encoders and WASM keep working.
 
 ## Overview
 

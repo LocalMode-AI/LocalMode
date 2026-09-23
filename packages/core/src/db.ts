@@ -31,6 +31,7 @@ import { trainPQ, pqQuantize, pqDequantize } from './quantization/pq.js';
 import type { CompressionConfig } from './storage/compression.js';
 import type { EmbeddingModel, ModelFingerprint } from './embeddings/types.js';
 import { globalEventBus } from './events/index.js';
+import { ValidationError } from './errors/index.js';
 
 /**
  * Internal VectorDB implementation.
@@ -1220,10 +1221,27 @@ export class VectorDBImpl<TMetadata extends Record<string, unknown> = Record<str
  *   quantization: { type: 'pq' },
  * });
  * ```
+ *
+ * @throws {ValidationError} If `encryption.enabled` is `true` — encryption at
+ * rest is not implemented by `createVectorDB()`; use `encryptionMiddleware()`
+ * via `wrapVectorDB()` instead.
+ * @see {@link wrapVectorDB} and `encryptionMiddleware()` for metadata encryption.
  */
 export async function createVectorDB<TMetadata extends Record<string, unknown> = Record<string, unknown>>(
   config: VectorDBConfig<TMetadata>
 ): Promise<VectorDB<TMetadata>> {
+  // The deprecated `encryption` option was never wired to storage. Refuse it
+  // rather than let callers believe their data is encrypted at rest.
+  if (config.encryption?.enabled) {
+    throw new ValidationError(
+      'The createVectorDB() encryption option is not supported: data would be stored unencrypted',
+      'Remove `encryption` from the config and wrap the database instead: ' +
+        "const { key } = await deriveEncryptionKey(passphrase); " +
+        'const secureDb = wrapVectorDB({ db, middleware: [encryptionMiddleware({ key })] }). ' +
+        'This encrypts document metadata; vectors stay plaintext so the index can search them.'
+    );
+  }
+
   // Merge enableGPU convenience flag into indexOptions.gpu
   const indexOptions = {
     ...DEFAULT_CONFIG.indexOptions,

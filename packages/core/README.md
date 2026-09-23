@@ -61,6 +61,7 @@ npm install @localmode/core
 - **Typed metadata** with generic `createVectorDB<TMetadata>()` for compile-time filter safety
 - Optional Zod schema validation on `add()`/`addMany()`
 - `TypedFilterQuery<TMetadata>` for autocomplete on filter keys and operators
+- **VectorDB middleware** (`wrapVectorDB`) — `before*`/`after*` hooks plus `wrapSearch`/`wrapGet` continuations, with built-in caching, logging, validation, and metadata encryption
 
 ### Pipelines — [Docs](https://localmode.dev/docs/core/pipelines)
 
@@ -83,7 +84,7 @@ npm install @localmode/core
 - `embed()` - Generate embeddings for single values
 - `embedMany()` - Batch embedding with progress tracking
 - `semanticSearch()` - Embed a query and search a VectorDB; `results[].text` round-trips chunk text stored by `ingest()`
-- Middleware support for caching, logging, validation
+- Embedding middleware (`wrapEmbeddingModel`) for retry, rate limiting, PII redaction, and differential privacy
 
 ### Embedding Drift Detection — [Docs](https://localmode.dev/docs/core/embedding-drift)
 
@@ -123,7 +124,7 @@ npm install @localmode/core
 - `TEXT_METADATA_FIELD` - The shared metadata key (`'_text'`) under which ingestion stores chunk text and `semanticSearch()` reads it back
 - `createBM25()` - BM25 keyword search
 - `hybridFuse()`, `reciprocalRankFusion()` - Hybrid search combining vector and keyword results
-- Document loaders (Text, JSON, CSV, HTML)
+- Document loaders (Text, JSON, CSV, HTML) — `loadDocument()` auto-detects JSON → HTML → CSV → text; loader classes and `create*Loader()` factories take constructor options
 
 ### Knowledge Base Engine — [Docs](https://localmode.dev/docs/core/knowledge-base)
 
@@ -450,6 +451,23 @@ import {
 } from '@localmode/core';
 ```
 
+### Document Loaders
+
+```typescript
+import {
+  loadDocument, // auto-detects JSON → HTML → CSV → text, or pass { loader: 'csv' | ... }
+  loadDocuments,
+  createLoaderRegistry, // your own loader list, e.g. with PDFLoader from @localmode/pdfjs
+  TextLoader,
+  JSONLoader,
+  CSVLoader,
+  HTMLLoader,
+} from '@localmode/core';
+
+const docs = await loadDocument(csvText, { loader: 'csv', textColumn: 'content' });
+const rows = await new CSVLoader({ textColumn: 'content' }).load(csvText); // per-call options win
+```
+
 ### Knowledge Base Engine
 
 ```typescript
@@ -624,17 +642,27 @@ import { askDocument, askTable } from '@localmode/core';
 
 ```typescript
 import {
+  // Embedding model middleware — wrapEmbeddingModel({ model, middleware })
   wrapEmbeddingModel,
-  wrapVectorDB,
-  cachingMiddleware,
-  loggingMiddleware,
+  composeEmbeddingMiddleware,
   retryMiddleware,
   rateLimitMiddleware,
-  validationMiddleware,
   piiRedactionMiddleware,
-  encryptionMiddleware,
+  // VectorDB middleware — wrapVectorDB({ db, middleware })
+  wrapVectorDB,
+  composeVectorDBMiddleware,
+  cachingMiddleware, // caches search()/get(), invalidated on every write
+  loggingMiddleware,
+  validationMiddleware,
+  encryptionMiddleware, // encrypts metadata; vectors stay plaintext for the index
 } from '@localmode/core';
 ```
+
+VectorDB middleware hooks: `beforeAdd`/`afterAdd`, `wrapGet`/`afterGet`, `beforeSearch`/`wrapSearch`/`afterSearch`, `beforeDelete`/`afterDelete`, `afterUpdate`, `afterDeleteWhere`, `afterImport`, `beforeClear`/`afterClear`, and `onError`. The `wrapSearch`/`wrapGet` hooks receive a `doSearch()`/`doGet()` continuation, so a middleware can answer without touching the database; in a composed array the first middleware is outermost. An `onError` handler that returns `true` suppresses the error and the operation resolves with a neutral value (`get` → `null`, `search` → `[]`, `deleteWhere` → `0`, writes → `undefined`).
+
+- `cachingMiddleware({ maxSearchResults, ttlMs })` answers repeated `search()`/`get()` calls from an LRU cache and invalidates it on add, update, delete, `deleteWhere`, import, and clear.
+- `loggingMiddleware()` logs each operation with its `durationMs`.
+- `encryptionMiddleware({ key })` encrypts metadata with AES-GCM. Vectors always stay plaintext because the index computes distances over them (`encryptVectors: true` throws a `ValidationError`); `encryptText: false` keeps string fields plaintext and filterable; `excludeFields` skips named fields.
 
 ### Security
 

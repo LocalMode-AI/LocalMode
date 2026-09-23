@@ -1,8 +1,8 @@
 /**
  * @file photo.spec.ts
  * @description E2E for the four `ui/blocks/photo/*` blocks (split from the retired
- * `photo-search` monolith, split-knowledge-photo Wave 3). Drives role/label/text
- * selectors ONLY (blocks-ux-pass Wave 4 — zero `data-testid`) against a production
+ * `photo-search` monolith). Drives role/label/text
+ * selectors ONLY (zero `data-testid`) against a production
  * build in real Chromium, with REAL CLIP model downloads + real inference — no
  * mocked model boundary.
  *
@@ -13,7 +13,7 @@
  *   text→image + image→image search, union-find dedup, re-categorization).
  * - REAL: the four blocks are SEPARATE pages, each owning its OWN usePhotoLibrary
  *   instance. The end-to-end test navigates all four in ONE context so CLIP
- *   downloads once (browser-cache-shared per D7) — and asserts BOTH the
+ *   downloads once (same model id, so the browser cache is shared) — and asserts BOTH the
  *   cache-shared model (no second full weight download) AND the unshared state
  *   (each block starts with an empty library).
  * - REAL: fixtures are committed files (e2e/fixtures/photo-search/): a real
@@ -77,7 +77,7 @@ const CONSOLE_ERROR_ALLOWLIST: ReadonlyArray<{
     // library falls back cleanly (real embedding + classification succeed — the
     // ranking/duplicate assertions prove it). Chrome still logs the 404.
     // SCOPE: only .json 404s from a HuggingFace host. WHO/WHEN: carried over
-    // verbatim from the retired photo-search.spec.ts (blocks-photo-search task 5.2).
+    // verbatim from the retired photo-search.spec.ts.
     reason: 'benign HF 404: optional CLIP sidecar-file probe (library falls back)',
     matches: (error) =>
       /huggingface\.co|hf\.co/i.test(error.url) && /\.json(\?|$)/i.test(error.url),

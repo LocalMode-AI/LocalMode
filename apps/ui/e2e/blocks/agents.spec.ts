@@ -1,6 +1,6 @@
 /**
  * @file agents.spec.ts
- * @description E2E suite for the `agents` category (split-agent-device Wave 3) —
+ * @description E2E suite for the `agents` category —
  * the two self-sufficient blocks that grew out of `agent-structured-data`:
  * `/blocks/agents/research-agent` (tool-using ReAct loop + human-in-the-loop
  * approval) and `/blocks/agents/data-extractor` (schema-validated extraction into
@@ -11,7 +11,7 @@
  * MODE→BLOCK RE-TARGET (honest delta): the old block was a two-mode container
  * over ONE shared WebLLM instance, and the old spec's "switch modes without
  * losing model state" lane proved that shared instance survived a mode switch.
- * The split DELIBERATELY removes the shared instance (D7 self-sufficiency): each
+ * The split DELIBERATELY removes the shared instance (each block is self-sufficient): each
  * block owns its OWN `useModelLoad` (same default model id ⇒ browser-cache-shared
  * download, separate in-memory instances). There is no longer a mode switch to
  * preserve state across. The preserved-state INTENT re-targets to per-block

@@ -70,6 +70,7 @@ console.log(result.text); // Full extracted text
 console.log(result.pageCount); // Total number of pages
 console.log(result.pages); // Array of { pageNumber, text } objects
 console.log(result.metadata); // PDF metadata
+console.log(result.metadataError); // Set only if the metadata could not be read
 ```
 
 #### Options
@@ -119,19 +120,22 @@ console.log(result.metadata); // PDF metadata
       type: 'number',
     },
     metadata: {
-      description: 'PDF metadata (title, author, etc.)',
+      description: 'PDF metadata (title, author, dates, etc.). Present (with undefined fields) when the PDF has no /Info dictionary; absent only when reading it failed',
       type: 'PDFMetadata | undefined',
+    },
+    metadataError: {
+      description: 'Why the metadata could not be read. Text is still returned; the reason is also warned once to the console. Never set merely because a PDF has no metadata',
+      type: 'string | undefined',
     },
   }}
 />
 
 ### PDFLoader
 
-Document loader for integration with LocalMode core:
+A `DocumentLoader` implementation for PDFs. Call its `load()` method directly: core's `loadDocument()` only auto-detects the built-in text, JSON, HTML, and CSV loaders, so it does not route PDFs to `PDFLoader`.
 
 ```typescript
 import { PDFLoader } from '@localmode/pdfjs';
-import { loadDocument } from '@localmode/core';
 
 const loader = new PDFLoader({
   splitByPage: false, // Single doc or one per page
@@ -140,13 +144,28 @@ const loader = new PDFLoader({
   password: undefined,
 });
 
-const { documents } = await loadDocument(loader, pdfBlob);
+// load() returns LoadedDocument[] ({ id, text, metadata })
+const documents = await loader.load(pdfBlob);
 
 for (const doc of documents) {
   console.log(doc.text);
   console.log(doc.metadata);
 }
 ```
+
+Each document's `metadata` carries:
+
+| Field | Description |
+| --- | --- |
+| `source` | File name, URL, or a generated `blob-N` / `document-N` id |
+| `mimeType` | `'application/pdf'` |
+| `pageCount` | Total pages in the PDF |
+| `title` | The PDF's `/Title`, if set |
+| `createdAt` | The PDF's `/CreationDate`, if set and valid |
+| `metadataError` | Present only when the PDF's information dictionary could not be read (the same reason as `PDFExtractResult.metadataError`); absent otherwise |
+| `page`, `totalPages` | Set on each document when `splitByPage` is `true` |
+
+`load()` accepts a `File`, `Blob`, `ArrayBuffer`, a URL string, or `{ type: 'url', url }` (URLs are fetched), and honors `abortSignal` and `generateId` from its options argument.
 
 ### Split by Page
 
@@ -156,14 +175,14 @@ Create separate documents for each page:
 import { PDFLoader } from '@localmode/pdfjs';
 
 const loader = new PDFLoader({ splitByPage: true });
-const { documents } = await loadDocument(loader, pdfBlob);
+const documents = await loader.load(pdfBlob);
 
 console.log(`Loaded ${documents.length} pages`);
 
-documents.forEach((doc, i) => {
-  console.log(`Page ${i + 1}: ${doc.text.substring(0, 100)}...`);
-  console.log(`  Metadata:`, doc.metadata);
-});
+for (const doc of documents) {
+  // metadata.page and metadata.totalPages are set when splitByPage is true
+  console.log(`Page ${doc.metadata.page}: ${doc.text.substring(0, 100)}...`);
+}
 ```
 
 ### Utility Functions
@@ -189,7 +208,7 @@ Build a PDF-powered RAG system:
 
 ```typescript
 import { PDFLoader } from '@localmode/pdfjs';
-import { createVectorDB, chunk, ingest, semanticSearch, streamText } from '@localmode/core';
+import { createVectorDB, ingest, semanticSearch, streamText } from '@localmode/core';
 import { transformers } from '@localmode/transformers';
 import { webllm } from '@localmode/webllm';
 
@@ -201,33 +220,23 @@ const db = await createVectorDB({ name: 'pdf-docs', dimensions: 384 });
 // Load and process PDF
 async function ingestPDF(file: File) {
   const loader = new PDFLoader({ splitByPage: true });
-  const { documents } = await loadDocument(loader, file);
+  const pages = await loader.load(file);
 
-  // Chunk each page
-  const allChunks = documents.flatMap((doc, pageIndex) =>
-    chunk(doc.text, {
-      strategy: 'recursive',
-      size: 512,
-      overlap: 50,
-    }).map((c) => ({
-      text: c.text,
-      metadata: {
-        filename: file.name,
-        page: pageIndex + 1,
-        start: c.start,
-        end: c.end,
-      },
-    }))
-  );
-
-  // Ingest into vector DB
-  await ingest({
+  // ingest() chunks each page, embeds the chunks, and stores them. Every chunk
+  // inherits its page's metadata plus sourceDocId, chunkIndex, chunkStart and
+  // chunkEnd, so pass whole pages rather than pre-chunked text.
+  const { chunksCreated } = await ingest({
     db,
     model: embeddingModel,
-    documents: allChunks,
+    documents: pages.map((page) => ({
+      id: page.id,
+      text: page.text,
+      metadata: { filename: file.name, page: page.metadata.page },
+    })),
+    chunking: { strategy: 'recursive', size: 512, overlap: 50 },
   });
 
-  return allChunks.length;
+  return chunksCreated;
 }
 
 // Query
@@ -337,9 +346,12 @@ try {
 ## Metadata Extraction
 
 ```typescript
-const { metadata } = await extractPDFText(file);
+const { metadata, metadataError } = await extractPDFText(file);
 
-if (metadata) {
+if (metadataError) {
+  // The information dictionary could not be read; the text is still usable
+  console.warn('No metadata:', metadataError);
+} else if (metadata) {
   console.log('Title:', metadata.title);
   console.log('Author:', metadata.author);
   console.log('Subject:', metadata.subject);
@@ -348,6 +360,20 @@ if (metadata) {
   console.log('Modification Date:', metadata.modificationDate);
 }
 ```
+
+`creationDate` and `modificationDate` are parsed from PDF date strings (`D:YYYYMMDDHHmmSSOHH'mm'`). A `Z` suffix is UTC and a `+HH'mm'` / `-HH'mm'` suffix is applied as an offset from UTC (hours-only offsets and a missing closing apostrophe are accepted). A date with no zone is read as local time, as the PDF specification leaves its zone unspecified. Malformed or impossible dates (a month of 13, February 30) give `undefined` rather than an invalid or rolled-over `Date`.
+
+## Runtime Support
+
+`@localmode/pdfjs` depends on `pdfjs-dist` 6, which sets these floors:
+
+| Runtime | Minimum |
+| --- | --- |
+| Chrome | 125+ |
+| Safari | 18+ |
+| Node.js (server-side extraction) | 22.13+ |
+
+In the browser the package loads PDF.js's default build and fetches the worker from jsDelivr (`pdfjs-dist@<version>/build/pdf.worker.min.mjs`) unless you set `GlobalWorkerOptions.workerSrc` yourself. On Node.js it loads PDF.js's `legacy` build (`pdfjs-dist/legacy/build/pdf.mjs`), the build PDF.js supports for Node, and requests `useSystemFonts: true` so documents that reference non-embedded standard fonts extract the same text as in a browser. A DOM-emulating test environment such as jsdom runs on Node and gets the Node path. The selection is automatic; there is nothing to configure.
 
 ## Best Practices
 

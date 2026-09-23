@@ -209,7 +209,7 @@ await db.add({
 });
 
 // Search works identically offline
-const results = await db.search(queryVector, { topK: 5 });
+const results = await db.search(queryVector, { k: 5 });
 ```
 
 The `IndexedDBStorage` adapter stores documents, vectors, HNSW graph indexes, and collection metadata in separate IndexedDB object stores. The Write-Ahead Log (WAL) option ensures that interrupted writes do not corrupt the database -- critical for mobile devices where the browser may be killed at any time.

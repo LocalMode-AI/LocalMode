@@ -1,6 +1,6 @@
 ---
 title: "Build a GDPR-Compliant AI Feature Without Touching User Data"
-description: "On-device browser inference eliminates the data processor relationship, cross-border transfers, and DPA negotiations that cloud AI demands. Four technical patterns -- PII redaction, encrypted vectors, differential privacy, and local classification -- show how to architect AI features that satisfy GDPR Articles 5, 25, 28, and 35 by design."
+description: "On-device browser inference eliminates the data processor relationship, cross-border transfers, and DPA negotiations that cloud AI demands. Four technical patterns -- PII redaction, encrypted storage, differential privacy, and local classification -- show how to architect AI features that satisfy GDPR Articles 5, 25, 28, and 35 by design."
 author: LocalMode
 date: 2026-02-05
 dateModified: "2026-07-04"
@@ -8,7 +8,7 @@ faq:
   - question: "How does on-device AI inference change GDPR compliance requirements?"
     answer: "When ML inference runs in a WebAssembly sandbox inside the browser, no personal data reaches any third party. This eliminates the data processor relationship (Article 28), removes cross-border transfer obligations (Chapter V), achieves data minimization by architecture (Article 5(1)(c)), and implements privacy by design (Article 25) at the infrastructure level."
   - question: "What are the four technical patterns for GDPR-compliant AI in the browser?"
-    answer: "PII detection and redaction before processing (redactPII strips emails, phones, SSNs before embedding), encrypted vectors at rest (AES-GCM encryption via Web Crypto API), differential privacy noise injection on embeddings (dp-middleware adds calibrated noise), and local classification that never transmits user text to any server."
+    answer: "PII detection and redaction before processing (redactPII strips emails, phones, SSNs before embedding), encrypted metadata at rest (AES-GCM encryption via Web Crypto API), differential privacy noise injection on embeddings (dp-middleware adds calibrated noise), and local classification that never transmits user text to any server."
   - question: "Does on-device AI completely eliminate GDPR obligations?"
     answer: "No. On-device inference eliminates server-side data risks and the Article 28 processor relationship, but client-side threats remain: malicious browser extensions, XSS attacks, and compromised npm dependencies. A DPIA may still be recommended for certain processing activities, though its scope is significantly reduced. Consult qualified legal counsel for your specific situation."
   - question: "How does local AI handle the GDPR Article 44 cross-border transfer requirement?"
@@ -75,7 +75,7 @@ On-device inference is a textbook implementation of this principle: the architec
 
 ## Four Technical Patterns for Privacy-by-Design AI
 
-The following patterns use real API signatures from `@localmode/core` (version 1.0.2, zero runtime dependencies). Every function shown here runs entirely in the browser.
+The following patterns use real API signatures from `@localmode/core` (version 2.5.0, zero runtime dependencies). Every function shown here runs entirely in the browser.
 
 ### Pattern 1: PII Detection and Redaction Before Processing
 
@@ -127,7 +127,7 @@ const { embedding } = await embed({
 
 **GDPR relevance**: This implements the Article 5(1)(c) data minimization principle at the application layer. Even though the model runs locally, the stored vector contains no PII signal. The [PII Redactor block](https://localmode.ai/blocks/privacy/pii-redactor) demonstrates this pattern with NER-based entity detection and downloadable redacted output.
 
-### Pattern 2: Encrypted Vector Storage
+### Pattern 2: Encrypted Storage
 
 [Article 5(1)(f)](https://gdpr-info.eu/art-5-gdpr/) requires "appropriate security of the personal data, including protection against unauthorised or unlawful processing." IndexedDB data is accessible to any JavaScript running on the same origin. Encryption at rest addresses this.
 
@@ -145,19 +145,18 @@ const { key, salt } = await deriveEncryptionKey('user-chosen-password');
 // Store salt for future sessions (the salt is not secret)
 localStorage.setItem('encryption-salt', salt);
 
-// Create an encrypted vector database
+// Create a vector database with encrypted metadata
 const db = await createVectorDB({ name: 'medical-notes', dimensions: 384 });
 const encryptedDb = wrapVectorDB({
   db,
   middleware: encryptionMiddleware({
     key,
-    encryptVectors: true,    // AES-GCM encrypt each Float32Array
-    encryptMetadata: true,   // Encrypt all metadata fields
+    encryptMetadata: true,   // Encrypt all metadata fields (the default)
     excludeFields: ['type'], // Leave non-sensitive fields for filtering
   }),
 });
 
-// Data is encrypted before IndexedDB write, decrypted on read
+// Metadata is encrypted before the IndexedDB write, decrypted on read
 await encryptedDb.add({
   id: 'note-1',
   vector: embedding,
@@ -167,6 +166,8 @@ await encryptedDb.add({
 // Search works transparently -- results are decrypted automatically
 const results = await encryptedDb.search(queryVector, { k: 5 });
 ```
+
+The middleware encrypts metadata -- the patient name and diagnosis above -- but leaves the vector itself in plaintext, because the index has to compute distances over it to store and search it. (Passing `encryptVectors: true` throws a `ValidationError`.) Combine this with Pattern 1 so the embedded text carries no PII signal, and with Pattern 3 so the stored vector is noised. To protect vectors at rest outside the live index, encrypt an exported snapshot with `encryptVector()`.
 
 All cryptographic operations use the Web Crypto API (`crypto.subtle`). No cryptographic dependencies are bundled -- `@localmode/core` has zero runtime dependencies.
 
@@ -308,14 +309,14 @@ const privateModel = wrapEmbeddingModel({
   middleware: dpEmbeddingMiddleware({ epsilon: 1.0 }, budget),
 });
 
-// 4. Encrypted vector database
+// 4. Vector database with encrypted metadata
 const db = await createVectorDB({ name: 'records', dimensions: 384 });
 const encryptedDb = wrapVectorDB({
   db,
   middleware: encryptionMiddleware({ key }),
 });
 
-// Pipeline: classify locally, embed with PII redaction + DP noise, store encrypted
+// Pipeline: classify locally, embed with PII redaction + DP noise, store with encrypted metadata
 const { label } = await classify({
   model: transformers.classifier('Xenova/distilbert-base-uncased-finetuned-sst-2-english'),
   text: userInput,
@@ -332,7 +333,7 @@ await encryptedDb.add({
 At the end of this pipeline:
 - PII was stripped before the text reached the embedding model
 - Calibrated Gaussian noise was added to the embedding vector
-- The noisy vector was encrypted with AES-256-GCM before IndexedDB storage
+- The document's metadata was encrypted with AES-256-GCM before IndexedDB storage (the noisy vector stays in plaintext so it can be searched)
 - Classification happened entirely on-device with no network request
 - No personal data was transmitted to any third party
 

@@ -167,7 +167,7 @@ const llm = transformers.languageModel('onnx-community/SmolLM2-135M-Instruct', {
 
 Transformers.js provides the runtime. LocalMode provides the developer interface.
 
-The `@localmode/transformers` package (version 4.0.0) depends on `@huggingface/transformers` ^4.2.0 and implements 26 model factory methods across 27 implementation files. Each factory returns an object that implements a core interface from `@localmode/core` -- meaning the same `embed()`, `classify()`, `transcribe()`, or `generateText()` function works regardless of which provider produced the model.
+The `@localmode/transformers` package (version 4.1.3) depends on `@huggingface/transformers` ~4.2.0 (pinned to the 4.2 line, because 4.3.0 breaks language models on WebGPU) and implements 26 model factory methods across 27 implementation files. Each factory returns an object that implements a core interface from `@localmode/core` -- meaning the same `embed()`, `classify()`, `transcribe()`, or `generateText()` function works regardless of which provider produced the model.
 
 ### The Provider Pattern
 
@@ -233,7 +233,7 @@ Here is the complete table of every model type `@localmode/transformers` exposes
 | 25 | `languageModel()` | `LanguageModel` | Generation | `onnx-community/SmolLM2-135M-Instruct` |
 | 26 | `vad()` | `TransformersSileroVAD` | Audio | Silero VAD voice activity detection |
 
-All 26 are powered by a single `@huggingface/transformers@^4.2.0` dependency.
+All 26 are powered by a single `@huggingface/transformers@~4.2.0` dependency.
 
 ---
 
@@ -340,7 +340,7 @@ All LocalMode-specific claims (factory method counts, implementation file counts
 - [ONNX Runtime quantization documentation](https://onnxruntime.ai/docs/performance/model-optimizations/quantization.html)
 
 **LocalMode Source Code:**
-- `packages/transformers/package.json` - `@huggingface/transformers` ^4.2.0, package version 4.0.0
+- `packages/transformers/package.json` - `@huggingface/transformers` ~4.2.0, package version 4.1.3
 - `packages/transformers/src/provider.ts` - 26 factory methods
 - `packages/transformers/src/implementations/` - 27 implementation files
 - `packages/transformers/src/implementations/language-model.ts` - dual-loading strategy (pipeline vs AutoModelForCausalLM)

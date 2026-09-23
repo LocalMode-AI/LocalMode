@@ -127,7 +127,10 @@ Everything after `retriever` — chains, prompts, output parsers — stays ident
 The `LocalModeReranker` implements `BaseDocumentCompressor`, so it works with LangChain's `ContextualCompressionRetriever`:
 
 ```typescript
+// langchain 0.3.x:
 import { ContextualCompressionRetriever } from 'langchain/retrievers/contextual_compression';
+// langchain 1.x moved it to @langchain/classic:
+// import { ContextualCompressionRetriever } from '@langchain/classic/retrievers/contextual_compression';
 
 const compressedRetriever = new ContextualCompressionRetriever({
   baseCompressor: reranker,

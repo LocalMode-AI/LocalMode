@@ -81,7 +81,7 @@ apps/
 
 | Tool | Version | Notes |
 | ---- | ------- | ----- |
-| **Node.js** | `>= 18` | `20 LTS` or newer recommended |
+| **Node.js** | `>= 22.13` | The root `engines.node` floor. `22 LTS` or `24 LTS` recommended. `pdfjs-dist` 6 requires Node 22.13+ (its real-PDF suite runs in Node under `pnpm test`); Next.js 16 needs 20.9+; Vite 7 / Vitest 4 need 20.19+ or 22.12+ |
 | **pnpm** | `>= 10` | The required package manager — do **not** use npm or yarn to install |
 | **git** | any recent | |
 
@@ -130,7 +130,7 @@ pnpm --filter docs dev                   # run the localmode.dev docs site local
 | A provider implementation | `packages/transformers/src/implementations/` |
 | A storage adapter | `packages/dexie/src/storage.ts`, `packages/idb/src/storage.ts` |
 | A UI primitive | `apps/ui/registry/localmode/<family>/<component>/` |
-| A block | `apps/ui/src/app/blocks/<name>/` |
+| A block | `apps/ui/src/app/blocks/<category>/<slug>/` (the flat `chat` block: `apps/ui/src/app/blocks/chat/`) |
 
 ---
 
@@ -216,15 +216,19 @@ import { createStorageAdapterConformanceSuite } from '@localmode/core';
 ### Running tests
 
 ```bash
-pnpm test              # Vitest over packages/**  (jsdom environment, globals on)
+pnpm test              # Vitest 4 over packages/**  (jsdom environment, globals on)
 pnpm test:types        # Type-level tests (*.test-d.ts) — NOT run by `pnpm test`
 pnpm --filter @localmode/core test        # just one package
+pnpm --filter @localmode/transformers test:validate   # model-downloading integration suite (network, slow)
 ```
 
 - **Where tests live:** `packages/<pkg>/tests/**` and colocated `*.test.ts` / `*.spec.ts`.
 - **Type-level contracts** go in `packages/core/tests/**/*.test-d.ts` and are checked by `pnpm test:types` (Vitest does **not** run them — run both when you touch generic signatures).
 - **Mock utilities** (`createMockEmbeddingModel()`, `createMockStorage()`, `createSeededRandom()`, the conformance suite, …) live in `packages/core/src/testing/index.ts`.
 - **Benchmarks** use Vitest's `bench()`.
+- **Skips:** the root suite skips only the three `HF_LIVE`-gated live Hugging Face API tests in `packages/wllama/tests/discovery.test.ts` (run them with `HF_LIVE=1 pnpm --filter @localmode/wllama exec vitest run tests/discovery.test.ts`). Don't add others.
+- **Suites outside the default pattern** get their own Vitest config — Vitest 4 has no `--include` flag. The transformers model-downloading suite (`tests/v4-migration-validation.integration.ts`) runs through `packages/transformers/vitest.integration.config.ts` via `test:validate`, so `pnpm test` never downloads models.
+- **Keep `vi.mock` at module top level** — Vitest 4 warns about a nested `vi.mock`, and it does not take effect.
 - **`apps/ui` has its own layers** — unit (`test:unit`), consumer install tests (`test:portability`, `test:blocks`), and real-model Playwright E2E (`test:e2e`). See below.
 
 ---
@@ -280,7 +284,7 @@ Changes that touch only `apps/*`, docs, tests, or tooling generally **don't** ne
 - **Portability invariant.** A primitive must compile with **zero `@localmode/*` packages installed**: define prop shapes locally, list only real npm imports in `dependencies`, and pull browser helpers from the copy-owned `@localmode/ui/lib/*` items via `@/lib/<name>`. **Blocks are the sole carve-out** — they're the wiring layer and may declare `@localmode/*` deps.
 - **No model download on page load.** Docs demos auto-render and `/blocks` pages default-mount the live block, but **every model load must be gated behind an explicit user action**. Mark a docs demo `<ComponentPreview gated>` if it would otherwise fetch on mount.
 - **No `data-testid` in blocks.** The block tree is testid-free; E2E specs select via **role/label/text** accessibility selectors. Give every control a role and an accessible name instead.
-- **Aggregates and `public/r/` are generated** — never hand-edit `ui/all` / family aggregates or commit `public/r/` (it's gitignored). The gallery grid derives from `blocks-catalog.ts` and redirects from `legacy-redirects.ts` — edit those, not `page.tsx` / `next.config.mjs`.
+- **Aggregates and `public/r/` are generated** — never hand-edit `ui/all` / family aggregates or commit `public/r/` (it's gitignored). The gallery grid derives from `blocks-catalog.ts` and redirects from `legacy-redirects.mts` — edit those, not `page.tsx` / `next.config.mjs`.
 
 Adding something? Follow the step-by-step **"How to add a component"** / **"How to add a block"** recipes in `apps/ui/README.md`, then verify:
 
@@ -292,7 +296,7 @@ pnpm --filter ui test:blocks      # real install of a block; asserts the carve-o
 pnpm --filter ui test:e2e         # Playwright — real model downloads + inference, no mocked model boundary
 ```
 
-> The E2E suite runs **real models in a real browser** and captures to `e2e-artifacts/`. When you change vision or audio streaming behavior, also do a **manual real-hardware sweep** (real webcam/microphone) — fixtures stand in for CI, and that gap is documented in the affected spec headers.
+> The E2E suite runs **real models in a real browser** and captures to `e2e-artifacts/`. Add `-- --headed` to watch a run. The base Playwright `launchOptions` disable Chrome Built-in AI (Playwright's Chromium exposes the `LanguageModel`/`Summarizer`/`Translator` globals with no model service behind them, which crashes the renderer in headed runs); `writing-tools.spec.ts` re-enables those features to assert against Chrome's real `availability()`, so run that file headless. A file-level `test.use({ launchOptions })` replaces the base flags rather than merging, so repeat the ones you still need. Headless Chromium has no WebGPU — WebGPU paths need a real-Chrome run. When you change vision or audio streaming behavior, also do a **manual real-hardware sweep** (real webcam/microphone) — fixtures stand in for CI, and that gap is documented in the affected spec headers.
 
 ---
 

@@ -1,7 +1,7 @@
 /**
  * @file vision-track.spec.ts
  * @description E2E for the `vision` category `live-tracker` block at
- * /blocks/vision/live-tracker (split-vision-lab Wave 2). Lives in its OWN file
+ * /blocks/vision/live-tracker. Lives in its OWN file
  * because Playwright only allows `test.use({ launchOptions })` at file level and
  * the tracker lanes need a different fake-video fixture (`track-fixture.y4m`)
  * than the object-detector lanes in `vision.spec.ts` (`vision-fixture.y4m`) —

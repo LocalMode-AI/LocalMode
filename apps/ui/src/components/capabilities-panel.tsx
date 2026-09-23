@@ -71,7 +71,7 @@ const FEATURES: FeatureInfo[] = [
     importance:
       'Enables 10-100x faster AI model inference by running computations on your GPU instead of CPU.',
     howToEnable:
-      'Use Chrome 113+, Edge 113+, Safari 18+ (macOS 15+ / iOS 26+), or enable the WebGPU flag in chrome://flags.',
+      'Use Chrome 113+, Edge 113+, Safari 26+ (macOS 15+ / iOS 26+), or enable the WebGPU flag in chrome://flags.',
   },
   {
     key: 'webnn',
@@ -171,11 +171,11 @@ const FEATURES: FeatureInfo[] = [
     label: 'Chrome AI',
     name: 'Chrome Built-in AI',
     description:
-      'Browser-native AI via Gemini Nano, zero-download summarization and translation. Requires Chrome 138+ on desktop.',
+      'Browser-native AI on desktop Chrome: the Summarizer and Translator APIs (Chrome 138+) and the Prompt API for Gemini Nano (Chrome 148+). Shown as available when any of the three is exposed.',
     importance:
-      'Instant AI inference with no model downloads, no bundle-size impact, and no API keys. Data never leaves the device.',
+      'The app ships no model files and needs no API keys; Chrome supplies the on-device model. Data never leaves the device.',
     howToEnable:
-      'Use Chrome 138+ desktop, enable chrome://flags/#optimization-guide-on-device-model and chrome://flags/#prompt-api-for-gemini-nano, restart, and wait for the Gemini Nano model to download.',
+      'Use desktop Chrome 138+ for Summarizer/Translator, or 148+ for the Prompt API; no flags are needed on stable. Chrome downloads its on-device model once, browser-wide, and only starts that download from a user action such as a click.',
   },
 ];
 

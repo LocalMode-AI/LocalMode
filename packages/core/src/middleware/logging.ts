@@ -6,7 +6,7 @@
  * @packageDocumentation
  */
 
-import type { Document, SearchResult, SearchOptions } from '../types.js';
+import type { Document } from '../types.js';
 import type { VectorDBMiddleware, LoggingMiddlewareOptions } from './types.js';
 
 /**
@@ -100,27 +100,23 @@ export function loggingMiddleware(options: LoggingMiddlewareOptions = {}): Vecto
       }
     },
 
-    beforeSearch: async (query: Float32Array, searchOptions: SearchOptions) => {
-      if (shouldLog('search')) {
-        const searchId = `search:${Date.now()}`;
-        startTimer(searchId);
-        (searchOptions as Record<string, unknown>).__searchId = searchId;
-        log('search:start', {
-          k: searchOptions.k ?? 10,
-          hasFilter: !!searchOptions.filter,
-          dimensions: query.length,
-        });
+    wrapSearch: async ({ doSearch, query, options: searchOptions }) => {
+      if (!shouldLog('search')) {
+        return doSearch();
       }
-      return { query, options: searchOptions };
-    },
 
-    afterSearch: async (results: SearchResult[]) => {
-      if (shouldLog('search')) {
-        log('search:complete', {
-          resultCount: results.length,
-          topScore: results[0]?.score,
-        });
-      }
+      log('search:start', {
+        k: searchOptions.k ?? 10,
+        hasFilter: !!searchOptions.filter,
+        dimensions: query.length,
+      });
+      const start = timing ? performance.now() : undefined;
+      const results = await doSearch();
+      log('search:complete', {
+        resultCount: results.length,
+        topScore: results[0]?.score,
+        durationMs: start === undefined ? undefined : performance.now() - start,
+      });
       return results;
     },
 

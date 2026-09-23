@@ -2,7 +2,7 @@ import { createMDX } from 'fumadocs-mdx/next';
 import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LEGACY_REDIRECTS, CATEGORY_RENAMES } from './src/lib/legacy-redirects.ts';
+import { LEGACY_REDIRECTS, CATEGORY_RENAMES } from './src/lib/legacy-redirects.mts';
 
 const withMDX = createMDX();
 const here = dirname(fileURLToPath(import.meta.url));
@@ -105,7 +105,7 @@ const config = {
       { source: '/demos/:name', destination: '/blocks/:name', permanent: true },
       { source: '/test-lab/:name', destination: '/blocks/:name', permanent: true },
       // Legacy slugs → absorbing block routes. Single source of truth in
-      // src/lib/legacy-redirects.ts, shared with the redirect-walk E2E spec so
+      // src/lib/legacy-redirects.mts, shared with the redirect-walk E2E spec so
       // config and test cannot drift. No catch-all: unknown legacy paths 404
       // rather than shadow a real route.
       ...LEGACY_REDIRECTS.map(({ slug, blockPath }) => ({
@@ -113,7 +113,7 @@ const config = {
         destination: blockPath,
         permanent: true,
       })),
-      // Renamed-category 308s. Single source in src/lib/legacy-redirects.ts,
+      // Renamed-category 308s. Single source in src/lib/legacy-redirects.mts,
       // shared with the redirect-walk E2E spec. Each renamed category adds an
       // entry there producing a 308 from the old /blocks/<name> route to the new.
       ...CATEGORY_RENAMES.map(({ from, to }) => ({

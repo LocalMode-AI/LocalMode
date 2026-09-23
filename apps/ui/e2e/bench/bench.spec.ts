@@ -107,7 +107,7 @@ test.describe('bench real run (WASM lanes)', () => {
     const expected503 = (e: string) =>
       e.includes('503') && e.includes('/api/bench/submit');
 
-    // Paid-study contract (prolific-study.md §0): the page reads the study
+    // Paid-study contract: the page reads the study
     // parameters, tells the participant the code comes after the upload, and
     // must NOT show the completion code before the run + submit attempt resolve.
     await page.goto('/bench/run?PROLIFIC_PID=5f3a1c2b4d6e7f8091a2b3c4&cc=TESTCODE1');

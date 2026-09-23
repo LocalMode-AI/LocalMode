@@ -12,9 +12,16 @@ import type {
   PDFPageContent,
   PDFMetadata,
 } from './types.js';
+import { isNodeRuntime, loadPDFJS, runtimeDocumentParams } from './runtime.js';
 
 // Dynamic import types for pdfjs-dist
 type PDFDocumentProxy = import('pdfjs-dist').PDFDocumentProxy;
+
+/** Outcome of reading a document's information dictionary. */
+interface MetadataOutcome {
+  metadata?: PDFMetadata;
+  metadataError?: string;
+}
 
 /**
  * Extract text from a PDF file.
@@ -63,11 +70,11 @@ export async function extractPDFText(
 
   abortSignal?.throwIfAborted();
 
-  // Dynamically import pdfjs-dist
-  const pdfjs = await import('pdfjs-dist');
+  // Load the PDF.js build that matches this runtime
+  const pdfjs = await loadPDFJS();
 
   // Set up worker using jsDelivr CDN (has all pdfjs-dist versions, unlike cdnjs)
-  if (typeof window !== 'undefined' && !pdfjs.GlobalWorkerOptions.workerSrc) {
+  if (!isNodeRuntime() && typeof window !== 'undefined' && !pdfjs.GlobalWorkerOptions.workerSrc) {
     pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
   }
 
@@ -90,6 +97,7 @@ export async function extractPDFText(
     data: typeof data === 'string' ? undefined : data,
     url: typeof data === 'string' ? data : undefined,
     password,
+    ...runtimeDocumentParams(),
   });
 
   // Handle abort
@@ -104,7 +112,7 @@ export async function extractPDFText(
   abortSignal?.throwIfAborted();
 
   // Extract metadata
-  const metadata = await extractMetadata(pdf);
+  const { metadata, metadataError } = await extractMetadata(pdf);
 
   // Extract text from each page
   const pageCount = pdf.numPages;
@@ -154,23 +162,37 @@ export async function extractPDFText(
     pageCount,
     pages,
     metadata,
+    metadataError,
   };
 }
 
 /**
  * Extract metadata from a PDF document.
+ *
+ * A document's information dictionary is optional, and a document that cannot
+ * supply one is still worth extracting text from, so a failure here does not
+ * fail the extraction. It is never discarded silently either: the reason is
+ * reported on `metadataError` and warned about once.
  */
-async function extractMetadata(pdf: PDFDocumentProxy): Promise<PDFMetadata | undefined> {
+async function extractMetadata(pdf: PDFDocumentProxy): Promise<MetadataOutcome> {
+  let metadata: Awaited<ReturnType<PDFDocumentProxy['getMetadata']>>;
+
   try {
-    const metadata = await pdf.getMetadata();
+    metadata = await pdf.getMetadata();
+  } catch (error) {
+    const metadataError = error instanceof Error ? error.message : String(error);
+    console.warn(`[@localmode/pdfjs] Could not read PDF metadata: ${metadataError}`);
+    return { metadataError };
+  }
 
-    if (!metadata.info) {
-      return undefined;
-    }
+  if (!metadata.info) {
+    return {};
+  }
 
-    const info = metadata.info as Record<string, unknown>;
+  const info = metadata.info as Record<string, unknown>;
 
-    return {
+  return {
+    metadata: {
       title: typeof info.Title === 'string' ? info.Title : undefined,
       author: typeof info.Author === 'string' ? info.Author : undefined,
       subject: typeof info.Subject === 'string' ? info.Subject : undefined,
@@ -179,23 +201,26 @@ async function extractMetadata(pdf: PDFDocumentProxy): Promise<PDFMetadata | und
       creator: typeof info.Creator === 'string' ? info.Creator : undefined,
       creationDate: parsePDFDate(info.CreationDate as string | undefined),
       modificationDate: parsePDFDate(info.ModDate as string | undefined),
-    };
-  } catch {
-    return undefined;
-  }
+    },
+  };
 }
 
 /**
  * Parse a PDF date string to a Date object.
+ *
+ * PDF dates have the form `D:YYYYMMDDHHmmSSOHH'mm'` (ISO 32000-1, 7.9.4), where
+ * every field after the year is optional and `O` is `Z` (UTC), `+` or `-`
+ * followed by the offset of local time from UTC. Without `O` the zone is
+ * unspecified and the date is read as local time. Returns `undefined` for a
+ * string that is not a valid date, never an Invalid Date.
  */
 function parsePDFDate(dateStr: string | undefined): Date | undefined {
   if (!dateStr) {
     return undefined;
   }
 
-  // PDF dates are in the format: D:YYYYMMDDHHmmSSOHH'mm'
   const match = dateStr.match(
-    /D:(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?([+-Z])?(\d{2})?'?(\d{2})?/
+    /D:(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?(?:([Zz+-])(?:(\d{2})'?(?:(\d{2})'?)?)?)?/
   );
 
   if (!match) {
@@ -204,22 +229,53 @@ function parsePDFDate(dateStr: string | undefined): Date | undefined {
 
   const [
     ,
-    year,
-    month = '01',
-    day = '01',
-    hour = '00',
-    minute = '00',
-    second = '00',
+    yearStr,
+    monthStr = '01',
+    dayStr = '01',
+    hourStr = '00',
+    minuteStr = '00',
+    secondStr = '00',
+    zone,
+    offsetHourStr = '00',
+    offsetMinuteStr = '00',
   ] = match;
 
-  return new Date(
-    parseInt(year),
-    parseInt(month) - 1,
-    parseInt(day),
-    parseInt(hour),
-    parseInt(minute),
-    parseInt(second)
-  );
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10);
+  const day = parseInt(dayStr, 10);
+  const hour = parseInt(hourStr, 10);
+  const minute = parseInt(minuteStr, 10);
+  const second = parseInt(secondStr, 10);
+  const offsetHour = parseInt(offsetHourStr, 10);
+  const offsetMinute = parseInt(offsetMinuteStr, 10);
+
+  if (
+    month < 1 || month > 12 ||
+    day < 1 ||
+    hour > 23 || minute > 59 || second > 59 ||
+    offsetHour > 23 || offsetMinute > 59
+  ) {
+    return undefined;
+  }
+
+  // Reject days past the end of the month (e.g. February 30), which Date
+  // would otherwise roll over into the next month.
+  const calendarDay = new Date(Date.UTC(year, month - 1, day));
+  if (calendarDay.getUTCMonth() !== month - 1 || calendarDay.getUTCDate() !== day) {
+    return undefined;
+  }
+
+  if (zone === undefined) {
+    return new Date(year, month - 1, day, hour, minute, second);
+  }
+
+  const utcMs = Date.UTC(year, month - 1, day, hour, minute, second);
+  if (zone === 'Z' || zone === 'z') {
+    return new Date(utcMs);
+  }
+
+  const offsetMs = (offsetHour * 60 + offsetMinute) * 60_000;
+  return new Date(zone === '+' ? utcMs - offsetMs : utcMs + offsetMs);
 }
 
 /**
@@ -231,7 +287,7 @@ function parsePDFDate(dateStr: string | undefined): Date | undefined {
 export async function getPDFPageCount(
   source: Blob | ArrayBuffer | Uint8Array | string
 ): Promise<number> {
-  const pdfjs = await import('pdfjs-dist');
+  const pdfjs = await loadPDFJS();
 
   let data: ArrayBuffer | Uint8Array | string;
   if (source instanceof Blob) {
@@ -245,6 +301,7 @@ export async function getPDFPageCount(
   const loadingTask = pdfjs.getDocument({
     data: typeof data === 'string' ? undefined : data,
     url: typeof data === 'string' ? data : undefined,
+    ...runtimeDocumentParams(),
   });
 
   const pdf = await loadingTask.promise;

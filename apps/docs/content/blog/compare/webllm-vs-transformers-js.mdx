@@ -8,7 +8,7 @@ faq:
   - question: "Should I use both WebLLM and Transformers.js in the same app?"
     answer: "If your app needs LLMs and other ML tasks, using @localmode/transformers for embeddings and classification and @localmode/webllm for LLM generation is the recommended pattern. This gives you the best engine for each task type."
   - question: "How stable is Transformers.js v4 for LLM inference?"
-    answer: "Transformers.js v4 is stable and production-ready. LocalMode uses @huggingface/transformers ^4.2.0, and the 16 curated ONNX LLM models have been browser-tested. The same LanguageModel interface works across WebLLM, wllama, and Transformers.js."
+    answer: "Transformers.js v4 is stable and production-ready. LocalMode uses @huggingface/transformers ~4.2.0 (pinned to the 4.2 line: 4.3.0 breaks language models on WebGPU), and the 16 curated ONNX LLM models have been browser-tested. The same LanguageModel interface works across WebLLM, wllama, and Transformers.js."
   - question: "What about wllama as a third LLM option?"
     answer: "wllama (llama.cpp WASM) is the universal fallback that works in every browser without WebGPU. If you need Firefox support or maximum browser compatibility, wllama is essential. See the WebLLM vs wllama comparison for details."
 ---

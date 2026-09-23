@@ -94,7 +94,7 @@ missing vectors deliberately exercise the Data tab's re-embed toggle lane.
 
 Real spoken English used as Chromium's fake microphone input
 (`--use-file-for-fake-audio-capture`) in `e2e/blocks/audio-blocks.spec.ts`
-(the grown phase0 voice spec), so the audio-studio block captures genuine
+(the successor of the original voice spec), so the audio blocks capture genuine
 speech through the real `getUserMedia` path and Whisper performs genuine
 speech recognition on it — the Notes record lane AND the Live streaming lane
 both feed on it.

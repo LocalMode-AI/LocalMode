@@ -12,7 +12,7 @@ faq:
   - question: "How do I swap between cloud and local models in a Vercel AI SDK project?"
     answer: "Create a LocalMode provider with createLocalMode(), then toggle models with a single variable. Both providers implement the same LanguageModelV3 interface, so the rest of your application code (prompt, messages, options) stays identical regardless of which provider is active."
   - question: "What are the peer dependencies for @localmode/ai-sdk?"
-    answer: "The adapter requires ai (>=6.0.0), @ai-sdk/provider (>=1.0.0), @ai-sdk/provider-utils (>=3.0.0), and @localmode/core (>=1.0.0). You also need at least one LocalMode model provider such as @localmode/webllm for LLMs or @localmode/transformers for embeddings."
+    answer: "The adapter requires ai (>=6.0.0), @ai-sdk/provider (>=1.0.0), @ai-sdk/provider-utils (>=3.0.0), and @localmode/core (>=2.0.0). You also need at least one LocalMode model provider such as @localmode/webllm for LLMs or @localmode/transformers for embeddings."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
@@ -62,7 +62,7 @@ pnpm install @localmode/webllm          # LLMs via WebGPU (Llama, Qwen, Phi, Gem
 pnpm install @localmode/transformers     # Embeddings, classification, and more
 ```
 
-The peer dependencies are `ai` (>=6.0.0), `@ai-sdk/provider` (>=1.0.0), `@ai-sdk/provider-utils` (>=3.0.0), and `@localmode/core` (>=1.0.0). If you are already on a recent AI SDK version, you likely have the first three installed.
+The peer dependencies are `ai` (>=6.0.0), `@ai-sdk/provider` (>=1.0.0), `@ai-sdk/provider-utils` (>=3.0.0), and `@localmode/core` (>=2.0.0). If you are already on a recent AI SDK version, you likely have the first three installed.
 
 ---
 
@@ -331,7 +331,7 @@ No API key configured. No environment variable set. No network request made. The
 
 ## Methodology
 
-This post is based on the actual implementation of `@localmode/ai-sdk` (version 1.0.0), the [Vercel AI SDK documentation](https://ai-sdk.dev/docs/introduction), and the [AI SDK provider specification](https://ai-sdk.dev/providers/community-providers/custom-providers). All code examples use real API signatures from both the AI SDK (`ai` package v6+) and LocalMode packages.
+This post is based on the actual implementation of `@localmode/ai-sdk` (version 2.0.1), the [Vercel AI SDK documentation](https://ai-sdk.dev/docs/introduction), and the [AI SDK provider specification](https://ai-sdk.dev/providers/community-providers/custom-providers). All code examples use real API signatures from both the AI SDK (`ai` package v6+) and LocalMode packages.
 
 Sources:
 - [AI SDK generateText reference](https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text)

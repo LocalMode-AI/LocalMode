@@ -102,12 +102,25 @@ export class CSVLoader implements DocumentLoader<CSVLoaderOptions> {
   readonly supports = ['.csv', 'text/csv', 'application/csv'];
 
   /**
+   * Create a loader.
+   *
+   * @param defaults - Options applied to every `load()` call; options passed to `load()` take precedence.
+   */
+  constructor(private readonly defaults: CSVLoaderOptions = {}) {}
+
+  /**
    * Check if this loader can handle the source.
    */
   canLoad(source: LoaderSource): boolean {
     if (typeof source === 'string') {
-      // Basic heuristic: contains comma and newline
-      return source.includes(',') && source.includes('\n');
+      // A header plus at least one data row, every non-empty row having the
+      // same number of (two or more) comma-separated fields. Prose that merely
+      // contains commas and line breaks rarely satisfies this.
+      if (!source.includes(',') || !source.includes('\n')) return false;
+      const rows = parseCSV(source.trim()).filter((row) => row.some((field) => field.trim()));
+      if (rows.length < 2) return false;
+      const width = rows[0].length;
+      return width >= 2 && rows.every((row) => row.length === width);
     }
     if (source instanceof File) {
       return source.name.endsWith('.csv');
@@ -121,7 +134,8 @@ export class CSVLoader implements DocumentLoader<CSVLoaderOptions> {
   /**
    * Load documents from CSV source.
    */
-  async load(source: LoaderSource, options: CSVLoaderOptions = {}): Promise<LoadedDocument[]> {
+  async load(source: LoaderSource, callOptions: CSVLoaderOptions = {}): Promise<LoadedDocument[]> {
+    const options: CSVLoaderOptions = { ...this.defaults, ...callOptions };
     const {
       generateId: customGenerateId,
       abortSignal,
@@ -333,9 +347,9 @@ export class CSVLoader implements DocumentLoader<CSVLoaderOptions> {
 }
 
 /**
- * Create a CSV loader with default options.
+ * Create a CSV loader whose options apply to every `load()` call.
  */
-export function createCSVLoader(_options?: CSVLoaderOptions): CSVLoader {
-  return new CSVLoader();
+export function createCSVLoader(options?: CSVLoaderOptions): CSVLoader {
+  return new CSVLoader(options);
 }
 

@@ -1,6 +1,6 @@
 /**
  * @file device.spec.ts
- * @description E2E spec for the `device` category (split-agent-device Wave 3) —
+ * @description E2E spec for the `device` category —
  * the three zero-download blocks that grew out of `device-model-lab`:
  * `/blocks/device/device-report`, `/blocks/device/model-advisor`, and
  * `/blocks/device/gguf-explorer`, plus the `/blocks/device` category page. Every
@@ -26,7 +26,7 @@
  *   violation), while the rendered File size proves the file itself is
  *   model-sized (hundreds of MB).
  *
- * Pinned upstream model (documented for rotation, design D10 risk note):
+ * Pinned upstream model (documented for rotation, since an upstream repo can disappear):
  *   repo  bartowski/Llama-3.2-1B-Instruct-GGUF
  *   file  Llama-3.2-1B-Instruct-Q4_K_M.gguf
  * Only STRUCTURAL fields are asserted (architecture "llama", quantization
@@ -107,7 +107,7 @@ const ADVISOR_ROUTE = '/blocks/device/model-advisor';
 const EXPLORER_ROUTE = '/blocks/device/gguf-explorer';
 const CATEGORY_ROUTE = '/blocks/device';
 
-/** Pinned E2E model (design D10) — see the rotation note in the file header. */
+/** Pinned E2E model — see the rotation note in the file header. */
 const PINNED_REPO = 'bartowski/Llama-3.2-1B-Instruct-GGUF';
 const PINNED_FILE = 'Llama-3.2-1B-Instruct-Q4_K_M.gguf';
 const PINNED_SHORTHAND = `${PINNED_REPO}:${PINNED_FILE}`;
@@ -610,7 +610,7 @@ test('gguf-explorer custom shorthand input inspects via wllama resolveModelUrl',
   await expect(page.getByRole('button', { name: 'Download to cache' })).toBeVisible();
 });
 
-/* ── category page: zero-download with all three blocks mounted (task 6.4) ── */
+/* ── category page: zero-download with all three blocks mounted ── */
 
 test('device category page mounts all three blocks with zero model-host traffic', async ({
   page,

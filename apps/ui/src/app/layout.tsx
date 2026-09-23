@@ -62,7 +62,7 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
     images: [DEFAULT_OG],
   },
-  // Env-gated: these render only when the tokens are provided (seo.md §2.7 / §20.1).
+  // Env-gated: these render only when the tokens are provided.
   verification: {
     google: process.env.GOOGLE_SITE_VERIFICATION,
     other: process.env.BING_SITE_VERIFICATION

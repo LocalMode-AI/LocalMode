@@ -9,11 +9,58 @@
 import type {
   DocumentLoader,
   LoadedDocument,
+  LoadedDocumentMetadata,
   LoaderSource,
   LoaderOptions,
 } from '@localmode/core';
-import type { PDFLoaderOptions } from './types.js';
+import type { PDFExtractResult, PDFLoaderOptions, PDFMetadata } from './types.js';
 import { extractPDFText } from './extract.js';
+
+/**
+ * Build the document-level metadata a {@link PDFLoader} attaches to every
+ * loaded document from an extraction result.
+ *
+ * `pdf` carries the full PDF information dictionary (title, author, subject,
+ * keywords, dates, producer, creator) whenever it was read. `metadataError` is
+ * included only when reading that dictionary failed, so a caller can tell
+ * "no title" apart from "the title could not be read"; otherwise the key is
+ * absent.
+ *
+ * @param result - The result of `extractPDFText()`
+ * @param source - Source identifier for the document
+ * @returns Loader metadata shared by the whole document (page fields excluded)
+ *
+ * @example
+ * ```ts
+ * const result = await extractPDFText(pdfBlob);
+ * const metadata = pdfDocumentMetadata(result, 'report.pdf');
+ * if (metadata.metadataError) console.warn(metadata.metadataError);
+ * ```
+ *
+ * @see {@link PDFLoader}
+ * @internal Not re-exported from the package entry point.
+ */
+export function pdfDocumentMetadata(
+  result: PDFExtractResult,
+  source: string
+): LoadedDocumentMetadata & { pdf?: PDFMetadata } {
+  const metadata: LoadedDocumentMetadata & { pdf?: PDFMetadata } = {
+    source,
+    mimeType: 'application/pdf',
+    pageCount: result.pageCount,
+    title: result.metadata?.title,
+    createdAt: result.metadata?.creationDate
+      ? new Date(result.metadata.creationDate)
+      : undefined,
+  };
+  if (result.metadata !== undefined) {
+    metadata.pdf = { ...result.metadata };
+  }
+  if (result.metadataError !== undefined) {
+    metadata.metadataError = result.metadataError;
+  }
+  return metadata;
+}
 
 /**
  * PDF Document Loader implementation.
@@ -169,15 +216,9 @@ export class PDFLoader implements DocumentLoader {
           id,
           text: page.text,
           metadata: {
-            source: sourceId,
-            mimeType: 'application/pdf',
-            pageCount: result.pageCount,
+            ...pdfDocumentMetadata(result, sourceId),
             page: page.pageNumber,
             totalPages: result.pageCount,
-            title: result.metadata?.title,
-            createdAt: result.metadata?.creationDate
-              ? new Date(result.metadata.creationDate)
-              : undefined,
           },
         });
       }
@@ -189,15 +230,7 @@ export class PDFLoader implements DocumentLoader {
       documents.push({
         id,
         text: result.text,
-        metadata: {
-          source: sourceId,
-          mimeType: 'application/pdf',
-          pageCount: result.pageCount,
-          title: result.metadata?.title,
-          createdAt: result.metadata?.creationDate
-            ? new Date(result.metadata.creationDate)
-            : undefined,
-        },
+        metadata: pdfDocumentMetadata(result, sourceId),
       });
     }
 
