@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.2] - 2026-09-23
+
+**Released:** no npm package; the `/bench` site only.
+
+### Documentation
+
+- **bench:** the methodology page states a known device limitation. On the Galaxy Z Fold 7 (Adreno 830, Chrome 153 on Android) the llama.cpp WebGPU lane (`wllama-webgpu`) generates incoherent SmolLM2 text: all 18 timed chat iterations recorded on that phone across six runs and three protocol versions are strings of isolated letters and word fragments, and the lane's MMLU cell fails in every run with "Invalid typed array length". The WASM lane and every other runtime on the phone produce coherent text, and no other device in the dataset shows this. The degenerate-output gate is length-based and 17 of the 18 iterations pass it, so the cells stay `ok` and the adreno-830 `wllama-webgpu` SmolLM2 chat rows (about 60 chars/s under v4 and v5, plus a v2 adreno-830 llama.cpp row from before the lane split) are kept. Every iteration's generated text is in the run files. An output-coherence check would be a protocol change and is reserved for a future version; the protocol (`localmode-bench/5`), the plausibility rules and the scoring are unchanged, and no run is re-scored or quarantined.
+
 ## [2.15.1] - 2026-09-23
 
 **Released:** no npm package; the `/bench` site only.

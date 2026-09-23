@@ -313,6 +313,22 @@ export default function BenchMethodologyPage() {
               Transformers.js cell in that run fails too. Those cells are recorded as errors with
               their cause and a failure-time memory sample, never as data.
             </li>
+            <li>
+              Known device limitation: on the Galaxy Z Fold 7 (Adreno 830, Chrome 153 on Android)
+              the llama.cpp WebGPU lane (<code className="font-mono text-sm">wllama-webgpu</code>)
+              generates incoherent SmolLM2 text. All 18 timed chat iterations recorded on that phone
+              across six runs and three protocol versions are strings of isolated letters and word
+              fragments, and the lane&apos;s MMLU cell fails in every run with &quot;Invalid typed
+              array length&quot;. The WASM lane and every other runtime on the same phone produce
+              coherent text, and no other device in the dataset shows this. The degenerate-output
+              gate is length-based and 17 of the 18 iterations pass it, so those cells are ok and
+              the adreno-830 <code className="font-mono text-sm">wllama-webgpu</code> SmolLM2 chat
+              rows (about 60 chars/s under v4 and v5, plus a v2 adreno-830 llama.cpp row from before
+              the lane split) are kept: they time a backend that is not producing a usable answer.
+              The generated text of every iteration is stored in the run files, so anyone can check
+              it. An output-coherence check would be a protocol change and is reserved for a future
+              version.
+            </li>
           </ul>
         </Section>
 
