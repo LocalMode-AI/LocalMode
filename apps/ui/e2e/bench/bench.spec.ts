@@ -10,7 +10,16 @@
  * exercised for real. Selectors are role/label/text only.
  */
 
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { expect, test, type ConsoleMessage, type Page, type Request } from '@playwright/test';
+
+/** The harness version every run must carry: the bench package this build installed. */
+const BENCH_PACKAGE_VERSION = (
+  JSON.parse(
+    readFileSync(path.resolve(__dirname, '..', '..', '..', '..', 'packages', 'bench', 'package.json'), 'utf8'),
+  ) as { version: string }
+).version;
 
 const MODEL_HOST_PATTERNS = [
   /huggingface\.co/i,
@@ -249,7 +258,8 @@ test.describe('bench real run (WASM lanes)', () => {
     expect(exported.schemaVersion).toBe(3);
     expect(env.network?.online).toBe(true);
     // Runtime versions are stamped at build time from the installed packages.
-    expect(exported.harness.version).toBe('0.8.0');
+    expect(exported.harness.version).toBe(BENCH_PACKAGE_VERSION);
+    expect(exported.harness.runtimeVersions?.['@localmode/bench']).toBe(BENCH_PACKAGE_VERSION);
     expect(exported.harness.runtimeVersions?.['@huggingface/transformers']).toMatch(/^\d+\.\d+\.\d+/);
     expect(exported.harness.runtimeVersions?.['@wllama/wllama']).toMatch(/^\d+\.\d+\.\d+/);
     for (const cell of exported.cells.filter((c) => c.status === 'ok')) {
@@ -375,7 +385,7 @@ test.describe('bench real run (WASM lanes)', () => {
     expect(partial.partial).toBe(true);
     expect(partial.protocol).toBe('localmode-bench/5');
     expect(partial.suite).toBe('quick');
-    expect(partial.harness.version).toBe('0.8.0');
+    expect(partial.harness.version).toBe(BENCH_PACKAGE_VERSION);
     // The environment landed before the first cell, so a crash during the first
     // model load still identifies the device.
     expect(partial.environment?.browser.engine).toBe('Blink');

@@ -37,7 +37,7 @@ import {
   startChromeAIDownload,
   type ChromeAIStatus,
 } from '@/lib/bench/chrome-ai-download';
-import { benchBuildCommit, benchRuntimeVersions } from '@/lib/bench/runtime-versions';
+import { benchBuildCommit, benchHarnessVersion, benchRuntimeVersions } from '@/lib/bench/runtime-versions';
 import { describeRetryCause } from '@/lib/bench/overlay-text';
 import {
   beginAttempt,
@@ -69,8 +69,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/registry/localmode/ui/table';
-
-const HARNESS_VERSION = '0.8.0';
 
 type Phase = 'idle' | 'running' | 'done' | 'error';
 
@@ -576,7 +574,7 @@ export function BenchRunner() {
       );
       const harness = {
         name: '@localmode/bench',
-        version: HARNESS_VERSION,
+        version: benchHarnessVersion(),
         appVersion: 'localmode.ai',
         runtimeVersions: benchRuntimeVersions(),
         commit: benchBuildCommit(),

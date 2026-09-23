@@ -15,6 +15,17 @@ export function benchRuntimeVersions(): Record<string, string> {
   }
 }
 
+/**
+ * Version of the `@localmode/bench` harness this build runs, stamped as
+ * `harness.version` on every submission. It is the same build-time entry that
+ * `harness.runtimeVersions['@localmode/bench']` carries, so the two can never
+ * disagree. `@localmode/bench` exports no version constant, so a build that did
+ * not stamp the entry reports `'unknown'` rather than a guessed version.
+ */
+export function benchHarnessVersion(): string {
+  return benchRuntimeVersions()['@localmode/bench'] ?? 'unknown';
+}
+
 /** Git commit of the deployed build when the host exposes it. */
 export function benchBuildCommit(): string | undefined {
   const sha = process.env.NEXT_PUBLIC_BENCH_BUILD_COMMIT;

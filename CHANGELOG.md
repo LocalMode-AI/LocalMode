@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.1] - 2026-09-23
+
+**Released:** no npm package; the `/bench` site only.
+
+### Fixed
+
+- **bench:** the `/bench/run` runner stamped a hard-coded `harness.version` of `0.8.0` on every run (and on the index entry's `harnessVersion`), so runs since `@localmode/bench` 0.8.1 carried a stale harness version while `harness.runtimeVersions['@localmode/bench']` on the same run said 0.8.2. The version now comes from the same build-time map as `runtimeVersions` (`benchHarnessVersion()` in `src/lib/bench/runtime-versions.ts`, filled by `next.config.mjs` from the installed `@localmode/bench`), so the two fields always agree; a build that did not stamp the map records `'unknown'` instead of a guessed version. The field is still a plain semver string. A new unit test (`scripts/bench-harness-version.test.ts`) loads the real `next.config.mjs` and checks the stamp against `packages/bench/package.json`, and the bench e2e spec now asserts the package version instead of the literal. Archived runs keep the value they were published with: for a run built with `@localmode/bench` 0.8.1 or 0.8.2 (2.14.1 to 2.15.0), `harness.version` reads 0.8.0, so read `harness.runtimeVersions['@localmode/bench']` and `harness.commit` instead.
+
 ## [2.15.0] - 2026-09-23
 
 Security release: every open Dependabot alert on the default branch (190 alerts: 9 critical, 88 high, 79 medium, 14 low) closed at the source, plus one exposure the alerts did not list.
