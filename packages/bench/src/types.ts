@@ -620,6 +620,32 @@ export interface HarnessInfo {
   runtimeVersions?: Record<string, string>;
   /** Git commit of the harness build where the host exposes it. */
   commit?: string;
+  /**
+   * Place of this run in a consecutive series the host ran on one device
+   * with the same settings, one fresh page load per run (since bench 0.9.0).
+   * `id` is shared by every run of the series; `index` is 1-based and at most
+   * `count`. Absent on a run outside a series.
+   */
+  series?: HarnessSeries;
+  /**
+   * Set when the run started right after the page deleted the model caches
+   * its providers keep for the origin (Cache API, IndexedDB, OPFS) and found
+   * them empty (since bench 0.9.0). It does not claim a fresh browser
+   * profile: the browser's HTTP disk cache and browser-wide models (Gemini
+   * Nano) are out of a page's reach, so a model may still arrive from the
+   * HTTP cache instead of the network. Absent otherwise.
+   */
+  coldStart?: 'provider-caches-cleared';
+}
+
+/** Series membership recorded on `harness.series`. */
+export interface HarnessSeries {
+  /** Identifier shared by every run of the series (1-64 characters). */
+  id: string;
+  /** 1-based position of this run in the series. */
+  index: number;
+  /** Runs the series was started with (1-1000). */
+  count: number;
 }
 
 /** The unit of submission: one full suite run on one device. */

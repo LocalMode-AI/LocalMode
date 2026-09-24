@@ -126,6 +126,11 @@ the warmup and the warm reload re-downloaded the 3.46 GB weights.
   wide gamut, color scheme), locale and time zone, page origin, and visibility.
   `harness.runtimeVersions` stamps the runtime package versions the host
   bundled and each cell's `runtimeVersion` names the one that produced it.
+  Since 0.9.0 a host may also stamp `harness.series` (`{ id, index, count }`,
+  the run's place in a consecutive series, one fresh page load per run) and
+  `harness.coldStart: 'provider-caches-cleared'` (the run started right after
+  the page cleared its providers' model caches; it does not claim a fresh
+  browser profile, since a page cannot clear the HTTP disk cache).
 - **Statistics** - median headline; mean ± SD, IQR, 95% CI (Student-t), CV;
   CV > 5% ⇒ high-variance flag; geomean only within a device run.
 - **Quality-fidelity lane** - tinyMMLU (MIT) accuracy + STS-B (CC BY-SA) Spearman,
@@ -294,6 +299,8 @@ cell without timed iterations keeps one placeholder row):
 | `suiteDurationMs` | `suite-end` minus `suite-start` |
 | `scrubbedAt` | When the publication scrub rewrote the file, if it did |
 | `validationOk`, `validationFlags` | `validateSubmission` verdict and its flags as `severity:code`, joined with `\|` |
+| `seriesId`, `seriesIndex`, `seriesCount` | `harness.series` (since 0.9.0): the series the run belongs to and its 1-based position in it; empty on a run outside a series |
+| `coldStart` | `harness.coldStart` (since 0.9.0): `provider-caches-cleared` when the run started right after the page cleared its providers' model caches; empty otherwise |
 | `rv_*` | One column per runtime package in `harness.runtimeVersions` across all runs, named by `runtimeVersionColumn()` (`@huggingface/transformers` becomes `rv_huggingface_transformers`), sorted by name |
 
 ## Dataset licenses

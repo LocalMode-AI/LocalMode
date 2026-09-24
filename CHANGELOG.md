@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.0] - 2026-09-24
+
+**Released:** `@localmode/bench` 0.9.0.
+
+### Added
+
+- **bench:** runner conveniences on `/bench/run` for long series and study participants. The protocol (`localmode-bench/5`), the measurement rules, the plausibility rules and the scoring are unchanged.
+  - **Runs** (1 to 30, default 1): a series of consecutive runs with the same suite, quality lane, lanes, publishing and cache setting. Each run executes on a fresh page load, because the Transformers.js lanes share one ONNX Runtime WebAssembly heap per page that never shrinks and the analysis counts one fresh page load as one independent sample. The series state lives in the runner's localStorage; after each run the page keeps the result (published, or downloaded as JSON when publishing is off or the submission fails; a rate-limited submission is waited out), reloads itself and starts the next run without a click. A "Series: run k of N" read-out lists the completed runs with their raw links, the elapsed time and an estimate from the mean run duration, with **Stop series** (after the run in progress, never mid-run; at once when idle) and **Copy summary**. A run that fails, is cancelled, or takes the page down pauses the series with the reason and a **Continue series** button, so a crashing run cannot loop; the unfinished-run recovery card works as before.
+  - **Clear model caches** (asks first in an `alertdialog`, disabled during a run): deletes the model files the providers keep for the site, namely Transformers.js (Cache API `transformers-cache`), WebLLM (Cache API or IndexedDB `webllm/*`), LiteRT (Cache API `litert-models`) and wllama (the OPFS directory `cache`, through wllama's own `clearAllModelCache`, with a direct removal as the fallback), then lists what was deleted and the site's storage use before and after. The bench's crash-recovery database, the service worker's caches and the runner's localStorage keys are never touched. The card states that Gemini Nano (browser-wide) and the browser's HTTP disk cache are not affected: provider caches cleared, not a fresh browser profile. **Clear caches after each run** repeats the clear after every run (after the result is published or exported), so the next run loads cold.
+  - **Link presets**: `/bench/run?tier=quick|standard|thorough&quality=on|off&runs=N&cold=on|off&publish=on|off` prefills the controls (with a copyable link for the current settings). A link never starts a run; only the reload inside a series does.
+  - A screen wake lock is held while a run or series is active and requested again when the tab returns to the front, with a status line ("Screen kept awake" / "Wake lock unavailable in this browser"); the tab title shows the series progress (`3/10 · LocalMode Bench`).
+- **bench 0.9.0:** optional run-file fields `harness.series` (`{ id, index, count }`) and `harness.coldStart: 'provider-caches-cleared'` (set only when the run started right after a clear that left the provider stores empty; a fresh browser profile cannot be detected from a page and is never claimed). Validation accepts them and rejects malformed values, the digest covers them, and `runs.csv` gains `seriesId`, `seriesIndex`, `seriesCount` and `coldStart` (after `validationFlags`; the `rv_*` columns move four places right). Additive, so no schema version change. The methodology page and the dataset's `SCHEMA.md` document the fields, the series behaviour, the clear semantics and the link parameters.
+
+### Fixed
+
+- **bench:** `pnpm test` in `packages/bench` ran no tests ("No test files found"); it now runs the package's suite through the workspace Vitest config.
+
 ## [2.15.3] - 2026-09-23
 
 **Released:** `@localmode/bench` 0.8.3.

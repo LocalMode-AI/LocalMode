@@ -205,6 +205,66 @@ export default function BenchMethodologyPage() {
           </ul>
         </Section>
 
+        <Section id="series" title="Series, cold runs and link presets">
+          <p>
+            None of this changes what a run measures: a series run or a cold run follows the same
+            protocol as any other run and is scored and aggregated the same way. The runner only
+            records how the run was started.
+          </p>
+          <ul className="list-disc space-y-2 pl-5">
+            <li>
+              <strong className="text-foreground">Series.</strong> The runner&apos;s Runs control (1 to
+              30) repeats the run with the same suite, quality lane, lanes, publishing and cache
+              setting. Every run of a series executes on a fresh page load: after each run the page
+              keeps the result (published, or downloaded as JSON when publishing is off or the
+              submission fails), reloads itself and starts the next run without a click. The reload
+              is deliberate: the Transformers.js lanes share one ONNX Runtime WebAssembly heap per
+              page that never shrinks, and the analysis counts one fresh page load as one
+              independent sample. Each run file carries{' '}
+              <code className="font-mono text-sm">harness.series</code>{' '}
+              (<code className="font-mono text-sm">{'{ id, index, count }'}</code>). Stop series ends
+              the series after the run in progress (never mid-run). A run that fails, is cancelled, or
+              takes the page down pauses the series with the reason; it continues only on a click, so
+              a run that crashes the page cannot loop.
+            </li>
+            <li>
+              <strong className="text-foreground">Clear model caches.</strong> Deletes the model
+              files the page&apos;s runtimes keep for the site: Transformers.js (Cache API{' '}
+              <code className="font-mono text-sm">transformers-cache</code>), WebLLM (Cache API or
+              IndexedDB <code className="font-mono text-sm">webllm/*</code>), LiteRT (Cache API{' '}
+              <code className="font-mono text-sm">litert-models</code>) and wllama (the Origin
+              Private File System directory <code className="font-mono text-sm">cache</code>, through
+              wllama&apos;s own <code className="font-mono text-sm">clearAllModelCache</code>). It can
+              run on demand or after every run. It cannot reach the browser&apos;s HTTP disk cache
+              (no page can clear it, and MediaPipe keeps its files only there) or Gemini Nano, which
+              Chrome installs browser-wide. A run that starts right after a clear that left those
+              stores empty records{' '}
+              <code className="font-mono text-sm">harness.coldStart: &quot;provider-caches-cleared&quot;</code>
+              ; a fresh browser profile cannot be detected from a page and is never claimed. The
+              per-cell <code className="font-mono text-sm">load.cached</code> probe still says
+              whether each provider found its model. Because the HTTP cache survives, a file can come
+              from disk instead of the network, so an in-page cold load can be shorter than a first
+              load in a new browser profile. Observed on Chrome 145 (macOS, Quick suite): after a
+              clear, every Hugging Face-hosted weight file came over the network again, while
+              MediaPipe&apos;s model and WASM files (which it never caches itself) came from the HTTP
+              disk cache.
+            </li>
+            <li>
+              <strong className="text-foreground">Link presets.</strong>{' '}
+              <code className="font-mono text-sm">
+                /bench/run?tier=quick|standard|thorough&amp;quality=on|off&amp;runs=N&amp;cold=on|off&amp;publish=on|off
+              </code>{' '}
+              prefills the suite, the quality lane, the series length, clearing after each run, and
+              publishing. A link never starts a run; only the reload inside a series does.
+            </li>
+            <li>
+              While a run or series is active the page holds a screen wake lock (requested again
+              whenever the tab returns to the front) and shows the series progress in the tab
+              title, for example <code className="font-mono text-sm">3/10 · LocalMode Bench</code>.
+            </li>
+          </ul>
+        </Section>
+
         <Section id="stats" title="Statistics">
           <p>
             Per metric: median headline; mean ± SD, IQR, and a Student-t 95% confidence interval in

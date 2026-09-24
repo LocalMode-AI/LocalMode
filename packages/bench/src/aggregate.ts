@@ -465,8 +465,10 @@ export function runtimeVersionColumn(packageName: string): string {
  * Per-run CSV for offline analysis: one row per run, in input order, with the
  * run's identity, harness build, suite, environment (device class, browser,
  * OS, cores, memory, screen, WebGPU adapter), cell counts by status, suite
- * duration (`suite-end` minus `suite-start`), and the validation verdict and
- * flags `validateSubmission` reports. Runtime package versions follow as one
+ * duration (`suite-end` minus `suite-start`), the validation verdict and
+ * flags `validateSubmission` reports, and the series membership and cold-start
+ * marker from `harness` (`seriesId`, `seriesIndex`, `seriesCount`,
+ * `coldStart`; empty on a run outside a series or not started cold). Runtime package versions follow as one
  * `rv_*` column per package in the union of all runs, sorted by column name.
  *
  * @param runs - Run results that passed shape validation.
@@ -496,6 +498,7 @@ export function runsToRunsCSV(
     'gpuArchitecture', 'gpuDevice', 'gpuDescription', 'gpuIsFallbackAdapter', 'gpuModel', 'crossOriginIsolated',
     'timerResolutionUs', 'fingerprintMflops', 'cellsTotal', 'cellsOk', 'cellsInvalid', 'cellsError', 'cellsSkipped',
     'suiteDurationMs', 'scrubbedAt', 'validationOk', 'validationFlags',
+    'seriesId', 'seriesIndex', 'seriesCount', 'coldStart',
     ...rvColumns,
   ];
   const lines = [header.join(',')];
@@ -523,6 +526,7 @@ export function runsToRunsCSV(
         start && end ? round2(end.t - start.t) : '',
         run.scrubbedAt, report.ok,
         report.flags.map((f) => `${f.severity}:${f.code}`).join('|'),
+        run.harness.series?.id, run.harness.series?.index, run.harness.series?.count, run.harness.coldStart,
         ...rvColumns.map((column) => byColumn.get(column)),
       ]
         .map(csvField)

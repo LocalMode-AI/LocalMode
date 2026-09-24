@@ -47,6 +47,7 @@ export type {
   DisplayInfo,
   LocaleInfo,
   HarnessInfo,
+  HarnessSeries,
   EnvironmentCapture,
   FingerprintResult,
   MetricSummary,

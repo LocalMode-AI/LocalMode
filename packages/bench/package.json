@@ -1,6 +1,6 @@
 {
   "name": "@localmode/bench",
-  "version": "0.8.3",
+  "version": "0.9.0",
   "description": "Cross-runtime benchmark harness for in-browser AI — MLPerf-Client-compatible metrics (TTFT, prefill/decode throughput), raw trace capture, integrity checks, and leaderboard aggregation for LLM and embedding inference across browser ML runtimes",
   "license": "MIT",
   "author": "LocalMode",
@@ -50,8 +50,8 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --root ../.. packages/bench",
+    "test:watch": "vitest --root ../.. packages/bench",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },

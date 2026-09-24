@@ -7,7 +7,11 @@
  * documented manual real-Chrome hardware sweep). Real model downloads + real
  * inference; results table, JSON export with digest, and the dev-mode
  * submission path (503 bench-store-unbound surfaced to the user) are all
- * exercised for real. Selectors are role/label/text only.
+ * exercised for real. The runner conveniences are driven the same way: link
+ * presets (prefill, never start), a two-run series across a real page reload,
+ * Stop series mid-run, and Clear model caches checked against the browser's
+ * own storage listings before the next run loads cold. Selectors are
+ * role/label/text only.
  */
 
 import { readFileSync } from 'node:fs';
@@ -47,6 +51,50 @@ function collectModelRequests(page: Page, sink: string[]) {
     const url = req.url();
     if (MODEL_HOST_PATTERNS.some((p) => p.test(url))) sink.push(url);
   });
+}
+
+/** Provider storage as the page sees it: Cache API names, IndexedDB names, wllama's OPFS directory. */
+async function providerStorage(page: Page): Promise<{ caches: string[]; databases: string[]; opfs: string[] | null }> {
+  return page.evaluate(async () => {
+    const cacheNames = await caches.keys();
+    const databases = (await indexedDB.databases()).map((d) => d.name ?? '');
+    let opfs: string[] | null = null;
+    try {
+      const root = await navigator.storage.getDirectory();
+      const dir = (await root.getDirectoryHandle('cache')) as unknown as AsyncIterable<[string, unknown]>;
+      opfs = [];
+      for await (const [name] of dir) opfs.push(name);
+    } catch {
+      opfs = null;
+    }
+    return { caches: cacheNames, databases, opfs };
+  });
+}
+
+interface ExportedRun {
+  runId: string;
+  harness: { series?: { id: string; index: number; count: number }; coldStart?: string };
+  cells: Array<{ cellId: string; runtimeId: string; status: string; load: { cached?: boolean; startT: number; endT: number } | null }>;
+}
+
+/** Every run file the page hands to the download manager, across reloads. */
+function collectRunDownloads(page: Page): Array<Promise<ExportedRun>> {
+  const files: Array<Promise<ExportedRun>> = [];
+  page.on('download', (download) => {
+    files.push(
+      download.path().then((p) => JSON.parse(readFileSync(p, 'utf8')) as ExportedRun),
+    );
+  });
+  return files;
+}
+
+/** Main-frame loads after the call (reloads count; the initial goto happens before). */
+function countLoads(page: Page): { count: number } {
+  const counter = { count: 0 };
+  page.on('load', () => {
+    counter.count += 1;
+  });
+  return counter;
 }
 
 test.describe('bench shell (zero model bytes)', () => {
@@ -93,6 +141,50 @@ test.describe('bench shell (zero model bytes)', () => {
     await expect(page.getByRole('switch', { name: /publish results/i })).toBeChecked();
     // Availability probes resolve; WebGPU lanes are marked unavailable headless.
     await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+  });
+
+  test('/bench/run link presets prefill the controls and never start a run', async ({ page }) => {
+    await page.goto('/bench/run?tier=standard&quality=on&runs=3&cold=on&publish=off');
+    const runButton = page.getByRole('button', { name: 'Run benchmark' });
+    await expect(runButton).toBeEnabled({ timeout: 15_000 });
+    await expect(page.getByRole('combobox', { name: 'Suite' })).toContainText('Standard');
+    await expect(page.getByRole('switch', { name: /quality-fidelity lane/i })).toBeChecked();
+    await expect(page.getByRole('spinbutton', { name: 'Runs' })).toHaveValue('3');
+    await expect(page.getByRole('switch', { name: 'Clear caches after each run' })).toBeChecked();
+    await expect(page.getByRole('switch', { name: /publish results/i })).not.toBeChecked();
+    await expect(page.getByText(/a series of 3 runs with these settings/i)).toBeVisible();
+    // The note documents the parameters and offers the link for the current controls.
+    await page.getByText('Link presets').click();
+    await expect(page.getByText('/bench/run?tier=standard&quality=on&runs=3&cold=on&publish=off')).toBeVisible();
+    // Nothing starts from a link: no run overlay, no series, and (afterEach) no model bytes.
+    await page.waitForTimeout(5_000);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Benchmark series' })).toHaveCount(0);
+    await expect(runButton).toBeEnabled();
+    // Out-of-range and unknown values are clamped or ignored.
+    await page.goto('/bench/run?runs=99&tier=custom&quality=maybe');
+    await expect(page.getByRole('spinbutton', { name: 'Runs' })).toHaveValue('30', { timeout: 15_000 });
+    await expect(page.getByRole('combobox', { name: 'Suite' })).toContainText('Quick');
+    await expect(page.getByRole('switch', { name: /quality-fidelity lane/i })).not.toBeChecked();
+  });
+
+  test('Clear model caches asks first and cancelling deletes nothing', async ({ page }) => {
+    await page.goto('/bench/run');
+    await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeEnabled({ timeout: 15_000 });
+    // A provider cache the clear would delete, written by the page itself.
+    await page.evaluate(async () => {
+      const cache = await caches.open('transformers-cache');
+      await cache.put('/probe-model-file', new Response('x'));
+    });
+    await page.getByRole('button', { name: 'Clear model caches' }).click();
+    const confirm = page.getByRole('alertdialog', { name: 'Clear model caches?' });
+    await expect(confirm).toBeVisible();
+    await expect(confirm).toContainText(/Gemini Nano \(Chrome Built-in AI\) is installed browser-wide/);
+    await expect(confirm).toContainText(/HTTP disk cache cannot be cleared from a page/);
+    await confirm.getByRole('button', { name: 'Cancel' }).click();
+    await expect(confirm).toHaveCount(0);
+    expect(await page.evaluate(() => caches.keys())).toContain('transformers-cache');
+    await expect(page.getByRole('region', { name: 'Model caches cleared' })).toHaveCount(0);
   });
 
   test('leaderboard API returns a valid empty aggregate', async ({ request }) => {
@@ -415,6 +507,163 @@ test.describe('bench real run (WASM lanes)', () => {
     await page.reload();
     await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('region', { name: /unfinished run recovered/i })).toHaveCount(0);
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test('a series of 2 Quick runs: one click, a page reload between runs, both runs kept with their series place', async ({
+    page,
+    context,
+  }) => {
+    test.setTimeout(30 * 60 * 1000);
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const consoleErrors: string[] = [];
+    collectConsoleErrors(page, consoleErrors);
+    await page.goto('/bench/run');
+    const runButton = page.getByRole('button', { name: 'Run benchmark' });
+    await expect(runButton).toBeEnabled({ timeout: 15_000 });
+    // Publishing off: each run of the series is exported as a JSON download.
+    await page.getByRole('switch', { name: /publish results/i }).click();
+    await page.getByRole('spinbutton', { name: 'Runs' }).fill('2');
+    const downloads = collectRunDownloads(page);
+    const loads = countLoads(page);
+    await runButton.click();
+
+    const dialog = page.getByRole('dialog', { name: /benchmark running/i });
+    await expect(dialog).toBeVisible({ timeout: 20_000 });
+    await expect(dialog.getByRole('group', { name: 'Series progress' })).toContainText('Series: run 1 of 2');
+    await expect(dialog.getByRole('button', { name: 'Stop series' })).toBeEnabled();
+    await expect(page).toHaveTitle('1/2 · LocalMode Bench');
+    await expect(page.getByRole('button', { name: 'Clear model caches' })).toBeDisabled();
+
+    // Run 2 starts by itself on the reloaded page (no click).
+    await expect(page.getByRole('dialog', { name: /benchmark running/i })
+      .getByRole('group', { name: 'Series progress' })).toContainText('Series: run 2 of 2', { timeout: 15 * 60 * 1000 });
+    expect(loads.count, 'the page reloaded between the two runs').toBeGreaterThanOrEqual(1);
+    await expect(page).toHaveTitle('2/2 · LocalMode Bench');
+
+    const panel = page.getByRole('region', { name: 'Benchmark series' });
+    await expect(panel).toContainText('Series complete: 2 of 2 runs', { timeout: 15 * 60 * 1000 });
+    const listed = panel.getByRole('list', { name: 'Completed runs' }).getByRole('listitem');
+    await expect(listed).toHaveCount(2);
+    await expect(page).toHaveTitle('Done 2/2 · LocalMode Bench');
+    expect(loads.count, 'exactly one reload: none after the last run').toBe(1);
+
+    expect(downloads).toHaveLength(2);
+    const [first, second] = await Promise.all(downloads);
+    expect(first.harness.series).toMatchObject({ index: 1, count: 2 });
+    expect(second.harness.series).toEqual({ id: first.harness.series!.id, index: 2, count: 2 });
+    expect(first.runId).not.toBe(second.runId);
+    for (const run of [first, second]) {
+      expect(run.cells.some((c) => c.status === 'ok')).toBe(true);
+      expect(run.harness.coldStart, 'no clear happened, so no cold start is claimed').toBeUndefined();
+    }
+    await expect(listed.nth(0)).toContainText(first.runId);
+    await expect(listed.nth(1)).toContainText(second.runId);
+
+    await panel.getByRole('button', { name: 'Copy summary' }).click();
+    const summary = await page.evaluate(() => navigator.clipboard.readText());
+    expect(summary).toContain(`series ${first.harness.series!.id}`);
+    expect(summary).toContain(`1. ${first.runId}`);
+    expect(summary).toContain(`2. ${second.runId}`);
+
+    // A finished series stays until closed, and is gone across a reload after that.
+    await panel.getByRole('button', { name: 'Close series' }).click();
+    await expect(page.getByRole('region', { name: 'Benchmark series' })).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeEnabled({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Benchmark series' })).toHaveCount(0);
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test('Stop series during run 1 of 3 keeps exactly one run and never reloads', async ({ page }) => {
+    test.setTimeout(20 * 60 * 1000);
+    const consoleErrors: string[] = [];
+    collectConsoleErrors(page, consoleErrors);
+    await page.goto('/bench/run?runs=3&publish=off');
+    const runButton = page.getByRole('button', { name: 'Run benchmark' });
+    await expect(runButton).toBeEnabled({ timeout: 15_000 });
+    const downloads = collectRunDownloads(page);
+    const loads = countLoads(page);
+    await runButton.click();
+    const dialog = page.getByRole('dialog', { name: /benchmark running/i });
+    await expect(dialog.getByRole('group', { name: 'Series progress' })).toContainText('Series: run 1 of 3', { timeout: 20_000 });
+    await dialog.getByRole('button', { name: 'Stop series' }).click();
+    await expect(dialog.getByRole('button', { name: 'Stopping after this run' })).toBeDisabled();
+    await expect(dialog.getByRole('group', { name: 'Series progress' })).toContainText(/stops when this run finishes/);
+
+    const panel = page.getByRole('region', { name: 'Benchmark series' });
+    await expect(panel).toContainText('Series stopped after 1 of 3 runs', { timeout: 15 * 60 * 1000 });
+    await expect(panel.getByRole('list', { name: 'Completed runs' }).getByRole('listitem')).toHaveCount(1);
+    // Hold for longer than the series' reload delay: nothing else starts.
+    await page.waitForTimeout(8_000);
+    expect(loads.count).toBe(0);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(downloads).toHaveLength(1);
+    const [only] = await Promise.all(downloads);
+    expect(only.harness.series).toMatchObject({ index: 1, count: 3 });
+    await expect(page.getByRole('table')).toBeVisible();
+    await expect(page).toHaveTitle('Stopped 1/3 · LocalMode Bench');
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test('Clear model caches empties the provider caches; the next run loads cold and records it', async ({ page }) => {
+    test.setTimeout(30 * 60 * 1000);
+    const consoleErrors: string[] = [];
+    collectConsoleErrors(page, consoleErrors);
+    await page.goto('/bench/run?publish=off');
+    const runButton = page.getByRole('button', { name: 'Run benchmark' });
+    await expect(runButton).toBeEnabled({ timeout: 15_000 });
+    const status = page.getByRole('status').first();
+
+    const exportRun = async (): Promise<ExportedRun> => {
+      const downloadPromise = page.waitForEvent('download');
+      await page.getByRole('button', { name: 'Export JSON' }).click();
+      const download = await downloadPromise;
+      return JSON.parse(readFileSync((await download.path())!, 'utf8')) as ExportedRun;
+    };
+
+    // Run 1 fills the provider caches.
+    await runButton.click();
+    await expect(status).toContainText('Suite complete', { timeout: 540_000 });
+    const warmSource = await exportRun();
+    expect(warmSource.harness.coldStart).toBeUndefined();
+    const before = await providerStorage(page);
+    expect(before.caches).toContain('transformers-cache');
+    expect(before.opfs?.length ?? 0, 'wllama cached its GGUF files in OPFS').toBeGreaterThan(0);
+    expect(before.databases).toContain('localmode-bench-progress');
+
+    await page.getByRole('button', { name: 'Clear model caches' }).click();
+    const confirm = page.getByRole('alertdialog', { name: 'Clear model caches?' });
+    await confirm.getByRole('button', { name: 'Clear caches' }).click();
+    const report = page.getByRole('region', { name: 'Model caches cleared' });
+    await expect(report).toContainText('Provider caches cleared', { timeout: 60_000 });
+    const deleted = report.getByRole('list', { name: 'Deleted storage' });
+    await expect(deleted).toContainText(/Cache API: .*transformers-cache \(\d+ files?\)/);
+    await expect(deleted).toContainText(new RegExp(`Origin Private File System \\(wllama\\): ${before.opfs!.filter((n) => !n.startsWith('__metadata__')).length} model files?`));
+    await expect(deleted).toContainText(/Storage used by this site: .* before, .* after/);
+    await expect(report).toContainText(/Gemini Nano \(Chrome Built-in AI\) is browser-wide and was not affected/);
+    await expect(report).toContainText(/not a fresh browser profile/);
+
+    const after = await providerStorage(page);
+    expect(after.caches.filter((n) => n === 'transformers-cache' || n === 'litert-models' || n.startsWith('webllm/'))).toEqual([]);
+    expect(after.databases.filter((n) => n.startsWith('webllm/'))).toEqual([]);
+    expect(after.opfs, "wllama's OPFS directory is gone").toBeNull();
+    // The bench's own crash-recovery database is never deleted.
+    expect(after.databases).toContain('localmode-bench-progress');
+
+    // Run 2 loads every cached model cold and says why.
+    await runButton.click();
+    await expect(page.getByRole('dialog', { name: /benchmark running/i })).toBeVisible({ timeout: 20_000 });
+    await expect(status).toContainText('Suite complete', { timeout: 540_000 });
+    const cold = await exportRun();
+    expect(cold.harness.coldStart).toBe('provider-caches-cleared');
+    expect(cold.harness.series).toBeUndefined();
+    const probed = cold.cells.filter(
+      (c) => c.load && typeof c.load.cached === 'boolean' && (c.runtimeId === 'transformers-wasm' || c.runtimeId === 'wllama'),
+    );
+    expect(probed.map((c) => c.runtimeId)).toEqual(expect.arrayContaining(['transformers-wasm', 'wllama']));
+    for (const c of probed) expect(c.load!.cached, `${c.cellId} loaded cold`).toBe(false);
+    // The same lanes were warm-cached before the clear: run 1's files were in the caches above.
     expect(consoleErrors).toEqual([]);
   });
 });

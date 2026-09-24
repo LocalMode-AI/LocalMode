@@ -40,6 +40,36 @@ import {
 import { benchBuildCommit, benchHarnessVersion, benchRuntimeVersions } from '@/lib/bench/runtime-versions';
 import { describeRetryCause } from '@/lib/bench/overlay-text';
 import {
+  clearProviderModelCaches,
+  describeClearReport,
+  markCachesCleared,
+  takeColdStartMarker,
+  type CacheClearReport,
+} from '@/lib/bench/cache-clear';
+import {
+  MAX_SERIES_RUNS,
+  clearStoredSeries,
+  continueSeries,
+  createSeries,
+  currentRunIndex,
+  formatDuration,
+  isSeriesOpen,
+  loadSeries,
+  markRunStarted,
+  parseRunPresets,
+  presetQuery,
+  recordRunFailed,
+  recordRunFinished,
+  requestStop,
+  resolveSeriesOnLoad,
+  saveSeries,
+  seriesEtaMs,
+  seriesSummaryText,
+  seriesTitle,
+  type SeriesRunRecord,
+  type SeriesState,
+} from '@/lib/bench/series';
+import {
   beginAttempt,
   finishAttempt,
   listUnfinishedAttempts,
@@ -54,6 +84,15 @@ import { Badge } from '@/registry/localmode/ui/badge';
 import { Progress } from '@/registry/localmode/ui/progress';
 import { Switch } from '@/registry/localmode/ui/switch';
 import { Label } from '@/registry/localmode/ui/label';
+import { Input } from '@/registry/localmode/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/registry/localmode/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -309,6 +348,94 @@ async function readStudySession(): Promise<StudySession | null> {
   return { participantHash: hex.slice(0, 12), completionCode: code && /^[A-Za-z0-9]{4,32}$/.test(code) ? code : null };
 }
 
+/** Save a JSON file through a temporary object URL. */
+function downloadJsonFile(data: unknown, filename: string): void {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  // Revoke later: a page that reloads right after (a series) must not cut the save short.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+const sleepMs = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Outcome of one submission attempt, as the series needs it. */
+type SubmitOutcome =
+  | { kind: 'done'; flagged: boolean; url?: string }
+  | { kind: 'failed'; message: string; retryAt?: number };
+
+type WakeLockStatus = 'idle' | 'held' | 'hidden' | 'unavailable' | 'refused';
+
+interface WakeLockSentinelLike {
+  release(): Promise<void>;
+  addEventListener(type: 'release', cb: () => void): void;
+}
+
+/**
+ * Hold a screen wake lock while `active`. The browser releases the lock
+ * whenever the tab is hidden, so it is requested again each time the tab
+ * comes back in front. Needs no user activation, so a series run that
+ * resumes after a reload holds it too.
+ */
+function useScreenWakeLock(active: boolean): WakeLockStatus {
+  const [lockState, setLockState] = useState<'pending' | 'held' | 'hidden' | 'refused'>('pending');
+  useEffect(() => {
+    const api = (navigator as { wakeLock?: { request(type: 'screen'): Promise<WakeLockSentinelLike> } }).wakeLock;
+    if (!active || !api) return;
+    let disposed = false;
+    let sentinel: WakeLockSentinelLike | null = null;
+    const acquire = async () => {
+      await Promise.resolve();
+      if (disposed || sentinel) return;
+      if (document.visibilityState !== 'visible') {
+        setLockState('hidden');
+        return;
+      }
+      try {
+        const s = await api.request('screen');
+        if (disposed) {
+          void s.release();
+          return;
+        }
+        sentinel = s;
+        setLockState('held');
+        s.addEventListener('release', () => {
+          if (sentinel === s) sentinel = null;
+          if (!disposed) setLockState(document.visibilityState === 'visible' ? 'refused' : 'hidden');
+        });
+      } catch {
+        if (!disposed) setLockState('refused');
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void acquire();
+    };
+    void acquire();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      disposed = true;
+      document.removeEventListener('visibilitychange', onVisibility);
+      const s = sentinel;
+      sentinel = null;
+      if (s) void s.release();
+      setLockState('pending');
+    };
+  }, [active]);
+  if (!active) return 'idle';
+  if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) return 'unavailable';
+  return lockState === 'pending' ? 'idle' : lockState;
+}
+
+const WAKE_LOCK_TEXT: Record<Exclude<WakeLockStatus, 'idle'>, string> = {
+  held: 'Screen kept awake',
+  hidden: 'Screen wake lock paused while this tab is hidden',
+  unavailable: 'Wake lock unavailable in this browser',
+  refused: 'The browser refused the screen wake lock; keep the screen on yourself',
+};
+
 export function BenchRunner() {
   const [suite, setSuite] = useState<Exclude<BenchSuiteId, 'custom'>>('quick');
   const [availability, setAvailability] = useState<{
@@ -360,9 +487,39 @@ export function BenchRunner() {
   >({ kind: 'idle' });
   const abortRef = useRef<AbortController | null>(null);
   const [study, setStudy] = useState<StudySession | null>(null);
+  /** The study parameters have been read (a resumed series run must carry them too). */
+  const [studyChecked, setStudyChecked] = useState(false);
   const [mobile, setMobile] = useState(false);
   /** Attempts an earlier page left unfinished (tab crash, closed tab): exportable, never submitted. */
   const [unfinished, setUnfinished] = useState<PartialAttempt[]>([]);
+  /** "Runs" input as typed; the series length is its clamped integer value. */
+  const [runsInput, setRunsInput] = useState('1');
+  const runsCount = Math.min(MAX_SERIES_RUNS, Math.max(1, Math.floor(Number(runsInput)) || 1));
+  const [clearAfterRun, setClearAfterRun] = useState(false);
+  /** The persisted series this page belongs to, if any (mirrored in seriesRef for async readers). */
+  const [series, setSeriesState] = useState<SeriesState | null>(null);
+  const seriesRef = useRef<SeriesState | null>(null);
+  const updateSeries = useCallback((next: SeriesState | null) => {
+    seriesRef.current = next;
+    setSeriesState(next);
+    if (next) saveSeries(next);
+    else clearStoredSeries();
+  }, []);
+  /** A reloaded page with a pending series starts its next run once the lanes are probed. */
+  const [autoStartPending, setAutoStartPending] = useState(false);
+  /** A model ran in this page: the next series run needs a fresh page load. */
+  const pageHasRunRef = useRef(false);
+  const [clearState, setClearState] = useState<
+    | { kind: 'idle' }
+    | { kind: 'confirm' }
+    | { kind: 'clearing' }
+    | { kind: 'done'; report: CacheClearReport }
+    | { kind: 'failed'; message: string }
+  >({ kind: 'idle' });
+  const [seriesCopied, setSeriesCopied] = useState(false);
+  const [presetCopied, setPresetCopied] = useState(false);
+  const seriesOpen = isSeriesOpen(series);
+  const wakeLock = useScreenWakeLock(phase === 'running' || series?.status === 'running');
 
   useEffect(() => {
     let cancelled = false;
@@ -370,16 +527,66 @@ export function BenchRunner() {
       if (!cancelled) setAvailability(a);
     });
     readStudySession().then((s) => {
-      if (!cancelled) setStudy(s);
+      if (cancelled) return;
+      setStudy(s);
+      setStudyChecked(true);
     });
     listUnfinishedAttempts().then((attempts) => {
       if (!cancelled) setUnfinished(attempts);
     });
     setMobile(isMobileDevice());
+    // A pending series wins over URL presets: its runs repeat the settings it
+    // started with. A link only prefills the controls; it never starts a run.
+    const stored = loadSeries();
+    // A finished series stays on screen until closed, but only an open one
+    // (running or paused) dictates the controls.
+    if (stored && !isSeriesOpen(stored)) updateSeries(stored);
+    if (stored && isSeriesOpen(stored)) {
+      const { state, action } = resolveSeriesOnLoad(stored);
+      updateSeries(state);
+      setSuite(state.settings.suite);
+      setIncludeQuality(state.settings.includeQuality);
+      setAutoSubmit(state.settings.publish);
+      setClearAfterRun(state.settings.clearAfterRun);
+      setDisabledLanes(new Set(state.settings.disabledLanes));
+      setRunsInput(String(state.count));
+      if (action === 'start-next') setAutoStartPending(true);
+    } else {
+      const presets = parseRunPresets(window.location.search);
+      if (presets.suite) setSuite(presets.suite);
+      if (presets.includeQuality !== undefined) setIncludeQuality(presets.includeQuality);
+      if (presets.publish !== undefined) setAutoSubmit(presets.publish);
+      if (presets.clearAfterRun !== undefined) setClearAfterRun(presets.clearAfterRun);
+      if (presets.runs !== undefined) setRunsInput(String(presets.runs));
+    }
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [updateSeries]);
+
+  // Keep the series panel's elapsed time live between runs (the run overlay has its own clock).
+  useEffect(() => {
+    if (!seriesOpen || phase === 'running') return;
+    const id = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(id);
+  }, [seriesOpen, phase]);
+
+  // The tab title carries the series progress, so a background tab shows it.
+  useEffect(() => {
+    if (!series) return;
+    const previous = document.title;
+    const wanted = seriesTitle(series);
+    document.title = wanted;
+    // Next.js writes the page metadata title after hydration; put the progress back.
+    const observer = new MutationObserver(() => {
+      if (document.title !== wanted) document.title = wanted;
+    });
+    observer.observe(document.head, { subtree: true, childList: true, characterData: true });
+    return () => {
+      observer.disconnect();
+      document.title = previous;
+    };
+  }, [series]);
 
   useEffect(() => {
     if (phase !== 'running') return;
@@ -456,7 +663,7 @@ export function BenchRunner() {
     return cells;
   }, [lanes, disabledLanes, suite, includeQuality]);
 
-  const submitRun = useCallback(async (run: BenchRunResult) => {
+  const submitRun = useCallback(async (run: BenchRunResult): Promise<SubmitOutcome> => {
     setSubmitState({ kind: 'submitting' });
     try {
       const res = await fetch('/api/bench/submit', {
@@ -473,29 +680,37 @@ export function BenchRunner() {
         retryAfterSec?: number;
       };
       if (body.ok) {
-        setSubmitState({ kind: 'done', flagged: body.flagged ?? false, url: body.url });
+        const outcome: SubmitOutcome = { kind: 'done', flagged: body.flagged ?? false, url: body.url };
+        setSubmitState(outcome);
+        return outcome;
       } else {
         // A shared network address (a household or office behind one NAT)
         // can exhaust the hourly window; the run is kept and resubmitted
         // by itself once the window opens, as long as the page stays open.
         const retryAfterSec =
           body.code === 'rate-limited' && typeof body.retryAfterSec === 'number' ? body.retryAfterSec : undefined;
-        setSubmitState({
+        const outcome: SubmitOutcome = {
           kind: 'failed',
           message: body.message ?? body.code ?? `Submission failed (${res.status})`,
           ...(retryAfterSec ? { retryAt: Date.now() + retryAfterSec * 1000 } : {}),
-        });
+        };
+        setSubmitState(outcome);
+        return outcome;
       }
     } catch {
-      setSubmitState({ kind: 'failed', message: 'Network error during submission.' });
+      const outcome: SubmitOutcome = { kind: 'failed', message: 'Network error during submission.' };
+      setSubmitState(outcome);
+      return outcome;
     }
   }, []);
+  /** True while a series run is publishing: the series waits out a rate limit itself. */
+  const seriesSubmitRef = useRef(false);
 
   // Automatic resubmission after a rate-limited attempt; a tick keeps the
   // countdown live once the run overlay's own clock has stopped.
   const retryAt = submitState.kind === 'failed' ? submitState.retryAt : undefined;
   useEffect(() => {
-    if (!retryAt || !result) return;
+    if (!retryAt || !result || seriesSubmitRef.current) return;
     const tick = setInterval(() => setNow(Date.now()), 1_000);
     const timer = setTimeout(() => void submitRun(result), Math.max(0, retryAt - Date.now()) + 1_000);
     return () => {
@@ -504,12 +719,31 @@ export function BenchRunner() {
     };
   }, [retryAt, result, submitRun]);
 
-  const run = useCallback(async () => {
+  /** Delete the providers' model caches and remember it for the next run's cold-start marker. */
+  const clearCaches = useCallback(async (): Promise<CacheClearReport | null> => {
+    setClearState({ kind: 'clearing' });
+    try {
+      const report = await clearProviderModelCaches();
+      markCachesCleared(report);
+      setClearState({ kind: 'done', report });
+      return report;
+    } catch (error) {
+      setClearState({ kind: 'failed', message: (error as Error)?.message ?? String(error) });
+      return null;
+    }
+  }, []);
+
+  const run = useCallback(async (options: { userActivated: boolean }) => {
     // Synchronous part of the click handler: Chrome accepts the Gemini Nano
-    // download request only inside the user activation, before any await.
+    // download request only inside the user activation, before any await. A
+    // series run that resumed after a reload has no activation, so it never
+    // asks; the lane is then skipped with the reason unless Nano is ready.
     const chromeLaneActive = activeLanes.some((l) => l.model.runtimeId === 'chrome-ai');
     let unsubscribeDownload: (() => void) | null = null;
-    if (chromeLaneActive && availability && availability.chromeAI !== 'available') {
+    pageHasRunRef.current = true;
+    const seriesAtStart = seriesRef.current;
+    const runStartedAtMs = Date.now();
+    if (options.userActivated && chromeLaneActive && availability && availability.chromeAI !== 'available') {
       if (startChromeAIDownload()) {
         setChromeDownloadPct(0);
         unsubscribeDownload = onChromeAIDownloadProgress((pct) => setChromeDownloadPct(pct));
@@ -545,6 +779,9 @@ export function BenchRunner() {
       } catch {
         // Offline / dev - the run still works, submission may be rejected.
       }
+      // A run is cold only when the page cleared the provider caches since
+      // the last run and they are still empty now; nothing else is claimed.
+      const coldStart = await takeColdStartMarker();
 
       const [{ createLLMAdapters, createEmbedAdapters }] = await Promise.all([
         import('@/lib/bench/adapters'),
@@ -578,6 +815,10 @@ export function BenchRunner() {
         appVersion: 'localmode.ai',
         runtimeVersions: benchRuntimeVersions(),
         commit: benchBuildCommit(),
+        ...(seriesAtStart
+          ? { series: { id: seriesAtStart.seriesId, index: currentRunIndex(seriesAtStart), count: seriesAtStart.count } }
+          : {}),
+        ...(coldStart ? { coldStart: 'provider-caches-cleared' as const } : {}),
       };
       // Progress goes to IndexedDB cell by cell, so a tab that dies mid-suite
       // still leaves an exportable partial record on the next page load.
@@ -700,17 +941,69 @@ export function BenchRunner() {
       setResult(suiteResult);
       setPhase('done');
       setStatusLine('Suite complete');
-      // Publishing was disclosed next to the Run button; opt-out via the toggle.
-      if (autoSubmit) void submitRun(suiteResult);
+      // The run is over; the partial record has served its purpose.
+      if (attempt) void finishAttempt(attempt.attemptId);
+      attempt = null;
+      if (!seriesAtStart) {
+        // Publishing was disclosed next to the Run button; opt-out via the toggle.
+        if (autoSubmit && !clearAfterRun) void submitRun(suiteResult);
+        else if (autoSubmit) await submitRun(suiteResult);
+        if (clearAfterRun) await clearCaches();
+        return;
+      }
+      // Series: keep the run (published, or exported as JSON when publishing
+      // is off or the submission failed), clear the caches if asked, record
+      // it, then reload so the next run starts on a fresh page.
+      let record: Omit<SeriesRunRecord, 'index'>;
+      const durationMs = Date.now() - runStartedAtMs;
+      if (autoSubmit) {
+        seriesSubmitRef.current = true;
+        let outcome = await submitRun(suiteResult);
+        // A rate limit is waited out here (the page stays open between runs).
+        while (outcome.kind === 'failed' && outcome.retryAt !== undefined) {
+          await sleepMs(Math.max(0, outcome.retryAt - Date.now()) + 1_000);
+          outcome = await submitRun(suiteResult);
+        }
+        seriesSubmitRef.current = false;
+        if (outcome.kind === 'done') {
+          record = { runId: suiteResult.runId, durationMs, outcome: outcome.flagged ? 'flagged' : 'published', rawUrl: outcome.url };
+        } else {
+          downloadJsonFile(suiteResult, `localmode-bench-${suiteResult.runId}.json`);
+          record = { runId: suiteResult.runId, durationMs, outcome: 'exported-after-failed-submit', note: outcome.message };
+        }
+      } else {
+        downloadJsonFile(suiteResult, `localmode-bench-${suiteResult.runId}.json`);
+        record = { runId: suiteResult.runId, durationMs, outcome: 'exported' };
+      }
+      if (clearAfterRun) await clearCaches();
+      const current = seriesRef.current ?? seriesAtStart;
+      const next = recordRunFinished(current, record, Date.now());
+      updateSeries(next);
+      if (next.status === 'running') {
+        setStatusLine(`Run ${next.completed.length} of ${next.count} kept; reloading the page for run ${next.completed.length + 1}`);
+        // Give the browser a moment to hand the exported file to the download manager.
+        await sleepMs(1_500);
+        window.location.reload();
+      }
     } catch (error) {
       // "Cancelled" only when this page's Cancel button fired; any other
       // AbortError is a failure to show, not a cancel.
+      const message = (error as Error)?.message ?? String(error);
       if (controller.signal.aborted) {
         setPhase('idle');
         setStatusLine('Cancelled');
       } else {
         setPhase('error');
-        setErrorMessage((error as Error).message ?? String(error));
+        setErrorMessage(message);
+      }
+      seriesSubmitRef.current = false;
+      if (seriesAtStart && seriesRef.current) {
+        updateSeries(
+          recordRunFailed(
+            seriesRef.current,
+            controller.signal.aborted ? 'the run was cancelled.' : `the benchmark failed (${message}).`,
+          ),
+        );
       }
     } finally {
       // The run resolved in-page (complete, cancelled, or failed with a
@@ -722,17 +1015,101 @@ export function BenchRunner() {
       setCellProgress(null);
       setLoadPct(null);
     }
-  }, [suite, buildCells, autoSubmit, submitRun, study, activeLanes, availability]);
+  }, [suite, buildCells, autoSubmit, submitRun, study, activeLanes, availability, clearAfterRun, clearCaches, updateSeries]);
 
-  const downloadJson = useCallback((data: unknown, filename: string) => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
+  const downloadJson = downloadJsonFile;
+
+  /** Run button: one run in this page, or the first run of a series. */
+  const startFromClick = useCallback(() => {
+    if (runsCount <= 1) {
+      void run({ userActivated: true });
+      return;
+    }
+    const created = createSeries({
+      seriesId: crypto.randomUUID(),
+      count: runsCount,
+      settings: {
+        suite,
+        includeQuality,
+        publish: autoSubmit,
+        clearAfterRun,
+        disabledLanes: [...disabledLanes],
+      },
+      now: Date.now(),
+    });
+    if (pageHasRunRef.current) {
+      // A model already ran in this page: run 1 must start on a fresh page too.
+      updateSeries(created);
+      window.location.reload();
+      return;
+    }
+    updateSeries(markRunStarted(created));
+    void run({ userActivated: true });
+  }, [runsCount, run, suite, includeQuality, autoSubmit, clearAfterRun, disabledLanes, updateSeries]);
+
+  // Resume a series after its reload: no click, the next run starts once the lanes are probed.
+  useEffect(() => {
+    if (!autoStartPending || availability === null || !studyChecked || phase !== 'idle') return;
+    const current = seriesRef.current;
+    setAutoStartPending(false);
+    if (!current || current.status !== 'running') return;
+    updateSeries(markRunStarted(current));
+    void run({ userActivated: false });
+  }, [autoStartPending, availability, studyChecked, phase, run, updateSeries]);
+
+  const stopSeries = useCallback(() => {
+    const current = seriesRef.current;
+    if (!current) return;
+    updateSeries(requestStop(current, { runInProgress: current.inFlightIndex !== null, now: Date.now() }));
+  }, [updateSeries]);
+
+  const continueCurrentSeries = useCallback(() => {
+    const current = seriesRef.current;
+    if (!current) return;
+    const resumed = continueSeries(current);
+    if (pageHasRunRef.current) {
+      updateSeries(resumed);
+      window.location.reload();
+      return;
+    }
+    updateSeries(markRunStarted(resumed));
+    void run({ userActivated: true });
+  }, [run, updateSeries]);
+
+  const closeSeries = useCallback(() => updateSeries(null), [updateSeries]);
+
+  const copySeriesSummary = useCallback(async () => {
+    const current = seriesRef.current;
+    if (!current) return;
+    try {
+      await navigator.clipboard.writeText(seriesSummaryText(current));
+      setSeriesCopied(true);
+      setTimeout(() => setSeriesCopied(false), 2_000);
+    } catch {
+      setSeriesCopied(false);
+    }
   }, []);
+
+  // Relative on screen (identical on the server and the client); absolute when copied.
+  const presetLink = useMemo(() => {
+    return `/bench/run?${presetQuery({
+      suite,
+      includeQuality,
+      runs: runsCount,
+      clearAfterRun,
+      publish: autoSubmit,
+    })}`;
+  }, [suite, includeQuality, runsCount, clearAfterRun, autoSubmit]);
+
+  const copyPresetLink = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}${presetLink}`);
+      setPresetCopied(true);
+      setTimeout(() => setPresetCopied(false), 2_000);
+    } catch {
+      setPresetCopied(false);
+    }
+  }, [presetLink]);
 
   const exportPartial = useCallback(
     (attempt: PartialAttempt) => {
@@ -888,6 +1265,51 @@ export function BenchRunner() {
             </div>
           </div>
 
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="bench-runs">Runs</Label>
+              <Input
+                id="bench-runs"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={MAX_SERIES_RUNS}
+                step={1}
+                className="w-20"
+                value={runsInput}
+                onChange={(e) => setRunsInput(e.target.value)}
+                onBlur={() => setRunsInput(String(runsCount))}
+                disabled={phase === 'running' || seriesOpen}
+                aria-describedby="bench-runs-help"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="bench-clear-after"
+                checked={clearAfterRun}
+                onCheckedChange={setClearAfterRun}
+                disabled={phase === 'running' || seriesOpen}
+              />
+              <Label htmlFor="bench-clear-after">Clear caches after each run</Label>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setClearState({ kind: 'confirm' })}
+              disabled={phase === 'running' || clearState.kind === 'clearing' || series?.status === 'running'}
+            >
+              {clearState.kind === 'clearing' ? 'Clearing model caches…' : 'Clear model caches'}
+            </Button>
+          </div>
+          <p id="bench-runs-help" className="text-xs text-muted-foreground">
+            {runsCount > 1
+              ? `A series of ${runsCount} runs with these settings. Each run starts on a fresh page load: the page reloads itself after every run and starts the next one without a click. Keep this tab open and in front until the series ends.`
+              : `Set Runs above 1 (up to ${MAX_SERIES_RUNS}) to run a series with these settings, one fresh page load per run.`}
+            {clearAfterRun
+              ? ' The model caches are cleared after every run, so each next run downloads its models again.'
+              : ''}
+          </p>
+
           <div className="flex flex-col gap-2" role="group" aria-label="Model lanes">
             {lanes.map(({ model, available, reason, note }) => {
               const key = laneKey(model);
@@ -940,7 +1362,10 @@ export function BenchRunner() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={run} disabled={phase === 'running' || activeLanes.length === 0}>
+            <Button
+              onClick={startFromClick}
+              disabled={phase === 'running' || activeLanes.length === 0 || seriesOpen || clearState.kind === 'clearing'}
+            >
               {phase === 'running' ? 'Running…' : 'Run benchmark'}
             </Button>
             <span className="text-sm text-muted-foreground">
@@ -980,8 +1405,122 @@ export function BenchRunner() {
             generated text for the fixed public prompts. No personal data. Turn the toggle off to
             keep the run local (JSON export only).
           </p>
+          <details className="text-xs text-muted-foreground">
+            <summary className="cursor-pointer select-none font-medium text-foreground">Link presets</summary>
+            <div className="mt-2 flex flex-col gap-2">
+              <p>
+                A link can prefill these controls, for example to send study participants the same
+                settings. It never starts a run: a click on Run benchmark is always needed.
+              </p>
+              <ul className="list-disc space-y-0.5 pl-5">
+                <li>
+                  <code className="font-mono">tier=quick|standard|thorough</code>: the suite
+                </li>
+                <li>
+                  <code className="font-mono">quality=on|off</code>: the quality-fidelity lane
+                </li>
+                <li>
+                  <code className="font-mono">runs=N</code>: runs in the series (1 to {MAX_SERIES_RUNS})
+                </li>
+                <li>
+                  <code className="font-mono">cold=on|off</code>: clear caches after each run
+                </li>
+                <li>
+                  <code className="font-mono">publish=on|off</code>: publish to the leaderboard
+                </li>
+              </ul>
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="break-all rounded bg-muted px-1 font-mono">{presetLink}</code>
+                <Button size="sm" variant="outline" onClick={() => void copyPresetLink()}>
+                  {presetCopied ? 'Copied' : 'Copy link'}
+                </Button>
+              </div>
+            </div>
+          </details>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={clearState.kind === 'confirm'}
+        onOpenChange={(open) => {
+          if (!open && clearState.kind === 'confirm') setClearState({ kind: 'idle' });
+        }}
+      >
+        <DialogContent role="alertdialog" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Clear model caches?</DialogTitle>
+            <DialogDescription>
+              This deletes every model file the benchmark&apos;s runtimes stored for this site
+              (Transformers.js, WebLLM and LiteRT in the Cache API, wllama in the Origin Private File
+              System, WebLLM in IndexedDB), so the next run downloads its models again. Your
+              unfinished-run records and settings are kept.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Not affected: Gemini Nano (Chrome Built-in AI) is installed browser-wide by Chrome and a
+            page cannot remove it, and the browser&apos;s own HTTP disk cache cannot be cleared from a
+            page, so a model may still load from that cache. This clears the provider caches; it is
+            not a fresh browser profile.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClearState({ kind: 'idle' })}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => void clearCaches()}>
+              Clear caches
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {(clearState.kind === 'done' || clearState.kind === 'failed') && (
+        <Card role="region" aria-label="Model caches cleared">
+          <CardHeader>
+            <CardTitle>
+              {clearState.kind === 'done' && clearState.report.ok
+                ? 'Provider caches cleared'
+                : 'Provider caches not fully cleared'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2 text-sm">
+            {clearState.kind === 'done' ? (
+              <ul className="list-disc space-y-0.5 pl-5" aria-label="Deleted storage">
+                {describeClearReport(clearState.report).map((line) => (
+                  <li key={line} className={line.startsWith('Error:') ? 'text-destructive' : ''}>
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-destructive">Clearing failed: {clearState.message}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Gemini Nano (Chrome Built-in AI) is browser-wide and was not affected, and the
+              browser&apos;s HTTP disk cache cannot be cleared from a page: these are provider caches
+              cleared, not a fresh browser profile. MediaPipe keeps no cache of its own; its files
+              come from the HTTP cache or the network on every load.
+            </p>
+            <div>
+              <Button size="sm" variant="ghost" onClick={() => setClearState({ kind: 'idle' })}>
+                Dismiss
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {series && phase !== 'running' && (
+        <SeriesPanel
+          series={series}
+          now={now}
+          wakeLock={wakeLock}
+          copied={seriesCopied}
+          onStop={stopSeries}
+          onContinue={continueCurrentSeries}
+          onClose={closeSeries}
+          onCopy={() => void copySeriesSummary()}
+        />
+      )}
 
       {phase === 'running' && (
         <RunOverlay
@@ -1006,6 +1545,9 @@ export function BenchRunner() {
           autoSubmit={autoSubmit}
           onCancel={cancel}
           cancelling={cancelling}
+          series={series}
+          wakeLock={wakeLock}
+          onStopSeries={stopSeries}
         />
       )}
 
@@ -1214,6 +1756,9 @@ function RunOverlay(props: {
   autoSubmit: boolean;
   onCancel: () => void;
   cancelling: boolean;
+  series: SeriesState | null;
+  wakeLock: WakeLockStatus;
+  onStopSeries: () => void;
 }) {
   const {
     suite,
@@ -1237,6 +1782,9 @@ function RunOverlay(props: {
     autoSubmit,
     onCancel,
     cancelling,
+    series,
+    wakeLock,
+    onStopSeries,
   } = props;
   const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1306,7 +1854,32 @@ function RunOverlay(props: {
             {done} of {total} steps done
             {runStartedAt !== null ? ` · running for ${formatElapsed(now - runStartedAt)}` : ''}
           </p>
+          {wakeLock !== 'idle' && <p className="text-xs text-muted-foreground">{WAKE_LOCK_TEXT[wakeLock]}</p>}
         </div>
+
+        {series && (
+          <div
+            role="group"
+            aria-label="Series progress"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3 text-sm"
+          >
+            <div className="flex flex-col gap-0.5">
+              <span className="font-medium">
+                Series: run {currentRunIndex(series)} of {series.count}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {series.stopRequested
+                  ? 'The series stops when this run finishes.'
+                  : series.completed.length > 0
+                    ? `${series.completed.length} done · the series ends in about ${formatDuration(seriesEtaMs(series) ?? 0)}`
+                    : 'After this run the page reloads and starts the next one by itself.'}
+              </span>
+            </div>
+            <Button size="sm" variant="outline" onClick={onStopSeries} disabled={series.stopRequested}>
+              {series.stopRequested ? 'Stopping after this run' : 'Stop series'}
+            </Button>
+          </div>
+        )}
 
         <div
           role="alert"
@@ -1457,3 +2030,88 @@ function RunOverlay(props: {
   );
 }
 
+/** The series read-out on the page (between runs, paused, or finished). */
+function SeriesPanel(props: {
+  series: SeriesState;
+  now: number;
+  wakeLock: WakeLockStatus;
+  copied: boolean;
+  onStop: () => void;
+  onContinue: () => void;
+  onClose: () => void;
+  onCopy: () => void;
+}) {
+  const { series, now, wakeLock, copied, onStop, onContinue, onClose, onCopy } = props;
+  const eta = seriesEtaMs(series);
+  const started = Date.parse(series.startedAt);
+  const ended = series.endedAt ? Date.parse(series.endedAt) : now;
+  const heading =
+    series.status === 'running'
+      ? `Series: run ${currentRunIndex(series)} of ${series.count}`
+      : series.status === 'paused'
+        ? `Series paused after ${series.completed.length} of ${series.count} runs`
+        : series.status === 'complete'
+          ? `Series complete: ${series.count} of ${series.count} runs`
+          : `Series stopped after ${series.completed.length} of ${series.count} runs`;
+  return (
+    <Card role="region" aria-label="Benchmark series">
+      <CardHeader>
+        <CardTitle>{heading}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 text-sm">
+        <p className="text-muted-foreground">
+          {series.settings.suite} suite · quality {series.settings.includeQuality ? 'on' : 'off'} · publish{' '}
+          {series.settings.publish ? 'on' : 'off'} · clear caches after each run {series.settings.clearAfterRun ? 'on' : 'off'}
+          {' · '}elapsed {formatDuration(Math.max(0, ended - started))}
+          {series.status === 'running' && eta !== null ? ` · about ${formatDuration(eta)} left` : ''}
+        </p>
+        {series.status === 'running' && wakeLock !== 'idle' && (
+          <p className="text-xs text-muted-foreground">{WAKE_LOCK_TEXT[wakeLock]}</p>
+        )}
+        {series.status === 'paused' && series.pauseReason && (
+          <p role="alert" className="text-destructive">
+            {series.pauseReason}
+          </p>
+        )}
+        {series.completed.length > 0 ? (
+          <ol className="flex flex-col gap-1" aria-label="Completed runs">
+            {series.completed.map((r) => (
+              <li key={r.runId} className="flex flex-wrap items-baseline gap-x-2">
+                <span className="tabular-nums">{r.index}.</span>
+                <span className="font-mono text-xs">{r.runId}</span>
+                <span className="text-muted-foreground">{formatDuration(r.durationMs)}</span>
+                {r.rawUrl ? (
+                  <a className="underline underline-offset-2" href={r.rawUrl} target="_blank" rel="noreferrer">
+                    View the raw run {r.index}
+                  </a>
+                ) : (
+                  <span className="text-muted-foreground">
+                    {r.outcome === 'exported' ? 'exported as JSON' : `exported as JSON; not published (${r.note ?? 'submission failed'})`}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="text-muted-foreground">No run of this series has finished yet.</p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          {series.status === 'paused' && <Button onClick={onContinue}>Continue series</Button>}
+          {(series.status === 'running' || series.status === 'paused') && (
+            <Button variant="outline" onClick={onStop}>
+              Stop series
+            </Button>
+          )}
+          <Button variant="outline" onClick={onCopy} disabled={series.completed.length === 0}>
+            {copied ? 'Copied' : 'Copy summary'}
+          </Button>
+          {(series.status === 'complete' || series.status === 'stopped') && (
+            <Button variant="ghost" onClick={onClose}>
+              Close series
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

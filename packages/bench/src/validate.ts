@@ -96,6 +96,8 @@ export function validateRunShape(value: unknown, options: ValidateOptions = {}):
   const harness = run.harness as Record<string, unknown> | undefined;
   if (!harness || typeof harness.name !== 'string' || typeof harness.version !== 'string') {
     push('harness {name, version} is required');
+  } else {
+    validateHarnessExtras(harness, push);
   }
   if (!['quick', 'standard', 'thorough', 'custom'].includes(run.suite as string)) {
     push('suite must be quick|standard|thorough|custom');
@@ -117,6 +119,23 @@ export function validateRunShape(value: unknown, options: ValidateOptions = {}):
   }
   if (!Array.isArray(run.events)) push('events must be an array');
   return errors;
+}
+
+/** Optional series membership and cold-start marker on `harness` (bench 0.9.0). */
+function validateHarnessExtras(harness: Record<string, unknown>, push: (m: string) => void): void {
+  if ('series' in harness && harness.series !== undefined) {
+    const series = harness.series as Record<string, unknown> | null;
+    const isCount = (v: unknown, max: number) => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= max;
+    if (typeof series !== 'object' || series === null) push('harness.series must be an object {id, index, count}');
+    else if (typeof series.id !== 'string' || series.id.length < 1 || series.id.length > 64)
+      push('harness.series.id must be a string (1-64 chars)');
+    else if (!isCount(series.count, 1000)) push('harness.series.count must be an integer from 1 to 1000');
+    else if (!isCount(series.index, series.count as number))
+      push('harness.series.index must be an integer from 1 to harness.series.count');
+  }
+  if ('coldStart' in harness && harness.coldStart !== 'provider-caches-cleared') {
+    push('harness.coldStart must be "provider-caches-cleared" when present');
+  }
 }
 
 function validateCellShape(value: unknown, index: number, push: (m: string) => void): void {
