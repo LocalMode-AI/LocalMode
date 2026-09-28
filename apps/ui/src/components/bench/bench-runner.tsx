@@ -29,7 +29,7 @@ import {
   memoryApiAvailable,
   sampleMemoryBytes,
 } from '@localmode/bench';
-import { BENCH_MODELS, SUITE_MODELS } from '@/lib/bench/catalog';
+import { BENCH_MODELS, SUITE_MODELS, estimateDownloadBytes } from '@/lib/bench/catalog';
 import { wllamaAvailability } from '@/lib/bench/adapters';
 import {
   chromeAIStatus,
@@ -47,9 +47,14 @@ import {
   type CacheClearReport,
 } from '@/lib/bench/cache-clear';
 import {
+  COOLDOWN_STEP_MINUTES,
+  MAX_COOLDOWN_MINUTES,
   MAX_SERIES_RUNS,
+  clampCooldownMinutes,
   clearStoredSeries,
   continueSeries,
+  cooldownRemainingMs,
+  cooldownStatusText,
   createSeries,
   currentRunIndex,
   formatDuration,
@@ -64,8 +69,10 @@ import {
   resolveSeriesOnLoad,
   saveSeries,
   seriesEtaMs,
+  seriesHarness,
   seriesSummaryText,
   seriesTitle,
+  startCooldown,
   type SeriesRunRecord,
   type SeriesState,
 } from '@/lib/bench/series';
@@ -496,6 +503,9 @@ export function BenchRunner() {
   const [runsInput, setRunsInput] = useState('1');
   const runsCount = Math.min(MAX_SERIES_RUNS, Math.max(1, Math.floor(Number(runsInput)) || 1));
   const [clearAfterRun, setClearAfterRun] = useState(false);
+  /** "Cool-down between runs" input as typed, in minutes; the series uses its clamped half-minute value. */
+  const [cooldownInput, setCooldownInput] = useState('0');
+  const cooldownMinutes = clampCooldownMinutes(Number(cooldownInput));
   /** The persisted series this page belongs to, if any (mirrored in seriesRef for async readers). */
   const [series, setSeriesState] = useState<SeriesState | null>(null);
   const seriesRef = useRef<SeriesState | null>(null);
@@ -548,6 +558,7 @@ export function BenchRunner() {
       setIncludeQuality(state.settings.includeQuality);
       setAutoSubmit(state.settings.publish);
       setClearAfterRun(state.settings.clearAfterRun);
+      setCooldownInput(String(state.settings.cooldownMs / 60_000));
       setDisabledLanes(new Set(state.settings.disabledLanes));
       setRunsInput(String(state.count));
       if (action === 'start-next') setAutoStartPending(true);
@@ -558,6 +569,7 @@ export function BenchRunner() {
       if (presets.publish !== undefined) setAutoSubmit(presets.publish);
       if (presets.clearAfterRun !== undefined) setClearAfterRun(presets.clearAfterRun);
       if (presets.runs !== undefined) setRunsInput(String(presets.runs));
+      if (presets.cooldownMinutes !== undefined) setCooldownInput(String(presets.cooldownMinutes));
     }
     return () => {
       cancelled = true;
@@ -627,12 +639,7 @@ export function BenchRunner() {
   }, [suite, availability]);
 
   const activeLanes = lanes.filter((l) => l.available && !disabledLanes.has(laneKey(l.model)));
-  // The two llama.cpp lanes share one GGUF per model (same URL, one provider
-  // cache), so a file is counted once no matter how many lanes load it.
-  const totalDownload = [...new Map(activeLanes.map((l) => [l.model.url ?? laneKey(l.model), l.model.sizeBytes ?? 0])).values()].reduce(
-    (acc, bytes) => acc + bytes,
-    0,
-  );
+  const totalDownload = estimateDownloadBytes(activeLanes.map((l) => l.model));
 
   /**
    * Every lane of the suite becomes cells, so a suite result always lists the
@@ -815,9 +822,7 @@ export function BenchRunner() {
         appVersion: 'localmode.ai',
         runtimeVersions: benchRuntimeVersions(),
         commit: benchBuildCommit(),
-        ...(seriesAtStart
-          ? { series: { id: seriesAtStart.seriesId, index: currentRunIndex(seriesAtStart), count: seriesAtStart.count } }
-          : {}),
+        ...(seriesAtStart ? { series: seriesHarness(seriesAtStart) } : {}),
         ...(coldStart ? { coldStart: 'provider-caches-cleared' as const } : {}),
       };
       // Progress goes to IndexedDB cell by cell, so a tab that dies mid-suite
@@ -980,9 +985,23 @@ export function BenchRunner() {
       const next = recordRunFinished(current, record, Date.now());
       updateSeries(next);
       if (next.status === 'running') {
+        // The idle clock starts now; with a cool-down the page waits it out
+        // here, then reloads. Stop series during the wait ends the series.
+        const cooling = startCooldown(next, Date.now());
+        updateSeries(cooling);
+        if (cooldownRemainingMs(cooling, Date.now()) > 0) {
+          setStatusLine(`Run ${next.completed.length} of ${next.count} kept; cooling down before run ${next.completed.length + 1}`);
+          for (;;) {
+            const current = seriesRef.current;
+            if (!current || current.status !== 'running') return;
+            if (cooldownRemainingMs(current, Date.now()) <= 0) break;
+            await sleepMs(250);
+          }
+        }
         setStatusLine(`Run ${next.completed.length} of ${next.count} kept; reloading the page for run ${next.completed.length + 1}`);
         // Give the browser a moment to hand the exported file to the download manager.
         await sleepMs(1_500);
+        if (seriesRef.current?.status !== 'running') return;
         window.location.reload();
       }
     } catch (error) {
@@ -1033,6 +1052,7 @@ export function BenchRunner() {
         includeQuality,
         publish: autoSubmit,
         clearAfterRun,
+        cooldownMs: cooldownMinutes * 60_000,
         disabledLanes: [...disabledLanes],
       },
       now: Date.now(),
@@ -1043,19 +1063,21 @@ export function BenchRunner() {
       window.location.reload();
       return;
     }
-    updateSeries(markRunStarted(created));
+    updateSeries(markRunStarted(created, Date.now()));
     void run({ userActivated: true });
-  }, [runsCount, run, suite, includeQuality, autoSubmit, clearAfterRun, disabledLanes, updateSeries]);
+  }, [runsCount, run, suite, includeQuality, autoSubmit, clearAfterRun, cooldownMinutes, disabledLanes, updateSeries]);
 
   // Resume a series after its reload: no click, the next run starts once the lanes are probed.
+  // A page reloaded by hand during a cool-down waits out the rest first (the series panel counts down).
   useEffect(() => {
     if (!autoStartPending || availability === null || !studyChecked || phase !== 'idle') return;
     const current = seriesRef.current;
+    if (current && cooldownRemainingMs(current, now) > 0) return;
     setAutoStartPending(false);
     if (!current || current.status !== 'running') return;
-    updateSeries(markRunStarted(current));
+    updateSeries(markRunStarted(current, Date.now()));
     void run({ userActivated: false });
-  }, [autoStartPending, availability, studyChecked, phase, run, updateSeries]);
+  }, [autoStartPending, availability, studyChecked, phase, run, updateSeries, now]);
 
   const stopSeries = useCallback(() => {
     const current = seriesRef.current;
@@ -1072,7 +1094,7 @@ export function BenchRunner() {
       window.location.reload();
       return;
     }
-    updateSeries(markRunStarted(resumed));
+    updateSeries(markRunStarted(resumed, Date.now()));
     void run({ userActivated: true });
   }, [run, updateSeries]);
 
@@ -1096,10 +1118,11 @@ export function BenchRunner() {
       suite,
       includeQuality,
       runs: runsCount,
+      cooldownMinutes,
       clearAfterRun,
       publish: autoSubmit,
     })}`;
-  }, [suite, includeQuality, runsCount, clearAfterRun, autoSubmit]);
+  }, [suite, includeQuality, runsCount, cooldownMinutes, clearAfterRun, autoSubmit]);
 
   const copyPresetLink = useCallback(async () => {
     try {
@@ -1284,6 +1307,24 @@ export function BenchRunner() {
               />
             </div>
             <div className="flex items-center gap-2">
+              <Label htmlFor="bench-cooldown">Cool-down between runs</Label>
+              <Input
+                id="bench-cooldown"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                max={MAX_COOLDOWN_MINUTES}
+                step={COOLDOWN_STEP_MINUTES}
+                className="w-20"
+                value={cooldownInput}
+                onChange={(e) => setCooldownInput(e.target.value)}
+                onBlur={() => setCooldownInput(String(cooldownMinutes))}
+                disabled={phase === 'running' || seriesOpen}
+                aria-describedby="bench-runs-help"
+              />
+              <span className="text-sm text-muted-foreground">min</span>
+            </div>
+            <div className="flex items-center gap-2">
               <Switch
                 id="bench-clear-after"
                 checked={clearAfterRun}
@@ -1307,6 +1348,12 @@ export function BenchRunner() {
               : `Set Runs above 1 (up to ${MAX_SERIES_RUNS}) to run a series with these settings, one fresh page load per run.`}
             {clearAfterRun
               ? ' The model caches are cleared after every run, so each next run downloads its models again.'
+              : ''}
+            {runsCount > 1 && cooldownMinutes > 0
+              ? ` After each run the page idles for ${cooldownMinutes} min (the cool-down) before it reloads, so the device can cool between runs; the wait is recorded on every run file.`
+              : ''}
+            {runsCount > 1 && cooldownMinutes === 0
+              ? ` Cool-down between runs (0 to ${MAX_COOLDOWN_MINUTES} min, in half-minute steps) idles the page after each run before the next one; use it on laptops and phones, which slow down when run back to back.`
               : ''}
           </p>
 
@@ -1421,6 +1468,10 @@ export function BenchRunner() {
                 </li>
                 <li>
                   <code className="font-mono">runs=N</code>: runs in the series (1 to {MAX_SERIES_RUNS})
+                </li>
+                <li>
+                  <code className="font-mono">cooldown=M</code>: cool-down between runs in minutes (0 to{' '}
+                  {MAX_COOLDOWN_MINUTES}, rounded to the nearest half minute)
                 </li>
                 <li>
                   <code className="font-mono">cold=on|off</code>: clear caches after each run
@@ -1871,7 +1922,7 @@ function RunOverlay(props: {
                 {series.stopRequested
                   ? 'The series stops when this run finishes.'
                   : series.completed.length > 0
-                    ? `${series.completed.length} done · the series ends in about ${formatDuration(seriesEtaMs(series) ?? 0)}`
+                    ? `${series.completed.length} done · the series ends in about ${formatDuration(seriesEtaMs(series, now) ?? 0)}`
                     : 'After this run the page reloads and starts the next one by itself.'}
               </span>
             </div>
@@ -2042,7 +2093,8 @@ function SeriesPanel(props: {
   onCopy: () => void;
 }) {
   const { series, now, wakeLock, copied, onStop, onContinue, onClose, onCopy } = props;
-  const eta = seriesEtaMs(series);
+  const eta = seriesEtaMs(series, now);
+  const cooldownText = cooldownStatusText(series, now);
   const started = Date.parse(series.startedAt);
   const ended = series.endedAt ? Date.parse(series.endedAt) : now;
   const heading =
@@ -2062,9 +2114,15 @@ function SeriesPanel(props: {
         <p className="text-muted-foreground">
           {series.settings.suite} suite · quality {series.settings.includeQuality ? 'on' : 'off'} · publish{' '}
           {series.settings.publish ? 'on' : 'off'} · clear caches after each run {series.settings.clearAfterRun ? 'on' : 'off'}
+          {' · '}cool-down {series.settings.cooldownMs / 60_000} min
           {' · '}elapsed {formatDuration(Math.max(0, ended - started))}
           {series.status === 'running' && eta !== null ? ` · about ${formatDuration(eta)} left` : ''}
         </p>
+        {cooldownText && (
+          <p role="status" className="font-medium tabular-nums">
+            {cooldownText}
+          </p>
+        )}
         {series.status === 'running' && wakeLock !== 'idle' && (
           <p className="text-xs text-muted-foreground">{WAKE_LOCK_TEXT[wakeLock]}</p>
         )}

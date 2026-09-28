@@ -130,7 +130,16 @@ the warmup and the warm reload re-downloaded the 3.46 GB weights.
   the run's place in a consecutive series, one fresh page load per run) and
   `harness.coldStart: 'provider-caches-cleared'` (the run started right after
   the page cleared its providers' model caches; it does not claim a fresh
-  browser profile, since a page cannot clear the HTTP disk cache).
+  browser profile, since a page cannot clear the HTTP disk cache). Since
+  0.9.1 `harness.series` may carry `cooldownMs` (the idle wait the host
+  configured between the runs of the series, integer, 0 to
+  `SERIES_MAX_COOLDOWN_MS` = 1 hour, on every run including run 1) and
+  `idleBeforeMs` (the idle time the host measured before this run started,
+  integer, 0 to `SERIES_MAX_IDLE_BEFORE_MS` = 30 days; absent on run 1). A
+  cool-down is idle time on the page, not a protocol setting: a 7-run
+  back-to-back Quick series on a 15 W class laptop showed the llama.cpp CPU
+  decode falling from about 135 to about 85 chars/s from run 3 on, so laptop
+  and phone series need a recorded pause between runs.
 - **Statistics** - median headline; mean ± SD, IQR, 95% CI (Student-t), CV;
   CV > 5% ⇒ high-variance flag; geomean only within a device run.
 - **Quality-fidelity lane** - tinyMMLU (MIT) accuracy + STS-B (CC BY-SA) Spearman,
@@ -301,6 +310,9 @@ cell without timed iterations keeps one placeholder row):
 | `validationOk`, `validationFlags` | `validateSubmission` verdict and its flags as `severity:code`, joined with `\|` |
 | `seriesId`, `seriesIndex`, `seriesCount` | `harness.series` (since 0.9.0): the series the run belongs to and its 1-based position in it; empty on a run outside a series |
 | `coldStart` | `harness.coldStart` (since 0.9.0): `provider-caches-cleared` when the run started right after the page cleared its providers' model caches; empty otherwise |
+| `seriesCooldownMs`, `seriesIdleBeforeMs` | `harness.series.cooldownMs` and `harness.series.idleBeforeMs` (since 0.9.1): the cool-down configured for the series and the idle time measured before this run, in ms; empty when not recorded (idle time is absent on run 1) |
+| `pressureSamples` | Number of `pressure-change` trace events (Compute Pressure state transitions the runner recorded; the observer samples once a second and records only changes); 0 when the browser has no Compute Pressure API |
+| `pressureCriticalFraction`, `pressureSeriousFraction`, `pressureFairFraction`, `pressureNominalFraction` | Fraction of the suite wall time (`suite-end` minus `suite-start`) spent in each Compute Pressure state, from `pressureStateFractions()`, rounded to four decimals. The state at `suite-start` is the last change at or before it; time before the first known state counts toward none, so the four sum to less than 1 when the first sample arrived mid-suite. Empty when the run has no sample or no complete suite span |
 | `rv_*` | One column per runtime package in `harness.runtimeVersions` across all runs, named by `runtimeVersionColumn()` (`@huggingface/transformers` becomes `rv_huggingface_transformers`), sorted by name |
 
 ## Dataset licenses

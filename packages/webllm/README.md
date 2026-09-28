@@ -70,7 +70,7 @@ await deleteModelCache('Llama-3.2-1B-Instruct-q4f16_1-MLC');
 
 | Model | Size | Context | Description |
 | ----- | ---- | ------- | ----------- |
-| `SmolLM2-135M-Instruct-q0f16-MLC` | 78MB | 2K | Tiniest model, instant loading |
+| `SmolLM2-135M-Instruct-q0f16-MLC` | 271MB | 2K | Tiniest model, instant loading |
 | `SmolLM2-360M-Instruct-q4f16_1-MLC` | 210MB | 2K | Very small, surprisingly capable |
 | `Qwen2.5-0.5B-Instruct-q4f16_1-MLC` | 278MB | 4K | Tiny Qwen, great quality for size |
 | `Qwen3-0.6B-q4f16_1-MLC` | 350MB | 4K | Latest tiny model |

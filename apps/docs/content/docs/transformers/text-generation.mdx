@@ -77,9 +77,8 @@ const model = isPromptAPISupported()
 | Model | Size | Context | Use Case |
 |-------|------|---------|----------|
 | `onnx-community/Qwen3.5-0.8B-ONNX` | ~500MB | 32K | **Vision** — best sub-1B multimodal, WebGPU recommended |
-| `onnx-community/Qwen3-0.6B-ONNX` | ~570MB | 4K | Smallest Qwen3 text model, fast |
+| `onnx-community/Qwen3-0.6B-ONNX` | ~930MB | 4K | Smallest Qwen3 text model, fast |
 | `onnx-community/granite-4.0-1b-ONNX-web` | ~350MB | 4K | IBM Granite 4.0 1B, 12 languages |
-| `onnx-community/Llama-3.2-1B-Instruct-ONNX` | ~380MB | 8K | Meta Llama 3.2 1B, q4f16, good general quality |
 | `onnx-community/TinyLlama-1.1B-Chat-v1.0-ONNX` | ~350MB | 2K | Small, fast, q4f16, no login required |
 | `onnx-community/Qwen2.5-Coder-1.5B-Instruct` | ~450MB | 4K | Code-specialized Qwen2.5, q4f16, great for programming |
 | `onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX` | ~500MB | 4K | DeepSeek-R1 distilled, q4f16, strong reasoning |
@@ -89,6 +88,7 @@ const model = isPromptAPISupported()
 | Model | Size | Context | Use Case |
 |-------|------|---------|----------|
 | `onnx-community/Qwen3.5-2B-ONNX` | ~1.5GB | 32K | **Vision** — high quality 2B multimodal, needs 4GB+ RAM |
+| `onnx-community/Llama-3.2-1B-Instruct-ONNX` | ~1.7GB | 8K | Meta Llama 3.2 1B, q4, good general quality |
 | `onnx-community/Llama-3.2-3B-Instruct-ONNX` | ~900MB | 8K | Meta Llama 3.2 3B, q4f16, strong quality |
 | `onnx-community/Phi-4-mini-instruct-web-q4f16` | ~2.3GB | 4K | Microsoft Phi-4 Mini, strong reasoning/coding, WebGPU recommended |
 | `microsoft/Phi-3-mini-4k-instruct-onnx-web` | ~1.2GB | 4K | Microsoft Phi-3, q4, strong reasoning |
@@ -99,8 +99,8 @@ const model = isPromptAPISupported()
 | Model | Size | Context | Use Case |
 |-------|------|---------|----------|
 | `onnx-community/Qwen3.5-4B-ONNX` | ~2.5GB | 32K | **Vision** — best Qwen3.5 for browser, multimodal, needs 8GB+ RAM |
-| `onnx-community/gemma-4-E2B-it-ONNX` | ~1.5GB | 128K | **Vision** — Google Gemma 4 E2B multimodal, 128K context, needs 6GB+ VRAM |
-| `onnx-community/gemma-4-E4B-it-ONNX` | ~3GB | 128K | **Vision** — Google Gemma 4 E4B multimodal, 128K context, needs 8GB+ VRAM |
+| `onnx-community/gemma-4-E2B-it-ONNX` | ~5.2GB | 128K | **Vision** — Google Gemma 4 E2B multimodal, 128K context, needs 6GB+ VRAM |
+| `onnx-community/gemma-4-E4B-it-ONNX` | ~7.2GB | 128K | **Vision** — Google Gemma 4 E4B multimodal, 128K context, needs 8GB+ VRAM |
 
 <Callout type="warn" title="Gemma 4 ONNX performance">
   Gemma 4 via Transformers.js achieves ~2 tok/s on WebGPU — significantly slower than the LiteRT path (~14-16 tok/s). Use `@localmode/litert` for text-only performance. The ONNX path is valuable for **vision/multimodal** support and **WASM fallback** when WebGPU is unavailable. See [Gemma 4: LiteRT vs ONNX](/blog/compare/gemma4-litert-vs-onnx) for a detailed comparison.

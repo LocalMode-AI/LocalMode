@@ -646,6 +646,23 @@ export interface HarnessSeries {
   index: number;
   /** Runs the series was started with (1-1000). */
   count: number;
+  /**
+   * Cool-down the series was configured with, in ms (integer, 0 to
+   * `SERIES_MAX_COOLDOWN_MS`): the idle time the host waits on the page after
+   * a run's result is kept and before the next run's page load (since bench
+   * 0.9.1). Recorded on every run of the series, run 1 included, because it
+   * describes the series. Idle time on the page, not a protocol setting.
+   */
+  cooldownMs?: number;
+  /**
+   * Idle wall time the host measured before this run started, in ms
+   * (integer, 0 to `SERIES_MAX_IDLE_BEFORE_MS`): from the moment the previous
+   * run of the series was kept (published or exported, caches cleared when
+   * asked) to this run's start, across the page reload (since bench 0.9.1).
+   * Absent on run 1 and on a run resumed by hand after a pause, where no
+   * previous run ended just before it.
+   */
+  idleBeforeMs?: number;
 }
 
 /** The unit of submission: one full suite run on one device. */

@@ -1,5 +1,11 @@
 # @localmode/transformers
 
+## 4.1.4
+
+### Patch Changes
+
+- fix: the declared download sizes of four catalog language models now match the files the provider fetches, summed from the Hugging Face tree API. The catalog carried the q4f16 file sizes (or less) while the provider loads `dtype: 'q4'`: Qwen3 0.6B is 928,224,461 bytes (declared 570 MiB), Llama 3.2 1B Instruct 1,704,451,656 (declared 380 MiB; the q4 decoder keeps its weights in a 1,692,672,000-byte external data file), Gemma 4 E2B 5,163,395,208 (declared 1,500 MiB) and Gemma 4 E4B 7,160,140,415 (declared 3,000 MiB). Each count covers `config.json`, `generation_config.json`, `tokenizer.json`, `tokenizer_config.json` and the q4 decoder with its external data; the Gemma 4 counts also cover the q4 `embed_tokens`, the fp16 vision encoder and the fp32 audio encoder (the multimodal load creates every encoder session and passes no dtype for the audio one), `processor_config.json` and `chat_template.jinja`. The Llama 3.2 1B and Gemma 4 descriptions now say q4 instead of q4f16. `sizeBytes` and the `size` labels feed download estimates; no runtime behavior changes.
+
 ## 4.1.3
 
 ### Patch Changes

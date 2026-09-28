@@ -121,7 +121,25 @@ export function validateRunShape(value: unknown, options: ValidateOptions = {}):
   return errors;
 }
 
-/** Optional series membership and cold-start marker on `harness` (bench 0.9.0). */
+/**
+ * Largest `harness.series.cooldownMs` a run may carry: one hour. The
+ * localmode.ai runner offers up to 30 minutes; the bound leaves room for
+ * other hosts and rejects nonsense.
+ */
+export const SERIES_MAX_COOLDOWN_MS = 3_600_000;
+
+/**
+ * Largest `harness.series.idleBeforeMs` a run may carry: 30 days. The idle
+ * time spans a page reload and can include a closed tab reopened later; a
+ * host omits the field rather than record a longer or negative gap.
+ */
+export const SERIES_MAX_IDLE_BEFORE_MS = 30 * 86_400_000;
+
+/**
+ * Optional series membership (with the series cool-down and the idle time
+ * measured before the run, bench 0.9.1) and cold-start marker on `harness`
+ * (bench 0.9.0).
+ */
 function validateHarnessExtras(harness: Record<string, unknown>, push: (m: string) => void): void {
   if ('series' in harness && harness.series !== undefined) {
     const series = harness.series as Record<string, unknown> | null;
@@ -132,6 +150,13 @@ function validateHarnessExtras(harness: Record<string, unknown>, push: (m: strin
     else if (!isCount(series.count, 1000)) push('harness.series.count must be an integer from 1 to 1000');
     else if (!isCount(series.index, series.count as number))
       push('harness.series.index must be an integer from 1 to harness.series.count');
+    else {
+      const isMs = (v: unknown, max: number) => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= max;
+      if ('cooldownMs' in series && !isMs(series.cooldownMs, SERIES_MAX_COOLDOWN_MS))
+        push(`harness.series.cooldownMs must be an integer from 0 to ${SERIES_MAX_COOLDOWN_MS}`);
+      if ('idleBeforeMs' in series && !isMs(series.idleBeforeMs, SERIES_MAX_IDLE_BEFORE_MS))
+        push(`harness.series.idleBeforeMs must be an integer from 0 to ${SERIES_MAX_IDLE_BEFORE_MS}`);
+    }
   }
   if ('coldStart' in harness && harness.coldStart !== 'provider-caches-cleared') {
     push('harness.coldStart must be "provider-caches-cleared" when present');

@@ -8,8 +8,16 @@
  * localStorage helpers at the bottom, which never throw.
  */
 
+import { SERIES_MAX_IDLE_BEFORE_MS } from '@localmode/bench';
+
 /** Largest series the runner accepts: the longest series the lab plan schedules (30 Thorough runs). */
 export const MAX_SERIES_RUNS = 30;
+
+/** Longest cool-down between the runs of a series, in minutes. */
+export const MAX_COOLDOWN_MINUTES = 30;
+
+/** The cool-down input moves in half-minute steps. */
+export const COOLDOWN_STEP_MINUTES = 0.5;
 
 /** localStorage key of the series state (runner-owned). */
 export const SERIES_STORAGE_KEY = 'localmode-bench-series';
@@ -22,6 +30,12 @@ export interface SeriesSettings {
   includeQuality: boolean;
   publish: boolean;
   clearAfterRun: boolean;
+  /**
+   * Idle wait on the page after each run's result is kept (and the caches
+   * cleared, when asked) and before the reload for the next run, in ms
+   * (0 to 30 minutes). A series stored without it reads as 0.
+   */
+  cooldownMs: number;
   /** Lanes the submitter switched off (`runtimeId/benchModelId`). */
   disabledLanes: string[];
 }
@@ -59,6 +73,25 @@ export interface SeriesState {
   stopRequested: boolean;
   pauseReason?: string;
   endedAt?: string;
+  /** Epoch ms at which the previous run was kept and the page began to idle; cleared when the next run starts. */
+  idleSince?: number;
+  /** Epoch ms at which the cool-down after the previous run ends; cleared when the next run starts. */
+  cooldownUntil?: number;
+  /** Idle time measured before the run in flight (or last started) began, in ms; absent when nothing measured it. */
+  idleBeforeMs?: number;
+}
+
+/** Clamp a cool-down in minutes to 0..MAX_COOLDOWN_MINUTES, rounded to the nearest half minute (NaN reads as 0). */
+export function clampCooldownMinutes(minutes: number): number {
+  if (!Number.isFinite(minutes)) return 0;
+  const clamped = Math.min(MAX_COOLDOWN_MINUTES, Math.max(0, minutes));
+  return Math.round(clamped / COOLDOWN_STEP_MINUTES) * COOLDOWN_STEP_MINUTES;
+}
+
+/** Drop the idle clock and the countdown (a stop, a pause, a failed run). */
+function withoutIdle(state: SeriesState): SeriesState {
+  const { idleSince: _idle, cooldownUntil: _until, ...rest } = state;
+  return rest;
 }
 
 /** Start a series at run 1. */
@@ -72,7 +105,11 @@ export function createSeries(input: {
     version: 1,
     seriesId: input.seriesId,
     count: Math.min(MAX_SERIES_RUNS, Math.max(1, Math.floor(input.count))),
-    settings: { ...input.settings, disabledLanes: [...input.settings.disabledLanes] },
+    settings: {
+      ...input.settings,
+      cooldownMs: clampCooldownMinutes(input.settings.cooldownMs / 60_000) * 60_000,
+      disabledLanes: [...input.settings.disabledLanes],
+    },
     startedAt: new Date(input.now).toISOString(),
     status: 'running',
     completed: [],
@@ -86,9 +123,65 @@ export function currentRunIndex(state: SeriesState): number {
   return state.inFlightIndex ?? state.completed.length + 1;
 }
 
-/** Mark the next run as started, so a page that dies during it is detected on the next load. */
-export function markRunStarted(state: SeriesState): SeriesState {
-  return { ...state, status: 'running', inFlightIndex: state.completed.length + 1, pauseReason: undefined };
+/**
+ * Mark the next run as started, so a page that dies during it is detected on
+ * the next load. The idle time since the previous run was kept (across the
+ * reload) becomes this run's `idleBeforeMs`; the idle clock and the countdown
+ * end here.
+ */
+export function markRunStarted(state: SeriesState, now: number): SeriesState {
+  const { idleSince, cooldownUntil: _until, idleBeforeMs: _previous, ...rest } = state;
+  return {
+    ...rest,
+    status: 'running',
+    inFlightIndex: state.completed.length + 1,
+    pauseReason: undefined,
+    ...(idleSince !== undefined ? { idleBeforeMs: Math.round(now - idleSince) } : {}),
+  };
+}
+
+/**
+ * Start the idle wait after a kept run: the idle clock starts now and the
+ * countdown ends `settings.cooldownMs` later. With a zero cool-down only the
+ * idle clock runs (the reload follows at once).
+ */
+export function startCooldown(state: SeriesState, now: number): SeriesState {
+  return { ...state, idleSince: now, cooldownUntil: now + state.settings.cooldownMs };
+}
+
+/** Milliseconds left of the cool-down before the next run (0 when none is running). */
+export function cooldownRemainingMs(state: SeriesState, now: number): number {
+  if (state.status !== 'running' || state.inFlightIndex !== null || state.cooldownUntil === undefined) return 0;
+  return Math.max(0, state.cooldownUntil - now);
+}
+
+/** "Cooling down: 2:45 until run 4 of 10" while a cool-down runs, else null. */
+export function cooldownStatusText(state: SeriesState, now: number): string | null {
+  const remaining = cooldownRemainingMs(state, now);
+  if (remaining <= 0) return null;
+  const seconds = Math.ceil(remaining / 1000);
+  const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  return `Cooling down: ${clock} until run ${currentRunIndex(state)} of ${state.count}`;
+}
+
+/** The series fields a run records on `harness.series` (idle time only when it was measured and is in range). */
+export function seriesHarness(state: SeriesState): {
+  id: string;
+  index: number;
+  count: number;
+  cooldownMs: number;
+  idleBeforeMs?: number;
+} {
+  const idle = state.idleBeforeMs;
+  return {
+    id: state.seriesId,
+    index: currentRunIndex(state),
+    count: state.count,
+    cooldownMs: state.settings.cooldownMs,
+    ...(idle !== undefined && Number.isInteger(idle) && idle >= 0 && idle <= SERIES_MAX_IDLE_BEFORE_MS
+      ? { idleBeforeMs: idle }
+      : {}),
+  };
 }
 
 /** Record a run that produced a result (published or exported). */
@@ -114,7 +207,7 @@ export function recordRunFinished(
 export function recordRunFailed(state: SeriesState, reason: string): SeriesState {
   const index = state.inFlightIndex ?? state.completed.length + 1;
   return {
-    ...state,
+    ...withoutIdle(state),
     status: 'paused',
     inFlightIndex: null,
     stopRequested: false,
@@ -126,7 +219,7 @@ export function recordRunFailed(state: SeriesState, reason: string): SeriesState
 export function requestStop(state: SeriesState, options: { runInProgress: boolean; now: number }): SeriesState {
   if (options.runInProgress) return { ...state, stopRequested: true };
   return {
-    ...state,
+    ...withoutIdle(state),
     status: 'stopped',
     inFlightIndex: null,
     stopRequested: false,
@@ -136,7 +229,7 @@ export function requestStop(state: SeriesState, options: { runInProgress: boolea
 
 /** Resume a paused series; the next run is the one after the last recorded run. */
 export function continueSeries(state: SeriesState): SeriesState {
-  return { ...state, status: 'running', inFlightIndex: null, stopRequested: false, pauseReason: undefined };
+  return { ...withoutIdle(state), status: 'running', inFlightIndex: null, stopRequested: false, pauseReason: undefined };
 }
 
 /**
@@ -150,7 +243,7 @@ export function resolveSeriesOnLoad(state: SeriesState): { state: SeriesState; a
   if (state.inFlightIndex !== null) {
     return {
       state: {
-        ...state,
+        ...withoutIdle(state),
         status: 'paused',
         inFlightIndex: null,
         stopRequested: false,
@@ -160,7 +253,10 @@ export function resolveSeriesOnLoad(state: SeriesState): { state: SeriesState; a
     };
   }
   if (state.stopRequested) {
-    return { state: { ...state, status: 'stopped', stopRequested: false, endedAt: state.endedAt ?? state.startedAt }, action: 'show' };
+    return {
+      state: { ...withoutIdle(state), status: 'stopped', stopRequested: false, endedAt: state.endedAt ?? state.startedAt },
+      action: 'show',
+    };
   }
   return { state, action: 'start-next' };
 }
@@ -170,11 +266,16 @@ export function isSeriesOpen(state: SeriesState | null): state is SeriesState {
   return state !== null && (state.status === 'running' || state.status === 'paused');
 }
 
-/** Remaining wall time: the mean duration of the completed runs times the runs left. Null before the first run finishes. */
-export function seriesEtaMs(state: SeriesState): number | null {
+/**
+ * Remaining wall time: the mean duration of the completed runs times the runs
+ * left, plus what is left of a running cool-down and one full cool-down
+ * before each later run. Null before the first run finishes.
+ */
+export function seriesEtaMs(state: SeriesState, now: number): number | null {
   if (state.completed.length === 0) return null;
   const mean = state.completed.reduce((acc, r) => acc + r.durationMs, 0) / state.completed.length;
-  return mean * Math.max(0, state.count - state.completed.length);
+  const left = Math.max(0, state.count - state.completed.length);
+  return mean * left + cooldownRemainingMs(state, now) + state.settings.cooldownMs * Math.max(0, left - 1);
 }
 
 /** Document title while a series is open or just ended, so a background tab shows progress. */
@@ -210,7 +311,7 @@ export function seriesSummaryText(state: SeriesState): string {
   const lines = [
     `LocalMode Bench series ${state.seriesId} · ${s.suite} suite · quality ${onOff(s.includeQuality)} · publish ${onOff(
       s.publish,
-    )} · clear caches after each run ${onOff(s.clearAfterRun)}`,
+    )} · clear caches after each run ${onOff(s.clearAfterRun)} · cool-down ${s.cooldownMs / 60_000} min`,
     `${state.completed.length} of ${state.count} runs · ${state.status} · started ${state.startedAt}`,
   ];
   for (const run of state.completed) {
@@ -250,6 +351,10 @@ export function parseSeriesState(raw: string | null): SeriesState | null {
   if (!settings || !SUITES.includes(settings.suite as SeriesSuite)) return null;
   if (typeof settings.includeQuality !== 'boolean' || typeof settings.publish !== 'boolean') return null;
   if (typeof settings.clearAfterRun !== 'boolean' || !Array.isArray(settings.disabledLanes)) return null;
+  if (settings.cooldownMs !== undefined && !isInt(settings.cooldownMs, 0, MAX_COOLDOWN_MINUTES * 60_000)) return null;
+  for (const key of ['idleSince', 'cooldownUntil', 'idleBeforeMs'] as const) {
+    if (s[key] !== undefined && (typeof s[key] !== 'number' || !Number.isFinite(s[key]))) return null;
+  }
   if (!STATUSES.includes(s.status as SeriesStatus) || typeof s.startedAt !== 'string') return null;
   if (!Array.isArray(s.completed)) return null;
   if (s.inFlightIndex !== null && !isInt(s.inFlightIndex, 1, MAX_SERIES_RUNS)) return null;
@@ -257,7 +362,9 @@ export function parseSeriesState(raw: string | null): SeriesState | null {
   for (const r of s.completed as Array<Record<string, unknown>>) {
     if (typeof r !== 'object' || r === null || typeof r.runId !== 'string' || typeof r.durationMs !== 'number') return null;
   }
-  return v as SeriesState;
+  const state = v as SeriesState;
+  // A series stored before the cool-down existed has none.
+  return settings.cooldownMs === undefined ? { ...state, settings: { ...state.settings, cooldownMs: 0 } } : state;
 }
 
 /** Read the stored series (null when absent, malformed, or storage is blocked). */
@@ -293,6 +400,8 @@ export interface RunPresets {
   suite?: SeriesSuite;
   includeQuality?: boolean;
   runs?: number;
+  /** Cool-down between runs, in minutes. */
+  cooldownMinutes?: number;
   clearAfterRun?: boolean;
   publish?: boolean;
 }
@@ -304,8 +413,9 @@ function readOnOff(value: string | null): boolean | undefined {
 }
 
 /**
- * Parse `?tier=quick|standard|thorough&quality=on|off&runs=N&cold=on|off&publish=on|off`.
- * Unknown values are ignored; `runs` must be an integer and is clamped to 1..MAX_SERIES_RUNS.
+ * Parse `?tier=quick|standard|thorough&quality=on|off&runs=N&cooldown=M&cold=on|off&publish=on|off`.
+ * Unknown values are ignored; `runs` must be an integer and is clamped to 1..MAX_SERIES_RUNS;
+ * `cooldown` (minutes) must be a plain decimal and is clamped to 0..MAX_COOLDOWN_MINUTES in half-minute steps.
  */
 export function parseRunPresets(search: string): RunPresets {
   const params = new URLSearchParams(search);
@@ -316,6 +426,8 @@ export function parseRunPresets(search: string): RunPresets {
   if (quality !== undefined) out.includeQuality = quality;
   const runs = params.get('runs');
   if (runs !== null && /^\d+$/.test(runs)) out.runs = Math.min(MAX_SERIES_RUNS, Math.max(1, Number(runs)));
+  const cooldown = params.get('cooldown');
+  if (cooldown !== null && /^\d+(\.\d+)?$/.test(cooldown)) out.cooldownMinutes = clampCooldownMinutes(Number(cooldown));
   const cold = readOnOff(params.get('cold'));
   if (cold !== undefined) out.clearAfterRun = cold;
   const publish = readOnOff(params.get('publish'));
@@ -325,7 +437,7 @@ export function parseRunPresets(search: string): RunPresets {
 
 /** The query string for a set of controls, in the documented parameter order. */
 export function presetQuery(p: Required<RunPresets>): string {
-  return `tier=${p.suite}&quality=${onOff(p.includeQuality)}&runs=${p.runs}&cold=${onOff(p.clearAfterRun)}&publish=${onOff(
-    p.publish,
-  )}`;
+  return `tier=${p.suite}&quality=${onOff(p.includeQuality)}&runs=${p.runs}&cooldown=${p.cooldownMinutes}&cold=${onOff(
+    p.clearAfterRun,
+  )}&publish=${onOff(p.publish)}`;
 }

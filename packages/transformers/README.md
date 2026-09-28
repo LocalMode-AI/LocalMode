@@ -263,10 +263,10 @@ for await (const chunk of result.stream) {
 | Model | Size | Context | Vision |
 | ----- | ---- | ------- | ------ |
 | `onnx-community/granite-4.0-350m-ONNX-web` | ~120MB | 4K | No |
-| `onnx-community/Qwen3-0.6B-ONNX` | ~570MB | 4K | No |
+| `onnx-community/Qwen3-0.6B-ONNX` | ~930MB | 4K | No |
 | `onnx-community/Qwen3.5-0.8B-ONNX` | ~500MB | 32K | Yes |
 | `onnx-community/granite-4.0-1b-ONNX-web` | ~350MB | 4K | No |
-| `onnx-community/Llama-3.2-1B-Instruct-ONNX` | ~380MB | 8K | No |
+| `onnx-community/Llama-3.2-1B-Instruct-ONNX` | ~1.7GB | 8K | No |
 | `onnx-community/TinyLlama-1.1B-Chat-v1.0-ONNX` | ~350MB | 2K | No |
 | `onnx-community/Qwen2.5-Coder-1.5B-Instruct` | ~450MB | 4K | No |
 | `onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX` | ~500MB | 4K | No |
@@ -274,10 +274,10 @@ for await (const chunk of result.stream) {
 | `onnx-community/Qwen3-4B-ONNX` | ~1.2GB | 4K | No |
 | `microsoft/Phi-3-mini-4k-instruct-onnx-web` | ~1.2GB | 4K | No |
 | `onnx-community/Qwen3.5-2B-ONNX` | ~1.5GB | 32K | Yes |
-| `onnx-community/gemma-4-E2B-it-ONNX` | ~1.5GB | 128K | Yes |
+| `onnx-community/gemma-4-E2B-it-ONNX` | ~5.2GB | 128K | Yes |
 | `onnx-community/Phi-4-mini-instruct-web-q4f16` | ~2.3GB | 4K | No |
 | `onnx-community/Qwen3.5-4B-ONNX` | ~2.5GB | 32K | Yes |
-| `onnx-community/gemma-4-E4B-it-ONNX` | ~3GB | 128K | Yes |
+| `onnx-community/gemma-4-E4B-it-ONNX` | ~7.2GB | 128K | Yes |
 
 **Vision support**: Qwen3.5, Qwen2.5-VL, Qwen3-VL, and Gemma 4 models support image input via their built-in vision encoder. Check `model.supportsVision` for feature detection. See [Vision docs](https://localmode.dev/docs/transformers#vision-image-input) for usage.
 

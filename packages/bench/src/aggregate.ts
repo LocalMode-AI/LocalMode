@@ -7,6 +7,7 @@
 import type { BenchCellResult, BenchRunResult, CellSummary, EmbedIteration, LLMIteration } from './types.js';
 import { isIncrementalStream, summarizeRun, validateSubmission, type ValidateOptions } from './validate.js';
 import { median } from './stats.js';
+import { pressureStateFractions } from './pressure.js';
 
 /**
  * Coarse device class: platform + WebGPU adapter vendor-architecture
@@ -231,6 +232,10 @@ function maybeMedian(values: number[]): number | undefined {
 
 function round2(v: number): number {
   return Math.round(v * 100) / 100;
+}
+
+function round4(v: number): number {
+  return Math.round(v * 10_000) / 10_000;
 }
 
 /** Escape one CSV field (RFC 4180). */
@@ -468,8 +473,16 @@ export function runtimeVersionColumn(packageName: string): string {
  * duration (`suite-end` minus `suite-start`), the validation verdict and
  * flags `validateSubmission` reports, and the series membership and cold-start
  * marker from `harness` (`seriesId`, `seriesIndex`, `seriesCount`,
- * `coldStart`; empty on a run outside a series or not started cold). Runtime package versions follow as one
- * `rv_*` column per package in the union of all runs, sorted by column name.
+ * `coldStart`; empty on a run outside a series or not started cold), the
+ * series cool-down and the idle time before the run (`seriesCooldownMs`,
+ * `seriesIdleBeforeMs`; empty when not recorded), and the Compute Pressure
+ * summary (`pressureSamples`, the number of `pressure-change` events, then
+ * `pressureCriticalFraction`, `pressureSeriousFraction`,
+ * `pressureFairFraction`, `pressureNominalFraction`: fractions of the suite
+ * wall time in each state from `pressureStateFractions`, rounded to four
+ * decimals, empty when the run has no sample). Runtime package versions
+ * follow as one `rv_*` column per package in the union of all runs, sorted by
+ * column name.
  *
  * @param runs - Run results that passed shape validation.
  * @param validateOptions - Passed to `validateSubmission`; defaults to
@@ -499,6 +512,9 @@ export function runsToRunsCSV(
     'timerResolutionUs', 'fingerprintMflops', 'cellsTotal', 'cellsOk', 'cellsInvalid', 'cellsError', 'cellsSkipped',
     'suiteDurationMs', 'scrubbedAt', 'validationOk', 'validationFlags',
     'seriesId', 'seriesIndex', 'seriesCount', 'coldStart',
+    'seriesCooldownMs', 'seriesIdleBeforeMs',
+    'pressureSamples', 'pressureCriticalFraction', 'pressureSeriousFraction', 'pressureFairFraction',
+    'pressureNominalFraction',
     ...rvColumns,
   ];
   const lines = [header.join(',')];
@@ -508,6 +524,9 @@ export function runsToRunsCSV(
     const start = run.events.find((e) => e.type === 'suite-start');
     const end = [...run.events].reverse().find((e) => e.type === 'suite-end');
     const report = validateSubmission(run, validateOptions);
+    const pressure = pressureStateFractions(run.events);
+    const fraction = (state: 'critical' | 'serious' | 'fair' | 'nominal') =>
+      pressure.fractions ? round4(pressure.fractions[state]) : undefined;
     const versions = run.harness.runtimeVersions ?? {};
     const byColumn = new Map(Object.entries(versions).map(([pkg, v]) => [runtimeVersionColumn(pkg), v]));
     lines.push(
@@ -527,6 +546,8 @@ export function runsToRunsCSV(
         run.scrubbedAt, report.ok,
         report.flags.map((f) => `${f.severity}:${f.code}`).join('|'),
         run.harness.series?.id, run.harness.series?.index, run.harness.series?.count, run.harness.coldStart,
+        run.harness.series?.cooldownMs, run.harness.series?.idleBeforeMs,
+        pressure.samples, fraction('critical'), fraction('serious'), fraction('fair'), fraction('nominal'),
         ...rvColumns.map((column) => byColumn.get(column)),
       ]
         .map(csvField)

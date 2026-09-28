@@ -119,6 +119,8 @@ export {
   checkPlausibility,
   validateSubmission,
   isIncrementalStream,
+  SERIES_MAX_COOLDOWN_MS,
+  SERIES_MAX_IDLE_BEFORE_MS,
 } from './validate.js';
 export type { ValidateOptions } from './validate.js';
 export { canonicalJson, sha256Hex, computeRunDigest, computeLegacyRunDigest, verifyRunDigest } from './canonical.js';
@@ -141,6 +143,8 @@ export {
   HEADLINE_MIN_SUBMISSIONS,
 } from './aggregate.js';
 export type { LeaderboardRow } from './aggregate.js';
+export { pressureStateFractions } from './pressure.js';
+export type { PressureState, PressureStateSummary } from './pressure.js';
 
 // Quality-fidelity lane
 export {

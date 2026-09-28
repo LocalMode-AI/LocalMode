@@ -24,9 +24,9 @@ import { ChromeAIDownloadGate } from '@/components/chrome-ai-download-gate';
 import { ErrorAlert } from '@/components/error-alert';
 import { cn } from '@/lib/utils';
 
-/** The Write AI-edit engine (a small, clean instruct model; ~380 MB q4). */
+/** The Write AI-edit engine (a small, clean instruct model; ~1.7 GB q4). */
 const EDIT_ENGINE_MODEL_ID = 'onnx-community/Llama-3.2-1B-Instruct-ONNX';
-const EDIT_ENGINE_MODEL_SIZE = '~380 MB';
+const EDIT_ENGINE_MODEL_SIZE = '~1.7 GB';
 
 /** Preset edit instructions. */
 const EDIT_PRESETS = [

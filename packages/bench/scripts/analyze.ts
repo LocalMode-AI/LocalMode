@@ -9,7 +9,7 @@
  *   leaderboard.csv  - aggregated rows (median-of-medians, min-N flags)
  *   iterations.csv   - long format, one row per timed iteration (R/pandas-ready)
  *   cells.csv        - one row per cell: warmup, load record, runtime config, memory, quality, error
- *   runs.csv         - one row per run: harness, environment, cell counts, validation, runtime versions
+ *   runs.csv         - one row per run: harness, environment, cell counts, validation, series, pressure, runtime versions
  *   validation.txt   - per-run validation report (shape + plausibility)
  *
  * Run files are read in sorted path order, so every output is deterministic.

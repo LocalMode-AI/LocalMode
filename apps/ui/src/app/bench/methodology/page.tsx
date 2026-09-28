@@ -228,6 +228,23 @@ export default function BenchMethodologyPage() {
               a run that crashes the page cannot loop.
             </li>
             <li>
+              <strong className="text-foreground">Cool-down between runs.</strong> An optional idle
+              wait of 0 to 30 minutes (half-minute steps, default 0) between the runs of a series.
+              After a run&apos;s result is kept (and the caches cleared, when that is on) the page
+              stays loaded and idle, shows a countdown in the series box (&quot;Cooling down: 2:45
+              until run 4 of 10&quot;), keeps the wake lock and the tab title progress, and only then
+              reloads for the next run; Stop series during the countdown ends the series at once.
+              Laptops and phones need it: a 7-run back-to-back Quick series on a 15&nbsp;W class
+              laptop showed the llama.cpp CPU decode falling from about 135 to about 85 chars/s from
+              run 3 on. The pause is idle time on the page, not a protocol change. Each run file of a
+              series records the configured cool-down as{' '}
+              <code className="font-mono text-sm">harness.series.cooldownMs</code> (run 1 included,
+              because it describes the series) and the idle time measured before the run, from the
+              moment the previous run was kept to this run&apos;s start across the reload, as{' '}
+              <code className="font-mono text-sm">harness.series.idleBeforeMs</code> (absent on run 1
+              and on a run resumed with Continue series).
+            </li>
+            <li>
               <strong className="text-foreground">Clear model caches.</strong> Deletes the model
               files the page&apos;s runtimes keep for the site: Transformers.js (Cache API{' '}
               <code className="font-mono text-sm">transformers-cache</code>), WebLLM (Cache API or
@@ -252,9 +269,10 @@ export default function BenchMethodologyPage() {
             <li>
               <strong className="text-foreground">Link presets.</strong>{' '}
               <code className="font-mono text-sm">
-                /bench/run?tier=quick|standard|thorough&amp;quality=on|off&amp;runs=N&amp;cold=on|off&amp;publish=on|off
+                /bench/run?tier=quick|standard|thorough&amp;quality=on|off&amp;runs=N&amp;cooldown=M&amp;cold=on|off&amp;publish=on|off
               </code>{' '}
-              prefills the suite, the quality lane, the series length, clearing after each run, and
+              prefills the suite, the quality lane, the series length, the cool-down between runs in
+              minutes (0 to 30, rounded to the nearest half minute), clearing after each run, and
               publishing. A link never starts a run; only the reload inside a series does.
             </li>
             <li>

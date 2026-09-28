@@ -1,5 +1,11 @@
 # @localmode/webllm
 
+## 2.2.1
+
+### Patch Changes
+
+- fix: the declared size of `SmolLM2-135M-Instruct-q0f16-MLC` is now 271,206,869 bytes (was 78 MiB): the q0f16 build keeps unquantized fp16 weights, 269,030,016 bytes over 8 shards, plus `mlc-chat-config.json`, `tensor-cache.json` and `tokenizer.json`, summed from the Hugging Face tree API (the model library `.wasm`, about 5.6 MB, is not counted). `sizeBytes` and the `size` label feed download estimates; no runtime behavior changes.
+
 ## 2.2.0
 
 ### Minor Changes

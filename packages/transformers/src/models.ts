@@ -356,8 +356,8 @@ export const TRANSFORMERS_LLM_MODELS: Record<
   'onnx-community/Qwen3-0.6B-ONNX': {
     name: 'Qwen3 0.6B (ONNX)',
     contextLength: 4096,
-    size: '~570MB',
-    sizeBytes: 570 * 1024 * 1024,
+    size: '~930MB',
+    sizeBytes: 928_224_461, // q4 file set (verified on HF)
     description: 'Smallest Qwen3 text model. Fast, lightweight, WebGPU recommended.',
   },
   /** Granite 4.0 1B — IBM's small multilingual model, 12 languages (~350MB) */
@@ -372,9 +372,9 @@ export const TRANSFORMERS_LLM_MODELS: Record<
   'onnx-community/Llama-3.2-1B-Instruct-ONNX': {
     name: 'Llama 3.2 1B Instruct (ONNX)',
     contextLength: 8192,
-    size: '~380MB',
-    sizeBytes: 380 * 1024 * 1024,
-    description: 'Meta Llama 3.2 1B instruction-tuned, q4f16. 8K context, good general quality.',
+    size: '~1.7GB',
+    sizeBytes: 1_704_451_656, // q4 file set (verified on HF)
+    description: 'Meta Llama 3.2 1B instruction-tuned, q4. 8K context, good general quality.',
   },
   /** TinyLlama 1.1B Chat — small, fast, public access */
   'onnx-community/TinyLlama-1.1B-Chat-v1.0-ONNX': {
@@ -471,10 +471,10 @@ export const TRANSFORMERS_LLM_MODELS: Record<
   'onnx-community/gemma-4-E2B-it-ONNX': {
     name: 'Gemma 4 E2B (ONNX)',
     contextLength: 131072,
-    size: '~1.5GB',
-    sizeBytes: 1500 * 1024 * 1024,
+    size: '~5.2GB',
+    sizeBytes: 5_163_395_208, // WebGPU file set: q4 text, fp16 vision, fp32 audio (verified on HF)
     description:
-      'Google Gemma 4 E2B, q4f16 multimodal with vision. 128K context. ~2 tok/s via WebGPU (use LiteRT for faster text-only). Needs 6GB+ VRAM.',
+      'Google Gemma 4 E2B, q4 multimodal with vision. 128K context. ~2 tok/s via WebGPU (use LiteRT for faster text-only). Needs 6GB+ VRAM.',
     vision: true,
   },
 
@@ -482,10 +482,10 @@ export const TRANSFORMERS_LLM_MODELS: Record<
   'onnx-community/gemma-4-E4B-it-ONNX': {
     name: 'Gemma 4 E4B (ONNX)',
     contextLength: 131072,
-    size: '~3GB',
-    sizeBytes: 3000 * 1024 * 1024,
+    size: '~7.2GB',
+    sizeBytes: 7_160_140_415, // WebGPU file set: q4 text, fp16 vision, fp32 audio (verified on HF)
     description:
-      'Google Gemma 4 E4B, q4f16 multimodal with vision. 128K context. ~2 tok/s via WebGPU (use LiteRT for faster text-only). Needs 8GB+ VRAM.',
+      'Google Gemma 4 E4B, q4 multimodal with vision. 128K context. ~2 tok/s via WebGPU (use LiteRT for faster text-only). Needs 8GB+ VRAM.',
     vision: true,
   },
 } as const;

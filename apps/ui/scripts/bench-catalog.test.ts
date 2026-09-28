@@ -94,6 +94,49 @@ describe('bench catalog drift guard', () => {
     expect(entry.url).toBe(bge.url);
   });
 
+  it('declared sizes match the files each lane downloads from Hugging Face (within 10%)', () => {
+    // The declared size selects a cell's decode-rate envelope class at
+    // validation and feeds the runner's download estimate, so it must be the
+    // real download. Byte counts were read from the Hugging Face tree API
+    // (2026-09-28) for exactly the files each provider fetches:
+    //   Transformers.js 4.2.0, dtype q4 (the provider default): config.json,
+    //     generation_config.json, tokenizer.json, tokenizer_config.json and
+    //     the q4 decoder with its external data. Gemma 4 loads through
+    //     Gemma4ForConditionalGeneration, which also creates the audio encoder
+    //     (fp32: no dtype is given for it) and the fp16 vision encoder, plus
+    //     processor_config.json and chat_template.jinja.
+    //   WebLLM 0.2.83: mlc-chat-config.json, tensor-cache.json, every
+    //     params_shard_*.bin and tokenizer.json (the model library .wasm, about
+    //     5.6 MB, is not counted).
+    //   LiteRT and llama.cpp: the single .litertlm / .gguf file.
+    const VERIFIED_DOWNLOAD_BYTES: Record<string, number> = {
+      'SmolLM2-135M-Instruct-q0f16-MLC': 271_206_869,
+      'Qwen3-0.6B-q4f16_1-MLC': 346_926_408,
+      'Llama-3.2-1B-Instruct-q4f16_1-MLC': 704_397_819,
+      'onnx-community/Qwen3-0.6B-ONNX': 928_224_461,
+      'onnx-community/Llama-3.2-1B-Instruct-ONNX': 1_704_451_656,
+      'onnx-community/gemma-4-E2B-it-ONNX': 5_163_395_208,
+      'qwen3-0.6B': 614_236_160,
+      'gemma-4-E2B': 2_008_432_640,
+      'SmolLM2-135M-Instruct-Q4_K_M': 105_454_432,
+      'Qwen3-0.6B-Q4_K_M': 396_705_472,
+      'Llama-3.2-1B-Instruct-Q4_K_M': 807_694_464,
+      'Gemma-4-E2B-IT-Q4_K_M': 3_462_680_032,
+      'bge-small-en-v1.5-Q8_0': 36_806_944,
+    };
+    const sized = BENCH_MODELS.filter((m) => m.sizeBytes !== undefined);
+    expect(sized.length).toBeGreaterThan(0);
+    for (const m of sized) {
+      const verified = VERIFIED_DOWNLOAD_BYTES[m.providerModelId];
+      expect(verified, `${m.runtimeId} / ${m.providerModelId} has no verified size`).toBeDefined();
+      const drift = Math.abs(m.sizeBytes! - verified) / verified;
+      expect(
+        drift,
+        `${m.runtimeId} / ${m.providerModelId} declares ${m.sizeBytes}, downloads ${verified}`,
+      ).toBeLessThanOrEqual(0.1);
+    }
+  });
+
   it('every suite references only existing benchModelIds', () => {
     const known = new Set(BENCH_MODELS.map((m) => m.benchModelId));
     for (const ids of Object.values(SUITE_MODELS)) {

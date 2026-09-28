@@ -443,7 +443,7 @@ export const BLOCK_CATEGORIES: BlockCategory[] = [
           'Rewrite or improve your draft and review the edits.',
         pageDescription: 'Rewrite or improve a draft with an AI edit you review as a before/after diff, then accept or reject it. Use quick presets or write your own instructions, with a live word count. It uses your browser\'s built-in AI when available, or a small downloadable model otherwise, and nothing downloads until you ask.',
         chips: ['AI edits', 'Diff review', 'Chrome AI + fallback'],
-        modelBadge: 'Chrome AI or ~380 MB',
+        modelBadge: 'Chrome AI or ~1.7 GB',
       },
       {
         category: 'writing-tools',

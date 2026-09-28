@@ -19,8 +19,8 @@ export const WEBLLM_MODELS = {
   'SmolLM2-135M-Instruct-q0f16-MLC': {
     name: 'SmolLM2 135M',
     contextLength: 2048,
-    sizeBytes: 78 * 1024 * 1024, // ~78MB
-    size: '78MB',
+    sizeBytes: 271_206_869, // q0f16 weights + tokenizer (verified on HF)
+    size: '271MB',
     description: 'Tiniest model, instant loading',
   },
   'SmolLM2-360M-Instruct-q4f16_1-MLC': {

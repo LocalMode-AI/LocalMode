@@ -206,6 +206,9 @@ describe('runs.csv', () => {
     'timerResolutionUs', 'fingerprintMflops', 'cellsTotal', 'cellsOk', 'cellsInvalid', 'cellsError', 'cellsSkipped',
     'suiteDurationMs', 'scrubbedAt', 'validationOk', 'validationFlags',
     'seriesId', 'seriesIndex', 'seriesCount', 'coldStart',
+    'seriesCooldownMs', 'seriesIdleBeforeMs',
+    'pressureSamples', 'pressureCriticalFraction', 'pressureSeriousFraction', 'pressureFairFraction',
+    'pressureNominalFraction',
     'rv_huggingface_transformers', 'rv_litert_lm_core', 'rv_wllama_wllama',
   ].join(',');
 
@@ -217,12 +220,14 @@ describe('runs.csv', () => {
         '1512,982,2,true,apple,metal-3,,,false,Apple M1 Pro,true,5,1234.57,' +
         '6,3,1,1,1,90000.5,,true,,' +
         ',,,,' +
+        ',,0,,,,,' +
         '4.2.0,,3.5.1',
       'analysis-run-0002,2026-09-21T08:30:00.000Z,localmode-bench/4,2,@localmode/bench,0.7.0,,,quick,false,' +
         'macos/no-webgpu,macos/no-webgpu,Safari,26.5.2,WebKit,macOS,15.5,,,8,true,,false,' +
         ',,,false,,,,,,,true,5,,' +
         '1,1,0,0,0,,,false,reject:fingerprint-missing,' +
         ',,,,' +
+        ',,0,,,,,' +
         ',0.12.1,3.4.0',
     ]);
   });

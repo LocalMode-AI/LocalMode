@@ -22,7 +22,7 @@ const AUTHORED_MODELS: readonly BenchModelRef[] = [
     task: 'llm',
     parameterCount: '135M',
     quantization: 'q0f16',
-    sizeBytes: 78 * 1024 * 1024,
+    sizeBytes: 271_206_869,
     contextLength: 2048,
     requiresWebGPU: true,
   },
@@ -86,7 +86,7 @@ const AUTHORED_MODELS: readonly BenchModelRef[] = [
     task: 'llm',
     parameterCount: '0.6B',
     quantization: 'q4',
-    sizeBytes: 570 * 1024 * 1024,
+    sizeBytes: 928_224_461,
     contextLength: 4096,
     requiresWebGPU: true,
     qualityPromptSuffix: ' /no_think',
@@ -99,7 +99,7 @@ const AUTHORED_MODELS: readonly BenchModelRef[] = [
     task: 'llm',
     parameterCount: '0.6B',
     quantization: 'q4',
-    sizeBytes: 570 * 1024 * 1024,
+    sizeBytes: 928_224_461,
     contextLength: 4096,
     qualityPromptSuffix: ' /no_think',
   },
@@ -137,13 +137,13 @@ const AUTHORED_MODELS: readonly BenchModelRef[] = [
     task: 'llm',
     parameterCount: '1B',
     quantization: 'q4',
-    sizeBytes: 380 * 1024 * 1024,
+    sizeBytes: 1_704_451_656,
     contextLength: 8192,
     requiresWebGPU: true,
   },
 
   // --- Gemma 4 E2B — current-gen medium class, 3-runtime pairing.
-  // Thorough suite only: 1.5-3.5 GB downloads per lane; the GGUF brushes the
+  // Thorough suite only: 2.0-5.2 GB downloads per lane; the GGUF brushes the
   // wasm32 heap ceiling and the litert/ONNX builds need WebGPU. ---
   {
     benchModelId: 'gemma-4-e2b',
@@ -178,7 +178,7 @@ const AUTHORED_MODELS: readonly BenchModelRef[] = [
     task: 'llm',
     parameterCount: 'E2B',
     quantization: 'q4f16',
-    sizeBytes: 1500 * 1024 * 1024,
+    sizeBytes: 5_163_395_208,
     contextLength: 131072,
     requiresWebGPU: true,
   },
@@ -271,4 +271,38 @@ export const SUITE_MODELS: Record<Exclude<BenchSuiteId, 'custom'>, string[]> = {
 /** Lookup helpers. */
 export function benchModelsFor(benchModelIds: readonly string[]): BenchModelRef[] {
   return BENCH_MODELS.filter((m) => benchModelIds.includes(m.benchModelId));
+}
+
+/**
+ * The provider cache a lane's model files land in. The two llama.cpp lanes
+ * load the same GGUF, and the Transformers.js WASM and WebGPU lanes load the
+ * same ONNX files (a text-only model uses `dtype: 'q4'` on both devices), so
+ * lanes that differ only in backend share one download.
+ */
+function artifactProvider(runtimeId: string): string {
+  if (runtimeId === 'wllama-webgpu') return 'wllama';
+  if (runtimeId === 'transformers-wasm' || runtimeId === 'transformers-webgpu') return 'transformers';
+  return runtimeId;
+}
+
+/**
+ * The identity of the model files a lane downloads: the file URL when the
+ * catalog declares one, otherwise the provider cache, model id and
+ * quantization.
+ */
+function artifactKey(model: BenchModelRef): string {
+  return model.url ?? `${artifactProvider(model.runtimeId)}|${model.providerModelId}|${model.quantization ?? ''}`;
+}
+
+/**
+ * The pre-run download estimate for a set of lanes, in bytes: each model file
+ * is counted once, however many lanes load it (a second lane loads it from the
+ * provider cache).
+ *
+ * @param models - The lanes that will run
+ * @returns The summed declared size of the unique model files
+ */
+export function estimateDownloadBytes(models: readonly BenchModelRef[]): number {
+  const unique = new Map(models.map((m) => [artifactKey(m), m.sizeBytes ?? 0]));
+  return [...unique.values()].reduce((acc, bytes) => acc + bytes, 0);
 }

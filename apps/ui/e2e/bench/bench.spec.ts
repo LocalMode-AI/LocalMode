@@ -9,7 +9,8 @@
  * submission path (503 bench-store-unbound surfaced to the user) are all
  * exercised for real. The runner conveniences are driven the same way: link
  * presets (prefill, never start), a two-run series across a real page reload,
- * Stop series mid-run, and Clear model caches checked against the browser's
+ * a two-run series with a one-minute cool-down (countdown, reload no earlier
+ * than the cool-down, idle time on run 2's file), Stop series mid-run, and Clear model caches checked against the browser's
  * own storage listings before the next run loads cold. Selectors are
  * role/label/text only.
  */
@@ -73,7 +74,10 @@ async function providerStorage(page: Page): Promise<{ caches: string[]; database
 
 interface ExportedRun {
   runId: string;
-  harness: { series?: { id: string; index: number; count: number }; coldStart?: string };
+  harness: {
+    series?: { id: string; index: number; count: number; cooldownMs?: number; idleBeforeMs?: number };
+    coldStart?: string;
+  };
   cells: Array<{ cellId: string; runtimeId: string; status: string; load: { cached?: boolean; startT: number; endT: number } | null }>;
 }
 
@@ -144,26 +148,28 @@ test.describe('bench shell (zero model bytes)', () => {
   });
 
   test('/bench/run link presets prefill the controls and never start a run', async ({ page }) => {
-    await page.goto('/bench/run?tier=standard&quality=on&runs=3&cold=on&publish=off');
+    await page.goto('/bench/run?tier=standard&quality=on&runs=3&cooldown=2.5&cold=on&publish=off');
     const runButton = page.getByRole('button', { name: 'Run benchmark' });
     await expect(runButton).toBeEnabled({ timeout: 15_000 });
     await expect(page.getByRole('combobox', { name: 'Suite' })).toContainText('Standard');
     await expect(page.getByRole('switch', { name: /quality-fidelity lane/i })).toBeChecked();
-    await expect(page.getByRole('spinbutton', { name: 'Runs' })).toHaveValue('3');
+    await expect(page.getByRole('spinbutton', { name: 'Runs', exact: true })).toHaveValue('3');
+    await expect(page.getByRole('spinbutton', { name: 'Cool-down between runs' })).toHaveValue('2.5');
     await expect(page.getByRole('switch', { name: 'Clear caches after each run' })).toBeChecked();
     await expect(page.getByRole('switch', { name: /publish results/i })).not.toBeChecked();
     await expect(page.getByText(/a series of 3 runs with these settings/i)).toBeVisible();
     // The note documents the parameters and offers the link for the current controls.
     await page.getByText('Link presets').click();
-    await expect(page.getByText('/bench/run?tier=standard&quality=on&runs=3&cold=on&publish=off')).toBeVisible();
+    await expect(page.getByText('/bench/run?tier=standard&quality=on&runs=3&cooldown=2.5&cold=on&publish=off')).toBeVisible();
     // Nothing starts from a link: no run overlay, no series, and (afterEach) no model bytes.
     await page.waitForTimeout(5_000);
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Benchmark series' })).toHaveCount(0);
     await expect(runButton).toBeEnabled();
     // Out-of-range and unknown values are clamped or ignored.
-    await page.goto('/bench/run?runs=99&tier=custom&quality=maybe');
-    await expect(page.getByRole('spinbutton', { name: 'Runs' })).toHaveValue('30', { timeout: 15_000 });
+    await page.goto('/bench/run?runs=99&cooldown=45&tier=custom&quality=maybe');
+    await expect(page.getByRole('spinbutton', { name: 'Runs', exact: true })).toHaveValue('30', { timeout: 15_000 });
+    await expect(page.getByRole('spinbutton', { name: 'Cool-down between runs' })).toHaveValue('30');
     await expect(page.getByRole('combobox', { name: 'Suite' })).toContainText('Quick');
     await expect(page.getByRole('switch', { name: /quality-fidelity lane/i })).not.toBeChecked();
   });
@@ -523,7 +529,7 @@ test.describe('bench real run (WASM lanes)', () => {
     await expect(runButton).toBeEnabled({ timeout: 15_000 });
     // Publishing off: each run of the series is exported as a JSON download.
     await page.getByRole('switch', { name: /publish results/i }).click();
-    await page.getByRole('spinbutton', { name: 'Runs' }).fill('2');
+    await page.getByRole('spinbutton', { name: 'Runs', exact: true }).fill('2');
     const downloads = collectRunDownloads(page);
     const loads = countLoads(page);
     await runButton.click();
@@ -550,8 +556,13 @@ test.describe('bench real run (WASM lanes)', () => {
 
     expect(downloads).toHaveLength(2);
     const [first, second] = await Promise.all(downloads);
-    expect(first.harness.series).toMatchObject({ index: 1, count: 2 });
-    expect(second.harness.series).toEqual({ id: first.harness.series!.id, index: 2, count: 2 });
+    expect(first.harness.series).toMatchObject({ index: 1, count: 2, cooldownMs: 0 });
+    expect(first.harness.series!.idleBeforeMs, 'run 1 has no previous run to idle after').toBeUndefined();
+    const { idleBeforeMs, ...secondSeries } = second.harness.series!;
+    expect(secondSeries).toEqual({ id: first.harness.series!.id, index: 2, count: 2, cooldownMs: 0 });
+    // No cool-down, but the idle time still spans the download grace (1.5 s) and the reload.
+    expect(Number.isInteger(idleBeforeMs)).toBe(true);
+    expect(idleBeforeMs!).toBeGreaterThanOrEqual(1_500);
     expect(first.runId).not.toBe(second.runId);
     for (const run of [first, second]) {
       expect(run.cells.some((c) => c.status === 'ok')).toBe(true);
@@ -572,6 +583,69 @@ test.describe('bench real run (WASM lanes)', () => {
     await page.reload();
     await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeEnabled({ timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Benchmark series' })).toHaveCount(0);
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test('a series of 2 Quick runs with cooldown=1: the page idles a minute with a countdown before the reload', async ({
+    page,
+  }) => {
+    test.setTimeout(35 * 60 * 1000);
+    const consoleErrors: string[] = [];
+    collectConsoleErrors(page, consoleErrors);
+    await page.goto('/bench/run?tier=quick&quality=off&runs=2&cooldown=1&publish=off');
+    const runButton = page.getByRole('button', { name: 'Run benchmark' });
+    await expect(runButton).toBeEnabled({ timeout: 15_000 });
+    await expect(page.getByRole('spinbutton', { name: 'Cool-down between runs' })).toHaveValue('1');
+    const downloads = collectRunDownloads(page);
+    // Wall-clock witnesses in the test process: when run 1's result was
+    // handed over (its JSON download) and when the page reloaded.
+    let firstResultAt: number | null = null;
+    page.on('download', () => {
+      if (firstResultAt === null) firstResultAt = Date.now();
+    });
+    const reloadTimes: number[] = [];
+    page.on('load', () => reloadTimes.push(Date.now()));
+    await runButton.click();
+
+    const dialog = page.getByRole('dialog', { name: /benchmark running/i });
+    await expect(dialog.getByRole('group', { name: 'Series progress' })).toContainText('Series: run 1 of 2', { timeout: 20_000 });
+
+    // Run 1 finishes: the series box counts down to run 2 while the page stays loaded.
+    const panel = page.getByRole('region', { name: 'Benchmark series' });
+    await expect(panel.getByRole('status')).toContainText(/^Cooling down: [01]:\d\d until run 2 of 2$/, {
+      timeout: 15 * 60 * 1000,
+    });
+    expect(firstResultAt, 'run 1 was exported before the cool-down').not.toBeNull();
+    expect(reloadTimes, 'no reload while cooling down').toEqual([]);
+    // The tab title keeps the series progress during the cool-down.
+    await expect(page).toHaveTitle('2/2 · LocalMode Bench');
+    // The countdown moves.
+    const before = await panel.getByRole('status').textContent();
+    await page.waitForTimeout(2_500);
+    const after = await panel.getByRole('status').textContent();
+    expect(after).not.toBe(before);
+
+    // Run 2 starts by itself on the reloaded page after the cool-down.
+    await expect(page.getByRole('dialog', { name: /benchmark running/i })
+      .getByRole('group', { name: 'Series progress' })).toContainText('Series: run 2 of 2', { timeout: 3 * 60 * 1000 });
+    const secondRunSeenAt = Date.now();
+    expect(reloadTimes).toHaveLength(1);
+    expect(reloadTimes[0] - firstResultAt!, 'the reload came no earlier than the 60 s cool-down').toBeGreaterThanOrEqual(60_000);
+
+    await expect(panel).toContainText('Series complete: 2 of 2 runs', { timeout: 15 * 60 * 1000 });
+    expect(reloadTimes, 'no reload after the last run').toHaveLength(1);
+    expect(downloads).toHaveLength(2);
+    const [first, second] = await Promise.all(downloads);
+    expect(first.harness.series).toMatchObject({ index: 1, count: 2, cooldownMs: 60_000 });
+    expect(first.harness.series!.idleBeforeMs).toBeUndefined();
+    expect(second.harness.series).toMatchObject({ id: first.harness.series!.id, index: 2, count: 2, cooldownMs: 60_000 });
+    expect(Number.isInteger(second.harness.series!.idleBeforeMs)).toBe(true);
+    // Measured, not copied from the setting: the cool-down plus the 1.5 s
+    // download grace plus the reload, and no longer than the gap the test
+    // itself witnessed between run 1's result and run 2 on screen.
+    expect(second.harness.series!.idleBeforeMs!).toBeGreaterThanOrEqual(61_500);
+    expect(second.harness.series!.idleBeforeMs!).toBeLessThanOrEqual(secondRunSeenAt - firstResultAt! + 1_000);
+    await expect(panel).toContainText('cool-down 1 min');
     expect(consoleErrors).toEqual([]);
   });
 

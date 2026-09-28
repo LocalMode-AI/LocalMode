@@ -75,11 +75,16 @@ describe('runs.csv series columns', () => {
   const header = (csv: string) => csv.split('\n')[0].split(',');
   const row = (csv: string, i: number) => csv.split('\n')[i].split(',');
 
-  it('places seriesId, seriesIndex, seriesCount and coldStart after validationFlags, before the rv_* columns', () => {
+  it('places the series, cool-down and pressure columns after validationFlags, before the rv_* columns', () => {
     const cols = header(runsToRunsCSV([makeAnalysisRun()]));
     const at = cols.indexOf('validationFlags');
-    expect(cols.slice(at + 1, at + 5)).toEqual(['seriesId', 'seriesIndex', 'seriesCount', 'coldStart']);
-    expect(cols[at + 5]).toMatch(/^rv_/);
+    expect(cols.slice(at + 1, at + 12)).toEqual([
+      'seriesId', 'seriesIndex', 'seriesCount', 'coldStart',
+      'seriesCooldownMs', 'seriesIdleBeforeMs',
+      'pressureSamples', 'pressureCriticalFraction', 'pressureSeriousFraction', 'pressureFairFraction',
+      'pressureNominalFraction',
+    ]);
+    expect(cols[at + 12]).toMatch(/^rv_/);
   });
 
   it('exports the values of a series run and leaves them empty on a run outside a series', () => {
