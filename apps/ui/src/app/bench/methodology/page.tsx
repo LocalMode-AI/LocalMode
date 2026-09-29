@@ -187,8 +187,11 @@ export default function BenchMethodologyPage() {
             </li>
             <li>5–10&nbsp;s cool-down after every model group that ran (5&nbsp;s quick, 8&nbsp;s standard, 10&nbsp;s thorough; a group whose cells were all skipped pays none); on Chromium the next group also waits for CPU pressure to recover (15&nbsp;s cap in quick, 30&nbsp;s otherwise).</li>
             <li>
-              A screen wake lock is held; timed regions overlapping a hidden tab, a wake-lock
-              release, or a GPU device loss are invalidated and recorded - never silently retried.
+              A screen wake lock is requested and the trace records the outcome (
+              <code className="font-mono text-sm">wakelock-acquired</code> or{' '}
+              <code className="font-mono text-sm">wakelock-denied</code>); timed regions overlapping a
+              hidden tab, a wake-lock release, or a GPU device loss are invalidated and recorded -
+              never silently retried.
             </li>
             <li>
               Quality-fidelity lane (optional, untimed): tinyMMLU accuracy and STS-B Spearman at
@@ -279,6 +282,22 @@ export default function BenchMethodologyPage() {
               While a run or series is active the page holds a screen wake lock (requested again
               whenever the tab returns to the front) and shows the series progress in the tab
               title, for example <code className="font-mono text-sm">3/10 · LocalMode Bench</code>.
+            </li>
+            <li>
+              <strong className="text-foreground">Safari and every iOS browser.</strong> WebKit grants
+              the screen wake lock only on a user interaction. Run 1 of a series starts from the Run
+              click and holds it, but every later run starts from the page&apos;s own reload and is
+              refused, so without help the device sleeps during the series (Chromium and Firefox grant
+              the lock after the reload). On WebKit the page asks again on the next tap or key press
+              (&quot;Tap anywhere to keep the screen awake&quot;), and the series box explains how to
+              keep the device awake for the whole series: on iPhone or iPad, Settings, Display &amp;
+              Brightness, Auto-Lock, Never; on a Mac, <code className="font-mono text-sm">caffeinate -d</code>{' '}
+              in Terminal or a display that never turns off. The run file records the outcome in its
+              trace: <code className="font-mono text-sm">wakelock-denied</code> with the error name when
+              the request at the start of the run is refused, and{' '}
+              <code className="font-mono text-sm">wakelock-acquired</code> with the detail{' '}
+              <code className="font-mono text-sm">user-activation</code> when a later tap granted it
+              (since bench 0.9.2). The page uses no silent video or audio to keep the screen on.
             </li>
           </ul>
         </Section>

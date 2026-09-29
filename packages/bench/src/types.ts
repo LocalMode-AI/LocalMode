@@ -250,7 +250,18 @@ export interface BenchCellResult {
   };
 }
 
-/** Trace events global to the suite run (validity accounting). */
+/**
+ * Trace events global to the suite run (validity accounting).
+ *
+ * Screen wake lock: `wakelock-acquired` when the lock is granted (detail
+ * `user-activation` when it was granted on a user interaction after a denial,
+ * since 0.9.2), `wakelock-released` when it ends, and `wakelock-denied` (since
+ * 0.9.2; detail: the error name, e.g. `NotAllowedError`) when the request at
+ * the start of the run is rejected. WebKit grants the lock only with a user
+ * activation, so a run started without one (a series run after its reload)
+ * records a denial there. A run with none of the three either predates 0.9.2
+ * or ran where `environment.apis.wakeLock` is false.
+ */
 export interface TraceEvent {
   t: number;
   type:
@@ -260,6 +271,7 @@ export interface TraceEvent {
     | 'visibility-visible'
     | 'wakelock-acquired'
     | 'wakelock-released'
+    | 'wakelock-denied'
     | 'pressure-change'
     | 'gpu-device-lost'
     | 'cooldown-start'

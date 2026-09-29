@@ -8,7 +8,7 @@
  * happens strictly behind the explicit Run action.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type {
   BenchCellResult,
   BenchModelRef,
@@ -76,6 +76,14 @@ import {
   type SeriesRunRecord,
   type SeriesState,
 } from '@/lib/bench/series';
+import {
+  WAKE_LOCK_TEXT,
+  isWebKitUserAgent,
+  lockLostStatus,
+  retryOnUserActivation,
+  wakeLockNotice,
+  type WakeLockStatus,
+} from '@/lib/bench/wake-lock';
 import {
   beginAttempt,
   finishAttempt,
@@ -374,8 +382,6 @@ type SubmitOutcome =
   | { kind: 'done'; flagged: boolean; url?: string }
   | { kind: 'failed'; message: string; retryAt?: number };
 
-type WakeLockStatus = 'idle' | 'held' | 'hidden' | 'unavailable' | 'refused';
-
 interface WakeLockSentinelLike {
   release(): Promise<void>;
   addEventListener(type: 'release', cb: () => void): void;
@@ -384,47 +390,72 @@ interface WakeLockSentinelLike {
 /**
  * Hold a screen wake lock while `active`. The browser releases the lock
  * whenever the tab is hidden, so it is requested again each time the tab
- * comes back in front. Needs no user activation, so a series run that
- * resumes after a reload holds it too.
+ * comes back in front. Chromium and Gecko grant it without a user
+ * activation, so a series run that resumes after a reload holds it there;
+ * WebKit refuses it without one, so on WebKit a refused or lost lock is
+ * requested again on the next user interaction ('tap').
  */
 function useScreenWakeLock(active: boolean): WakeLockStatus {
-  const [lockState, setLockState] = useState<'pending' | 'held' | 'hidden' | 'refused'>('pending');
+  const [lockState, setLockState] = useState<'pending' | 'held' | 'hidden' | 'refused' | 'tap'>('pending');
   useEffect(() => {
     const api = (navigator as { wakeLock?: { request(type: 'screen'): Promise<WakeLockSentinelLike> } }).wakeLock;
     if (!active || !api) return;
+    const webkit = isWebKitUserAgent(navigator.userAgent);
     let disposed = false;
     let sentinel: WakeLockSentinelLike | null = null;
-    const acquire = async () => {
-      await Promise.resolve();
-      if (disposed || sentinel) return;
+    let stopRetry: (() => void) | null = null;
+    const lost = () => {
+      if (disposed) return;
       if (document.visibilityState !== 'visible') {
         setLockState('hidden');
         return;
       }
+      setLockState(lockLostStatus(webkit));
+      // On WebKit the next tap or key press carries the activation it needs.
+      if (webkit && !stopRetry) stopRetry = retryOnUserActivation(window, request);
+    };
+    // Runs synchronously up to `api.request`, so a call from an input
+    // handler makes the request while the user activation is transient.
+    const request = async (): Promise<boolean> => {
+      if (disposed || sentinel) return true;
+      if (document.visibilityState !== 'visible') {
+        setLockState('hidden');
+        return false;
+      }
       try {
         const s = await api.request('screen');
-        if (disposed) {
+        if (disposed || sentinel) {
           void s.release();
-          return;
+          return true;
         }
         sentinel = s;
+        stopRetry?.();
+        stopRetry = null;
         setLockState('held');
         s.addEventListener('release', () => {
           if (sentinel === s) sentinel = null;
-          if (!disposed) setLockState(document.visibilityState === 'visible' ? 'refused' : 'hidden');
+          lost();
         });
+        return true;
       } catch {
-        if (!disposed) setLockState('refused');
+        if (!sentinel) lost();
+        return false;
       }
     };
+    const acquire = async () => {
+      await Promise.resolve();
+      await request();
+    };
     const onVisibility = () => {
-      if (document.visibilityState === 'visible') void acquire();
+      if (document.visibilityState === 'visible') void request();
     };
     void acquire();
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       disposed = true;
       document.removeEventListener('visibilitychange', onVisibility);
+      stopRetry?.();
+      stopRetry = null;
       const s = sentinel;
       sentinel = null;
       if (s) void s.release();
@@ -436,12 +467,27 @@ function useScreenWakeLock(active: boolean): WakeLockStatus {
   return lockState === 'pending' ? 'idle' : lockState;
 }
 
-const WAKE_LOCK_TEXT: Record<Exclude<WakeLockStatus, 'idle'>, string> = {
-  held: 'Screen kept awake',
-  hidden: 'Screen wake lock paused while this tab is hidden',
-  unavailable: 'Wake lock unavailable in this browser',
-  refused: 'The browser refused the screen wake lock; keep the screen on yourself',
-};
+/** The user agent never changes during a page's life: nothing to subscribe to. */
+const subscribeNever = () => () => undefined;
+
+/** The "keep the device awake" notice a running series shows when the screen is not kept awake. */
+function WakeLockNotice({ status }: { status: WakeLockStatus }) {
+  const webkit = useSyncExternalStore(
+    subscribeNever,
+    () => isWebKitUserAgent(navigator.userAgent),
+    () => false,
+  );
+  const notice = wakeLockNotice(status, webkit);
+  if (!notice) return null;
+  return (
+    <p
+      role="note"
+      className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+    >
+      {notice}
+    </p>
+  );
+}
 
 export function BenchRunner() {
   const [suite, setSuite] = useState<Exclude<BenchSuiteId, 'custom'>>('quick');
@@ -1931,6 +1977,7 @@ function RunOverlay(props: {
             </Button>
           </div>
         )}
+        {series && <WakeLockNotice status={wakeLock} />}
 
         <div
           role="alert"
@@ -1939,7 +1986,11 @@ function RunOverlay(props: {
           <p className="font-medium">Please keep this tab open, visible, and in front until the run finishes.</p>
           <ul className="mt-1 list-disc space-y-0.5 pl-5">
             <li>Do not switch to another tab, minimize or cover this window, lock the screen, or close this page.</li>
-            <li>Keep the device plugged in; the screen is kept awake for you while the run is in progress.</li>
+            <li>
+              {wakeLock === 'refused' || wakeLock === 'tap' || wakeLock === 'unavailable'
+                ? 'Keep the device plugged in and its screen on; this browser does not keep the screen awake for you.'
+                : 'Keep the device plugged in; the screen is kept awake for you while the run is in progress.'}
+            </li>
             <li>Browsers slow down background tabs, so a measurement taken while this tab is hidden is set aside and repeated once the tab is back in front; if the tab stays hidden, that step is marked invalid.</li>
             {study && <li>Your completion code appears on this page as soon as the run and its upload finish.</li>}
           </ul>
@@ -2126,6 +2177,7 @@ function SeriesPanel(props: {
         {series.status === 'running' && wakeLock !== 'idle' && (
           <p className="text-xs text-muted-foreground">{WAKE_LOCK_TEXT[wakeLock]}</p>
         )}
+        {series.status === 'running' && <WakeLockNotice status={wakeLock} />}
         {series.status === 'paused' && series.pauseReason && (
           <p role="alert" className="text-destructive">
             {series.pauseReason}

@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.2] - 2026-09-29
+
+**Released:** `@localmode/bench` 0.9.2.
+
+### Fixed
+
+- **bench:** on Safari (macOS, iPhone and iPad), and every other iOS browser, a series on `/bench/run` could not keep the screen awake after run 1, so the device slept a few minutes into the series while Chrome and Firefox stayed awake. Cause, reproduced on WebKit: `navigator.wakeLock.request('screen')` is granted only with a user activation. Run 1 starts from the Run click and gets the lock; every later run starts from the page's own reload and is refused with `NotAllowedError` (Chrome grants it after the reload). Three iOS and macOS Safari series on file stopped after run 2, whose trace has no wake-lock event. The page now, on WebKit, requests the lock again on the next tap or key press and says "Tap anywhere to keep the screen awake"; while a series runs without a granted lock (refused, awaiting a tap, or no wake-lock API), the series box in the run overlay and the between-runs series panel show a notice: "This browser did not grant a screen wake lock, so the device may sleep during the series.", followed on WebKit by "iPhone or iPad: Settings, Display & Brightness, Auto-Lock, Never. Mac: run caffeinate -d in Terminal or set the display to never turn off." (elsewhere, "Set the display to never turn off, or keep the device awake another way, until the series ends."), and "If the device sleeps, the series waits until it wakes, and steps measured while the page is hidden are set aside." The overlay's "the screen is kept awake for you" line no longer claims so when it is not. No silent video or audio is used to keep the screen on. The methodology page documents the WebKit behaviour and what the run file records.
+- **bench 0.9.2:** the trace records a refused wake-lock request as `wakelock-denied` (detail: the error name), re-requests the lock on the next user activation, and records a lock granted that way as `wakelock-acquired` with the detail `user-activation`. Before, a denial left no event. Covered by the digest like every trace event; no validation or scoring rule reads it; the protocol (`localmode-bench/5`) and schema version are unchanged.
+
 ## [2.16.1] - 2026-09-28
 
 **Released:** `@localmode/bench` 0.9.1, `@localmode/transformers` 4.1.4, `@localmode/webllm` 2.2.1.

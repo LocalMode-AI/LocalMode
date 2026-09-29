@@ -102,7 +102,16 @@ the warmup and the warm reload re-downloaded the 3.46 GB weights.
   own decisions), so every result lists every cell its suite defines.
 - **Trace events** - visibility, wake lock, GPU device loss, aborts, cool-downs,
   and compute-pressure transitions (recorded on state change only; the gate
-  itself reads every one-second sample).
+  itself reads every one-second sample). Wake lock: `wakelock-acquired` when
+  the screen wake lock is granted, `wakelock-released` when it ends, and since
+  0.9.2 `wakelock-denied` (detail: the error name, e.g. `NotAllowedError`) when
+  the request at the start of the run is refused. WebKit (Safari, every iOS
+  browser) grants the lock only on a user interaction, so a run started
+  without one (a series run after its reload) is refused there; the recorder
+  then requests it again on the next activation-triggering input event and, if
+  granted, records `wakelock-acquired` with the detail `user-activation`. A
+  run with no wake-lock event predates 0.9.2 or ran where
+  `environment.apis.wakeLock` is false.
 - **Environment capture** (`captureEnvironment()`) - everything the browser
   discloses, recorded whether or not the current analysis uses it, every probe
   guarded so a missing API records nothing for its key: browser (UA-CH brands
