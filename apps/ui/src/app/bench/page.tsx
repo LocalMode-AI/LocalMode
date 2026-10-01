@@ -12,7 +12,7 @@ import { JsonLd } from '@/components/json-ld';
 import { breadcrumbGraph } from '@/lib/structured-data';
 import { ogImageUrl } from '@/lib/og';
 import { LEADERBOARD_PROTOCOL_VERSIONS } from '@localmode/bench';
-import { aggregateIndex, readIndex } from '@/lib/bench/store';
+import { getLeaderboardSnapshot } from '@/lib/bench/leaderboard-cache';
 import { LeaderboardTable } from '@/components/bench/leaderboard-table';
 import { SubmissionsTable } from '@/components/bench/submissions-table';
 
@@ -43,14 +43,12 @@ export const revalidate = 300;
 
 export default async function BenchPage() {
   const repo = process.env.BENCH_GITHUB_REPO ?? null;
-  const entries = repo ? await readIndex(repo, { next: { revalidate: 300 } }) : [];
-  const rows = aggregateIndex(entries);
-  // Count what the table aggregates: unflagged runs under the current protocol
-  // (archived runs from earlier protocol versions stay in the dataset only).
-  const currentRuns = entries.filter(
-    (e) => !e.flagged && !!e.protocol && LEADERBOARD_PROTOCOL_VERSIONS.includes(e.protocol),
-  );
-  const verifiedRuns = currentRuns.length;
+  // The cached aggregate (5-minute revalidate): rows, the count of unflagged
+  // runs under the current protocols, and the newest of those runs.
+  const snapshot = repo ? await getLeaderboardSnapshot(repo) : null;
+  const rows = snapshot?.rows ?? [];
+  const verifiedRuns = snapshot?.runs ?? 0;
+  const recentSubmissions = snapshot?.recentSubmissions ?? [];
 
   return (
     <div className="flex w-full flex-1 flex-col">
@@ -133,7 +131,7 @@ export default async function BenchPage() {
           )}
         </section>
 
-        {currentRuns.length > 0 && (
+        {recentSubmissions.length > 0 && (
           <section className="flex flex-col gap-3" aria-label="Recent submissions">
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="text-xl font-semibold">Recent submissions</h2>
@@ -142,7 +140,7 @@ export default async function BenchPage() {
                 WebAssembly features, API availability, display, network) is in each run&apos;s JSON.
               </p>
             </div>
-            <SubmissionsTable entries={currentRuns} repo={repo} />
+            <SubmissionsTable entries={recentSubmissions} repo={repo} />
           </section>
         )}
       </main>

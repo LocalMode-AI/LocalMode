@@ -6,7 +6,7 @@
  */
 
 import { refineDeviceClass } from '@localmode/bench';
-import type { RunIndexEntry } from '@/lib/bench/store';
+import type { RunIndexSubmission } from '@/lib/bench/store';
 import {
   Table,
   TableBody,
@@ -22,7 +22,7 @@ function fmtGB(bytes?: number): string {
 }
 
 /** Runs-with-dataset-link path: the run JSON inside the public repository. */
-function runUrl(repo: string | null, entry: RunIndexEntry): string | undefined {
+function runUrl(repo: string | null, entry: RunIndexSubmission): string | undefined {
   return repo ? `https://github.com/${repo}/blob/main/${entry.path}` : undefined;
 }
 
@@ -31,7 +31,7 @@ export function SubmissionsTable({
   repo,
   limit = 25,
 }: {
-  entries: RunIndexEntry[];
+  entries: RunIndexSubmission[];
   repo: string | null;
   limit?: number;
 }) {

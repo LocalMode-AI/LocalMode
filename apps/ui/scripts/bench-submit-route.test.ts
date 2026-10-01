@@ -128,6 +128,64 @@ describe('POST /api/bench/submit', () => {
     expect(indexBody).not.toContain('America/Chicago');
   });
 
+  it('publishes self-reported hardware with a normalized GPU name, recomputing the digest, and indexes it', async () => {
+    const run = makeRun({ nonce: issueNonce(), runId: `run-hw-${Math.random().toString(16).slice(2)}` });
+    run.environment = {
+      ...run.environment,
+      userReportedDevice: 'prolific:0123456789ab',
+      userReportedHardware: { gpu: '  NVIDIA   GeForce RTX 4060 ', chassis: 'laptop', ramGB: 16, otherAppsRunning: true },
+    };
+    run.digest = await computeRunDigest(run);
+    const { status, body } = await post(run);
+    expect(status).toBe(200);
+    expect(body.ok).toBe(true);
+    const published = committed[0].run;
+    expect(published.environment.userReportedHardware).toEqual({
+      gpu: 'NVIDIA GeForce RTX 4060',
+      chassis: 'laptop',
+      ramGB: 16,
+      otherAppsRunning: true,
+    });
+    expect(typeof published.scrubbedAt).toBe('string');
+    expect(published.digest).not.toBe(run.digest);
+    expect(await verifyRunDigest(published)).toBe(true);
+    const [entry] = JSON.parse(indexBody) as Array<Record<string, unknown>>;
+    expect(entry).toMatchObject({ reportedGpu: 'NVIDIA GeForce RTX 4060', reportedChassis: 'laptop', reportedRamGB: 16 });
+  });
+
+  it('publishes already-normalized hardware as sent, with the client digest intact', async () => {
+    const run = makeRun({ nonce: issueNonce(), runId: `run-hw-clean-${Math.random().toString(16).slice(2)}` });
+    run.environment = { ...run.environment, userReportedHardware: { gpu: 'Apple M2', chassis: 'desktop', ramGB: null } };
+    run.digest = await computeRunDigest(run);
+    expect((await post(run)).status).toBe(200);
+    const published = committed[0].run;
+    expect(published.scrubbedAt).toBeUndefined();
+    expect(published.digest).toBe(run.digest);
+    expect(published.environment.userReportedHardware).toEqual({ gpu: 'Apple M2', chassis: 'desktop', ramGB: null });
+    const [entry] = JSON.parse(indexBody) as Array<Record<string, unknown>>;
+    expect(entry.reportedGpu).toBe('Apple M2');
+    expect('reportedRamGB' in entry).toBe(false);
+  });
+
+  it('rejects malformed self-reported hardware before anything is stored', async () => {
+    const run = makeRun({ nonce: issueNonce(), runId: `run-hw-bad-${Math.random().toString(16).slice(2)}` });
+    run.environment = {
+      ...run.environment,
+      userReportedHardware: { gpu: 'RTX\u202e0604', chassis: 'tower', ramGB: 0 } as never,
+    };
+    run.digest = await computeRunDigest(run);
+    const { status, body } = await post(run);
+    expect(status).toBe(400);
+    expect(body.code).toBe('invalid-shape');
+    expect(body.errors).toEqual([
+      'environment.userReportedHardware.gpu must be a string of 1 to 64 characters after trimming, without control characters',
+      'environment.userReportedHardware.chassis must be laptop|desktop|other',
+      'environment.userReportedHardware.ramGB must be an integer from 1 to 1024, or null',
+    ]);
+    expect(committed).toHaveLength(0);
+    expect(indexPuts).toBe(0);
+  });
+
   it('refuses a nonce the second time it is presented', async () => {
     const nonce = issueNonce();
     const first = makeRun({ nonce, runId: `run-a-${Math.random().toString(16).slice(2)}` });

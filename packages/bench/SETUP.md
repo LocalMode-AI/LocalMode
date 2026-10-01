@@ -84,8 +84,8 @@ path. To restore missing entries, rebuild from a clone of the dataset:
 
 ```
 cd apps/ui
-pnpm exec tsx scripts/rebuild-bench-index.ts --dataset ../../LocalMode-Bench --dry-run
-pnpm exec tsx scripts/rebuild-bench-index.ts --dataset ../../LocalMode-Bench
+pnpm exec tsx scripts/rebuild-bench-index.ts --dataset ../../../LocalMode-Bench --dry-run
+pnpm exec tsx scripts/rebuild-bench-index.ts --dataset ../../../LocalMode-Bench
 ```
 
 Every `runs/**.json` (verified) and `quarantine/**.json` (flagged) file
@@ -94,6 +94,31 @@ by `createdAt` then path. The tool writes nothing when a run file cannot be
 indexed, or when the result would hold fewer entries than the current index or
 drop a run it lists (`--allow-shrink` overrides the last two). Review the diff
 and commit the file in the dataset clone.
+
+## 6. Matching participants of a paid study
+
+A paid-study link (`/bench/run?...&cc=<code>&PROLIFIC_PID=<id>`) records the
+participant only as `prolific:<first 12 hex digits of SHA-256(id)>` in
+`environment.userReportedDevice`, and the hardware the participant reported
+on the page in `environment.userReportedHardware`. To check the participants
+of a study against the dataset, export the participant list from the study
+platform (CSV with a "Participant id" column, or a plain file with one id per
+line) and run, from `apps/ui`:
+
+```
+pnpm exec tsx scripts/match-study-submissions.ts participants.csv --dataset ../../../LocalMode-Bench
+pnpm exec tsx scripts/match-study-submissions.ts participants.csv --pid-column "Participant id" --json > matches.json
+```
+
+`--dataset` defaults to `../../../LocalMode-Bench` (a clone beside this
+repository). Each id is hashed with the page's own `parseStudySession()`, looked
+up in `index/summary.json`, and each matched run file is read. One row per
+participant without a run and one per run otherwise: the verdict (`approve`
+when exactly one run carries the hash, `duplicate` when several do, all
+listed, `no-match` when none does), the run id, `createdAt`, browser name and
+engine, the browser eligibility recomputed with `studyEligibility()` from the
+run's user agent and UA-CH brands, and the reported hardware. `--json` prints
+the same rows as JSON. The tool reads the clone only; it writes nothing.
 
 ## Optional integration check (real GitHub API, opt-in)
 

@@ -11,13 +11,15 @@
  * presets (prefill, never start), a two-run series across a real page reload,
  * a two-run series with a one-minute cool-down (countdown, reload no earlier
  * than the cool-down, idle time on run 2's file), Stop series mid-run, and Clear model caches checked against the browser's
- * own storage listings before the next run loads cold. Selectors are
+ * own storage listings before the next run loads cold. The paid-study browser
+ * gate is checked in Chromium and under a Safari user agent with
+ * `navigator.userAgentData` removed (see the gate describe block). Selectors are
  * role/label/text only.
  */
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { expect, test, type ConsoleMessage, type Page, type Request } from '@playwright/test';
+import { expect, test, type ConsoleMessage, type Locator, type Page, type Request } from '@playwright/test';
 
 /** The harness version every run must carry: the bench package this build installed. */
 const BENCH_PACKAGE_VERSION = (
@@ -74,6 +76,10 @@ async function providerStorage(page: Page): Promise<{ caches: string[]; database
 
 interface ExportedRun {
   runId: string;
+  environment: {
+    userReportedDevice?: string;
+    userReportedHardware?: { gpu?: string; chassis?: string; ramGB?: number | null; otherAppsRunning?: boolean };
+  };
   harness: {
     series?: { id: string; index: number; count: number; cooldownMs?: number; idleBeforeMs?: number };
     coldStart?: string;
@@ -90,6 +96,23 @@ function collectRunDownloads(page: Page): Array<Promise<ExportedRun>> {
     );
   });
   return files;
+}
+
+/** The paid-study hardware questions, as a participant sees them. */
+const HARDWARE_FORM = 'About this computer';
+const HARDWARE_REASON_ALL =
+  'Answer "About this computer" first: graphics card or chip, computer type and memory (RAM).';
+
+/** Answer the hardware questions inside `scope` (the page, or the run overlay). */
+async function answerHardware(
+  scope: Page | Locator,
+  answers: { gpu: string; chassis: 'Laptop' | 'Desktop' | 'Other'; ram: string; otherApps?: 'Yes' | 'No' },
+) {
+  const form = scope.getByRole('group', { name: HARDWARE_FORM });
+  await form.getByLabel('Graphics card or chip').fill(answers.gpu);
+  await form.getByRole('radio', { name: answers.chassis }).check();
+  await form.getByLabel('Memory (RAM)').selectOption({ label: answers.ram });
+  if (answers.otherApps) await form.getByRole('radio', { name: answers.otherApps }).check();
 }
 
 /** Main-frame loads after the call (reloads count; the initial goto happens before). */
@@ -202,6 +225,151 @@ test.describe('bench shell (zero model bytes)', () => {
   });
 });
 
+/**
+ * Paid-study browser gate. The study pays only for runs from Chrome or Edge on
+ * a computer, or Chrome on Android, so a study link carrying a `cc` code opened
+ * in any other browser shows a notice in place of the Run button. The config
+ * has only a Chromium project, so Safari is reproduced in Chromium: the context
+ * user agent is Safari 26.3's (recorded on macOS), and because Chromium keeps
+ * exposing `navigator.userAgentData` (with Chromium brands) under a spoofed user
+ * agent, an init script removes it, as Safari has none. The page therefore takes
+ * the same no-userAgentData path a real Safari takes. The real-Safari check is
+ * part of the manual hardware sweep.
+ */
+const SAFARI_MAC_UA =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15';
+/** A study link in the shape the study uses: presets, the code, then Prolific's three ids (test values). */
+const STUDY_LINK =
+  '/bench/run?tier=quick&quality=off&runs=1&cold=off&publish=on&cc=TESTCODE1&PROLIFIC_PID=e2e-test-pid&STUDY_ID=e2e-study&SESSION_ID=e2e-session';
+const STUDY_GATE_HEADING = 'This study needs Chrome or Edge';
+
+test.describe('paid-study browser gate (zero model bytes)', () => {
+  let consoleErrors: string[];
+  let modelRequests: string[];
+
+  test.beforeEach(({ page }) => {
+    consoleErrors = [];
+    modelRequests = [];
+    collectConsoleErrors(page, consoleErrors);
+    collectModelRequests(page, modelRequests);
+  });
+
+  test.afterEach(async () => {
+    expect(consoleErrors, 'no console errors allowed').toEqual([]);
+    expect(modelRequests, 'the study gate lanes must fetch no model assets').toEqual([]);
+  });
+
+  test('Chromium: a study link keeps the Run button, shows no gate, and asks about the hardware before Run', async ({ page }) => {
+    await page.goto(STUDY_LINK);
+    await expect(page.getByRole('heading', { level: 1, name: /run localmode bench/i })).toBeVisible();
+    expect(await page.evaluate(() => (navigator as Navigator & { userAgentData?: unknown }).userAgentData !== undefined)).toBe(true);
+    const runButton = page.getByRole('button', { name: 'Run benchmark' });
+    // The lanes are probed, so a disabled button is the hardware gate, not a loading state.
+    await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+    const form = page.getByRole('group', { name: HARDWARE_FORM });
+    await expect(form).toBeVisible();
+    await expect(runButton).toBeDisabled();
+    const reason = page.getByText(HARDWARE_REASON_ALL, { exact: true });
+    await expect(reason).toBeVisible();
+    await expect(runButton).toHaveAccessibleDescription(HARDWARE_REASON_ALL);
+    // The form sits above the Run button.
+    const formBox = (await form.boundingBox())!;
+    const runBox = (await runButton.boundingBox())!;
+    expect(formBox.y + formBox.height).toBeLessThanOrEqual(runBox.y);
+    const gpu = form.getByLabel('Graphics card or chip');
+    await expect(gpu).toHaveAttribute('maxlength', '64');
+    await expect(gpu).toHaveAccessibleDescription(/Task Manager, Performance, GPU.*About This Mac.*Settings, About/);
+    await expect(form).toContainText('published with the run in the public leaderboard dataset');
+    await expect(form.getByLabel('Memory (RAM)').locator('option')).toHaveText([
+      'Choose…', '4 GB', '6 GB', '8 GB', '12 GB', '16 GB', '24 GB', '32 GB', '48 GB', '64 GB', '96 GB', '128 GB or more', 'Not sure',
+    ]);
+    // Invalid and partial states keep Run disabled and name what is missing.
+    await gpu.fill('    ');
+    await expect(page.getByText(HARDWARE_REASON_ALL, { exact: true })).toBeVisible();
+    await gpu.fill('Intel Iris Xe Graphics');
+    await form.getByRole('radio', { name: 'Desktop' }).check();
+    await expect(page.getByText('Answer "About this computer" first: memory (RAM).', { exact: true })).toBeVisible();
+    await expect(runButton).toBeDisabled();
+    // "Not sure" is an answer; the other-programs question is optional.
+    await form.getByLabel('Memory (RAM)').selectOption({ label: 'Not sure' });
+    await expect(runButton).toBeEnabled();
+    await expect(page.getByText(/^Answer "About this computer" first/)).toHaveCount(0);
+    await expect(page.getByText(/paid study session detected/i)).toBeVisible();
+    await expect(page.getByRole('alert', { name: STUDY_GATE_HEADING })).toHaveCount(0);
+    await expect(page.getByText(STUDY_GATE_HEADING)).toHaveCount(0);
+    // STUDY_ID and SESSION_ID pass through: the presets are still applied, and no code shows before a run.
+    await expect(page.getByRole('combobox', { name: 'Suite' })).toContainText('Quick');
+    await expect(page.getByRole('switch', { name: /quality-fidelity lane/i })).not.toBeChecked();
+    await expect(page.getByRole('switch', { name: /publish results/i })).toBeChecked();
+    await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
+  });
+
+  test.describe('Safari user agent', () => {
+    test.use({ userAgent: SAFARI_MAC_UA });
+
+    test.beforeEach(async ({ context }) => {
+      await context.addInitScript(() => {
+        Object.defineProperty(Navigator.prototype, 'userAgentData', { get: () => undefined, configurable: true });
+      });
+    });
+
+    test('a study link with cc shows the notice in place of the Run button and downloads nothing', async ({ page }) => {
+      await page.goto(STUDY_LINK);
+      await expect(page.getByRole('heading', { level: 1, name: /run localmode bench/i })).toBeVisible();
+      expect(
+        await page.evaluate(() => ({
+          ua: navigator.userAgent,
+          uad: (navigator as Navigator & { userAgentData?: unknown }).userAgentData ?? null,
+        })),
+      ).toEqual({ ua: SAFARI_MAC_UA, uad: null });
+      const gate = page.getByRole('alert', { name: STUDY_GATE_HEADING });
+      await expect(gate).toBeVisible({ timeout: 15_000 });
+      await expect(gate).toContainText(
+        'This study needs Chrome or Edge on a computer, or Chrome on Android. Runs from Safari, iPhone or iPad browsers, Firefox and other browsers are not eligible for payment and do not receive a completion code. Open this exact link in Chrome or Edge to take part.',
+      );
+      // The lanes finished probing, so the absent button is the gate, not a loading state.
+      await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+      await expect(page.getByRole('button', { name: 'Run benchmark' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /running/i })).toHaveCount(0);
+      await expect(page.getByText(/paid study session detected/i)).toHaveCount(0);
+      await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
+      await expect(page.getByText('TESTCODE1')).toHaveCount(0);
+      // The hardware questions belong to an eligible study session only.
+      await expect(page.getByRole('group', { name: HARDWARE_FORM })).toHaveCount(0);
+      // The ordinary runner controls stay visible.
+      await expect(page.getByRole('combobox', { name: 'Suite' })).toContainText('Quick');
+      // Nothing starts on its own: no run overlay and (afterEach) no model bytes.
+      await page.waitForTimeout(3_000);
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+    });
+
+    test('PROLIFIC_PID without cc behaves as a plain visit: no gate, Run button present', async ({ page }) => {
+      await page.goto(
+        '/bench/run?tier=quick&quality=off&runs=1&cold=off&publish=on&PROLIFIC_PID=e2e-test-pid&STUDY_ID=e2e-study&SESSION_ID=e2e-session',
+      );
+      await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeEnabled({ timeout: 15_000 });
+      expect(await page.evaluate(() => navigator.userAgent)).toBe(SAFARI_MAC_UA);
+      await expect(page.getByText(/paid study session detected/i)).toBeVisible();
+      await expect(page.getByRole('alert', { name: STUDY_GATE_HEADING })).toHaveCount(0);
+      await expect(page.getByText(STUDY_GATE_HEADING)).toHaveCount(0);
+      await expect(page.getByRole('group', { name: HARDWARE_FORM })).toHaveCount(0);
+    });
+  });
+
+  test('an organic visit (no cc) shows no hardware questions and the Run button is enabled as before', async ({ page }) => {
+    for (const url of ['/bench/run', '/bench/run?tier=quick&quality=off&runs=1&publish=on&PROLIFIC_PID=e2e-test-pid']) {
+      await page.goto(url);
+      const runButton = page.getByRole('button', { name: 'Run benchmark' });
+      await expect(runButton).toBeEnabled({ timeout: 15_000 });
+      await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+      await expect(page.getByRole('group', { name: HARDWARE_FORM })).toHaveCount(0);
+      await expect(page.getByLabel('Graphics card or chip')).toHaveCount(0);
+      await expect(page.getByText(/^Answer "About this computer" first/)).toHaveCount(0);
+      await expect(runButton).not.toHaveAttribute('aria-describedby', /.+/);
+    }
+  });
+});
+
 test.describe('bench real run (WASM lanes)', () => {
   test('quick suite: real downloads, real inference, export + dev-mode submit', async ({ page }) => {
     const consoleErrors: string[] = [];
@@ -219,8 +387,18 @@ test.describe('bench real run (WASM lanes)', () => {
     // must NOT show the completion code before the run + submit attempt resolve.
     await page.goto('/bench/run?PROLIFIC_PID=5f3a1c2b4d6e7f8091a2b3c4&cc=TESTCODE1');
     const runButton = page.getByRole('button', { name: 'Run benchmark' });
-    await expect(runButton).toBeEnabled({ timeout: 15_000 });
+    // A study link asks about the hardware first: Run stays disabled, with the reason, until it is answered.
+    await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+    await expect(runButton).toBeDisabled();
+    await expect(page.getByText(HARDWARE_REASON_ALL, { exact: true })).toBeVisible();
+    await answerHardware(page, { gpu: 'Intel Iris Xe Graphics', chassis: 'Laptop', ram: '16 GB', otherApps: 'No' });
+    await expect(runButton).toBeEnabled();
     await expect(page.getByText(/paid study session detected/i)).toBeVisible();
+    // Second witness for the recorded answers: the run file the page uploads.
+    const submitted: string[] = [];
+    page.on('request', (req) => {
+      if (req.url().endsWith('/api/bench/submit') && req.method() === 'POST') submitted.push(req.postData() ?? '');
+    });
     await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
 
     // Headless Chromium: WebGPU lanes must be visibly unavailable, not hidden.
@@ -239,6 +417,16 @@ test.describe('bench real run (WASM lanes)', () => {
     await expect(dialog).toContainText(/Estimated time remaining|Estimating the remaining time/);
     await expect(dialog.getByRole('list', { name: /model lanes progress/i })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Cancel run' })).toBeVisible();
+
+    // The answers stay editable during the run, in the overlay; the values present when the
+    // run file is assembled are the ones recorded (the GPU name normalized).
+    const runForm = dialog.getByRole('group', { name: HARDWARE_FORM });
+    await expect(runForm.getByLabel('Graphics card or chip')).toHaveValue('Intel Iris Xe Graphics');
+    await expect(runForm.getByRole('radio', { name: 'Laptop' })).toBeChecked();
+    await expect(runForm.getByLabel('Memory (RAM)')).toHaveValue('16');
+    await runForm.getByLabel('Graphics card or chip').fill('  NVIDIA   GeForce RTX 4060  ');
+    await runForm.getByRole('radio', { name: 'Yes' }).check();
+    await expect(page.getByRole('group', { name: HARDWARE_FORM })).toHaveCount(1);
 
     // Live progress surfaces through the status live region.
     const status = page.getByRole('status').first();
@@ -271,6 +459,7 @@ test.describe('bench real run (WASM lanes)', () => {
       harness: { version: string; runtimeVersions?: Record<string, string> };
       environment: {
         userReportedDevice?: string;
+        userReportedHardware?: unknown;
         userAgent?: string;
         pageOrigin?: string;
         browser: { name: string; engine?: string; webdriver?: boolean; vendor?: string };
@@ -310,6 +499,13 @@ test.describe('bench real run (WASM lanes)', () => {
     // The dataset row carries a 12-hex SHA-256 prefix of the participant id, never the id.
     expect(exported.environment.userReportedDevice).toMatch(/^prolific:[0-9a-f]{12}$/);
     expect(JSON.stringify(exported)).not.toContain('5f3a1c2b4d6e7f8091a2b3c4');
+    // The hardware answers as they stood when the run file was assembled (edited during the run).
+    expect(exported.environment.userReportedHardware).toEqual({
+      gpu: 'NVIDIA GeForce RTX 4060',
+      chassis: 'laptop',
+      ramGB: 16,
+      otherAppsRunning: true,
+    });
     expect(exported.fingerprint?.mflops).toBeGreaterThan(1);
     expect(exported.cells.some((c) => c.status === 'ok' && c.iterations.length > 0)).toBe(true);
     // Lanes this device cannot run stay in the result as skipped cells with the
@@ -412,6 +608,11 @@ test.describe('bench real run (WASM lanes)', () => {
       timeout: 30_000,
     });
     await expect(page.getByRole('button', { name: 'Retry submission' })).toBeVisible();
+    // The uploaded run file carries the same answers and the same digest as the export.
+    expect(submitted).toHaveLength(1);
+    const uploaded = JSON.parse(submitted[0]) as { digest?: string; environment: { userReportedHardware?: unknown } };
+    expect(uploaded.environment.userReportedHardware).toEqual(exported.environment.userReportedHardware);
+    expect(uploaded.digest).toBe(exported.digest);
 
     // Pay-on-attempt: the completion code appears now that the submit attempt
     // resolved (here: failed with the dev-mode 503), with the researcher note.
@@ -524,8 +725,12 @@ test.describe('bench real run (WASM lanes)', () => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     const consoleErrors: string[] = [];
     collectConsoleErrors(page, consoleErrors);
-    await page.goto('/bench/run');
+    // A study link: the hardware answers given before run 1 must reach run 2 across the reload.
+    await page.goto('/bench/run?cc=TESTCODE2&PROLIFIC_PID=e2e-series-pid');
     const runButton = page.getByRole('button', { name: 'Run benchmark' });
+    await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+    await expect(runButton).toBeDisabled();
+    await answerHardware(page, { gpu: 'AMD Radeon 780M', chassis: 'Desktop', ram: '128 GB or more', otherApps: 'No' });
     await expect(runButton).toBeEnabled({ timeout: 15_000 });
     // Publishing off: each run of the series is exported as a JSON download.
     await page.getByRole('switch', { name: /publish results/i }).click();
@@ -546,6 +751,13 @@ test.describe('bench real run (WASM lanes)', () => {
       .getByRole('group', { name: 'Series progress' })).toContainText('Series: run 2 of 2', { timeout: 15 * 60 * 1000 });
     expect(loads.count, 'the page reloaded between the two runs').toBeGreaterThanOrEqual(1);
     await expect(page).toHaveTitle('2/2 · LocalMode Bench');
+    // The answers survived the reload; one is changed during run 2 and must be recorded on run 2 only.
+    const run2Form = page.getByRole('dialog', { name: /benchmark running/i }).getByRole('group', { name: HARDWARE_FORM });
+    await expect(run2Form.getByLabel('Graphics card or chip')).toHaveValue('AMD Radeon 780M');
+    await expect(run2Form.getByRole('radio', { name: 'Desktop' })).toBeChecked();
+    await expect(run2Form.getByLabel('Memory (RAM)')).toHaveValue('128');
+    await expect(run2Form.getByRole('radio', { name: 'No' })).toBeChecked();
+    await run2Form.getByRole('radio', { name: 'Yes' }).check();
 
     const panel = page.getByRole('region', { name: 'Benchmark series' });
     await expect(panel).toContainText('Series complete: 2 of 2 runs', { timeout: 15 * 60 * 1000 });
@@ -564,6 +776,13 @@ test.describe('bench real run (WASM lanes)', () => {
     expect(Number.isInteger(idleBeforeMs)).toBe(true);
     expect(idleBeforeMs!).toBeGreaterThanOrEqual(1_500);
     expect(first.runId).not.toBe(second.runId);
+    const answered = { gpu: 'AMD Radeon 780M', chassis: 'desktop', ramGB: 128 };
+    expect(first.environment.userReportedHardware).toEqual({ ...answered, otherAppsRunning: false });
+    expect(second.environment.userReportedHardware).toEqual({ ...answered, otherAppsRunning: true });
+    expect(second.environment.userReportedDevice).toBe(first.environment.userReportedDevice);
+    expect(first.environment.userReportedDevice).toMatch(/^prolific:[0-9a-f]{12}$/);
+    // The series has ended, so its stored answers are gone.
+    expect(await page.evaluate(() => localStorage.getItem('localmode-bench-series-hardware'))).toBeNull();
     for (const run of [first, second]) {
       expect(run.cells.some((c) => c.status === 'ok')).toBe(true);
       expect(run.harness.coldStart, 'no clear happened, so no cold start is claimed').toBeUndefined();
@@ -581,8 +800,13 @@ test.describe('bench real run (WASM lanes)', () => {
     await panel.getByRole('button', { name: 'Close series' }).click();
     await expect(page.getByRole('region', { name: 'Benchmark series' })).toHaveCount(0);
     await page.reload();
-    await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeEnabled({ timeout: 15_000 });
+    await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Benchmark series' })).toHaveCount(0);
+    // A new run on the study link asks again: the ended series took its answers with it.
+    await expect(page.getByRole('group', { name: HARDWARE_FORM }).getByLabel('Graphics card or chip')).toHaveValue('');
+    await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeDisabled();
+    await answerHardware(page, { gpu: 'AMD Radeon 780M', chassis: 'Desktop', ram: '32 GB' });
+    await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeEnabled({ timeout: 15_000 });
     expect(consoleErrors).toEqual([]);
   });
 

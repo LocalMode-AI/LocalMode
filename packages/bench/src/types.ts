@@ -562,6 +562,38 @@ export interface EnvironmentCapture {
   visibilityState?: string;
   /** Free-text device self-report — displayed as "user-reported", never trusted. */
   userReportedDevice?: string;
+  /**
+   * Hardware the participant of a paid study reported on the page (since
+   * bench 0.9.4): the GPU name the browser masks, the chassis, and the exact
+   * RAM the browser caps. Self-reported, never checked against the device,
+   * and published with the run like every other field. The localmode.ai
+   * runner asks for it only on a paid-study link opened in an eligible
+   * browser, so it is absent on every other run.
+   */
+  userReportedHardware?: UserReportedHardware;
+}
+
+/**
+ * Self-reported hardware recorded on `environment.userReportedHardware`.
+ * Every field is optional: a host records only the answers it has.
+ */
+export interface UserReportedHardware {
+  /**
+   * The graphics card or chip as the participant read it from the operating
+   * system (e.g. "NVIDIA GeForce RTX 4060 Laptop GPU", "Apple M2"): 1 to 64
+   * characters after trimming, no control characters.
+   */
+  gpu?: string;
+  /** Computer type. */
+  chassis?: 'laptop' | 'desktop' | 'other';
+  /**
+   * Installed memory in GB (integer, 1 to 1024), from the bucket the
+   * participant chose; the top bucket "128 GB or more" records 128. Null
+   * when the participant answered "Not sure".
+   */
+  ramGB?: number | null;
+  /** Whether other heavy programs (games, video calls, editing software) were running. */
+  otherAppsRunning?: boolean;
 }
 
 /** Deterministic JS matmul microbenchmark result (hardware fingerprint). */

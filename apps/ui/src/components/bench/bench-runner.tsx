@@ -8,7 +8,7 @@
  * happens strictly behind the explicit Run action.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import type {
   BenchCellResult,
   BenchModelRef,
@@ -84,6 +84,20 @@ import {
   wakeLockNotice,
   type WakeLockStatus,
 } from '@/lib/bench/wake-lock';
+import { readStudyEligibility } from '@/lib/bench/study-eligibility';
+import { parseStudySession, type StudySession } from '@/lib/bench/study-session';
+import {
+  CHASSIS_CHOICES,
+  clearSeriesHardware,
+  EMPTY_HARDWARE_ANSWERS,
+  hardwareBlockReason,
+  loadSeriesHardware,
+  RAM_BUCKETS_GB,
+  REPORTED_GPU_MAX_LENGTH,
+  saveSeriesHardware,
+  toUserReportedHardware,
+  type HardwareAnswers,
+} from '@/lib/bench/study-hardware';
 import {
   beginAttempt,
   finishAttempt,
@@ -93,6 +107,7 @@ import {
   updateAttempt,
   type PartialAttempt,
 } from '@/lib/bench/partial-run-store';
+import { ChevronRight } from 'lucide-react';
 import { Button } from '@/registry/localmode/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/registry/localmode/ui/card';
 import { Badge } from '@/registry/localmode/ui/badge';
@@ -338,29 +353,18 @@ function laneKey(model: BenchModelRef): string {
 }
 
 /**
- * Paid-study session read from the URL (`?PROLIFIC_PID=<id>&cc=<code>`).
- * The participant id is never stored or published as-is: the run carries a
- * short SHA-256 prefix so a payment can be verified against a dataset row
- * without the dataset revealing who ran it. The completion code is shown only
- * after the run finishes and the submission attempt has resolved, whether it
- * succeeded or not (payment is on attempt, never on our infrastructure).
+ * The completion code is shown only after the run finishes and the submission
+ * attempt has resolved, whether it succeeded or not (payment is on attempt,
+ * never on our infrastructure). The study pays only for runs from Chrome or
+ * Edge on a computer, or Chrome on Android: with a completion code in the
+ * link, any other browser sees a notice in place of the Run button and never
+ * sees the code.
  */
-interface StudySession {
-  participantHash: string;
-  completionCode: string | null;
-}
-
 const PROLIFIC_COMPLETE_URL = 'https://app.prolific.com/submissions/complete?cc=';
 
 async function readStudySession(): Promise<StudySession | null> {
   if (typeof window === 'undefined') return null;
-  const params = new URLSearchParams(window.location.search);
-  const pid = params.get('PROLIFIC_PID')?.trim();
-  if (!pid) return null;
-  const code = params.get('cc')?.trim() || null;
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pid));
-  const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
-  return { participantHash: hex.slice(0, 12), completionCode: code && /^[A-Za-z0-9]{4,32}$/.test(code) ? code : null };
+  return parseStudySession(window.location.search, readStudyEligibility());
 }
 
 /** Save a JSON file through a temporary object URL. */
@@ -489,6 +493,173 @@ function WakeLockNotice({ status }: { status: WakeLockStatus }) {
   );
 }
 
+/** One-line description of each suite tier, shown under the suite picker. */
+const SUITE_HINTS: Record<'quick' | 'standard' | 'thorough', string> = {
+  quick: 'About 10 min with downloads: the SmolLM2 135M chat pairing and the embedding pairing. Runs on phones.',
+  standard:
+    'Longer than Quick: adds the four-runtime Qwen3 0.6B pairing and Gemini Nano. Desktop only, 16 GB of RAM recommended.',
+  thorough:
+    'The longest tier: every pairing, including Llama 3.2 1B and the multi-gigabyte Gemma 4 E2B. Desktop only, 16 GB of RAM recommended.',
+};
+
+/** A labelled group of related run settings inside the configuration card. */
+function ConfigSection({
+  id,
+  title,
+  className,
+  children,
+}: {
+  id: string;
+  title: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      role="group"
+      aria-labelledby={id}
+      className={`flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-muted/30 p-3 sm:p-4 ${className ?? ''}`}
+    >
+      <h3 id={id} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+/** Muted one-line help text under a setting. */
+const SELECT_CLASS =
+  'h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
+
+/**
+ * "About this computer": the paid-study hardware questions. The first three
+ * are required before Run; all four stay editable while the run is in
+ * progress, and the values present when the run file is assembled are
+ * recorded and published with the run.
+ */
+function HardwareFieldset({
+  idPrefix,
+  answers,
+  onChange,
+  duringRun = false,
+}: {
+  idPrefix: string;
+  answers: HardwareAnswers;
+  onChange: (patch: Partial<HardwareAnswers>) => void;
+  duringRun?: boolean;
+}) {
+  const radio = 'size-4 accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  return (
+    <fieldset
+      aria-describedby={`${idPrefix}-note`}
+      className="flex min-w-0 flex-col gap-4 rounded-lg border border-border bg-muted/30 p-3 sm:p-4"
+    >
+      <legend className="px-1 text-sm font-semibold">About this computer</legend>
+      <p className="-mt-2 text-xs text-muted-foreground">
+        {duringRun
+          ? 'You can still correct these answers. The answers shown here when the run finishes are recorded.'
+          : 'The first three questions are required before the run can start. You can change the answers until the run finishes.'}
+      </p>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${idPrefix}-gpu`}>Graphics card or chip</Label>
+        <Input
+          id={`${idPrefix}-gpu`}
+          type="text"
+          required
+          aria-required="true"
+          maxLength={REPORTED_GPU_MAX_LENGTH}
+          autoComplete="off"
+          spellCheck={false}
+          className="max-w-md"
+          value={answers.gpu}
+          onChange={(e) => onChange({ gpu: e.target.value })}
+          aria-describedby={`${idPrefix}-gpu-help`}
+        />
+        <p id={`${idPrefix}-gpu-help`} className="text-xs leading-relaxed text-muted-foreground">
+          Where to find it: on Windows, Task Manager, Performance, GPU; on a Mac, Apple menu, About This Mac (the
+          chip); on Linux, Settings, About (Graphics). Type the name as shown, for example &quot;NVIDIA GeForce RTX
+          4060&quot;, &quot;Intel Iris Xe Graphics&quot;, &quot;AMD Radeon 780M&quot; or &quot;Apple M2&quot;.
+        </p>
+      </div>
+
+      <div role="radiogroup" aria-labelledby={`${idPrefix}-chassis-label`} aria-required="true" className="flex flex-col gap-1.5">
+        <span id={`${idPrefix}-chassis-label`} className="text-sm font-medium">
+          Computer type
+        </span>
+        <div className="flex flex-wrap gap-x-5 gap-y-2">
+          {CHASSIS_CHOICES.map((c) => (
+            <label key={c.value} className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name={`${idPrefix}-chassis`}
+                value={c.value}
+                required
+                checked={answers.chassis === c.value}
+                onChange={() => onChange({ chassis: c.value })}
+                className={radio}
+              />
+              {c.label}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={`${idPrefix}-ram`}>Memory (RAM)</Label>
+        <select
+          id={`${idPrefix}-ram`}
+          required
+          aria-required="true"
+          className={SELECT_CLASS}
+          value={answers.ram}
+          onChange={(e) => onChange({ ram: e.target.value })}
+        >
+          <option value="">Choose…</option>
+          {RAM_BUCKETS_GB.map((gb, i) => (
+            <option key={gb} value={String(gb)}>
+              {i === RAM_BUCKETS_GB.length - 1 ? `${gb} GB or more` : `${gb} GB`}
+            </option>
+          ))}
+          <option value="unsure">Not sure</option>
+        </select>
+      </div>
+
+      <div role="radiogroup" aria-labelledby={`${idPrefix}-apps-label`} className="flex flex-col gap-1.5">
+        <span id={`${idPrefix}-apps-label`} className="text-sm font-medium">
+          Other heavy programs running (games, video calls, editing software)
+        </span>
+        <div className="flex flex-wrap gap-x-5 gap-y-2">
+          {(['yes', 'no'] as const).map((v) => (
+            <label key={v} className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name={`${idPrefix}-apps`}
+                value={v}
+                checked={answers.otherApps === v}
+                onChange={() => onChange({ otherApps: v })}
+                className={radio}
+              />
+              {v === 'yes' ? 'Yes' : 'No'}
+            </label>
+          ))}
+          <span className="text-xs text-muted-foreground">Optional</span>
+        </div>
+      </div>
+
+      <p id={`${idPrefix}-note`} className="text-xs text-muted-foreground">
+        These answers are published with the run in the public leaderboard dataset; do not enter names or email
+        addresses here.
+      </p>
+    </fieldset>
+  );
+}
+
+function ConfigHelp({ children }: { children: ReactNode }) {
+  return <p className="text-xs leading-relaxed text-muted-foreground">{children}</p>;
+}
+
 export function BenchRunner() {
   const [suite, setSuite] = useState<Exclude<BenchSuiteId, 'custom'>>('quick');
   const [availability, setAvailability] = useState<{
@@ -542,6 +713,21 @@ export function BenchRunner() {
   const [study, setStudy] = useState<StudySession | null>(null);
   /** The study parameters have been read (a resumed series run must carry them too). */
   const [studyChecked, setStudyChecked] = useState(false);
+  /** A study link with a completion code, opened in a browser the study does not pay for. */
+  const studyIneligible = study?.completionCode != null && !study.eligibility.eligible;
+  /** The study session whose promises (hints, completion code) this browser may see. */
+  const paidStudy = study && !studyIneligible ? study : null;
+  /** A paid-study link (with a completion code) in an eligible browser asks about the hardware. */
+  const hardwareRequired = paidStudy?.completionCode != null;
+  /** "About this computer" answers; the values at the moment the run file is assembled are recorded. */
+  const [hardware, setHardware] = useState<HardwareAnswers>(EMPTY_HARDWARE_ANSWERS);
+  const hardwareRef = useRef<HardwareAnswers>(EMPTY_HARDWARE_ANSWERS);
+  const updateHardware = useCallback((patch: Partial<HardwareAnswers>) => {
+    const next = { ...hardwareRef.current, ...patch };
+    hardwareRef.current = next;
+    setHardware(next);
+  }, []);
+  const hardwareReason = hardwareRequired ? hardwareBlockReason(hardware) : null;
   const [mobile, setMobile] = useState(false);
   /** Attempts an earlier page left unfinished (tab crash, closed tab): exportable, never submitted. */
   const [unfinished, setUnfinished] = useState<PartialAttempt[]>([]);
@@ -560,6 +746,8 @@ export function BenchRunner() {
     setSeriesState(next);
     if (next) saveSeries(next);
     else clearStoredSeries();
+    // The hardware answers live as long as the series has runs to do.
+    if (!isSeriesOpen(next)) clearSeriesHardware();
   }, []);
   /** A reloaded page with a pending series starts its next run once the lanes are probed. */
   const [autoStartPending, setAutoStartPending] = useState(false);
@@ -599,7 +787,13 @@ export function BenchRunner() {
     if (stored && !isSeriesOpen(stored)) updateSeries(stored);
     if (stored && isSeriesOpen(stored)) {
       const { state, action } = resolveSeriesOnLoad(stored);
+      // Read before updateSeries, which forgets the answers if the series has ended.
+      const savedHardware = loadSeriesHardware(state.seriesId);
       updateSeries(state);
+      if (savedHardware && isSeriesOpen(state)) {
+        hardwareRef.current = savedHardware;
+        setHardware(savedHardware);
+      }
       setSuite(state.settings.suite);
       setIncludeQuality(state.settings.includeQuality);
       setAutoSubmit(state.settings.publish);
@@ -645,6 +839,11 @@ export function BenchRunner() {
       document.title = previous;
     };
   }, [series]);
+
+  // An open series keeps the hardware answers for its next page loads.
+  useEffect(() => {
+    if (hardwareRequired && isSeriesOpen(series)) saveSeriesHardware(series.seriesId, hardware);
+  }, [hardwareRequired, series, hardware]);
 
   useEffect(() => {
     if (phase !== 'running') return;
@@ -987,6 +1186,14 @@ export function BenchRunner() {
           },
         },
       });
+      // The hardware answers as they stand now, when the run file is assembled.
+      const reportedHardware =
+        study?.completionCode != null && study.eligibility.eligible
+          ? toUserReportedHardware(hardwareRef.current)
+          : undefined;
+      if (reportedHardware) {
+        suiteResult.environment = { ...suiteResult.environment, userReportedHardware: reportedHardware };
+      }
       suiteResult.nonce = nonce;
       suiteResult.digest = await computeRunDigest(suiteResult);
       setResult(suiteResult);
@@ -1048,6 +1255,7 @@ export function BenchRunner() {
         // Give the browser a moment to hand the exported file to the download manager.
         await sleepMs(1_500);
         if (seriesRef.current?.status !== 'running') return;
+        if (reportedHardware) saveSeriesHardware(next.seriesId, hardwareRef.current);
         window.location.reload();
       }
     } catch (error) {
@@ -1106,12 +1314,13 @@ export function BenchRunner() {
     if (pageHasRunRef.current) {
       // A model already ran in this page: run 1 must start on a fresh page too.
       updateSeries(created);
+      if (hardwareRequired) saveSeriesHardware(created.seriesId, hardwareRef.current);
       window.location.reload();
       return;
     }
     updateSeries(markRunStarted(created, Date.now()));
     void run({ userActivated: true });
-  }, [runsCount, run, suite, includeQuality, autoSubmit, clearAfterRun, cooldownMinutes, disabledLanes, updateSeries]);
+  }, [runsCount, run, suite, includeQuality, autoSubmit, clearAfterRun, cooldownMinutes, disabledLanes, updateSeries, hardwareRequired]);
 
   // Resume a series after its reload: no click, the next run starts once the lanes are probed.
   // A page reloaded by hand during a cool-down waits out the rest first (the series panel counts down).
@@ -1119,11 +1328,13 @@ export function BenchRunner() {
     if (!autoStartPending || availability === null || !studyChecked || phase !== 'idle') return;
     const current = seriesRef.current;
     if (current && cooldownRemainingMs(current, now) > 0) return;
+    // A study series whose answers did not survive the reload waits until they are given again.
+    if (hardwareReason !== null) return;
     setAutoStartPending(false);
-    if (!current || current.status !== 'running') return;
+    if (!current || current.status !== 'running' || studyIneligible) return;
     updateSeries(markRunStarted(current, Date.now()));
     void run({ userActivated: false });
-  }, [autoStartPending, availability, studyChecked, phase, run, updateSeries, now]);
+  }, [autoStartPending, availability, studyChecked, studyIneligible, hardwareReason, phase, run, updateSeries, now]);
 
   const stopSeries = useCallback(() => {
     const current = seriesRef.current;
@@ -1137,12 +1348,13 @@ export function BenchRunner() {
     const resumed = continueSeries(current);
     if (pageHasRunRef.current) {
       updateSeries(resumed);
+      if (hardwareRequired) saveSeriesHardware(resumed.seriesId, hardwareRef.current);
       window.location.reload();
       return;
     }
     updateSeries(markRunStarted(resumed, Date.now()));
     void run({ userActivated: true });
-  }, [run, updateSeries]);
+  }, [run, updateSeries, hardwareRequired]);
 
   const closeSeries = useCallback(() => updateSeries(null), [updateSeries]);
 
@@ -1292,179 +1504,284 @@ export function BenchRunner() {
           <CardTitle>Configure the run</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-5">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="bench-suite">Suite</Label>
-              <Select
-                value={suite}
-                onValueChange={(v) => setSuite(v as typeof suite)}
-                disabled={phase === 'running'}
-              >
-                <SelectTrigger id="bench-suite" className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="quick">Quick (~10 min)</SelectItem>
-                  <SelectItem value="standard" disabled={mobile}>
-                    Standard{mobile ? ' (desktop only)' : ''}
-                  </SelectItem>
-                  <SelectItem value="thorough" disabled={mobile}>
-                    Thorough{mobile ? ' (desktop only)' : ''}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="bench-quality"
-                checked={includeQuality}
-                onCheckedChange={setIncludeQuality}
-                disabled={phase === 'running'}
-              />
-              <Label htmlFor="bench-quality">Include quality-fidelity lane</Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="bench-publish"
-                checked={autoSubmit}
-                onCheckedChange={setAutoSubmit}
-                disabled={phase === 'running'}
-              />
-              <Label htmlFor="bench-publish">Publish results to the public leaderboard</Label>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Label htmlFor="bench-runs">Runs</Label>
-              <Input
-                id="bench-runs"
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={MAX_SERIES_RUNS}
-                step={1}
-                className="w-20"
-                value={runsInput}
-                onChange={(e) => setRunsInput(e.target.value)}
-                onBlur={() => setRunsInput(String(runsCount))}
-                disabled={phase === 'running' || seriesOpen}
-                aria-describedby="bench-runs-help"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="bench-cooldown">Cool-down between runs</Label>
-              <Input
-                id="bench-cooldown"
-                type="number"
-                inputMode="decimal"
-                min={0}
-                max={MAX_COOLDOWN_MINUTES}
-                step={COOLDOWN_STEP_MINUTES}
-                className="w-20"
-                value={cooldownInput}
-                onChange={(e) => setCooldownInput(e.target.value)}
-                onBlur={() => setCooldownInput(String(cooldownMinutes))}
-                disabled={phase === 'running' || seriesOpen}
-                aria-describedby="bench-runs-help"
-              />
-              <span className="text-sm text-muted-foreground">min</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="bench-clear-after"
-                checked={clearAfterRun}
-                onCheckedChange={setClearAfterRun}
-                disabled={phase === 'running' || seriesOpen}
-              />
-              <Label htmlFor="bench-clear-after">Clear caches after each run</Label>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setClearState({ kind: 'confirm' })}
-              disabled={phase === 'running' || clearState.kind === 'clearing' || series?.status === 'running'}
-            >
-              {clearState.kind === 'clearing' ? 'Clearing model caches…' : 'Clear model caches'}
-            </Button>
-          </div>
-          <p id="bench-runs-help" className="text-xs text-muted-foreground">
-            {runsCount > 1
-              ? `A series of ${runsCount} runs with these settings. Each run starts on a fresh page load: the page reloads itself after every run and starts the next one without a click. Keep this tab open and in front until the series ends.`
-              : `Set Runs above 1 (up to ${MAX_SERIES_RUNS}) to run a series with these settings, one fresh page load per run.`}
-            {clearAfterRun
-              ? ' The model caches are cleared after every run, so each next run downloads its models again.'
-              : ''}
-            {runsCount > 1 && cooldownMinutes > 0
-              ? ` After each run the page idles for ${cooldownMinutes} min (the cool-down) before it reloads, so the device can cool between runs; the wait is recorded on every run file.`
-              : ''}
-            {runsCount > 1 && cooldownMinutes === 0
-              ? ` Cool-down between runs (0 to ${MAX_COOLDOWN_MINUTES} min, in half-minute steps) idles the page after each run before the next one; use it on laptops and phones, which slow down when run back to back.`
-              : ''}
-          </p>
-
-          <div className="flex flex-col gap-2" role="group" aria-label="Model lanes">
-            {lanes.map(({ model, available, reason, note }) => {
-              const key = laneKey(model);
-              const checked = available && !disabledLanes.has(key);
-              return (
-                <div
-                  key={key}
-                  className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
+          <div className="grid gap-4 md:grid-cols-2">
+            <ConfigSection id="bench-config-suite" title="Suite">
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <Label htmlFor="bench-suite">Suite</Label>
+                <Select
+                  value={suite}
+                  onValueChange={(v) => setSuite(v as typeof suite)}
+                  disabled={phase === 'running'}
                 >
-                  <div className="flex min-w-0 flex-col">
-                    <span className="break-words text-sm font-medium">{model.displayName}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {model.runtimeId} · {formatBytes(model.sizeBytes)}
-                      {model.quantization ? ` · ${model.quantization}` : ''}
-                    </span>
-                    {/* Reasons and notes can run to a sentence with a browser error inside;
-                        they wrap here, inside the shrinking column, so a phone-width row
-                        never grows past the viewport. */}
-                    {!available && (
-                      <span className="break-words text-xs text-muted-foreground">{reason ?? 'unavailable'}</span>
-                    )}
-                    {available && note && <span className="break-words text-xs text-muted-foreground">{note}</span>}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {!available && (
-                      <Badge variant="outline" className="text-muted-foreground">
-                        unavailable
-                      </Badge>
-                    )}
-                    <Switch
-                      checked={checked}
-                      disabled={!available || phase === 'running'}
-                      onCheckedChange={(on) => {
-                        setDisabledLanes((prev) => {
-                          const next = new Set(prev);
-                          if (on) next.delete(key);
-                          else next.add(key);
-                          return next;
-                        });
-                      }}
-                      aria-label={`Include ${model.displayName}`}
-                    />
+                  <SelectTrigger id="bench-suite" className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="quick">Quick (~10 min)</SelectItem>
+                    <SelectItem value="standard" disabled={mobile}>
+                      Standard{mobile ? ' (desktop only)' : ''}
+                    </SelectItem>
+                    <SelectItem value="thorough" disabled={mobile}>
+                      Thorough{mobile ? ' (desktop only)' : ''}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <ConfigHelp>{SUITE_HINTS[suite]}</ConfigHelp>
+              <div className="flex items-center justify-between gap-4 border-t border-border pt-3">
+                <Label htmlFor="bench-quality">Include quality-fidelity lane</Label>
+                <Switch
+                  id="bench-quality"
+                  checked={includeQuality}
+                  onCheckedChange={setIncludeQuality}
+                  disabled={phase === 'running'}
+                />
+              </div>
+              <ConfigHelp>Adds tinyMMLU and STS-B scoring to check that each runtime keeps model accuracy.</ConfigHelp>
+            </ConfigSection>
+
+            <ConfigSection id="bench-config-series" title="Series" className="md:row-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <Label htmlFor="bench-runs">Runs</Label>
+                <Input
+                  id="bench-runs"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={MAX_SERIES_RUNS}
+                  step={1}
+                  className="w-20"
+                  value={runsInput}
+                  onChange={(e) => setRunsInput(e.target.value)}
+                  onBlur={() => setRunsInput(String(runsCount))}
+                  disabled={phase === 'running' || seriesOpen}
+                  aria-describedby="bench-runs-help"
+                />
+              </div>
+              <ConfigHelp>1 to {MAX_SERIES_RUNS} runs with these settings, each on a fresh page load.</ConfigHelp>
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border pt-3">
+                <Label htmlFor="bench-cooldown">Cool-down between runs</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="bench-cooldown"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={MAX_COOLDOWN_MINUTES}
+                    step={COOLDOWN_STEP_MINUTES}
+                    className="w-20"
+                    value={cooldownInput}
+                    onChange={(e) => setCooldownInput(e.target.value)}
+                    onBlur={() => setCooldownInput(String(cooldownMinutes))}
+                    disabled={phase === 'running' || seriesOpen}
+                    aria-describedby="bench-runs-help"
+                  />
+                  <span className="text-sm text-muted-foreground">min</span>
+                </div>
+              </div>
+              <ConfigHelp>Idle time after each run so the device can cool (0 to {MAX_COOLDOWN_MINUTES} min).</ConfigHelp>
+              <div className="flex items-center justify-between gap-4 border-t border-border pt-3">
+                <Label htmlFor="bench-clear-after">Clear caches after each run</Label>
+                <Switch
+                  id="bench-clear-after"
+                  checked={clearAfterRun}
+                  onCheckedChange={setClearAfterRun}
+                  disabled={phase === 'running' || seriesOpen}
+                />
+              </div>
+              <ConfigHelp>Each next run downloads its models again, for cold-start timings.</ConfigHelp>
+              <p
+                id="bench-runs-help"
+                className="rounded-md bg-muted/60 p-3 text-xs leading-relaxed text-muted-foreground"
+              >
+                {runsCount > 1
+                  ? `A series of ${runsCount} runs with these settings. Each run starts on a fresh page load: the page reloads itself after every run and starts the next one without a click. Keep this tab open and in front until the series ends.`
+                  : `Set Runs above 1 (up to ${MAX_SERIES_RUNS}) to run a series with these settings, one fresh page load per run.`}
+                {clearAfterRun
+                  ? ' The model caches are cleared after every run, so each next run downloads its models again.'
+                  : ''}
+                {runsCount > 1 && cooldownMinutes > 0
+                  ? ` After each run the page idles for ${cooldownMinutes} min (the cool-down) before it reloads, so the device can cool between runs; the wait is recorded on every run file.`
+                  : ''}
+                {runsCount > 1 && cooldownMinutes === 0
+                  ? ` Cool-down between runs (0 to ${MAX_COOLDOWN_MINUTES} min, in half-minute steps) idles the page after each run before the next one; use it on laptops and phones, which slow down when run back to back.`
+                  : ''}
+              </p>
+            </ConfigSection>
+
+            <ConfigSection id="bench-config-publishing" title="Publishing">
+              <div className="flex items-center justify-between gap-4">
+                <Label htmlFor="bench-publish">Publish results to the public leaderboard</Label>
+                <Switch
+                  id="bench-publish"
+                  checked={autoSubmit}
+                  onCheckedChange={setAutoSubmit}
+                  disabled={phase === 'running'}
+                />
+              </div>
+              <ConfigHelp>
+                {autoSubmit
+                  ? 'The result uploads to the open dataset when the run completes.'
+                  : 'The run stays on this device; export the JSON from the results.'}
+              </ConfigHelp>
+            </ConfigSection>
+
+            <ConfigSection id="bench-config-tools" title="Tools" className="md:col-span-2">
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => setClearState({ kind: 'confirm' })}
+                  disabled={phase === 'running' || clearState.kind === 'clearing' || series?.status === 'running'}
+                >
+                  {clearState.kind === 'clearing' ? 'Clearing model caches…' : 'Clear model caches'}
+                </Button>
+                <ConfigHelp>Deletes the stored model files now; asks to confirm first.</ConfigHelp>
+              </div>
+              <details className="group border-t border-border pt-3 text-xs text-muted-foreground">
+                <summary className="flex cursor-pointer select-none items-center gap-1.5 rounded-sm text-sm font-medium text-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
+                  <ChevronRight
+                    aria-hidden="true"
+                    className="size-4 text-muted-foreground transition-transform group-open:rotate-90"
+                  />
+                  Link presets
+                </summary>
+                <div className="mt-2 flex flex-col gap-2">
+                  <p>
+                    A link can prefill these controls, for example to send study participants the same
+                    settings. It never starts a run: a click on Run benchmark is always needed.
+                  </p>
+                  <ul className="list-disc space-y-0.5 pl-5">
+                    <li>
+                      <code className="font-mono">tier=quick|standard|thorough</code>: the suite
+                    </li>
+                    <li>
+                      <code className="font-mono">quality=on|off</code>: the quality-fidelity lane
+                    </li>
+                    <li>
+                      <code className="font-mono">runs=N</code>: runs in the series (1 to {MAX_SERIES_RUNS})
+                    </li>
+                    <li>
+                      <code className="font-mono">cooldown=M</code>: cool-down between runs in minutes (0 to{' '}
+                      {MAX_COOLDOWN_MINUTES}, rounded to the nearest half minute)
+                    </li>
+                    <li>
+                      <code className="font-mono">cold=on|off</code>: clear caches after each run
+                    </li>
+                    <li>
+                      <code className="font-mono">publish=on|off</code>: publish to the leaderboard
+                    </li>
+                  </ul>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <code className="min-w-0 break-all rounded bg-muted px-1.5 py-1 font-mono">{presetLink}</code>
+                    <Button size="sm" variant="outline" onClick={() => void copyPresetLink()}>
+                      {presetCopied ? 'Copied' : 'Copy link'}
+                    </Button>
                   </div>
                 </div>
-              );
-            })}
-            {availability === null && (
-              <p className="text-sm text-muted-foreground">Probing device capabilities…</p>
-            )}
+              </details>
+            </ConfigSection>
+          </div>
+          <div className="flex flex-col gap-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Model lanes</h3>
+            <div className="flex flex-col gap-2" role="group" aria-label="Model lanes">
+              {lanes.map(({ model, available, reason, note }) => {
+                const key = laneKey(model);
+                const checked = available && !disabledLanes.has(key);
+                return (
+                  <div
+                    key={key}
+                    className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2"
+                  >
+                    <div className="flex min-w-0 flex-col">
+                      <span className="break-words text-sm font-medium">{model.displayName}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {model.runtimeId} · {formatBytes(model.sizeBytes)}
+                        {model.quantization ? ` · ${model.quantization}` : ''}
+                      </span>
+                      {/* Reasons and notes can run to a sentence with a browser error inside;
+                          they wrap here, inside the shrinking column, so a phone-width row
+                          never grows past the viewport. */}
+                      {!available && (
+                        <span className="break-words text-xs text-muted-foreground">{reason ?? 'unavailable'}</span>
+                      )}
+                      {available && note && <span className="break-words text-xs text-muted-foreground">{note}</span>}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {!available && (
+                        <Badge variant="outline" className="text-muted-foreground">
+                          unavailable
+                        </Badge>
+                      )}
+                      <Switch
+                        checked={checked}
+                        disabled={!available || phase === 'running'}
+                        onCheckedChange={(on) => {
+                          setDisabledLanes((prev) => {
+                            const next = new Set(prev);
+                            if (on) next.delete(key);
+                            else next.add(key);
+                            return next;
+                          });
+                        }}
+                        aria-label={`Include ${model.displayName}`}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+              {availability === null && (
+                <p className="text-sm text-muted-foreground">Probing device capabilities…</p>
+              )}
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              onClick={startFromClick}
-              disabled={phase === 'running' || activeLanes.length === 0 || seriesOpen || clearState.kind === 'clearing'}
+          {studyIneligible && (
+            <div
+              role="alert"
+              aria-labelledby="study-browser-gate-title"
+              className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
             >
-              {phase === 'running' ? 'Running…' : 'Run benchmark'}
-            </Button>
+              <p id="study-browser-gate-title" className="font-medium">
+                This study needs Chrome or Edge
+              </p>
+              <p className="mt-1">
+                This study needs Chrome or Edge on a computer, or Chrome on Android. Runs from Safari,
+                iPhone or iPad browsers, Firefox and other browsers are not eligible for payment and do
+                not receive a completion code. Open this exact link in Chrome or Edge to take part.
+              </p>
+            </div>
+          )}
+          {hardwareRequired && phase !== 'running' && (
+            <HardwareFieldset idPrefix="bench-hw" answers={hardware} onChange={updateHardware} />
+          )}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-5">
+            {!studyIneligible && (
+              <Button
+                size="lg"
+                onClick={startFromClick}
+                disabled={
+                  phase === 'running' ||
+                  activeLanes.length === 0 ||
+                  seriesOpen ||
+                  clearState.kind === 'clearing' ||
+                  hardwareReason !== null
+                }
+                aria-describedby={hardwareReason !== null ? 'bench-run-blocked' : undefined}
+              >
+                {phase === 'running' ? 'Running…' : 'Run benchmark'}
+              </Button>
+            )}
             <span className="text-sm text-muted-foreground">
               {activeLanes.length} lanes · est. download {formatBytes(totalDownload)} (cached models
               skip the download)
             </span>
+            {hardwareReason !== null && phase !== 'running' && (
+              <p id="bench-run-blocked" className="basis-full text-sm font-medium text-amber-800 dark:text-amber-200">
+                {hardwareReason}
+              </p>
+            )}
           </div>
           {mobile && (
             <p className="text-xs text-muted-foreground" role="note">
@@ -1476,7 +1793,7 @@ export function BenchRunner() {
               &quot;out of memory&quot; error on its first model rarely survives the next one).
             </p>
           )}
-          {study && (
+          {paidStudy && (
             <p className="text-xs text-muted-foreground" role="note">
               Paid study session detected: your completion code appears on this page once the run
               finishes and the upload attempt completes. Keep this tab open until then.
@@ -1498,42 +1815,6 @@ export function BenchRunner() {
             generated text for the fixed public prompts. No personal data. Turn the toggle off to
             keep the run local (JSON export only).
           </p>
-          <details className="text-xs text-muted-foreground">
-            <summary className="cursor-pointer select-none font-medium text-foreground">Link presets</summary>
-            <div className="mt-2 flex flex-col gap-2">
-              <p>
-                A link can prefill these controls, for example to send study participants the same
-                settings. It never starts a run: a click on Run benchmark is always needed.
-              </p>
-              <ul className="list-disc space-y-0.5 pl-5">
-                <li>
-                  <code className="font-mono">tier=quick|standard|thorough</code>: the suite
-                </li>
-                <li>
-                  <code className="font-mono">quality=on|off</code>: the quality-fidelity lane
-                </li>
-                <li>
-                  <code className="font-mono">runs=N</code>: runs in the series (1 to {MAX_SERIES_RUNS})
-                </li>
-                <li>
-                  <code className="font-mono">cooldown=M</code>: cool-down between runs in minutes (0 to{' '}
-                  {MAX_COOLDOWN_MINUTES}, rounded to the nearest half minute)
-                </li>
-                <li>
-                  <code className="font-mono">cold=on|off</code>: clear caches after each run
-                </li>
-                <li>
-                  <code className="font-mono">publish=on|off</code>: publish to the leaderboard
-                </li>
-              </ul>
-              <div className="flex flex-wrap items-center gap-2">
-                <code className="break-all rounded bg-muted px-1 font-mono">{presetLink}</code>
-                <Button size="sm" variant="outline" onClick={() => void copyPresetLink()}>
-                  {presetCopied ? 'Copied' : 'Copy link'}
-                </Button>
-              </div>
-            </div>
-          </details>
         </CardContent>
       </Card>
 
@@ -1638,7 +1919,8 @@ export function BenchRunner() {
           downloadBps={downloadBps}
           retryNotices={retryNotices}
           hiddenCount={hiddenCount}
-          study={study}
+          study={paidStudy}
+          hardware={hardwareRequired ? { answers: hardware, onChange: updateHardware } : null}
           autoSubmit={autoSubmit}
           onCancel={cancel}
           cancelling={cancelling}
@@ -1793,7 +2075,7 @@ export function BenchRunner() {
                 </p>
               )}
             </div>
-            {study?.completionCode && (submitState.kind === 'done' || submitState.kind === 'failed') && (
+            {paidStudy?.completionCode && (submitState.kind === 'done' || submitState.kind === 'failed') && (
               <div
                 role="region"
                 aria-label="Study completion code"
@@ -1801,7 +2083,7 @@ export function BenchRunner() {
               >
                 <p>
                   Your Prolific completion code:{' '}
-                  <code className="rounded bg-muted px-1 font-mono text-base">{study.completionCode}</code>
+                  <code className="rounded bg-muted px-1 font-mono text-base">{paidStudy.completionCode}</code>
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {submitState.kind === 'failed'
@@ -1809,7 +2091,7 @@ export function BenchRunner() {
                     : 'Enter it on Prolific to finish the study.'}{' '}
                   <a
                     className="underline underline-offset-2"
-                    href={`${PROLIFIC_COMPLETE_URL}${encodeURIComponent(study.completionCode)}`}
+                    href={`${PROLIFIC_COMPLETE_URL}${encodeURIComponent(paidStudy.completionCode)}`}
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -1850,6 +2132,8 @@ function RunOverlay(props: {
   retryNotices: string[];
   hiddenCount: number;
   study: StudySession | null;
+  /** The study's hardware questions, editable while the run is in progress (null outside a study). */
+  hardware: { answers: HardwareAnswers; onChange: (patch: Partial<HardwareAnswers>) => void } | null;
   autoSubmit: boolean;
   onCancel: () => void;
   cancelling: boolean;
@@ -1876,6 +2160,7 @@ function RunOverlay(props: {
     retryNotices,
     hiddenCount,
     study,
+    hardware,
     autoSubmit,
     onCancel,
     cancelling,
@@ -2116,6 +2401,15 @@ function RunOverlay(props: {
             })}
           </ul>
         </div>
+
+        {hardware && (
+          <HardwareFieldset
+            idPrefix="bench-hw-run"
+            answers={hardware.answers}
+            onChange={hardware.onChange}
+            duringRun
+          />
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">

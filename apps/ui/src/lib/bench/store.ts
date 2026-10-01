@@ -56,6 +56,15 @@ export interface RunIndexEntry {
   runtimeVersions?: Record<string, string>;
   /** Prolific-study runs carry `prolific:<hash>`; lab runs carry a free-text label. */
   userReportedDevice?: string;
+  /**
+   * Hardware a paid-study participant reported on the page
+   * (`environment.userReportedHardware`): GPU name, chassis, RAM in GB.
+   * Absent when the run carries no answer (and `reportedRamGB` also for
+   * "Not sure"), so entries of runs without the field stay byte-identical.
+   */
+  reportedGpu?: string;
+  reportedChassis?: 'laptop' | 'desktop' | 'other';
+  reportedRamGB?: number;
   flagged: boolean;
   path: string;
   cells: Array<{
@@ -226,6 +235,9 @@ export function toIndexEntry(
     harnessVersion: run.harness.version,
     runtimeVersions: run.harness.runtimeVersions,
     userReportedDevice: env.userReportedDevice,
+    reportedGpu: env.userReportedHardware?.gpu,
+    reportedChassis: env.userReportedHardware?.chassis,
+    reportedRamGB: env.userReportedHardware?.ramGB ?? undefined,
     flagged,
     path,
     cells: run.cells
@@ -366,24 +378,123 @@ export async function appendToIndex(config: BenchStoreConfig, entry: RunIndexEnt
 }
 
 /**
- * Read the run index (raw.githubusercontent, ISR-cacheable by the caller). The
- * raw host serves the file at any size, so the contents API's 1 MiB inline
- * limit does not apply here. Next's data cache stores entries up to 2 MB, so
- * a larger index is fetched again on every revalidation (Next logs a warning)
- * while the rendered page and the API response stay cached.
+ * Read the run index from raw.githubusercontent, which serves the file at any
+ * size (the contents API's 1 MiB inline limit does not apply here).
+ *
+ * The fetch is `cache: 'no-store'`: Next's data cache refuses entries over
+ * 2 MB, and an index above that size was downloaded on every revalidation,
+ * never stored, and the last copy that did fit kept being served. Callers
+ * cache the small aggregate instead (`computeLeaderboardSnapshot()` behind
+ * `getLeaderboardSnapshot()`). A 4.45 MB index parses in about 9 MB of heap,
+ * so a plain `res.json()` is adequate.
+ *
+ * @returns The index entries; `[]` when the index does not exist yet (404).
+ * @throws {BenchStoreError} `github-error` on any other failed request,
+ *   `index-unreadable` when the body is not a complete JSON array, so a
+ *   transient failure is never cached as an empty leaderboard.
  */
-export async function readIndex(
-  repo: string,
-  init?: RequestInit & { next?: { revalidate?: number } },
-): Promise<RunIndexEntry[]> {
-  const res = await fetch(`https://raw.githubusercontent.com/${repo}/main/${INDEX_PATH}`, init);
-  if (!res.ok) return [];
+export async function readIndex(repo: string): Promise<RunIndexEntry[]> {
+  const res = await fetch(`https://raw.githubusercontent.com/${repo}/main/${INDEX_PATH}`, { cache: 'no-store' });
+  if (res.status === 404) return [];
+  if (!res.ok) throw new BenchStoreError('github-error', `GET raw index failed: ${res.status}`);
+  let parsed: unknown;
   try {
-    const parsed = (await res.json()) as unknown;
-    return Array.isArray(parsed) ? (parsed as RunIndexEntry[]) : [];
+    parsed = await res.json();
   } catch {
-    return [];
+    throw new BenchStoreError('index-unreadable', 'raw index is not valid JSON');
   }
+  if (!Array.isArray(parsed)) throw new BenchStoreError('index-unreadable', 'raw index is not a JSON array');
+  return parsed as RunIndexEntry[];
+}
+
+/** Seconds the cached leaderboard aggregate stays fresh (the page's ISR period too). */
+export const LEADERBOARD_REVALIDATE_SEC = 300;
+
+/** Rows in the /bench "Recent submissions" table. */
+export const RECENT_SUBMISSIONS_LIMIT = 25;
+
+/**
+ * Next's data cache refuses any entry larger than this (`incremental-cache`
+ * logs "items over 2MB can not be cached" and keeps the previous entry).
+ */
+export const NEXT_DATA_CACHE_ENTRY_LIMIT = 2 * 1024 * 1024;
+
+/** An index entry without its per-cell metrics, for the submissions table. */
+export type RunIndexSubmission = Omit<RunIndexEntry, 'cells'>;
+
+/** What the leaderboard API and the /bench page render, cached as one value. */
+export interface LeaderboardSnapshot {
+  /** Aggregated rows (`aggregateIndex()`). */
+  rows: IndexLeaderboardRow[];
+  /** Unflagged runs under a protocol the leaderboard shows. */
+  runs: number;
+  /** Protocol versions the rows cover. */
+  protocols: string[];
+  /** Newest current runs (at most `RECENT_SUBMISSIONS_LIMIT`), without cells. */
+  recentSubmissions: RunIndexSubmission[];
+  /** Entries in the index that was read, all protocols and flags included. */
+  entries: number;
+  /** When the index was read (ISO 8601). */
+  generatedAt: string;
+}
+
+/**
+ * Size Next's incremental cache measures for an `unstable_cache` entry holding
+ * `value`: the JSON of the stored record, whose body is the JSON of the value.
+ */
+export function dataCacheEntrySize(value: unknown, revalidate = LEADERBOARD_REVALIDATE_SEC): number {
+  return JSON.stringify({
+    kind: 'FETCH',
+    data: { headers: {}, body: JSON.stringify(value), status: 200, url: '' },
+    revalidate,
+  }).length;
+}
+
+/**
+ * Build the leaderboard snapshot from index entries (pure).
+ *
+ * @param entries - The whole index.
+ * @param protocols - Protocol versions the leaderboard shows.
+ */
+export function buildLeaderboardSnapshot(
+  entries: readonly RunIndexEntry[],
+  protocols: readonly string[] = LEADERBOARD_PROTOCOL_VERSIONS,
+): LeaderboardSnapshot {
+  // Same rule as the rows: unflagged runs measured under a protocol the leaderboard shows.
+  const current = entries.filter((e) => !e.flagged && !!e.protocol && protocols.includes(e.protocol));
+  const recentSubmissions = [...current]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, RECENT_SUBMISSIONS_LIMIT)
+    .map(({ cells: _cells, ...rest }) => rest);
+  return {
+    rows: aggregateIndex(entries, protocols),
+    runs: current.length,
+    protocols: [...protocols],
+    recentSubmissions,
+    entries: entries.length,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Read the index (uncached) and build the snapshot. The snapshot is what gets
+ * cached; if it ever grows past Next's 2 MB entry limit, Next would refuse to
+ * store it and keep serving the previous one, so that condition is logged as
+ * an error here instead of going unnoticed.
+ *
+ * @throws {BenchStoreError} when the index cannot be read (see `readIndex()`).
+ */
+export async function computeLeaderboardSnapshot(repo: string): Promise<LeaderboardSnapshot> {
+  const entries = await readIndex(repo);
+  const snapshot = buildLeaderboardSnapshot(entries);
+  const size = dataCacheEntrySize(snapshot);
+  if (size > NEXT_DATA_CACHE_ENTRY_LIMIT) {
+    console.error(
+      `[bench] the leaderboard aggregate for ${entries.length} index entries is ${size} bytes as a data-cache entry, ` +
+        `over Next's 2 MB limit: it will not be cached, and an older cached aggregate may be served until it fits again`,
+    );
+  }
+  return snapshot;
 }
 
 /** Minimum submissions before a leaderboard row loses its provisional badge. */

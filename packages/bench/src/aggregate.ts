@@ -531,7 +531,10 @@ export function runtimeVersionColumn(packageName: string): string {
  * follow as one `rv_*` column per package in the union of all runs, sorted by
  * column name, and after them the battery state from `environment.power`
  * (`powerCharging`, `powerLevel`: the quarter-rounded level the schema keeps;
- * both empty when the browser has no Battery API).
+ * both empty when the browser has no Battery API), then the hardware a
+ * paid-study participant reported (`reportedGpu`, `reportedChassis`,
+ * `reportedRamGB`, `reportedOtherApps` from `environment.userReportedHardware`;
+ * empty when absent, and `reportedRamGB` empty for "Not sure").
  *
  * @param runs - Run results that passed shape validation.
  * @param validateOptions - Passed to `validateSubmission`; defaults to
@@ -566,6 +569,7 @@ export function runsToRunsCSV(
     'pressureNominalFraction',
     ...rvColumns,
     'powerCharging', 'powerLevel',
+    'reportedGpu', 'reportedChassis', 'reportedRamGB', 'reportedOtherApps',
   ];
   const lines = [header.join(',')];
   for (const run of runs) {
@@ -600,6 +604,8 @@ export function runsToRunsCSV(
         pressure.samples, fraction('critical'), fraction('serious'), fraction('fair'), fraction('nominal'),
         ...rvColumns.map((column) => byColumn.get(column)),
         env.power?.charging, env.power?.level,
+        env.userReportedHardware?.gpu, env.userReportedHardware?.chassis, env.userReportedHardware?.ramGB,
+        env.userReportedHardware?.otherAppsRunning,
       ]
         .map(csvField)
         .join(','),

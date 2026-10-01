@@ -151,6 +151,14 @@ the warmup and the warm reload re-downloaded the 3.46 GB weights.
   back-to-back Quick series on a 15 W class laptop showed the llama.cpp CPU
   decode falling from about 135 to about 85 chars/s from run 3 on, so laptop
   and phone series need a recorded pause between runs.
+  Since 0.9.4 a host may record `environment.userReportedHardware`
+  (`{ gpu?, chassis?, ramGB?, otherAppsRunning? }`): the hardware a paid-study
+  participant reports on the page (GPU name, laptop/desktop/other, RAM bucket
+  in GB or `null` for "Not sure", other heavy programs running). It is
+  self-reported, published with the run, absent on every other run, covered
+  by the digest, and validated (`gpu` 1 to 64 characters after trimming
+  without control characters, `ramGB` an integer from 1 to 1024 or `null`);
+  `scrubRunForPublication` normalizes the GPU name with `sanitizeReportedGpu()`.
 - **Statistics** - median headline; mean ± SD, IQR, 95% CI (Student-t), CV;
   CV > 5% ⇒ high-variance flag; geomean only within a device run.
 - **Quality-fidelity lane** - tinyMMLU (MIT) accuracy + STS-B Spearman (scores
@@ -329,6 +337,10 @@ cell without timed iterations keeps one placeholder row):
 | `rv_*` | One column per runtime package in `harness.runtimeVersions` across all runs, named by `runtimeVersionColumn()` (`@huggingface/transformers` becomes `rv_huggingface_transformers`), sorted by name |
 | `powerCharging` | Since 0.9.3, after the `rv_*` columns: `environment.power.charging`, `true` or `false`; empty when the browser has no Battery API (`batterySupported: false`: Safari, Firefox, every iOS browser) |
 | `powerLevel` | Since 0.9.3: `environment.power.level`, the battery level rounded to the quarter (0, 0.25, 0.5, 0.75, 1) that schema 3 keeps; empty without the Battery API |
+| `reportedGpu` | Since 0.9.4, after `powerLevel`: `environment.userReportedHardware.gpu`, the graphics card or chip a paid-study participant typed (self-reported, normalized by `sanitizeReportedGpu()`); empty when absent |
+| `reportedChassis` | Since 0.9.4: `environment.userReportedHardware.chassis`, `laptop`, `desktop` or `other`; empty when absent |
+| `reportedRamGB` | Since 0.9.4: `environment.userReportedHardware.ramGB`, the reported RAM bucket in GB (the top bucket "128 GB or more" is 128); empty when absent or answered "Not sure" (`null`) |
+| `reportedOtherApps` | Since 0.9.4: `environment.userReportedHardware.otherAppsRunning`, `true` or `false`; empty when absent |
 
 ## Dataset licenses
 

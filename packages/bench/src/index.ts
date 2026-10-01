@@ -48,6 +48,7 @@ export type {
   LocaleInfo,
   HarnessInfo,
   HarnessSeries,
+  UserReportedHardware,
   EnvironmentCapture,
   FingerprintResult,
   MetricSummary,
@@ -121,12 +122,14 @@ export {
   isIncrementalStream,
   SERIES_MAX_COOLDOWN_MS,
   SERIES_MAX_IDLE_BEFORE_MS,
+  REPORTED_GPU_MAX_LENGTH,
+  REPORTED_RAM_MAX_GB,
 } from './validate.js';
 export type { ValidateOptions } from './validate.js';
 export { canonicalJson, sha256Hex, computeRunDigest, computeLegacyRunDigest, verifyRunDigest } from './canonical.js';
 
 // Publication scrub (what a public run file may carry)
-export { scrubRunForPublication } from './publication.js';
+export { scrubRunForPublication, sanitizeReportedGpu } from './publication.js';
 export type { PublicationScrub } from './publication.js';
 
 // Aggregation (leaderboard + analysis tooling)

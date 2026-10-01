@@ -110,6 +110,7 @@ export function validateRunShape(value: unknown, options: ValidateOptions = {}):
     if (!env.os || typeof (env.os as Record<string, unknown>).platform !== 'string') {
       push('environment.os.platform is required');
     }
+    validateUserReportedHardware(env, push);
   }
   if (!Array.isArray(run.cells)) push('cells must be an array');
   else if ((run.cells as unknown[]).length === 0) push('cells must not be empty');
@@ -161,6 +162,47 @@ function validateHarnessExtras(harness: Record<string, unknown>, push: (m: strin
   if ('coldStart' in harness && harness.coldStart !== 'provider-caches-cleared') {
     push('harness.coldStart must be "provider-caches-cleared" when present');
   }
+}
+
+/** Longest `environment.userReportedHardware.gpu` a run may carry, in characters after trimming. */
+export const REPORTED_GPU_MAX_LENGTH = 64;
+
+/** Largest `environment.userReportedHardware.ramGB` a run may carry. */
+export const REPORTED_RAM_MAX_GB = 1024;
+
+/**
+ * Control characters a self-reported string may not contain: the C0 and C1
+ * ranges and DEL, plus the bidirectional controls that reorder displayed text
+ * (U+061C, U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069).
+ */
+// eslint-disable-next-line no-control-regex -- matching control characters is the purpose of this pattern
+export const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
+
+/** Optional self-reported hardware on `environment` (bench 0.9.4). */
+function validateUserReportedHardware(env: Record<string, unknown>, push: (m: string) => void): void {
+  if (!('userReportedHardware' in env) || env.userReportedHardware === undefined) return;
+  const hw = env.userReportedHardware as Record<string, unknown> | null;
+  if (typeof hw !== 'object' || hw === null || Array.isArray(hw)) {
+    push('environment.userReportedHardware must be an object {gpu?, chassis?, ramGB?, otherAppsRunning?}');
+    return;
+  }
+  if ('gpu' in hw) {
+    const gpu = hw.gpu;
+    const trimmed = typeof gpu === 'string' ? gpu.trim() : '';
+    if (typeof gpu !== 'string' || trimmed.length < 1 || trimmed.length > REPORTED_GPU_MAX_LENGTH || CONTROL_CHARACTERS.test(gpu))
+      push(
+        `environment.userReportedHardware.gpu must be a string of 1 to ${REPORTED_GPU_MAX_LENGTH} characters after trimming, without control characters`,
+      );
+  }
+  if ('chassis' in hw && !['laptop', 'desktop', 'other'].includes(hw.chassis as string))
+    push('environment.userReportedHardware.chassis must be laptop|desktop|other');
+  if ('ramGB' in hw) {
+    const ram = hw.ramGB;
+    const ok = ram === null || (typeof ram === 'number' && Number.isInteger(ram) && ram >= 1 && ram <= REPORTED_RAM_MAX_GB);
+    if (!ok) push(`environment.userReportedHardware.ramGB must be an integer from 1 to ${REPORTED_RAM_MAX_GB}, or null`);
+  }
+  if ('otherAppsRunning' in hw && typeof hw.otherAppsRunning !== 'boolean')
+    push('environment.userReportedHardware.otherAppsRunning must be a boolean');
 }
 
 function validateCellShape(value: unknown, index: number, push: (m: string) => void): void {

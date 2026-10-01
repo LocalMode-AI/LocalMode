@@ -15,7 +15,7 @@
  * is passed (for example after deleting a run file on purpose).
  *
  * Usage (from apps/ui):
- *   pnpm exec tsx scripts/rebuild-bench-index.ts --dataset ../../LocalMode-Bench
+ *   pnpm exec tsx scripts/rebuild-bench-index.ts --dataset ../../../LocalMode-Bench
  *   pnpm exec tsx scripts/rebuild-bench-index.ts --dataset <dir> --dry-run
  *   pnpm exec tsx scripts/rebuild-bench-index.ts --dataset <dir> --allow-shrink
  */

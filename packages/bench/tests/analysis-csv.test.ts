@@ -324,10 +324,10 @@ describe('runs.csv', () => {
   });
 
   it('emits one row per run with runtime versions over the union of all runs', () => {
-    // Both fixtures report a battery that is charging with no level.
+    // Both fixtures report a battery that is charging with no level, and no self-reported hardware.
     expect(lines(runsToRunsCSV(runs()))).toEqual([
-      `${HEADER},powerCharging,powerLevel`,
-      ...LEGACY_ROWS.map((row) => `${row},true,`),
+      `${HEADER},powerCharging,powerLevel,reportedGpu,reportedChassis,reportedRamGB,reportedOtherApps`,
+      ...LEGACY_ROWS.map((row) => `${row},true,,,,,`),
     ]);
   });
 
@@ -348,7 +348,7 @@ describe('runs.csv', () => {
     const out = lines(runsToRunsCSV([unplugged, noBattery, full, empty]));
     const header = out[0].split(',');
     const at = (row: number, col: string) => out[row].split(',')[header.indexOf(col)];
-    expect(header.slice(-2)).toEqual(['powerCharging', 'powerLevel']);
+    expect(header.slice(-6, -4)).toEqual(['powerCharging', 'powerLevel']);
     expect([at(1, 'powerCharging'), at(1, 'powerLevel')]).toEqual(['false', '0.75']);
     expect([at(2, 'powerCharging'), at(2, 'powerLevel')]).toEqual(['', '']);
     expect([at(3, 'powerCharging'), at(3, 'powerLevel')]).toEqual(['true', '1']);
