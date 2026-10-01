@@ -73,6 +73,28 @@ previous version's rows therefore stay on the leaderboard beside the new
 version's as those runs arrive. Archived runs stay in `runs/` as-is and are
 never re-scored.
 
+## 5. Rebuilding the index
+
+`index/summary.json` is derived data: every entry can be regenerated from the
+run files. The submit route reads the index through the Git blobs API (the
+contents API returns no inline content for files over 1 MiB) and never writes
+an index it could not read in full; when the append fails, the run file is
+still committed and the submitter gets `index-update-failed` with the run's
+path. To restore missing entries, rebuild from a clone of the dataset:
+
+```
+cd apps/ui
+pnpm exec tsx scripts/rebuild-bench-index.ts --dataset ../../LocalMode-Bench --dry-run
+pnpm exec tsx scripts/rebuild-bench-index.ts --dataset ../../LocalMode-Bench
+```
+
+Every `runs/**.json` (verified) and `quarantine/**.json` (flagged) file
+becomes one entry, built with the submit route's own `toIndexEntry()`, ordered
+by `createdAt` then path. The tool writes nothing when a run file cannot be
+indexed, or when the result would hold fewer entries than the current index or
+drop a run it lists (`--allow-shrink` overrides the last two). Review the diff
+and commit the file in the dataset clone.
+
 ## Optional integration check (real GitHub API, opt-in)
 
 With the env vars exported locally you can exercise the real store path against
@@ -84,6 +106,9 @@ BENCH_GITHUB_REPO=you/scratch-repo BENCH_GITHUB_TOKEN=... \
     const cfg = m.benchStoreConfig(); console.log('bound:', !!cfg); })"
 ```
 
-The unit suite covers all pure logic (validation, aggregation, nonce); the
-GitHub network boundary is deliberately exercised only here and in production -
-documented gap per the repo test-integrity policy.
+The unit suite covers all pure logic (validation, aggregation, nonce) and the
+index read-modify-write against a fake GitHub that answers as the real API does
+(base64 content up to 1 MiB, `content: ""` with `encoding: "none"` above it,
+blobs at any size, 409 on a stale sha). The real GitHub API itself is exercised
+only here and in production - documented gap per the repo test-integrity
+policy.

@@ -1,11 +1,15 @@
 /**
- * STS Benchmark subset — the first 100 pairs of the STS-B test split
- * (semantic textual similarity; human scores 0-5). Source:
+ * STS Benchmark subset: the first 100 rows of the STS Benchmark test split
+ * (semantic textual similarity; human scores 0-5), all captions from the
+ * Microsoft Research Video Description Corpus. Source:
  * https://huggingface.co/datasets/mteb/stsbenchmark-sts (test split).
  *
- * LICENSE: CC BY-SA 4.0 (share-alike). This file and any redistribution of the
- * pairs below remain under CC BY-SA 4.0 — see LICENSE-CC-BY-SA.md in this
- * directory. Kept isolated from the MIT-licensed code and datasets on purpose.
+ * LICENSE: the STS Benchmark releases its similarity scores under CC BY-SA 4.0
+ * and leaves each sentence under its source corpus's terms (Microsoft
+ * Research's for these pairs); CC BY-SA 4.0 does not cover the sentence text.
+ * See LICENSE-CC-BY-SA.md in this directory. The file is retained for the
+ * protocol's quality-fidelity lane while the maintainer confirms the
+ * redistribution terms, and is kept isolated from the MIT-licensed code.
  *
  * Used by the embedding quality lane: Spearman correlation of cosine
  * similarities against the human scores.

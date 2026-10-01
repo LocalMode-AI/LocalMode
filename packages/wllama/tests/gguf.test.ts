@@ -400,8 +400,9 @@ describe('GGUF Browser Compatibility', () => {
       // metadata — but the auto-detected value is capped at 8192: the mocked
       // gguf advertises llama.context_length 131072, and passing a native
       // long-context window straight to n_ctx requests a multi-GiB KV cache
-      // that aborts the wasm32 load ("ggml_aligned_malloc: insufficient
-      // memory"). Explicit settings.contextLength is never capped (next test).
+      // that aborts the load under wllama's 4 GiB link-time memory cap
+      // ("ggml_aligned_malloc: insufficient memory"). Explicit
+      // settings.contextLength is never capped (next test).
       await model.doGenerate({ prompt: 'Hello' });
       expect(model.contextLength).toBe(8192);
     });

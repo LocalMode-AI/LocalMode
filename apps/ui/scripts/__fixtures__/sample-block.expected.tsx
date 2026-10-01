@@ -3,7 +3,7 @@
 /**
  * @file sample-block.tsx
  * @description Sample block for the strip-snippet golden test — one clean line.
- * @constraint wllama n_ctx capped at 8192 for the wasm32 heap.
+ * @constraint wllama n_ctx capped at 8192 for the 4 GiB memory64 cap.
  */
 import * as React from 'react';
 

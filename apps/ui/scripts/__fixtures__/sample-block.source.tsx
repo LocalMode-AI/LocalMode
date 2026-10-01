@@ -13,7 +13,7 @@
  * sample-confidence. E2E: the platform spec drives these by testid.
  * QA note: this whole section is E2E noise and must not ship.
  *
- * @constraint wllama n_ctx capped at 8192 for the wasm32 heap.
+ * @constraint wllama n_ctx capped at 8192 for the 4 GiB memory64 cap.
  */
 import * as React from 'react';
 

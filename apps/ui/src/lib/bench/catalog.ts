@@ -144,7 +144,8 @@ const AUTHORED_MODELS: readonly BenchModelRef[] = [
 
   // --- Gemma 4 E2B — current-gen medium class, 3-runtime pairing.
   // Thorough suite only: 2.0-5.2 GB downloads per lane; the GGUF brushes the
-  // wasm32 heap ceiling and the litert/ONNX builds need WebGPU. ---
+  // 4 GiB link-time memory cap of wllama's memory64 build and the litert/ONNX
+  // builds need WebGPU. ---
   {
     benchModelId: 'gemma-4-e2b',
     runtimeId: 'litert',

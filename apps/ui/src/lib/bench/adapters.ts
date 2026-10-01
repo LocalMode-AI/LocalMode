@@ -229,7 +229,8 @@ export function wllamaThreads(): number {
  * Context sizes the llama.cpp lanes load with. The language workloads need at
  * most ~700 tokens (pp512 + 128 generated + template); 2048 leaves room while
  * keeping the KV cache small enough for the 3.46 GB Gemma 4 E2B GGUF inside
- * the CPU lane's 4 GB wasm heap, where the provider's 8192 default failed the
+ * the CPU lane, under the 4 GiB link-time memory cap of wllama's memory64
+ * build, where the provider's 8192 default failed the
  * quality cell on every run. The embedding model's context is its own 512.
  */
 export const WLLAMA_BENCH_CONTEXT_LLM = 2048;
@@ -303,8 +304,9 @@ function makeWllamaAdapter(gpu: boolean): LLMRuntimeAdapter {
       abortSignal?.throwIfAborted();
       // Text-only workloads: never load a catalog vision projector (Gemma 4
       // E2B ships one). It is unused, costs a 557 MB download and CLIP warmup,
-      // turns wllama's model cache off for the pair, and does not fit the CPU
-      // lane's 4 GB wasm heap beside the 3.46 GB weights.
+      // turns wllama's model cache off for the pair, and does not fit on the CPU
+      // lane beside the 3.46 GB weights under the 4 GiB link-time memory cap of
+      // wllama's memory64 build.
       const llm = mod.wllama.languageModel(model.providerModelId, {
         nGpuLayers: requestedGpuLayers,
         vision: false,

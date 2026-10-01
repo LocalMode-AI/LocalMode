@@ -38,9 +38,11 @@ let corsWarningEmitted = false;
  * Cap applied to the DEFAULT context length inferred from the model catalog
  * or GGUF metadata (never to an explicit `settings.contextLength`).
  *
- * The wllama runtime is wasm32: the whole process — model weights AND the
- * KV cache sized by `n_ctx` — must fit in a 4GiB heap. Long-context models
- * advertise native windows like 131072 tokens, whose KV cache alone is
+ * wllama's default build is a memory64 build linked with a 4 GiB memory cap
+ * (`-sMAXIMUM_MEMORY=4096MB`), and its compatibility build for browsers
+ * without JSPI or Memory64, such as Safari, is 32-bit: either way the whole
+ * process, model weights AND the KV cache sized by `n_ctx`, must fit in
+ * 4 GiB. Long-context models advertise native windows like 131072 tokens, whose KV cache alone is
  * multi-GiB (e.g. DeepSeek-R1-Distill-Qwen-1.5B: 131072 tokens ≈ 3.5GiB →
  * `ggml_aligned_malloc: insufficient memory` abort at load). 8192 keeps the
  * default KV cache in the low hundreds of MB for small models while staying

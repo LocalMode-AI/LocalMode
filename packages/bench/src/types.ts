@@ -500,7 +500,11 @@ export interface EnvironmentCapture {
     /** navigator.hardwareConcurrency — WebKit clamps it (8 on macOS, 4 on iOS); Chromium and Firefox report the real count. */
     cores: number | null;
     coresClamped: boolean;
-    /** navigator.deviceMemory (GB) — Chromium-only, capped at 8. */
+    /**
+     * navigator.deviceMemory (GB), Chromium-only and capped by the browser. The
+     * caps observed in the dataset: 8 on Chrome 144/145 and on Android, 32 on
+     * desktop Chrome 152/153.
+     */
     deviceMemoryGB: number | null;
     deviceMemoryCapped: boolean;
     /** `performance.memory.jsHeapSizeLimit` (Chromium) — the V8 heap ceiling for this tab. */

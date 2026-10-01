@@ -70,7 +70,7 @@ describe('stripSnippet — acceptance criteria', () => {
     expect(stripped).not.toContain('This continuation line'); // dropped desc tail
     // the non-inferable @constraint line is preserved as the 3rd line
     expect(lines.some((l) => l.startsWith('@constraint'))).toBe(true);
-    expect(stripped).toContain('@constraint wllama n_ctx capped at 8192 for the wasm32 heap.');
+    expect(stripped).toContain('@constraint wllama n_ctx capped at 8192 for the 4 GiB memory64 cap.');
   });
 
   it('retains the /** KEEP */-tagged constraint comment verbatim', () => {

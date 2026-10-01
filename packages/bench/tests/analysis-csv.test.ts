@@ -18,7 +18,14 @@ import {
   type BenchCellResult,
   type LLMIteration,
 } from '../src/index.js';
-import { LLAMA_CELL, makeAnalysisRun, makeSecondAnalysisRun } from './fixtures/analysis-runs.js';
+import {
+  EMBED_CELL,
+  LLAMA_CELL,
+  QUALITY_CELL,
+  SKIPPED_CELL,
+  makeAnalysisRun,
+  makeSecondAnalysisRun,
+} from './fixtures/analysis-runs.js';
 import { LITERT_BURST_ITERATION } from './fixtures/litert-burst-iteration.js';
 
 // Output of runsToLongCSV / rowsToCSV for [makeAnalysisRun(), makeSecondAnalysisRun()]
@@ -136,9 +143,8 @@ describe('cells.csv', () => {
     'qualityTaskId', 'qualityScore', 'qualityN', 'qualityParseRate', 'errorName', 'errorMessage', 'errorCause',
   ].join(',');
 
-  it('emits one row per cell, in run then cell order, with exact values', () => {
-    expect(lines(runsToCellsCSV(runs()))).toEqual([
-      HEADER,
+  // cells.csv for [makeAnalysisRun(), makeSecondAnalysisRun()] before cellStartedAt / cellEndedAt.
+  const LEGACY_ROWS = [
       'analysis-run-0001,localmode-bench/5,wllama/qwen3-0.6b/chat-pp128-tg128,wllama,3.5.1,qwen3-0.6b,chat-pp128-tg128,llm-generate,wasm,ok,,2,0,0,' +
         '333.33,2500.5,false,462000000,3,2400.25,' +
         '5,5,true,2048,0,0/29,true,false,false,,,,' +
@@ -174,6 +180,39 @@ describe('cells.csv', () => {
         ',,,,,,,,,fp32,wasm,true,' +
         '50000000,80000000,81000000,,legacyHeap,' +
         ',,,,,,',
+  ];
+
+  it('keeps the old header and every old field as a prefix, row for row', () => {
+    const out = lines(runsToCellsCSV(runs()));
+    expect(out).toHaveLength(LEGACY_ROWS.length + 1);
+    expect(out[0].startsWith(`${HEADER},`)).toBe(true);
+    LEGACY_ROWS.forEach((row, i) => {
+      expect(out[i + 1].startsWith(`${row},`)).toBe(true);
+    });
+  });
+
+  it('emits one row per cell, in run then cell order, with exact values', () => {
+    // Run 1: createdAt 2026-09-22T10:00:00.000Z is the wall time of suite-end (t = 90,000.5 ms),
+    // so a page time t maps to 10:00:00.000Z - (90,000.5 - t) ms, rounded to the millisecond.
+    const TIMES = [
+      // llama: load.startT 100; last iteration endT 11,570.
+      '2026-09-22T09:58:30.100Z,2026-09-22T09:58:41.570Z',
+      // embed: load.startT 0; last iteration endT 23,000.
+      '2026-09-22T09:58:30.000Z,2026-09-22T09:58:53.000Z',
+      // quality cell reusing the loaded model: its one retried attempt at 5,000 is its only timestamp.
+      '2026-09-22T09:58:35.000Z,2026-09-22T09:58:35.000Z',
+      // errored quality cell with no load record, iteration or attempt: no timestamp.
+      ',',
+      // skipped: never started.
+      ',',
+      // litert: load.startT 3,000; the real burst iteration ends at 366,034.58, past the fixture's suite-end.
+      '2026-09-22T09:58:33.000Z,2026-09-22T10:04:36.034Z',
+      // run 2 has no suite-end event: no time base.
+      ',',
+    ];
+    expect(lines(runsToCellsCSV(runs()))).toEqual([
+      `${HEADER},cellStartedAt,cellEndedAt`,
+      ...LEGACY_ROWS.map((row, i) => `${row},${TIMES[i]}`),
     ]);
   });
 
@@ -187,6 +226,51 @@ describe('cells.csv', () => {
     expect(row[header.indexOf('loadProgressEvents')]).toBe('1');
     expect(row[header.indexOf('loadProgressSpanMs')]).toBe('0');
     expect(row[header.indexOf('loadDeclaredBytes')]).toBe('');
+  });
+
+  it('spans every recorded timestamp: load, progress, warmup, kept and discarded iterations, attempts', () => {
+    const run = makeAnalysisRun();
+    const at = (csv: string, name: string) => {
+      const [header, row] = lines(csv).map((l) => l.split(','));
+      return row[header.indexOf(name)];
+    };
+    // A failed load attempt at 40 precedes the load; a discarded iteration ends after the kept ones.
+    run.cells = [
+      {
+        ...LLAMA_CELL,
+        attempts: [{ error: { name: 'TimeoutError', message: 'stalled' }, at: 40 }],
+        discardedIterations: [{ ...(LLAMA_CELL.iterations[1] as LLMIteration), startT: 12_000, endT: 12_345.4 }],
+      },
+    ];
+    let csv = runsToCellsCSV([run]);
+    expect(at(csv, 'cellStartedAt')).toBe('2026-09-22T09:58:30.040Z');
+    expect(at(csv, 'cellEndedAt')).toBe('2026-09-22T09:58:42.345Z');
+
+    // Load and warmup only (a quality cell that owns the group's load): the end is
+    // load.endT + warmupMs = 2,600.5 + 333.333 = 2,933.833.
+    run.cells = [{ ...QUALITY_CELL, attempts: undefined, load: LLAMA_CELL.load, warmupMs: 333.333 }];
+    csv = runsToCellsCSV([run]);
+    expect(at(csv, 'cellStartedAt')).toBe('2026-09-22T09:58:30.100Z');
+    expect(at(csv, 'cellEndedAt')).toBe('2026-09-22T09:58:32.933Z');
+
+    // The last suite-end is the time base; a createdAt that does not parse gives no time.
+    run.cells = [EMBED_CELL];
+    run.events = [...run.events, { t: 100_000.5, type: 'suite-end' }];
+    csv = runsToCellsCSV([run]);
+    expect(at(csv, 'cellStartedAt')).toBe('2026-09-22T09:58:20.000Z');
+    run.createdAt = 'not a date';
+    csv = runsToCellsCSV([run]);
+    expect(at(csv, 'cellStartedAt')).toBe('');
+    expect(at(csv, 'cellEndedAt')).toBe('');
+  });
+
+  it('leaves both times empty on a skipped cell even when the run has a time base', () => {
+    const run = makeAnalysisRun();
+    run.cells = [SKIPPED_CELL];
+    const [header, row] = lines(runsToCellsCSV([run])).map((l) => l.split(','));
+    expect(row[header.indexOf('status')]).toBe('skipped');
+    expect(row[header.indexOf('cellStartedAt')]).toBe('');
+    expect(row[header.indexOf('cellEndedAt')]).toBe('');
   });
 
   it('quotes fields that carry commas or quotes', () => {
@@ -212,9 +296,8 @@ describe('runs.csv', () => {
     'rv_huggingface_transformers', 'rv_litert_lm_core', 'rv_wllama_wllama',
   ].join(',');
 
-  it('emits one row per run with runtime versions over the union of all runs', () => {
-    expect(lines(runsToRunsCSV(runs()))).toEqual([
-      HEADER,
+  // runs.csv for [makeAnalysisRun(), makeSecondAnalysisRun()] before powerCharging / powerLevel.
+  const LEGACY_ROWS = [
       'analysis-run-0001,2026-09-22T10:00:00.000Z,localmode-bench/5,3,@localmode/bench,0.8.2,2.15.2,abc1234,thorough,true,' +
         'macos/apple-metal-3,macos/apple-m1-pro,Google Chrome,145.0.7632.159,Blink,macOS,15.5,arm,desktop,10,false,8,true,' +
         '1512,982,2,true,apple,metal-3,,,false,Apple M1 Pro,true,5,1234.57,' +
@@ -229,7 +312,48 @@ describe('runs.csv', () => {
         ',,,,' +
         ',,0,,,,,' +
         ',0.12.1,3.4.0',
+  ];
+
+  it('keeps the old header and every old field as a prefix, row for row', () => {
+    const out = lines(runsToRunsCSV(runs()));
+    expect(out).toHaveLength(LEGACY_ROWS.length + 1);
+    expect(out[0].startsWith(`${HEADER},`)).toBe(true);
+    LEGACY_ROWS.forEach((row, i) => {
+      expect(out[i + 1].startsWith(`${row},`)).toBe(true);
+    });
+  });
+
+  it('emits one row per run with runtime versions over the union of all runs', () => {
+    // Both fixtures report a battery that is charging with no level.
+    expect(lines(runsToRunsCSV(runs()))).toEqual([
+      `${HEADER},powerCharging,powerLevel`,
+      ...LEGACY_ROWS.map((row) => `${row},true,`),
     ]);
+  });
+
+  it('exports the battery state, and leaves both columns empty without the Battery API', () => {
+    const unplugged = makeAnalysisRun();
+    unplugged.environment = {
+      ...unplugged.environment,
+      power: { batterySupported: true, charging: false, level: 0.75 },
+    };
+    const noBattery = makeSecondAnalysisRun();
+    noBattery.environment = { ...noBattery.environment, power: { batterySupported: false } };
+    const full = makeAnalysisRun();
+    full.runId = 'analysis-run-0003';
+    full.environment = { ...full.environment, power: { batterySupported: true, charging: true, level: 1 } };
+    const empty = makeAnalysisRun();
+    empty.runId = 'analysis-run-0004';
+    empty.environment = { ...empty.environment, power: { batterySupported: true, charging: false, level: 0 } };
+    const out = lines(runsToRunsCSV([unplugged, noBattery, full, empty]));
+    const header = out[0].split(',');
+    const at = (row: number, col: string) => out[row].split(',')[header.indexOf(col)];
+    expect(header.slice(-2)).toEqual(['powerCharging', 'powerLevel']);
+    expect([at(1, 'powerCharging'), at(1, 'powerLevel')]).toEqual(['false', '0.75']);
+    expect([at(2, 'powerCharging'), at(2, 'powerLevel')]).toEqual(['', '']);
+    expect([at(3, 'powerCharging'), at(3, 'powerLevel')]).toEqual(['true', '1']);
+    // A zero level is a reading, not a missing field.
+    expect([at(4, 'powerCharging'), at(4, 'powerLevel')]).toEqual(['false', '0']);
   });
 
   it('reports the same validation verdict and flags validateSubmission gives the archive', () => {

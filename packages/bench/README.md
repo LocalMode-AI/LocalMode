@@ -22,9 +22,11 @@ thread count (at least two) instead of all of it, because a pool over every
 logical thread ran at half speed with high variance on hybrid and SMT
 processors, and load with a 2,048-token context sized to the workloads (about
 700 tokens) instead of the provider's 8,192 default, which shrinks the KV
-cache of the 3.46 GB Gemma 4 E2B GGUF inside the CPU lane's 4 GB wasm heap
-(that lane's Gemma quality cell still fails there on the per-request state
-allocation, recorded as an error as under v4); `n_ctx`, `n_threads`,
+cache of the 3.46 GB Gemma 4 E2B GGUF on the CPU lane, under the 4 GiB
+link-time memory cap of wllama's memory64 build (the compatibility build for
+browsers without JSPI or Memory64, such as Safari, is 32-bit; that lane's
+Gemma quality cell still fails there on the per-request state allocation,
+recorded as an error as under v4); `n_ctx`, `n_threads`,
 `multithread` and `n_threads_used` are recorded per cell. v3 split the llama.cpp lane: `wllama` is llama.cpp
 WASM on the CPU (`n_gpu_layers: 0`) and `wllama-webgpu` offloads every layer
 to WebGPU, over the same GGUF files; under v2 the single `wllama` lane ran on
@@ -32,7 +34,7 @@ WebGPU wherever the browser had it while recording `wasm` (wllama 3.5's
 default). v4 loads every llama.cpp language model as text only: under v3 the
 Gemma 4 E2B pairing also loaded its 557 MB vision projector (the provider's
 catalog default), which the text-only workloads never use, did not fit the
-CPU lane's 4 GB wasm heap, and disabled wllama's model cache for the pair so
+CPU lane under that 4 GiB cap, and disabled wllama's model cache for the pair so
 the warmup and the warm reload re-downloaded the 3.46 GB weights.
 
 - **TTFT** - first non-empty stream chunk minus stream start (`performance.now()`
@@ -151,8 +153,9 @@ the warmup and the warm reload re-downloaded the 3.46 GB weights.
   and phone series need a recorded pause between runs.
 - **Statistics** - median headline; mean ± SD, IQR, 95% CI (Student-t), CV;
   CV > 5% ⇒ high-variance flag; geomean only within a device run.
-- **Quality-fidelity lane** - tinyMMLU (MIT) accuracy + STS-B (CC BY-SA) Spearman,
-  temperature 0; measures runtime/quantization fidelity, not model capability.
+- **Quality-fidelity lane** - tinyMMLU (MIT) accuracy + STS-B Spearman (scores
+  CC BY-SA 4.0; see Dataset licenses), temperature 0; measures
+  runtime/quantization fidelity, not model capability.
   MMLU: 48-token budget (`MMLU_MAX_TOKENS`), `<think>` blocks stripped before
   parsing (markdown emphasis tolerated; letters are matched case-sensitively
   after a keyword, so "the answer is a bit" is not answer A; "Option C" and
@@ -298,6 +301,7 @@ cell without timed iterations keeps one placeholder row):
 | `memoryApi` | The API that measured them: `uaSpecific`, `legacyHeap` or `none` |
 | `qualityTaskId`, `qualityScore`, `qualityN`, `qualityParseRate` | Quality-lane result |
 | `errorName`, `errorMessage`, `errorCause` | The error that ended the cell |
+| `cellStartedAt`, `cellEndedAt` | Since 0.9.3: when the cell began and ended, as ISO 8601 UTC wall-clock times rounded to the millisecond (`2026-09-25T05:36:10.630Z`). Start and end are the earliest and latest page-relative timestamp the cell records: `load.startT` and `load.endT`, the load progress samples, `load.endT + warmupMs` (a lower bound of the warmup end), `startT` and `endT` of every kept and discarded iteration, and the `at` of every failed attempt. A page time `t` maps to `createdAt - (suiteEnd - t)`, where `suiteEnd` is the `t` of the run's last `suite-end` event: the runner stamps `createdAt` right after recording that event, in the same synchronous step, so the offset between them is below a millisecond. The span never reaches past what the cell recorded, so the first cell of a model group starts at its load, and the untimed tail of a cell (the part of a failed attempt after its last record) is not covered. Both empty on a skipped cell, on a cell that records no timestamp (a quality cell that reuses the model an earlier cell loaded and has no failed attempt: the quality lanes record no timing), and on a run without a `suite-end` event. The mapping assumes `performance.now()` advanced with the wall clock through the run; a device that slept mid-run shifts the cells before the sleep later by the time asleep on browsers that pause `performance.now()` during sleep |
 
 **runs.csv**, one row per run:
 
@@ -323,8 +327,16 @@ cell without timed iterations keeps one placeholder row):
 | `pressureSamples` | Number of `pressure-change` trace events (Compute Pressure state transitions the runner recorded; the observer samples once a second and records only changes); 0 when the browser has no Compute Pressure API |
 | `pressureCriticalFraction`, `pressureSeriousFraction`, `pressureFairFraction`, `pressureNominalFraction` | Fraction of the suite wall time (`suite-end` minus `suite-start`) spent in each Compute Pressure state, from `pressureStateFractions()`, rounded to four decimals. The state at `suite-start` is the last change at or before it; time before the first known state counts toward none, so the four sum to less than 1 when the first sample arrived mid-suite. Empty when the run has no sample or no complete suite span |
 | `rv_*` | One column per runtime package in `harness.runtimeVersions` across all runs, named by `runtimeVersionColumn()` (`@huggingface/transformers` becomes `rv_huggingface_transformers`), sorted by name |
+| `powerCharging` | Since 0.9.3, after the `rv_*` columns: `environment.power.charging`, `true` or `false`; empty when the browser has no Battery API (`batterySupported: false`: Safari, Firefox, every iOS browser) |
+| `powerLevel` | Since 0.9.3: `environment.power.level`, the battery level rounded to the quarter (0, 0.25, 0.5, 0.75, 1) that schema 3 keeps; empty without the Battery API |
 
 ## Dataset licenses
 
 - `src/datasets/tiny-mmlu.ts` - MIT (tinyBenchmarks/tinyMMLU, upstream cais/mmlu).
-- `src/datasets/stsb/` - CC BY-SA 4.0, isolated with its own license file.
+- `src/datasets/stsb/` - the first 100 rows of the STS Benchmark test split,
+  all captions from the Microsoft Research Video Description Corpus. The STS
+  Benchmark releases its similarity scores under CC BY-SA 4.0 and leaves each
+  sentence under its source corpus's terms (Microsoft Research's for these
+  pairs). The file is retained for the protocol's quality-fidelity lane while
+  the maintainer confirms the redistribution terms; its notice,
+  `src/datasets/stsb/LICENSE-CC-BY-SA.md`, ships in the npm package.

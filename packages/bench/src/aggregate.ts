@@ -399,7 +399,12 @@ const RUNTIME_CONFIG_COLUMNS = [
  * order then cell order, carrying the per-cell records iterations.csv does
  * not: warmup, the load record (cache probe, declared bytes, progress
  * events), the runtime configuration, the memory samples, the quality
- * score, and the error. Joins to iterations.csv on (`runId`, `cellId`) and
+ * score, the error, and last the cell's wall-clock span (`cellStartedAt`,
+ * `cellEndedAt`: ISO 8601 UTC, millisecond precision, the earliest and latest
+ * page-relative timestamp the cell records, mapped through the run's time
+ * base, where `createdAt` is the wall time of the last `suite-end` event;
+ * empty on a skipped cell, on a cell that records no timestamp, and on a run
+ * without `suite-end`). Joins to iterations.csv on (`runId`, `cellId`) and
  * to runs.csv on `runId`. Missing fields are empty strings, never zero.
  *
  * @param runs - Validated run results.
@@ -415,14 +420,56 @@ export function runsToCellsCSV(runs: readonly BenchRunResult[]): string {
     ...RUNTIME_CONFIG_COLUMNS,
     'memoryBaseline', 'memoryPostLoad', 'memoryPostRun', 'memoryAtError', 'memoryApi',
     'qualityTaskId', 'qualityScore', 'qualityN', 'qualityParseRate', 'errorName', 'errorMessage', 'errorCause',
+    'cellStartedAt', 'cellEndedAt',
   ];
   const lines = [header.join(',')];
   for (const run of runs) {
+    const toWallClock = wallClockOf(run);
     for (const cell of run.cells) {
-      lines.push(cellRow(run, cell).map(csvField).join(','));
+      const span = cellPageSpan(cell);
+      lines.push(
+        [...cellRow(run, cell), toWallClock?.(span?.start), toWallClock?.(span?.end)].map(csvField).join(','),
+      );
     }
   }
   return lines.join('\n') + '\n';
+}
+
+/**
+ * Maps a page-relative trace time (`performance.now()`, ms) to an ISO 8601 UTC
+ * wall-clock time, rounded to the millisecond. The runner stamps `createdAt`
+ * right after it records the last `suite-end` event, in the same synchronous
+ * step, so `createdAt` is the wall time of that event's `t`. Undefined when
+ * the run has no `suite-end` event or `createdAt` does not parse.
+ */
+function wallClockOf(run: BenchRunResult): ((t: number | undefined) => string | undefined) | undefined {
+  const end = [...run.events].reverse().find((e) => e.type === 'suite-end');
+  const anchor = Date.parse(run.createdAt);
+  if (!end || Number.isNaN(anchor)) return undefined;
+  return (t) => (t === undefined ? undefined : new Date(Math.round(anchor - (end.t - t))).toISOString());
+}
+
+/**
+ * The span of the page-relative timestamps a cell records: the earliest and
+ * latest of `load.startT` / `load.endT`, the load progress samples,
+ * `load.endT + warmupMs` (a lower bound of the warmup end), every kept and
+ * discarded iteration's `startT` / `endT`, and every failed attempt's `at`.
+ * Undefined when the cell records none (a skipped cell, or a cell that ran
+ * over a model loaded for an earlier cell without timing anything: a quality
+ * lane with no failed attempt).
+ */
+function cellPageSpan(cell: BenchCellResult): { start: number; end: number } | undefined {
+  const times: number[] = [];
+  if (cell.load) {
+    times.push(cell.load.startT, cell.load.endT);
+    for (const p of cell.load.progress ?? []) times.push(p.t);
+    if (cell.warmupMs !== undefined) times.push(cell.load.endT + cell.warmupMs);
+  }
+  for (const it of [...cell.iterations, ...(cell.discardedIterations ?? [])]) times.push(it.startT, it.endT);
+  for (const attempt of cell.attempts ?? []) times.push(attempt.at);
+  const finite = times.filter((t) => Number.isFinite(t));
+  if (finite.length === 0) return undefined;
+  return { start: Math.min(...finite), end: Math.max(...finite) };
 }
 
 function cellRow(run: BenchRunResult, cell: BenchCellResult): unknown[] {
@@ -482,7 +529,9 @@ export function runtimeVersionColumn(packageName: string): string {
  * wall time in each state from `pressureStateFractions`, rounded to four
  * decimals, empty when the run has no sample). Runtime package versions
  * follow as one `rv_*` column per package in the union of all runs, sorted by
- * column name.
+ * column name, and after them the battery state from `environment.power`
+ * (`powerCharging`, `powerLevel`: the quarter-rounded level the schema keeps;
+ * both empty when the browser has no Battery API).
  *
  * @param runs - Run results that passed shape validation.
  * @param validateOptions - Passed to `validateSubmission`; defaults to
@@ -516,6 +565,7 @@ export function runsToRunsCSV(
     'pressureSamples', 'pressureCriticalFraction', 'pressureSeriousFraction', 'pressureFairFraction',
     'pressureNominalFraction',
     ...rvColumns,
+    'powerCharging', 'powerLevel',
   ];
   const lines = [header.join(',')];
   for (const run of runs) {
@@ -549,6 +599,7 @@ export function runsToRunsCSV(
         run.harness.series?.cooldownMs, run.harness.series?.idleBeforeMs,
         pressure.samples, fraction('critical'), fraction('serious'), fraction('fair'), fraction('nominal'),
         ...rvColumns.map((column) => byColumn.get(column)),
+        env.power?.charging, env.power?.level,
       ]
         .map(csvField)
         .join(','),

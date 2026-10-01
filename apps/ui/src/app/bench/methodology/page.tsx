@@ -426,6 +426,32 @@ export default function BenchMethodologyPage() {
               it. An output-coherence check would be a protocol change and is reserved for a future
               version.
             </li>
+            <li>
+              Known prompt limitation: the Llama 3.2 1B chat template writes the current local date
+              into its default system header (&quot;Today Date: 25 Sep 2026&quot;, through the
+              template&apos;s <code className="font-mono text-sm">strftime_now</code>). The bench
+              sends no system prompt, so on the three Llama lanes that render this template
+              (Transformers.js WebGPU, llama.cpp CPU and llama.cpp WebGPU) the prompt changes with
+              the device&apos;s local calendar date. Decoding is greedy, so on the Transformers.js
+              lane each date yields a different fixed output, and the decode rate follows the text:
+              with no change to the model files, the browser or the harness, the pp128 decode rate
+              of one machine moved by about 9 to 13% from one date to another, stepping at local
+              midnight on the two machines that ran across it, and one tinyMMLU item changed from
+              wrong to right. The llama.cpp Llama lanes already produce a different text in every
+              iteration, so there the date changes the prompt without leaving a mark in the output.
+              The Qwen3, Gemma 4 and SmolLM2 templates carry no date on any lane. WebLLM&apos;s
+              templates insert a fixed default system message instead (for Llama 3.2 1B, &quot;You
+              are a helpful, respectful and honest assistant.&quot;), so the prompts of one pairing
+              already differ across runtimes; runtime-native templating is part of what is measured.
+              In practice: same-day comparisons on a Llama lane use identical prompts; comparisons
+              across days carry the date effect; and for crowd submissions the local date cannot be
+              recovered (schema 3 stopped recording the time zone), so a Llama-lane row aggregates
+              runs made with different prompts. The generated text of every iteration is stored in
+              the run files, so anyone can partition the Transformers.js Llama cells by output.
+              Pinning the date (or sending one fixed system prompt on every lane) and recording a
+              digest of the rendered prompt per cell would be a protocol change and are reserved
+              for a future version; no run is re-scored.
+            </li>
           </ul>
         </Section>
 
@@ -444,7 +470,9 @@ export default function BenchMethodologyPage() {
               the requested count and the pool the runtime built are recorded on the cell. The
               context change sizes the KV cache to what the workloads need (at most about 700
               tokens) instead of the provider&apos;s 8,192 default, which matters most for the
-              3.46 GB Gemma 4 E2B GGUF inside the CPU lane&apos;s 4 GB wasm heap. It does not
+              3.46 GB Gemma 4 E2B GGUF on the CPU lane, under the 4 GiB link-time memory cap of
+              wllama&apos;s memory64 build (the compatibility build for browsers without JSPI or
+              Memory64, such as Safari, is 32-bit). It does not
               rescue that lane&apos;s Gemma quality cell: with the weights resident, the per-request
               state allocation still fails (<code className="font-mono text-sm">std::bad_alloc</code>)
               and the cell is recorded as an error, as it was under v4. Every other lane measures
@@ -458,7 +486,8 @@ export default function BenchMethodologyPage() {
               lanes loaded a 557 MB projector the text-only workloads never use: its download and
               CLIP warmup ran inside the untimed warmup, the provider turned wllama&apos;s model
               cache off for the two-file source (so the warmup and the warm reload re-downloaded
-              the 3.46 GB weights), and on the CPU lane the pair did not fit the 4 GB wasm heap,
+              the 3.46 GB weights), and on the CPU lane the pair did not fit under the 4 GiB
+              link-time memory cap of wllama&apos;s memory64 build,
               which failed the three Gemma 4 E2B cells on every Thorough run. v4 loads the language
               model alone (<code className="font-mono text-sm">runtimeConfig.mmproj: false</code>);
               the other pairings measure exactly as under v3, and the version is bumped so that no

@@ -178,7 +178,7 @@ export async function commitRun(
 
 export class BenchStoreError extends Error {
   constructor(
-    public readonly code: 'duplicate-run' | 'github-error' | 'index-conflict',
+    public readonly code: 'duplicate-run' | 'github-error' | 'index-conflict' | 'index-unreadable' | 'index-shrink',
     message: string,
   ) {
     super(message);
@@ -257,37 +257,102 @@ export function toIndexEntry(
 }
 
 /**
+ * Refuse an index write that would hold fewer entries than the index it
+ * replaces. The submit path only ever appends, so a shrinking write means the
+ * read went wrong; only a deliberate rebuild (`rebuild: true`, set by the
+ * maintainer's `rebuild-bench-index` tool through `--allow-shrink`) may shrink it.
+ *
+ * @param previousCount - Entries in the index that was read.
+ * @param nextCount - Entries in the index about to be written.
+ * @param options - `rebuild: true` allows a smaller index.
+ * @throws {BenchStoreError} `index-shrink` when the write would drop entries.
+ */
+export function assertIndexNotShrinking(
+  previousCount: number,
+  nextCount: number,
+  options: { rebuild?: boolean } = {},
+): void {
+  if (nextCount < previousCount && !options.rebuild) {
+    throw new BenchStoreError(
+      'index-shrink',
+      `refusing to replace an index of ${previousCount} entries with one of ${nextCount}`,
+    );
+  }
+}
+
+/**
+ * Read index/summary.json for an update: its blob sha (for the compare-and-swap
+ * write) and its entries. The contents endpoint is used only for the sha and
+ * size, because above 1 MiB it returns `content: ""` with `encoding: "none"`;
+ * the content always comes from the Git blobs endpoint, which returns base64
+ * at any size up to 100 MB. Any read that cannot be trusted throws, so the
+ * caller never writes over an index it did not read in full.
+ *
+ * @returns `{ sha: undefined, entries: [] }` when the index does not exist yet.
+ * @throws {BenchStoreError} `github-error` on a failed request, `index-unreadable`
+ *   when the content is missing, truncated, or not a JSON array.
+ */
+export async function readIndexForUpdate(
+  config: BenchStoreConfig,
+): Promise<{ sha: string | undefined; entries: RunIndexEntry[] }> {
+  const meta = await fetch(`${API}/repos/${config.repo}/contents/${INDEX_PATH}`, {
+    headers: ghHeaders(config.token),
+    cache: 'no-store',
+  });
+  if (meta.status === 404) return { sha: undefined, entries: [] };
+  if (!meta.ok) throw new BenchStoreError('github-error', `GitHub GET index failed: ${meta.status}`);
+  const info = (await meta.json()) as { type?: string; sha?: string; size?: number };
+  if (info.type !== 'file' || typeof info.sha !== 'string' || typeof info.size !== 'number') {
+    throw new BenchStoreError('index-unreadable', 'GitHub contents response for the index has no file sha or size');
+  }
+
+  const blob = await fetch(`${API}/repos/${config.repo}/git/blobs/${info.sha}`, {
+    headers: ghHeaders(config.token),
+    cache: 'no-store',
+  });
+  if (!blob.ok) throw new BenchStoreError('github-error', `GitHub GET index blob failed: ${blob.status}`);
+  const body = (await blob.json()) as { encoding?: string; content?: string };
+  if (body.encoding !== 'base64' || typeof body.content !== 'string') {
+    throw new BenchStoreError('index-unreadable', `index blob has encoding "${body.encoding}", expected base64`);
+  }
+  const bytes = Buffer.from(body.content, 'base64');
+  if (bytes.length !== info.size) {
+    throw new BenchStoreError(
+      'index-unreadable',
+      `index blob decoded to ${bytes.length} bytes, the contents API reported ${info.size}`,
+    );
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bytes.toString('utf8'));
+  } catch {
+    throw new BenchStoreError('index-unreadable', 'index content is not valid JSON');
+  }
+  if (!Array.isArray(parsed)) throw new BenchStoreError('index-unreadable', 'index content is not a JSON array');
+  return { sha: info.sha, entries: parsed as RunIndexEntry[] };
+}
+
+/**
  * Append an entry to index/summary.json with optimistic concurrency (sha
- * compare-and-swap, up to 4 attempts on races).
+ * compare-and-swap, up to 4 attempts on races). An index that cannot be read
+ * in full is never overwritten: the error propagates and the caller reports it.
+ *
+ * @throws {BenchStoreError} on an unreadable index, a failed write, or a write
+ *   that would drop entries.
  */
 export async function appendToIndex(config: BenchStoreConfig, entry: RunIndexEntry): Promise<void> {
   for (let attempt = 0; attempt < 4; attempt++) {
-    const current = await fetch(`${API}/repos/${config.repo}/contents/${INDEX_PATH}`, {
-      headers: ghHeaders(config.token),
-      cache: 'no-store',
-    });
-    let sha: string | undefined;
-    let entries: RunIndexEntry[] = [];
-    if (current.ok) {
-      const body = (await current.json()) as { sha: string; content: string };
-      sha = body.sha;
-      try {
-        entries = JSON.parse(Buffer.from(body.content, 'base64').toString('utf8')) as RunIndexEntry[];
-      } catch {
-        entries = [];
-      }
-    } else if (current.status !== 404) {
-      throw new BenchStoreError('github-error', `GitHub GET index failed: ${current.status}`);
-    }
+    const { sha, entries } = await readIndexForUpdate(config);
     if (entries.some((e) => e.runId === entry.runId)) return;
-    entries.push(entry);
+    const next = [...entries, entry];
+    assertIndexNotShrinking(entries.length, next.length);
 
     const put = await fetch(`${API}/repos/${config.repo}/contents/${INDEX_PATH}`, {
       method: 'PUT',
       headers: { ...ghHeaders(config.token), 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: `bench: index run ${entry.runId}`,
-        content: Buffer.from(JSON.stringify(entries)).toString('base64'),
+        content: Buffer.from(JSON.stringify(next)).toString('base64'),
         ...(sha ? { sha } : {}),
       }),
     });
@@ -295,12 +360,18 @@ export async function appendToIndex(config: BenchStoreConfig, entry: RunIndexEnt
     if (put.status !== 409 && put.status !== 422) {
       throw new BenchStoreError('github-error', `GitHub PUT index failed: ${put.status}`);
     }
-    // Race with another submission — refetch and retry.
+    // Race with another submission: refetch and retry.
   }
   throw new BenchStoreError('index-conflict', 'index update kept conflicting');
 }
 
-/** Read the run index (raw.githubusercontent, ISR-cacheable by the caller). */
+/**
+ * Read the run index (raw.githubusercontent, ISR-cacheable by the caller). The
+ * raw host serves the file at any size, so the contents API's 1 MiB inline
+ * limit does not apply here. Next's data cache stores entries up to 2 MB, so
+ * a larger index is fetched again on every revalidation (Next logs a warning)
+ * while the rendered page and the API response stay cached.
+ */
 export async function readIndex(
   repo: string,
   init?: RequestInit & { next?: { revalidate?: number } },

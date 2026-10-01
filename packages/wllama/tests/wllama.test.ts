@@ -524,15 +524,15 @@ describe('@localmode/wllama', () => {
   });
 
   // ─────────────────────────────────────────────────────────────
-  // Default context-length cap (wasm32 KV-cache budget)
+  // Default context-length cap (KV-cache budget under the 4 GiB memory cap)
   // ─────────────────────────────────────────────────────────────
   describe('Default context-length cap', () => {
     it('caps the catalog-inferred context length at 8192 for n_ctx', async () => {
       // Regression: the DeepSeek-R1 distills advertise a 131072-token native
       // window in the catalog. Passing that straight to n_ctx asks llama.cpp
-      // for a ~3.5GiB KV cache, which cannot fit in the wasm32 4GiB heap
-      // alongside the weights — the load aborts with
-      // "ggml_aligned_malloc: insufficient memory". The DEFAULT inferred from
+      // for a ~3.5GiB KV cache, which cannot fit under the 4 GiB link-time
+      // memory cap of wllama's memory64 build alongside the weights, so the load
+      // aborts with "ggml_aligned_malloc: insufficient memory". The DEFAULT inferred from
       // the catalog must be capped; found by the blocks-chat reasoning E2E lane.
       const model = new WllamaLanguageModel('DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M');
       await model.doGenerate({ prompt: 'Hi' });
@@ -783,7 +783,8 @@ describe('@localmode/wllama', () => {
     // Catalog vision models attach their projector by default; a text-only
     // caller (a benchmark lane, a chat app without image input) can opt out.
     // Without the opt-out, Gemma 4 E2B's 3.46 GB GGUF plus its 557 MB projector
-    // did not fit the CPU-only wasm32 heap and wllama disabled its model cache
+    // did not fit on the CPU under the 4 GiB link-time memory cap of wllama's
+    // memory64 build, and wllama disabled its model cache
     // for the multi-file source, re-downloading the weights on every load.
     describe('vision: false (text-only)', () => {
       it('attaches the catalog projector by default and disables wllama caching for the pair', async () => {

@@ -16,7 +16,7 @@ import type {
 } from './types.js';
 
 /**
- * ~128-token prompt (measured 512 chars). Original text, public domain.
+ * ~128-token prompt (509 characters). Original text, public domain.
  * Exact per-tokenizer counts are computed post-hoc from this fixed string.
  */
 const PROMPT_PP128 = [
@@ -28,7 +28,7 @@ const PROMPT_PP128 = [
   'eight weeks. Be specific about labeling, sequencing, and volunteer coordination.',
 ].join(' ');
 
-/** ~512-token prompt (measured 2178 chars). Original text, public domain. */
+/** ~512-token prompt (2,335 characters). Original text, public domain. */
 const PROMPT_PP512 = [
   'Read the following notes from a town planning meeting and then answer the question at the end.',
   'The town of Milbrook has grown from eight thousand residents to eleven thousand in six years.',

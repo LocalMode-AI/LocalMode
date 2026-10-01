@@ -14,6 +14,8 @@ import { issueNonce } from '../src/lib/bench/nonce';
 
 const committed: Array<{ path: string; run: BenchRunResult }> = [];
 let indexBody = '[]';
+let blobFails = false;
+let indexPuts = 0;
 
 function stubGitHub() {
   const realFetch = globalThis.fetch;
@@ -22,10 +24,30 @@ function stubGitHub() {
     if (!url.startsWith('https://api.github.com/')) return realFetch(input, init);
     if (url.includes('/contents/index/summary.json')) {
       if (init?.method === 'PUT') {
+        indexPuts++;
         indexBody = Buffer.from(JSON.parse(String(init.body)).content, 'base64').toString();
         return new Response('{}', { status: 200 });
       }
-      return new Response(JSON.stringify({ sha: 'abc', content: Buffer.from(indexBody).toString('base64') }), { status: 200 });
+      // As GitHub answers: the contents endpoint carries the blob sha and
+      // size (inline content is empty above 1 MiB), the blob endpoint the bytes.
+      const size = Buffer.byteLength(indexBody);
+      return new Response(
+        JSON.stringify({
+          type: 'file',
+          sha: 'abc',
+          size,
+          content: size > 1024 * 1024 ? '' : Buffer.from(indexBody).toString('base64'),
+          encoding: size > 1024 * 1024 ? 'none' : 'base64',
+        }),
+        { status: 200 },
+      );
+    }
+    if (url.endsWith('/git/blobs/abc')) {
+      if (blobFails) return new Response('{"message":"Server Error"}', { status: 500 });
+      return new Response(
+        JSON.stringify({ sha: 'abc', size: Buffer.byteLength(indexBody), encoding: 'base64', content: Buffer.from(indexBody).toString('base64') }),
+        { status: 200 },
+      );
     }
     if (init?.method === 'PUT') {
       const body = JSON.parse(String(init.body));
@@ -56,6 +78,8 @@ describe('POST /api/bench/submit', () => {
     delete process.env.KV_REST_API_URL;
     committed.length = 0;
     indexBody = '[]';
+    blobFails = false;
+    indexPuts = 0;
     stubGitHub();
   });
   afterEach(() => {
@@ -124,5 +148,38 @@ describe('POST /api/bench/submit', () => {
     expect(status).toBe(400);
     expect(body.code).toBe('digest-mismatch');
     expect(committed).toHaveLength(0);
+  });
+
+  it('indexes a run when the index is over 1 MiB, keeping every existing entry', async () => {
+    const existing = Array.from({ length: 2000 }, (_, i) => ({ runId: `old-${i}`, padding: 'x'.repeat(600) }));
+    indexBody = JSON.stringify(existing);
+    expect(Buffer.byteLength(indexBody)).toBeGreaterThan(1024 * 1024);
+    const run = makeRun({ nonce: issueNonce(), runId: `run-big-${Math.random().toString(16).slice(2)}` });
+    run.digest = await computeRunDigest(run);
+    const { status, body } = await post(run);
+    expect(status).toBe(200);
+    expect(body.ok).toBe(true);
+    const index = JSON.parse(indexBody) as Array<{ runId: string }>;
+    expect(index).toHaveLength(2001);
+    expect(index[0].runId).toBe('old-0');
+    expect(index.at(-1)!.runId).toBe(run.runId);
+  });
+
+  it('reports a run whose index append failed, and leaves the index untouched', async () => {
+    indexBody = JSON.stringify([{ runId: 'kept' }]);
+    blobFails = true;
+    const run = makeRun({ nonce: issueNonce(), runId: `run-noindex-${Math.random().toString(16).slice(2)}` });
+    run.digest = await computeRunDigest(run);
+    const { status, body } = await post(run);
+    expect(status).toBe(502);
+    expect(body.code).toBe('index-update-failed');
+    expect(body.ok).toBe(false);
+    // The run file itself is committed and the response says where.
+    expect(committed).toHaveLength(1);
+    expect(body.path).toBe(committed[0].path);
+    expect(String(body.url)).toContain(committed[0].path);
+    expect(String(body.message)).toContain('no need to submit it again');
+    expect(indexPuts).toBe(0);
+    expect(JSON.parse(indexBody)).toEqual([{ runId: 'kept' }]);
   });
 });

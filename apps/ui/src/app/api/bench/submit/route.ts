@@ -122,16 +122,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     published.digest = await computeRunDigest(published);
   }
 
+  let path: string;
   try {
-    const path = await commitRun(config, published, flagged);
-    await appendToIndex(config, toIndexEntry(published, report.summaries, flagged, path));
-    return NextResponse.json({
-      ok: true,
-      flagged,
-      flags: report.flags,
-      path,
-      url: `https://github.com/${config.repo}/blob/main/${path}`,
-    });
+    path = await commitRun(config, published, flagged);
   } catch (error) {
     if (error instanceof BenchStoreError && error.code === 'duplicate-run') {
       return NextResponse.json(
@@ -145,4 +138,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { status: 502 },
     );
   }
+
+  const url = `https://github.com/${config.repo}/blob/main/${path}`;
+  try {
+    await appendToIndex(config, toIndexEntry(published, report.summaries, flagged, path));
+  } catch (error) {
+    // The run file is in the dataset; only its leaderboard index entry is
+    // missing. The index is never rewritten from a failed read, so the
+    // maintainer restores the entry with the index rebuild tool.
+    console.error(`[bench] run committed at ${path} but the index append failed:`, error);
+    return NextResponse.json(
+      {
+        ok: false,
+        code: 'index-update-failed',
+        path,
+        url,
+        message:
+          'The run was saved to the public dataset, but the leaderboard index could not be updated, so it will not show on the leaderboard until the index is rebuilt. There is no need to submit it again.',
+      },
+      { status: 502 },
+    );
+  }
+  return NextResponse.json({ ok: true, flagged, flags: report.flags, path, url });
 }
