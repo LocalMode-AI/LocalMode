@@ -98,21 +98,25 @@ function collectRunDownloads(page: Page): Array<Promise<ExportedRun>> {
   return files;
 }
 
-/** The paid-study hardware questions, as a participant sees them. */
+/** The paid-study hardware questions, as a participant sees them: a dialog after Run, a group in the run overlay. */
 const HARDWARE_FORM = 'About this computer';
 const HARDWARE_REASON_ALL =
-  'Answer "About this computer" first: graphics card or chip, computer type and memory (RAM).';
+  'Still to answer: graphics card or chip, computer type, memory (RAM) and other heavy programs running.';
 
-/** Answer the hardware questions inside `scope` (the page, or the run overlay). */
+/** The "About this computer" dialog that Run benchmark opens on a paid-study link. */
+function hardwareDialog(page: Page): Locator {
+  return page.getByRole('dialog', { name: HARDWARE_FORM });
+}
+
+/** Answer the four hardware questions inside `scope` (the dialog, or the run overlay's group). */
 async function answerHardware(
-  scope: Page | Locator,
-  answers: { gpu: string; chassis: 'Laptop' | 'Desktop' | 'Other'; ram: string; otherApps?: 'Yes' | 'No' },
+  scope: Locator,
+  answers: { gpu: string; chassis: 'Laptop' | 'Desktop' | 'Other'; ram: string; otherApps: 'Yes' | 'No' },
 ) {
-  const form = scope.getByRole('group', { name: HARDWARE_FORM });
-  await form.getByLabel('Graphics card or chip').fill(answers.gpu);
-  await form.getByRole('radio', { name: answers.chassis }).check();
-  await form.getByLabel('Memory (RAM)').selectOption({ label: answers.ram });
-  if (answers.otherApps) await form.getByRole('radio', { name: answers.otherApps }).check();
+  await scope.getByLabel('Graphics card or chip').fill(answers.gpu);
+  await scope.getByRole('radio', { name: answers.chassis }).check();
+  await scope.getByLabel('Memory (RAM)').selectOption({ label: answers.ram });
+  await scope.getByRole('radio', { name: answers.otherApps }).check();
 }
 
 /** Main-frame loads after the call (reloads count; the initial goto happens before). */
@@ -227,21 +231,29 @@ test.describe('bench shell (zero model bytes)', () => {
 
 /**
  * Paid-study browser gate. The study pays only for runs from Chrome or Edge on
- * a computer, or Chrome on Android, so a study link carrying a `cc` code opened
- * in any other browser shows a notice in place of the Run button. The config
+ * a computer, so a study link carrying a `cc` code opened in any other browser,
+ * or on a phone or tablet, shows a notice in place of the Run button. The config
  * has only a Chromium project, so Safari is reproduced in Chromium: the context
  * user agent is Safari 26.3's (recorded on macOS), and because Chromium keeps
  * exposing `navigator.userAgentData` (with Chromium brands) under a spoofed user
  * agent, an init script removes it, as Safari has none. The page therefore takes
- * the same no-userAgentData path a real Safari takes. The real-Safari check is
- * part of the manual hardware sweep.
+ * the same no-userAgentData path a real Safari takes. Chrome on Android is
+ * reproduced the same way: an Android Chrome user agent, and an init script
+ * that replaces `navigator.userAgentData` with the brands, `mobile: true` and
+ * platform a real Android Chrome reports. The real-Safari and real-Android
+ * checks are part of the manual hardware sweep.
  */
 const SAFARI_MAC_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.3 Safari/605.1.15';
 /** A study link in the shape the study uses: presets, the code, then Prolific's three ids (test values). */
 const STUDY_LINK =
   '/bench/run?tier=quick&quality=off&runs=1&cold=off&publish=on&cc=TESTCODE1&PROLIFIC_PID=e2e-test-pid&STUDY_ID=e2e-study&SESSION_ID=e2e-session';
+/** Chrome 153 on an Android phone, in the reduced user-agent form Chrome sends. */
+const ANDROID_CHROME_UA =
+  'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Mobile Safari/537.36';
 const STUDY_GATE_HEADING = 'This study needs Chrome or Edge';
+const STUDY_GATE_TEXT =
+  'This study needs Chrome or Edge on a computer. Runs from phones and tablets, Safari, Firefox and other browsers are not eligible for payment and do not receive a completion code. Open this exact link in Chrome or Edge on a Windows, macOS, Linux or ChromeOS computer to take part.';
 
 test.describe('paid-study browser gate (zero model bytes)', () => {
   let consoleErrors: string[];
@@ -259,41 +271,19 @@ test.describe('paid-study browser gate (zero model bytes)', () => {
     expect(modelRequests, 'the study gate lanes must fetch no model assets').toEqual([]);
   });
 
-  test('Chromium: a study link keeps the Run button, shows no gate, and asks about the hardware before Run', async ({ page }) => {
+  test('Chromium: a study link shows no inline form; Run opens the "About this computer" dialog', async ({ page }) => {
     await page.goto(STUDY_LINK);
     await expect(page.getByRole('heading', { level: 1, name: /run localmode bench/i })).toBeVisible();
     expect(await page.evaluate(() => (navigator as Navigator & { userAgentData?: unknown }).userAgentData !== undefined)).toBe(true);
     const runButton = page.getByRole('button', { name: 'Run benchmark' });
-    // The lanes are probed, so a disabled button is the hardware gate, not a loading state.
     await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
-    const form = page.getByRole('group', { name: HARDWARE_FORM });
-    await expect(form).toBeVisible();
-    await expect(runButton).toBeDisabled();
-    const reason = page.getByText(HARDWARE_REASON_ALL, { exact: true });
-    await expect(reason).toBeVisible();
-    await expect(runButton).toHaveAccessibleDescription(HARDWARE_REASON_ALL);
-    // The form sits above the Run button.
-    const formBox = (await form.boundingBox())!;
-    const runBox = (await runButton.boundingBox())!;
-    expect(formBox.y + formBox.height).toBeLessThanOrEqual(runBox.y);
-    const gpu = form.getByLabel('Graphics card or chip');
-    await expect(gpu).toHaveAttribute('maxlength', '64');
-    await expect(gpu).toHaveAccessibleDescription(/Task Manager, Performance, GPU.*About This Mac.*Settings, About/);
-    await expect(form).toContainText('published with the run in the public leaderboard dataset');
-    await expect(form.getByLabel('Memory (RAM)').locator('option')).toHaveText([
-      'Choose…', '4 GB', '6 GB', '8 GB', '12 GB', '16 GB', '24 GB', '32 GB', '48 GB', '64 GB', '96 GB', '128 GB or more', 'Not sure',
-    ]);
-    // Invalid and partial states keep Run disabled and name what is missing.
-    await gpu.fill('    ');
-    await expect(page.getByText(HARDWARE_REASON_ALL, { exact: true })).toBeVisible();
-    await gpu.fill('Intel Iris Xe Graphics');
-    await form.getByRole('radio', { name: 'Desktop' }).check();
-    await expect(page.getByText('Answer "About this computer" first: memory (RAM).', { exact: true })).toBeVisible();
-    await expect(runButton).toBeDisabled();
-    // "Not sure" is an answer; the other-programs question is optional.
-    await form.getByLabel('Memory (RAM)').selectOption({ label: 'Not sure' });
+    // Nothing is asked on the page itself, and Run is enabled.
     await expect(runButton).toBeEnabled();
-    await expect(page.getByText(/^Answer "About this computer" first/)).toHaveCount(0);
+    await expect(page.getByRole('group', { name: HARDWARE_FORM })).toHaveCount(0);
+    await expect(page.getByLabel('Graphics card or chip')).toHaveCount(0);
+    await expect(page.getByText(HARDWARE_REASON_ALL)).toHaveCount(0);
+    await expect(runButton).not.toHaveAttribute('aria-describedby', /.+/);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page.getByText(/paid study session detected/i)).toBeVisible();
     await expect(page.getByRole('alert', { name: STUDY_GATE_HEADING })).toHaveCount(0);
     await expect(page.getByText(STUDY_GATE_HEADING)).toHaveCount(0);
@@ -302,6 +292,75 @@ test.describe('paid-study browser gate (zero model bytes)', () => {
     await expect(page.getByRole('switch', { name: /quality-fidelity lane/i })).not.toBeChecked();
     await expect(page.getByRole('switch', { name: /publish results/i })).toBeChecked();
     await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
+
+    // Run opens the dialog: titled, described, with every question empty and Start disabled with the reason.
+    await runButton.click();
+    const dialog = hardwareDialog(page);
+    await expect(dialog).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(1);
+    await expect(dialog).toHaveAccessibleDescription(/Answer all four questions.*published with the run in the public leaderboard dataset/);
+    const start = dialog.getByRole('button', { name: 'Start benchmark' });
+    await expect(start).toBeDisabled();
+    await expect(dialog.getByText(HARDWARE_REASON_ALL, { exact: true })).toBeVisible();
+    await expect(start).toHaveAccessibleDescription(HARDWARE_REASON_ALL);
+    const gpu = dialog.getByLabel('Graphics card or chip');
+    await expect(gpu).toBeFocused();
+    await expect(gpu).toHaveValue('');
+    await expect(gpu).toHaveAttribute('maxlength', '64');
+    // "Where to find it": one bullet per system, tied to the input, with the example names on their own line.
+    const where = dialog.getByRole('list', { name: 'Where to find it:' });
+    await expect(where.getByRole('listitem')).toHaveText([
+      'Windows: Task Manager, Performance tab, GPU',
+      'macOS: About This Mac, Chip or Graphics',
+      'Linux: Settings, About, or lspci | grep -i vga',
+    ]);
+    await expect(gpu).toHaveAccessibleDescription(
+      'Where to find it: Windows: Task Manager, Performance tab, GPU macOS: About This Mac, Chip or Graphics Linux: Settings, About, or lspci | grep -i vga Examples: NVIDIA GeForce RTX 4060, AMD Radeon 780M, Intel Arc or Iris Xe Graphics, Apple M2.',
+    );
+    await expect(dialog.getByLabel('Memory (RAM)').locator('option')).toHaveText([
+      'Choose…', '4 GB', '6 GB', '8 GB', '12 GB', '16 GB', '24 GB', '32 GB', '48 GB', '64 GB', '96 GB', '128 GB or more', 'Not sure',
+    ]);
+    await expect(dialog.getByRole('radiogroup', { name: /other heavy programs running/i })).toHaveAttribute('aria-required', 'true');
+    await expect(dialog.getByText('Optional')).toHaveCount(0);
+
+    // Invalid and partial answers keep Start disabled and name what is missing.
+    await gpu.fill('    ');
+    await expect(dialog.getByText(HARDWARE_REASON_ALL, { exact: true })).toBeVisible();
+    await gpu.fill('Intel Iris Xe Graphics');
+    await dialog.getByRole('radio', { name: 'Desktop' }).check();
+    await expect(
+      dialog.getByText('Still to answer: memory (RAM) and other heavy programs running.', { exact: true }),
+    ).toBeVisible();
+    await expect(start).toBeDisabled();
+    // "Not sure" is an answer, but the other-programs question is required too.
+    await dialog.getByLabel('Memory (RAM)').selectOption({ label: 'Not sure' });
+    await expect(dialog.getByText('Still to answer: other heavy programs running.', { exact: true })).toBeVisible();
+    await expect(start).toBeDisabled();
+    // Enter in the text field does not start an incomplete form.
+    await gpu.press('Enter');
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('radio', { name: 'No' }).check();
+    await expect(start).toBeEnabled();
+    await expect(dialog.getByText(/^Still to answer/)).toHaveCount(0);
+    await expect(start).not.toHaveAttribute('aria-describedby', /.+/);
+
+    // Cancel closes without starting, and focus goes back to Run benchmark.
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(runButton).toBeFocused();
+    await expect(runButton).toBeEnabled();
+    // The answers are kept for the next attempt; Escape closes the same way.
+    await runButton.click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel('Graphics card or chip')).toHaveValue('Intel Iris Xe Graphics');
+    await expect(dialog.getByRole('button', { name: 'Start benchmark' })).toBeEnabled();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(runButton).toBeFocused();
+    // Neither close started a run: no overlay, no status, and (afterEach) no model bytes.
+    await page.waitForTimeout(3_000);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /running/i })).toHaveCount(0);
   });
 
   test.describe('Safari user agent', () => {
@@ -324,9 +383,7 @@ test.describe('paid-study browser gate (zero model bytes)', () => {
       ).toEqual({ ua: SAFARI_MAC_UA, uad: null });
       const gate = page.getByRole('alert', { name: STUDY_GATE_HEADING });
       await expect(gate).toBeVisible({ timeout: 15_000 });
-      await expect(gate).toContainText(
-        'This study needs Chrome or Edge on a computer, or Chrome on Android. Runs from Safari, iPhone or iPad browsers, Firefox and other browsers are not eligible for payment and do not receive a completion code. Open this exact link in Chrome or Edge to take part.',
-      );
+      await expect(gate).toContainText(STUDY_GATE_TEXT);
       // The lanes finished probing, so the absent button is the gate, not a loading state.
       await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
       await expect(page.getByRole('button', { name: 'Run benchmark' })).toHaveCount(0);
@@ -336,6 +393,7 @@ test.describe('paid-study browser gate (zero model bytes)', () => {
       await expect(page.getByText('TESTCODE1')).toHaveCount(0);
       // The hardware questions belong to an eligible study session only.
       await expect(page.getByRole('group', { name: HARDWARE_FORM })).toHaveCount(0);
+      await expect(page.getByLabel('Graphics card or chip')).toHaveCount(0);
       // The ordinary runner controls stay visible.
       await expect(page.getByRole('combobox', { name: 'Suite' })).toContainText('Quick');
       // Nothing starts on its own: no run overlay and (afterEach) no model bytes.
@@ -353,6 +411,63 @@ test.describe('paid-study browser gate (zero model bytes)', () => {
       await expect(page.getByRole('alert', { name: STUDY_GATE_HEADING })).toHaveCount(0);
       await expect(page.getByText(STUDY_GATE_HEADING)).toHaveCount(0);
       await expect(page.getByRole('group', { name: HARDWARE_FORM })).toHaveCount(0);
+      await expect(page.getByLabel('Graphics card or chip')).toHaveCount(0);
+    });
+  });
+
+  test.describe('Chrome on Android', () => {
+    test.use({ userAgent: ANDROID_CHROME_UA });
+
+    test.beforeEach(async ({ context }) => {
+      await context.addInitScript(() => {
+        const data = {
+          brands: [
+            { brand: 'Chromium', version: '153' },
+            { brand: 'Google Chrome', version: '153' },
+          ],
+          mobile: true,
+          platform: 'Android',
+          getHighEntropyValues: async () => ({}),
+          toJSON() {
+            return { brands: this.brands, mobile: this.mobile, platform: this.platform };
+          },
+        };
+        Object.defineProperty(Navigator.prototype, 'userAgentData', { get: () => data, configurable: true });
+      });
+    });
+
+    test('a study link with cc shows the notice in place of the Run button and downloads nothing', async ({ page }) => {
+      await page.goto(STUDY_LINK);
+      await expect(page.getByRole('heading', { level: 1, name: /run localmode bench/i })).toBeVisible();
+      expect(
+        await page.evaluate(() => {
+          const uad = (navigator as Navigator & { userAgentData?: { brands: unknown; mobile: unknown; platform: unknown } })
+            .userAgentData;
+          return { ua: navigator.userAgent, brands: uad?.brands, mobile: uad?.mobile, platform: uad?.platform };
+        }),
+      ).toEqual({
+        ua: ANDROID_CHROME_UA,
+        brands: [
+          { brand: 'Chromium', version: '153' },
+          { brand: 'Google Chrome', version: '153' },
+        ],
+        mobile: true,
+        platform: 'Android',
+      });
+      const gate = page.getByRole('alert', { name: STUDY_GATE_HEADING });
+      await expect(gate).toBeVisible({ timeout: 15_000 });
+      await expect(gate).toContainText(STUDY_GATE_TEXT);
+      // The lanes finished probing, so the absent button is the gate, not a loading state.
+      await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+      await expect(page.getByRole('button', { name: 'Run benchmark' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /running/i })).toHaveCount(0);
+      await expect(page.getByText(/paid study session detected/i)).toHaveCount(0);
+      await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
+      await expect(page.getByText('TESTCODE1')).toHaveCount(0);
+      await expect(page.getByRole('group', { name: HARDWARE_FORM })).toHaveCount(0);
+      // Nothing starts on its own: no run overlay and (afterEach) no model bytes.
+      await page.waitForTimeout(3_000);
+      await expect(page.getByRole('dialog')).toHaveCount(0);
     });
   });
 
@@ -364,7 +479,7 @@ test.describe('paid-study browser gate (zero model bytes)', () => {
       await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
       await expect(page.getByRole('group', { name: HARDWARE_FORM })).toHaveCount(0);
       await expect(page.getByLabel('Graphics card or chip')).toHaveCount(0);
-      await expect(page.getByText(/^Answer "About this computer" first/)).toHaveCount(0);
+      await expect(page.getByText(/^Still to answer/)).toHaveCount(0);
       await expect(runButton).not.toHaveAttribute('aria-describedby', /.+/);
     }
   });
@@ -387,11 +502,8 @@ test.describe('bench real run (WASM lanes)', () => {
     // must NOT show the completion code before the run + submit attempt resolve.
     await page.goto('/bench/run?PROLIFIC_PID=5f3a1c2b4d6e7f8091a2b3c4&cc=TESTCODE1');
     const runButton = page.getByRole('button', { name: 'Run benchmark' });
-    // A study link asks about the hardware first: Run stays disabled, with the reason, until it is answered.
+    // A study link asks about the hardware in a dialog that Run opens; Start stays disabled until all four are answered.
     await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
-    await expect(runButton).toBeDisabled();
-    await expect(page.getByText(HARDWARE_REASON_ALL, { exact: true })).toBeVisible();
-    await answerHardware(page, { gpu: 'Intel Iris Xe Graphics', chassis: 'Laptop', ram: '16 GB', otherApps: 'No' });
     await expect(runButton).toBeEnabled();
     await expect(page.getByText(/paid study session detected/i)).toBeVisible();
     // Second witness for the recorded answers: the run file the page uploads.
@@ -405,6 +517,15 @@ test.describe('bench real run (WASM lanes)', () => {
     await expect(page.getByText('no WebGPU').first()).toBeVisible();
 
     await runButton.click();
+    const askDialog = hardwareDialog(page);
+    await expect(askDialog).toBeVisible();
+    const start = askDialog.getByRole('button', { name: 'Start benchmark' });
+    await expect(start).toBeDisabled();
+    await expect(askDialog.getByText(HARDWARE_REASON_ALL, { exact: true })).toBeVisible();
+    await answerHardware(askDialog, { gpu: 'Intel Iris Xe Graphics', chassis: 'Laptop', ram: '16 GB', otherApps: 'No' });
+    await expect(start).toBeEnabled();
+    await start.click();
+    await expect(hardwareDialog(page)).toHaveCount(0);
     await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
 
     // While the run is in progress everything a participant needs is in one
@@ -417,6 +538,8 @@ test.describe('bench real run (WASM lanes)', () => {
     await expect(dialog).toContainText(/Estimated time remaining|Estimating the remaining time/);
     await expect(dialog.getByRole('list', { name: /model lanes progress/i })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Cancel run' })).toBeVisible();
+    // Focus moved into the run overlay, not back to the Run button behind it.
+    await expect(dialog).toBeFocused();
 
     // The answers stay editable during the run, in the overlay; the values present when the
     // run file is assembled are the ones recorded (the GPU name normalized).
@@ -427,6 +550,7 @@ test.describe('bench real run (WASM lanes)', () => {
     await runForm.getByLabel('Graphics card or chip').fill('  NVIDIA   GeForce RTX 4060  ');
     await runForm.getByRole('radio', { name: 'Yes' }).check();
     await expect(page.getByRole('group', { name: HARDWARE_FORM })).toHaveCount(1);
+    await expect(page.getByRole('dialog')).toHaveCount(1);
 
     // Live progress surfaces through the status live region.
     const status = page.getByRole('status').first();
@@ -725,12 +849,28 @@ test.describe('bench real run (WASM lanes)', () => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     const consoleErrors: string[] = [];
     collectConsoleErrors(page, consoleErrors);
+    // Every "About this computer" dialog that opens on any page load of the series is counted.
+    const askedOn: string[] = [];
+    await page.exposeFunction('__benchHardwareDialogShown', (title: string) => askedOn.push(title));
+    await page.addInitScript(() => {
+      const report = (t: string) =>
+        (window as unknown as { __benchHardwareDialogShown: (t: string) => Promise<void> }).__benchHardwareDialogShown(t);
+      const seen = new WeakSet<Element>();
+      new MutationObserver(() => {
+        for (const el of document.querySelectorAll('[role="dialog"]')) {
+          const titleId = el.getAttribute('aria-labelledby');
+          const title = titleId ? document.getElementById(titleId)?.textContent : null;
+          if (title === 'About this computer' && !seen.has(el)) {
+            seen.add(el);
+            void report(document.title);
+          }
+        }
+      }).observe(document, { childList: true, subtree: true });
+    });
     // A study link: the hardware answers given before run 1 must reach run 2 across the reload.
     await page.goto('/bench/run?cc=TESTCODE2&PROLIFIC_PID=e2e-series-pid');
     const runButton = page.getByRole('button', { name: 'Run benchmark' });
     await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
-    await expect(runButton).toBeDisabled();
-    await answerHardware(page, { gpu: 'AMD Radeon 780M', chassis: 'Desktop', ram: '128 GB or more', otherApps: 'No' });
     await expect(runButton).toBeEnabled({ timeout: 15_000 });
     // Publishing off: each run of the series is exported as a JSON download.
     await page.getByRole('switch', { name: /publish results/i }).click();
@@ -738,6 +878,10 @@ test.describe('bench real run (WASM lanes)', () => {
     const downloads = collectRunDownloads(page);
     const loads = countLoads(page);
     await runButton.click();
+    const askDialog = hardwareDialog(page);
+    await expect(askDialog).toBeVisible();
+    await answerHardware(askDialog, { gpu: 'AMD Radeon 780M', chassis: 'Desktop', ram: '128 GB or more', otherApps: 'No' });
+    await askDialog.getByRole('button', { name: 'Start benchmark' }).click();
 
     const dialog = page.getByRole('dialog', { name: /benchmark running/i });
     await expect(dialog).toBeVisible({ timeout: 20_000 });
@@ -751,6 +895,8 @@ test.describe('bench real run (WASM lanes)', () => {
       .getByRole('group', { name: 'Series progress' })).toContainText('Series: run 2 of 2', { timeout: 15 * 60 * 1000 });
     expect(loads.count, 'the page reloaded between the two runs').toBeGreaterThanOrEqual(1);
     await expect(page).toHaveTitle('2/2 · LocalMode Bench');
+    // Run 2 started without asking again: the answers survived the reload.
+    await expect(hardwareDialog(page)).toHaveCount(0);
     // The answers survived the reload; one is changed during run 2 and must be recorded on run 2 only.
     const run2Form = page.getByRole('dialog', { name: /benchmark running/i }).getByRole('group', { name: HARDWARE_FORM });
     await expect(run2Form.getByLabel('Graphics card or chip')).toHaveValue('AMD Radeon 780M');
@@ -765,6 +911,7 @@ test.describe('bench real run (WASM lanes)', () => {
     await expect(listed).toHaveCount(2);
     await expect(page).toHaveTitle('Done 2/2 · LocalMode Bench');
     expect(loads.count, 'exactly one reload: none after the last run').toBe(1);
+    expect(askedOn, 'the dialog was shown once, before run 1, and never on the reloaded page of run 2').toHaveLength(1);
 
     expect(downloads).toHaveLength(2);
     const [first, second] = await Promise.all(downloads);
@@ -803,10 +950,14 @@ test.describe('bench real run (WASM lanes)', () => {
     await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Benchmark series' })).toHaveCount(0);
     // A new run on the study link asks again: the ended series took its answers with it.
-    await expect(page.getByRole('group', { name: HARDWARE_FORM }).getByLabel('Graphics card or chip')).toHaveValue('');
-    await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeDisabled();
-    await answerHardware(page, { gpu: 'AMD Radeon 780M', chassis: 'Desktop', ram: '32 GB' });
     await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeEnabled({ timeout: 15_000 });
+    await page.getByRole('button', { name: 'Run benchmark' }).click();
+    await expect(hardwareDialog(page).getByLabel('Graphics card or chip')).toHaveValue('');
+    await expect(hardwareDialog(page).getByRole('button', { name: 'Start benchmark' })).toBeDisabled();
+    await expect(hardwareDialog(page).getByText(HARDWARE_REASON_ALL, { exact: true })).toBeVisible();
+    await hardwareDialog(page).getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(askedOn).toHaveLength(2);
     expect(consoleErrors).toEqual([]);
   });
 

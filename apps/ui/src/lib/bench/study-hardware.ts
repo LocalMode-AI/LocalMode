@@ -37,15 +37,16 @@ export interface HardwareAnswers {
 
 export const EMPTY_HARDWARE_ANSWERS: HardwareAnswers = { gpu: '', chassis: '', ram: '', otherApps: '' };
 
-/** Label of each required question, as the inline reason names it. */
+/** Label of each question, as the inline reason names it. Every question is required. */
 const REQUIRED_LABELS = {
   gpu: 'graphics card or chip',
   chassis: 'computer type',
   ram: 'memory (RAM)',
+  otherApps: 'other heavy programs running',
 } as const;
 
 /**
- * The required questions still unanswered, in form order.
+ * The questions still unanswered, in form order.
  *
  * @param answers - The form state.
  * @returns Labels of the missing answers; empty when the run may start.
@@ -55,24 +56,25 @@ export function missingHardwareAnswers(answers: HardwareAnswers): string[] {
   if (!sanitizeReportedGpu(answers.gpu)) missing.push(REQUIRED_LABELS.gpu);
   if (!answers.chassis) missing.push(REQUIRED_LABELS.chassis);
   if (!answers.ram) missing.push(REQUIRED_LABELS.ram);
+  if (!answers.otherApps) missing.push(REQUIRED_LABELS.otherApps);
   return missing;
 }
 
 /**
- * The inline reason shown beside a disabled Run button.
+ * The inline reason shown beside the disabled Start benchmark button.
  *
  * @param answers - The form state.
- * @returns The sentence, or null when every required answer is given.
+ * @returns The sentence, or null when every answer is given.
  * @example
  * hardwareBlockReason(EMPTY_HARDWARE_ANSWERS);
- * // 'Answer "About this computer" first: graphics card or chip, computer type and memory (RAM).'
+ * // 'Still to answer: graphics card or chip, computer type, memory (RAM) and other heavy programs running.'
  */
 export function hardwareBlockReason(answers: HardwareAnswers): string | null {
   const missing = missingHardwareAnswers(answers);
   if (missing.length === 0) return null;
   const list =
     missing.length === 1 ? missing[0] : `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}`;
-  return `Answer "About this computer" first: ${list}.`;
+  return `Still to answer: ${list}.`;
 }
 
 /**

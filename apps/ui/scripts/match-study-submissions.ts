@@ -9,7 +9,7 @@
  * Verdicts: `approve` when exactly one run carries the hash, `duplicate` when
  * more than one does (every run is listed), `no-match` when none does. The
  * eligibility column recomputes the study's browser rule (`studyEligibility`)
- * from the run file's user agent and UA-CH brands, so a run from an
+ * from the run file's user agent, UA-CH brands, mobile bit and platform, so a run from an
  * ineligible browser stands out for review.
  *
  * Input: the study's participant export as CSV (the column named by
@@ -128,7 +128,12 @@ export async function participantTag(participantId: string): Promise<string> {
 function describeEligibility(run: BenchRunResult): string {
   const env = run.environment;
   if (!env.userAgent) return 'unknown';
-  const verdict = studyEligibility({ userAgent: env.userAgent, brands: env.browser.brands ?? null });
+  const verdict = studyEligibility({
+    userAgent: env.userAgent,
+    brands: env.browser.brands ?? null,
+    mobile: env.device?.mobile ?? null,
+    platform: env.os?.platform ?? null,
+  });
   return verdict.eligible ? 'eligible' : `ineligible (${verdict.reason})`;
 }
 

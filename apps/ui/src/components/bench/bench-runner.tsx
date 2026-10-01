@@ -356,8 +356,8 @@ function laneKey(model: BenchModelRef): string {
  * The completion code is shown only after the run finishes and the submission
  * attempt has resolved, whether it succeeded or not (payment is on attempt,
  * never on our infrastructure). The study pays only for runs from Chrome or
- * Edge on a computer, or Chrome on Android: with a completion code in the
- * link, any other browser sees a notice in place of the Run button and never
+ * Edge on a computer: with a completion code in the link, any other browser,
+ * and any phone or tablet, sees a notice in place of the Run button and never
  * sees the code.
  */
 const PROLIFIC_COMPLETE_URL = 'https://app.prolific.com/submissions/complete?cc=';
@@ -532,36 +532,38 @@ function ConfigSection({
 const SELECT_CLASS =
   'h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
 
+/** Where to read the graphics card or chip name, one line per system. */
+const GPU_HELP_BULLETS: ReadonlyArray<{ system: string; where: ReactNode }> = [
+  { system: 'Windows', where: 'Task Manager, Performance tab, GPU' },
+  { system: 'macOS', where: 'About This Mac, Chip or Graphics' },
+  {
+    system: 'Linux',
+    where: (
+      <>
+        Settings, About, or <code className="font-mono">lspci | grep -i vga</code>
+      </>
+    ),
+  },
+];
+
 /**
- * "About this computer": the paid-study hardware questions. The first three
- * are required before Run; all four stay editable while the run is in
- * progress, and the values present when the run file is assembled are
- * recorded and published with the run.
+ * "About this computer": the four paid-study hardware questions, all
+ * required. They are asked in a dialog when Run benchmark is pressed and stay
+ * editable in the run overlay; the values present when the run file is
+ * assembled are recorded and published with the run.
  */
-function HardwareFieldset({
+function HardwareQuestions({
   idPrefix,
   answers,
   onChange,
-  duringRun = false,
 }: {
   idPrefix: string;
   answers: HardwareAnswers;
   onChange: (patch: Partial<HardwareAnswers>) => void;
-  duringRun?: boolean;
 }) {
   const radio = 'size-4 accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
   return (
-    <fieldset
-      aria-describedby={`${idPrefix}-note`}
-      className="flex min-w-0 flex-col gap-4 rounded-lg border border-border bg-muted/30 p-3 sm:p-4"
-    >
-      <legend className="px-1 text-sm font-semibold">About this computer</legend>
-      <p className="-mt-2 text-xs text-muted-foreground">
-        {duringRun
-          ? 'You can still correct these answers. The answers shown here when the run finishes are recorded.'
-          : 'The first three questions are required before the run can start. You can change the answers until the run finishes.'}
-      </p>
-
+    <>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={`${idPrefix}-gpu`}>Graphics card or chip</Label>
         <Input
@@ -577,11 +579,17 @@ function HardwareFieldset({
           onChange={(e) => onChange({ gpu: e.target.value })}
           aria-describedby={`${idPrefix}-gpu-help`}
         />
-        <p id={`${idPrefix}-gpu-help`} className="text-xs leading-relaxed text-muted-foreground">
-          Where to find it: on Windows, Task Manager, Performance, GPU; on a Mac, Apple menu, About This Mac (the
-          chip); on Linux, Settings, About (Graphics). Type the name as shown, for example &quot;NVIDIA GeForce RTX
-          4060&quot;, &quot;Intel Iris Xe Graphics&quot;, &quot;AMD Radeon 780M&quot; or &quot;Apple M2&quot;.
-        </p>
+        <div id={`${idPrefix}-gpu-help`} className="flex flex-col gap-1 text-xs leading-relaxed text-muted-foreground">
+          <p id={`${idPrefix}-gpu-where`}>Where to find it:</p>
+          <ul aria-labelledby={`${idPrefix}-gpu-where`} className="list-disc space-y-0.5 pl-4">
+            {GPU_HELP_BULLETS.map((b) => (
+              <li key={b.system}>
+                {b.system}: {b.where}
+              </li>
+            ))}
+          </ul>
+          <p>Examples: NVIDIA GeForce RTX 4060, AMD Radeon 780M, Intel Arc or Iris Xe Graphics, Apple M2.</p>
+        </div>
       </div>
 
       <div role="radiogroup" aria-labelledby={`${idPrefix}-chassis-label`} aria-required="true" className="flex flex-col gap-1.5">
@@ -626,7 +634,7 @@ function HardwareFieldset({
         </select>
       </div>
 
-      <div role="radiogroup" aria-labelledby={`${idPrefix}-apps-label`} className="flex flex-col gap-1.5">
+      <div role="radiogroup" aria-labelledby={`${idPrefix}-apps-label`} aria-required="true" className="flex flex-col gap-1.5">
         <span id={`${idPrefix}-apps-label`} className="text-sm font-medium">
           Other heavy programs running (games, video calls, editing software)
         </span>
@@ -637,6 +645,7 @@ function HardwareFieldset({
                 type="radio"
                 name={`${idPrefix}-apps`}
                 value={v}
+                required
                 checked={answers.otherApps === v}
                 onChange={() => onChange({ otherApps: v })}
                 className={radio}
@@ -644,15 +653,114 @@ function HardwareFieldset({
               {v === 'yes' ? 'Yes' : 'No'}
             </label>
           ))}
-          <span className="text-xs text-muted-foreground">Optional</span>
         </div>
       </div>
+    </>
+  );
+}
 
+const HARDWARE_PUBLISHED_NOTE =
+  'These answers are published with the run in the public leaderboard dataset; do not enter names or email addresses here.';
+
+/** The hardware questions inside the run overlay, where they can still be corrected before the upload. */
+function HardwareFieldset({
+  idPrefix,
+  answers,
+  onChange,
+}: {
+  idPrefix: string;
+  answers: HardwareAnswers;
+  onChange: (patch: Partial<HardwareAnswers>) => void;
+}) {
+  return (
+    <fieldset
+      aria-describedby={`${idPrefix}-note`}
+      className="flex min-w-0 flex-col gap-4 rounded-lg border border-border bg-muted/30 p-3 sm:p-4"
+    >
+      <legend className="px-1 text-sm font-semibold">About this computer</legend>
+      <p className="-mt-2 text-xs text-muted-foreground">
+        You can still correct these answers. The answers shown here when the run finishes are recorded.
+      </p>
+      <HardwareQuestions idPrefix={idPrefix} answers={answers} onChange={onChange} />
       <p id={`${idPrefix}-note`} className="text-xs text-muted-foreground">
-        These answers are published with the run in the public leaderboard dataset; do not enter names or email
-        addresses here.
+        {HARDWARE_PUBLISHED_NOTE}
       </p>
     </fieldset>
+  );
+}
+
+/**
+ * The "About this computer" dialog Run benchmark opens on a paid-study link.
+ * Start benchmark stays disabled, with the missing answers named beside it,
+ * until all four are given; it starts the run from its own click, so the start
+ * keeps the user activation the screen wake lock needs.
+ */
+function HardwareDialog({
+  open,
+  answers,
+  onChange,
+  onStart,
+  onCancel,
+  onCloseAutoFocus,
+}: {
+  open: boolean;
+  answers: HardwareAnswers;
+  onChange: (patch: Partial<HardwareAnswers>) => void;
+  onStart: () => void;
+  onCancel: () => void;
+  onCloseAutoFocus: (event: Event) => void;
+}) {
+  const reason = hardwareBlockReason(answers);
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onCancel();
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        onCloseAutoFocus={onCloseAutoFocus}
+        className="max-h-[calc(100dvh-2rem)] gap-5 overflow-y-auto p-4 sm:p-6"
+      >
+        <DialogHeader className="text-left">
+          <DialogTitle>About this computer</DialogTitle>
+          <DialogDescription>
+            Answer all four questions to start the benchmark. You can still correct them while it runs.{' '}
+            {HARDWARE_PUBLISHED_NOTE}
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          noValidate
+          className="flex min-w-0 flex-col gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (hardwareBlockReason(answers) === null) onStart();
+          }}
+        >
+          <HardwareQuestions idPrefix="bench-hw" answers={answers} onChange={onChange} />
+          <div className="flex flex-col gap-2 border-t border-border pt-4">
+            {reason !== null && (
+              <p id="bench-hw-missing" className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                {reason}
+              </p>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={onCancel}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={reason !== null}
+                aria-describedby={reason !== null ? 'bench-hw-missing' : undefined}
+              >
+                Start benchmark
+              </Button>
+            </DialogFooter>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -728,6 +836,18 @@ export function BenchRunner() {
     setHardware(next);
   }, []);
   const hardwareReason = hardwareRequired ? hardwareBlockReason(hardware) : null;
+  /**
+   * The "About this computer" dialog and the start it leads to: 'run' after a
+   * click on Run benchmark, 'series-next' when a later series run found its
+   * stored answers incomplete after the reload.
+   */
+  const [hardwareDialog, setHardwareDialog] = useState<null | 'run' | 'series-next'>(null);
+  /** A series run waits for the answers (its dialog was cancelled); Run benchmark reopens it. */
+  const [seriesAwaitingAnswersFlag, setSeriesAwaitingAnswers] = useState(false);
+  /** Start benchmark closed the dialog: focus belongs to the run overlay, not back on Run. */
+  const startingFromDialogRef = useRef(false);
+  /** Run benchmark, where focus returns when the dialog is cancelled (the dialog has no Radix trigger). */
+  const runButtonRef = useRef<HTMLButtonElement>(null);
   const [mobile, setMobile] = useState(false);
   /** Attempts an earlier page left unfinished (tab crash, closed tab): exportable, never submitted. */
   const [unfinished, setUnfinished] = useState<PartialAttempt[]>([]);
@@ -763,6 +883,7 @@ export function BenchRunner() {
   const [seriesCopied, setSeriesCopied] = useState(false);
   const [presetCopied, setPresetCopied] = useState(false);
   const seriesOpen = isSeriesOpen(series);
+  const seriesAwaitingAnswers = seriesAwaitingAnswersFlag && series?.status === 'running';
   const wakeLock = useScreenWakeLock(phase === 'running' || series?.status === 'running');
 
   useEffect(() => {
@@ -1328,13 +1449,37 @@ export function BenchRunner() {
     if (!autoStartPending || availability === null || !studyChecked || phase !== 'idle') return;
     const current = seriesRef.current;
     if (current && cooldownRemainingMs(current, now) > 0) return;
-    // A study series whose answers did not survive the reload waits until they are given again.
-    if (hardwareReason !== null) return;
     setAutoStartPending(false);
+    // A study series whose answers did not survive the reload asks for them again instead of starting.
+    if (hardwareReason !== null) {
+      if (current && current.status === 'running' && !studyIneligible) {
+        setSeriesAwaitingAnswers(true);
+        setHardwareDialog('series-next');
+      }
+      return;
+    }
     if (!current || current.status !== 'running' || studyIneligible) return;
     updateSeries(markRunStarted(current, Date.now()));
     void run({ userActivated: false });
   }, [autoStartPending, availability, studyChecked, studyIneligible, hardwareReason, phase, run, updateSeries, now]);
+
+  /** Start benchmark in the "About this computer" dialog: the same start a click on Run makes. */
+  const startFromHardwareDialog = useCallback(() => {
+    if (hardwareBlockReason(hardwareRef.current) !== null) return;
+    const mode = hardwareDialog;
+    startingFromDialogRef.current = true;
+    setHardwareDialog(null);
+    if (mode !== 'series-next') {
+      startFromClick();
+      return;
+    }
+    setSeriesAwaitingAnswers(false);
+    const current = seriesRef.current;
+    if (!current || current.status !== 'running') return;
+    saveSeriesHardware(current.seriesId, hardwareRef.current);
+    updateSeries(markRunStarted(current, Date.now()));
+    void run({ userActivated: true });
+  }, [hardwareDialog, startFromClick, run, updateSeries]);
 
   const stopSeries = useCallback(() => {
     const current = seriesRef.current;
@@ -1747,28 +1892,29 @@ export function BenchRunner() {
                 This study needs Chrome or Edge
               </p>
               <p className="mt-1">
-                This study needs Chrome or Edge on a computer, or Chrome on Android. Runs from Safari,
-                iPhone or iPad browsers, Firefox and other browsers are not eligible for payment and do
-                not receive a completion code. Open this exact link in Chrome or Edge to take part.
+                This study needs Chrome or Edge on a computer. Runs from phones and tablets, Safari,
+                Firefox and other browsers are not eligible for payment and do not receive a completion
+                code. Open this exact link in Chrome or Edge on a Windows, macOS, Linux or ChromeOS
+                computer to take part.
               </p>
             </div>
-          )}
-          {hardwareRequired && phase !== 'running' && (
-            <HardwareFieldset idPrefix="bench-hw" answers={hardware} onChange={updateHardware} />
           )}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-5">
             {!studyIneligible && (
               <Button
+                ref={runButtonRef}
                 size="lg"
-                onClick={startFromClick}
+                onClick={() => {
+                  if (seriesAwaitingAnswers) setHardwareDialog('series-next');
+                  else if (hardwareRequired) setHardwareDialog('run');
+                  else startFromClick();
+                }}
                 disabled={
                   phase === 'running' ||
                   activeLanes.length === 0 ||
-                  seriesOpen ||
-                  clearState.kind === 'clearing' ||
-                  hardwareReason !== null
+                  (seriesOpen && !seriesAwaitingAnswers) ||
+                  clearState.kind === 'clearing'
                 }
-                aria-describedby={hardwareReason !== null ? 'bench-run-blocked' : undefined}
               >
                 {phase === 'running' ? 'Running…' : 'Run benchmark'}
               </Button>
@@ -1777,11 +1923,6 @@ export function BenchRunner() {
               {activeLanes.length} lanes · est. download {formatBytes(totalDownload)} (cached models
               skip the download)
             </span>
-            {hardwareReason !== null && phase !== 'running' && (
-              <p id="bench-run-blocked" className="basis-full text-sm font-medium text-amber-800 dark:text-amber-200">
-                {hardwareReason}
-              </p>
-            )}
           </div>
           {mobile && (
             <p className="text-xs text-muted-foreground" role="note">
@@ -1817,6 +1958,24 @@ export function BenchRunner() {
           </p>
         </CardContent>
       </Card>
+
+      {hardwareRequired && (
+        <HardwareDialog
+          open={hardwareDialog !== null && phase !== 'running'}
+          answers={hardware}
+          onChange={updateHardware}
+          onStart={startFromHardwareDialog}
+          onCancel={() => setHardwareDialog(null)}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            if (startingFromDialogRef.current) {
+              startingFromDialogRef.current = false;
+              return;
+            }
+            runButtonRef.current?.focus();
+          }}
+        />
+      )}
 
       <Dialog
         open={clearState.kind === 'confirm'}
@@ -2407,7 +2566,6 @@ function RunOverlay(props: {
             idPrefix="bench-hw-run"
             answers={hardware.answers}
             onChange={hardware.onChange}
-            duringRun
           />
         )}
 

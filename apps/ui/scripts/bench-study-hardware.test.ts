@@ -1,11 +1,12 @@
 /**
  * "About this computer" on /bench/run: the paid-study hardware answers. The
- * pure parts are tested here (the Run gate's reason, the conversion into the
- * run file's `environment.userReportedHardware`, the stored series copy), and
- * the index entry the submit route builds from a run with and without the
- * answers. The page wiring (form shown only on an eligible study link, Run
- * disabled until answered, answers kept across a series reload) is covered by
- * the bench e2e spec.
+ * pure parts are tested here (the Start benchmark button's reason, the
+ * conversion into the run file's `environment.userReportedHardware`, the
+ * stored series copy), and the index entry the submit route builds from a run
+ * with and without the answers. The page wiring (the dialog Run benchmark
+ * opens only on an eligible study link, Start disabled until all four answers
+ * are given, answers kept across a series reload) is covered by the bench e2e
+ * spec.
  */
 import { describe, expect, it } from 'vitest';
 import { validateRunShape, type BenchRunResult } from '@localmode/bench';
@@ -23,34 +24,40 @@ import { toIndexEntry } from '../src/lib/bench/store';
 
 const FILLED: HardwareAnswers = { gpu: 'NVIDIA GeForce RTX 4060', chassis: 'laptop', ram: '16', otherApps: 'no' };
 
-describe('the Run gate', () => {
-  it('names every unanswered required question, in form order', () => {
+describe('the Start benchmark gate', () => {
+  it('names every unanswered question, in form order', () => {
     expect(missingHardwareAnswers(EMPTY_HARDWARE_ANSWERS)).toEqual([
       'graphics card or chip',
       'computer type',
       'memory (RAM)',
+      'other heavy programs running',
     ]);
     expect(hardwareBlockReason(EMPTY_HARDWARE_ANSWERS)).toBe(
-      'Answer "About this computer" first: graphics card or chip, computer type and memory (RAM).',
+      'Still to answer: graphics card or chip, computer type, memory (RAM) and other heavy programs running.',
     );
     expect(hardwareBlockReason({ ...EMPTY_HARDWARE_ANSWERS, gpu: 'Apple M2', chassis: 'desktop' })).toBe(
-      'Answer "About this computer" first: memory (RAM).',
+      'Still to answer: memory (RAM) and other heavy programs running.',
     );
-    expect(hardwareBlockReason({ ...EMPTY_HARDWARE_ANSWERS, ram: 'unsure' })).toBe(
-      'Answer "About this computer" first: graphics card or chip and computer type.',
+    expect(hardwareBlockReason({ ...EMPTY_HARDWARE_ANSWERS, ram: 'unsure', otherApps: 'no' })).toBe(
+      'Still to answer: graphics card or chip and computer type.',
     );
+    expect(hardwareBlockReason({ ...FILLED, chassis: '' })).toBe('Still to answer: computer type.');
   });
 
-  it('opens once the three required answers are given; the other-programs question is optional', () => {
-    expect(hardwareBlockReason({ ...FILLED, otherApps: '' })).toBeNull();
+  it('opens only once all four answers are given; the other-programs question is required too', () => {
+    expect(missingHardwareAnswers({ ...FILLED, otherApps: '' })).toEqual(['other heavy programs running']);
+    expect(hardwareBlockReason({ ...FILLED, otherApps: '' })).toBe(
+      'Still to answer: other heavy programs running.',
+    );
     expect(hardwareBlockReason(FILLED)).toBeNull();
+    expect(hardwareBlockReason({ ...FILLED, otherApps: 'yes' })).toBeNull();
     // "Not sure" is an answer.
     expect(hardwareBlockReason({ ...FILLED, ram: 'unsure' })).toBeNull();
   });
 
   it('does not count a GPU name of only spaces or control characters as an answer', () => {
     expect(missingHardwareAnswers({ ...FILLED, gpu: '   ' })).toEqual(['graphics card or chip']);
-    expect(missingHardwareAnswers({ ...FILLED, gpu: '‮\u0000' })).toEqual(['graphics card or chip']);
+    expect(missingHardwareAnswers({ ...FILLED, gpu: '\u202e\u0000' })).toEqual(['graphics card or chip']);
   });
 });
 
