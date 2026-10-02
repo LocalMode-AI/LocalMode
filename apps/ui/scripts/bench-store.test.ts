@@ -9,6 +9,7 @@ import type { RunIndexEntry } from '../src/lib/bench/store';
 import { aggregateIndex, rateLimitWithRetry, SUBMIT_RATE_LIMIT, SUBMIT_RATE_WINDOW_SEC, toIndexEntry } from '../src/lib/bench/store';
 import { summarizeRun, type BenchRunResult } from '@localmode/bench';
 import { issueNonce, verifyNonce, NONCE_MAX_AGE_MS } from '../src/lib/bench/nonce';
+import { makeRun } from '../../../packages/bench/tests/helpers';
 
 function entry(overrides: Partial<RunIndexEntry> & { runId: string }): RunIndexEntry {
   return {
@@ -246,6 +247,35 @@ describe('toIndexEntry() → aggregateIndex() (protocol v2 fields)', () => {
     // An empty UA-CH model (every non-Android platform) must not become a "" device model.
     expect(entry.deviceModel).toBeUndefined();
     expect(entry.cells[0].runtimeVersion).toBe('0.12.1');
+  });
+
+  it('classes a listed AMD device id by its architecture and keeps the browser label beside it', () => {
+    const barcelo = makeRun({ runId: 'amd-barcelo' });
+    barcelo.environment = {
+      ...barcelo.environment,
+      os: { ...barcelo.environment.os, platform: 'Windows' },
+      gpu: { available: true, vendor: 'amd', architecture: 'rdna-2' },
+      webglRenderer: 'ANGLE (AMD, AMD Radeon (TM) Graphics (0x000015E7) Direct3D11 vs_5_0 ps_5_0, D3D11)',
+      gpuModel: 'AMD Radeon (TM) Graphics',
+    };
+    const corrected = toIndexEntry(barcelo, summarizeRun(barcelo), false, 'runs/2026/09/amd-barcelo.json');
+    expect(corrected).toMatchObject({
+      deviceClass: 'windows/amd-gcn-5',
+      deviceSubclass: 'windows/amd-gcn-5',
+      gpuArchitecture: 'gcn-5',
+      gpuArchitectureReported: 'rdna-2',
+    });
+    // The key sits right after gpuArchitecture in the serialized entry.
+    expect(JSON.stringify(corrected)).toContain('"gpuArchitecture":"gcn-5","gpuArchitectureReported":"rdna-2","gpuModel"');
+
+    // Granite Ridge: the browser label is right, so the entry carries no reported label at all.
+    const granite = structuredClone(barcelo);
+    granite.environment.webglRenderer = 'ANGLE (AMD, AMD Radeon(TM) Graphics (0x000013C0) Direct3D11 vs_5_0 ps_5_0, D3D11)';
+    const kept = toIndexEntry(granite, summarizeRun(granite), false, 'runs/2026/09/amd-granite.json');
+    expect(kept.deviceClass).toBe('windows/amd-rdna-2');
+    expect(kept.gpuArchitecture).toBe('rdna-2');
+    expect(JSON.stringify(kept)).not.toContain('gpuArchitectureReported');
+    expect(JSON.stringify(toIndexEntry(makeRun(), [], false, 'runs/x.json'))).not.toContain('gpuArchitectureReported');
   });
 });
 

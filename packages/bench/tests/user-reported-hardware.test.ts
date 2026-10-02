@@ -122,6 +122,53 @@ describe('publication scrub', () => {
     expect(sanitizeReportedGpu(`${'a'.repeat(63)} b`)).toBe('a'.repeat(63));
   });
 
+  it.each([
+    ['a Windows computer name glued to the clock speed', 'Processador Intel(R) Core(TM) i5-3330S CPU @ 2.7DESKTOP-A1B2C3D', 'Processador Intel(R) Core(TM) i5-3330S CPU @ 2.7'],
+    ['a laptop computer name', 'Intel Iris Xe Graphics LAPTOP-AB12CD3', 'Intel Iris Xe Graphics'],
+    ['a lowercase computer name with digits', 'desktop-a1b2c3d GTX 1650', 'GTX 1650'],
+    ['a Windows Server computer name', 'WIN-ABCDEFGH123 Intel HD Graphics', 'Intel HD Graphics'],
+    ['a renamed computer', 'RTX 3060 (OFFICEPC-7F3K2Q)', 'RTX 3060'],
+    ['an email address', 'AMD Radeon 780M jane.doe+bench@example.co.uk', 'AMD Radeon 780M'],
+    ['a URL with a scheme', 'https://example.com/specs?id=42 Apple M2', 'Apple M2'],
+    ['a bare www host', 'www.example.com Apple M2', 'Apple M2'],
+    ['only a computer name', 'DESKTOP-A1B2C3D', ''],
+  ])('removes %s', (_label, typed, published) => {
+    expect(sanitizeReportedGpu(typed)).toBe(published);
+    // Idempotent: a published name passes through unchanged.
+    expect(sanitizeReportedGpu(published)).toBe(published);
+  });
+
+  it.each([
+    'NVIDIA GeForce RTX 4060 Ti',
+    'AMD Radeon RX 7900 XT',
+    'Intel Arc A770',
+    'Apple M4 Max',
+    'NVIDIA GeForce GTX-1080TI',
+    'AMD RX-7900XTX',
+    'Intel(R) Core(TM) i5-3330S CPU @ 2.70GHz',
+    'Intel Core i7@3.4GHz',
+    'Radeon (TM) RX 550 (2 GB), Intel(R) UHD Graphics 620 (128MB)',
+    'NVIDIA GeForce RTX 4060 Laptop GPU',
+    'desktop-class integrated graphics',
+    'RTX A3000 6G',
+    '01:00.0 VGA compatible controller: NVIDIA Corporation',
+  ])('keeps the product name %s', (name) => {
+    expect(sanitizeReportedGpu(name)).toBe(name);
+  });
+
+  it('scrubs a computer name out of a run and the recomputed digest verifies', async () => {
+    const typed = withHardware({ ...FULL, gpu: 'Intel HD Graphics 2500 DESKTOP-A1B2C3D' });
+    typed.digest = await computeRunDigest(typed);
+    const scrub = scrubRunForPublication(typed);
+    expect(scrub.changed).toBe(true);
+    expect(scrub.removed).toContain('environment.userReportedHardware.gpu (normalized)');
+    expect(scrub.run.environment.userReportedHardware?.gpu).toBe('Intel HD Graphics 2500');
+    expect(JSON.stringify(scrub.run)).not.toContain('DESKTOP-');
+    expect(await verifyRunDigest(scrub.run)).toBe(false);
+    scrub.run.digest = await computeRunDigest(scrub.run);
+    expect(await verifyRunDigest(scrub.run)).toBe(true);
+  });
+
   it('rewrites an unnormalized name and reports the change; leaves a normalized one alone', () => {
     const spaced = withHardware({ ...FULL, gpu: ' NVIDIA  GeForce RTX 4060 ' });
     const scrub = scrubRunForPublication(spaced);

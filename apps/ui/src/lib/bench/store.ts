@@ -7,7 +7,14 @@
  */
 
 import type { BenchRunResult, CellSummary } from '@localmode/bench';
-import { LEADERBOARD_PROTOCOL_VERSIONS, deviceClassOf, deviceSubclassOf, median, refineDeviceClass } from '@localmode/bench';
+import {
+  LEADERBOARD_PROTOCOL_VERSIONS,
+  deviceClassOf,
+  deviceSubclassOf,
+  gpuArchitectureOf,
+  median,
+  refineDeviceClass,
+} from '@localmode/bench';
 
 /** Light per-run entry stored in index/summary.json. */
 export interface RunIndexEntry {
@@ -33,7 +40,13 @@ export interface RunIndexEntry {
   /** CPU architecture from UA-CH (arm / x86) where disclosed. */
   architecture?: string;
   gpuVendor?: string;
+  /**
+   * WebGPU architecture the class is built from: the browser's label, or the
+   * architecture `gpuArchitectureOf()` reads from a listed AMD device id.
+   */
   gpuArchitecture?: string;
+  /** The browser's own architecture label, present only when the AMD device-id table corrected it. */
+  gpuArchitectureReported?: string;
   /** GPU model parsed from the WebGL renderer string (e.g. "Apple M4"). */
   gpuModel?: string;
   /** Form factor: phone / tablet / desktop / xr / tv / unknown. */
@@ -227,7 +240,8 @@ export function toIndexEntry(
     osVersion: env.os.version,
     architecture: env.os.architecture,
     gpuVendor: env.gpu.vendor,
-    gpuArchitecture: env.gpu.architecture,
+    gpuArchitecture: gpuArchitectureOf(run).architecture,
+    gpuArchitectureReported: gpuArchitectureOf(run).reported,
     gpuModel: env.gpuModel,
     deviceType: env.device?.type,
     deviceModel: env.os.model || undefined,

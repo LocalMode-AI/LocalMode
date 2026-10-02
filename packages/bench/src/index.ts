@@ -135,7 +135,10 @@ export type { PublicationScrub } from './publication.js';
 // Aggregation (leaderboard + analysis tooling)
 export {
   aggregateRuns,
+  amdArchitectureFromRenderer,
+  AMD_DEVICE_ID_ARCHITECTURE,
   deviceClassOf,
+  gpuArchitectureOf,
   deviceSubclassOf,
   refineDeviceClass,
   rowsToCSV,

@@ -10,15 +10,92 @@ import { median } from './stats.js';
 import { pressureStateFractions } from './pressure.js';
 
 /**
+ * Architecture of AMD integrated GPUs whose WebGPU label is wrong in Chromium,
+ * keyed by PCI device id. Chromium takes `adapter.info.architecture` from
+ * Dawn's `src/dawn/gpu_info.json`, which matches most AMD ids under a 0xFFF0
+ * mask, so Kaveri (0x1304 to 0x131D, GCN 2) falls into the GCN 1 bucket
+ * 0x1300/0x1310 and the Vega-based Renoir parts 0x15E7 (Barcelo) and 0x164C
+ * (Lucienne) fall into the RDNA 2 buckets 0x15E0/0x1640. Ids the browser
+ * already labels correctly are listed too, so the table states every
+ * architecture it was checked against.
+ *
+ * Sources (read 2026-10-02):
+ * - PCI ID Repository, https://pci-ids.ucw.cz/read/PC/1002/<id>: 130a Kaveri,
+ *   15e7 Barcelo, 164c Lucienne, 1636 Renoir, 1638 Cezanne, 15d8 Picasso/Raven 2,
+ *   15dd Raven Ridge, 13c0 Granite Ridge, 15bf Phoenix1.
+ * - Linux `drivers/gpu/drm/amd/amdgpu/amdgpu_drv.c` id table: 0x1304 to 0x131D
+ *   CHIP_KAVERI; 0x15DD and 0x15D8 CHIP_RAVEN; 0x15E7, 0x1636, 0x1638 and
+ *   0x164C CHIP_RENOIR (13C0 and 15BF are bound by IP discovery, not listed).
+ * - Mesa `src/amd/common/amd_family.h`: CHIP_KAVERI under GFX7 (Sea Islands,
+ *   GCN 2); CHIP_RAVEN, CHIP_RAVEN2 and CHIP_RENOIR under GFX9 (Vega, GCN 5);
+ *   CHIP_RAPHAEL_MENDOCINO (Ryzen 7000, Granite Ridge's graphics) under
+ *   GFX10.3 (RDNA 2); CHIP_PHOENIX under GFX11 (RDNA 3).
+ * - Dawn `src/dawn/gpu_info.json`: the 0xFFF0 mask table and the exact-id
+ *   exceptions 0x1636 and 0x1638 (GCN 5).
+ */
+export const AMD_DEVICE_ID_ARCHITECTURE: Readonly<Record<string, string>> = Object.freeze({
+  // Kaveri (GCN 2); Chromium reports gcn-1.
+  '1304': 'gcn-2', '1305': 'gcn-2', '1306': 'gcn-2', '1307': 'gcn-2', '1309': 'gcn-2',
+  '130A': 'gcn-2', '130B': 'gcn-2', '130C': 'gcn-2', '130D': 'gcn-2', '130E': 'gcn-2',
+  '130F': 'gcn-2', '1310': 'gcn-2', '1311': 'gcn-2', '1312': 'gcn-2', '1313': 'gcn-2',
+  '1315': 'gcn-2', '1316': 'gcn-2', '1317': 'gcn-2', '1318': 'gcn-2', '131B': 'gcn-2',
+  '131C': 'gcn-2', '131D': 'gcn-2',
+  // Raven Ridge, Picasso (GCN 5); Chromium agrees.
+  '15DD': 'gcn-5', '15D8': 'gcn-5',
+  // Renoir family (GCN 5): Chromium reports rdna-2 for Barcelo and Lucienne.
+  '15E7': 'gcn-5', '1636': 'gcn-5', '1638': 'gcn-5', '164C': 'gcn-5',
+  // Granite Ridge (RDNA 2) and Phoenix1 (RDNA 3); Chromium agrees.
+  '13C0': 'rdna-2', '15BF': 'rdna-3',
+});
+
+/**
+ * Architecture of an AMD GPU from its WebGL renderer string, by the PCI device
+ * id ANGLE prints as `(0x0000XXXX)`, looked up in
+ * {@link AMD_DEVICE_ID_ARCHITECTURE}.
+ *
+ * @param webglRenderer - The run's `environment.webglRenderer`.
+ * @returns The architecture slug (`gcn-5`), or undefined when the renderer is
+ *   not AMD, carries no device id, or the id is not in the table.
+ *
+ * @example
+ * amdArchitectureFromRenderer('ANGLE (AMD, AMD Radeon(TM) Graphics (0x000015E7) Direct3D11 vs_5_0 ps_5_0, D3D11)'); // 'gcn-5'
+ */
+export function amdArchitectureFromRenderer(webglRenderer: string | null | undefined): string | undefined {
+  if (!webglRenderer || !/\b(AMD|ATI)\b/.test(webglRenderer)) return undefined;
+  const id = webglRenderer.match(/\(0x0000([0-9A-Fa-f]{4})\)/);
+  if (!id) return undefined;
+  return AMD_DEVICE_ID_ARCHITECTURE[id[1].toUpperCase()];
+}
+
+/**
+ * WebGPU architecture of a run: the browser's label, except for an AMD
+ * adapter whose device id is in {@link AMD_DEVICE_ID_ARCHITECTURE}, which
+ * takes the table's architecture.
+ *
+ * @returns `architecture` (used for the class) and `reported` (the browser's
+ *   label, set only when it differs from `architecture`).
+ */
+export function gpuArchitectureOf(run: BenchRunResult): { architecture: string | undefined; reported?: string } {
+  const env = run.environment;
+  const browser = env.gpu.architecture;
+  if (!env.gpu.available || env.gpu.vendor !== 'amd') return { architecture: browser };
+  const corrected = amdArchitectureFromRenderer(env.webglRenderer);
+  if (!corrected || corrected === browser) return { architecture: browser };
+  return { architecture: corrected, ...(browser ? { reported: browser } : {}) };
+}
+
+/**
  * Coarse device class: platform + WebGPU adapter vendor-architecture
  * (`macos/apple-metal-3`, `windows/amd-rdna-2`, `linux/no-webgpu`). Every
  * browser exposes these signals, so the class is the honest unit for
- * cross-device rollups; it never changes for an archived run.
+ * cross-device rollups. The architecture is the browser's, except where
+ * {@link gpuArchitectureOf} corrects a known-wrong AMD label from the
+ * device id.
  */
 export function deviceClassOf(run: BenchRunResult): string {
   const env = run.environment;
   const gpu = env.gpu.available
-    ? [env.gpu.vendor ?? 'gpu', env.gpu.architecture].filter(Boolean).join('-')
+    ? [env.gpu.vendor ?? 'gpu', gpuArchitectureOf(run).architecture].filter(Boolean).join('-')
     : 'no-webgpu';
   return [env.os.platform.toLowerCase().replace(/\s+/g, '-'), gpu].join('/');
 }

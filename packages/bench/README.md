@@ -158,7 +158,9 @@ the warmup and the warm reload re-downloaded the 3.46 GB weights.
   self-reported, published with the run, absent on every other run, covered
   by the digest, and validated (`gpu` 1 to 64 characters after trimming
   without control characters, `ramGB` an integer from 1 to 1024 or `null`);
-  `scrubRunForPublication` normalizes the GPU name with `sanitizeReportedGpu()`.
+  `scrubRunForPublication` normalizes the GPU name with `sanitizeReportedGpu()`,
+  which since 0.9.5 also removes URLs, email addresses and computer names
+  (`DESKTOP-XXXXXXX`, `LAPTOP-XXXXXXX`, `WIN-XXXXXXXXXXX`) from it.
 - **Statistics** - median headline; mean ± SD, IQR, 95% CI (Student-t), CV;
   CV > 5% ⇒ high-variance flag; geomean only within a device run.
 - **Quality-fidelity lane** - tinyMMLU (MIT) accuracy + STS-B Spearman (scores

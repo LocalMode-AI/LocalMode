@@ -69,6 +69,19 @@ describe('toUserReportedHardware()', () => {
     expect(validateRunShape({ ...run, environment: { ...run.environment, userReportedHardware: hw } })).toEqual([]);
   });
 
+  it('never records a computer name, an email address or a URL typed into the GPU answer', () => {
+    expect(
+      toUserReportedHardware({ ...FILLED, gpu: 'Processador Intel(R) Core(TM) i5-3330S CPU @ 2.7DESKTOP-A1B2C3D' })?.gpu,
+    ).toBe('Processador Intel(R) Core(TM) i5-3330S CPU @ 2.7');
+    expect(toUserReportedHardware({ ...FILLED, gpu: 'RTX 3060 me@example.com https://example.com/x' })?.gpu).toBe('RTX 3060');
+    for (const name of ['NVIDIA GeForce RTX 4060 Ti', 'AMD Radeon RX 7900 XT', 'Intel Arc A770', 'Apple M4 Max']) {
+      expect(toUserReportedHardware({ ...FILLED, gpu: name })?.gpu).toBe(name);
+    }
+    // An answer that is only a computer name counts as unanswered, so Start stays disabled.
+    expect(missingHardwareAnswers({ ...FILLED, gpu: 'DESKTOP-A1B2C3D' })).toEqual(['graphics card or chip']);
+    expect(toUserReportedHardware({ ...FILLED, gpu: 'DESKTOP-A1B2C3D' })).not.toHaveProperty('gpu');
+  });
+
   it('maps every RAM bucket to its number, the top bucket to 128 and "Not sure" to null', () => {
     for (const gb of RAM_BUCKETS_GB) expect(toUserReportedHardware({ ...FILLED, ram: String(gb) })?.ramGB).toBe(gb);
     expect(RAM_BUCKETS_GB[RAM_BUCKETS_GB.length - 1]).toBe(128);

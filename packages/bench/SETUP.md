@@ -101,6 +101,23 @@ indexed, or when the result would hold fewer entries than the current index or
 drop a run it lists (`--allow-shrink` overrides the last two). Review the diff
 and commit the file in the dataset clone.
 
+Since bench 0.9.5 the entry builder corrects Chromium's WebGPU architecture
+label for the AMD integrated GPUs listed in `AMD_DEVICE_ID_ARCHITECTURE`
+(`packages/bench/src/aggregate.ts`), reading the PCI device id from the run's
+`environment.webglRenderer`: Barcelo (0x15E7) and Lucienne (0x164C) are GCN 5
+(Vega), not `rdna-2`, and Kaveri (0x1304 to 0x131D) is GCN 2, not `gcn-1`. The
+first rebuild after this release applies the correction to the existing
+entries: those runs move to a new `deviceClass` (and `deviceSubclass` where the
+GPU model names no part number), `gpuArchitecture` takes the corrected value
+and `gpuArchitectureReported` keeps the browser's label; their leaderboard
+group changes accordingly. Every other entry stays byte-identical and the run
+files are not touched. A dry run against the dataset on 2026-10-02 found five
+such runs (two 0x164C and two 0x15E7 moving from `windows/amd-rdna-2` to
+`windows/amd-gcn-5`, one 0x130A moving from `windows/amd-gcn-1` to
+`windows/amd-gcn-2` with its subclass `windows/amd-radeon-r5-graphics`
+unchanged). Runs submitted after the deploy are indexed with the correction
+directly.
+
 ## 6. Matching participants of a paid study
 
 A paid-study link (`/bench/run?...&cc=<code>&PROLIFIC_PID=<id>`) records the
@@ -125,6 +142,36 @@ listed, `no-match` when none does), the run id, `createdAt`, browser name and
 engine, the browser eligibility recomputed with `studyEligibility()` from the
 run's user agent and UA-CH brands, and the reported hardware. `--json` prints
 the same rows as JSON. The tool reads the clone only; it writes nothing.
+
+## 7. Scrubbing a participant answer from a published run
+
+The answers a participant types are published as typed, after
+`sanitizeReportedGpu()` has removed control characters, URLs, email
+addresses and computer names (`DESKTOP-XXXXXXX`, `LAPTOP-XXXXXXX`,
+`WIN-XXXXXXXXXXX`, other uppercase `NAME-X1X2X` tokens) from the GPU name.
+When a published run still carries something a public file must not, rewrite
+that one answer from a clone of the dataset, from `apps/ui`:
+
+```
+pnpm exec tsx scripts/scrub-run-field.ts --dataset ../../../LocalMode-Bench --run <runId> --field environment.userReportedHardware.gpu --sanitize --dry-run
+pnpm exec tsx scripts/scrub-run-field.ts --dataset ../../../LocalMode-Bench --run <runId> --field environment.userReportedHardware.gpu --sanitize
+pnpm exec tsx scripts/scrub-run-field.ts --dataset ../../../LocalMode-Bench --run <runId> --field <path> --value "<new value>"
+pnpm exec tsx scripts/scrub-run-field.ts --dataset ../../../LocalMode-Bench --run <runId> --field <path> --delete
+```
+
+Only the participant's answers may be edited:
+`environment.userReportedHardware.gpu`, `.chassis`, `.ramGB`,
+`.otherAppsRunning`, and `environment.userReportedDevice`; any other path is
+refused. `--sanitize` applies the current `sanitizeReportedGpu()` to the GPU
+name. The run file goes through the submit route's publication path
+(`scrubRunForPublication`, `scrubbedAt` stamped, digest recomputed with
+`computeRunDigest`), is validated and its digest verified, and is written back
+in the dataset's compact JSON layout. The run's entry in
+`index/summary.json` is rewritten only in the fields `toIndexEntry()` derives
+from the edited answer (for the GPU name, `reportedGpu`). The tool prints the
+before and after of the field, the digest and the index entry; review
+`git diff` (exactly the run file and the index should change) and commit both
+files in the dataset clone. The old value stays in the dataset's Git history.
 
 ## Optional integration check (real GitHub API, opt-in)
 
