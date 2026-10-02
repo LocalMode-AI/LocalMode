@@ -85,7 +85,27 @@ import {
   type WakeLockStatus,
 } from '@/lib/bench/wake-lock';
 import { readStudyEligibility } from '@/lib/bench/study-eligibility';
-import { parseStudySession, type StudySession } from '@/lib/bench/study-session';
+import { parseStudySession, readStudyCompletionCode, type StudySession } from '@/lib/bench/study-session';
+import {
+  ATTEMPT_CAP_MESSAGE,
+  FULL_MODE_HINT,
+  MAX_AUTOMATIC_RESTARTS,
+  UPLOAD_FAILED_MESSAGE,
+  attemptLabel,
+  beginStudyAttempt,
+  cellsAllAttempted,
+  clearStudyAttempt,
+  interruptStudyAttempt,
+  loadStudyAttempt,
+  parseCompletionMode,
+  resolveStudyAttemptOnLoad,
+  restartNeedsActivation,
+  saveStudyAttempt,
+  shouldIssueCompletionCode,
+  uploadFailedPermanently,
+  type CompletionMode,
+  type StudyAttemptState,
+} from '@/lib/bench/study-completion';
 import {
   CHASSIS_CHOICES,
   clearSeriesHardware,
@@ -353,12 +373,14 @@ function laneKey(model: BenchModelRef): string {
 }
 
 /**
- * The completion code is shown only after the run finishes and the submission
- * attempt has resolved, whether it succeeded or not (payment is on attempt,
- * never on our infrastructure). The study pays only for runs from Chrome or
- * Edge on a computer: with a completion code in the link, any other browser,
- * and any phone or tablet, sees a notice in place of the Run button and never
- * sees the code.
+ * When the completion code shows depends on the link's `ccmode`: by default
+ * (`attempt`) once the run finishes and the submission attempt has resolved,
+ * whether it succeeded or not (payment is on attempt, never on our
+ * infrastructure); with `ccmode=full` only for a run that finished with every
+ * cell attempted and uploaded (see study-completion.ts). The study pays only
+ * for runs from Chrome or Edge on a computer: with a completion code in the
+ * link, any other browser, and any phone or tablet, sees a notice in place of
+ * the Run button and never sees the code.
  */
 const PROLIFIC_COMPLETE_URL = 'https://app.prolific.com/submissions/complete?cc=';
 
@@ -827,6 +849,29 @@ export function BenchRunner() {
   const paidStudy = study && !studyIneligible ? study : null;
   /** A paid-study link (with a completion code) in an eligible browser asks about the hardware. */
   const hardwareRequired = paidStudy?.completionCode != null;
+  /** The link's completion-code rule (`ccmode`), read on mount. */
+  const [completionMode, setCompletionMode] = useState<CompletionMode>('attempt');
+  /** The code is issued only for a finished, uploaded run, and interrupted runs restart by themselves. */
+  const fullMode = completionMode === 'full' && paidStudy?.completionCode != null;
+  /** Attempt count of the run in progress on a full-mode link (mirrored in a ref for async readers). */
+  const [studyAttempt, setStudyAttemptState] = useState<StudyAttemptState | null>(null);
+  const studyAttemptRef = useRef<StudyAttemptState | null>(null);
+  const updateStudyAttempt = useCallback((next: StudyAttemptState | null) => {
+    studyAttemptRef.current = next;
+    setStudyAttemptState(next);
+    if (next) saveStudyAttempt(next);
+    else clearStudyAttempt();
+  }, []);
+  /** The run used up its attempts: no code, the cap message instead. */
+  const studyCapped = fullMode && studyAttempt?.capped === true;
+  /** A full-mode run the participant stopped (confirmed): no code. */
+  const [stoppedByUser, setStoppedByUser] = useState(false);
+  /** The "Stop the run?" confirmation of a full-mode run is open. */
+  const [stopConfirmOpen, setStopConfirmOpen] = useState(false);
+  /** An interrupted single run restarts once the lanes are probed. */
+  const [restartPending, setRestartPending] = useState(false);
+  /** The restart waits for a click where the browser needs one for the wake lock. */
+  const [restartAwaitingClick, setRestartAwaitingClick] = useState(false);
   /** "About this computer" answers; the values at the moment the run file is assembled are recorded. */
   const [hardware, setHardware] = useState<HardwareAnswers>(EMPTY_HARDWARE_ANSWERS);
   const hardwareRef = useRef<HardwareAnswers>(EMPTY_HARDWARE_ANSWERS);
@@ -900,6 +945,25 @@ export function BenchRunner() {
       if (!cancelled) setUnfinished(attempts);
     });
     setMobile(isMobileDevice());
+    // A full-mode study link restarts a run an earlier page left unfinished
+    // (a reload, a crash, a closed tab), up to the attempt cap.
+    const search = window.location.search;
+    const mode = parseCompletionMode(search);
+    setCompletionMode(mode);
+    const fullCode =
+      mode === 'full' && readStudyEligibility().eligible ? readStudyCompletionCode(search) : null;
+    let attemptAction: 'none' | 'restart' | 'capped' = 'none';
+    if (fullCode) {
+      const resolved = resolveStudyAttemptOnLoad(loadStudyAttempt(), fullCode);
+      updateStudyAttempt(resolved.state);
+      attemptAction = resolved.action;
+      if (resolved.action === 'restart' && resolved.state?.hardware) {
+        hardwareRef.current = resolved.state.hardware;
+        setHardware(resolved.state.hardware);
+      }
+      // The study pays only for an uploaded run: publishing stays on.
+      setAutoSubmit(true);
+    }
     // A pending series wins over URL presets: its runs repeat the settings it
     // started with. A link only prefills the controls; it never starts a run.
     const stored = loadSeries();
@@ -907,7 +971,12 @@ export function BenchRunner() {
     // (running or paused) dictates the controls.
     if (stored && !isSeriesOpen(stored)) updateSeries(stored);
     if (stored && isSeriesOpen(stored)) {
-      const { state, action } = resolveSeriesOnLoad(stored);
+      let { state, action } = resolveSeriesOnLoad(stored);
+      // On a full-mode link the interrupted run of the series starts again instead of pausing.
+      if (attemptAction === 'restart' && state.status === 'paused' && stored.inFlightIndex !== null) {
+        state = continueSeries(state);
+        action = 'start-next';
+      }
       // Read before updateSeries, which forgets the answers if the series has ended.
       const savedHardware = loadSeriesHardware(state.seriesId);
       updateSeries(state);
@@ -922,7 +991,7 @@ export function BenchRunner() {
       setCooldownInput(String(state.settings.cooldownMs / 60_000));
       setDisabledLanes(new Set(state.settings.disabledLanes));
       setRunsInput(String(state.count));
-      if (action === 'start-next') setAutoStartPending(true);
+      if (action === 'start-next' && attemptAction !== 'capped') setAutoStartPending(true);
     } else {
       const presets = parseRunPresets(window.location.search);
       if (presets.suite) setSuite(presets.suite);
@@ -931,11 +1000,13 @@ export function BenchRunner() {
       if (presets.clearAfterRun !== undefined) setClearAfterRun(presets.clearAfterRun);
       if (presets.runs !== undefined) setRunsInput(String(presets.runs));
       if (presets.cooldownMinutes !== undefined) setCooldownInput(String(presets.cooldownMinutes));
+      if (fullCode) setAutoSubmit(true);
+      if (attemptAction === 'restart') setRestartPending(true);
     }
     return () => {
       cancelled = true;
     };
-  }, [updateSeries]);
+  }, [updateSeries, updateStudyAttempt]);
 
   // Keep the series panel's elapsed time live between runs (the run overlay has its own clock).
   useEffect(() => {
@@ -1092,6 +1163,20 @@ export function BenchRunner() {
     };
   }, [retryAt, result, submitRun]);
 
+  // A full-mode run that finished and whose upload resolved for good (done,
+  // or failed with no resubmission scheduled) is no longer an attempt to restart.
+  useEffect(() => {
+    if (!fullMode || !result || !studyAttemptRef.current?.inFlight) return;
+    if (submitState.kind === 'done' || uploadFailedPermanently(submitState)) updateStudyAttempt(null);
+  }, [fullMode, result, submitState, updateStudyAttempt]);
+
+  // Answers corrected during a full-mode run are the ones its restart reuses.
+  useEffect(() => {
+    const current = studyAttemptRef.current;
+    if (!fullMode || !current?.inFlight || current.hardware === hardware) return;
+    updateStudyAttempt({ ...current, hardware });
+  }, [fullMode, hardware, updateStudyAttempt]);
+
   /** Delete the providers' model caches and remember it for the next run's cold-start marker. */
   const clearCaches = useCallback(async (): Promise<CacheClearReport | null> => {
     setClearState({ kind: 'clearing' });
@@ -1116,6 +1201,20 @@ export function BenchRunner() {
     pageHasRunRef.current = true;
     const seriesAtStart = seriesRef.current;
     const runStartedAtMs = Date.now();
+    // A full-mode study run counts its attempt before anything can fail, so a
+    // page that dies during it restarts the run on the next load.
+    const studyCode = fullMode ? (study?.completionCode ?? null) : null;
+    if (studyCode) {
+      updateStudyAttempt(
+        beginStudyAttempt(studyAttemptRef.current, {
+          code: studyCode,
+          runIndex: seriesAtStart ? currentRunIndex(seriesAtStart) : 1,
+          hardware: hardwareRef.current,
+        }),
+      );
+    }
+    setStoppedByUser(false);
+    let restartAfterError = false;
     if (options.userActivated && chromeLaneActive && availability && availability.chromeAI !== 'available') {
       if (startChromeAIDownload()) {
         setChromeDownloadPct(0);
@@ -1344,6 +1443,8 @@ export function BenchRunner() {
           outcome = await submitRun(suiteResult);
         }
         seriesSubmitRef.current = false;
+        // The run finished: its attempt count starts again for the next run.
+        if (studyCode) updateStudyAttempt(null);
         if (outcome.kind === 'done') {
           record = { runId: suiteResult.runId, durationMs, outcome: outcome.flagged ? 'flagged' : 'published', rawUrl: outcome.url };
         } else {
@@ -1391,7 +1492,31 @@ export function BenchRunner() {
         setErrorMessage(message);
       }
       seriesSubmitRef.current = false;
-      if (seriesAtStart && seriesRef.current) {
+      let seriesHandled = false;
+      if (studyCode) {
+        const current = studyAttemptRef.current;
+        if (controller.signal.aborted) {
+          // A confirmed Stop: no code, and reopening the link starts again at attempt 1.
+          updateStudyAttempt(null);
+          if (seriesAtStart && seriesRef.current) {
+            updateSeries(requestStop(seriesRef.current, { runInProgress: false, now: Date.now() }));
+            seriesHandled = true;
+          }
+        } else if (current) {
+          // A runner error is an interruption: restart on a fresh page, or stop at the cap.
+          const { state, action } = interruptStudyAttempt(current);
+          if (action === 'restart') {
+            restartAfterError = true;
+            seriesHandled = true;
+            setStatusLine(
+              `The run stopped with an error; restarting it on a fresh page (${attemptLabel(current.attempts + 1)})`,
+            );
+          } else {
+            updateStudyAttempt(state);
+          }
+        }
+      }
+      if (seriesAtStart && seriesRef.current && !seriesHandled) {
         updateSeries(
           recordRunFailed(
             seriesRef.current,
@@ -1401,15 +1526,25 @@ export function BenchRunner() {
       }
     } finally {
       // The run resolved in-page (complete, cancelled, or failed with a
-      // recorded error): the partial record has served its purpose.
-      if (attempt) void finishAttempt(attempt.attemptId);
+      // recorded error): the partial record has served its purpose. A
+      // full-mode run that restarts keeps it, as a page that died would.
+      if (attempt && !restartAfterError) void finishAttempt(attempt.attemptId);
+      if (studyCode && !restartAfterError && studyAttemptRef.current?.capped) {
+        void listUnfinishedAttempts().then(setUnfinished);
+      }
       unsubscribeDownload?.();
       setChromeDownloadPct(null);
       abortRef.current = null;
       setCellProgress(null);
       setLoadPct(null);
     }
-  }, [suite, buildCells, autoSubmit, submitRun, study, activeLanes, availability, clearAfterRun, clearCaches, updateSeries]);
+    if (restartAfterError) {
+      // Let the participant read why before the page reloads into the next attempt.
+      await sleepMs(3_000);
+      if (seriesRef.current && seriesRef.current.status === 'running') saveSeriesHardware(seriesRef.current.seriesId, hardwareRef.current);
+      window.location.reload();
+    }
+  }, [suite, buildCells, autoSubmit, submitRun, study, activeLanes, availability, clearAfterRun, clearCaches, updateSeries, fullMode, updateStudyAttempt]);
 
   const downloadJson = downloadJsonFile;
 
@@ -1462,6 +1597,23 @@ export function BenchRunner() {
     updateSeries(markRunStarted(current, Date.now()));
     void run({ userActivated: false });
   }, [autoStartPending, availability, studyChecked, studyIneligible, hardwareReason, phase, run, updateSeries, now]);
+
+  // Restart an interrupted full-mode run after the reload: no click where the
+  // browser keeps the screen awake without one, else a single Continue button.
+  useEffect(() => {
+    if (!restartPending || availability === null || !studyChecked || phase !== 'idle') return;
+    setRestartPending(false);
+    if (!fullMode || studyCapped) return;
+    if (hardwareReason !== null) {
+      setHardwareDialog('run');
+      return;
+    }
+    if (restartNeedsActivation(isWebKitUserAgent(navigator.userAgent))) {
+      setRestartAwaitingClick(true);
+      return;
+    }
+    void run({ userActivated: false });
+  }, [restartPending, availability, studyChecked, phase, fullMode, studyCapped, hardwareReason, run]);
 
   /** Start benchmark in the "About this computer" dialog: the same start a click on Run makes. */
   const startFromHardwareDialog = useCallback(() => {
@@ -1517,6 +1669,7 @@ export function BenchRunner() {
 
   // Relative on screen (identical on the server and the client); absolute when copied.
   const presetLink = useMemo(() => {
+    // `ccmode` is carried over from the link this page was opened with; it has no control of its own.
     return `/bench/run?${presetQuery({
       suite,
       includeQuality,
@@ -1524,8 +1677,8 @@ export function BenchRunner() {
       cooldownMinutes,
       clearAfterRun,
       publish: autoSubmit,
-    })}`;
-  }, [suite, includeQuality, runsCount, cooldownMinutes, clearAfterRun, autoSubmit]);
+    })}${completionMode === 'full' ? '&ccmode=full' : ''}`;
+  }, [suite, includeQuality, runsCount, cooldownMinutes, clearAfterRun, autoSubmit, completionMode]);
 
   const copyPresetLink = useCallback(async () => {
     try {
@@ -1572,10 +1725,40 @@ export function BenchRunner() {
     abortRef.current?.abort();
   }, []);
 
+  /** Cancel run / Stop series on a full-mode link ask first: a stopped run earns no code. */
+  const requestRunStop = useCallback(() => setStopConfirmOpen(true), []);
+  const confirmRunStop = useCallback(() => {
+    setStopConfirmOpen(false);
+    setStoppedByUser(true);
+    if (abortRef.current) {
+      cancel();
+      return;
+    }
+    // Between the runs of a series: end the series now.
+    updateStudyAttempt(null);
+    const current = seriesRef.current;
+    if (current) updateSeries(requestStop(current, { runInProgress: false, now: Date.now() }));
+  }, [cancel, updateSeries, updateStudyAttempt]);
+
+  /** Export the newest unfinished attempt (a run that hit the attempt cap never produced a full result). */
+  const exportLatestPartial = useCallback(() => {
+    const latest = [...unfinished].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))[0];
+    if (latest) exportPartial(latest);
+  }, [unfinished, exportPartial]);
+
   const exportJson = useCallback(() => {
     if (!result) return;
     downloadJson(result, `localmode-bench-${result.runId}.json`);
   }, [result, downloadJson]);
+
+  const codeIssued = shouldIssueCompletionCode({
+    mode: fullMode ? 'full' : 'attempt',
+    suiteEnded: result !== null,
+    allCellsAttempted: result !== null && cellsAllAttempted(result.cells, planned.length),
+    submitState,
+    stoppedByUser,
+    lastRunOfSeries: !series || series.status === 'complete',
+  });
 
   const summaries: CellSummary[] = result?.clientSummaries ?? [];
   const cellById = new Map<string, BenchCellResult>(result?.cells.map((c) => [c.cellId, c]) ?? []);
@@ -1761,13 +1944,15 @@ export function BenchRunner() {
                   id="bench-publish"
                   checked={autoSubmit}
                   onCheckedChange={setAutoSubmit}
-                  disabled={phase === 'running'}
+                  disabled={phase === 'running' || fullMode}
                 />
               </div>
               <ConfigHelp>
-                {autoSubmit
-                  ? 'The result uploads to the open dataset when the run completes.'
-                  : 'The run stays on this device; export the JSON from the results.'}
+                {fullMode
+                  ? 'The study pays for an uploaded run, so publishing stays on for this link.'
+                  : autoSubmit
+                    ? 'The result uploads to the open dataset when the run completes.'
+                    : 'The run stays on this device; export the JSON from the results.'}
               </ConfigHelp>
             </ConfigSection>
 
@@ -1817,6 +2002,12 @@ export function BenchRunner() {
                     <li>
                       <code className="font-mono">publish=on|off</code>: publish to the leaderboard
                     </li>
+                    <li>
+                      <code className="font-mono">ccmode=full</code>: on a study link with a completion code, the
+                      code is issued only for a finished, uploaded run, and an interrupted run restarts by
+                      itself (up to {MAX_AUTOMATIC_RESTARTS} times); kept in the link below when this page
+                      was opened with it
+                    </li>
                   </ul>
                   <div className="flex flex-wrap items-center gap-2">
                     <code className="min-w-0 break-all rounded bg-muted px-1.5 py-1 font-mono">{presetLink}</code>
@@ -1861,7 +2052,7 @@ export function BenchRunner() {
                       )}
                       <Switch
                         checked={checked}
-                        disabled={!available || phase === 'running'}
+                        disabled={!available || phase === 'running' || fullMode}
                         onCheckedChange={(on) => {
                           setDisabledLanes((prev) => {
                             const next = new Set(prev);
@@ -1913,10 +2104,23 @@ export function BenchRunner() {
                   phase === 'running' ||
                   activeLanes.length === 0 ||
                   (seriesOpen && !seriesAwaitingAnswers) ||
-                  clearState.kind === 'clearing'
+                  clearState.kind === 'clearing' ||
+                  studyCapped ||
+                  restartAwaitingClick
                 }
               >
                 {phase === 'running' ? 'Running…' : 'Run benchmark'}
+              </Button>
+            )}
+            {restartAwaitingClick && (
+              <Button
+                size="lg"
+                onClick={() => {
+                  setRestartAwaitingClick(false);
+                  void run({ userActivated: true });
+                }}
+              >
+                Continue
               </Button>
             )}
             <span className="text-sm text-muted-foreground">
@@ -1936,9 +2140,31 @@ export function BenchRunner() {
           )}
           {paidStudy && (
             <p className="text-xs text-muted-foreground" role="note">
-              Paid study session detected: your completion code appears on this page once the run
-              finishes and the upload attempt completes. Keep this tab open until then.
+              {fullMode
+                ? `Paid study session detected. ${FULL_MODE_HINT} Keep this tab open until then.`
+                : 'Paid study session detected: your completion code appears on this page once the run finishes and the upload attempt completes. Keep this tab open until then.'}
             </p>
+          )}
+          {restartAwaitingClick && (
+            <p className="text-sm" role="note">
+              The run was interrupted. Press Continue to start it again ({attemptLabel((studyAttempt?.attempts ?? 0) + 1)}).
+            </p>
+          )}
+          {studyCapped && (
+            <div
+              role="alert"
+              aria-labelledby="study-attempt-cap-title"
+              className="flex flex-col gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm"
+            >
+              <p id="study-attempt-cap-title" className="font-medium">
+                {ATTEMPT_CAP_MESSAGE}
+              </p>
+              <div>
+                <Button size="sm" variant="outline" onClick={exportLatestPartial} disabled={unfinished.length === 0}>
+                  Export JSON
+                </Button>
+              </div>
+            </div>
           )}
           {suite !== 'quick' && (
             <p className="text-xs text-muted-foreground" role="note">
@@ -1976,6 +2202,31 @@ export function BenchRunner() {
           }}
         />
       )}
+
+      <Dialog
+        open={stopConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open) setStopConfirmOpen(false);
+        }}
+      >
+        <DialogContent role="alertdialog" showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Stop the run?</DialogTitle>
+            <DialogDescription>
+              The study pays only for a finished run. If you stop now, no completion code is issued;
+              reopening the link starts the run again from the beginning.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStopConfirmOpen(false)}>
+              Keep running
+            </Button>
+            <Button variant="destructive" onClick={confirmRunStop}>
+              Stop
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={clearState.kind === 'confirm'}
@@ -2052,8 +2303,9 @@ export function BenchRunner() {
           now={now}
           wakeLock={wakeLock}
           copied={seriesCopied}
-          onStop={stopSeries}
+          onStop={fullMode ? requestRunStop : stopSeries}
           onContinue={continueCurrentSeries}
+          canContinue={!studyCapped}
           onClose={closeSeries}
           onCopy={() => void copySeriesSummary()}
         />
@@ -2081,11 +2333,13 @@ export function BenchRunner() {
           study={paidStudy}
           hardware={hardwareRequired ? { answers: hardware, onChange: updateHardware } : null}
           autoSubmit={autoSubmit}
-          onCancel={cancel}
+          onCancel={fullMode ? requestRunStop : cancel}
           cancelling={cancelling}
           series={series}
           wakeLock={wakeLock}
-          onStopSeries={stopSeries}
+          onStopSeries={fullMode ? requestRunStop : stopSeries}
+          fullMode={fullMode}
+          attempt={fullMode ? (studyAttempt?.attempts ?? null) : null}
         />
       )}
 
@@ -2100,6 +2354,12 @@ export function BenchRunner() {
             </p>
             {phase === 'error' && errorMessage && (
               <p className="text-sm text-destructive">Benchmark failed: {errorMessage}</p>
+            )}
+            {fullMode && stoppedByUser && (
+              <p role="note" className="text-sm">
+                The run was stopped, so no completion code is issued. Reopening the link starts the run
+                again from the beginning.
+              </p>
             )}
           </CardContent>
         </Card>
@@ -2234,7 +2494,12 @@ export function BenchRunner() {
                 </p>
               )}
             </div>
-            {paidStudy?.completionCode && (submitState.kind === 'done' || submitState.kind === 'failed') && (
+            {fullMode && uploadFailedPermanently(submitState) && (!series || series.status === 'complete') && (
+              <p role="alert" className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm">
+                {UPLOAD_FAILED_MESSAGE}
+              </p>
+            )}
+            {paidStudy?.completionCode && codeIssued && (
               <div
                 role="region"
                 aria-label="Study completion code"
@@ -2299,6 +2564,10 @@ function RunOverlay(props: {
   series: SeriesState | null;
   wakeLock: WakeLockStatus;
   onStopSeries: () => void;
+  /** The link issues its code only for a finished, uploaded run. */
+  fullMode: boolean;
+  /** Attempt number of this run on a full-mode link (null otherwise). */
+  attempt: number | null;
 }) {
   const {
     suite,
@@ -2326,6 +2595,8 @@ function RunOverlay(props: {
     series,
     wakeLock,
     onStopSeries,
+    fullMode,
+    attempt,
   } = props;
   const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -2396,6 +2667,11 @@ function RunOverlay(props: {
             {runStartedAt !== null ? ` · running for ${formatElapsed(now - runStartedAt)}` : ''}
           </p>
           {wakeLock !== 'idle' && <p className="text-xs text-muted-foreground">{WAKE_LOCK_TEXT[wakeLock]}</p>}
+          {attempt !== null && (
+            <p className="text-xs text-muted-foreground">
+              {attemptLabel(attempt)} · an interrupted run restarts by itself, up to {MAX_AUTOMATIC_RESTARTS} times
+            </p>
+          )}
         </div>
 
         {series && (
@@ -2436,7 +2712,13 @@ function RunOverlay(props: {
                 : 'Keep the device plugged in; the screen is kept awake for you while the run is in progress.'}
             </li>
             <li>Browsers slow down background tabs, so a measurement taken while this tab is hidden is set aside and repeated once the tab is back in front; if the tab stays hidden, that step is marked invalid.</li>
-            {study && <li>Your completion code appears on this page as soon as the run and its upload finish.</li>}
+            {study && (
+              <li>
+                {fullMode
+                  ? FULL_MODE_HINT
+                  : 'Your completion code appears on this page as soon as the run and its upload finish.'}
+              </li>
+            )}
           </ul>
         </div>
 
@@ -2592,10 +2874,12 @@ function SeriesPanel(props: {
   copied: boolean;
   onStop: () => void;
   onContinue: () => void;
+  /** False when the run in progress used up its study attempts. */
+  canContinue: boolean;
   onClose: () => void;
   onCopy: () => void;
 }) {
-  const { series, now, wakeLock, copied, onStop, onContinue, onClose, onCopy } = props;
+  const { series, now, wakeLock, copied, onStop, onContinue, canContinue, onClose, onCopy } = props;
   const eta = seriesEtaMs(series, now);
   const cooldownText = cooldownStatusText(series, now);
   const started = Date.parse(series.startedAt);
@@ -2658,7 +2942,7 @@ function SeriesPanel(props: {
           <p className="text-muted-foreground">No run of this series has finished yet.</p>
         )}
         <div className="flex flex-wrap gap-2">
-          {series.status === 'paused' && <Button onClick={onContinue}>Continue series</Button>}
+          {series.status === 'paused' && canContinue && <Button onClick={onContinue}>Continue series</Button>}
           {(series.status === 'running' || series.status === 'paused') && (
             <Button variant="outline" onClick={onStop}>
               Stop series

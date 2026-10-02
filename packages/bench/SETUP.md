@@ -38,6 +38,12 @@ Behavior without them: `/bench` renders with an empty leaderboard, `/bench/run`
 works fully (export JSON), and `POST /api/bench/submit` answers
 `503 bench-store-unbound` - runs are never lost.
 
+`BENCH_GITHUB_API_URL` (unset in production) points the store at another
+GitHub-compatible REST endpoint instead of `https://api.github.com`. The bench
+e2e spec uses it to run a bound `next start` against a local endpoint that
+receives the commits, so the successful-upload path of the runner is driven
+end to end without writing to a real repository.
+
 Build-time stamps (no configuration needed): `next.config.mjs` resolves the
 installed versions of the provider packages and the runtimes they wrap (plus
 wllama's CDN pin) into `NEXT_PUBLIC_BENCH_RUNTIME_VERSIONS`, recorded on every

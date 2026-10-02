@@ -13,11 +13,17 @@
  * than the cool-down, idle time on run 2's file), Stop series mid-run, and Clear model caches checked against the browser's
  * own storage listings before the next run loads cold. The paid-study browser
  * gate is checked in Chromium and under a Safari user agent with
- * `navigator.userAgentData` removed (see the gate describe block). Selectors are
+ * `navigator.userAgentData` removed (see the gate describe block). The
+ * full-completion study mode (`ccmode=full`) is driven against a second
+ * `next start` of the same build whose results store is bound to a local
+ * GitHub-compatible endpoint (see that describe block). Selectors are
  * role/label/text only.
  */
 
-import { readFileSync } from 'node:fs';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import http from 'node:http';
+import net from 'node:net';
 import path from 'node:path';
 import { expect, test, type ConsoleMessage, type Locator, type Page, type Request } from '@playwright/test';
 
@@ -1114,5 +1120,442 @@ test.describe('bench real run (WASM lanes)', () => {
     for (const c of probed) expect(c.load!.cached, `${c.cellId} loaded cold`).toBe(false);
     // The same lanes were warm-cached before the clear: run 1's files were in the caches above.
     expect(consoleErrors).toEqual([]);
+  });
+});
+
+/**
+ * Full-completion study mode (`ccmode=full`): the completion code shows only
+ * for a run that finished with every cell attempted and uploaded; an
+ * interruption restarts the run by itself (at most 3 times); a Stop asks
+ * first and issues no code. A successful upload needs a bound results store,
+ * so this block starts a second `next start` of the same production build
+ * with the store bound to a local GitHub-compatible endpoint
+ * (`BENCH_GITHUB_API_URL`). Everything from the page through the submit
+ * route (nonce, digest, shape validation, scrub, store calls) runs unmodified;
+ * only GitHub itself is replaced, which is the store's documented mock layer.
+ * The endpoint holds each run-file commit for COMMIT_DELAY_MS so the page is
+ * observably waiting on the upload while the code must still be absent. The
+ * upload-failure lane uses the default (unbound) server, which answers 503.
+ * Interruptions are real page reloads after the first cell started; the
+ * participant's "Leave" answer to the browser's leave-page prompt is given.
+ */
+const FULL_STUDY_LINK =
+  '/bench/run?tier=quick&quality=off&runs=1&cold=off&publish=on&cc=TESTCODE1&ccmode=full&PROLIFIC_PID=e2e-full-pid&STUDY_ID=e2e-study&SESSION_ID=e2e-session';
+const FULL_MODE_HINT =
+  'Your completion code appears when the whole run has finished and uploaded. If it is interrupted, this page restarts it by itself.';
+const ATTEMPT_CAP_TEXT =
+  'The run could not finish after 4 attempts. Please message the researcher with a screenshot of this page; you are paid for the attempt.';
+const UPLOAD_FAILED_TEXT =
+  'The run finished but the upload did not go through. Export the result and message the researcher with it; you are paid for the attempt.';
+const STOP_CONFIRM_TEXT =
+  'The study pays only for a finished run. If you stop now, no completion code is issued; reopening the link starts the run again from the beginning.';
+const COMMIT_DELAY_MS = 4_000;
+const FULL_ANSWERS = { gpu: 'Intel Iris Xe Graphics', chassis: 'Laptop', ram: '16 GB', otherApps: 'No' } as const;
+
+async function freePort(): Promise<number> {
+  const srv = net.createServer();
+  await new Promise<void>((resolve) => srv.listen(0, '127.0.0.1', resolve));
+  const { port } = srv.address() as net.AddressInfo;
+  await new Promise<void>((resolve) => srv.close(() => resolve()));
+  return port;
+}
+
+/** What the local GitHub-compatible endpoint received. */
+interface FakeGitHub {
+  server: http.Server;
+  port: number;
+  commits: Array<{ path: string; run: ExportedRun & { digest?: string } }>;
+}
+
+/** Answers the store's calls as GitHub does: 404 for the absent index, 201 for created files. */
+async function startFakeGitHub(): Promise<FakeGitHub> {
+  const commits: FakeGitHub['commits'] = [];
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', () => {
+      const match = /^\/repos\/e2e\/bench-data\/contents\/(.+)$/.exec(req.url ?? '');
+      if (req.method === 'PUT' && match) {
+        const filePath = match[1];
+        const content = JSON.parse(Buffer.from((JSON.parse(body) as { content: string }).content, 'base64').toString('utf8'));
+        const isRunFile = /^(runs|quarantine)\//.test(filePath);
+        setTimeout(
+          () => {
+            if (isRunFile) commits.push({ path: filePath, run: content as FakeGitHub['commits'][number]['run'] });
+            res.writeHead(201, { 'Content-Type': 'application/json' });
+            res.end('{}');
+          },
+          isRunFile ? COMMIT_DELAY_MS : 0,
+        );
+        return;
+      }
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end('{"message":"Not Found"}');
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return { server, port: (server.address() as net.AddressInfo).port, commits };
+}
+
+/** A second `next start` of this build with the results store bound to the local endpoint. */
+async function startBoundServer(githubPort: number): Promise<{ proc: ChildProcess; origin: string; log: string[] }> {
+  const appDir = path.resolve(__dirname, '..', '..');
+  if (!existsSync(path.join(appDir, '.next', 'BUILD_ID'))) {
+    throw new Error('The full-completion lanes start `next start` on this build: run `next build` in apps/ui first.');
+  }
+  const port = await freePort();
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    BENCH_GITHUB_REPO: 'e2e/bench-data',
+    BENCH_GITHUB_TOKEN: 'e2e-token',
+    BENCH_GITHUB_API_URL: `http://127.0.0.1:${githubPort}`,
+  };
+  // Dev nonces and the in-instance rate limit: no shared secret or Redis in this environment.
+  for (const key of ['BENCH_NONCE_SECRET', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'KV_REST_API_URL', 'KV_REST_API_TOKEN']) {
+    delete env[key];
+  }
+  const log: string[] = [];
+  const proc = spawn(path.join(appDir, 'node_modules', '.bin', 'next'), ['start', '-p', String(port)], { cwd: appDir, env });
+  proc.stdout?.on('data', (d) => log.push(String(d)));
+  proc.stderr?.on('data', (d) => log.push(String(d)));
+  const origin = `http://localhost:${port}`;
+  const deadline = Date.now() + 60_000;
+  for (;;) {
+    try {
+      const res = await fetch(`${origin}/api/bench/nonce`);
+      if (res.ok) break;
+    } catch {
+      // Not listening yet.
+    }
+    if (Date.now() > deadline || proc.exitCode !== null) {
+      proc.kill();
+      throw new Error(`bound next start did not come up on ${origin}:\n${log.join('')}`);
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return { proc, origin, log };
+}
+
+/** The participant answers "Leave" to the leave-page prompt a running benchmark raises on reload. */
+function acceptLeavePrompts(page: Page) {
+  page.on('dialog', (dialog) => {
+    if (dialog.type() === 'beforeunload') void dialog.accept();
+    else void dialog.dismiss();
+  });
+}
+
+/** The full-mode attempt count as the page stored it. */
+async function storedAttempt(page: Page): Promise<{ attempts: number; inFlight: boolean; capped: boolean; runIndex: number } | null> {
+  const raw = await page.evaluate(() => localStorage.getItem('localmode-bench-series-attempts'));
+  return raw ? (JSON.parse(raw) as { attempts: number; inFlight: boolean; capped: boolean; runIndex: number }) : null;
+}
+
+/** Open the study link, press Run benchmark, answer the four questions, and start. */
+async function startFullStudyRun(page: Page, url: string) {
+  await page.goto(url);
+  const runButton = page.getByRole('button', { name: 'Run benchmark' });
+  await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+  await expect(runButton).toBeEnabled({ timeout: 15_000 });
+  await runButton.click();
+  const ask = hardwareDialog(page);
+  await expect(ask).toBeVisible();
+  await answerHardware(ask, FULL_ANSWERS);
+  await ask.getByRole('button', { name: 'Start benchmark' }).click();
+  await expect(page.getByRole('dialog', { name: /benchmark running/i })).toBeVisible({ timeout: 20_000 });
+}
+
+/** Every first appearance of the completion-code region, timed in the test process. */
+async function watchCodeRegion(page: Page): Promise<number[]> {
+  const shownAt: number[] = [];
+  await page.exposeFunction('__benchCodeShown', () => shownAt.push(Date.now()));
+  await page.addInitScript(() => {
+    const seen = new WeakSet<Element>();
+    new MutationObserver(() => {
+      for (const el of document.querySelectorAll('[role="region"][aria-label="Study completion code"]')) {
+        if (seen.has(el)) continue;
+        seen.add(el);
+        void (window as unknown as { __benchCodeShown: () => Promise<void> }).__benchCodeShown();
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
+  return shownAt;
+}
+
+test.describe('full-completion study mode (ccmode=full)', () => {
+  let github: FakeGitHub;
+  let bound: { proc: ChildProcess; origin: string; log: string[] };
+
+  test.beforeAll(async () => {
+    github = await startFakeGitHub();
+    bound = await startBoundServer(github.port);
+  });
+
+  test.afterAll(async () => {
+    bound?.proc.kill();
+    await new Promise<void>((resolve) => (github ? github.server.close(() => resolve()) : resolve()));
+  });
+
+  test('a finished run shows the code only after its upload succeeded', async ({ page }) => {
+    test.setTimeout(20 * 60 * 1000);
+    const consoleErrors: string[] = [];
+    collectConsoleErrors(page, consoleErrors);
+    const codeShownAt = await watchCodeRegion(page);
+    const submitResponses: Array<{ at: number; status: number }> = [];
+    page.on('response', (res) => {
+      if (res.url().endsWith('/api/bench/submit')) submitResponses.push({ at: Date.now(), status: res.status() });
+    });
+    const commitsBefore = github.commits.length;
+
+    await page.goto(`${bound.origin}${FULL_STUDY_LINK}`);
+    await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByText(`Paid study session detected. ${FULL_MODE_HINT} Keep this tab open until then.`)).toBeVisible();
+    // The study pays for an uploaded run: publishing is on and cannot be switched off on this link.
+    const publish = page.getByRole('switch', { name: /publish results/i });
+    await expect(publish).toBeChecked();
+    await expect(publish).toBeDisabled();
+    // The link presets keep the mode in the generated link.
+    await page.getByText('Link presets').click();
+    await expect(page.getByText('/bench/run?tier=quick&quality=off&runs=1&cooldown=0&cold=off&publish=on&ccmode=full')).toBeVisible();
+    await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
+
+    const runButton = page.getByRole('button', { name: 'Run benchmark' });
+    await runButton.click();
+    await answerHardware(hardwareDialog(page), FULL_ANSWERS);
+    await hardwareDialog(page).getByRole('button', { name: 'Start benchmark' }).click();
+    const overlay = page.getByRole('dialog', { name: /benchmark running/i });
+    await expect(overlay).toBeVisible({ timeout: 20_000 });
+    await expect(overlay.getByRole('alert')).toContainText(FULL_MODE_HINT);
+    await expect(overlay).toContainText('Attempt 1 of 4');
+    await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
+    expect(await storedAttempt(page)).toMatchObject({ attempts: 1, inFlight: true, capped: false, runIndex: 1 });
+
+    const status = page.getByRole('status').first();
+    await expect(status).toContainText(/Running /, { timeout: 120_000 });
+    await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
+    await expect(status).toContainText('Suite complete', { timeout: 540_000 });
+    await expect(overlay).toHaveCount(0);
+    // The local endpoint holds the commit: the page waits on the upload and shows no code yet.
+    await expect(page.getByText('Publishing to the leaderboard…')).toBeVisible();
+    await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
+
+    const codeRegion = page.getByRole('region', { name: /study completion code/i });
+    await expect(codeRegion).toBeVisible({ timeout: 60_000 });
+    await expect(codeRegion).toContainText('TESTCODE1');
+    await expect(codeRegion).toContainText('Enter it on Prolific to finish the study.');
+    await expect(page.getByText(/^Submitted/)).toBeVisible();
+
+    // Witnesses: one successful upload, answered before the code first appeared, and
+    // the run file it committed is the run on this page.
+    expect(submitResponses.map((r) => r.status)).toEqual([200]);
+    expect(codeShownAt).toHaveLength(1);
+    expect(codeShownAt[0]).toBeGreaterThanOrEqual(submitResponses[0].at);
+    expect(github.commits.length).toBe(commitsBefore + 1);
+    const committed = github.commits[github.commits.length - 1].run;
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export JSON' }).click();
+    const exported = JSON.parse(readFileSync((await (await downloadPromise).path())!, 'utf8')) as ExportedRun;
+    expect(committed.runId).toBe(exported.runId);
+    expect(committed.environment.userReportedHardware).toEqual({ gpu: 'Intel Iris Xe Graphics', chassis: 'laptop', ramGB: 16, otherAppsRunning: false });
+    expect(exported.cells.some((c) => c.status === 'ok')).toBe(true);
+    // The run finished: nothing is left to restart.
+    expect(await storedAttempt(page)).toBeNull();
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test('a reload mid-run restarts the run by itself (attempt 2, no dialog), which then finishes, uploads and shows the code', async ({
+    page,
+  }) => {
+    test.setTimeout(25 * 60 * 1000);
+    const consoleErrors: string[] = [];
+    collectConsoleErrors(page, consoleErrors);
+    acceptLeavePrompts(page);
+    const askedOn: string[] = [];
+    await page.exposeFunction('__benchHardwareDialogShown', (title: string) => askedOn.push(title));
+    await page.addInitScript(() => {
+      const seen = new WeakSet<Element>();
+      new MutationObserver(() => {
+        for (const el of document.querySelectorAll('[role="dialog"]')) {
+          const titleId = el.getAttribute('aria-labelledby');
+          const title = titleId ? document.getElementById(titleId)?.textContent : null;
+          if (title === 'About this computer' && !seen.has(el)) {
+            seen.add(el);
+            void (window as unknown as { __benchHardwareDialogShown: (t: string) => Promise<void> }).__benchHardwareDialogShown(
+              document.title,
+            );
+          }
+        }
+      }).observe(document, { childList: true, subtree: true });
+    });
+    const submitted: string[] = [];
+    page.on('request', (req) => {
+      if (req.url().endsWith('/api/bench/submit') && req.method() === 'POST') submitted.push(req.postData() ?? '');
+    });
+
+    await startFullStudyRun(page, `${bound.origin}${FULL_STUDY_LINK}`);
+    const status = page.getByRole('status').first();
+    await expect(status).toContainText(/Running /, { timeout: 120_000 });
+    expect(await storedAttempt(page)).toMatchObject({ attempts: 1, inFlight: true });
+    const loads = countLoads(page);
+    await page.reload();
+
+    // No click: the run starts again by itself on the reloaded page, without asking about the hardware.
+    const overlay = page.getByRole('dialog', { name: /benchmark running/i });
+    await expect(overlay).toBeVisible({ timeout: 30_000 });
+    await expect(overlay).toContainText('Attempt 2 of 4');
+    expect(loads.count).toBe(1);
+    expect(await storedAttempt(page)).toMatchObject({ attempts: 2, inFlight: true });
+    await expect(hardwareDialog(page)).toHaveCount(0);
+    expect(askedOn, 'the dialog was shown once, before attempt 1').toHaveLength(1);
+    const runForm = overlay.getByRole('group', { name: HARDWARE_FORM });
+    await expect(runForm.getByLabel('Graphics card or chip')).toHaveValue('Intel Iris Xe Graphics');
+    await expect(runForm.getByRole('radio', { name: 'Laptop' })).toBeChecked();
+    await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
+
+    await expect(status).toContainText('Suite complete', { timeout: 540_000 });
+    const codeRegion = page.getByRole('region', { name: /study completion code/i });
+    await expect(codeRegion).toBeVisible({ timeout: 60_000 });
+    await expect(codeRegion).toContainText('TESTCODE1');
+    expect(submitted, 'only the finished attempt uploaded').toHaveLength(1);
+    const uploaded = JSON.parse(submitted[0]) as ExportedRun;
+    expect(uploaded.environment.userReportedHardware).toEqual({ gpu: 'Intel Iris Xe Graphics', chassis: 'laptop', ramGB: 16, otherAppsRunning: false });
+    expect(github.commits.some((c) => c.run.runId === uploaded.runId)).toBe(true);
+    expect(await storedAttempt(page)).toBeNull();
+    // The interrupted attempt left its partial record, as any page that went away mid-run does.
+    await expect(page.getByRole('region', { name: /unfinished run recovered/i })).toContainText(/quick suite · \d+ of \d+ cells finished/);
+    expect(loads.count, 'no further reload').toBe(1);
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test('Stop asks first; a confirmed Stop issues no code, and reopening the link starts again at attempt 1', async ({ page }) => {
+    test.setTimeout(10 * 60 * 1000);
+    const consoleErrors: string[] = [];
+    collectConsoleErrors(page, consoleErrors);
+    const submitted: string[] = [];
+    page.on('request', (req) => {
+      if (req.url().endsWith('/api/bench/submit')) submitted.push(req.url());
+    });
+    await startFullStudyRun(page, `${bound.origin}${FULL_STUDY_LINK}`);
+    const overlay = page.getByRole('dialog', { name: /benchmark running/i });
+    const status = page.getByRole('status').first();
+    await expect(status).toContainText(/Running /, { timeout: 120_000 });
+
+    await overlay.getByRole('button', { name: 'Cancel run' }).click();
+    const confirm = page.getByRole('alertdialog', { name: 'Stop the run?' });
+    await expect(confirm).toBeVisible();
+    await expect(confirm).toHaveAccessibleDescription(STOP_CONFIRM_TEXT);
+    // Keep running closes the question and the run goes on.
+    await confirm.getByRole('button', { name: 'Keep running' }).click();
+    await expect(confirm).toHaveCount(0);
+    await expect(overlay).toBeVisible();
+    await expect(overlay.getByRole('button', { name: 'Cancel run' })).toBeEnabled();
+
+    await overlay.getByRole('button', { name: 'Cancel run' }).click();
+    await confirm.getByRole('button', { name: 'Stop', exact: true }).click();
+    await expect(overlay).toHaveCount(0, { timeout: 120_000 });
+    await expect(page.getByRole('status').first()).toHaveText('Cancelled');
+    await expect(
+      page.getByText('The run was stopped, so no completion code is issued. Reopening the link starts the run again from the beginning.'),
+    ).toBeVisible();
+    await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
+    await expect(page.getByText('TESTCODE1')).toHaveCount(0);
+    // As before: a cancelled run uploads nothing and leaves no partial record behind.
+    expect(submitted).toEqual([]);
+    await expect(page.getByRole('region', { name: /unfinished run recovered/i })).toHaveCount(0);
+    expect(await storedAttempt(page)).toBeNull();
+
+    // Reopening the link restarts nothing by itself; Run starts again from the beginning, at attempt 1.
+    await page.goto(`${bound.origin}${FULL_STUDY_LINK}`);
+    await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeEnabled({ timeout: 15_000 });
+    await page.waitForTimeout(5_000);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('region', { name: /unfinished run recovered/i })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Run benchmark' }).click();
+    await expect(hardwareDialog(page).getByLabel('Graphics card or chip')).toHaveValue('');
+    await answerHardware(hardwareDialog(page), FULL_ANSWERS);
+    await hardwareDialog(page).getByRole('button', { name: 'Start benchmark' }).click();
+    await expect(overlay).toContainText('Attempt 1 of 4', { timeout: 20_000 });
+    await expect(overlay).toContainText(/Quick suite · 0 of \d+ steps done/);
+    expect(await storedAttempt(page)).toMatchObject({ attempts: 1, inFlight: true });
+    await overlay.getByRole('button', { name: 'Cancel run' }).click();
+    await page.getByRole('alertdialog', { name: 'Stop the run?' }).getByRole('button', { name: 'Stop', exact: true }).click();
+    await expect(overlay).toHaveCount(0, { timeout: 120_000 });
+    expect(submitted).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test('after 4 interrupted attempts the page stops restarting, shows the cap message, no code, and Export JSON', async ({ page }) => {
+    test.setTimeout(20 * 60 * 1000);
+    const consoleErrors: string[] = [];
+    collectConsoleErrors(page, consoleErrors);
+    acceptLeavePrompts(page);
+    const submitted: string[] = [];
+    page.on('request', (req) => {
+      if (req.url().endsWith('/api/bench/submit')) submitted.push(req.url());
+    });
+    await startFullStudyRun(page, `${bound.origin}${FULL_STUDY_LINK}`);
+    const overlay = page.getByRole('dialog', { name: /benchmark running/i });
+    const status = page.getByRole('status').first();
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      await expect(overlay).toContainText(`Attempt ${attempt} of 4`, { timeout: 30_000 });
+      await expect(status).toContainText(/Running /, { timeout: 120_000 });
+      expect(await storedAttempt(page)).toMatchObject({ attempts: attempt, inFlight: true, capped: false });
+      await page.reload();
+    }
+
+    const cap = page.getByRole('alert', { name: ATTEMPT_CAP_TEXT });
+    await expect(cap).toBeVisible({ timeout: 30_000 });
+    expect(await storedAttempt(page)).toMatchObject({ attempts: 4, inFlight: false, capped: true });
+    // Nothing starts again, and the Run button stays off.
+    await page.waitForTimeout(8_000);
+    await expect(overlay).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeDisabled();
+    await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
+    await expect(page.getByText('TESTCODE1')).toHaveCount(0);
+    expect(submitted).toEqual([]);
+    // The four interrupted attempts are on record, and Export JSON saves the newest.
+    const recovered = page.getByRole('region', { name: /unfinished run recovered/i });
+    await expect(recovered.getByRole('button', { name: 'Export partial run' })).toHaveCount(4);
+    const downloadPromise = page.waitForEvent('download');
+    await cap.getByRole('button', { name: 'Export JSON' }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/^localmode-bench-partial-.*\.json$/);
+    const partial = JSON.parse(readFileSync((await download.path())!, 'utf8')) as { partial: boolean; suite: string; finishedCells: number };
+    expect(partial.partial).toBe(true);
+    expect(partial.suite).toBe('quick');
+    expect(partial.finishedCells).toBeGreaterThan(0);
+    // The cap holds on every later load of the same link.
+    await page.reload();
+    await expect(page.getByRole('alert', { name: ATTEMPT_CAP_TEXT })).toBeVisible({ timeout: 15_000 });
+    await page.waitForTimeout(5_000);
+    await expect(overlay).toHaveCount(0);
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test('a finished run whose upload fails shows the researcher message, Export JSON, and no code', async ({ page }) => {
+    test.setTimeout(20 * 60 * 1000);
+    const consoleErrors: string[] = [];
+    collectConsoleErrors(page, consoleErrors);
+    // ALLOWLIST (documented, this lane only): the default server's results store is
+    // unbound, so the submit answers 503 bench-store-unbound, which is the failure
+    // this lane is about. Chromium logs every non-2xx fetch as a console error;
+    // scoped to status + URL, any other console error still fails.
+    const expected503 = (e: string) => e.includes('503') && e.includes('/api/bench/submit');
+    await startFullStudyRun(page, FULL_STUDY_LINK);
+    const status = page.getByRole('status').first();
+    await expect(status).toContainText('Suite complete', { timeout: 540_000 });
+    await expect(page.getByText(/results store is not configured/i)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('alert').filter({ hasText: UPLOAD_FAILED_TEXT })).toBeVisible();
+    await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
+    await expect(page.getByText('TESTCODE1')).toHaveCount(0);
+    const exportButton = page.getByRole('button', { name: 'Export JSON' });
+    await expect(exportButton).toBeVisible();
+    const downloadPromise = page.waitForEvent('download');
+    await exportButton.click();
+    const exported = JSON.parse(readFileSync((await (await downloadPromise).path())!, 'utf8')) as ExportedRun;
+    expect(exported.cells.some((c) => c.status === 'ok')).toBe(true);
+    expect(exported.environment.userReportedDevice).toMatch(/^prolific:[0-9a-f]{12}$/);
+    // The run finished, so it is not restarted: nothing left in flight.
+    expect(await storedAttempt(page)).toBeNull();
+    expect(consoleErrors.filter((e) => !expected503(e))).toEqual([]);
   });
 });

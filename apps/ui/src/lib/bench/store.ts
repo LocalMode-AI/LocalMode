@@ -140,7 +140,14 @@ export function benchStoreConfig(): BenchStoreConfig | null {
   return { repo, token };
 }
 
-const API = 'https://api.github.com';
+/**
+ * GitHub REST API base. `BENCH_GITHUB_API_URL` points the store at another
+ * GitHub-compatible endpoint (the bench e2e spec runs one locally to receive
+ * the commits of a bound store); production leaves it unset.
+ */
+function githubApi(): string {
+  return (process.env.BENCH_GITHUB_API_URL ?? 'https://api.github.com').replace(/\/+$/, '');
+}
 
 function ghHeaders(token: string): HeadersInit {
   return {
@@ -172,7 +179,7 @@ export async function commitRun(
   flagged: boolean,
 ): Promise<string> {
   const path = runPath(run, flagged);
-  const res = await fetch(`${API}/repos/${config.repo}/contents/${path}`, {
+  const res = await fetch(`${githubApi()}/repos/${config.repo}/contents/${path}`, {
     method: 'PUT',
     headers: { ...ghHeaders(config.token), 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -307,7 +314,7 @@ export function assertIndexNotShrinking(
 export async function readIndexForUpdate(
   config: BenchStoreConfig,
 ): Promise<{ sha: string | undefined; entries: RunIndexEntry[] }> {
-  const meta = await fetch(`${API}/repos/${config.repo}/contents/${INDEX_PATH}`, {
+  const meta = await fetch(`${githubApi()}/repos/${config.repo}/contents/${INDEX_PATH}`, {
     headers: ghHeaders(config.token),
     cache: 'no-store',
   });
@@ -318,7 +325,7 @@ export async function readIndexForUpdate(
     throw new BenchStoreError('index-unreadable', 'GitHub contents response for the index has no file sha or size');
   }
 
-  const blob = await fetch(`${API}/repos/${config.repo}/git/blobs/${info.sha}`, {
+  const blob = await fetch(`${githubApi()}/repos/${config.repo}/git/blobs/${info.sha}`, {
     headers: ghHeaders(config.token),
     cache: 'no-store',
   });
@@ -359,7 +366,7 @@ export async function appendToIndex(config: BenchStoreConfig, entry: RunIndexEnt
     const next = [...entries, entry];
     assertIndexNotShrinking(entries.length, next.length);
 
-    const put = await fetch(`${API}/repos/${config.repo}/contents/${INDEX_PATH}`, {
+    const put = await fetch(`${githubApi()}/repos/${config.repo}/contents/${INDEX_PATH}`, {
       method: 'PUT',
       headers: { ...ghHeaders(config.token), 'Content-Type': 'application/json' },
       body: JSON.stringify({

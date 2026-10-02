@@ -21,6 +21,23 @@ export interface StudySession {
 const COMPLETION_CODE = /^[A-Za-z0-9]{4,32}$/;
 
 /**
+ * Read the completion code of a paid-study link without hashing anything:
+ * the `cc` value when the query also has a non-empty `PROLIFIC_PID` and the
+ * code is 4 to 32 ASCII letters or digits, otherwise null.
+ *
+ * @param search - The query string, with or without the leading `?`.
+ * @returns The completion code, or null.
+ * @example
+ * readStudyCompletionCode('?PROLIFIC_PID=abc&cc=TESTCODE1'); // 'TESTCODE1'
+ */
+export function readStudyCompletionCode(search: string): string | null {
+  const params = new URLSearchParams(search);
+  if (!params.get('PROLIFIC_PID')?.trim()) return null;
+  const code = params.get('cc')?.trim() || null;
+  return code && COMPLETION_CODE.test(code) ? code : null;
+}
+
+/**
  * Read the study session from a query string.
  *
  * @param search - The query string, with or without the leading `?`.
@@ -33,12 +50,11 @@ export async function parseStudySession(search: string, eligibility: StudyEligib
   const params = new URLSearchParams(search);
   const pid = params.get('PROLIFIC_PID')?.trim();
   if (!pid) return null;
-  const code = params.get('cc')?.trim() || null;
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pid));
   const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
   return {
     participantHash: hex.slice(0, 12),
-    completionCode: code && COMPLETION_CODE.test(code) ? code : null,
+    completionCode: readStudyCompletionCode(search),
     eligibility,
   };
 }
