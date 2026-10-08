@@ -7,6 +7,7 @@
  */
 
 import type { BenchRunResult, CellSummary } from '@localmode/bench';
+import { NONCE_MAX_AGE_MS } from './nonce';
 import {
   LEADERBOARD_PROTOCOL_VERSIONS,
   deviceClassOf,
@@ -80,6 +81,12 @@ export interface RunIndexEntry {
   reportedRamGB?: number;
   flagged: boolean;
   path: string;
+  /**
+   * When a maintainer added the run from a participant's exported file
+   * (`scripts/import-exported-run.ts`) because its upload never went
+   * through. Absent on every run the submit route published.
+   */
+  importedAt?: string;
   cells: Array<{
     cellId: string;
     runtimeId: string;
@@ -180,6 +187,27 @@ export function runPath(run: BenchRunResult, flagged: boolean): string {
   return `${flagged ? 'quarantine' : 'runs'}/${yyyy}/${mm}/${safeId}.json`;
 }
 
+/** The bytes of a published run file: compact JSON, no trailing newline. */
+export function serializeRunFile(run: BenchRunResult): string {
+  return JSON.stringify(run);
+}
+
+/** The bytes of `index/summary.json`: compact JSON, no trailing newline. */
+export function serializeIndexEntries(entries: readonly RunIndexEntry[]): string {
+  return JSON.stringify(entries);
+}
+
+/**
+ * The index after adding `entry` at the end, or null when the index already
+ * lists its run. Passes the same no-shrink guard as every index write.
+ */
+export function appendIndexEntry(entries: readonly RunIndexEntry[], entry: RunIndexEntry): RunIndexEntry[] | null {
+  if (entries.some((e) => e.runId === entry.runId)) return null;
+  const next = [...entries, entry];
+  assertIndexNotShrinking(entries.length, next.length);
+  return next;
+}
+
 /**
  * Commit a run file. Uses create-only semantics: GitHub rejects a PUT without
  * `sha` when the file exists (422) — natural duplicate protection.
@@ -197,7 +225,7 @@ export async function commitRun(
     headers: { ...ghHeaders(config.token), 'Content-Type': 'application/json' },
     body: JSON.stringify({
       message: `bench: ${flagged ? 'quarantine' : 'add'} run ${run.runId}`,
-      content: Buffer.from(JSON.stringify(run)).toString('base64'),
+      content: Buffer.from(serializeRunFile(run)).toString('base64'),
     }),
   });
   if (res.status === 422) throw new BenchStoreError('duplicate-run', `run file already exists: ${path}`);
@@ -376,16 +404,15 @@ export async function readIndexForUpdate(
 export async function appendToIndex(config: BenchStoreConfig, entry: RunIndexEntry): Promise<void> {
   for (let attempt = 0; attempt < 4; attempt++) {
     const { sha, entries } = await readIndexForUpdate(config);
-    if (entries.some((e) => e.runId === entry.runId)) return;
-    const next = [...entries, entry];
-    assertIndexNotShrinking(entries.length, next.length);
+    const next = appendIndexEntry(entries, entry);
+    if (next === null) return;
 
     const put = await fetch(`${githubApi()}/repos/${config.repo}/contents/${INDEX_PATH}`, {
       method: 'PUT',
       headers: { ...ghHeaders(config.token), 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: `bench: index run ${entry.runId}`,
-        content: Buffer.from(JSON.stringify(next)).toString('base64'),
+        content: Buffer.from(serializeIndexEntries(next)).toString('base64'),
         ...(sha ? { sha } : {}),
       }),
     });
@@ -690,13 +717,13 @@ export async function rateLimitWithRetry(
 }
 
 /** Seconds a consumed nonce stays remembered: the nonce's own validity window. */
-export const NONCE_CONSUMED_TTL_SEC = 6 * 3600;
+export const NONCE_CONSUMED_TTL_SEC = NONCE_MAX_AGE_MS / 1000;
 
 const consumedNonces = new Map<string, number>();
 
 /**
- * Mark a nonce as used; false when it was used before. A nonce is issued per
- * page load and is valid for six hours, so without this a nonce copied out
+ * Mark a nonce as used; false when it was used before. A nonce is valid for
+ * `NONCE_MAX_AGE_MS`, so without this a nonce copied out
  * of a fresh submission could front any number of fabricated runs until it
  * expired. Uses Upstash when bound (all instances agree), else an in-instance
  * set. Fails open on errors.

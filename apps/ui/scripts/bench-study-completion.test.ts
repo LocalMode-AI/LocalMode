@@ -2,7 +2,8 @@
  * The completion-code rule of a paid-study link on /bench/run: `attempt` mode
  * (the default, code after any resolved upload attempt) and `full` mode (code
  * only for a finished, uploaded run, with automatic restarts after an
- * interruption up to a cap). The pure decisions and the stored attempt count
+ * interruption up to a cap, and a stop after two interruptions in a row at the
+ * same cell). The pure decisions and the stored attempt count
  * are tested here; the page wiring (restart on reload, the Stop confirmation,
  * the cap and upload-failure messages) is covered by the bench e2e spec.
  */
@@ -11,6 +12,9 @@ import {
   ATTEMPT_CAP_MESSAGE,
   MAX_AUTOMATIC_RESTARTS,
   MAX_RUN_ATTEMPTS,
+  MAX_SAME_CELL_ATTEMPTS,
+  RESTART_POLICY_TEXT,
+  attemptCapMessage,
   STUDY_ATTEMPTS_STORAGE_KEY,
   attemptLabel,
   beginStudyAttempt,
@@ -117,7 +121,21 @@ describe('the attempt count', () => {
     expect(ATTEMPT_CAP_MESSAGE).toBe(
       'The run could not finish after 4 attempts. Please message the researcher with a screenshot of this page; you are paid for the attempt.',
     );
-    expect(attemptLabel(2)).toBe('Attempt 2 of 4');
+    expect(attemptCapMessage(4)).toBe(ATTEMPT_CAP_MESSAGE);
+    expect(attemptLabel(2)).toBe('Attempt 2 of at most 4');
+    expect(RESTART_POLICY_TEXT).toBe(
+      'an interrupted run restarts by itself, up to 3 times, and stops if it is interrupted twice in a row at the same step',
+    );
+  });
+
+  it('says why a run stopped at the same cell', () => {
+    expect(MAX_SAME_CELL_ATTEMPTS).toBe(2);
+    expect(attemptCapMessage(2, 'same-cell')).toBe(
+      'The run could not finish after 2 attempts: both stopped at the same step. Please message the researcher with a screenshot of this page; you are paid for the attempt.',
+    );
+    expect(attemptCapMessage(3, 'same-cell')).toBe(
+      'The run could not finish after 3 attempts: the last two stopped at the same step. Please message the researcher with a screenshot of this page; you are paid for the attempt.',
+    );
   });
 
   it('lives beside the series state in localStorage', () => {
@@ -151,11 +169,67 @@ describe('the attempt count', () => {
     expect(resolveStudyAttemptOnLoad(state, 'CODEA').action).toBe('capped');
   });
 
+  /** Interrupt one attempt per cell id, reloading through storage each time, as the page does. */
+  function interruptAt(cells: Array<string | null>) {
+    let state: StudyAttemptState | null = null;
+    const actions: string[] = [];
+    for (const cell of cells) {
+      state = beginStudyAttempt(state, { code: 'CODEA', runIndex: 1, hardware: HW });
+      state = { ...state, partialAttemptId: `partial-${actions.length + 1}` };
+      const resolved = resolveStudyAttemptOnLoad(parseStudyAttempt(serializeStudyAttempt(state)), 'CODEA', cell);
+      actions.push(resolved.action);
+      state = resolved.state;
+      if (resolved.action === 'capped') break;
+    }
+    return { actions, state };
+  }
+
+  it('stops after the second attempt when both die at the same cell', () => {
+    const { actions, state } = interruptAt(['wllama/gemma/gen', 'wllama/gemma/gen']);
+    expect(actions).toEqual(['restart', 'capped']);
+    expect(state).toMatchObject({ attempts: 2, inFlight: false, capped: true, capReason: 'same-cell', lastInterruptedCellId: 'wllama/gemma/gen' });
+    expect(state?.partialAttemptId).toBeUndefined();
+    expect(resolveStudyAttemptOnLoad(state, 'CODEA', null).action).toBe('capped');
+  });
+
+  it('keeps the cap of 3 restarts when every interruption is at another cell than the one before', () => {
+    const alternating = interruptAt(['a/m/w1', 'a/m/w2', 'a/m/w1', 'a/m/w2']);
+    expect(alternating.actions).toEqual(['restart', 'restart', 'restart', 'capped']);
+    expect(alternating.state).toMatchObject({ attempts: 4, capped: true, capReason: 'attempts' });
+    const distinct = interruptAt(['a/m/w1', 'b/m/w1', 'c/m/w1', 'd/m/w1']);
+    expect(distinct.actions).toEqual(['restart', 'restart', 'restart', 'capped']);
+  });
+
+  it('stops at the first repeat in a row, whenever it comes', () => {
+    const late = interruptAt(['a/m/w1', 'b/m/w1', 'b/m/w1']);
+    expect(late.actions).toEqual(['restart', 'restart', 'capped']);
+    expect(late.state).toMatchObject({ attempts: 3, capReason: 'same-cell' });
+    expect(attemptCapMessage(late.state!.attempts, late.state!.capReason)).toContain('the last two stopped at the same step');
+  });
+
+  it('never matches an unknown cell (no progress record, or between cells)', () => {
+    expect(interruptAt([null, null, null, null]).actions).toEqual(['restart', 'restart', 'restart', 'capped']);
+    // An unknown cell in between breaks the run of repeats.
+    expect(interruptAt(['a/m/w1', null, 'a/m/w1', null]).actions).toEqual(['restart', 'restart', 'restart', 'capped']);
+  });
+
+  it('a count for another run of the series forgets the cell', () => {
+    const first = interruptAt(['a/m/w1']).state!;
+    const nextRun = beginStudyAttempt(first, { code: 'CODEA', runIndex: 2, hardware: HW });
+    expect(nextRun.lastInterruptedCellId).toBeUndefined();
+    expect(resolveStudyAttemptOnLoad(nextRun, 'CODEA', 'a/m/w1').action).toBe('restart');
+  });
+
   it('an in-page runner error restarts the same way', () => {
     const third = { ...beginStudyAttempt(null, { code: 'C0DE', runIndex: 1, hardware: null }), attempts: 3 };
     expect(interruptStudyAttempt(third).action).toBe('restart');
     expect(interruptStudyAttempt({ ...third, attempts: 4 })).toEqual({
-      state: { ...third, attempts: 4, inFlight: false, capped: true },
+      state: { ...third, attempts: 4, inFlight: false, capped: true, capReason: 'attempts' },
+      action: 'capped',
+    });
+    // A runner error at the cell the previous attempt died at stops the run.
+    expect(interruptStudyAttempt({ ...third, attempts: 2, lastInterruptedCellId: 'x/y/z' }, 'x/y/z')).toEqual({
+      state: { ...third, attempts: 2, inFlight: false, capped: true, capReason: 'same-cell', lastInterruptedCellId: 'x/y/z' },
       action: 'capped',
     });
   });
@@ -177,6 +251,11 @@ describe('the attempt count', () => {
     expect(parseStudyAttempt(JSON.stringify({ ...state, attempts: 0 }))).toBeNull();
     expect(parseStudyAttempt(JSON.stringify({ ...state, inFlight: 'yes' }))).toBeNull();
     expect(parseStudyAttempt(JSON.stringify({ ...state, hardware: { ...HW, chassis: 'tablet' } }))).toBeNull();
+    const full: StudyAttemptState = { ...state, partialAttemptId: 'p-1', lastInterruptedCellId: 'a/b/c', capped: true, capReason: 'same-cell' };
+    expect(parseStudyAttempt(serializeStudyAttempt(full))).toEqual(full);
+    expect(parseStudyAttempt(JSON.stringify({ ...state, capReason: 'other' }))).toBeNull();
+    expect(parseStudyAttempt(JSON.stringify({ ...state, lastInterruptedCellId: '' }))).toBeNull();
+    expect(parseStudyAttempt(JSON.stringify({ ...state, partialAttemptId: 5 }))).toBeNull();
   });
 
   it('restarts need a click only where the wake lock needs one (WebKit)', () => {

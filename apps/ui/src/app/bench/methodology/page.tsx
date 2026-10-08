@@ -374,9 +374,13 @@ export default function BenchMethodologyPage() {
             <li>
               Verified-tier runs happen on this site and carry a server-issued, time-boxed session
               nonce that accepts exactly one submission (a second upload under the same nonce is
-              refused; reloading the page issues a new one). Submissions are limited to 20 per hour
-              per network address; a refused upload is retried by the page after the wait the
-              server states, and nothing about the run is lost in between.
+              refused; the page fetches a new one right before every upload, so a run that takes
+              most of a day still uploads). Submissions are limited to 20 per hour per network
+              address; a refused upload is retried by the page after the wait the server states,
+              and nothing about the run is lost in between. A finished run whose upload never went
+              through can be added by a maintainer from the file the participant exported: it
+              passes the same checks as an upload except the session nonce, and its index entry
+              carries <code className="font-mono text-sm">importedAt</code>.
             </li>
             <li>
               Submissions contain the raw per-chunk timestamp trace and the full generated text;

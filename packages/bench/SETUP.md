@@ -59,7 +59,11 @@ rejected attempts count too), sized for several devices behind one NAT; a 429
 carries `Retry-After` and `retryAfterSec`, and the runner keeps the run and
 resubmits it by itself when the window opens. A session nonce fronts one
 submission (`consumeNonce`; Redis `SET NX EX` when bound, in-instance set
-otherwise), and the published file never contains it: the server applies
+otherwise) and is valid for 24 hours (`NONCE_MAX_AGE_MS` in
+`apps/ui/src/lib/bench/nonce.ts`; a used nonce is remembered for as long). The
+page fetches one when a run starts and a fresh one right before every upload
+attempt, so the age of the run does not matter; the digest does not cover the
+nonce, so the swap leaves it valid. The published file never contains it: the server applies
 `scrubRunForPublication` before committing, recomputing the digest and
 stamping `scrubbedAt` when a pre-schema-3 page's payload had to be cleaned.
 
@@ -98,8 +102,9 @@ Every `runs/**.json` (verified) and `quarantine/**.json` (flagged) file
 becomes one entry, built with the submit route's own `toIndexEntry()`, ordered
 by `createdAt` then path. The tool writes nothing when a run file cannot be
 indexed, or when the result would hold fewer entries than the current index or
-drop a run it lists (`--allow-shrink` overrides the last two). Review the diff
-and commit the file in the dataset clone.
+drop a run it lists (`--allow-shrink` overrides the last two). The one entry
+key no run file holds, `importedAt` (section 8), is carried over from the
+current index. Review the diff and commit the file in the dataset clone.
 
 Since bench 0.9.5 the entry builder corrects Chromium's WebGPU architecture
 label for the AMD integrated GPUs listed in `AMD_DEVICE_ID_ARCHITECTURE`
@@ -172,6 +177,36 @@ from the edited answer (for the GPU name, `reportedGpu`). The tool prints the
 before and after of the field, the digest and the index entry; review
 `git diff` (exactly the run file and the index should change) and commit both
 files in the dataset clone. The old value stays in the dataset's Git history.
+
+## 8. Importing a run whose upload failed
+
+A participant whose finished run could not be uploaded (the page showed "the
+upload did not go through") can export it with Export JSON and send the file.
+Add it to a clone of the dataset, from `apps/ui`:
+
+```
+pnpm exec tsx scripts/import-exported-run.ts --dataset ../../../LocalMode-Bench --file export.json --dry-run
+pnpm exec tsx scripts/import-exported-run.ts --dataset ../../../LocalMode-Bench --file export.json
+```
+
+The file goes through the submit route's own pipeline
+(`apps/ui/src/lib/bench/submission.ts`, the module the route calls): the 4 MB
+cap and JSON parsing, `verifyRunDigest`, `validateSubmission` with the
+quarantine decision (reject-severity flags send it to `quarantine/`), the
+publication scrub (the nonce is dropped; `scrubbedAt` and a recomputed digest
+only when an older page captured fields schema 3 removes), the dataset path,
+the run file bytes and the index entry from `toIndexEntry()`. An imported run
+therefore passed the same validation as a submitted one; it lacks only the
+live nonce check (an exported file's nonce has expired by the time it arrives)
+and the rate limit. The run file is exactly what the route would have committed
+for the same file, digest included. Its index entry is marked: it carries
+`importedAt`, the ISO time of the import, a key no submitted run's entry has;
+the index rebuild tool keeps it from the current index. A run id that is
+already in the index or under `runs/` or `quarantine/` is refused, and so is a
+file whose digest does not verify. `--dry-run` prints the path, the
+verified/quarantine decision, the flags and the index entry, and writes
+nothing. Review `git diff` (one new run file, one appended index entry) and
+commit both in the dataset clone.
 
 ## Optional integration check (real GitHub API, opt-in)
 

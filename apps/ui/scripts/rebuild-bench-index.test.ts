@@ -17,6 +17,7 @@ import { makeRun } from '../../../packages/bench/tests/helpers';
 import { issueNonce } from '../src/lib/bench/nonce';
 import type { RunIndexEntry } from '../src/lib/bench/store';
 import { buildIndexFromDataset, checkRebuildAgainst, INDEX_FILE, serializeIndex } from './rebuild-bench-index';
+import { importExportedRun } from './import-exported-run';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const TSX = join(here, '..', 'node_modules', '.bin', 'tsx');
@@ -110,6 +111,33 @@ describe('rebuild-bench-index', () => {
     expect(typeof entries[0].harnessVersion).toBe('string');
     expect(entries[0].cells.length).toBeGreaterThan(0);
   });
+
+  it('keeps importedAt from the current index: a rebuild after an import changes no byte', async () => {
+    expect(await submit(await freshRun('fixture-run-a', '2026-09-24T06:00:00.000Z'))).toBe(200);
+    for (const [path, text] of committed) writeDatasetFile(path, text);
+    writeDatasetFile(INDEX_FILE, indexBody);
+    // A second run whose upload never went through, added from its exported file.
+    const exported = makeRun({ nonce: issueNonce(Date.now() - 30 * 3600_000), runId: 'fixture-run-b', createdAt: '2026-09-25T06:00:00.000Z' });
+    exported.digest = await computeRunDigest(exported);
+    const exportFile = join(dataset, 'export-b.json');
+    writeFileSync(exportFile, JSON.stringify(exported));
+    await importExportedRun({ datasetDir: dataset, file: exportFile, now: new Date('2026-10-07T12:00:00.000Z') });
+    rmSync(exportFile);
+    const afterImport = readFileSync(join(dataset, INDEX_FILE), 'utf8');
+    const imported = (JSON.parse(afterImport) as RunIndexEntry[]).map((e) => [e.runId, e.importedAt]);
+    expect(imported).toEqual([
+      ['fixture-run-a', undefined],
+      ['fixture-run-b', '2026-10-07T12:00:00.000Z'],
+    ]);
+
+    const ok = cli();
+    expect(ok.status, ok.stderr).toBe(0);
+    expect(readFileSync(join(dataset, INDEX_FILE), 'utf8')).toBe(afterImport);
+    // Without the current index, the same run files give the entries without the mark.
+    const bare = buildIndexFromDataset(dataset).entries;
+    expect(bare.every((e) => !('importedAt' in e))).toBe(true);
+    expect(serializeIndex(bare)).not.toBe(afterImport);
+  }, 120_000);
 
   it('orders by createdAt then path, marks quarantine/ runs flagged, and ignores non-JSON files', async () => {
     writeDatasetFile('runs/2026/09/fixture-z-late.json', JSON.stringify(await freshRun('fixture-z-late', '2026-09-27T00:00:00.000Z')));

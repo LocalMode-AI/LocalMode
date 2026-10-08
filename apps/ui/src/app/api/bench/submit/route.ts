@@ -6,8 +6,6 @@
  */
 
 import { NextResponse, type NextRequest } from 'next/server';
-import type { BenchRunResult } from '@localmode/bench';
-import { computeRunDigest, scrubRunForPublication, validateSubmission, verifyRunDigest } from '@localmode/bench';
 import { verifyNonce } from '@/lib/bench/nonce';
 import {
   appendToIndex,
@@ -17,13 +15,10 @@ import {
   consumeNonce,
   rateLimitWithRetry,
   SUBMIT_RATE_LIMIT,
-  toIndexEntry,
 } from '@/lib/bench/store';
+import { checkSubmission, parseSubmissionBody, publicationOf, toPublishedRun } from '@/lib/bench/submission';
 
 export const dynamic = 'force-dynamic';
-
-/** Hard cap on submission size (raw traces are compact; this is generous). */
-const MAX_BODY_BYTES = 4 * 1024 * 1024;
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const config = benchStoreConfig();
@@ -57,50 +52,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const raw = await request.text();
-  if (raw.length > MAX_BODY_BYTES) {
-    return NextResponse.json(
-      { ok: false, code: 'payload-too-large', message: 'Submission exceeds 4MB.' },
-      { status: 413 },
-    );
-  }
-
-  let run: BenchRunResult;
-  try {
-    run = JSON.parse(raw) as BenchRunResult;
-  } catch {
-    return NextResponse.json(
-      { ok: false, code: 'invalid-json', message: 'Body is not valid JSON.' },
-      { status: 400 },
-    );
-  }
+  const parsed = parseSubmissionBody(await request.text());
+  if ('rejection' in parsed) return NextResponse.json(parsed.rejection.body, { status: parsed.rejection.status });
+  const { run } = parsed;
 
   if (!verifyNonce(run.nonce)) {
     return NextResponse.json(
       {
         ok: false,
         code: 'invalid-nonce',
-        message: 'Missing or expired session nonce. Re-run from the official bench page.',
+        message:
+          'The session token of this upload is missing or has expired. The bench page fetches a new token and tries the upload again by itself; if it still fails, export the run as JSON.',
       },
       { status: 403 },
     );
   }
 
-  if (!(await verifyRunDigest(run))) {
-    return NextResponse.json(
-      { ok: false, code: 'digest-mismatch', message: 'Result digest is missing or wrong.' },
-      { status: 400 },
-    );
-  }
-
-  const report = validateSubmission(run);
-  if (report.shapeErrors.length > 0) {
-    return NextResponse.json(
-      { ok: false, code: 'invalid-shape', errors: report.shapeErrors },
-      { status: 400 },
-    );
-  }
-  const flagged = !report.ok;
+  const checking = await checkSubmission(run);
+  if ('rejection' in checking) return NextResponse.json(checking.rejection.body, { status: checking.rejection.status });
+  const { checked } = checking;
+  const { flagged } = checked;
 
   // A nonce fronts one submission. Checked after the cheap rejections so a
   // malformed payload does not burn the page's nonce.
@@ -111,16 +82,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Publish only what a public file may carry: the nonce never, and none of
-  // the fields a page built before schema 3 still captures. When the scrub
-  // changed anything, the client's digest no longer applies and the file
-  // carries a recomputed one plus the time of the rewrite.
-  const scrub = scrubRunForPublication(run);
-  let published = scrub.run;
-  if (scrub.changed) {
-    published = { ...scrub.run, scrubbedAt: new Date().toISOString() };
-    published.digest = await computeRunDigest(published);
-  }
+  const published = await toPublishedRun(run);
 
   let path: string;
   try {
@@ -141,7 +103,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const url = `https://github.com/${config.repo}/blob/main/${path}`;
   try {
-    await appendToIndex(config, toIndexEntry(published, report.summaries, flagged, path));
+    await appendToIndex(config, publicationOf(published, checked).entry);
   } catch (error) {
     // The run file is in the dataset; only its leaderboard index entry is
     // missing. The index is never rewritten from a failed read, so the
@@ -159,5 +121,5 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { status: 502 },
     );
   }
-  return NextResponse.json({ ok: true, flagged, flags: report.flags, path, url });
+  return NextResponse.json({ ok: true, flagged, flags: checked.flags, path, url });
 }

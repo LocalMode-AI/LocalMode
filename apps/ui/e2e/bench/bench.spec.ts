@@ -21,6 +21,7 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
+import { createHmac } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
@@ -1126,8 +1127,9 @@ test.describe('bench real run (WASM lanes)', () => {
 /**
  * Full-completion study mode (`ccmode=full`): the completion code shows only
  * for a run that finished with every cell attempted and uploaded; an
- * interruption restarts the run by itself (at most 3 times); a Stop asks
- * first and issues no code. A successful upload needs a bound results store,
+ * interruption restarts the run by itself (at most 3 times, and not after
+ * two interruptions in a row at the same cell); a Stop asks first and issues
+ * no code. A successful upload needs a bound results store,
  * so this block starts a second `next start` of the same production build
  * with the store bound to a local GitHub-compatible endpoint
  * (`BENCH_GITHUB_API_URL`). Everything from the page through the submit
@@ -1135,6 +1137,9 @@ test.describe('bench real run (WASM lanes)', () => {
  * only GitHub itself is replaced, which is the store's documented mock layer.
  * The endpoint holds each run-file commit for COMMIT_DELAY_MS so the page is
  * observably waiting on the upload while the code must still be absent. The
+ * bound server signs nonces with E2E_NONCE_SECRET, as production does, so the
+ * long-run lane can hand the page a correctly signed nonce issued 25 hours
+ * earlier. The
  * upload-failure lane uses the default (unbound) server, which answers 503.
  * Interruptions are real page reloads after the first cell started; the
  * participant's "Leave" answer to the browser's leave-page prompt is given.
@@ -1145,6 +1150,18 @@ const FULL_MODE_HINT =
   'Your completion code appears when the whole run has finished and uploaded. If it is interrupted, this page restarts it by itself.';
 const ATTEMPT_CAP_TEXT =
   'The run could not finish after 4 attempts. Please message the researcher with a screenshot of this page; you are paid for the attempt.';
+const SAME_CELL_CAP_TEXT =
+  'The run could not finish after 2 attempts: both stopped at the same step. Please message the researcher with a screenshot of this page; you are paid for the attempt.';
+const EXPIRED_NONCE_MESSAGE =
+  'The session token of this upload is missing or has expired. The bench page fetches a new token and tries the upload again by itself; if it still fails, export the run as JSON.';
+/** The bound server's nonce key: known to the test so it can sign a nonce with an old timestamp. */
+const E2E_NONCE_SECRET = 'e2e-bench-nonce-secret';
+
+/** A nonce as `issueNonce()` signs it, issued at `issuedAtMs`. */
+function signedNonce(issuedAtMs: number): string {
+  const payload = String(issuedAtMs);
+  return `${payload}.${createHmac('sha256', E2E_NONCE_SECRET).update(payload).digest('hex')}`;
+}
 const UPLOAD_FAILED_TEXT =
   'The run finished but the upload did not go through. Export the result and message the researcher with it; you are paid for the attempt.';
 const STOP_CONFIRM_TEXT =
@@ -1210,8 +1227,9 @@ async function startBoundServer(githubPort: number): Promise<{ proc: ChildProces
     BENCH_GITHUB_TOKEN: 'e2e-token',
     BENCH_GITHUB_API_URL: `http://127.0.0.1:${githubPort}`,
   };
-  // Dev nonces and the in-instance rate limit: no shared secret or Redis in this environment.
-  for (const key of ['BENCH_NONCE_SECRET', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'KV_REST_API_URL', 'KV_REST_API_TOKEN']) {
+  // Signed nonces, as in production; the in-instance rate limit and nonce set (no Redis here).
+  env.BENCH_NONCE_SECRET = E2E_NONCE_SECRET;
+  for (const key of ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'KV_REST_API_URL', 'KV_REST_API_TOKEN']) {
     delete env[key];
   }
   const log: string[] = [];
@@ -1245,9 +1263,43 @@ function acceptLeavePrompts(page: Page) {
 }
 
 /** The full-mode attempt count as the page stored it. */
-async function storedAttempt(page: Page): Promise<{ attempts: number; inFlight: boolean; capped: boolean; runIndex: number } | null> {
+interface StoredAttempt {
+  attempts: number;
+  inFlight: boolean;
+  capped: boolean;
+  runIndex: number;
+  partialAttemptId?: string;
+  lastInterruptedCellId?: string;
+  capReason?: string;
+}
+
+async function storedAttempt(page: Page): Promise<StoredAttempt | null> {
   const raw = await page.evaluate(() => localStorage.getItem('localmode-bench-series-attempts'));
-  return raw ? (JSON.parse(raw) as { attempts: number; inFlight: boolean; capped: boolean; runIndex: number }) : null;
+  return raw ? (JSON.parse(raw) as StoredAttempt) : null;
+}
+
+/** The cell the page's progress record (IndexedDB) names as in progress for the attempt in flight. */
+async function recordedCell(page: Page): Promise<string | null> {
+  return page.evaluate(async () => {
+    const raw = localStorage.getItem('localmode-bench-series-attempts');
+    const id = raw ? (JSON.parse(raw) as { partialAttemptId?: string }).partialAttemptId : undefined;
+    if (!id) return null;
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open('localmode-bench-progress');
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    try {
+      const record = await new Promise<{ currentCellId?: string } | undefined>((resolve, reject) => {
+        const req = db.transaction('attempts', 'readonly').objectStore('attempts').get(id);
+        req.onsuccess = () => resolve(req.result as { currentCellId?: string } | undefined);
+        req.onerror = () => reject(req.error);
+      });
+      return record?.currentCellId ?? null;
+    } finally {
+      db.close();
+    }
+  });
 }
 
 /** Open the study link, press Run benchmark, answer the four questions, and start. */
@@ -1325,7 +1377,9 @@ test.describe('full-completion study mode (ccmode=full)', () => {
     const overlay = page.getByRole('dialog', { name: /benchmark running/i });
     await expect(overlay).toBeVisible({ timeout: 20_000 });
     await expect(overlay.getByRole('alert')).toContainText(FULL_MODE_HINT);
-    await expect(overlay).toContainText('Attempt 1 of 4');
+    await expect(overlay).toContainText(
+      'Attempt 1 of at most 4 · an interrupted run restarts by itself, up to 3 times, and stops if it is interrupted twice in a row at the same step',
+    );
     await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
     expect(await storedAttempt(page)).toMatchObject({ attempts: 1, inFlight: true, capped: false, runIndex: 1 });
 
@@ -1401,7 +1455,7 @@ test.describe('full-completion study mode (ccmode=full)', () => {
     // No click: the run starts again by itself on the reloaded page, without asking about the hardware.
     const overlay = page.getByRole('dialog', { name: /benchmark running/i });
     await expect(overlay).toBeVisible({ timeout: 30_000 });
-    await expect(overlay).toContainText('Attempt 2 of 4');
+    await expect(overlay).toContainText('Attempt 2 of at most 4');
     expect(loads.count).toBe(1);
     expect(await storedAttempt(page)).toMatchObject({ attempts: 2, inFlight: true });
     await expect(hardwareDialog(page)).toHaveCount(0);
@@ -1473,7 +1527,7 @@ test.describe('full-completion study mode (ccmode=full)', () => {
     await expect(hardwareDialog(page).getByLabel('Graphics card or chip')).toHaveValue('');
     await answerHardware(hardwareDialog(page), FULL_ANSWERS);
     await hardwareDialog(page).getByRole('button', { name: 'Start benchmark' }).click();
-    await expect(overlay).toContainText('Attempt 1 of 4', { timeout: 20_000 });
+    await expect(overlay).toContainText('Attempt 1 of at most 4', { timeout: 20_000 });
     await expect(overlay).toContainText(/Quick suite · 0 of \d+ steps done/);
     expect(await storedAttempt(page)).toMatchObject({ attempts: 1, inFlight: true });
     await overlay.getByRole('button', { name: 'Cancel run' }).click();
@@ -1483,8 +1537,8 @@ test.describe('full-completion study mode (ccmode=full)', () => {
     expect(consoleErrors).toEqual([]);
   });
 
-  test('after 4 interrupted attempts the page stops restarting, shows the cap message, no code, and Export JSON', async ({ page }) => {
-    test.setTimeout(20 * 60 * 1000);
+  test('two interruptions in a row at the same cell stop the run after attempt 2: cap message, no code, Export JSON', async ({ page }) => {
+    test.setTimeout(15 * 60 * 1000);
     const consoleErrors: string[] = [];
     collectConsoleErrors(page, consoleErrors);
     acceptLeavePrompts(page);
@@ -1495,16 +1549,105 @@ test.describe('full-completion study mode (ccmode=full)', () => {
     await startFullStudyRun(page, `${bound.origin}${FULL_STUDY_LINK}`);
     const overlay = page.getByRole('dialog', { name: /benchmark running/i });
     const status = page.getByRole('status').first();
-    for (let attempt = 1; attempt <= 4; attempt++) {
-      await expect(overlay).toContainText(`Attempt ${attempt} of 4`, { timeout: 30_000 });
-      await expect(status).toContainText(/Running /, { timeout: 120_000 });
+    // Both attempts are interrupted while the first cell runs, as on a device that dies at the same model every
+    // time. The cell is the one the page's progress record names, which is what the restart rule reads.
+    await expect(status).toContainText(/Running /, { timeout: 120_000 });
+    const firstCell = (await recordedCell(page)) ?? '';
+    expect(firstCell).not.toBe('');
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      await expect(overlay).toContainText(`Attempt ${attempt} of at most 4`, { timeout: 30_000 });
+      await expect.poll(() => recordedCell(page), { timeout: 120_000 }).toBe(firstCell);
       expect(await storedAttempt(page)).toMatchObject({ attempts: attempt, inFlight: true, capped: false });
       await page.reload();
     }
 
+    const cap = page.getByRole('alert', { name: SAME_CELL_CAP_TEXT });
+    await expect(cap).toBeVisible({ timeout: 30_000 });
+    expect(await storedAttempt(page)).toMatchObject({
+      attempts: 2,
+      inFlight: false,
+      capped: true,
+      capReason: 'same-cell',
+      lastInterruptedCellId: firstCell,
+    });
+    // Nothing starts again, and the Run button stays off.
+    await page.waitForTimeout(8_000);
+    await expect(overlay).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeDisabled();
+    await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
+    await expect(page.getByText('TESTCODE1')).toHaveCount(0);
+    expect(submitted).toEqual([]);
+    // The two interrupted attempts are on record, and Export JSON saves the newest, which names the cell.
+    const recovered = page.getByRole('region', { name: /unfinished run recovered/i });
+    await expect(recovered.getByRole('button', { name: 'Export partial run' })).toHaveCount(2);
+    const downloadPromise = page.waitForEvent('download');
+    await cap.getByRole('button', { name: 'Export JSON' }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/^localmode-bench-partial-.*\.json$/);
+    const partial = JSON.parse(readFileSync((await download.path())!, 'utf8')) as {
+      partial: boolean;
+      suite: string;
+      currentCellId: string | null;
+    };
+    expect(partial.partial).toBe(true);
+    expect(partial.suite).toBe('quick');
+    expect(partial.currentCellId).toBe(firstCell);
+    // The cap holds on every later load of the same link.
+    await page.reload();
+    await expect(page.getByRole('alert', { name: SAME_CELL_CAP_TEXT })).toBeVisible({ timeout: 15_000 });
+    await page.waitForTimeout(5_000);
+    await expect(overlay).toHaveCount(0);
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test('interruptions at a different cell each time restart up to the cap of 4 attempts, then stop with the cap message', async ({
+    page,
+  }) => {
+    test.setTimeout(25 * 60 * 1000);
+    const consoleErrors: string[] = [];
+    collectConsoleErrors(page, consoleErrors);
+    acceptLeavePrompts(page);
+    const submitted: string[] = [];
+    page.on('request', (req) => {
+      if (req.url().endsWith('/api/bench/submit')) submitted.push(req.url());
+    });
+    await startFullStudyRun(page, `${bound.origin}${FULL_STUDY_LINK}`);
+    const overlay = page.getByRole('dialog', { name: /benchmark running/i });
+    const status = page.getByRole('status').first();
+    // Odd attempts are interrupted in the first cell, even ones in a later cell: never the same cell twice in a
+    // row. The cell is the one the page's progress record names, which is what the restart rule reads.
+    await expect(status).toContainText(/Running /, { timeout: 120_000 });
+    const firstCell = (await recordedCell(page)) ?? '';
+    expect(firstCell).not.toBe('');
+    const interruptedAt: string[] = [];
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      await expect(overlay).toContainText(`Attempt ${attempt} of at most 4`, { timeout: 30_000 });
+      // The reloaded page recorded the previous interruption at the cell it was on.
+      if (attempt > 1) expect((await storedAttempt(page))?.lastInterruptedCellId).toBe(interruptedAt[attempt - 2]);
+      let cell: string | null;
+      if (attempt % 2 === 1) {
+        await expect.poll(() => recordedCell(page), { timeout: 120_000 }).toBe(firstCell);
+        cell = firstCell;
+      } else {
+        await expect
+          .poll(async () => {
+            const current = await recordedCell(page);
+            return current !== null && current !== firstCell;
+          }, { timeout: 300_000 })
+          .toBe(true);
+        cell = await recordedCell(page);
+      }
+      expect(await storedAttempt(page)).toMatchObject({ attempts: attempt, inFlight: true, capped: false });
+      interruptedAt.push(cell ?? '');
+      await page.reload();
+    }
+    expect(interruptedAt[1]).not.toBe(interruptedAt[0]);
+    expect(interruptedAt[2]).toBe(interruptedAt[0]);
+    expect(interruptedAt[3]).not.toBe(interruptedAt[2]);
+
     const cap = page.getByRole('alert', { name: ATTEMPT_CAP_TEXT });
     await expect(cap).toBeVisible({ timeout: 30_000 });
-    expect(await storedAttempt(page)).toMatchObject({ attempts: 4, inFlight: false, capped: true });
+    expect(await storedAttempt(page)).toMatchObject({ attempts: 4, inFlight: false, capped: true, capReason: 'attempts' });
     // Nothing starts again, and the Run button stays off.
     await page.waitForTimeout(8_000);
     await expect(overlay).toHaveCount(0);
@@ -1519,16 +1662,101 @@ test.describe('full-completion study mode (ccmode=full)', () => {
     await cap.getByRole('button', { name: 'Export JSON' }).click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toMatch(/^localmode-bench-partial-.*\.json$/);
-    const partial = JSON.parse(readFileSync((await download.path())!, 'utf8')) as { partial: boolean; suite: string; finishedCells: number };
+    const partial = JSON.parse(readFileSync((await download.path())!, 'utf8')) as {
+      partial: boolean;
+      suite: string;
+      currentCellId: string | null;
+    };
     expect(partial.partial).toBe(true);
     expect(partial.suite).toBe('quick');
-    expect(partial.finishedCells).toBeGreaterThan(0);
+    // The newest attempt names the cell it was interrupted at (it may have died before finishing any cell).
+    expect(partial.currentCellId).toBe(interruptedAt[3]);
     // The cap holds on every later load of the same link.
     await page.reload();
     await expect(page.getByRole('alert', { name: ATTEMPT_CAP_TEXT })).toBeVisible({ timeout: 15_000 });
     await page.waitForTimeout(5_000);
     await expect(overlay).toHaveCount(0);
     expect(consoleErrors).toEqual([]);
+  });
+
+  test.describe('a run that outlives its start nonce', () => {
+    // The site's service worker claims the page and fetches /api/bench itself
+    // (network only), and Playwright cannot route a request a service worker
+    // makes; without it the page's own fetches reach page.route. The nonce and
+    // submit requests take the same path to the server either way.
+    test.use({ serviceWorkers: 'block' });
+
+    test('a run whose start nonce expired uploads with a nonce fetched right before the submit', async ({ page }) => {
+      test.setTimeout(20 * 60 * 1000);
+      const consoleErrors: string[] = [];
+      collectConsoleErrors(page, consoleErrors);
+      // The page fetches a nonce when the run starts. A Thorough run on a slow
+      // device can take most of a day, so the run-start fetch is answered with a
+      // nonce the bound server's key signed 25 hours ago: its age is what this
+      // lane is about, the run itself is a real Quick run. Every later fetch
+      // reaches the server unchanged.
+      const expired = signedNonce(Date.now() - 25 * 3600_000);
+      let nonceFetches = 0;
+      await page.route(`${bound.origin}/api/bench/nonce`, async (route) => {
+        nonceFetches += 1;
+        if (nonceFetches === 1) await route.fulfill({ json: { nonce: expired }, headers: { 'Cache-Control': 'no-store' } });
+        else await route.continue();
+      });
+      const traffic: Array<{ kind: 'nonce' | 'submit'; at: number; nonce?: string; status?: number }> = [];
+      const pending: Array<Promise<void>> = [];
+      page.on('response', (res) => {
+        const url = res.url();
+        const at = Date.now();
+        if (url === `${bound.origin}/api/bench/nonce`) {
+          const entry: (typeof traffic)[number] = { kind: 'nonce', at };
+          traffic.push(entry);
+          pending.push(res.json().then((b: { nonce: string }) => void (entry.nonce = b.nonce)));
+        } else if (url === `${bound.origin}/api/bench/submit`) {
+          const posted = JSON.parse(res.request().postData() ?? '{}') as { nonce?: string };
+          traffic.push({ kind: 'submit', at, nonce: posted.nonce, status: res.status() });
+        }
+      });
+      const commitsBefore = github.commits.length;
+
+      await startFullStudyRun(page, `${bound.origin}${FULL_STUDY_LINK}`);
+      const status = page.getByRole('status').first();
+      await expect(status).toContainText('Suite complete', { timeout: 540_000 });
+      const codeRegion = page.getByRole('region', { name: /study completion code/i });
+      await expect(codeRegion).toBeVisible({ timeout: 60_000 });
+      await expect(codeRegion).toContainText('TESTCODE1');
+      await expect(page.getByText(UPLOAD_FAILED_TEXT)).toHaveCount(0);
+      await Promise.all(pending);
+
+      // The run started on the expired nonce; the upload carried the one fetched just before it.
+      expect(nonceFetches, 'both nonce requests went through the route').toBe(2);
+      expect(traffic.map((t) => t.kind)).toEqual(['nonce', 'nonce', 'submit']);
+      expect(traffic[0].nonce).toBe(expired);
+      expect(traffic[1].nonce).toMatch(/^\d+\.[0-9a-f]{64}$/);
+      expect(traffic[1].nonce).not.toBe(expired);
+      expect(traffic[2]).toMatchObject({ status: 200, nonce: traffic[1].nonce });
+      expect(traffic[2].at).toBeGreaterThanOrEqual(traffic[1].at);
+      expect(github.commits.length).toBe(commitsBefore + 1);
+      const committed = github.commits[github.commits.length - 1].run;
+
+      // The run kept on the page still carries its start nonce; the digest, which
+      // does not cover the nonce, is the one the dataset received.
+      const downloadPromise = page.waitForEvent('download');
+      await page.getByRole('button', { name: 'Export JSON' }).click();
+      const exportedText = readFileSync((await (await downloadPromise).path())!, 'utf8');
+      const exported = JSON.parse(exportedText) as ExportedRun & { nonce?: string; digest?: string };
+      expect(exported.nonce).toBe(expired);
+      expect(committed.runId).toBe(exported.runId);
+      expect(committed.digest).toBe(exported.digest);
+      // Without the fresh nonce the same upload is refused, with the message that says the page retries.
+      const direct = await page.request.post(`${bound.origin}/api/bench/submit`, {
+        data: exportedText,
+        headers: { 'Content-Type': 'application/json' },
+      });
+      expect(direct.status()).toBe(403);
+      expect(await direct.json()).toEqual({ ok: false, code: 'invalid-nonce', message: EXPIRED_NONCE_MESSAGE });
+      expect(github.commits.length).toBe(commitsBefore + 1);
+      expect(consoleErrors).toEqual([]);
+    });
   });
 
   test('a finished run whose upload fails shows the researcher message, Export JSON, and no code', async ({ page }) => {

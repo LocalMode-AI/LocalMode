@@ -87,10 +87,11 @@ import {
 import { readStudyEligibility } from '@/lib/bench/study-eligibility';
 import { parseStudySession, readStudyCompletionCode, type StudySession } from '@/lib/bench/study-session';
 import {
-  ATTEMPT_CAP_MESSAGE,
   FULL_MODE_HINT,
   MAX_AUTOMATIC_RESTARTS,
+  RESTART_POLICY_TEXT,
   UPLOAD_FAILED_MESSAGE,
+  attemptCapMessage,
   attemptLabel,
   beginStudyAttempt,
   cellsAllAttempted,
@@ -383,6 +384,18 @@ function laneKey(model: BenchModelRef): string {
  * the Run button and never sees the code.
  */
 const PROLIFIC_COMPLETE_URL = 'https://app.prolific.com/submissions/complete?cc=';
+
+/** A session nonce from the bench API; undefined when the request fails (offline, dev). */
+async function fetchSessionNonce(): Promise<string | undefined> {
+  try {
+    const res = await fetch('/api/bench/nonce', { cache: 'no-store' });
+    if (!res.ok) return undefined;
+    const { nonce } = (await res.json()) as { nonce?: unknown };
+    return typeof nonce === 'string' ? nonce : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 async function readStudySession(): Promise<StudySession | null> {
   if (typeof window === 'undefined') return null;
@@ -941,7 +954,8 @@ export function BenchRunner() {
       setStudy(s);
       setStudyChecked(true);
     });
-    listUnfinishedAttempts().then((attempts) => {
+    const unfinishedAttempts = listUnfinishedAttempts();
+    void unfinishedAttempts.then((attempts) => {
       if (!cancelled) setUnfinished(attempts);
     });
     setMobile(isMobileDevice());
@@ -952,56 +966,69 @@ export function BenchRunner() {
     setCompletionMode(mode);
     const fullCode =
       mode === 'full' && readStudyEligibility().eligible ? readStudyCompletionCode(search) : null;
-    let attemptAction: 'none' | 'restart' | 'capped' = 'none';
-    if (fullCode) {
-      const resolved = resolveStudyAttemptOnLoad(loadStudyAttempt(), fullCode);
-      updateStudyAttempt(resolved.state);
-      attemptAction = resolved.action;
-      if (resolved.action === 'restart' && resolved.state?.hardware) {
-        hardwareRef.current = resolved.state.hardware;
-        setHardware(resolved.state.hardware);
+    const storedAttempt = fullCode ? loadStudyAttempt() : null;
+    // The rest of the setup, once the cell an interrupted attempt died at is known.
+    const setUp = (interruptedCellId: string | null) => {
+      let attemptAction: 'none' | 'restart' | 'capped' = 'none';
+      if (fullCode) {
+        const resolved = resolveStudyAttemptOnLoad(storedAttempt, fullCode, interruptedCellId);
+        updateStudyAttempt(resolved.state);
+        attemptAction = resolved.action;
+        if (resolved.action === 'restart' && resolved.state?.hardware) {
+          hardwareRef.current = resolved.state.hardware;
+          setHardware(resolved.state.hardware);
+        }
+        // The study pays only for an uploaded run: publishing stays on.
+        setAutoSubmit(true);
       }
-      // The study pays only for an uploaded run: publishing stays on.
-      setAutoSubmit(true);
-    }
-    // A pending series wins over URL presets: its runs repeat the settings it
-    // started with. A link only prefills the controls; it never starts a run.
-    const stored = loadSeries();
-    // A finished series stays on screen until closed, but only an open one
-    // (running or paused) dictates the controls.
-    if (stored && !isSeriesOpen(stored)) updateSeries(stored);
-    if (stored && isSeriesOpen(stored)) {
-      let { state, action } = resolveSeriesOnLoad(stored);
-      // On a full-mode link the interrupted run of the series starts again instead of pausing.
-      if (attemptAction === 'restart' && state.status === 'paused' && stored.inFlightIndex !== null) {
-        state = continueSeries(state);
-        action = 'start-next';
+      // A pending series wins over URL presets: its runs repeat the settings it
+      // started with. A link only prefills the controls; it never starts a run.
+      const stored = loadSeries();
+      // A finished series stays on screen until closed, but only an open one
+      // (running or paused) dictates the controls.
+      if (stored && !isSeriesOpen(stored)) updateSeries(stored);
+      if (stored && isSeriesOpen(stored)) {
+        let { state, action } = resolveSeriesOnLoad(stored);
+        // On a full-mode link the interrupted run of the series starts again instead of pausing.
+        if (attemptAction === 'restart' && state.status === 'paused' && stored.inFlightIndex !== null) {
+          state = continueSeries(state);
+          action = 'start-next';
+        }
+        // Read before updateSeries, which forgets the answers if the series has ended.
+        const savedHardware = loadSeriesHardware(state.seriesId);
+        updateSeries(state);
+        if (savedHardware && isSeriesOpen(state)) {
+          hardwareRef.current = savedHardware;
+          setHardware(savedHardware);
+        }
+        setSuite(state.settings.suite);
+        setIncludeQuality(state.settings.includeQuality);
+        setAutoSubmit(state.settings.publish);
+        setClearAfterRun(state.settings.clearAfterRun);
+        setCooldownInput(String(state.settings.cooldownMs / 60_000));
+        setDisabledLanes(new Set(state.settings.disabledLanes));
+        setRunsInput(String(state.count));
+        if (action === 'start-next' && attemptAction !== 'capped') setAutoStartPending(true);
+      } else {
+        const presets = parseRunPresets(window.location.search);
+        if (presets.suite) setSuite(presets.suite);
+        if (presets.includeQuality !== undefined) setIncludeQuality(presets.includeQuality);
+        if (presets.publish !== undefined) setAutoSubmit(presets.publish);
+        if (presets.clearAfterRun !== undefined) setClearAfterRun(presets.clearAfterRun);
+        if (presets.runs !== undefined) setRunsInput(String(presets.runs));
+        if (presets.cooldownMinutes !== undefined) setCooldownInput(String(presets.cooldownMinutes));
+        if (fullCode) setAutoSubmit(true);
+        if (attemptAction === 'restart') setRestartPending(true);
       }
-      // Read before updateSeries, which forgets the answers if the series has ended.
-      const savedHardware = loadSeriesHardware(state.seriesId);
-      updateSeries(state);
-      if (savedHardware && isSeriesOpen(state)) {
-        hardwareRef.current = savedHardware;
-        setHardware(savedHardware);
-      }
-      setSuite(state.settings.suite);
-      setIncludeQuality(state.settings.includeQuality);
-      setAutoSubmit(state.settings.publish);
-      setClearAfterRun(state.settings.clearAfterRun);
-      setCooldownInput(String(state.settings.cooldownMs / 60_000));
-      setDisabledLanes(new Set(state.settings.disabledLanes));
-      setRunsInput(String(state.count));
-      if (action === 'start-next' && attemptAction !== 'capped') setAutoStartPending(true);
+    };
+    // An attempt left in flight names, in its progress record, the cell it was on.
+    const partialId = storedAttempt?.inFlight && storedAttempt.code === fullCode ? storedAttempt.partialAttemptId : undefined;
+    if (partialId) {
+      void unfinishedAttempts.then((attempts) => {
+        if (!cancelled) setUp(attempts.find((a) => a.attemptId === partialId)?.currentCellId ?? null);
+      });
     } else {
-      const presets = parseRunPresets(window.location.search);
-      if (presets.suite) setSuite(presets.suite);
-      if (presets.includeQuality !== undefined) setIncludeQuality(presets.includeQuality);
-      if (presets.publish !== undefined) setAutoSubmit(presets.publish);
-      if (presets.clearAfterRun !== undefined) setClearAfterRun(presets.clearAfterRun);
-      if (presets.runs !== undefined) setRunsInput(String(presets.runs));
-      if (presets.cooldownMinutes !== undefined) setCooldownInput(String(presets.cooldownMinutes));
-      if (fullCode) setAutoSubmit(true);
-      if (attemptAction === 'restart') setRestartPending(true);
+      setUp(null);
     }
     return () => {
       cancelled = true;
@@ -1110,19 +1137,32 @@ export function BenchRunner() {
   const submitRun = useCallback(async (run: BenchRunResult): Promise<SubmitOutcome> => {
     setSubmitState({ kind: 'submitting' });
     try {
-      const res = await fetch('/api/bench/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(run),
-      });
-      const body = (await res.json()) as {
-        ok: boolean;
-        flagged?: boolean;
-        url?: string;
-        message?: string;
-        code?: string;
-        retryAfterSec?: number;
+      // A Thorough run on a slow device can outlast the nonce fetched when it
+      // started, so every upload attempt carries one fetched just before it.
+      // The digest does not cover the nonce: swapping it keeps the digest
+      // valid, and the run kept on the page (and its Export JSON) is unchanged.
+      const post = async (nonce: string | undefined) => {
+        const res = await fetch('/api/bench/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...run, nonce: nonce ?? run.nonce }),
+        });
+        const body = (await res.json()) as {
+          ok: boolean;
+          flagged?: boolean;
+          url?: string;
+          message?: string;
+          code?: string;
+          retryAfterSec?: number;
+        };
+        return { res, body };
       };
+      let { res, body } = await post(await fetchSessionNonce());
+      // An expired or missing token (the fetch above failed): one more try with a new one.
+      if (!body.ok && body.code === 'invalid-nonce') {
+        const fresh = await fetchSessionNonce();
+        if (fresh) ({ res, body } = await post(fresh));
+      }
       if (body.ok) {
         const outcome: SubmitOutcome = { kind: 'done', flagged: body.flagged ?? false, url: body.url };
         setSubmitState(outcome);
@@ -1232,6 +1272,7 @@ export function BenchRunner() {
     setRetryNotices([]);
     setFinished(new Map());
     setCurrentCellId(null);
+    currentCellRef.current = null;
     cellStartRef.current = null;
     setLoadedLanes(new Set());
     setRunStartedAt(Date.now());
@@ -1243,14 +1284,9 @@ export function BenchRunner() {
     setCancelling(false);
     let attempt: PartialAttempt | null = null;
     try {
-      // Nonce first so the whole run is bound to this session.
-      let nonce: string | undefined;
-      try {
-        const res = await fetch('/api/bench/nonce');
-        if (res.ok) nonce = ((await res.json()) as { nonce: string }).nonce;
-      } catch {
-        // Offline / dev - the run still works, submission may be rejected.
-      }
+      // The run file carries a nonce from its start; each upload replaces it
+      // with a fresh one (see submitRun). Offline, the run still works.
+      const nonce = await fetchSessionNonce();
       // A run is cold only when the page cleared the provider caches since
       // the last run and they are still empty now; nothing else is claimed.
       const coldStart = await takeColdStartMarker();
@@ -1297,6 +1333,11 @@ export function BenchRunner() {
         harness,
         plannedCellIds: cells.map((c) => `${c.model.runtimeId}/${c.model.benchModelId}/${c.workload.id}`),
       });
+      // A full-mode attempt remembers its progress record: after an
+      // interruption the next page load reads which cell it died at.
+      if (studyCode && attempt && studyAttemptRef.current?.inFlight) {
+        updateStudyAttempt({ ...studyAttemptRef.current, partialAttemptId: attempt.attemptId });
+      }
       const suiteResult = await runBenchmarkSuite({
         suite,
         cells,
@@ -1503,8 +1544,12 @@ export function BenchRunner() {
             seriesHandled = true;
           }
         } else if (current) {
-          // A runner error is an interruption: restart on a fresh page, or stop at the cap.
-          const { state, action } = interruptStudyAttempt(current);
+          // A runner error is an interruption: restart on a fresh page, or stop
+          // at the cap. A restart leaves the count in flight and the progress
+          // record in place, so the reloaded page records the interruption
+          // (and its cell) exactly as after a crash.
+          const failedCellId = attempt ? (attempt.currentCellId ?? null) : (currentCellRef.current ?? null);
+          const { state, action } = interruptStudyAttempt(current, failedCellId);
           if (action === 'restart') {
             restartAfterError = true;
             seriesHandled = true;
@@ -2005,8 +2050,8 @@ export function BenchRunner() {
                     <li>
                       <code className="font-mono">ccmode=full</code>: on a study link with a completion code, the
                       code is issued only for a finished, uploaded run, and an interrupted run restarts by
-                      itself (up to {MAX_AUTOMATIC_RESTARTS} times); kept in the link below when this page
-                      was opened with it
+                      itself (up to {MAX_AUTOMATIC_RESTARTS} times, and not after two interruptions in a row
+                      at the same step); kept in the link below when this page was opened with it
                     </li>
                   </ul>
                   <div className="flex flex-wrap items-center gap-2">
@@ -2157,7 +2202,7 @@ export function BenchRunner() {
               className="flex flex-col gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm"
             >
               <p id="study-attempt-cap-title" className="font-medium">
-                {ATTEMPT_CAP_MESSAGE}
+                {attemptCapMessage(studyAttempt?.attempts ?? 0, studyAttempt?.capReason)}
               </p>
               <div>
                 <Button size="sm" variant="outline" onClick={exportLatestPartial} disabled={unfinished.length === 0}>
@@ -2669,7 +2714,7 @@ function RunOverlay(props: {
           {wakeLock !== 'idle' && <p className="text-xs text-muted-foreground">{WAKE_LOCK_TEXT[wakeLock]}</p>}
           {attempt !== null && (
             <p className="text-xs text-muted-foreground">
-              {attemptLabel(attempt)} · an interrupted run restarts by itself, up to {MAX_AUTOMATIC_RESTARTS} times
+              {attemptLabel(attempt)} · {RESTART_POLICY_TEXT}
             </p>
           )}
         </div>

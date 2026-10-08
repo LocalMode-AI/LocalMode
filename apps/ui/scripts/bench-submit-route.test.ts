@@ -199,6 +199,26 @@ describe('POST /api/bench/submit', () => {
     expect(committed).toHaveLength(1);
   });
 
+  it('refuses an expired nonce saying the page retries, and takes the same run with a fresh one and the same digest', async () => {
+    const run = makeRun({ nonce: issueNonce(Date.now() - 25 * 3600_000), runId: `run-late-${Math.random().toString(16).slice(2)}` });
+    run.digest = await computeRunDigest(run);
+    const refused = await post(run);
+    expect(refused.status).toBe(403);
+    expect(refused.body).toEqual({
+      ok: false,
+      code: 'invalid-nonce',
+      message:
+        'The session token of this upload is missing or has expired. The bench page fetches a new token and tries the upload again by itself; if it still fails, export the run as JSON.',
+    });
+    expect(committed).toHaveLength(0);
+    // What the page does before every upload attempt: swap in a fresh nonce, keep the digest.
+    const accepted = await post({ ...run, nonce: issueNonce() });
+    expect(accepted.status).toBe(200);
+    expect(committed).toHaveLength(1);
+    expect(committed[0].run.digest).toBe(run.digest);
+    expect(await verifyRunDigest(committed[0].run)).toBe(true);
+  });
+
   it('rejects a wrong digest before anything is stored', async () => {
     const run = makeRun({ nonce: issueNonce(), runId: `run-bad-${Math.random().toString(16).slice(2)}` });
     run.digest = 'not-the-digest';

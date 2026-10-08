@@ -1,13 +1,21 @@
 /**
  * Anti-forgery nonce for the verified submission tier. The bench page fetches
- * a nonce before running; the submitted result embeds it; the API verifies the
- * HMAC and its age. Server-only (node:crypto).
+ * a nonce when a run starts and a fresh one right before every upload attempt;
+ * the submitted result embeds it; the API verifies the HMAC and its age. The
+ * run digest does not cover the nonce, so swapping it leaves the digest valid.
+ * Server-only (node:crypto).
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
-/** Nonces older than this are rejected (a suite run fits comfortably). */
-export const NONCE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+/**
+ * Nonces older than this are rejected. The page fetches a fresh nonce right
+ * before it uploads, so the window only has to cover the gap between that
+ * fetch and the request; it stays long so that a page built before the
+ * refresh, whose nonce dates from the start of the run, can still upload a
+ * Thorough run that took most of a day on a slow device.
+ */
+export const NONCE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 function secret(): string | null {
   return process.env.BENCH_NONCE_SECRET ?? null;

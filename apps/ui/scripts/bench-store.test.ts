@@ -6,7 +6,14 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RunIndexEntry } from '../src/lib/bench/store';
-import { aggregateIndex, rateLimitWithRetry, SUBMIT_RATE_LIMIT, SUBMIT_RATE_WINDOW_SEC, toIndexEntry } from '../src/lib/bench/store';
+import {
+  aggregateIndex,
+  NONCE_CONSUMED_TTL_SEC,
+  rateLimitWithRetry,
+  SUBMIT_RATE_LIMIT,
+  SUBMIT_RATE_WINDOW_SEC,
+  toIndexEntry,
+} from '../src/lib/bench/store';
 import { summarizeRun, type BenchRunResult } from '@localmode/bench';
 import { issueNonce, verifyNonce, NONCE_MAX_AGE_MS } from '../src/lib/bench/nonce';
 import { makeRun } from '../../../packages/bench/tests/helpers';
@@ -291,6 +298,19 @@ describe('nonce', () => {
     expect(verifyNonce(nonce + '0', 1_000_000)).toBe(false);
     expect(verifyNonce(nonce.replace(/^\d/, '9'), 1_000_000)).toBe(false);
     expect(verifyNonce(nonce, 1_000_000 + NONCE_MAX_AGE_MS + 1)).toBe(false);
+  });
+
+  it('accepts a nonce for 24 hours: a 12.5 h Thorough run uploads with the nonce it started with', () => {
+    vi.stubEnv('BENCH_NONCE_SECRET', 'test-secret');
+    const issuedAt = Date.parse('2026-10-06T14:00:00.000Z');
+    const nonce = issueNonce(issuedAt);
+    expect(NONCE_MAX_AGE_MS).toBe(24 * 60 * 60 * 1000);
+    expect(verifyNonce(nonce, issuedAt + 6 * 3600_000 + 1)).toBe(true);
+    expect(verifyNonce(nonce, issuedAt + 12.5 * 3600_000)).toBe(true);
+    expect(verifyNonce(nonce, issuedAt + 24 * 3600_000)).toBe(true);
+    expect(verifyNonce(nonce, issuedAt + 24 * 3600_000 + 1)).toBe(false);
+    // A used nonce is remembered for as long as it is valid, so it cannot be replayed inside the window.
+    expect(NONCE_CONSUMED_TTL_SEC * 1000).toBe(NONCE_MAX_AGE_MS);
   });
 
   it('rejects future-dated nonces beyond clock skew', () => {
