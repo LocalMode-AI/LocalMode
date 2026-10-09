@@ -3,7 +3,9 @@
  * (the default, code after any resolved upload attempt) and `full` mode (code
  * only for a finished, uploaded run, with automatic restarts after an
  * interruption up to a cap, and a stop after two interruptions in a row at the
- * same cell). The pure decisions and the stored attempt count
+ * same cell). In both modes the link fixes the suite and the run settings,
+ * and a run whose suite or quality-fidelity setting differs from the link's
+ * gets no code. The pure decisions and the stored attempt count
  * are tested here; the page wiring (restart on reload, the Stop confirmation,
  * the cap and upload-failure messages) is covered by the bench e2e spec.
  */
@@ -14,6 +16,8 @@ import {
   MAX_RUN_ATTEMPTS,
   MAX_SAME_CELL_ATTEMPTS,
   RESTART_POLICY_TEXT,
+  SETTINGS_MISMATCH_MESSAGE,
+  STUDY_LOCK_NOTE,
   attemptCapMessage,
   STUDY_ATTEMPTS_STORAGE_KEY,
   attemptLabel,
@@ -24,13 +28,17 @@ import {
   parseStudyAttempt,
   resolveStudyAttemptOnLoad,
   restartNeedsActivation,
+  runMatchesStudyLink,
+  runSettingsOf,
   serializeStudyAttempt,
   shouldIssueCompletionCode,
+  studyRunLock,
   uploadFailedPermanently,
   type CompletionInput,
   type StudyAttemptState,
 } from '../src/lib/bench/study-completion';
-import { SERIES_STORAGE_KEY } from '../src/lib/bench/series';
+import { EMBED_WORKLOADS, LLM_WORKLOADS, QUALITY_WORKLOADS } from '@localmode/bench';
+import { SERIES_STORAGE_KEY, parseRunPresets } from '../src/lib/bench/series';
 import type { HardwareAnswers } from '../src/lib/bench/study-hardware';
 
 const HW: HardwareAnswers = { gpu: 'NVIDIA GeForce RTX 4060', chassis: 'desktop', ram: '32', otherApps: 'no' };
@@ -76,6 +84,8 @@ describe('shouldIssueCompletionCode', () => {
     submitState: { kind: 'done' },
     stoppedByUser: false,
     lastRunOfSeries: true,
+    runSettings: { suite: 'thorough', includeQuality: true },
+    linkSettings: { suite: 'thorough', includeQuality: true },
   };
 
   it('attempt mode: after any resolved upload attempt of a finished suite (unchanged rule)', () => {
@@ -106,11 +116,87 @@ describe('shouldIssueCompletionCode', () => {
     }
   });
 
+  it('both modes: no code for a run whose suite differs from the link tier', () => {
+    // A Thorough link, a Standard run that otherwise qualifies for the code.
+    const standardRun = { suite: 'standard', includeQuality: true };
+    expect(shouldIssueCompletionCode({ ...base, runSettings: standardRun })).toBe(false);
+    expect(shouldIssueCompletionCode({ ...base, mode: 'attempt', runSettings: standardRun })).toBe(false);
+    expect(shouldIssueCompletionCode({ ...base, mode: 'attempt', submitState: { kind: 'failed' }, runSettings: standardRun })).toBe(
+      false,
+    );
+    expect(shouldIssueCompletionCode({ ...base, runSettings: { suite: 'quick', includeQuality: true } })).toBe(false);
+  });
+
+  it('both modes: no code for a run whose quality-fidelity setting differs from the link', () => {
+    const noQuality = { suite: 'thorough', includeQuality: false };
+    expect(shouldIssueCompletionCode({ ...base, runSettings: noQuality })).toBe(false);
+    expect(shouldIssueCompletionCode({ ...base, mode: 'attempt', runSettings: noQuality })).toBe(false);
+    // The reverse: a link with quality off and a run with it on.
+    const offLink = { suite: 'thorough' as const, includeQuality: false };
+    expect(shouldIssueCompletionCode({ ...base, linkSettings: offLink })).toBe(false);
+    expect(shouldIssueCompletionCode({ ...base, linkSettings: offLink, runSettings: noQuality })).toBe(true);
+  });
+
+  it('no code without a run result to compare', () => {
+    expect(shouldIssueCompletionCode({ ...base, runSettings: null })).toBe(false);
+    expect(shouldIssueCompletionCode({ ...base, mode: 'attempt', runSettings: null })).toBe(false);
+  });
+
   it('a permanent upload failure is a failure with no resubmission scheduled', () => {
     expect(uploadFailedPermanently({ kind: 'failed' })).toBe(true);
     expect(uploadFailedPermanently({ kind: 'failed', retryAt: 5 })).toBe(false);
     expect(uploadFailedPermanently({ kind: 'done' })).toBe(false);
     expect(uploadFailedPermanently({ kind: 'submitting' })).toBe(false);
+  });
+});
+
+describe('the settings a study link fixes', () => {
+  it('maps the link presets to the locked controls, defaults where the link is silent', () => {
+    expect(studyRunLock(parseRunPresets('?tier=thorough&quality=on&runs=3&cooldown=2.5&cold=on&publish=on&cc=ABCD1234&ccmode=full'))).toEqual({
+      suite: 'thorough',
+      includeQuality: true,
+      runs: 3,
+      cooldownMinutes: 2.5,
+      clearAfterRun: true,
+    });
+    // Nothing in the link: the values the controls start with on a plain visit.
+    expect(studyRunLock(parseRunPresets('?PROLIFIC_PID=abc&cc=ABCD1234'))).toEqual({
+      suite: 'quick',
+      includeQuality: false,
+      runs: 1,
+      cooldownMinutes: 0,
+      clearAfterRun: false,
+    });
+    // Unknown and out-of-range values are read as parseRunPresets reads them; publish is not locked.
+    const lock = studyRunLock(parseRunPresets('?tier=custom&quality=maybe&runs=99&cooldown=45&publish=off'));
+    expect(lock).toEqual({ suite: 'quick', includeQuality: false, runs: 30, cooldownMinutes: 30, clearAfterRun: false });
+    expect(Object.keys(lock)).not.toContain('publish');
+  });
+
+  it('reads a finished run\'s suite and quality-fidelity setting from its cells', () => {
+    const llm = LLM_WORKLOADS[0];
+    const embed = EMBED_WORKLOADS[0];
+    const withQuality = [llm, embed, QUALITY_WORKLOADS[0], QUALITY_WORKLOADS[2]].map((w) => ({ workloadKind: w.kind }));
+    const without = [llm, embed].map((w) => ({ workloadKind: w.kind }));
+    expect(runSettingsOf({ suite: 'standard', cells: withQuality })).toEqual({ suite: 'standard', includeQuality: true });
+    expect(runSettingsOf({ suite: 'thorough', cells: without })).toEqual({ suite: 'thorough', includeQuality: false });
+    // Only the STS cell (an embedding-only device still plans it): quality is on.
+    expect(runSettingsOf({ suite: 'quick', cells: [{ workloadKind: QUALITY_WORKLOADS[2].kind }] }).includeQuality).toBe(true);
+  });
+
+  it('a run matches the link only when the suite and the quality setting both match', () => {
+    const link = studyRunLock(parseRunPresets('?tier=thorough&quality=on'));
+    expect(runMatchesStudyLink({ suite: 'thorough', includeQuality: true }, link)).toBe(true);
+    expect(runMatchesStudyLink({ suite: 'standard', includeQuality: true }, link)).toBe(false);
+    expect(runMatchesStudyLink({ suite: 'thorough', includeQuality: false }, link)).toBe(false);
+    expect(runMatchesStudyLink({ suite: 'quick', includeQuality: false }, link)).toBe(false);
+  });
+
+  it('words the note and the mismatch message', () => {
+    expect(STUDY_LOCK_NOTE).toBe('This study link fixes the suite and the run settings.');
+    expect(SETTINGS_MISMATCH_MESSAGE).toBe(
+      'This run did not use the suite and quality-fidelity setting this study link names, so no completion code is issued. Please message the researcher with a screenshot of this page.',
+    );
   });
 });
 

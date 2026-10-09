@@ -90,6 +90,8 @@ import {
   FULL_MODE_HINT,
   MAX_AUTOMATIC_RESTARTS,
   RESTART_POLICY_TEXT,
+  SETTINGS_MISMATCH_MESSAGE,
+  STUDY_LOCK_NOTE,
   UPLOAD_FAILED_MESSAGE,
   attemptCapMessage,
   attemptLabel,
@@ -101,11 +103,15 @@ import {
   parseCompletionMode,
   resolveStudyAttemptOnLoad,
   restartNeedsActivation,
+  runMatchesStudyLink,
+  runSettingsOf,
   saveStudyAttempt,
   shouldIssueCompletionCode,
+  studyRunLock,
   uploadFailedPermanently,
   type CompletionMode,
   type StudyAttemptState,
+  type StudyRunLock,
 } from '@/lib/bench/study-completion';
 import {
   CHASSIS_CHOICES,
@@ -866,6 +872,13 @@ export function BenchRunner() {
   const [completionMode, setCompletionMode] = useState<CompletionMode>('attempt');
   /** The code is issued only for a finished, uploaded run, and interrupted runs restart by themselves. */
   const fullMode = completionMode === 'full' && paidStudy?.completionCode != null;
+  /**
+   * The suite and run settings a paid-study link fixes, read on mount (null
+   * on any other visit). The study pays for the suite the link names, so
+   * these controls are disabled on such a link.
+   */
+  const [studyLock, setStudyLock] = useState<StudyRunLock | null>(null);
+  const settingsLocked = studyLock !== null;
   /** Attempt count of the run in progress on a full-mode link (mirrored in a ref for async readers). */
   const [studyAttempt, setStudyAttemptState] = useState<StudyAttemptState | null>(null);
   const studyAttemptRef = useRef<StudyAttemptState | null>(null);
@@ -964,8 +977,10 @@ export function BenchRunner() {
     const search = window.location.search;
     const mode = parseCompletionMode(search);
     setCompletionMode(mode);
-    const fullCode =
-      mode === 'full' && readStudyEligibility().eligible ? readStudyCompletionCode(search) : null;
+    const studyCode = readStudyEligibility().eligible ? readStudyCompletionCode(search) : null;
+    const fullCode = mode === 'full' ? studyCode : null;
+    const lock = studyCode ? studyRunLock(parseRunPresets(search)) : null;
+    setStudyLock(lock);
     const storedAttempt = fullCode ? loadStudyAttempt() : null;
     // The rest of the setup, once the cell an interrupted attempt died at is known.
     const setUp = (interruptedCellId: string | null) => {
@@ -1010,13 +1025,22 @@ export function BenchRunner() {
         setRunsInput(String(state.count));
         if (action === 'start-next' && attemptAction !== 'capped') setAutoStartPending(true);
       } else {
-        const presets = parseRunPresets(window.location.search);
-        if (presets.suite) setSuite(presets.suite);
-        if (presets.includeQuality !== undefined) setIncludeQuality(presets.includeQuality);
+        const presets = parseRunPresets(search);
+        if (lock) {
+          // A paid-study link fixes these: the controls show the link's values, disabled.
+          setSuite(lock.suite);
+          setIncludeQuality(lock.includeQuality);
+          setClearAfterRun(lock.clearAfterRun);
+          setRunsInput(String(lock.runs));
+          setCooldownInput(String(lock.cooldownMinutes));
+        } else {
+          if (presets.suite) setSuite(presets.suite);
+          if (presets.includeQuality !== undefined) setIncludeQuality(presets.includeQuality);
+          if (presets.clearAfterRun !== undefined) setClearAfterRun(presets.clearAfterRun);
+          if (presets.runs !== undefined) setRunsInput(String(presets.runs));
+          if (presets.cooldownMinutes !== undefined) setCooldownInput(String(presets.cooldownMinutes));
+        }
         if (presets.publish !== undefined) setAutoSubmit(presets.publish);
-        if (presets.clearAfterRun !== undefined) setClearAfterRun(presets.clearAfterRun);
-        if (presets.runs !== undefined) setRunsInput(String(presets.runs));
-        if (presets.cooldownMinutes !== undefined) setCooldownInput(String(presets.cooldownMinutes));
         if (fullCode) setAutoSubmit(true);
         if (attemptAction === 'restart') setRestartPending(true);
       }
@@ -1796,14 +1820,25 @@ export function BenchRunner() {
     downloadJson(result, `localmode-bench-${result.runId}.json`);
   }, [result, downloadJson]);
 
-  const codeIssued = shouldIssueCompletionCode({
-    mode: fullMode ? 'full' : 'attempt',
-    suiteEnded: result !== null,
-    allCellsAttempted: result !== null && cellsAllAttempted(result.cells, planned.length),
-    submitState,
-    stoppedByUser,
-    lastRunOfSeries: !series || series.status === 'complete',
-  });
+  const resultSettings = result ? runSettingsOf(result) : null;
+  const codeIssued =
+    studyLock !== null &&
+    shouldIssueCompletionCode({
+      mode: fullMode ? 'full' : 'attempt',
+      suiteEnded: result !== null,
+      allCellsAttempted: result !== null && cellsAllAttempted(result.cells, planned.length),
+      submitState,
+      stoppedByUser,
+      lastRunOfSeries: !series || series.status === 'complete',
+      runSettings: resultSettings,
+      linkSettings: studyLock,
+    });
+  /** A finished run on a paid-study link that did not use the link's suite or quality setting. */
+  const studySettingsMismatch =
+    paidStudy?.completionCode != null &&
+    studyLock !== null &&
+    resultSettings !== null &&
+    !runMatchesStudyLink(resultSettings, studyLock);
 
   const summaries: CellSummary[] = result?.clientSummaries ?? [];
   const cellById = new Map<string, BenchCellResult>(result?.cells.map((c) => [c.cellId, c]) ?? []);
@@ -1884,7 +1919,7 @@ export function BenchRunner() {
                 <Select
                   value={suite}
                   onValueChange={(v) => setSuite(v as typeof suite)}
-                  disabled={phase === 'running'}
+                  disabled={phase === 'running' || settingsLocked}
                 >
                   <SelectTrigger id="bench-suite" className="w-44">
                     <SelectValue />
@@ -1907,7 +1942,7 @@ export function BenchRunner() {
                   id="bench-quality"
                   checked={includeQuality}
                   onCheckedChange={setIncludeQuality}
-                  disabled={phase === 'running'}
+                  disabled={phase === 'running' || settingsLocked}
                 />
               </div>
               <ConfigHelp>Adds tinyMMLU and STS-B scoring to check that each runtime keeps model accuracy.</ConfigHelp>
@@ -1927,7 +1962,7 @@ export function BenchRunner() {
                   value={runsInput}
                   onChange={(e) => setRunsInput(e.target.value)}
                   onBlur={() => setRunsInput(String(runsCount))}
-                  disabled={phase === 'running' || seriesOpen}
+                  disabled={phase === 'running' || seriesOpen || settingsLocked}
                   aria-describedby="bench-runs-help"
                 />
               </div>
@@ -1946,7 +1981,7 @@ export function BenchRunner() {
                     value={cooldownInput}
                     onChange={(e) => setCooldownInput(e.target.value)}
                     onBlur={() => setCooldownInput(String(cooldownMinutes))}
-                    disabled={phase === 'running' || seriesOpen}
+                    disabled={phase === 'running' || seriesOpen || settingsLocked}
                     aria-describedby="bench-runs-help"
                   />
                   <span className="text-sm text-muted-foreground">min</span>
@@ -1959,7 +1994,7 @@ export function BenchRunner() {
                   id="bench-clear-after"
                   checked={clearAfterRun}
                   onCheckedChange={setClearAfterRun}
-                  disabled={phase === 'running' || seriesOpen}
+                  disabled={phase === 'running' || seriesOpen || settingsLocked}
                 />
               </div>
               <ConfigHelp>Each next run downloads its models again, for cold-start timings.</ConfigHelp>
@@ -2025,7 +2060,9 @@ export function BenchRunner() {
                 <div className="mt-2 flex flex-col gap-2">
                   <p>
                     A link can prefill these controls, for example to send study participants the same
-                    settings. It never starts a run: a click on Run benchmark is always needed.
+                    settings. It never starts a run: a click on Run benchmark is always needed. On a study
+                    link with a completion code, the link fixes the suite, the quality-fidelity lane, Runs,
+                    the cool-down and clearing caches after each run.
                   </p>
                   <ul className="list-disc space-y-0.5 pl-5">
                     <li>
@@ -2064,6 +2101,11 @@ export function BenchRunner() {
               </details>
             </ConfigSection>
           </div>
+          {settingsLocked && (
+            <p className="text-xs text-muted-foreground" role="note">
+              {STUDY_LOCK_NOTE}
+            </p>
+          )}
           <div className="flex flex-col gap-2">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Model lanes</h3>
             <div className="flex flex-col gap-2" role="group" aria-label="Model lanes">
@@ -2539,7 +2581,15 @@ export function BenchRunner() {
                 </p>
               )}
             </div>
-            {fullMode && uploadFailedPermanently(submitState) && (!series || series.status === 'complete') && (
+            {studySettingsMismatch && (
+              <p role="alert" className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm">
+                {SETTINGS_MISMATCH_MESSAGE}
+              </p>
+            )}
+            {fullMode &&
+              !studySettingsMismatch &&
+              uploadFailedPermanently(submitState) &&
+              (!series || series.status === 'complete') && (
               <p role="alert" className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm">
                 {UPLOAD_FAILED_MESSAGE}
               </p>

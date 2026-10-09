@@ -13,7 +13,10 @@
  * than the cool-down, idle time on run 2's file), Stop series mid-run, and Clear model caches checked against the browser's
  * own storage listings before the next run loads cold. The paid-study browser
  * gate is checked in Chromium and under a Safari user agent with
- * `navigator.userAgentData` removed (see the gate describe block). The
+ * `navigator.userAgentData` removed (see the gate describe block), and a
+ * paid-study link is checked to fix the suite and the run settings (disabled
+ * controls at the link's values; editable on an organic visit), with a real
+ * run that differs from its link getting no code. The
  * full-completion study mode (`ccmode=full`) is driven against a second
  * `next start` of the same build whose results store is bound to a local
  * GitHub-compatible endpoint (see that describe block). Selectors are
@@ -83,6 +86,7 @@ async function providerStorage(page: Page): Promise<{ caches: string[]; database
 
 interface ExportedRun {
   runId: string;
+  suite: string;
   environment: {
     userReportedDevice?: string;
     userReportedHardware?: { gpu?: string; chassis?: string; ramGB?: number | null; otherAppsRunning?: boolean };
@@ -490,6 +494,74 @@ test.describe('paid-study browser gate (zero model bytes)', () => {
       await expect(runButton).not.toHaveAttribute('aria-describedby', /.+/);
     }
   });
+
+  test('a study link fixes the suite and the run settings; an organic visit with the same presets leaves them editable', async ({
+    page,
+  }) => {
+    const presets = 'tier=thorough&quality=on&runs=2&cooldown=1.5&cold=on&publish=on';
+    const controls = {
+      suite: page.getByRole('combobox', { name: 'Suite' }),
+      quality: page.getByRole('switch', { name: /quality-fidelity lane/i }),
+      runs: page.getByRole('spinbutton', { name: 'Runs', exact: true }),
+      cooldown: page.getByRole('spinbutton', { name: 'Cool-down between runs' }),
+      clearAfter: page.getByRole('switch', { name: 'Clear caches after each run' }),
+    };
+    const assertPresetValues = async () => {
+      await expect(controls.suite).toContainText('Thorough');
+      await expect(controls.quality).toBeChecked();
+      await expect(controls.runs).toHaveValue('2');
+      await expect(controls.cooldown).toHaveValue('1.5');
+      await expect(controls.clearAfter).toBeChecked();
+    };
+    const note = page.getByRole('note').filter({ hasText: 'This study link fixes the suite and the run settings.' });
+    // Both completion modes of a paid-study link lock the five controls to the link's values.
+    for (const mode of ['', '&ccmode=full']) {
+      await page.goto(`/bench/run?${presets}&cc=TESTCODE1${mode}&PROLIFIC_PID=e2e-lock-pid&STUDY_ID=e2e-study&SESSION_ID=e2e-session`);
+      await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeEnabled({ timeout: 15_000 });
+      await expect(page.getByText(/paid study session detected/i)).toBeVisible();
+      await assertPresetValues();
+      for (const control of Object.values(controls)) await expect(control).toBeDisabled();
+      await expect(note).toHaveCount(1);
+      await expect(note).toHaveText('This study link fixes the suite and the run settings.');
+      // A click on the locked picker opens nothing and changes nothing.
+      await controls.suite.click({ force: true });
+      await expect(page.getByRole('listbox')).toHaveCount(0);
+      await controls.quality.click({ force: true });
+      await expect(controls.quality).toBeChecked();
+      await assertPresetValues();
+      // Publishing stays as before: forced on in full mode, editable on an attempt-mode link.
+      const publish = page.getByRole('switch', { name: /publish results/i });
+      await expect(publish).toBeChecked();
+      if (mode) await expect(publish).toBeDisabled();
+      else await expect(publish).toBeEnabled();
+    }
+    // A study link that names no presets locks the controls at the plain-visit values.
+    await page.goto('/bench/run?cc=TESTCODE1&PROLIFIC_PID=e2e-lock-pid');
+    await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeEnabled({ timeout: 15_000 });
+    await expect(controls.suite).toContainText('Quick');
+    await expect(controls.quality).not.toBeChecked();
+    await expect(controls.runs).toHaveValue('1');
+    await expect(controls.cooldown).toHaveValue('0');
+    await expect(controls.clearAfter).not.toBeChecked();
+    for (const control of Object.values(controls)) await expect(control).toBeDisabled();
+    await expect(note).toHaveCount(1);
+
+    // An organic visit (no cc, with or without PROLIFIC_PID) prefills the same values and leaves every control editable.
+    for (const url of [`/bench/run?${presets}`, `/bench/run?${presets}&PROLIFIC_PID=e2e-lock-pid`]) {
+      await page.goto(url);
+      await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeEnabled({ timeout: 15_000 });
+      await assertPresetValues();
+      for (const control of Object.values(controls)) await expect(control).toBeEnabled();
+      await expect(page.getByText('This study link fixes the suite and the run settings.')).toHaveCount(0);
+      await controls.suite.click();
+      await page.getByRole('option', { name: /^Standard/ }).click();
+      await expect(controls.suite).toContainText('Standard');
+      await controls.quality.click();
+      await expect(controls.quality).not.toBeChecked();
+      await controls.runs.fill('4');
+      await expect(controls.runs).toHaveValue('4');
+    }
+  });
 });
 
 test.describe('bench real run (WASM lanes)', () => {
@@ -875,13 +947,16 @@ test.describe('bench real run (WASM lanes)', () => {
       }).observe(document, { childList: true, subtree: true });
     });
     // A study link: the hardware answers given before run 1 must reach run 2 across the reload.
-    await page.goto('/bench/run?cc=TESTCODE2&PROLIFIC_PID=e2e-series-pid');
+    // The study link names the series length: Runs is fixed at 2 on it.
+    await page.goto('/bench/run?runs=2&cc=TESTCODE2&PROLIFIC_PID=e2e-series-pid');
     const runButton = page.getByRole('button', { name: 'Run benchmark' });
     await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
     await expect(runButton).toBeEnabled({ timeout: 15_000 });
+    const runsInput = page.getByRole('spinbutton', { name: 'Runs', exact: true });
+    await expect(runsInput).toHaveValue('2');
+    await expect(runsInput).toBeDisabled();
     // Publishing off: each run of the series is exported as a JSON download.
     await page.getByRole('switch', { name: /publish results/i }).click();
-    await page.getByRole('spinbutton', { name: 'Runs', exact: true }).fill('2');
     const downloads = collectRunDownloads(page);
     const loads = countLoads(page);
     await runButton.click();
@@ -966,6 +1041,57 @@ test.describe('bench real run (WASM lanes)', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0);
     expect(askedOn).toHaveLength(2);
     expect(consoleErrors).toEqual([]);
+  });
+
+  test('a run that differs from the study link (an open series from an earlier visit) gets no code and the researcher message', async ({
+    page,
+  }) => {
+    test.setTimeout(25 * 60 * 1000);
+    const consoleErrors: string[] = [];
+    collectConsoleErrors(page, consoleErrors);
+    acceptLeavePrompts(page);
+    // ALLOWLIST (documented, this lane only): the unbound dev store answers the
+    // upload with 503 bench-store-unbound, which Chromium logs as a console
+    // error. On a matching attempt-mode run that failed upload issues the code
+    // (the quick-suite lane above), so the 503 is what makes the missing code
+    // here a witness of the settings check. Scoped to status and URL.
+    const expected503 = (e: string) => e.includes('503') && e.includes('/api/bench/submit');
+    // An earlier, organic visit starts a series of 2 Quick runs with the quality lane off and publishing on...
+    await page.goto('/bench/run?tier=quick&quality=off&runs=2&publish=on');
+    await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeEnabled({ timeout: 15_000 });
+    await page.getByRole('button', { name: 'Run benchmark' }).click();
+    const overlay = page.getByRole('dialog', { name: /benchmark running/i });
+    await expect(overlay.getByRole('group', { name: 'Series progress' })).toContainText('Series: run 1 of 2', { timeout: 20_000 });
+    // ...and the participant then opens a study link that names the quality lane on, mid-run.
+    await page.goto('/bench/run?tier=quick&quality=on&runs=2&publish=on&cc=TESTCODE1&PROLIFIC_PID=e2e-mismatch-pid');
+    await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+    const panel = page.getByRole('region', { name: 'Benchmark series' });
+    await expect(panel).toContainText(/did not finish/);
+    // The open series dictates what runs; the controls show its settings, locked on the study link.
+    const quality = page.getByRole('switch', { name: /quality-fidelity lane/i });
+    await expect(quality).not.toBeChecked();
+    await expect(quality).toBeDisabled();
+    await expect(page.getByText('This study link fixes the suite and the run settings.')).toBeVisible();
+    await panel.getByRole('button', { name: 'Continue series' }).click();
+    await expect(overlay.getByRole('group', { name: 'Series progress' })).toContainText('Series: run 1 of 2', { timeout: 20_000 });
+    await overlay.getByRole('button', { name: 'Stop series' }).click();
+    await expect(panel).toContainText('Series stopped after 1 of 2 runs', { timeout: 15 * 60 * 1000 });
+    // The run finished and its upload attempt resolved (503 here), yet no code: its quality setting is not the link's.
+    await expect(page.getByRole('status').filter({ hasText: /results store is not configured/i })).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByRole('alert').filter({ hasText: 'did not use the suite' })).toHaveText(
+      'This run did not use the suite and quality-fidelity setting this study link names, so no completion code is issued. Please message the researcher with a screenshot of this page.',
+    );
+    await expect(page.getByRole('region', { name: /study completion code/i })).toHaveCount(0);
+    await expect(page.getByText('TESTCODE1')).toHaveCount(0);
+    // The run on the page is the series' Quick run without quality cells.
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export JSON' }).click();
+    const exported = JSON.parse(readFileSync((await (await downloadPromise).path())!, 'utf8')) as ExportedRun;
+    expect(exported.suite).toBe('quick');
+    expect(exported.cells.filter((c) => c.cellId.split('/')[2].startsWith('quality-'))).toEqual([]);
+    expect(consoleErrors.filter((e) => !expected503(e))).toEqual([]);
   });
 
   test('a series of 2 Quick runs with cooldown=1: the page idles a minute with a countdown before the reload', async ({
@@ -1365,6 +1491,11 @@ test.describe('full-completion study mode (ccmode=full)', () => {
     const publish = page.getByRole('switch', { name: /publish results/i });
     await expect(publish).toBeChecked();
     await expect(publish).toBeDisabled();
+    // The suite and the run settings are the link's, and fixed.
+    await expect(page.getByRole('combobox', { name: 'Suite' })).toContainText('Quick');
+    await expect(page.getByRole('combobox', { name: 'Suite' })).toBeDisabled();
+    await expect(page.getByRole('switch', { name: /quality-fidelity lane/i })).toBeDisabled();
+    await expect(page.getByText('This study link fixes the suite and the run settings.')).toBeVisible();
     // The link presets keep the mode in the generated link.
     await page.getByText('Link presets').click();
     await expect(page.getByText('/bench/run?tier=quick&quality=off&runs=1&cooldown=0&cold=off&publish=on&ccmode=full')).toBeVisible();
@@ -1409,6 +1540,11 @@ test.describe('full-completion study mode (ccmode=full)', () => {
     await page.getByRole('button', { name: 'Export JSON' }).click();
     const exported = JSON.parse(readFileSync((await (await downloadPromise).path())!, 'utf8')) as ExportedRun;
     expect(committed.runId).toBe(exported.runId);
+    // The uploaded run is the suite the link names (tier=quick), with its quality setting (quality=off).
+    expect(new URLSearchParams(FULL_STUDY_LINK.split('?')[1]).get('tier')).toBe('quick');
+    expect(committed.suite).toBe('quick');
+    expect(exported.suite).toBe('quick');
+    expect(committed.cells.filter((c) => c.cellId.split('/')[2].startsWith('quality-'))).toEqual([]);
     expect(committed.environment.userReportedHardware).toEqual({ gpu: 'Intel Iris Xe Graphics', chassis: 'laptop', ramGB: 16, otherAppsRunning: false });
     expect(exported.cells.some((c) => c.status === 'ok')).toBe(true);
     // The run finished: nothing is left to restart.

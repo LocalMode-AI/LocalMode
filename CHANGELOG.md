@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.9] - 2026-10-08
+
+**Released:** no npm package; the `/bench` site only.
+
+### Fixed
+
+- **bench:** a paid-study link did not fix the suite it pays for. A participant opened a Thorough study link (`tier=thorough&quality=on&...&ccmode=full`) and uploaded two Standard-suite runs, because the Suite picker, the quality-fidelity switch, Runs, Cool-down between runs and Clear caches after each run stayed editable on a study link, and the full-completion rule counted the shorter suite's planned cells as the whole run, so it could issue the code. On a paid-study link (a valid `cc`, in both the `attempt` and the `full` completion mode) those five controls are now disabled at the link's values, a parameter the link leaves out taking the plain-visit value (`studyRunLock()` in `apps/ui/src/lib/bench/study-completion.ts`), and a note under the configuration panel reads "This study link fixes the suite and the run settings."; publishing stays forced on in `full` mode as before. The completion code is now issued only when the finished run's `suite` equals the link's `tier` and its quality-fidelity setting (read from its quality cells, `runSettingsOf()`) equals the link's `quality`; a run that differs gets no code and the page asks the participant to message the researcher with a screenshot. Organic visits are unchanged: a link still only prefills the controls. Unit tests cover the presets-to-lock mapping and both checks in both modes; the bench e2e spec checks the locked controls on study links in both modes and the editable ones on an organic visit, asserts that the run the full-mode lane uploads has the link's suite, and drives a real run that differs from its study link (an open series from an earlier visit) to the researcher message with no code.
+
 ## [2.16.8] - 2026-10-07
 
 **Released:** no npm package; the `/bench` site only.

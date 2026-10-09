@@ -8,9 +8,13 @@
  * MAX_AUTOMATIC_RESTARTS times per run, and stops as soon as two attempts in a
  * row are interrupted at the same cell (a device that dies at the same model
  * load every time would otherwise spend four full runs on it); the attempt
- * count lives in localStorage beside the series state. Everything in this module is pure
+ * count lives in localStorage beside the series state. In both modes the
+ * study pays for the suite the link names: the link fixes the suite and the
+ * run settings (`studyRunLock`), and a run whose suite or quality-fidelity
+ * setting differs from the link's gets no code. Everything in this module is pure
  * except the localStorage helpers at the bottom, which never throw.
  */
+import type { RunPresets, SeriesSuite } from './series';
 import { parseStoredHardware, type HardwareAnswers } from './study-hardware';
 
 export type CompletionMode = 'attempt' | 'full';
@@ -77,6 +81,85 @@ export function parseCompletionMode(search: string): CompletionMode {
   return new URLSearchParams(search).get('ccmode') === 'full' ? 'full' : 'attempt';
 }
 
+/**
+ * The run settings a paid-study link fixes. The page shows them in disabled
+ * controls; a parameter the link leaves out takes the value the controls
+ * start with on a plain visit.
+ */
+export interface StudyRunLock {
+  suite: SeriesSuite;
+  includeQuality: boolean;
+  runs: number;
+  /** Cool-down between runs, in minutes. */
+  cooldownMinutes: number;
+  clearAfterRun: boolean;
+}
+
+/**
+ * The settings a paid-study link fixes, from its parsed presets (see
+ * `parseRunPresets`). Publishing is not part of the lock: `full` mode forces
+ * it on by itself.
+ *
+ * @param presets - The link's presets.
+ * @returns The locked settings.
+ * @example
+ * studyRunLock(parseRunPresets('?tier=thorough&quality=on&cc=ABCD1234'));
+ * // { suite: 'thorough', includeQuality: true, runs: 1, cooldownMinutes: 0, clearAfterRun: false }
+ */
+export function studyRunLock(presets: RunPresets): StudyRunLock {
+  return {
+    suite: presets.suite ?? 'quick',
+    includeQuality: presets.includeQuality ?? false,
+    runs: presets.runs ?? 1,
+    cooldownMinutes: presets.cooldownMinutes ?? 0,
+    clearAfterRun: presets.clearAfterRun ?? false,
+  };
+}
+
+/** The settings of a finished run the completion rule compares with the link. */
+export interface StudyRunSettings {
+  suite: string;
+  includeQuality: boolean;
+}
+
+/**
+ * The suite and quality-fidelity setting a finished run actually used: its
+ * `suite`, and whether it planned any quality cell (quality cells are planned
+ * on every lane, skipped or not, whenever the lane is on).
+ *
+ * @param run - The run result.
+ * @returns The run's settings.
+ * @example
+ * runSettingsOf(result); // { suite: 'standard', includeQuality: false }
+ */
+export function runSettingsOf(run: { suite: string; cells: readonly { workloadKind: string }[] }): StudyRunSettings {
+  return { suite: run.suite, includeQuality: run.cells.some((c) => c.workloadKind.startsWith('quality-')) };
+}
+
+/**
+ * Whether a finished run used the suite and the quality-fidelity setting
+ * the study link names.
+ *
+ * @param run - The run's settings (see `runSettingsOf`).
+ * @param link - The link's locked settings.
+ * @returns True when both match.
+ * @example
+ * runMatchesStudyLink({ suite: 'standard', includeQuality: true }, studyRunLock({ suite: 'thorough', includeQuality: true })); // false
+ */
+export function runMatchesStudyLink(
+  run: StudyRunSettings,
+  link: Pick<StudyRunLock, 'suite' | 'includeQuality'>,
+): boolean {
+  return run.suite === link.suite && run.includeQuality === link.includeQuality;
+}
+
+/** Message shown in place of the code when a finished run does not match the link's suite or quality setting. */
+export const SETTINGS_MISMATCH_MESSAGE =
+  'This run did not use the suite and quality-fidelity setting this study link names, so no completion code is issued. Please message the researcher with a screenshot of this page.';
+
+/** The note under the configuration panel of a paid-study link. */
+export const STUDY_LOCK_NOTE = 'This study link fixes the suite and the run settings.';
+
 /** A finished cell as the completion rule reads it. */
 export interface CompletionCell {
   status: 'ok' | 'invalid' | 'error' | 'skipped';
@@ -121,10 +204,15 @@ export interface CompletionInput {
   stoppedByUser: boolean;
   /** The run is the last run of its series (true outside a series). */
   lastRunOfSeries: boolean;
+  /** The finished run's settings (see `runSettingsOf`), or null before a result exists. */
+  runSettings: StudyRunSettings | null;
+  /** The settings the study link fixes. */
+  linkSettings: Pick<StudyRunLock, 'suite' | 'includeQuality'>;
 }
 
 /**
- * Whether the page shows the completion code.
+ * Whether the page shows the completion code. In both modes the finished
+ * run must have used the suite and the quality-fidelity setting the link names.
  *
  * - `attempt`: once the suite ended and the upload attempt resolved (done or failed).
  * - `full`: only when the suite ended with every cell attempted, the upload
@@ -135,11 +223,15 @@ export interface CompletionInput {
  * @returns True when the code is shown.
  * @example
  * shouldIssueCompletionCode({ mode: 'full', suiteEnded: true, allCellsAttempted: true,
- *   submitState: { kind: 'done' }, stoppedByUser: false, lastRunOfSeries: true }); // true
+ *   submitState: { kind: 'done' }, stoppedByUser: false, lastRunOfSeries: true,
+ *   runSettings: { suite: 'thorough', includeQuality: true },
+ *   linkSettings: { suite: 'thorough', includeQuality: true } }); // true
  */
 export function shouldIssueCompletionCode(input: CompletionInput): boolean {
-  const { mode, suiteEnded, allCellsAttempted, submitState, stoppedByUser, lastRunOfSeries } = input;
+  const { mode, suiteEnded, allCellsAttempted, submitState, stoppedByUser, lastRunOfSeries, runSettings, linkSettings } =
+    input;
   if (!suiteEnded || stoppedByUser) return false;
+  if (runSettings === null || !runMatchesStudyLink(runSettings, linkSettings)) return false;
   if (mode === 'attempt') return submitState.kind === 'done' || submitState.kind === 'failed';
   return allCellsAttempted && lastRunOfSeries && submitState.kind === 'done';
 }
