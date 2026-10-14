@@ -380,7 +380,12 @@ export default function BenchMethodologyPage() {
               and nothing about the run is lost in between. A finished run whose upload never went
               through can be added by a maintainer from the file the participant exported: it
               passes the same checks as an upload except the session nonce, and its index entry
-              carries <code className="font-mono text-sm">importedAt</code>.
+              carries <code className="font-mono text-sm">importedAt</code>. A run the page
+              assembled after a series had finished, which carried that series&apos; record
+              numbered past its count, is imported with the record removed as a publication scrub
+              (<code className="font-mono text-sm">scrubbedAt</code> stamped, digest recomputed after
+              the participant&apos;s digest verified), and its entry carries{' '}
+              <code className="font-mono text-sm">importNote</code>.
             </li>
             <li>
               Submissions contain the raw per-chunk timestamp trace and the full generated text;

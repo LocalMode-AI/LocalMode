@@ -8,9 +8,9 @@
  *
  * Entries are ordered by `createdAt`, then by path, so the output depends only
  * on the run files. The output is compact JSON with no trailing newline, as the
- * submit path writes it. The one entry field no run file holds, `importedAt`
- * (set by `import-exported-run.ts` on a run added from an exported file), is
- * carried over from the current index for the same run id.
+ * submit path writes it. The entry fields no run file holds, `importedAt` and
+ * `importNote` (set by `import-exported-run.ts` on a run added from an
+ * exported file), are carried over from the current index for the same run id.
  *
  * The tool refuses to write an index that has fewer entries than the current
  * one, or that drops a run the current index lists, unless `--allow-shrink`
@@ -61,12 +61,15 @@ function listJson(root: string, dir: string): string[] {
  * Build the index entries for every run file in a dataset clone.
  *
  * @param datasetDir - Root of the dataset clone (holds `runs/` and `quarantine/`).
- * @param current - The index being replaced; its `importedAt` values are kept.
+ * @param current - The index being replaced; its `importedAt` and `importNote` values are kept.
  * @returns The ordered entries and any run file that could not be indexed.
  */
 export function buildIndexFromDataset(datasetDir: string, current: readonly RunIndexEntry[] = []): RebuildResult {
-  const importedAt = new Map<string, string>();
-  for (const e of current) if (typeof e.importedAt === 'string') importedAt.set(e.runId, e.importedAt);
+  const imports = new Map<string, Pick<RunIndexEntry, 'importedAt' | 'importNote'>>();
+  for (const e of current) {
+    if (typeof e.importedAt !== 'string') continue;
+    imports.set(e.runId, { importedAt: e.importedAt, ...(typeof e.importNote === 'string' ? { importNote: e.importNote } : {}) });
+  }
   const entries: RunIndexEntry[] = [];
   const problems: RebuildProblem[] = [];
   const seen = new Map<string, string>();
@@ -92,9 +95,9 @@ export function buildIndexFromDataset(datasetDir: string, current: readonly RunI
     // The directory is the publication decision: quarantine/ holds the runs
     // the submit path flagged, runs/ the verified ones.
     const entry = toIndexEntry(run, report.summaries, path.startsWith('quarantine/'), path);
-    const imported = importedAt.get(run.runId);
-    // Appended last, where the import tool puts it.
-    entries.push(imported === undefined ? entry : { ...entry, importedAt: imported });
+    const imported = imports.get(run.runId);
+    // Appended last, where the import tool puts them.
+    entries.push(imported === undefined ? entry : { ...entry, ...imported });
   }
   entries.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.path.localeCompare(b.path));
   return { entries, problems };

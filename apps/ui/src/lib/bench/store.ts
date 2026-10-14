@@ -87,6 +87,11 @@ export interface RunIndexEntry {
    * through. Absent on every run the submit route published.
    */
   importedAt?: string;
+  /**
+   * What the import changed besides the nonce, on an imported run that needed
+   * it (`"stale series record removed"`). Absent otherwise.
+   */
+  importNote?: string;
   cells: Array<{
     cellId: string;
     runtimeId: string;

@@ -208,6 +208,26 @@ verified/quarantine decision, the flags and the index entry, and writes
 nothing. Review `git diff` (one new run file, one appended index entry) and
 commit both in the dataset clone.
 
+A run that a `/bench/run` page assembled after a series had finished on it
+(site 2.16.9 and earlier) carries that series' record numbered past its count,
+for example `harness.series` index 11 of count 10, and the route refuses it
+with "harness.series.index must be an integer from 1 to
+harness.series.count". Import such a file with `--drop-stale-series`:
+
+```
+pnpm exec tsx scripts/import-exported-run.ts --dataset ../../../LocalMode-Bench --file export.json --drop-stale-series --dry-run
+pnpm exec tsx scripts/import-exported-run.ts --dataset ../../../LocalMode-Bench --file export.json --drop-stale-series
+```
+
+The tool first verifies the participant's digest over the file as exported,
+then removes `harness.series` as a publication scrub: `scrubbedAt` is stamped,
+the digest recomputed, and the rest of the run is untouched. The output prints
+the removed record and the client digest, and the index entry carries
+`importNote: "stale series record removed"` after `importedAt` (the rebuild
+tool keeps both). The flag is refused for a run whose series record is
+consistent (index within its count) or absent, so it cannot strip a genuine
+series place.
+
 ## Optional integration check (real GitHub API, opt-in)
 
 With the env vars exported locally you can exercise the real store path against

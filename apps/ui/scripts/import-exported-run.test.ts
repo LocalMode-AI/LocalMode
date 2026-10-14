@@ -37,11 +37,12 @@ const readText = (p: string) => readFileSync(join(dataset, p), 'utf8');
 const readIndex = () => JSON.parse(readText('index/summary.json')) as RunIndexEntry[];
 
 /** The file a participant's Export JSON saves: the run with the nonce its run started with, and the page's digest. */
-async function exportedRun(source = SOURCE_RUN): Promise<BenchRunResult> {
+async function exportedRun(source = SOURCE_RUN, series?: BenchRunResult['harness']['series']): Promise<BenchRunResult> {
   const run = JSON.parse(readFileSync(join(FIXTURE, source), 'utf8')) as BenchRunResult;
   run.runId = RUN_ID;
   run.createdAt = '2026-10-03T08:00:00.000Z';
   run.environment = { ...run.environment, userReportedDevice: 'prolific:0f1e2d3c4b5a' };
+  if (series) run.harness = { ...run.harness, series };
   run.nonce = issueNonce(Date.now() - 25 * 3600_000);
   run.digest = await computeRunDigest(run);
   return run;
@@ -213,4 +214,88 @@ describe('import-exported-run', () => {
     expect(existsSync(join(dataset, RUN_PATH))).toBe(false);
     expect(readText('index/summary.json')).toBe(indexText);
   }, 120_000);
+
+  describe('--drop-stale-series', () => {
+    /** The record a run started after a finished series of 2 carried: numbered 3 of 2. */
+    const STALE = { id: 'series-stale', index: 3, count: 2, cooldownMs: 0, idleBeforeMs: 183_040 };
+
+    it('without the flag, a run numbered past its series is refused with the shape error and nothing is written', async () => {
+      writeFileSync(exportPath, JSON.stringify(await exportedRun(SOURCE_RUN, STALE)));
+      const indexText = readText('index/summary.json');
+      const out = cli();
+      expect(out.status).toBe(1);
+      expect(out.stderr).toContain(
+        'the submit route would refuse this file (400 invalid-shape): harness.series.index must be an integer from 1 to harness.series.count',
+      );
+      expect(existsSync(join(dataset, RUN_PATH))).toBe(false);
+      expect(readText('index/summary.json')).toBe(indexText);
+    }, 120_000);
+
+    it('with the flag, removes the record as a publication scrub: scrubbedAt, a recomputed digest, and the import note', async () => {
+      writeFileSync(exportPath, JSON.stringify(await exportedRun(SOURCE_RUN, STALE)));
+      const exported = JSON.parse(readFileSync(exportPath, 'utf8')) as BenchRunResult;
+      expect(await verifyRunDigest(exported)).toBe(true);
+      const indexBefore = readIndex();
+      const out = cli('--drop-stale-series');
+      expect(out.stderr).toBe('');
+      expect(out.status).toBe(0);
+      expect(out.stdout).toContain(
+        `stale series record removed: ${JSON.stringify(STALE)} (index 3 > count 2); client digest ${exported.digest} verified before the removal`,
+      );
+      expect(out.stdout).toContain('publication scrub: rewrote fields, scrubbedAt stamped, digest recomputed');
+      expect(out.stdout).toContain(`run file: ${RUN_PATH} (runs: verified`);
+
+      const published = JSON.parse(readText(RUN_PATH)) as BenchRunResult;
+      expect(published.harness.series).toBeUndefined();
+      expect(published.nonce).toBeUndefined();
+      expect(Number.isNaN(Date.parse(published.scrubbedAt ?? ''))).toBe(false);
+      expect(published.digest).not.toBe(exported.digest);
+      expect(await verifyRunDigest(published)).toBe(true);
+      // Nothing else changed: the export minus the series record, the nonce and the digest.
+      const { nonce: _n, digest: _d, scrubbedAt: _s, ...publishedRest } = published;
+      const { nonce: _n2, digest: _d2, ...exportedRest } = exported;
+      const { series: _series, ...harness } = exportedRest.harness;
+      expect(publishedRest).toEqual({ ...exportedRest, harness });
+
+      const index = readIndex();
+      expect(index.slice(0, -1)).toEqual(indexBefore);
+      const entry = index.at(-1)!;
+      expect(entry).toMatchObject({ runId: RUN_ID, flagged: false, path: RUN_PATH, importNote: 'stale series record removed' });
+      expect(entry.importedAt).toBe(published.scrubbedAt);
+      expect(Object.keys(entry).slice(-2)).toEqual(['importedAt', 'importNote']);
+      // Only this entry carries the note.
+      expect(index.filter((e) => 'importNote' in e)).toHaveLength(1);
+      // A rebuild of the index from the run files keeps the import note.
+      const rebuilt = buildIndexFromDataset(dataset, index);
+      expect(rebuilt.problems).toEqual([]);
+      expect(serializeIndex(rebuilt.entries)).toBe(readText('index/summary.json'));
+    }, 120_000);
+
+    it('refuses the flag for a consistent series record, and for a run with none, writing nothing', async () => {
+      const indexText = readText('index/summary.json');
+      writeFileSync(exportPath, JSON.stringify(await exportedRun(SOURCE_RUN, { ...STALE, index: 2 })));
+      const out = cli('--drop-stale-series');
+      expect(out.status).toBe(1);
+      expect(out.stderr).toContain(
+        '--drop-stale-series: harness.series is consistent (index 2 of 2); the flag only removes a record numbered past its count',
+      );
+      // The same file imports without the flag.
+      writeFileSync(exportPath, JSON.stringify(await exportedRun()));
+      await expect(importExportedRun({ datasetDir: dataset, file: exportPath, dryRun: true, dropStaleSeries: true })).rejects.toThrow(
+        '--drop-stale-series: the run carries no harness.series record; import it without the flag',
+      );
+      expect(existsSync(join(dataset, RUN_PATH))).toBe(false);
+      expect(readText('index/summary.json')).toBe(indexText);
+    }, 120_000);
+
+    it('refuses a tampered export with the flag before removing anything', async () => {
+      const run = await exportedRun(SOURCE_RUN, STALE);
+      run.environment.hardware.cores = (run.environment.hardware.cores ?? 4) + 1;
+      writeFileSync(exportPath, JSON.stringify(run));
+      const out = cli('--drop-stale-series');
+      expect(out.status).toBe(1);
+      expect(out.stderr).toContain('the submit route would refuse this file (400 digest-mismatch): Result digest is missing or wrong.');
+      expect(existsSync(join(dataset, RUN_PATH))).toBe(false);
+    }, 120_000);
+  });
 });

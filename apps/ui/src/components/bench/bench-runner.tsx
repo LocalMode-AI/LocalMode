@@ -69,9 +69,11 @@ import {
   resolveSeriesOnLoad,
   saveSeries,
   seriesEtaMs,
+  seriesForRun,
   seriesHarness,
   seriesSummaryText,
   seriesTitle,
+  seriesToStore,
   startCooldown,
   type SeriesRunRecord,
   type SeriesState,
@@ -935,7 +937,9 @@ export function BenchRunner() {
   const updateSeries = useCallback((next: SeriesState | null) => {
     seriesRef.current = next;
     setSeriesState(next);
-    if (next) saveSeries(next);
+    // Only a series with runs to do is stored: a finished one ends with this page.
+    const stored = seriesToStore(next);
+    if (stored) saveSeries(stored);
     else clearStoredSeries();
     // The hardware answers live as long as the series has runs to do.
     if (!isSeriesOpen(next)) clearSeriesHardware();
@@ -999,8 +1003,9 @@ export function BenchRunner() {
       // A pending series wins over URL presets: its runs repeat the settings it
       // started with. A link only prefills the controls; it never starts a run.
       const stored = loadSeries();
-      // A finished series stays on screen until closed, but only an open one
-      // (running or paused) dictates the controls.
+      // A finished series left in storage (by an earlier version of this page)
+      // is shown once and removed from storage; only an open one (running or
+      // paused) dictates the controls.
       if (stored && !isSeriesOpen(stored)) updateSeries(stored);
       if (stored && isSeriesOpen(stored)) {
         let { state, action } = resolveSeriesOnLoad(stored);
@@ -1263,7 +1268,9 @@ export function BenchRunner() {
     const chromeLaneActive = activeLanes.some((l) => l.model.runtimeId === 'chrome-ai');
     let unsubscribeDownload: (() => void) | null = null;
     pageHasRunRef.current = true;
-    const seriesAtStart = seriesRef.current;
+    // A run carries a series record only for an open series with a run left to do.
+    const { series: seriesAtStart, dropped } = seriesForRun(seriesRef.current);
+    if (dropped) console.warn(`LocalMode Bench: ${dropped}.`);
     const runStartedAtMs = Date.now();
     // A full-mode study run counts its attempt before anything can fail, so a
     // page that dies during it restarts the run on the next load.
@@ -1619,6 +1626,8 @@ export function BenchRunner() {
 
   /** Run button: one run in this page, or the first run of a series. */
   const startFromClick = useCallback(() => {
+    // A finished series on screen belongs to the runs before this one: close it.
+    if (seriesRef.current && !isSeriesOpen(seriesRef.current)) updateSeries(null);
     if (runsCount <= 1) {
       void run({ userActivated: true });
       return;

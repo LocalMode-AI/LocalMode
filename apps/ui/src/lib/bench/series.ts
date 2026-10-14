@@ -267,6 +267,33 @@ export function isSeriesOpen(state: SeriesState | null): state is SeriesState {
 }
 
 /**
+ * What the page keeps in localStorage for a series: the series while it has
+ * runs to do, nothing once it is complete or stopped. A finished series is
+ * shown on the page that ran it until closed, but never outlives that page, so
+ * a later run on a fresh load is a plain run.
+ */
+export function seriesToStore(state: SeriesState | null): SeriesState | null {
+  return isSeriesOpen(state) ? state : null;
+}
+
+/**
+ * The series a run that starts now belongs to. Only an open series whose next
+ * run is within its count qualifies; anything else (a complete or stopped
+ * series still on screen, or a record whose next index is past its count) is
+ * dropped, with the reason, so the run is assembled as a plain run without
+ * `harness.series`.
+ */
+export function seriesForRun(state: SeriesState | null): { series: SeriesState | null; dropped: string | null } {
+  if (state === null) return { series: null, dropped: null };
+  const index = currentRunIndex(state);
+  if (isSeriesOpen(state) && index <= state.count) return { series: state, dropped: null };
+  return {
+    series: null,
+    dropped: `series ${state.seriesId} is ${state.status} (next index ${index} of ${state.count}); the run is assembled without harness.series`,
+  };
+}
+
+/**
  * Remaining wall time: the mean duration of the completed runs times the runs
  * left, plus what is left of a running cool-down and one full cool-down
  * before each later run. Null before the first run finishes.

@@ -25,10 +25,12 @@ import {
   resolveSeriesOnLoad,
   serializeSeriesState,
   seriesEtaMs,
+  seriesForRun,
   seriesHarness,
   seriesSummaryText,
   startCooldown,
   seriesTitle,
+  seriesToStore,
   type SeriesSettings,
   type SeriesState,
 } from '../src/lib/bench/series';
@@ -375,5 +377,58 @@ describe('cool-down between runs', () => {
     expect(text.split('\n')[0]).toBe(
       'LocalMode Bench series series-c · thorough suite · quality on · publish on · clear caches after each run off · cool-down 1.5 min',
     );
+  });
+});
+
+describe('after the last run: nothing is stored and the next run is a plain run', () => {
+  it('stores the series while it has runs to do and nothing once the last run is recorded', () => {
+    let s = fresh(2);
+    expect(seriesToStore(s)).toBe(s);
+    s = finishRun(s, 'run-a', 1_000);
+    expect(seriesToStore(s)).toBe(s);
+    const paused = recordRunFailed(markRunStarted(s, T0), 'boom');
+    expect(seriesToStore(paused)).toBe(paused);
+    // A run still in flight after Stop was pressed keeps the series stored until it records.
+    const stopping = requestStop(markRunStarted(s, T0), { runInProgress: true, now: T0 });
+    expect(seriesToStore(stopping)).toBe(stopping);
+    s = finishRun(s, 'run-b', 1_000, T0 + 5_000);
+    expect(s.status).toBe('complete');
+    expect(seriesToStore(s)).toBeNull();
+    expect(seriesToStore(recordRunFinished(stopping, { runId: 'run-b', durationMs: 5, outcome: 'exported' }, T0))).toBeNull();
+    expect(seriesToStore(requestStop(fresh(3), { runInProgress: false, now: T0 }))).toBeNull();
+    expect(seriesToStore(null)).toBeNull();
+  });
+
+  it('a run started after the series completed carries no series record, with the reason', () => {
+    let s = createSeries({ seriesId: 'series-done', count: 10, settings: { ...settings, cooldownMs: 180_000 }, now: T0 });
+    for (let i = 1; i <= 10; i += 1) {
+      s = startCooldown(finishRun(s, `run-${i}`, 1_000, T0 + i * 1_000), T0 + i * 1_000);
+    }
+    expect(s.status).toBe('complete');
+    // The record a stale series would put on the run: index 11 of 10, which the submit route rejects.
+    expect(seriesHarness(s)).toMatchObject({ id: 'series-done', index: 11, count: 10 });
+    const { series, dropped } = seriesForRun(s);
+    expect(series).toBeNull();
+    expect(dropped).toBe(
+      'series series-done is complete (next index 11 of 10); the run is assembled without harness.series',
+    );
+  });
+
+  it('drops a record whose next index is past its count even while it reads as open, and a stopped series', () => {
+    const overrun: SeriesState = { ...finishRun(finishRun(fresh(2), 'a', 1), 'b', 1), status: 'running', endedAt: undefined };
+    expect(seriesForRun(overrun)).toEqual({
+      series: null,
+      dropped: 'series series-1 is running (next index 3 of 2); the run is assembled without harness.series',
+    });
+    const stopped = requestStop(finishRun(fresh(3), 'a', 1), { runInProgress: false, now: T0 });
+    expect(seriesForRun(stopped).series).toBeNull();
+    expect(seriesForRun(stopped).dropped).toMatch(/^series series-1 is stopped \(next index 2 of 3\)/);
+  });
+
+  it('keeps the record of a run that is part of an open series, and a run with no series at all', () => {
+    const s = markRunStarted(finishRun(fresh(3), 'a', 1), T0);
+    expect(seriesForRun(s)).toEqual({ series: s, dropped: null });
+    expect(seriesHarness(seriesForRun(s).series!)).toMatchObject({ index: 2, count: 3 });
+    expect(seriesForRun(null)).toEqual({ series: null, dropped: null });
   });
 });

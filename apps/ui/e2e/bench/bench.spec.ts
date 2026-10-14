@@ -8,7 +8,9 @@
  * inference; results table, JSON export with digest, and the dev-mode
  * submission path (503 bench-store-unbound surfaced to the user) are all
  * exercised for real. The runner conveniences are driven the same way: link
- * presets (prefill, never start), a two-run series across a real page reload,
+ * presets (prefill, never start), a two-run series across a real page reload
+ * (then a plain run in a second tab of the same browser, which must carry no
+ * series record and upload to a bound local store),
  * a two-run series with a one-minute cool-down (countdown, reload no earlier
  * than the cool-down, idle time on run 2's file), Stop series mid-run, and Clear model caches checked against the browser's
  * own storage listings before the next run loads cold. The paid-study browser
@@ -920,127 +922,187 @@ test.describe('bench real run (WASM lanes)', () => {
     expect(consoleErrors).toEqual([]);
   });
 
-  test('a series of 2 Quick runs: one click, a page reload between runs, both runs kept with their series place', async ({
+  test('a series of 2 Quick runs: one click, a page reload between runs, both runs kept with their series place; a plain run after it uploads without a series record', async ({
     page,
     context,
   }) => {
-    test.setTimeout(30 * 60 * 1000);
-    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-    const consoleErrors: string[] = [];
-    collectConsoleErrors(page, consoleErrors);
-    // Every "About this computer" dialog that opens on any page load of the series is counted.
-    const askedOn: string[] = [];
-    await page.exposeFunction('__benchHardwareDialogShown', (title: string) => askedOn.push(title));
-    await page.addInitScript(() => {
-      const report = (t: string) =>
-        (window as unknown as { __benchHardwareDialogShown: (t: string) => Promise<void> }).__benchHardwareDialogShown(t);
-      const seen = new WeakSet<Element>();
-      new MutationObserver(() => {
-        for (const el of document.querySelectorAll('[role="dialog"]')) {
-          const titleId = el.getAttribute('aria-labelledby');
-          const title = titleId ? document.getElementById(titleId)?.textContent : null;
-          if (title === 'About this computer' && !seen.has(el)) {
-            seen.add(el);
-            void report(document.title);
+    test.setTimeout(45 * 60 * 1000);
+    // The plain run after the series uploads for real, so this lane runs on a
+    // second `next start` whose store is bound to the local GitHub-compatible
+    // endpoint (see the full-completion describe block below).
+    const github = await startFakeGitHub();
+    const bound = await startBoundServer(github.port);
+    try {
+      await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+      const consoleErrors: string[] = [];
+      collectConsoleErrors(page, consoleErrors);
+      // Every "About this computer" dialog that opens on any page load of the series is counted.
+      const askedOn: string[] = [];
+      await page.exposeFunction('__benchHardwareDialogShown', (title: string) => askedOn.push(title));
+      await page.addInitScript(() => {
+        const report = (t: string) =>
+          (window as unknown as { __benchHardwareDialogShown: (t: string) => Promise<void> }).__benchHardwareDialogShown(t);
+        const seen = new WeakSet<Element>();
+        new MutationObserver(() => {
+          for (const el of document.querySelectorAll('[role="dialog"]')) {
+            const titleId = el.getAttribute('aria-labelledby');
+            const title = titleId ? document.getElementById(titleId)?.textContent : null;
+            if (title === 'About this computer' && !seen.has(el)) {
+              seen.add(el);
+              void report(document.title);
+            }
           }
-        }
-      }).observe(document, { childList: true, subtree: true });
-    });
-    // A study link: the hardware answers given before run 1 must reach run 2 across the reload.
-    // The study link names the series length: Runs is fixed at 2 on it.
-    await page.goto('/bench/run?runs=2&cc=TESTCODE2&PROLIFIC_PID=e2e-series-pid');
-    const runButton = page.getByRole('button', { name: 'Run benchmark' });
-    await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
-    await expect(runButton).toBeEnabled({ timeout: 15_000 });
-    const runsInput = page.getByRole('spinbutton', { name: 'Runs', exact: true });
-    await expect(runsInput).toHaveValue('2');
-    await expect(runsInput).toBeDisabled();
-    // Publishing off: each run of the series is exported as a JSON download.
-    await page.getByRole('switch', { name: /publish results/i }).click();
-    const downloads = collectRunDownloads(page);
-    const loads = countLoads(page);
-    await runButton.click();
-    const askDialog = hardwareDialog(page);
-    await expect(askDialog).toBeVisible();
-    await answerHardware(askDialog, { gpu: 'AMD Radeon 780M', chassis: 'Desktop', ram: '128 GB or more', otherApps: 'No' });
-    await askDialog.getByRole('button', { name: 'Start benchmark' }).click();
+        }).observe(document, { childList: true, subtree: true });
+      });
+      // A study link: the hardware answers given before run 1 must reach run 2 across the reload.
+      // The study link names the series length: Runs is fixed at 2 on it.
+      await page.goto(`${bound.origin}/bench/run?runs=2&cc=TESTCODE2&PROLIFIC_PID=e2e-series-pid`);
+      const runButton = page.getByRole('button', { name: 'Run benchmark' });
+      await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+      await expect(runButton).toBeEnabled({ timeout: 15_000 });
+      const runsInput = page.getByRole('spinbutton', { name: 'Runs', exact: true });
+      await expect(runsInput).toHaveValue('2');
+      await expect(runsInput).toBeDisabled();
+      // Publishing off: each run of the series is exported as a JSON download.
+      await page.getByRole('switch', { name: /publish results/i }).click();
+      const downloads = collectRunDownloads(page);
+      const loads = countLoads(page);
+      await runButton.click();
+      const askDialog = hardwareDialog(page);
+      await expect(askDialog).toBeVisible();
+      await answerHardware(askDialog, { gpu: 'AMD Radeon 780M', chassis: 'Desktop', ram: '128 GB or more', otherApps: 'No' });
+      await askDialog.getByRole('button', { name: 'Start benchmark' }).click();
 
-    const dialog = page.getByRole('dialog', { name: /benchmark running/i });
-    await expect(dialog).toBeVisible({ timeout: 20_000 });
-    await expect(dialog.getByRole('group', { name: 'Series progress' })).toContainText('Series: run 1 of 2');
-    await expect(dialog.getByRole('button', { name: 'Stop series' })).toBeEnabled();
-    await expect(page).toHaveTitle('1/2 · LocalMode Bench');
-    await expect(page.getByRole('button', { name: 'Clear model caches' })).toBeDisabled();
+      const dialog = page.getByRole('dialog', { name: /benchmark running/i });
+      await expect(dialog).toBeVisible({ timeout: 20_000 });
+      await expect(dialog.getByRole('group', { name: 'Series progress' })).toContainText('Series: run 1 of 2');
+      await expect(dialog.getByRole('button', { name: 'Stop series' })).toBeEnabled();
+      await expect(page).toHaveTitle('1/2 · LocalMode Bench');
+      await expect(page.getByRole('button', { name: 'Clear model caches' })).toBeDisabled();
 
-    // Run 2 starts by itself on the reloaded page (no click).
-    await expect(page.getByRole('dialog', { name: /benchmark running/i })
-      .getByRole('group', { name: 'Series progress' })).toContainText('Series: run 2 of 2', { timeout: 15 * 60 * 1000 });
-    expect(loads.count, 'the page reloaded between the two runs').toBeGreaterThanOrEqual(1);
-    await expect(page).toHaveTitle('2/2 · LocalMode Bench');
-    // Run 2 started without asking again: the answers survived the reload.
-    await expect(hardwareDialog(page)).toHaveCount(0);
-    // The answers survived the reload; one is changed during run 2 and must be recorded on run 2 only.
-    const run2Form = page.getByRole('dialog', { name: /benchmark running/i }).getByRole('group', { name: HARDWARE_FORM });
-    await expect(run2Form.getByLabel('Graphics card or chip')).toHaveValue('AMD Radeon 780M');
-    await expect(run2Form.getByRole('radio', { name: 'Desktop' })).toBeChecked();
-    await expect(run2Form.getByLabel('Memory (RAM)')).toHaveValue('128');
-    await expect(run2Form.getByRole('radio', { name: 'No' })).toBeChecked();
-    await run2Form.getByRole('radio', { name: 'Yes' }).check();
+      // Run 2 starts by itself on the reloaded page (no click).
+      await expect(page.getByRole('dialog', { name: /benchmark running/i })
+        .getByRole('group', { name: 'Series progress' })).toContainText('Series: run 2 of 2', { timeout: 15 * 60 * 1000 });
+      expect(loads.count, 'the page reloaded between the two runs').toBeGreaterThanOrEqual(1);
+      await expect(page).toHaveTitle('2/2 · LocalMode Bench');
+      // Run 2 started without asking again: the answers survived the reload.
+      await expect(hardwareDialog(page)).toHaveCount(0);
+      // The answers survived the reload; one is changed during run 2 and must be recorded on run 2 only.
+      const run2Form = page.getByRole('dialog', { name: /benchmark running/i }).getByRole('group', { name: HARDWARE_FORM });
+      await expect(run2Form.getByLabel('Graphics card or chip')).toHaveValue('AMD Radeon 780M');
+      await expect(run2Form.getByRole('radio', { name: 'Desktop' })).toBeChecked();
+      await expect(run2Form.getByLabel('Memory (RAM)')).toHaveValue('128');
+      await expect(run2Form.getByRole('radio', { name: 'No' })).toBeChecked();
+      await run2Form.getByRole('radio', { name: 'Yes' }).check();
 
-    const panel = page.getByRole('region', { name: 'Benchmark series' });
-    await expect(panel).toContainText('Series complete: 2 of 2 runs', { timeout: 15 * 60 * 1000 });
-    const listed = panel.getByRole('list', { name: 'Completed runs' }).getByRole('listitem');
-    await expect(listed).toHaveCount(2);
-    await expect(page).toHaveTitle('Done 2/2 · LocalMode Bench');
-    expect(loads.count, 'exactly one reload: none after the last run').toBe(1);
-    expect(askedOn, 'the dialog was shown once, before run 1, and never on the reloaded page of run 2').toHaveLength(1);
+      const panel = page.getByRole('region', { name: 'Benchmark series' });
+      await expect(panel).toContainText('Series complete: 2 of 2 runs', { timeout: 15 * 60 * 1000 });
+      const listed = panel.getByRole('list', { name: 'Completed runs' }).getByRole('listitem');
+      await expect(listed).toHaveCount(2);
+      await expect(page).toHaveTitle('Done 2/2 · LocalMode Bench');
+      expect(loads.count, 'exactly one reload: none after the last run').toBe(1);
+      expect(askedOn, 'the dialog was shown once, before run 1, and never on the reloaded page of run 2').toHaveLength(1);
 
-    expect(downloads).toHaveLength(2);
-    const [first, second] = await Promise.all(downloads);
-    expect(first.harness.series).toMatchObject({ index: 1, count: 2, cooldownMs: 0 });
-    expect(first.harness.series!.idleBeforeMs, 'run 1 has no previous run to idle after').toBeUndefined();
-    const { idleBeforeMs, ...secondSeries } = second.harness.series!;
-    expect(secondSeries).toEqual({ id: first.harness.series!.id, index: 2, count: 2, cooldownMs: 0 });
-    // No cool-down, but the idle time still spans the download grace (1.5 s) and the reload.
-    expect(Number.isInteger(idleBeforeMs)).toBe(true);
-    expect(idleBeforeMs!).toBeGreaterThanOrEqual(1_500);
-    expect(first.runId).not.toBe(second.runId);
-    const answered = { gpu: 'AMD Radeon 780M', chassis: 'desktop', ramGB: 128 };
-    expect(first.environment.userReportedHardware).toEqual({ ...answered, otherAppsRunning: false });
-    expect(second.environment.userReportedHardware).toEqual({ ...answered, otherAppsRunning: true });
-    expect(second.environment.userReportedDevice).toBe(first.environment.userReportedDevice);
-    expect(first.environment.userReportedDevice).toMatch(/^prolific:[0-9a-f]{12}$/);
-    // The series has ended, so its stored answers are gone.
-    expect(await page.evaluate(() => localStorage.getItem('localmode-bench-series-hardware'))).toBeNull();
-    for (const run of [first, second]) {
-      expect(run.cells.some((c) => c.status === 'ok')).toBe(true);
-      expect(run.harness.coldStart, 'no clear happened, so no cold start is claimed').toBeUndefined();
+      expect(downloads).toHaveLength(2);
+      const [first, second] = await Promise.all(downloads);
+      expect(first.harness.series).toMatchObject({ index: 1, count: 2, cooldownMs: 0 });
+      expect(first.harness.series!.idleBeforeMs, 'run 1 has no previous run to idle after').toBeUndefined();
+      const { idleBeforeMs, ...secondSeries } = second.harness.series!;
+      expect(secondSeries).toEqual({ id: first.harness.series!.id, index: 2, count: 2, cooldownMs: 0 });
+      // No cool-down, but the idle time still spans the download grace (1.5 s) and the reload.
+      expect(Number.isInteger(idleBeforeMs)).toBe(true);
+      expect(idleBeforeMs!).toBeGreaterThanOrEqual(1_500);
+      expect(first.runId).not.toBe(second.runId);
+      const answered = { gpu: 'AMD Radeon 780M', chassis: 'desktop', ramGB: 128 };
+      expect(first.environment.userReportedHardware).toEqual({ ...answered, otherAppsRunning: false });
+      expect(second.environment.userReportedHardware).toEqual({ ...answered, otherAppsRunning: true });
+      expect(second.environment.userReportedDevice).toBe(first.environment.userReportedDevice);
+      expect(first.environment.userReportedDevice).toMatch(/^prolific:[0-9a-f]{12}$/);
+      // The series has ended, so its stored answers are gone.
+      expect(await page.evaluate(() => localStorage.getItem('localmode-bench-series-hardware'))).toBeNull();
+      for (const run of [first, second]) {
+        expect(run.cells.some((c) => c.status === 'ok')).toBe(true);
+        expect(run.harness.coldStart, 'no clear happened, so no cold start is claimed').toBeUndefined();
+      }
+      await expect(listed.nth(0)).toContainText(first.runId);
+      await expect(listed.nth(1)).toContainText(second.runId);
+      // The last run of the series removed the stored series: the panel stays on this page only.
+      expect(await page.evaluate(() => localStorage.getItem('localmode-bench-series'))).toBeNull();
+
+      await panel.getByRole('button', { name: 'Copy summary' }).click();
+      const summary = await page.evaluate(() => navigator.clipboard.readText());
+      expect(summary).toContain(`series ${first.harness.series!.id}`);
+      expect(summary).toContain(`1. ${first.runId}`);
+      expect(summary).toContain(`2. ${second.runId}`);
+
+      // A later Run of the /bench/run page in this browser, before the series is
+      // closed (an organic link, Runs 1, publishing on), is a plain run: it
+      // carries no harness.series (a stale record would read index 3 of 2, which
+      // the submit route refuses) and uploads.
+      const plain = await context.newPage();
+      const plainErrors: string[] = [];
+      collectConsoleErrors(plain, plainErrors);
+      const plainWarnings: string[] = [];
+      plain.on('console', (msg) => {
+        if (msg.type() === 'warning') plainWarnings.push(msg.text());
+      });
+      const plainBodies: string[] = [];
+      plain.on('request', (req) => {
+        if (req.url().endsWith('/api/bench/submit') && req.method() === 'POST') plainBodies.push(req.postData() ?? '');
+      });
+      const plainStatuses: number[] = [];
+      plain.on('response', (res) => {
+        if (res.url().endsWith('/api/bench/submit')) plainStatuses.push(res.status());
+      });
+      const commitsBefore = github.commits.length;
+      await plain.goto(`${bound.origin}/bench/run?tier=quick&quality=off&runs=1&publish=on`);
+      await expect(plain.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+      await expect(plain.getByRole('region', { name: 'Benchmark series' })).toHaveCount(0);
+      await expect(plain.getByRole('spinbutton', { name: 'Runs', exact: true })).toHaveValue('1');
+      await expect(plain.getByRole('button', { name: 'Run benchmark' })).toBeEnabled({ timeout: 15_000 });
+      await plain.getByRole('button', { name: 'Run benchmark' }).click();
+      const plainOverlay = plain.getByRole('dialog', { name: /benchmark running/i });
+      await expect(plainOverlay).toBeVisible({ timeout: 20_000 });
+      await expect(plainOverlay.getByRole('group', { name: 'Series progress' })).toHaveCount(0);
+      await expect(plain.getByRole('status').first()).toContainText('Suite complete', { timeout: 15 * 60 * 1000 });
+      await expect(plain.getByText(/^Submitted/)).toBeVisible({ timeout: 60_000 });
+      expect(plainStatuses).toEqual([200]);
+      expect(plainBodies).toHaveLength(1);
+      const uploaded = JSON.parse(plainBodies[0]) as ExportedRun;
+      expect(uploaded.harness.series).toBeUndefined();
+      expect(uploaded.runId).not.toBe(first.runId);
+      expect(uploaded.runId).not.toBe(second.runId);
+      expect(github.commits.length).toBe(commitsBefore + 1);
+      const committedPlain = github.commits[github.commits.length - 1];
+      expect(committedPlain.path).toMatch(new RegExp(`^runs/\\d{4}/\\d{2}/${uploaded.runId}\\.json$`));
+      expect(committedPlain.run.runId).toBe(uploaded.runId);
+      expect(committedPlain.run.harness.series).toBeUndefined();
+      expect(committedPlain.run.cells.some((c) => c.status === 'ok')).toBe(true);
+      // Nothing stale reached the run's assembly, so the guard never had to drop a record.
+      expect(plainWarnings.filter((w) => w.includes('harness.series'))).toEqual([]);
+      expect(plainErrors).toEqual([]);
+      await plain.close();
+
+      // A finished series stays until closed, and is gone across a reload after that.
+      await panel.getByRole('button', { name: 'Close series' }).click();
+      await expect(page.getByRole('region', { name: 'Benchmark series' })).toHaveCount(0);
+      await page.reload();
+      await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+      await expect(page.getByRole('region', { name: 'Benchmark series' })).toHaveCount(0);
+      // A new run on the study link asks again: the ended series took its answers with it.
+      await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeEnabled({ timeout: 15_000 });
+      await page.getByRole('button', { name: 'Run benchmark' }).click();
+      await expect(hardwareDialog(page).getByLabel('Graphics card or chip')).toHaveValue('');
+      await expect(hardwareDialog(page).getByRole('button', { name: 'Start benchmark' })).toBeDisabled();
+      await expect(hardwareDialog(page).getByText(HARDWARE_REASON_ALL, { exact: true })).toBeVisible();
+      await hardwareDialog(page).getByRole('button', { name: 'Cancel' }).click();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      expect(askedOn).toHaveLength(2);
+      expect(consoleErrors).toEqual([]);
+    } finally {
+      bound.proc.kill();
+      await new Promise<void>((resolve) => github.server.close(() => resolve()));
     }
-    await expect(listed.nth(0)).toContainText(first.runId);
-    await expect(listed.nth(1)).toContainText(second.runId);
-
-    await panel.getByRole('button', { name: 'Copy summary' }).click();
-    const summary = await page.evaluate(() => navigator.clipboard.readText());
-    expect(summary).toContain(`series ${first.harness.series!.id}`);
-    expect(summary).toContain(`1. ${first.runId}`);
-    expect(summary).toContain(`2. ${second.runId}`);
-
-    // A finished series stays until closed, and is gone across a reload after that.
-    await panel.getByRole('button', { name: 'Close series' }).click();
-    await expect(page.getByRole('region', { name: 'Benchmark series' })).toHaveCount(0);
-    await page.reload();
-    await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
-    await expect(page.getByRole('region', { name: 'Benchmark series' })).toHaveCount(0);
-    // A new run on the study link asks again: the ended series took its answers with it.
-    await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeEnabled({ timeout: 15_000 });
-    await page.getByRole('button', { name: 'Run benchmark' }).click();
-    await expect(hardwareDialog(page).getByLabel('Graphics card or chip')).toHaveValue('');
-    await expect(hardwareDialog(page).getByRole('button', { name: 'Start benchmark' })).toBeDisabled();
-    await expect(hardwareDialog(page).getByText(HARDWARE_REASON_ALL, { exact: true })).toBeVisible();
-    await hardwareDialog(page).getByRole('button', { name: 'Cancel' }).click();
-    await expect(page.getByRole('dialog')).toHaveCount(0);
-    expect(askedOn).toHaveLength(2);
-    expect(consoleErrors).toEqual([]);
   });
 
   test('a run that differs from the study link (an open series from an earlier visit) gets no code and the researcher message', async ({
@@ -1183,6 +1245,8 @@ test.describe('bench real run (WASM lanes)', () => {
     expect(downloads).toHaveLength(1);
     const [only] = await Promise.all(downloads);
     expect(only.harness.series).toMatchObject({ index: 1, count: 3 });
+    // A stopped series is not stored: a later load starts with no series.
+    expect(await page.evaluate(() => localStorage.getItem('localmode-bench-series'))).toBeNull();
     await expect(page.getByRole('table')).toBeVisible();
     await expect(page).toHaveTitle('Stopped 1/3 · LocalMode Bench');
     expect(consoleErrors).toEqual([]);

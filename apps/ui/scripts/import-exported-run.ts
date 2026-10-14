@@ -17,15 +17,25 @@
  * distinguishable from submitted ones; the index rebuild tool keeps it. A run
  * id that the index or a run file already holds is refused.
  *
+ * `--drop-stale-series` handles one known page defect: a run started after a
+ * series had finished carried that series' record numbered past its count
+ * (`harness.series.index > harness.series.count`), which the shape check
+ * refuses. With the flag, and only for such a record, the tool first verifies
+ * the client digest, then removes `harness.series` as a publication scrub:
+ * `scrubbedAt` is stamped and the digest recomputed, the removal is printed,
+ * and the index entry carries `importNote: "stale series record removed"`.
+ * The flag is refused for a run whose series record is consistent or absent.
+ *
  * Usage (from apps/ui):
  *   pnpm exec tsx scripts/import-exported-run.ts --dataset ../../../LocalMode-Bench --file export.json --dry-run
  *   pnpm exec tsx scripts/import-exported-run.ts --dataset ../../../LocalMode-Bench --file export.json
+ *   pnpm exec tsx scripts/import-exported-run.ts --dataset ../../../LocalMode-Bench --file export.json --drop-stale-series
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { PlausibilityFlag } from '@localmode/bench';
+import { computeRunDigest, verifyRunDigest, type BenchRunResult, type HarnessSeries, type PlausibilityFlag } from '@localmode/bench';
 import type { RunIndexEntry } from '../src/lib/bench/store';
 import {
   appendIndexEntry,
@@ -39,6 +49,9 @@ import {
 
 /** Dataset-relative path of the index. */
 export const INDEX_FILE = 'index/summary.json';
+
+/** The index entry note of a run imported with `--drop-stale-series`. */
+export const STALE_SERIES_NOTE = 'stale series record removed';
 
 export class ImportRunError extends Error {
   constructor(message: string) {
@@ -54,6 +67,8 @@ export interface ImportRunOptions {
   dryRun?: boolean;
   /** Time recorded as `importedAt` (and as `scrubbedAt` if the scrub changes the run); now when omitted. */
   now?: Date;
+  /** Remove a `harness.series` record numbered past its count before the checks (see the module notes). */
+  dropStaleSeries?: boolean;
 }
 
 export interface ImportRunResult {
@@ -71,6 +86,8 @@ export interface ImportRunResult {
   indexEntriesBefore: number;
   /** True when the publication scrub rewrote more than the nonce (`scrubbedAt` stamped, digest recomputed). */
   scrubbed: boolean;
+  /** The series record `--drop-stale-series` removed, with the client digest it was covered by. */
+  droppedSeries?: { series: HarnessSeries; clientDigest: string };
   dryRun: boolean;
 }
 
@@ -109,6 +126,35 @@ function readIndex(datasetDir: string): RunIndexEntry[] {
 }
 
 /**
+ * Remove a series record numbered past its count, as a publication scrub.
+ *
+ * @param run - The exported run, as parsed.
+ * @param now - Time stamped as `scrubbedAt`.
+ * @returns The run without `harness.series` (digest recomputed), the removed record and the client digest.
+ * @throws {ImportRunError} When the run has no series record, a consistent one, or a client digest that does not verify.
+ */
+async function dropStaleSeries(
+  run: BenchRunResult,
+  now: Date,
+): Promise<{ run: BenchRunResult; series: HarnessSeries; clientDigest: string }> {
+  const series = run.harness?.series;
+  if (!series) throw new ImportRunError('--drop-stale-series: the run carries no harness.series record; import it without the flag');
+  if (!(Number.isInteger(series.index) && Number.isInteger(series.count) && series.index > series.count)) {
+    throw new ImportRunError(
+      `--drop-stale-series: harness.series is consistent (index ${series.index} of ${series.count}); the flag only removes a record numbered past its count`,
+    );
+  }
+  // The removal is a scrub of a run the page produced as it stands: its own digest must hold first.
+  if (!(await verifyRunDigest(run))) {
+    throw new ImportRunError('the submit route would refuse this file (400 digest-mismatch): Result digest is missing or wrong.');
+  }
+  const { series: _removed, ...harness } = run.harness;
+  const scrubbed: BenchRunResult = { ...run, harness, scrubbedAt: now.toISOString() };
+  scrubbed.digest = await computeRunDigest(scrubbed);
+  return { run: scrubbed, series, clientDigest: run.digest! };
+}
+
+/**
  * Import an exported run file into a dataset clone.
  *
  * @param options - Dataset clone, exported file, `dryRun`, and the import time.
@@ -125,14 +171,24 @@ export async function importExportedRun(options: ImportRunOptions): Promise<Impo
 
   const parsed = parseSubmissionBody(readFileSync(file, 'utf8'));
   if ('rejection' in parsed) throw new ImportRunError(describeRejection(parsed.rejection));
-  const { run } = parsed;
+  let { run } = parsed;
+  let droppedSeries: ImportRunResult['droppedSeries'];
+  if (options.dropStaleSeries) {
+    const dropped = await dropStaleSeries(run, now);
+    run = dropped.run;
+    droppedSeries = { series: dropped.series, clientDigest: dropped.clientDigest };
+  }
   const checking = await checkSubmission(run);
   if ('rejection' in checking) throw new ImportRunError(describeRejection(checking.rejection));
   const { checked } = checking;
 
   const published = await toPublishedRun(run, () => now);
   const publication = publicationOf(published, checked);
-  const entry: RunIndexEntry = { ...publication.entry, importedAt: now.toISOString() };
+  const entry: RunIndexEntry = {
+    ...publication.entry,
+    importedAt: now.toISOString(),
+    ...(droppedSeries ? { importNote: STALE_SERIES_NOTE } : {}),
+  };
 
   // The route's duplicate protection is GitHub refusing to create an
   // existing file; here every place the run could already be is checked.
@@ -158,7 +214,8 @@ export async function importExportedRun(options: ImportRunOptions): Promise<Impo
     fileText: publication.fileText,
     entry,
     indexEntriesBefore: index.length,
-    scrubbed: published.scrubbedAt !== undefined && published.scrubbedAt !== run.scrubbedAt,
+    scrubbed: published.scrubbedAt !== undefined && published.scrubbedAt !== parsed.run.scrubbedAt,
+    ...(droppedSeries ? { droppedSeries } : {}),
     dryRun,
   };
 }
@@ -168,6 +225,11 @@ export function formatImportResult(r: ImportRunResult): string {
   const { cells, ...rest } = r.entry;
   const lines = [
     `run: ${r.runId}`,
+    ...(r.droppedSeries
+      ? [
+          `stale series record removed: ${JSON.stringify(r.droppedSeries.series)} (index ${r.droppedSeries.series.index} > count ${r.droppedSeries.series.count}); client digest ${r.droppedSeries.clientDigest} verified before the removal`,
+        ]
+      : []),
     `run file: ${r.path} (${r.flagged ? 'quarantine: flagged, hidden from the leaderboard' : 'runs: verified'}, ${Buffer.byteLength(r.fileText)} bytes)`,
     `flags: ${r.flags.length === 0 ? 'none' : ''}`,
     ...r.flags.map((f) => `  - ${JSON.stringify(f)}`),
@@ -188,7 +250,7 @@ async function main(argv: string[]): Promise<number> {
   const datasetArg = arg('--dataset');
   const file = arg('--file');
   if (!datasetArg || !file) {
-    console.error('usage: tsx scripts/import-exported-run.ts --dataset <clone> --file <export.json> [--dry-run]');
+    console.error('usage: tsx scripts/import-exported-run.ts --dataset <clone> --file <export.json> [--dry-run] [--drop-stale-series]');
     return 1;
   }
   try {
@@ -196,6 +258,7 @@ async function main(argv: string[]): Promise<number> {
       datasetDir: resolve(datasetArg),
       file: resolve(file),
       dryRun: argv.includes('--dry-run'),
+      dropStaleSeries: argv.includes('--drop-stale-series'),
     });
     console.log(formatImportResult(result));
     return 0;
