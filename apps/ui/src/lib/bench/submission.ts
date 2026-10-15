@@ -10,7 +10,7 @@
  */
 
 import type { BenchRunResult, CellSummary, PlausibilityFlag } from '@localmode/bench';
-import { computeRunDigest, scrubRunForPublication, validateSubmission, verifyRunDigest } from '@localmode/bench';
+import { computeRunDigest, isControlRun, scrubRunForPublication, validateSubmission, verifyRunDigest } from '@localmode/bench';
 import {
   appendIndexEntry,
   runPath,
@@ -48,6 +48,28 @@ export function parseSubmissionBody(raw: string): { run: BenchRunResult } | { re
   }
 }
 
+/**
+ * Refuse a control run (`harness.control`). A control run is a control
+ * experiment for the methodology, not a protocol run: it is never published
+ * and never enters the leaderboard index. The page never uploads one; this
+ * check is the server's own guard, and the import tool shares it.
+ *
+ * @param run - The parsed submission.
+ * @returns The 422 rejection for a control run, or null.
+ */
+export function rejectControlRun(run: unknown): SubmissionRejection | null {
+  if (!isControlRun(run)) return null;
+  const kind = (run as { harness: { control?: { kind?: unknown } | null } }).harness.control?.kind;
+  return {
+    status: 422,
+    body: {
+      ok: false,
+      code: 'control-run',
+      message: `This is a control run (harness.control${typeof kind === 'string' ? ` kind ${kind}` : ''}). Control runs are never published to the leaderboard; keep the exported JSON and collect it into a dataset clone with scripts/collect-control-runs.ts.`,
+    },
+  };
+}
+
 /** A run that passed the digest and shape checks. */
 export interface CheckedSubmission {
   /** Server-side summaries of every cell, recomputed from the raw trace. */
@@ -59,8 +81,9 @@ export interface CheckedSubmission {
 }
 
 /**
- * Verify the digest and validate the run. A run with reject-severity
- * findings is accepted but flagged, which routes it to quarantine/.
+ * Verify the digest and validate the run. A control run is refused first
+ * (see `rejectControlRun`). A run with reject-severity findings is accepted
+ * but flagged, which routes it to quarantine/.
  *
  * @param run - The submitted run.
  * @returns The checked submission, or the rejection.
@@ -68,6 +91,8 @@ export interface CheckedSubmission {
 export async function checkSubmission(
   run: BenchRunResult,
 ): Promise<{ checked: CheckedSubmission } | { rejection: SubmissionRejection }> {
+  const control = rejectControlRun(run);
+  if (control) return { rejection: control };
   if (!(await verifyRunDigest(run))) {
     return { rejection: { status: 400, body: { ok: false, code: 'digest-mismatch', message: 'Result digest is missing or wrong.' } } };
   }

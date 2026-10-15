@@ -19,7 +19,7 @@ import { BENCH_PROTOCOL_VERSION, ACCEPTED_SCHEMA_VERSIONS } from './types.js';
 import { summarize } from './stats.js';
 import { parseMMLUAnswer } from './quality.js';
 import { TINY_MMLU } from './datasets/tiny-mmlu.js';
-import { MIN_GENERATED_CHARS } from './protocol.js';
+import { CONTROL_KINDS, controlRuntimeOrder, MIN_GENERATED_CHARS } from './protocol.js';
 
 /** Version of the plausibility rule set (recorded alongside moderation). */
 export const PLAUSIBILITY_RULES_VERSION = 2;
@@ -138,8 +138,10 @@ export const SERIES_MAX_IDLE_BEFORE_MS = 30 * 86_400_000;
 
 /**
  * Optional series membership (with the series cool-down and the idle time
- * measured before the run, bench 0.9.1) and cold-start marker on `harness`
- * (bench 0.9.0).
+ * measured before the run, bench 0.9.1), cold-start marker on `harness`
+ * (bench 0.9.0), and control-run marker (bench 0.9.6). The shape check
+ * accepts a well-formed control marker, so an exported control run validates
+ * offline; refusing to publish it is the submission route's job.
  */
 function validateHarnessExtras(harness: Record<string, unknown>, push: (m: string) => void): void {
   if ('series' in harness && harness.series !== undefined) {
@@ -161,6 +163,19 @@ function validateHarnessExtras(harness: Record<string, unknown>, push: (m: strin
   }
   if ('coldStart' in harness && harness.coldStart !== 'provider-caches-cleared') {
     push('harness.coldStart must be "provider-caches-cleared" when present');
+  }
+  if ('control' in harness && harness.control !== undefined) {
+    const control = harness.control as Record<string, unknown> | null;
+    if (typeof control !== 'object' || control === null || Array.isArray(control))
+      push('harness.control must be an object {kind, runtimeOrder}');
+    else if (!CONTROL_KINDS.includes(control.kind as never))
+      push(`harness.control.kind must be one of ${CONTROL_KINDS.join(', ')}`);
+    else {
+      const expected = controlRuntimeOrder(control.kind as (typeof CONTROL_KINDS)[number]);
+      const order = control.runtimeOrder;
+      if (!Array.isArray(order) || order.length !== expected.length || order.some((id, i) => id !== expected[i]))
+        push(`harness.control.runtimeOrder must be the ${String(control.kind)} order [${expected.join(', ')}]`);
+    }
   }
 }
 

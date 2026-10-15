@@ -26,6 +26,9 @@
  * and the index entry carries `importNote: "stale series record removed"`.
  * The flag is refused for a run whose series record is consistent or absent.
  *
+ * A control run (`harness.control`) is refused: it never enters the index.
+ * `scripts/collect-control-runs.ts` files control runs under `controls/`.
+ *
  * Usage (from apps/ui):
  *   pnpm exec tsx scripts/import-exported-run.ts --dataset ../../../LocalMode-Bench --file export.json --dry-run
  *   pnpm exec tsx scripts/import-exported-run.ts --dataset ../../../LocalMode-Bench --file export.json
@@ -35,7 +38,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { computeRunDigest, verifyRunDigest, type BenchRunResult, type HarnessSeries, type PlausibilityFlag } from '@localmode/bench';
+import { computeRunDigest, isControlRun, verifyRunDigest, type BenchRunResult, type HarnessSeries, type PlausibilityFlag } from '@localmode/bench';
 import type { RunIndexEntry } from '../src/lib/bench/store';
 import {
   appendIndexEntry,
@@ -172,6 +175,12 @@ export async function importExportedRun(options: ImportRunOptions): Promise<Impo
   const parsed = parseSubmissionBody(readFileSync(file, 'utf8'));
   if ('rejection' in parsed) throw new ImportRunError(describeRejection(parsed.rejection));
   let { run } = parsed;
+  // A control run never enters the leaderboard index (nor runs/ or quarantine/).
+  if (isControlRun(run)) {
+    throw new ImportRunError(
+      `run ${run.runId} is a control run (harness.control kind ${String(run.harness.control?.kind)}); a control run never enters the dataset index. Collect it with scripts/collect-control-runs.ts instead.`,
+    );
+  }
   let droppedSeries: ImportRunResult['droppedSeries'];
   if (options.dropStaleSeries) {
     const dropped = await dropStaleSeries(run, now);

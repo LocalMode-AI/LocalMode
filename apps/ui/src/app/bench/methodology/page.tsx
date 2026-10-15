@@ -279,6 +279,19 @@ export default function BenchMethodologyPage() {
               publishing. A link never starts a run; only the reload inside a series does.
             </li>
             <li>
+              <strong className="text-foreground">Control runs.</strong>{' '}
+              <code className="font-mono text-sm">/bench/run?control=order-reversed</code> runs the same
+              suite with the runtimes in the exact reverse of the protocol&apos;s execution order, a
+              control experiment for the methodology: under the protocol order a lane is tied to its
+              position in the suite, and comparing the lane ratios of the two orders separates the two.
+              Cells, rules, traces and the environment capture are those of a protocol run; the run file
+              carries <code className="font-mono text-sm">harness.control</code> (the kind and the order
+              used). A control run is never uploaded (Export JSON only, and the submission route refuses
+              one), never enters the leaderboard and is never scored, so it needs no protocol version.
+              Runs and the cool-down work as usual, and a series keeps its control mode across its
+              reloads. A study link with the parameter is refused.
+            </li>
+            <li>
               While a run or series is active the page holds a screen wake lock (requested again
               whenever the tab returns to the front) and shows the series progress in the tab
               title, for example <code className="font-mono text-sm">3/10 · LocalMode Bench</code>.

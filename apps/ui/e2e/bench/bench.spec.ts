@@ -96,6 +96,7 @@ interface ExportedRun {
   harness: {
     series?: { id: string; index: number; count: number; cooldownMs?: number; idleBeforeMs?: number };
     coldStart?: string;
+    control?: { kind: string; runtimeOrder: string[] };
   };
   cells: Array<{ cellId: string; runtimeId: string; status: string; load: { cached?: boolean; startT: number; endT: number } | null }>;
 }
@@ -1985,5 +1986,131 @@ test.describe('full-completion study mode (ccmode=full)', () => {
     // The run finished, so it is not restarted: nothing left in flight.
     expect(await storedAttempt(page)).toBeNull();
     expect(consoleErrors.filter((e) => !expected503(e))).toEqual([]);
+  });
+});
+
+test.describe('control run: reversed runtime order (never uploaded)', () => {
+  /** The protocol's runtime order (packages/bench RUNTIME_EXECUTION_ORDER); the control run must use its exact reverse. */
+  const PROTOCOL_ORDER = [
+    'transformers-wasm',
+    'transformers-webgpu',
+    'chrome-ai',
+    'webllm',
+    'mediapipe',
+    'litert',
+    'wllama-webgpu',
+    'wllama',
+  ];
+  const REVERSED = [...PROTOCOL_ORDER].reverse();
+  const BANNER = 'Control run: reversed runtime order; not published to the leaderboard';
+
+  test('a study link or an unknown kind with the control parameter is refused: Run stays disabled, nothing loads', async ({ page }) => {
+    const consoleErrors: string[] = [];
+    collectConsoleErrors(page, consoleErrors);
+    const modelRequests: string[] = [];
+    collectModelRequests(page, modelRequests);
+    await page.goto('/bench/run?PROLIFIC_PID=e2e-control-pid&cc=TESTCODE9&control=order-reversed');
+    await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByRole('alert', { name: 'Control run refused' })).toContainText(
+      'A paid-study link cannot start a control run',
+    );
+    await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeDisabled();
+    await expect(page.getByRole('note', { name: 'Control run' })).toHaveCount(0);
+
+    await page.goto('/bench/run?control=order-shuffled');
+    await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByRole('alert', { name: 'Control run refused' })).toContainText(
+      'Unknown control run kind "order-shuffled"',
+    );
+    await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeDisabled();
+    expect(modelRequests).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test('?control=order-reversed&runs=2: banner, a real 2-run Quick series in the reversed order, each run exported with harness.control, no upload request', async ({
+    page,
+  }) => {
+    test.setTimeout(45 * 60 * 1000);
+    const consoleErrors: string[] = [];
+    collectConsoleErrors(page, consoleErrors);
+    // Every request to the bench API across both page loads: a control run makes none to /submit.
+    const benchApi: string[] = [];
+    page.on('request', (req) => {
+      const { pathname } = new URL(req.url());
+      if (pathname.startsWith('/api/bench/')) benchApi.push(`${req.method()} ${pathname}`);
+    });
+    const downloads = collectRunDownloads(page);
+
+    await page.goto('/bench/run?tier=quick&quality=off&runs=2&control=order-reversed&publish=on');
+    // Loads after the first one: the series' own reloads.
+    const loads = countLoads(page);
+    const banner = page.getByRole('note', { name: 'Control run' });
+    await expect(banner).toBeVisible();
+    await expect(banner.getByText(BANNER, { exact: true })).toBeVisible();
+    await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+    // publish=on in the link is overridden: a control run is never published, and the toggle is locked off.
+    const publish = page.getByRole('switch', { name: /publish results/i });
+    await expect(publish).not.toBeChecked();
+    await expect(publish).toBeDisabled();
+    await expect(page.getByText(/a control run is never published/i)).toBeVisible();
+    // Headless Chromium: the WebGPU lanes are visibly unavailable, exactly as on a protocol run.
+    await expect(page.getByText('no WebGPU').first()).toBeVisible();
+    const runButton = page.getByRole('button', { name: 'Run benchmark' });
+    await expect(runButton).toBeEnabled();
+    await runButton.click();
+
+    const dialog = page.getByRole('dialog', { name: /benchmark running/i });
+    await expect(dialog).toBeVisible({ timeout: 20_000 });
+    await expect(dialog.getByRole('group', { name: 'Series progress' })).toContainText('Series: run 1 of 2');
+    // Run 2 starts by itself on the reloaded page, still in control mode (the series carries the kind).
+    await expect(
+      page.getByRole('dialog', { name: /benchmark running/i }).getByRole('group', { name: 'Series progress' }),
+    ).toContainText('Series: run 2 of 2', { timeout: 15 * 60 * 1000 });
+    expect(loads.count, 'the page reloaded between the two runs').toBeGreaterThanOrEqual(1);
+    await expect(page.getByRole('note', { name: 'Control run' }).getByText(BANNER, { exact: true })).toBeVisible();
+
+    const panel = page.getByRole('region', { name: 'Benchmark series' });
+    await expect(panel).toContainText('Series complete: 2 of 2 runs', { timeout: 15 * 60 * 1000 });
+    expect(loads.count, 'exactly one reload: none after the last run').toBe(1);
+    // Export JSON only: no Submit control on a control run's results.
+    await expect(page.getByRole('button', { name: 'Submit to leaderboard' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Retry submission' })).toHaveCount(0);
+    const exportButton = page.getByRole('button', { name: 'Export JSON' });
+    await expect(exportButton).toBeVisible();
+    await exportButton.click();
+    await expect.poll(() => downloads.length, { timeout: 30_000 }).toBe(3);
+    const [first, second, exported] = await Promise.all(downloads);
+
+    // The button's export is run 2's file, byte for byte the record the series kept.
+    expect(exported).toEqual(second);
+    expect(first.runId).not.toBe(second.runId);
+    for (const run of [first, second] as Array<ExportedRun & { protocol?: string; nonce?: string; digest?: string }>) {
+      expect(run.harness.control).toEqual({ kind: 'order-reversed', runtimeOrder: REVERSED });
+      expect(run.harness.series).toMatchObject({ count: 2 });
+      expect(run.protocol).toBe('localmode-bench/5');
+      expect(run.digest).toMatch(/^[0-9a-f]{64}$/);
+      // Never uploaded, so it never fetched an upload token.
+      expect(run.nonce).toBeUndefined();
+      // Every quick cell is present exactly once, in the reversed runtime order (catalog order within a runtime).
+      const ids = run.cells.map((c) => c.cellId);
+      expect(new Set(ids).size).toBe(ids.length);
+      const ranks = run.cells.map((c) => REVERSED.indexOf(c.runtimeId));
+      expect(ranks.every((r) => r >= 0)).toBe(true);
+      expect(ranks, `cells ran in the reversed order: ${run.cells.map((c) => c.runtimeId).join(' > ')}`).toEqual(
+        [...ranks].sort((a, b) => a - b),
+      );
+      expect(run.cells[0].runtimeId).toBe('wllama');
+      expect(run.cells.at(-1)!.runtimeId).toBe('transformers-wasm');
+      // The WASM lanes ran for real; the WebGPU lanes are skipped for want of WebGPU, as on a protocol run.
+      expect(run.cells.find((c) => c.cellId === 'wllama/smollm2-135m/chat-pp128-tg128')?.status).toBe('ok');
+      expect(run.cells.find((c) => c.cellId === 'transformers-wasm/bge-small-en/embed-single')?.status).toBe('ok');
+      expect(run.cells.find((c) => c.cellId === 'wllama-webgpu/smollm2-135m/chat-pp128-tg128')?.status).toBe('skipped');
+    }
+    expect(second.harness.series!.index).toBe(2);
+    expect(second.harness.series!.id).toBe(first.harness.series!.id);
+
+    expect(benchApi.filter((r) => r.endsWith('/api/bench/submit')), 'no upload request').toEqual([]);
+    expect(benchApi, 'no bench API request at all: no upload token either').toEqual([]);
+    expect(consoleErrors).toEqual([]);
   });
 });

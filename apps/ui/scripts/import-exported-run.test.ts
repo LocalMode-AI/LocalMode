@@ -15,7 +15,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { computeRunDigest, verifyRunDigest, type BenchRunResult } from '@localmode/bench';
+import { computeRunDigest, createHarnessControl, verifyRunDigest, type BenchRunResult } from '@localmode/bench';
 import { issueNonce } from '../src/lib/bench/nonce';
 import type { RunIndexEntry } from '../src/lib/bench/store';
 import { importExportedRun, ImportRunError } from './import-exported-run';
@@ -201,6 +201,25 @@ describe('import-exported-run', () => {
     const again = cli();
     expect(again.status).toBe(1);
     expect(again.stderr).toContain(`run ${RUN_ID} is already in the dataset: ${RUN_PATH}`);
+  }, 120_000);
+
+  it('refuses a control run: it never enters the index, runs/ or quarantine/', async () => {
+    const run = JSON.parse(readFileSync(exportPath, 'utf8')) as BenchRunResult;
+    run.harness = { ...run.harness, control: createHarnessControl('order-reversed') };
+    run.digest = await computeRunDigest(run);
+    writeFileSync(exportPath, JSON.stringify(run));
+    const indexText = readText('index/summary.json');
+    await expect(importExportedRun({ datasetDir: dataset, file: exportPath })).rejects.toThrow(
+      new ImportRunError(
+        `run ${RUN_ID} is a control run (harness.control kind order-reversed); a control run never enters the dataset index. Collect it with scripts/collect-control-runs.ts instead.`,
+      ),
+    );
+    const out = cli();
+    expect(out.status).toBe(1);
+    expect(out.stderr).toContain(`run ${RUN_ID} is a control run`);
+    expect(existsSync(join(dataset, RUN_PATH))).toBe(false);
+    expect(existsSync(join(dataset, `quarantine/2026/10/${RUN_ID}.json`))).toBe(false);
+    expect(readText('index/summary.json')).toBe(indexText);
   }, 120_000);
 
   it('--dry-run prints what it would write and writes nothing', () => {

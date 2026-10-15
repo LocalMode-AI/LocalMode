@@ -16,6 +16,7 @@ CITATION.cff       # makes the dataset citable
 LICENSE            # CC0 1.0 (public domain) for the data
 .gitattributes     # run JSONs marked linguist-generated
 runs/  quarantine/  index/
+controls/          # control runs, filed by collect-control-runs.ts (section 9); never indexed
 ```
 
 The submission API creates missing `runs/YYYY/MM/` paths on first write.
@@ -227,6 +228,51 @@ the removed record and the client digest, and the index entry carries
 tool keeps both). The flag is refused for a run whose series record is
 consistent (index within its count) or absent, so it cannot strip a genuine
 series place.
+
+## 9. Control runs
+
+A control run is a control experiment for the methodology: the same suite as
+a protocol run, with the runtime execution order reversed, so that the lane
+ratios under the two orders can be compared (see the package README, Control
+runs). It is opted into only by the query parameter:
+
+```
+https://localmode.ai/bench/run?control=order-reversed
+https://localmode.ai/bench/run?tier=quick&quality=off&runs=10&cooldown=0&cold=off&control=order-reversed
+```
+
+The page shows "Control run: reversed runtime order; not published to the
+leaderboard" for as long as control mode is on. The run file carries
+`harness.control = { kind: 'order-reversed', runtimeOrder: [...] }` with the
+order the runner used; everything else (cells, rules, traces, environment
+capture) is a protocol run's. A control run is never uploaded: the publish
+toggle is locked off, the results offer Export JSON only, the page fetches no
+upload token, and the submit route refuses a run carrying `harness.control`
+with 422 `control-run`. Runs N works as usual, so ten executions run
+unattended; each run of the series is exported as a JSON download, and the
+series keeps its control mode across its reloads. A paid-study link with the
+parameter, or an unknown kind, is refused on the page and Run stays disabled.
+
+Control runs never enter the leaderboard index: `import-exported-run.ts`
+refuses them. File the exported runs into a clone of the dataset, from
+`apps/ui`:
+
+```
+pnpm exec tsx scripts/collect-control-runs.ts --dataset ../../../LocalMode-Bench --dir ~/Downloads/control-runs --dry-run
+pnpm exec tsx scripts/collect-control-runs.ts --dataset ../../../LocalMode-Bench --dir ~/Downloads/control-runs
+```
+
+(`--file <export.json>` may be given several times instead of `--dir`, which
+takes every `.json` file directly inside the folder.) Each file must be a
+control run whose digest verifies and whose shape validates
+(`validateSubmission`; plausibility flags are printed and kept). The nonce is
+dropped if the file has one, and the run is written as compact JSON to
+`controls/<kind>/<YYYY-MM-DD>/<runId>.json`, the date being `createdAt` in
+UTC. `index/summary.json` is not read or written. A run id already under
+`runs/`, `quarantine/` or `controls/` is refused, and one refused file stops
+the whole batch before anything is written. Check `git diff` (only new files
+under `controls/`) and commit them in the dataset clone. The dataset's
+`SCHEMA.md` should carry the same note on `harness.control` and `controls/`.
 
 ## Optional integration check (real GitHub API, opt-in)
 

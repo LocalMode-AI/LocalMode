@@ -8,6 +8,7 @@ import type { BenchCellResult, BenchRunResult, CellSummary, EmbedIteration, LLMI
 import { isIncrementalStream, summarizeRun, validateSubmission, type ValidateOptions } from './validate.js';
 import { median } from './stats.js';
 import { pressureStateFractions } from './pressure.js';
+import { isControlRun } from './protocol.js';
 
 /**
  * Architecture of AMD integrated GPUs whose WebGPU label is wrong in Chromium,
@@ -175,6 +176,8 @@ export const HEADLINE_MIN_SUBMISSIONS = 3;
 /**
  * Aggregate validated runs into leaderboard rows.
  *
+ * Control runs (`harness.control`) are never scored and contribute to no row.
+ *
  * @param runs - Validated (non-quarantined) run results.
  * @param minSubmissions - Min submissions before a row loses `provisional`.
  * @example
@@ -213,6 +216,7 @@ export function aggregateRuns(
   const buckets = new Map<string, Bucket>();
 
   for (const run of runs) {
+    if (isControlRun(run)) continue;
     const protocol = run.protocol;
     const deviceClass = deviceClassOf(run);
     const deviceSubclass = refineDeviceClass(deviceClass, run.environment.gpuModel);
@@ -611,7 +615,9 @@ export function runtimeVersionColumn(packageName: string): string {
  * both empty when the browser has no Battery API), then the hardware a
  * paid-study participant reported (`reportedGpu`, `reportedChassis`,
  * `reportedRamGB`, `reportedOtherApps` from `environment.userReportedHardware`;
- * empty when absent, and `reportedRamGB` empty for "Not sure").
+ * empty when absent, and `reportedRamGB` empty for "Not sure"), then the
+ * control-run marker (`controlKind`, `controlRuntimeOrder`: `harness.control`
+ * with the order joined by `>`; empty on a protocol run).
  *
  * @param runs - Run results that passed shape validation.
  * @param validateOptions - Passed to `validateSubmission`; defaults to
@@ -647,6 +653,7 @@ export function runsToRunsCSV(
     ...rvColumns,
     'powerCharging', 'powerLevel',
     'reportedGpu', 'reportedChassis', 'reportedRamGB', 'reportedOtherApps',
+    'controlKind', 'controlRuntimeOrder',
   ];
   const lines = [header.join(',')];
   for (const run of runs) {
@@ -683,6 +690,7 @@ export function runsToRunsCSV(
         env.power?.charging, env.power?.level,
         env.userReportedHardware?.gpu, env.userReportedHardware?.chassis, env.userReportedHardware?.ramGB,
         env.userReportedHardware?.otherAppsRunning,
+        run.harness.control?.kind, run.harness.control?.runtimeOrder.join('>'),
       ]
         .map(csvField)
         .join(','),

@@ -208,11 +208,14 @@ export interface CompletionInput {
   runSettings: StudyRunSettings | null;
   /** The settings the study link fixes. */
   linkSettings: Pick<StudyRunLock, 'suite' | 'includeQuality'>;
+  /** The run is a control run (`harness.control`): never uploaded, so never paid. */
+  controlRun?: boolean;
 }
 
 /**
  * Whether the page shows the completion code. In both modes the finished
- * run must have used the suite and the quality-fidelity setting the link names.
+ * run must have used the suite and the quality-fidelity setting the link names,
+ * and must not be a control run.
  *
  * - `attempt`: once the suite ended and the upload attempt resolved (done or failed).
  * - `full`: only when the suite ended with every cell attempted, the upload
@@ -230,7 +233,7 @@ export interface CompletionInput {
 export function shouldIssueCompletionCode(input: CompletionInput): boolean {
   const { mode, suiteEnded, allCellsAttempted, submitState, stoppedByUser, lastRunOfSeries, runSettings, linkSettings } =
     input;
-  if (!suiteEnded || stoppedByUser) return false;
+  if (!suiteEnded || stoppedByUser || input.controlRun) return false;
   if (runSettings === null || !runMatchesStudyLink(runSettings, linkSettings)) return false;
   if (mode === 'attempt') return submitState.kind === 'done' || submitState.kind === 'failed';
   return allCellsAttempted && lastRunOfSeries && submitState.kind === 'done';

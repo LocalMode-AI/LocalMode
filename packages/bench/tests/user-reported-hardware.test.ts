@@ -185,10 +185,11 @@ describe('publication scrub', () => {
 });
 
 describe('runs.csv reported-hardware columns', () => {
-  it('follows powerLevel with reportedGpu, reportedChassis, reportedRamGB, reportedOtherApps', () => {
+  it('follows powerLevel with reportedGpu, reportedChassis, reportedRamGB, reportedOtherApps, then the control-run columns', () => {
     const cols = runsToRunsCSV([makeAnalysisRun()]).split('\n')[0].split(',');
-    expect(cols.slice(-6)).toEqual([
+    expect(cols.slice(-8)).toEqual([
       'powerCharging', 'powerLevel', 'reportedGpu', 'reportedChassis', 'reportedRamGB', 'reportedOtherApps',
+      'controlKind', 'controlRuntimeOrder',
     ]);
   });
 
@@ -202,8 +203,8 @@ describe('runs.csv reported-hardware columns', () => {
       userReportedHardware: { gpu: 'AMD Radeon RX 7800 XT, desktop card', chassis: 'desktop', ramGB: null, otherAppsRunning: true },
     };
     const out = runsToRunsCSV([reported, makeSecondAnalysisRun(), unsure]).trimEnd().split('\n');
-    expect(out[1].endsWith(',NVIDIA GeForce RTX 4060 Laptop GPU,laptop,16,false')).toBe(true);
-    expect(out[2].endsWith(',,,,')).toBe(true);
-    expect(out[3].endsWith(',"AMD Radeon RX 7800 XT, desktop card",desktop,,true')).toBe(true);
+    expect(out[1].endsWith(',NVIDIA GeForce RTX 4060 Laptop GPU,laptop,16,false,,')).toBe(true);
+    expect(out[2].endsWith(',,,,,,')).toBe(true);
+    expect(out[3].endsWith(',"AMD Radeon RX 7800 XT, desktop card",desktop,,true,,')).toBe(true);
   });
 });

@@ -8,7 +8,13 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { computeRunDigest, computeLegacyRunDigest, verifyRunDigest, type BenchRunResult } from '@localmode/bench';
+import {
+  computeRunDigest,
+  computeLegacyRunDigest,
+  createHarnessControl,
+  verifyRunDigest,
+  type BenchRunResult,
+} from '@localmode/bench';
 import { makeRun } from '../../../packages/bench/tests/helpers';
 import { issueNonce } from '../src/lib/bench/nonce';
 
@@ -184,6 +190,37 @@ describe('POST /api/bench/submit', () => {
     ]);
     expect(committed).toHaveLength(0);
     expect(indexPuts).toBe(0);
+  });
+
+  it('rejects a control run with 422 before the nonce is spent, storing nothing', async () => {
+    const nonce = issueNonce();
+    const control = makeRun({
+      nonce,
+      runId: `run-control-${Math.random().toString(16).slice(2)}`,
+      harness: { name: '@localmode/bench', version: '0.1.0', control: createHarnessControl('order-reversed') },
+    });
+    control.digest = await computeRunDigest(control);
+    const { status, body } = await post(control);
+    expect(status).toBe(422);
+    expect(body).toEqual({
+      ok: false,
+      code: 'control-run',
+      message:
+        'This is a control run (harness.control kind order-reversed). Control runs are never published to the leaderboard; keep the exported JSON and collect it into a dataset clone with scripts/collect-control-runs.ts.',
+    });
+    expect(committed).toHaveLength(0);
+    expect(indexPuts).toBe(0);
+    // Without a nonce, and with a malformed marker, the answer is the same 422, not a nonce or shape error.
+    const bare = { ...control, nonce: undefined, harness: { ...control.harness, control: null } };
+    const second = await post(bare);
+    expect(second.status).toBe(422);
+    expect(second.body.code).toBe('control-run');
+    // The nonce was not consumed: a protocol run takes it.
+    const protocolRun = makeRun({ nonce, runId: `run-after-control-${Math.random().toString(16).slice(2)}` });
+    protocolRun.digest = await computeRunDigest(protocolRun);
+    expect((await post(protocolRun)).status).toBe(200);
+    expect(committed).toHaveLength(1);
+    expect(committed[0].run.harness.control).toBeUndefined();
   });
 
   it('refuses a nonce the second time it is presented', async () => {

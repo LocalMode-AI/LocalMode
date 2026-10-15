@@ -8,7 +8,7 @@
  * localStorage helpers at the bottom, which never throw.
  */
 
-import { SERIES_MAX_IDLE_BEFORE_MS } from '@localmode/bench';
+import { CONTROL_KINDS, SERIES_MAX_IDLE_BEFORE_MS, type ControlKind } from '@localmode/bench';
 
 /** Largest series the runner accepts: the longest series the lab plan schedules (30 Thorough runs). */
 export const MAX_SERIES_RUNS = 30;
@@ -38,6 +38,12 @@ export interface SeriesSettings {
   cooldownMs: number;
   /** Lanes the submitter switched off (`runtimeId/benchModelId`). */
   disabledLanes: string[];
+  /**
+   * Control kind of a control-run series (`?control=<kind>`); absent on a
+   * protocol series. Every run of the series runs in that control mode, a
+   * resumed series included, and none is published.
+   */
+  control?: ControlKind;
 }
 
 /** How a finished run of the series was kept. */
@@ -94,6 +100,12 @@ function withoutIdle(state: SeriesState): SeriesState {
   return rest;
 }
 
+/** Settings without a `control` key (so a protocol series stores none). */
+function withoutControl(settings: SeriesSettings): Omit<SeriesSettings, 'control'> {
+  const { control: _control, ...rest } = settings;
+  return rest;
+}
+
 /** Start a series at run 1. */
 export function createSeries(input: {
   seriesId: string;
@@ -106,9 +118,11 @@ export function createSeries(input: {
     seriesId: input.seriesId,
     count: Math.min(MAX_SERIES_RUNS, Math.max(1, Math.floor(input.count))),
     settings: {
-      ...input.settings,
+      ...withoutControl(input.settings),
       cooldownMs: clampCooldownMinutes(input.settings.cooldownMs / 60_000) * 60_000,
       disabledLanes: [...input.settings.disabledLanes],
+      // A control series is never published.
+      ...(input.settings.control ? { control: input.settings.control, publish: false } : {}),
     },
     startedAt: new Date(input.now).toISOString(),
     status: 'running',
@@ -336,9 +350,11 @@ const onOff = (v: boolean) => (v ? 'on' : 'off');
 export function seriesSummaryText(state: SeriesState): string {
   const s = state.settings;
   const lines = [
-    `LocalMode Bench series ${state.seriesId} · ${s.suite} suite · quality ${onOff(s.includeQuality)} · publish ${onOff(
-      s.publish,
-    )} · clear caches after each run ${onOff(s.clearAfterRun)} · cool-down ${s.cooldownMs / 60_000} min`,
+    `LocalMode Bench ${s.control ? `control series (${s.control})` : 'series'} ${state.seriesId} · ${s.suite} suite · quality ${onOff(
+      s.includeQuality,
+    )} · publish ${onOff(s.publish)} · clear caches after each run ${onOff(s.clearAfterRun)} · cool-down ${
+      s.cooldownMs / 60_000
+    } min`,
     `${state.completed.length} of ${state.count} runs · ${state.status} · started ${state.startedAt}`,
   ];
   for (const run of state.completed) {
@@ -379,6 +395,9 @@ export function parseSeriesState(raw: string | null): SeriesState | null {
   if (typeof settings.includeQuality !== 'boolean' || typeof settings.publish !== 'boolean') return null;
   if (typeof settings.clearAfterRun !== 'boolean' || !Array.isArray(settings.disabledLanes)) return null;
   if (settings.cooldownMs !== undefined && !isInt(settings.cooldownMs, 0, MAX_COOLDOWN_MINUTES * 60_000)) return null;
+  if (settings.control !== undefined && !CONTROL_KINDS.includes(settings.control as ControlKind)) return null;
+  // A control series that claims to publish was not written by this page.
+  if (settings.control !== undefined && settings.publish !== false) return null;
   for (const key of ['idleSince', 'cooldownUntil', 'idleBeforeMs'] as const) {
     if (s[key] !== undefined && (typeof s[key] !== 'number' || !Number.isFinite(s[key]))) return null;
   }
@@ -462,9 +481,12 @@ export function parseRunPresets(search: string): RunPresets {
   return out;
 }
 
-/** The query string for a set of controls, in the documented parameter order. */
-export function presetQuery(p: Required<RunPresets>): string {
+/**
+ * The query string for a set of controls, in the documented parameter order;
+ * a control run's link ends with `control=<kind>` (and never publishes).
+ */
+export function presetQuery(p: Required<RunPresets>, control?: ControlKind | null): string {
   return `tier=${p.suite}&quality=${onOff(p.includeQuality)}&runs=${p.runs}&cooldown=${p.cooldownMinutes}&cold=${onOff(
     p.clearAfterRun,
-  )}&publish=${onOff(p.publish)}`;
+  )}&publish=${onOff(control ? false : p.publish)}${control ? `&control=${control}` : ''}`;
 }

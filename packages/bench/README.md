@@ -161,6 +161,12 @@ the warmup and the warm reload re-downloaded the 3.46 GB weights.
   `scrubRunForPublication` normalizes the GPU name with `sanitizeReportedGpu()`,
   which since 0.9.5 also removes URLs, email addresses and computer names
   (`DESKTOP-XXXXXXX`, `LAPTOP-XXXXXXX`, `WIN-XXXXXXXXXXX`) from it.
+  Since 0.9.6 a run may carry `harness.control` (`{ kind, runtimeOrder }`):
+  it marks a control run, which is not a protocol run (see Control runs
+  below). The only kind is `order-reversed`, whose `runtimeOrder` must be
+  exactly the reverse of `RUNTIME_EXECUTION_ORDER`; the validator rejects any
+  other kind or order, and the digest covers the field like the rest of
+  `harness`.
 - **Statistics** - median headline; mean ± SD, IQR, 95% CI (Student-t), CV;
   CV > 5% ⇒ high-variance flag; geomean only within a device run.
 - **Quality-fidelity lane** - tinyMMLU (MIT) accuracy + STS-B Spearman (scores
@@ -175,6 +181,44 @@ the warmup and the warm reload re-downloaded the 3.46 GB weights.
   stored so scores are recomputable server-side (the `quality-details-mismatch`
   rule rejects disagreement); the parse rate is reported beside the score as
   `qualityParseRate` (a low parse rate = format-limited, not low fidelity).
+
+## Control runs
+
+The protocol executes its cells in the fixed `RUNTIME_EXECUTION_ORDER`, a
+reproducibility measure; a lane is therefore tied to its position in the
+suite (what ran before it, how long the page has been busy). A control run,
+a control experiment for the methodology, runs the same suite with a
+different runtime order so that the lane ratios of the two orders can be
+compared:
+
+```ts
+import { createHarnessControl, runBenchmarkSuite } from '@localmode/bench';
+
+const control = await runBenchmarkSuite({
+  ...sameOptionsAsAProtocolRun,
+  harness: { ...harness, control: createHarnessControl('order-reversed') },
+});
+// control.harness.control = { kind: 'order-reversed', runtimeOrder: ['wllama', 'wllama-webgpu', ..., 'transformers-wasm'] }
+```
+
+- `order-reversed` (the only kind) runs the runtimes in the exact reverse of
+  `RUNTIME_EXECUTION_ORDER` (`controlRuntimeOrder()`); within a runtime the
+  catalog order is kept. It also runs the Transformers.js WebGPU lane before
+  its WASM lane, which the protocol order avoids; a WebGPU session failure
+  that takes the WASM lane with it is recorded as an error, as on any run.
+- The runner orders the cells by `harness.control.runtimeOrder` and refuses
+  any order that is not the kind's canonical one, so the record names the
+  order the run used. Cells, the run policy, validity gates, traces and the
+  environment capture are those of a protocol run.
+- A control run is not a protocol run: it is never submitted, published or
+  scored, which is why the field needed no protocol version. The localmode.ai
+  runner offers Export JSON only (`/bench/run?control=order-reversed`, see
+  SETUP.md), the submission route answers 422 `control-run`, and
+  `aggregateRuns` leaves control runs out of every leaderboard row.
+  `isControlRun(run)` is the check.
+- Control runs are kept in the dataset under `controls/`, never indexed (see
+  Results dataset). The analysis CLI reads them like any run file:
+  `runs.csv` names their kind and order, and `leaderboard.csv` leaves them out.
 
 ## Usage (host wiring)
 
@@ -241,7 +285,14 @@ Community submissions are stored in a public GitHub repository:
 runs/YYYY/MM/<runId>.json    verified submissions (auto-published)
 quarantine/YYYY/MM/<runId>.json  flagged submissions (public, hidden from charts)
 index/summary.json           aggregated leaderboard rows (rebuilt on write)
+controls/<kind>/<YYYY-MM-DD>/<runId>.json  control runs (harness.control), never indexed
 ```
+
+`controls/` holds control runs (see Control runs), filed by kind and by the
+UTC date of `createdAt`. They are never submitted, so the submission API
+never writes there: a maintainer files exported control runs into a clone
+with `apps/ui/scripts/collect-control-runs.ts` (SETUP.md, section 9). They
+never appear in `index/summary.json` and never on the leaderboard.
 
 Environment variables for the submission API (see `apps/ui`):
 
@@ -343,6 +394,7 @@ cell without timed iterations keeps one placeholder row):
 | `reportedChassis` | Since 0.9.4: `environment.userReportedHardware.chassis`, `laptop`, `desktop` or `other`; empty when absent |
 | `reportedRamGB` | Since 0.9.4: `environment.userReportedHardware.ramGB`, the reported RAM bucket in GB (the top bucket "128 GB or more" is 128); empty when absent or answered "Not sure" (`null`) |
 | `reportedOtherApps` | Since 0.9.4: `environment.userReportedHardware.otherAppsRunning`, `true` or `false`; empty when absent |
+| `controlKind`, `controlRuntimeOrder` | Since 0.9.6, after `reportedOtherApps`: `harness.control.kind` (`order-reversed`) and the runtime order the control run used, joined by `>`; empty on a protocol run. `leaderboard.csv` never includes a control run |
 
 ## Dataset licenses
 

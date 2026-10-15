@@ -16,7 +16,13 @@ import {
   rateLimitWithRetry,
   SUBMIT_RATE_LIMIT,
 } from '@/lib/bench/store';
-import { checkSubmission, parseSubmissionBody, publicationOf, toPublishedRun } from '@/lib/bench/submission';
+import {
+  checkSubmission,
+  parseSubmissionBody,
+  publicationOf,
+  rejectControlRun,
+  toPublishedRun,
+} from '@/lib/bench/submission';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,6 +61,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const parsed = parseSubmissionBody(await request.text());
   if ('rejection' in parsed) return NextResponse.json(parsed.rejection.body, { status: parsed.rejection.status });
   const { run } = parsed;
+
+  // A control run is never published, whatever else it carries; refused
+  // before the nonce so the answer names the real reason.
+  const control = rejectControlRun(run);
+  if (control) return NextResponse.json(control.body, { status: control.status });
 
   if (!verifyNonce(run.nonce)) {
     return NextResponse.json(

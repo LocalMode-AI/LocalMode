@@ -10,7 +10,9 @@
 
 import type {
   BenchRuntimeId,
+  ControlKind,
   EmbedWorkloadSpec,
+  HarnessControl,
   LLMWorkloadSpec,
   QualityWorkloadSpec,
 } from './types.js';
@@ -175,18 +177,81 @@ export const RUNTIME_EXECUTION_ORDER: readonly BenchRuntimeId[] = [
 ] as const;
 
 /**
- * Sort planned cells into the protocol execution order (stable within a
- * runtime). The runner applies this itself; exported for hosts and tests.
+ * Sort planned cells into a runtime execution order (stable within a
+ * runtime). The order defaults to the protocol's `RUNTIME_EXECUTION_ORDER`;
+ * a control run passes its own (see `controlRuntimeOrder`). The runner
+ * applies this itself; exported for hosts and tests.
+ *
+ * @param cells - Planned cells in catalog order.
+ * @param order - Runtime order to sort by; runtimes it does not list run last.
+ * @returns A new array; the input is not modified.
+ * @example
+ * const ordered = orderCells(cells); // protocol order
+ * const reversed = orderCells(cells, controlRuntimeOrder('order-reversed'));
  */
 export function orderCells<T extends { model: { runtimeId: BenchRuntimeId } }>(
   cells: readonly T[],
+  order: readonly BenchRuntimeId[] = RUNTIME_EXECUTION_ORDER,
 ): T[] {
-  const rank = new Map(RUNTIME_EXECUTION_ORDER.map((id, i) => [id, i]));
+  const rank = new Map(order.map((id, i) => [id, i]));
   return [...cells].sort(
     (a, b) =>
-      (rank.get(a.model.runtimeId) ?? RUNTIME_EXECUTION_ORDER.length) -
-      (rank.get(b.model.runtimeId) ?? RUNTIME_EXECUTION_ORDER.length),
+      (rank.get(a.model.runtimeId) ?? order.length) - (rank.get(b.model.runtimeId) ?? order.length),
   );
+}
+
+/** Control-run kinds a host may record on `harness.control`. */
+export const CONTROL_KINDS: readonly ControlKind[] = ['order-reversed'] as const;
+
+/**
+ * The runtime execution order of a control run.
+ *
+ * `order-reversed` is the exact reverse of `RUNTIME_EXECUTION_ORDER`, so every
+ * runtime that ran first under the protocol runs last, and the lane ratios of
+ * the two orders can be compared. Note that it also runs the Transformers.js
+ * WebGPU lane before its WASM lane, which the protocol order avoids (see
+ * `RUNTIME_EXECUTION_ORDER`); a WebGPU session failure can therefore fail the
+ * WASM lane of a control run, and is recorded as an error like any other.
+ *
+ * @param kind - The control kind.
+ * @returns A new array of every runtime, each exactly once.
+ * @example
+ * controlRuntimeOrder('order-reversed')[0]; // 'wllama'
+ */
+export function controlRuntimeOrder(kind: ControlKind): BenchRuntimeId[] {
+  switch (kind) {
+    case 'order-reversed':
+      return [...RUNTIME_EXECUTION_ORDER].reverse();
+  }
+}
+
+/**
+ * The `harness.control` record of a control run of the given kind.
+ *
+ * @param kind - The control kind.
+ * @returns `{ kind, runtimeOrder }` with the kind's canonical runtime order.
+ * @example
+ * const harness = { name, version, control: createHarnessControl('order-reversed') };
+ */
+export function createHarnessControl(kind: ControlKind): HarnessControl {
+  return { kind, runtimeOrder: controlRuntimeOrder(kind) };
+}
+
+/**
+ * Whether a run is a control run: its `harness` carries a `control` key with
+ * any value other than `undefined` (a malformed marker counts, so a refusal
+ * keyed on it cannot be sidestepped). A control run is never submitted,
+ * published or scored.
+ *
+ * @param run - Any run-shaped value.
+ * @returns True when `harness.control` is present.
+ * @example
+ * if (isControlRun(run)) return reject('control runs are never published');
+ */
+export function isControlRun(run: unknown): boolean {
+  if (typeof run !== 'object' || run === null) return false;
+  const harness = (run as { harness?: unknown }).harness;
+  return typeof harness === 'object' && harness !== null && (harness as { control?: unknown }).control !== undefined;
 }
 
 /** Run policy for a suite (part of the versioned protocol). */

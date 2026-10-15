@@ -15,12 +15,14 @@ import type {
   BenchRunResult,
   BenchSuiteId,
   CellSummary,
+  ControlKind,
   PlannedCell,
   RunnerActivity,
 } from '@localmode/bench';
 import {
   computeRunDigest,
   EMBED_WORKLOADS,
+  isControlRun,
   LLM_WORKLOADS,
   orderCells,
   QUALITY_WORKLOADS,
@@ -39,6 +41,14 @@ import {
 } from '@/lib/bench/chrome-ai-download';
 import { benchBuildCommit, benchHarnessVersion, benchRuntimeVersions } from '@/lib/bench/runtime-versions';
 import { describeRetryCause } from '@/lib/bench/overlay-text';
+import {
+  CONTROL_UPLOAD_REFUSAL,
+  controlBannerText,
+  controlHarness,
+  effectiveControlKind,
+  mayUpload,
+  parseControlRequest,
+} from '@/lib/bench/control';
 import {
   clearProviderModelCaches,
   describeClearReport,
@@ -955,6 +965,14 @@ export function BenchRunner() {
     | { kind: 'done'; report: CacheClearReport }
     | { kind: 'failed'; message: string }
   >({ kind: 'idle' });
+  /**
+   * Control-run kind of this page (`?control=<kind>`, or the kind an open
+   * series started with), null on a protocol run. A control run is never
+   * uploaded and carries `harness.control`.
+   */
+  const [controlKind, setControlKind] = useState<ControlKind | null>(null);
+  /** A control parameter the page refuses (an unknown kind, or a paid-study link): Run stays disabled. */
+  const [controlRefusal, setControlRefusal] = useState<string | null>(null);
   const [seriesCopied, setSeriesCopied] = useState(false);
   const [presetCopied, setPresetCopied] = useState(false);
   const seriesOpen = isSeriesOpen(series);
@@ -985,6 +1003,8 @@ export function BenchRunner() {
     const fullCode = mode === 'full' ? studyCode : null;
     const lock = studyCode ? studyRunLock(parseRunPresets(search)) : null;
     setStudyLock(lock);
+    const controlRequest = parseControlRequest(search);
+    if (controlRequest.status === 'refused') setControlRefusal(controlRequest.message);
     const storedAttempt = fullCode ? loadStudyAttempt() : null;
     // The rest of the setup, once the cell an interrupted attempt died at is known.
     const setUp = (interruptedCellId: string | null) => {
@@ -1028,6 +1048,8 @@ export function BenchRunner() {
         setCooldownInput(String(state.settings.cooldownMs / 60_000));
         setDisabledLanes(new Set(state.settings.disabledLanes));
         setRunsInput(String(state.count));
+        // The series keeps the control mode it started in, whatever the URL says now.
+        setControlKind(effectiveControlKind(controlRequest, state.settings.control ?? null));
         if (action === 'start-next' && attemptAction !== 'capped') setAutoStartPending(true);
       } else {
         const presets = parseRunPresets(search);
@@ -1047,6 +1069,10 @@ export function BenchRunner() {
         }
         if (presets.publish !== undefined) setAutoSubmit(presets.publish);
         if (fullCode) setAutoSubmit(true);
+        const kind = effectiveControlKind(controlRequest, undefined);
+        setControlKind(kind);
+        // A control run is never published.
+        if (kind) setAutoSubmit(false);
         if (attemptAction === 'restart') setRestartPending(true);
       }
     };
@@ -1164,6 +1190,12 @@ export function BenchRunner() {
   }, [lanes, disabledLanes, suite, includeQuality]);
 
   const submitRun = useCallback(async (run: BenchRunResult): Promise<SubmitOutcome> => {
+    // A control run never leaves the page: no request is made for it.
+    if (!mayUpload(run)) {
+      const refused: SubmitOutcome = { kind: 'failed', message: CONTROL_UPLOAD_REFUSAL };
+      setSubmitState(refused);
+      return refused;
+    }
     setSubmitState({ kind: 'submitting' });
     try {
       // A Thorough run on a slow device can outlast the nonce fetched when it
@@ -1317,7 +1349,8 @@ export function BenchRunner() {
     try {
       // The run file carries a nonce from its start; each upload replaces it
       // with a fresh one (see submitRun). Offline, the run still works.
-      const nonce = await fetchSessionNonce();
+      // A control run is never uploaded, so it fetches no upload token.
+      const nonce = controlKind ? undefined : await fetchSessionNonce();
       // A run is cold only when the page cleared the provider caches since
       // the last run and they are still empty now; nothing else is claimed.
       const coldStart = await takeColdStartMarker();
@@ -1326,8 +1359,10 @@ export function BenchRunner() {
         import('@/lib/bench/adapters'),
       ]);
       const cells = buildCells();
+      // A control run executes (and records) its own runtime order; everything else is the protocol run's.
+      const control = controlKind ? controlHarness(controlKind) : undefined;
       // The overlay lists steps in the order the runner executes them.
-      const ordered = orderCells(cells);
+      const ordered = orderCells(cells, control?.runtimeOrder);
       const orderedIds = ordered.map((c) => `${c.model.runtimeId}/${c.model.benchModelId}/${c.workload.id}`);
       setPlanned(
         ordered.map((c) => ({
@@ -1356,6 +1391,7 @@ export function BenchRunner() {
         commit: benchBuildCommit(),
         ...(seriesAtStart ? { series: seriesHarness(seriesAtStart) } : {}),
         ...(coldStart ? { coldStart: 'provider-caches-cleared' as const } : {}),
+        ...(control ? { control } : {}),
       };
       // Progress goes to IndexedDB cell by cell, so a tab that dies mid-suite
       // still leaves an exportable partial record on the next page load.
@@ -1494,10 +1530,12 @@ export function BenchRunner() {
       // The run is over; the partial record has served its purpose.
       if (attempt) void finishAttempt(attempt.attemptId);
       attempt = null;
+      // A control run is never uploaded, whatever the toggle says.
+      const upload = autoSubmit && mayUpload(suiteResult);
       if (!seriesAtStart) {
         // Publishing was disclosed next to the Run button; opt-out via the toggle.
-        if (autoSubmit && !clearAfterRun) void submitRun(suiteResult);
-        else if (autoSubmit) await submitRun(suiteResult);
+        if (upload && !clearAfterRun) void submitRun(suiteResult);
+        else if (upload) await submitRun(suiteResult);
         if (clearAfterRun) await clearCaches();
         return;
       }
@@ -1506,7 +1544,7 @@ export function BenchRunner() {
       // it, then reload so the next run starts on a fresh page.
       let record: Omit<SeriesRunRecord, 'index'>;
       const durationMs = Date.now() - runStartedAtMs;
-      if (autoSubmit) {
+      if (upload) {
         seriesSubmitRef.current = true;
         let outcome = await submitRun(suiteResult);
         // A rate limit is waited out here (the page stays open between runs).
@@ -1620,7 +1658,7 @@ export function BenchRunner() {
       if (seriesRef.current && seriesRef.current.status === 'running') saveSeriesHardware(seriesRef.current.seriesId, hardwareRef.current);
       window.location.reload();
     }
-  }, [suite, buildCells, autoSubmit, submitRun, study, activeLanes, availability, clearAfterRun, clearCaches, updateSeries, fullMode, updateStudyAttempt]);
+  }, [suite, buildCells, autoSubmit, submitRun, study, activeLanes, availability, clearAfterRun, clearCaches, updateSeries, fullMode, updateStudyAttempt, controlKind]);
 
   const downloadJson = downloadJsonFile;
 
@@ -1638,10 +1676,11 @@ export function BenchRunner() {
       settings: {
         suite,
         includeQuality,
-        publish: autoSubmit,
+        publish: autoSubmit && !controlKind,
         clearAfterRun,
         cooldownMs: cooldownMinutes * 60_000,
         disabledLanes: [...disabledLanes],
+        ...(controlKind ? { control: controlKind } : {}),
       },
       now: Date.now(),
     });
@@ -1654,12 +1693,14 @@ export function BenchRunner() {
     }
     updateSeries(markRunStarted(created, Date.now()));
     void run({ userActivated: true });
-  }, [runsCount, run, suite, includeQuality, autoSubmit, clearAfterRun, cooldownMinutes, disabledLanes, updateSeries, hardwareRequired]);
+  }, [runsCount, run, suite, includeQuality, autoSubmit, clearAfterRun, cooldownMinutes, disabledLanes, updateSeries, hardwareRequired, controlKind]);
 
   // Resume a series after its reload: no click, the next run starts once the lanes are probed.
   // A page reloaded by hand during a cool-down waits out the rest first (the series panel counts down).
   useEffect(() => {
     if (!autoStartPending || availability === null || !studyChecked || phase !== 'idle') return;
+    // A refused control parameter never starts anything, a resumed series included.
+    if (controlRefusal !== null) return;
     const current = seriesRef.current;
     if (current && cooldownRemainingMs(current, now) > 0) return;
     setAutoStartPending(false);
@@ -1674,14 +1715,14 @@ export function BenchRunner() {
     if (!current || current.status !== 'running' || studyIneligible) return;
     updateSeries(markRunStarted(current, Date.now()));
     void run({ userActivated: false });
-  }, [autoStartPending, availability, studyChecked, studyIneligible, hardwareReason, phase, run, updateSeries, now]);
+  }, [autoStartPending, availability, studyChecked, studyIneligible, hardwareReason, phase, run, updateSeries, now, controlRefusal]);
 
   // Restart an interrupted full-mode run after the reload: no click where the
   // browser keeps the screen awake without one, else a single Continue button.
   useEffect(() => {
     if (!restartPending || availability === null || !studyChecked || phase !== 'idle') return;
     setRestartPending(false);
-    if (!fullMode || studyCapped) return;
+    if (!fullMode || studyCapped || controlRefusal !== null) return;
     if (hardwareReason !== null) {
       setHardwareDialog('run');
       return;
@@ -1691,7 +1732,7 @@ export function BenchRunner() {
       return;
     }
     void run({ userActivated: false });
-  }, [restartPending, availability, studyChecked, phase, fullMode, studyCapped, hardwareReason, run]);
+  }, [restartPending, availability, studyChecked, phase, fullMode, studyCapped, hardwareReason, run, controlRefusal]);
 
   /** Start benchmark in the "About this computer" dialog: the same start a click on Run makes. */
   const startFromHardwareDialog = useCallback(() => {
@@ -1755,8 +1796,8 @@ export function BenchRunner() {
       cooldownMinutes,
       clearAfterRun,
       publish: autoSubmit,
-    })}${completionMode === 'full' ? '&ccmode=full' : ''}`;
-  }, [suite, includeQuality, runsCount, cooldownMinutes, clearAfterRun, autoSubmit, completionMode]);
+    }, controlKind)}${completionMode === 'full' ? '&ccmode=full' : ''}`;
+  }, [suite, includeQuality, runsCount, cooldownMinutes, clearAfterRun, autoSubmit, completionMode, controlKind]);
 
   const copyPresetLink = useCallback(async () => {
     try {
@@ -1841,6 +1882,7 @@ export function BenchRunner() {
       lastRunOfSeries: !series || series.status === 'complete',
       runSettings: resultSettings,
       linkSettings: studyLock,
+      controlRun: result !== null && isControlRun(result),
     });
   /** A finished run on a paid-study link that did not use the link's suite or quality setting. */
   const studySettingsMismatch =
@@ -1854,6 +1896,29 @@ export function BenchRunner() {
 
   return (
     <div className="flex flex-col gap-6">
+      {controlKind && (
+        <div
+          role="note"
+          aria-label="Control run"
+          className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100"
+        >
+          <p className="font-medium">{controlBannerText(controlKind)}</p>
+          <p className="mt-1">
+            The suite, its cells, rules, traces and environment capture are those of a protocol run; only
+            the order of the runtimes differs, and the run file records it in harness.control. Keep each run
+            with Export JSON (a series exports every run by itself); nothing is uploaded.
+          </p>
+        </div>
+      )}
+      {controlRefusal && (
+        <div
+          role="alert"
+          aria-label="Control run refused"
+          className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm"
+        >
+          {controlRefusal}
+        </div>
+      )}
       {unfinished.length > 0 && (
         <Card role="region" aria-label="Unfinished run recovered">
           <CardHeader>
@@ -2033,11 +2098,13 @@ export function BenchRunner() {
                   id="bench-publish"
                   checked={autoSubmit}
                   onCheckedChange={setAutoSubmit}
-                  disabled={phase === 'running' || fullMode}
+                  disabled={phase === 'running' || fullMode || controlKind !== null}
                 />
               </div>
               <ConfigHelp>
-                {fullMode
+                {controlKind
+                  ? 'A control run is never published: export the JSON from the results (a series exports each run by itself).'
+                  : fullMode
                   ? 'The study pays for an uploaded run, so publishing stays on for this link.'
                   : autoSubmit
                     ? 'The result uploads to the open dataset when the run completes.'
@@ -2202,7 +2269,8 @@ export function BenchRunner() {
                   (seriesOpen && !seriesAwaitingAnswers) ||
                   clearState.kind === 'clearing' ||
                   studyCapped ||
-                  restartAwaitingClick
+                  restartAwaitingClick ||
+                  controlRefusal !== null
                 }
               >
                 {phase === 'running' ? 'Running…' : 'Run benchmark'}
@@ -2549,8 +2617,8 @@ export function BenchRunner() {
               <Button variant="outline" onClick={exportJson}>
                 Export JSON
               </Button>
-              {(submitState.kind === 'failed' ||
-                (submitState.kind === 'idle' && !autoSubmit)) && (
+              {mayUpload(result) &&
+                (submitState.kind === 'failed' || (submitState.kind === 'idle' && !autoSubmit)) && (
                 <Button onClick={() => result && submitRun(result)}>
                   {submitState.kind === 'failed' ? 'Retry submission' : 'Submit to leaderboard'}
                 </Button>

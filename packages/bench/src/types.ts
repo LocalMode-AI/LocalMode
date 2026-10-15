@@ -684,6 +684,37 @@ export interface HarnessInfo {
    * HTTP cache instead of the network. Absent otherwise.
    */
   coldStart?: 'provider-caches-cleared';
+  /**
+   * Set only on a control run (since bench 0.9.6): the same suite, cells,
+   * rules, traces and environment capture as a protocol run, executed with a
+   * different runtime order so that a lane's position in the suite can be
+   * separated from the lane itself, a control experiment for the
+   * methodology. `runtimeOrder` is the order the runner actually executed
+   * (the runner orders the cells by it and refuses an order that is not the
+   * kind's canonical one, so the record cannot disagree with the run).
+   *
+   * A control run is not a protocol run: it is never submitted, never
+   * published to the leaderboard and never scored, so this field brings no
+   * protocol version bump. Hosts refuse to upload it, the submission route
+   * rejects it, and `aggregateRuns` leaves it out of every leaderboard row.
+   * Absent on every protocol run.
+   */
+  control?: HarnessControl;
+}
+
+/** Kinds of control run (see `HarnessInfo.control`). */
+export type ControlKind = 'order-reversed';
+
+/**
+ * Control-run marker recorded on `harness.control`.
+ *
+ * - `order-reversed`: the runtimes execute in the exact reverse of
+ *   `RUNTIME_EXECUTION_ORDER`; within a runtime, catalog order is kept.
+ */
+export interface HarnessControl {
+  kind: ControlKind;
+  /** The runtime execution order the run used, first runtime first. */
+  runtimeOrder: BenchRuntimeId[];
 }
 
 /** Series membership recorded on `harness.series`. */

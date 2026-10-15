@@ -48,6 +48,8 @@ export type {
   LocaleInfo,
   HarnessInfo,
   HarnessSeries,
+  HarnessControl,
+  ControlKind,
   UserReportedHardware,
   EnvironmentCapture,
   FingerprintResult,
@@ -69,6 +71,10 @@ export {
   MIN_GENERATED_CHARS,
   RUNTIME_EXECUTION_ORDER,
   orderCells,
+  CONTROL_KINDS,
+  controlRuntimeOrder,
+  createHarnessControl,
+  isControlRun,
 } from './protocol.js';
 export type { RunPolicy } from './protocol.js';
 

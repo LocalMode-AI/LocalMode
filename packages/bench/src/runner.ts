@@ -8,6 +8,7 @@
 import type {
   BenchCellResult,
   BenchModelRef,
+  BenchRuntimeId,
   BenchRunResult,
   BenchSuiteId,
   EmbedIteration,
@@ -28,7 +29,14 @@ import type {
   LoadedLLM,
 } from './adapter.js';
 import { USAGE_FIDELITY } from './adapter.js';
-import { MIN_GENERATED_CHARS, orderCells, type RunPolicy } from './protocol.js';
+import {
+  controlRuntimeOrder,
+  CONTROL_KINDS,
+  MIN_GENERATED_CHARS,
+  orderCells,
+  RUNTIME_EXECUTION_ORDER,
+  type RunPolicy,
+} from './protocol.js';
 import { hrNow, sleep, abortDomException } from './timing.js';
 import { TraceRecorder } from './trace.js';
 import { memoryApiAvailable, sampleMemoryBytes } from './memory.js';
@@ -90,6 +98,11 @@ export interface RunSuiteOptions {
   policy: RunPolicy;
   llmAdapters: ReadonlyMap<string, LLMRuntimeAdapter>;
   embedAdapters: ReadonlyMap<string, EmbeddingRuntimeAdapter>;
+  /**
+   * Harness identity recorded on the result. When it carries `control` (a
+   * control run), the runner executes the cells in `control.runtimeOrder`
+   * instead of `RUNTIME_EXECUTION_ORDER`; everything else is unchanged.
+   */
   harness: HarnessInfo;
   hooks?: RunnerHooks;
   abortSignal?: AbortSignal;
@@ -121,6 +134,7 @@ export type TraceLike = Pick<
  */
 export async function runBenchmarkSuite(options: RunSuiteOptions): Promise<BenchRunResult> {
   const { policy, hooks, abortSignal } = options;
+  const runtimeOrder = resolveRuntimeOrder(options.harness);
   const trace: TraceLike = options.trace ?? new TraceRecorder();
   await trace.attach();
   trace.record('suite-start', options.suite);
@@ -141,9 +155,9 @@ export async function runBenchmarkSuite(options: RunSuiteOptions): Promise<Bench
 
     const baselineMemory = memApi !== 'none' ? await sampleMemoryBytes() : null;
 
-    // Deterministic protocol execution order (reproducibility), then group
-    // cells so each (runtime, model) loads exactly once.
-    const groups = groupCells(orderCells(options.cells));
+    // Deterministic execution order (reproducibility; a control run's own
+    // order), then group cells so each (runtime, model) loads exactly once.
+    const groups = groupCells(orderCells(options.cells, runtimeOrder));
     const totalCells = options.cells.length;
     let cellIndex = 0;
 
@@ -189,6 +203,28 @@ export async function runBenchmarkSuite(options: RunSuiteOptions): Promise<Bench
   } finally {
     await trace.dispose();
   }
+}
+
+/**
+ * The runtime order a run executes: the protocol's, or a control run's. A
+ * control marker whose kind is unknown or whose order is not the kind's
+ * canonical order is refused before anything runs, so the recorded
+ * `harness.control.runtimeOrder` always names the order the cells ran in.
+ */
+function resolveRuntimeOrder(harness: HarnessInfo): readonly BenchRuntimeId[] {
+  const control = harness.control;
+  if (control === undefined) return RUNTIME_EXECUTION_ORDER;
+  if (!CONTROL_KINDS.includes(control.kind)) {
+    throw new TypeError(`harness.control.kind must be one of ${CONTROL_KINDS.join(', ')}; got ${String(control.kind)}`);
+  }
+  const expected = controlRuntimeOrder(control.kind);
+  const given = control.runtimeOrder;
+  if (!Array.isArray(given) || given.length !== expected.length || given.some((id, i) => id !== expected[i])) {
+    throw new TypeError(
+      `harness.control.runtimeOrder must be the ${control.kind} order [${expected.join(', ')}]; use createHarnessControl('${control.kind}')`,
+    );
+  }
+  return expected;
 }
 
 /** Cells grouped per (runtimeId, benchModelId + providerModelId). */
