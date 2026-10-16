@@ -27,6 +27,7 @@ import {
   seriesEtaMs,
   seriesForRun,
   seriesHarness,
+  savedInBrowserCount,
   seriesSummaryText,
   startCooldown,
   seriesTitle,
@@ -163,6 +164,43 @@ describe('series read-outs', () => {
       '1. run-a · 1 m 5 s · https://x/run-a.json',
       '2. run-b · 5 s · exported as JSON (not published)',
     ]);
+  });
+});
+
+describe('series summary: saved in this browser', () => {
+  it('names each run\'s download and browser copy, and how many runs the browser keeps', () => {
+    let s = markRunStarted(fresh(3), T0);
+    s = recordRunFinished(
+      s,
+      { runId: 'run-a', durationMs: 5_000, outcome: 'exported', downloadTriggered: true, savedInBrowser: true },
+      T0,
+    );
+    s = recordRunFinished(
+      markRunStarted(s, T0),
+      { runId: 'run-b', durationMs: 5_000, outcome: 'exported', downloadTriggered: true, savedInBrowser: false },
+      T0,
+    );
+    s = recordRunFinished(
+      markRunStarted(s, T0),
+      { runId: 'run-c', durationMs: 5_000, outcome: 'published', rawUrl: 'https://x/run-c.json', savedInBrowser: true },
+      T0,
+    );
+    expect(savedInBrowserCount(s)).toBe(2);
+    expect(seriesSummaryText(s).split('\n').slice(2)).toEqual([
+      '1. run-a · 5 s · exported as JSON (not published) · download triggered, saved in this browser',
+      '2. run-b · 5 s · exported as JSON (not published) · download triggered, not saved in this browser',
+      '3. run-c · 5 s · https://x/run-c.json · saved in this browser',
+      '2 of 3 runs saved in this browser (Saved exports on /bench/run)',
+    ]);
+  });
+
+  it('round-trips the new run fields through the stored series', () => {
+    const s = recordRunFinished(
+      markRunStarted(fresh(2), T0),
+      { runId: 'run-a', durationMs: 5, outcome: 'exported', downloadTriggered: true, savedInBrowser: true },
+      T0,
+    );
+    expect(parseSeriesState(serializeSeriesState(s))?.completed[0]).toMatchObject({ downloadTriggered: true, savedInBrowser: true });
   });
 });
 

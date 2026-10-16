@@ -60,6 +60,14 @@ export interface SeriesRunRecord {
   rawUrl?: string;
   /** Why a run was exported instead of published. */
   note?: string;
+  /** True when the run file was kept in this browser (Saved exports) before any download; false when that write failed. */
+  savedInBrowser?: boolean;
+  /**
+   * True when the page triggered the run file's automatic download. The page
+   * cannot tell whether the browser saved it (Chrome may block a site's
+   * repeated automatic downloads), so the Saved exports copy is the record.
+   */
+  downloadTriggered?: boolean;
 }
 
 export type SeriesStatus = 'running' | 'paused' | 'complete' | 'stopped';
@@ -363,9 +371,22 @@ export function seriesSummaryText(state: SeriesState): string {
       (run.outcome === 'exported'
         ? 'exported as JSON (not published)'
         : `exported as JSON (submission failed${run.note ? `: ${run.note}` : ''})`);
-    lines.push(`${run.index}. ${run.runId} · ${formatDuration(run.durationMs)} · ${where}`);
+    const kept = [
+      run.downloadTriggered ? 'download triggered' : null,
+      run.savedInBrowser === true ? 'saved in this browser' : run.savedInBrowser === false ? 'not saved in this browser' : null,
+    ].filter(Boolean);
+    lines.push(`${run.index}. ${run.runId} · ${formatDuration(run.durationMs)} · ${where}${kept.length ? ` · ${kept.join(', ')}` : ''}`);
+  }
+  const saved = savedInBrowserCount(state);
+  if (state.completed.some((r) => r.savedInBrowser !== undefined)) {
+    lines.push(`${saved} of ${state.completed.length} runs saved in this browser (Saved exports on /bench/run)`);
   }
   return lines.join('\n');
+}
+
+/** How many finished runs of the series were kept in this browser (Saved exports). */
+export function savedInBrowserCount(state: SeriesState): number {
+  return state.completed.filter((r) => r.savedInBrowser === true).length;
 }
 
 const SUITES: readonly SeriesSuite[] = ['quick', 'standard', 'thorough'];

@@ -146,6 +146,18 @@ import {
   updateAttempt,
   type PartialAttempt,
 } from '@/lib/bench/partial-run-store';
+import {
+  listSavedExports,
+  markExported,
+  persistThenDownload,
+  pruneSavedExports,
+  runExportFileName,
+  saveFinishedRun,
+  serializeRunExport,
+  type SavedExportMeta,
+} from '@/lib/bench/saved-exports';
+import { triggerTextDownload } from '@/lib/bench/download';
+import { SavedExportsPanel } from '@/components/bench/saved-exports-panel';
 import { ChevronRight } from 'lucide-react';
 import { Button } from '@/registry/localmode/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/registry/localmode/ui/card';
@@ -420,16 +432,12 @@ async function readStudySession(): Promise<StudySession | null> {
   return parseStudySession(window.location.search, readStudyEligibility());
 }
 
-/** Save a JSON file through a temporary object URL. */
+/**
+ * Save a JSON file through a temporary object URL, serialized exactly as the
+ * Saved exports panel stores it (so both files are identical).
+ */
 function downloadJsonFile(data: unknown, filename: string): void {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  // Revoke later: a page that reloads right after (a series) must not cut the save short.
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  triggerTextDownload(serializeRunExport(data), filename);
 }
 
 const sleepMs = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -934,6 +942,11 @@ export function BenchRunner() {
   const [mobile, setMobile] = useState(false);
   /** Attempts an earlier page left unfinished (tab crash, closed tab): exportable, never submitted. */
   const [unfinished, setUnfinished] = useState<PartialAttempt[]>([]);
+  /** Finished runs kept in this browser (IndexedDB), listed under Saved exports. */
+  const [savedExports, setSavedExports] = useState<SavedExportMeta[]>([]);
+  const refreshSavedExports = useCallback(() => {
+    void listSavedExports().then(setSavedExports);
+  }, []);
   /** "Runs" input as typed; the series length is its clamped integer value. */
   const [runsInput, setRunsInput] = useState('1');
   const runsCount = Math.min(MAX_SERIES_RUNS, Math.max(1, Math.floor(Number(runsInput)) || 1));
@@ -993,6 +1006,12 @@ export function BenchRunner() {
     void unfinishedAttempts.then((attempts) => {
       if (!cancelled) setUnfinished(attempts);
     });
+    // Saved exports outlive the page (and the series); pruning is off unless an age is configured.
+    void pruneSavedExports()
+      .then(() => listSavedExports())
+      .then((saved) => {
+        if (!cancelled) setSavedExports(saved);
+      });
     setMobile(isMobileDevice());
     // A full-mode study link restarts a run an earlier page left unfinished
     // (a reload, a crash, a closed tab), up to the attempt cap.
@@ -1264,6 +1283,15 @@ export function BenchRunner() {
     };
   }, [retryAt, result, submitRun]);
 
+  // A finished run whose upload failed for good is kept under Saved exports
+  // (a series run was saved before its upload; saving again changes nothing).
+  useEffect(() => {
+    if (!result || !uploadFailedPermanently(submitState)) return;
+    void saveFinishedRun(result, 'submit-failed').then((saved) => {
+      if (saved) refreshSavedExports();
+    });
+  }, [result, submitState, refreshSavedExports]);
+
   // A full-mode run that finished and whose upload resolved for good (done,
   // or failed with no resubmission scheduled) is no longer an attempt to restart.
   useEffect(() => {
@@ -1532,6 +1560,18 @@ export function BenchRunner() {
       attempt = null;
       // A control run is never uploaded, whatever the toggle says.
       const upload = autoSubmit && mayUpload(suiteResult);
+      // Keep the finished run in this browser before anything can lose it:
+      // every run of a series (its automatic download may be blocked and the
+      // page reloads right after), and a single run that is only exported.
+      const saved =
+        seriesAtStart || !upload
+          ? await saveFinishedRun(suiteResult, seriesAtStart ? 'series' : control ? 'control' : 'publish-off')
+          : null;
+      if (saved) refreshSavedExports();
+      /** Download the run file; the saved copy is the record if the browser blocks the download. */
+      const exportRunFile = () =>
+        persistThenDownload(suiteResult, 'series', triggerTextDownload);
+      const kept = { savedInBrowser: saved !== null };
       if (!seriesAtStart) {
         // Publishing was disclosed next to the Run button; opt-out via the toggle.
         if (upload && !clearAfterRun) void submitRun(suiteResult);
@@ -1558,13 +1598,21 @@ export function BenchRunner() {
         if (outcome.kind === 'done') {
           record = { runId: suiteResult.runId, durationMs, outcome: outcome.flagged ? 'flagged' : 'published', rawUrl: outcome.url };
         } else {
-          downloadJsonFile(suiteResult, `localmode-bench-${suiteResult.runId}.json`);
-          record = { runId: suiteResult.runId, durationMs, outcome: 'exported-after-failed-submit', note: outcome.message };
+          await exportRunFile();
+          record = {
+            runId: suiteResult.runId,
+            durationMs,
+            outcome: 'exported-after-failed-submit',
+            note: outcome.message,
+            downloadTriggered: true,
+          };
         }
       } else {
-        downloadJsonFile(suiteResult, `localmode-bench-${suiteResult.runId}.json`);
-        record = { runId: suiteResult.runId, durationMs, outcome: 'exported' };
+        await exportRunFile();
+        record = { runId: suiteResult.runId, durationMs, outcome: 'exported', downloadTriggered: true };
       }
+      record = { ...record, ...kept };
+      if (saved) refreshSavedExports();
       if (clearAfterRun) await clearCaches();
       const current = seriesRef.current ?? seriesAtStart;
       const next = recordRunFinished(current, record, Date.now());
@@ -1658,7 +1706,7 @@ export function BenchRunner() {
       if (seriesRef.current && seriesRef.current.status === 'running') saveSeriesHardware(seriesRef.current.seriesId, hardwareRef.current);
       window.location.reload();
     }
-  }, [suite, buildCells, autoSubmit, submitRun, study, activeLanes, availability, clearAfterRun, clearCaches, updateSeries, fullMode, updateStudyAttempt, controlKind]);
+  }, [suite, buildCells, autoSubmit, submitRun, study, activeLanes, availability, clearAfterRun, clearCaches, updateSeries, fullMode, updateStudyAttempt, controlKind, refreshSavedExports]);
 
   const downloadJson = downloadJsonFile;
 
@@ -1867,8 +1915,11 @@ export function BenchRunner() {
 
   const exportJson = useCallback(() => {
     if (!result) return;
-    downloadJson(result, `localmode-bench-${result.runId}.json`);
-  }, [result, downloadJson]);
+    downloadJson(result, runExportFileName(result.runId));
+    if (savedExports.some((r) => r.runId === result.runId)) {
+      void markExported(result.runId).then(refreshSavedExports);
+    }
+  }, [result, downloadJson, savedExports, refreshSavedExports]);
 
   const resultSettings = result ? runSettingsOf(result) : null;
   const codeIssued =
@@ -1906,7 +1957,8 @@ export function BenchRunner() {
           <p className="mt-1">
             The suite, its cells, rules, traces and environment capture are those of a protocol run; only
             the order of the runtimes differs, and the run file records it in harness.control. Keep each run
-            with Export JSON (a series exports every run by itself); nothing is uploaded.
+            with Export JSON (a series exports every run by itself, and every run is also kept in this
+            browser under Saved exports); nothing is uploaded.
           </p>
         </div>
       )}
@@ -1919,6 +1971,7 @@ export function BenchRunner() {
           {controlRefusal}
         </div>
       )}
+      <SavedExportsPanel exports={savedExports} onChanged={refreshSavedExports} />
       {unfinished.length > 0 && (
         <Card role="region" aria-label="Unfinished run recovered">
           <CardHeader>
@@ -2089,6 +2142,12 @@ export function BenchRunner() {
                   ? ` Cool-down between runs (0 to ${MAX_COOLDOWN_MINUTES} min, in half-minute steps) idles the page after each run before the next one; use it on laptops and phones, which slow down when run back to back.`
                   : ''}
               </p>
+              {runsCount > 1 && (!autoSubmit || controlKind !== null) && (
+                <p role="note" aria-label="Saved exports hint" className="text-xs text-muted-foreground">
+                  Each run&apos;s JSON is kept in this browser under Saved exports; allow automatic
+                  downloads for this site in Chrome to also save them to disk.
+                </p>
+              )}
             </ConfigSection>
 
             <ConfigSection id="bench-config-publishing" title="Publishing">
@@ -2103,12 +2162,12 @@ export function BenchRunner() {
               </div>
               <ConfigHelp>
                 {controlKind
-                  ? 'A control run is never published: export the JSON from the results (a series exports each run by itself).'
+                  ? 'A control run is never published: it is kept in this browser under Saved exports, and Export JSON in the results saves it (a series exports each run by itself).'
                   : fullMode
                   ? 'The study pays for an uploaded run, so publishing stays on for this link.'
                   : autoSubmit
                     ? 'The result uploads to the open dataset when the run completes.'
-                    : 'The run stays on this device; export the JSON from the results.'}
+                    : 'The run stays on this device, kept in this browser under Saved exports; Export JSON in the results saves it to disk.'}
               </ConfigHelp>
             </ConfigSection>
 
@@ -2405,7 +2464,7 @@ export function BenchRunner() {
               This deletes every model file the benchmark&apos;s runtimes stored for this site
               (Transformers.js, WebLLM and LiteRT in the Cache API, wllama in the Origin Private File
               System, WebLLM in IndexedDB), so the next run downloads its models again. Your
-              unfinished-run records and settings are kept.
+              unfinished-run records, saved exports and settings are kept.
             </DialogDescription>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
@@ -2472,6 +2531,7 @@ export function BenchRunner() {
           canContinue={!studyCapped}
           onClose={closeSeries}
           onCopy={() => void copySeriesSummary()}
+          savedRunIds={new Set(savedExports.map((r) => r.runId))}
         />
       )}
 
@@ -3050,8 +3110,11 @@ function SeriesPanel(props: {
   canContinue: boolean;
   onClose: () => void;
   onCopy: () => void;
+  /** Run ids currently kept under Saved exports. */
+  savedRunIds: Set<string>;
 }) {
-  const { series, now, wakeLock, copied, onStop, onContinue, canContinue, onClose, onCopy } = props;
+  const { series, now, wakeLock, copied, onStop, onContinue, canContinue, onClose, onCopy, savedRunIds } = props;
+  const savedCount = series.completed.filter((r) => savedRunIds.has(r.runId)).length;
   const eta = seriesEtaMs(series, now);
   const cooldownText = cooldownStatusText(series, now);
   const started = Date.parse(series.startedAt);
@@ -3107,11 +3170,34 @@ function SeriesPanel(props: {
                     {r.outcome === 'exported' ? 'exported as JSON' : `exported as JSON; not published (${r.note ?? 'submission failed'})`}
                   </span>
                 )}
+                <span className="text-xs text-muted-foreground">
+                  {[
+                    r.downloadTriggered ? 'download triggered' : null,
+                    savedRunIds.has(r.runId)
+                      ? 'saved in this browser'
+                      : r.savedInBrowser === false
+                        ? 'not saved in this browser'
+                        : r.savedInBrowser
+                          ? 'removed from this browser'
+                          : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
               </li>
             ))}
           </ol>
         ) : (
           <p className="text-muted-foreground">No run of this series has finished yet.</p>
+        )}
+        {series.completed.length > 0 && (
+          <p role="note" aria-label="Runs saved in this browser">
+            {savedCount} of {series.completed.length} finished run{series.completed.length === 1 ? '' : 's'} saved in
+            this browser under Saved exports
+            {series.completed.some((r) => r.downloadTriggered)
+              ? '. The page triggered a download of each exported run, but the browser may have blocked it: download them again from Saved exports.'
+              : '.'}
+          </p>
         )}
         <div className="flex flex-wrap gap-2">
           {series.status === 'paused' && canContinue && <Button onClick={onContinue}>Continue series</Button>}

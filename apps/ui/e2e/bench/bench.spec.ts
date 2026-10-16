@@ -31,7 +31,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
-import { expect, test, type ConsoleMessage, type Locator, type Page, type Request } from '@playwright/test';
+import { expect, test, type ConsoleMessage, type Download, type Locator, type Page, type Request } from '@playwright/test';
+import { readStoredZip } from '../../scripts/_zip-reader';
 
 /** The harness version every run must carry: the bench package this build installed. */
 const BENCH_PACKAGE_VERSION = (
@@ -2112,5 +2113,130 @@ test.describe('control run: reversed runtime order (never uploaded)', () => {
     expect(benchApi.filter((r) => r.endsWith('/api/bench/submit')), 'no upload request').toEqual([]);
     expect(benchApi, 'no bench API request at all: no upload token either').toEqual([]);
     expect(consoleErrors).toEqual([]);
+  });
+
+  test('downloads blocked: a 2-run control Quick series keeps both runs under Saved exports, and Download all from a click saves them byte for byte', async ({
+    browser,
+  }, testInfo) => {
+    test.setTimeout(45 * 60 * 1000);
+    const baseURL = testInfo.project.use.baseURL;
+    // The browser refuses every download in this context, as Chrome does for a
+    // site's repeated automatic downloads the user has not allowed.
+    const blocked = await browser.newContext({ baseURL, acceptDownloads: false });
+    const page = await blocked.newPage();
+    const consoleErrors: string[] = [];
+    collectConsoleErrors(page, consoleErrors);
+    const benchApi: string[] = [];
+    page.on('request', (req) => {
+      const { pathname } = new URL(req.url());
+      if (pathname.startsWith('/api/bench/')) benchApi.push(`${req.method()} ${pathname}`);
+    });
+    // Every download the page attempted, with the browser's verdict.
+    const attempted: Array<Promise<{ name: string; failure: string | null }>> = [];
+    page.on('download', (d: Download) => {
+      attempted.push(d.failure().then((failure) => ({ name: d.suggestedFilename(), failure })));
+    });
+
+    await page.goto('/bench/run?tier=quick&quality=off&runs=2&cooldown=0&control=order-reversed');
+    const loads = countLoads(page);
+    await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+    // Nothing saved yet: no panel.
+    await expect(page.getByRole('region', { name: 'Saved exports' })).toHaveCount(0);
+    // The series settings say where each run's JSON is kept.
+    await expect(page.getByRole('note', { name: 'Saved exports hint' })).toHaveText(
+      "Each run's JSON is kept in this browser under Saved exports; allow automatic downloads for this site in Chrome to also save them to disk.",
+    );
+    await page.getByRole('button', { name: 'Run benchmark' }).click();
+    await expect(
+      page.getByRole('dialog', { name: /benchmark running/i }).getByRole('group', { name: 'Series progress' }),
+    ).toContainText('Series: run 2 of 2', { timeout: 15 * 60 * 1000 });
+    const seriesPanel = page.getByRole('region', { name: 'Benchmark series' });
+    await expect(seriesPanel).toContainText('Series complete: 2 of 2 runs', { timeout: 15 * 60 * 1000 });
+    expect(loads.count, 'one reload between the two runs').toBe(1);
+
+    // Both runs are under Saved exports, and the series panel says so.
+    const panel = page.getByRole('region', { name: 'Saved exports' });
+    await expect(panel).toBeVisible();
+    await expect(panel.getByRole('listitem')).toHaveCount(2);
+    await expect(panel).toContainText('2 finished runs are saved in this browser');
+    await expect(seriesPanel.getByRole('note', { name: 'Runs saved in this browser' })).toContainText(
+      '2 of 2 finished runs saved in this browser under Saved exports',
+    );
+    await expect(seriesPanel.getByRole('list', { name: 'Completed runs' })).toContainText('download triggered · saved in this browser');
+
+    // What the browser holds, read with raw IndexedDB calls.
+    const stored = await page.evaluate(async () => {
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const req = indexedDB.open('localmode-bench-progress');
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      try {
+        return await new Promise<Array<{ runId: string; fileName: string; json: string; exportedAt?: string }>>((resolve, reject) => {
+          const req = db.transaction('finished-runs', 'readonly').objectStore('finished-runs').getAll();
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+      } finally {
+        db.close();
+      }
+    });
+    expect(stored).toHaveLength(2);
+    const runs = stored.map((r) => JSON.parse(r.json) as ExportedRun & { digest?: string });
+    expect(runs.map((r) => r.harness.series!.index).sort()).toEqual([1, 2]);
+    expect(runs[0].harness.series!.id).toBe(runs[1].harness.series!.id);
+    for (const [i, r] of stored.entries()) {
+      expect(r.fileName).toBe(`localmode-bench-${r.runId}.json`);
+      expect(runs[i].runId).toBe(r.runId);
+      expect(runs[i].harness.control?.kind).toBe('order-reversed');
+      expect(runs[i].digest).toMatch(/^[0-9a-f]{64}$/);
+      // Stored as the page serializes an export (two-space JSON), and the series triggered its download.
+      expect(r.json).toBe(JSON.stringify(runs[i], null, 2));
+      expect(typeof r.exportedAt).toBe('string');
+      await expect(panel.getByRole('listitem', { name: `Saved run ${r.runId}` })).toContainText('control: order-reversed');
+    }
+    // The series tried to download each run, and the browser refused both: no file reached the disk.
+    const verdicts = await Promise.all(attempted);
+    expect(verdicts.map((v) => v.name).sort(), 'one download attempt per run').toEqual(stored.map((r) => r.fileName).sort());
+    expect(verdicts.every((v) => v.failure !== null), JSON.stringify(verdicts)).toBe(true);
+    expect(benchApi, 'a control run makes no bench API request').toEqual([]);
+    expect(consoleErrors).toEqual([]);
+
+    // Later, with downloads allowed: the same browser storage in a context that accepts downloads.
+    const state = await blocked.storageState({ indexedDB: true });
+    await blocked.close();
+    const allowed = await browser.newContext({ baseURL, acceptDownloads: true, storageState: state });
+    try {
+      const page2 = await allowed.newPage();
+      const consoleErrors2: string[] = [];
+      collectConsoleErrors(page2, consoleErrors2);
+      const modelRequests: string[] = [];
+      collectModelRequests(page2, modelRequests);
+      await page2.goto('/bench/run');
+      const panel2 = page2.getByRole('region', { name: 'Saved exports' });
+      await expect(panel2.getByRole('listitem')).toHaveCount(2);
+      const downloadPromise = page2.waitForEvent('download');
+      await panel2.getByRole('button', { name: 'Download all (.zip)' }).click();
+      const archive = await downloadPromise;
+      expect(await archive.failure()).toBeNull();
+      expect(archive.suggestedFilename()).toMatch(/^localmode-bench-saved-exports-.*\.zip$/);
+      const entries = readStoredZip(readFileSync(await archive.path()));
+      expect(entries.map((e) => e.name).sort()).toEqual(stored.map((r) => r.fileName).sort());
+      for (const r of stored) {
+        const entry = entries.find((e) => e.name === r.fileName)!;
+        expect(entry.data.equals(Buffer.from(r.json, 'utf8')), `${r.fileName} is byte for byte the stored file`).toBe(true);
+      }
+      // A single run's Download saves the same bytes as its archive entry.
+      const one = stored[0];
+      const single = page2.waitForEvent('download');
+      await panel2.getByRole('listitem', { name: `Saved run ${one.runId}` }).getByRole('button', { name: /^Download run / }).click();
+      const file = await single;
+      expect(file.suggestedFilename()).toBe(one.fileName);
+      expect(readFileSync(await file.path()).equals(Buffer.from(one.json, 'utf8'))).toBe(true);
+      expect(modelRequests, 'downloading saved runs fetches no model').toEqual([]);
+      expect(consoleErrors2).toEqual([]);
+    } finally {
+      await allowed.close();
+    }
   });
 });

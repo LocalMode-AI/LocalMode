@@ -16,10 +16,10 @@ import type {
   HarnessInfo,
 } from '@localmode/bench';
 import { BENCH_PROTOCOL_VERSION, BENCH_SCHEMA_VERSION } from '@localmode/bench';
+import { ATTEMPTS_STORE, hasIndexedDB, inStore } from './progress-db';
 
-const DB_NAME = 'localmode-bench-progress';
-const STORE = 'attempts';
-const DB_VERSION = 1;
+const tx = <T>(mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> =>
+  inStore(ATTEMPTS_STORE, mode, work);
 
 /** One in-progress (or abandoned) benchmark attempt. */
 export interface PartialAttempt {
@@ -48,40 +48,6 @@ export interface PartialAttempt {
    */
   memoryBytesAtPhase?: number;
   pageOrigin?: string;
-}
-
-function hasIndexedDB(): boolean {
-  return typeof indexedDB !== 'undefined';
-}
-
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'attemptId' });
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error ?? new Error('indexedDB open failed'));
-    req.onblocked = () => reject(new Error('indexedDB open blocked'));
-  });
-}
-
-function tx<T>(mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
-  return openDb().then(
-    (db) =>
-      new Promise<T>((resolve, reject) => {
-        const t = db.transaction(STORE, mode);
-        const req = work(t.objectStore(STORE));
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error ?? new Error('indexedDB request failed'));
-        t.oncomplete = () => db.close();
-        t.onabort = () => {
-          db.close();
-          reject(t.error ?? new Error('indexedDB transaction aborted'));
-        };
-      }),
-  );
 }
 
 /** Start tracking an attempt. Returns null where IndexedDB is unavailable (progress is then not persisted). */

@@ -289,7 +289,9 @@ export default function BenchMethodologyPage() {
               used). A control run is never uploaded (Export JSON only, and the submission route refuses
               one), never enters the leaderboard and is never scored, so it needs no protocol version.
               Runs and the cool-down work as usual, and a series keeps its control mode across its
-              reloads. A study link with the parameter is refused.
+              reloads. A study link with the parameter is refused. Every run the page exports is first
+              kept in the browser and listed under Saved exports on the run page, so a download the
+              browser blocked is not lost.
             </li>
             <li>
               While a run or series is active the page holds a screen wake lock (requested again

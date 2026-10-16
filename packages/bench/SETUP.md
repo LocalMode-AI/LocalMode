@@ -253,6 +253,40 @@ unattended; each run of the series is exported as a JSON download, and the
 series keeps its control mode across its reloads. A paid-study link with the
 parameter, or an unknown kind, is refused on the page and Run stays disabled.
 
+### Saved exports: getting every run file
+
+Chrome blocks a site's repeated automatic downloads unless you allow them, and
+the page cannot tell when it did. A series saves each run with an automatic
+download and then reloads for the next run, so without that permission only
+some of the files reach the disk. The page therefore keeps every finished run
+in the browser before it tries to download it: every run of a series
+(published or not), and a single run that is only exported (a control run, a
+run with publishing off, or a run whose upload failed). The copies live in
+the page's IndexedDB database `localmode-bench-progress`, object store
+`finished-runs`, keyed by run id; Clear model caches does not touch them, and
+nothing removes them by age.
+
+To get the files, open `/bench/run` in the same browser profile (after the
+series ends, or any time later). The **Saved exports** panel lists each kept
+run: short run id, suite, control kind, series place, finish time, size, and
+when its download last started.
+
+- **Download all (.zip)** saves one archive holding every kept run, each as
+  `localmode-bench-<runId>.json`. A click is a user action, so Chrome allows
+  this download even where it blocked the automatic ones. Unzip it and point
+  the collector at the folder (`--dir`).
+- **Download** on a row saves that one run file.
+- **Remove** (it asks first) deletes the browser's copy; do this once the file
+  is safe on disk.
+
+Every saved file is byte for byte the file Export JSON and the series'
+automatic download save (two-space indented JSON with the page's digest), so
+the collector and `import-exported-run.ts` accept it as is. To also get the
+files on disk while a series runs, allow automatic downloads for the site in
+Chrome (the blocked-download icon in the address bar, or Settings → Privacy
+and security → Site settings → Additional permissions → Automatic downloads). The series panel says how
+many of its runs the browser holds and whether each download was triggered.
+
 Control runs never enter the leaderboard index: `import-exported-run.ts`
 refuses them. File the exported runs into a clone of the dataset, from
 `apps/ui`:
