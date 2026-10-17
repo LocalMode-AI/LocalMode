@@ -232,18 +232,38 @@ series place.
 ## 9. Control runs
 
 A control run is a control experiment for the methodology: the same suite as
-a protocol run, with the runtime execution order reversed, so that the lane
-ratios under the two orders can be compared (see the package README, Control
-runs). It is opted into only by the query parameter:
+a protocol run, in the runtime execution order its kind names, so that the
+lane ratios under two orders can be compared (see the package README, Control
+runs). There are two kinds:
+
+- `order-reversed` runs the runtimes in the exact reverse of the protocol
+  order.
+- `fixed-order` runs them in the protocol order itself, marked as a control
+  run. Use it for the reference series of an order-reversed series: record
+  both on the same machine, with the same browser build, on the same day and
+  with the same settings, so the two orders are compared within one browser
+  build (the protocol runs on the leaderboard may come from another build).
+
+A control run is opted into only by the query parameter:
 
 ```
 https://localmode.ai/bench/run?control=order-reversed
+https://localmode.ai/bench/run?control=fixed-order
 https://localmode.ai/bench/run?tier=quick&quality=off&runs=10&cooldown=0&cold=off&control=order-reversed
+https://localmode.ai/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=fixed-order
 ```
 
-The page shows "Control run: reversed runtime order; not published to the
-leaderboard" for as long as control mode is on. The run file carries
-`harness.control = { kind: 'order-reversed', runtimeOrder: [...] }` with the
+Leave a cool-down between the runs of a series: `cooldown=5` waits five
+minutes between runs (the parameter is in minutes, capped at 30). On a
+laptop still warm from the previous run, the Compute Pressure state can
+reach `serious` or `critical` during the next one, and an analysis that
+excludes runs by their `pressureCriticalFraction` would drop them.
+
+For as long as control mode is on, the page shows "Control run: reversed
+runtime order; not published to the leaderboard" (`order-reversed`) or
+"Control run: protocol runtime order; not published to the leaderboard"
+(`fixed-order`). The run file carries
+`harness.control = { kind, runtimeOrder: [...] }` with the kind and the
 order the runner used; everything else (cells, rules, traces, environment
 capture) is a protocol run's. A control run is never uploaded: the publish
 toggle is locked off, the results offer Export JSON only, the page fetches no
@@ -302,7 +322,7 @@ control run whose digest verifies and whose shape validates
 (`validateSubmission`; plausibility flags are printed and kept). The nonce is
 dropped if the file has one, and the run is written as compact JSON to
 `controls/<kind>/<YYYY-MM-DD>/<runId>.json`, the date being `createdAt` in
-UTC. `index/summary.json` is not read or written. A run id already under
+UTC (`controls/order-reversed/...` or `controls/fixed-order/...`). `index/summary.json` is not read or written. A run id already under
 `runs/`, `quarantine/` or `controls/` is refused, and one refused file stops
 the whole batch before anything is written. Check `git diff` (only new files
 under `controls/`) and commit them in the dataset clone. The dataset's

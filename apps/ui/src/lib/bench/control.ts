@@ -1,8 +1,11 @@
 /**
  * Control runs on /bench/run: a control experiment for the methodology that
- * runs the same suite as a protocol run with a different runtime execution
- * order, so a lane's position in the suite can be told apart from the lane
- * itself. A control run is opted into only by the `?control=<kind>` query
+ * runs the same suite as a protocol run in the runtime execution order its
+ * kind names. `order-reversed` reverses the protocol order, so a lane's
+ * position in the suite can be told apart from the lane itself;
+ * `fixed-order` keeps the protocol order, a same-build, same-day reference
+ * series so an order-reversed series can be compared within one browser
+ * build. A control run is opted into only by the `?control=<kind>` query
  * parameter (no other control on the page turns it on), is marked
  * `harness.control` in its run file, is never uploaded (Export JSON only),
  * and is refused on a paid-study link. Everything in this module is pure.
@@ -21,6 +24,7 @@ export type ControlRequest =
 /** Banner text per control kind, shown on the page for as long as control mode is on. */
 const BANNER_TEXT: Record<ControlKind, string> = {
   'order-reversed': 'Control run: reversed runtime order; not published to the leaderboard',
+  'fixed-order': 'Control run: protocol runtime order; not published to the leaderboard',
 };
 
 /** Message for a paid-study link that also carries the control parameter. */
@@ -35,7 +39,7 @@ export const CONTROL_UPLOAD_REFUSAL =
  * Read the control request from a /bench/run query string.
  *
  * - No `control` parameter: `none`, a protocol run.
- * - A known kind (`order-reversed`): `control`, unless the query is a
+ * - A known kind (`order-reversed`, `fixed-order`): `control`, unless the query is a
  *   paid-study link (`PROLIFIC_PID` or `cc` present), which is `refused`.
  * - Any other value: `refused`, so a mistyped kind never quietly runs (and
  *   publishes) a protocol run.
@@ -52,7 +56,7 @@ export function parseControlRequest(search: string): ControlRequest {
   if (!CONTROL_KINDS.includes(value as ControlKind)) {
     return {
       status: 'refused',
-      message: `Unknown control run kind "${value}"; the supported kind is ${CONTROL_KINDS.join(', ')}. Remove the control parameter for a protocol run.`,
+      message: `Unknown control run kind "${value}"; the supported kinds are ${CONTROL_KINDS.join(', ')}. Remove the control parameter for a protocol run.`,
     };
   }
   if (params.has('PROLIFIC_PID') || params.has('cc')) return { status: 'refused', message: CONTROL_STUDY_REFUSAL };

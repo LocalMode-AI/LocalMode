@@ -19,6 +19,7 @@ import {
   validateSubmission,
   verifyRunDigest,
   type BenchRunResult,
+  type ControlKind,
 } from '@localmode/bench';
 import { collectControlRuns, CollectControlRunsError, controlRunPath } from './collect-control-runs';
 
@@ -46,11 +47,16 @@ function snapshot(dir: string): Map<string, string> {
 }
 
 /** The file a control page's Export JSON saves. */
-async function controlExport(runId: string, createdAt: string, withControl = true): Promise<BenchRunResult> {
+async function controlExport(
+  runId: string,
+  createdAt: string,
+  withControl = true,
+  kind: ControlKind = 'order-reversed',
+): Promise<BenchRunResult> {
   const run = JSON.parse(readFileSync(join(FIXTURE, SOURCE_RUN), 'utf8')) as BenchRunResult;
   run.runId = runId;
   run.createdAt = createdAt;
-  if (withControl) run.harness = { ...run.harness, control: createHarnessControl('order-reversed') };
+  if (withControl) run.harness = { ...run.harness, control: createHarnessControl(kind) };
   delete run.nonce;
   run.digest = await computeRunDigest(run);
   return run;
@@ -105,6 +111,45 @@ describe('collect-control-runs', () => {
     expect(filed.harness.control).toEqual({ kind: 'order-reversed', runtimeOrder: [...RUNTIME_EXECUTION_ORDER].reverse() });
     expect(validateSubmission(filed).shapeErrors).toEqual([]);
     expect(controlRunPath(filed)).toBe(added[0]);
+  }, 120_000);
+
+  it('files a fixed-order export under controls/fixed-order/<date>/ beside an order-reversed one, index untouched', async () => {
+    const fixed = await controlExport('control-run-fixed', '2026-10-16T08:00:00.000Z', true, 'fixed-order');
+    const reversed = await controlExport('control-run-rev', '2026-10-16T10:00:00.000Z');
+    const fixedFile = await writeExport('fixed.json', fixed);
+    const reversedFile = await writeExport('reversed.json', reversed);
+    const before = snapshot(dataset);
+
+    const out = cli('--file', fixedFile, '--file', reversedFile);
+    expect(out.stderr).toBe('');
+    expect(out.status).toBe(0);
+    expect(out.stdout).toContain(`controls/fixed-order/2026-10-16/control-run-fixed.json <- ${fixedFile} (fixed-order,`);
+    expect(out.stdout).toContain('2 control runs; index/summary.json untouched');
+
+    const after = snapshot(dataset);
+    const added = [...after.keys()].filter((k) => !before.has(k)).sort();
+    expect(added).toEqual([
+      'controls/fixed-order/2026-10-16/control-run-fixed.json',
+      'controls/order-reversed/2026-10-16/control-run-rev.json',
+    ]);
+    for (const [path, bytes] of before) expect(after.get(path)).toBe(bytes);
+    const filed = JSON.parse(after.get(added[0])!) as BenchRunResult;
+    expect(after.get(added[0])).toBe(JSON.stringify(fixed));
+    expect(await verifyRunDigest(filed)).toBe(true);
+    expect(filed.harness.control).toEqual({ kind: 'fixed-order', runtimeOrder: [...RUNTIME_EXECUTION_ORDER] });
+    expect(controlRunPath(filed)).toBe(added[0]);
+  }, 120_000);
+
+  it('refuses a fixed-order marker carrying the reversed order, writing nothing', async () => {
+    const run = await controlExport('control-run-fixed-bad', '2026-10-16T09:00:00.000Z', true, 'fixed-order');
+    run.harness = { ...run.harness, control: { kind: 'fixed-order', runtimeOrder: [...RUNTIME_EXECUTION_ORDER].reverse() } };
+    run.digest = await computeRunDigest(run);
+    const file = await writeExport('fixed-bad.json', run);
+    const before = snapshot(dataset);
+    await expect(collectControlRuns({ datasetDir: dataset, files: [file] })).rejects.toThrow(
+      `${file}: invalid shape: harness.control.runtimeOrder must be the fixed-order order [${RUNTIME_EXECUTION_ORDER.join(', ')}]`,
+    );
+    expect(snapshot(dataset)).toEqual(before);
   }, 120_000);
 
   it('drops a nonce an export carries, as the publication scrub does, keeping the digest', async () => {

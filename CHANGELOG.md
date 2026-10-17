@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.13] - 2026-10-16
+
+**Released:** `@localmode/bench` 0.9.7.
+
+### Added
+
+- **bench:** a second control-run kind, `fixed-order`, on `/bench/run?control=fixed-order`. It runs the same suite in the protocol's own runtime order (`RUNTIME_EXECUTION_ORDER`) and marks the run file `harness.control = { kind: 'fixed-order', runtimeOrder: [...] }`. It is the same-build, same-day reference series for an order-reversed series: the protocol runs on the leaderboard may come from another browser build, so comparing the two orders within one browser build needs a reference series recorded beside the reversed one and kept out of the leaderboard. It is export-only exactly like `order-reversed`: the page shows "Control run: protocol runtime order; not published to the leaderboard", the publish toggle is locked off, no upload token is fetched, `POST /api/bench/submit` refuses it with 422 `control-run`, `collect-control-runs.ts` files it under `controls/fixed-order/<YYYY-MM-DD>/`, `import-exported-run.ts` refuses it, `aggregateRuns` leaves it out of every leaderboard row, and `runs.csv` names it in `controlKind`/`controlRuntimeOrder`. The runner refuses a `fixed-order` marker whose order is not the protocol order, through the same refusal as a mismatched `order-reversed` order; an unknown kind and a paid-study link carrying either kind are still refused on the page. The unknown-kind message now reads "the supported kinds are order-reversed, fixed-order". Every `order-reversed` behaviour is unchanged. `packages/bench/README.md` (Control runs), `SETUP.md` section 9 and the methodology page describe both kinds, when to use `fixed-order`, and the advice to leave a cool-down between the runs of a series (`cooldown=5`, five minutes between runs; the parameter is in minutes, capped at 30) so that a laptop still warm from the previous run does not push the next run into critical Compute Pressure, which an analysis excluding runs by `pressureCriticalFraction` would drop. Unit tests cover the kind list, the order validation per kind in the runner and the validator, the record, aggregation and `runs.csv`, the page's parsing, banner and series state, the submit-route rejection, filing under `controls/fixed-order/`, and the import refusal; a new lane of `e2e/bench/bench.spec.ts` runs a real Quick suite from `?control=fixed-order` and checks the banner, the protocol order in the exported JSON and that no bench API request is made.
+- **bench 0.9.7:** `ControlKind` gains `'fixed-order'`; `CONTROL_KINDS` is `['order-reversed', 'fixed-order']` and `controlRuntimeOrder('fixed-order')` returns a fresh copy of `RUNTIME_EXECUTION_ORDER`. A control run is never submitted, published or scored, so the protocol stays `localmode-bench/5`, the schema stays 3 and the plausibility rules stay 2; no run is re-scored.
+
 ## [2.16.12] - 2026-10-15
 
 **Released:** no npm package; the `/bench` site only.

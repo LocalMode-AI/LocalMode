@@ -1955,8 +1955,10 @@ export function BenchRunner() {
         >
           <p className="font-medium">{controlBannerText(controlKind)}</p>
           <p className="mt-1">
-            The suite, its cells, rules, traces and environment capture are those of a protocol run; only
-            the order of the runtimes differs, and the run file records it in harness.control. Keep each run
+            {controlKind === 'fixed-order'
+              ? 'The suite, its cells, rules, traces, environment capture and runtime order are those of a protocol run; the run file is marked as a control run in harness.control, a reference for a reversed-order series on the same browser build. Keep each run'
+              : 'The suite, its cells, rules, traces and environment capture are those of a protocol run; only the order of the runtimes differs, and the run file records it in harness.control. Keep each run'}
+            {' '}
             with Export JSON (a series exports every run by itself, and every run is also kept in this
             browser under Saved exports); nothing is uploaded.
           </p>

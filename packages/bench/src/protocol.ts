@@ -201,7 +201,7 @@ export function orderCells<T extends { model: { runtimeId: BenchRuntimeId } }>(
 }
 
 /** Control-run kinds a host may record on `harness.control`. */
-export const CONTROL_KINDS: readonly ControlKind[] = ['order-reversed'] as const;
+export const CONTROL_KINDS: readonly ControlKind[] = ['order-reversed', 'fixed-order'] as const;
 
 /**
  * The runtime execution order of a control run.
@@ -213,15 +213,24 @@ export const CONTROL_KINDS: readonly ControlKind[] = ['order-reversed'] as const
  * `RUNTIME_EXECUTION_ORDER`); a WebGPU session failure can therefore fail the
  * WASM lane of a control run, and is recorded as an error like any other.
  *
+ * `fixed-order` is `RUNTIME_EXECUTION_ORDER` itself: a same-build, same-day
+ * reference series for an order-reversed series, so that the two orders can
+ * be compared within one browser build (protocol runs on the leaderboard may
+ * come from another build), recorded as a control run so it stays out of
+ * the leaderboard.
+ *
  * @param kind - The control kind.
  * @returns A new array of every runtime, each exactly once.
  * @example
  * controlRuntimeOrder('order-reversed')[0]; // 'wllama'
+ * controlRuntimeOrder('fixed-order')[0]; // 'transformers-wasm'
  */
 export function controlRuntimeOrder(kind: ControlKind): BenchRuntimeId[] {
   switch (kind) {
     case 'order-reversed':
       return [...RUNTIME_EXECUTION_ORDER].reverse();
+    case 'fixed-order':
+      return [...RUNTIME_EXECUTION_ORDER];
   }
 }
 

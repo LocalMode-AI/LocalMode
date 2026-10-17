@@ -685,11 +685,15 @@ export interface HarnessInfo {
    */
   coldStart?: 'provider-caches-cleared';
   /**
-   * Set only on a control run (since bench 0.9.6): the same suite, cells,
-   * rules, traces and environment capture as a protocol run, executed with a
-   * different runtime order so that a lane's position in the suite can be
-   * separated from the lane itself, a control experiment for the
-   * methodology. `runtimeOrder` is the order the runner actually executed
+   * Set only on a control run (since bench 0.9.6; kind `fixed-order` since
+   * 0.9.7): the same suite, cells, rules, traces and environment capture as
+   * a protocol run, executed in the order the kind names, a control
+   * experiment for the methodology. `order-reversed` runs the runtimes in
+   * the reverse of the protocol order, so that a lane's position in the
+   * suite can be separated from the lane itself; `fixed-order` runs them in
+   * the protocol order, a reference series recorded with the same browser
+   * build on the same day, so that an order-reversed series can be compared
+   * within one browser build. `runtimeOrder` is the order the runner actually executed
    * (the runner orders the cells by it and refuses an order that is not the
    * kind's canonical one, so the record cannot disagree with the run).
    *
@@ -703,13 +707,19 @@ export interface HarnessInfo {
 }
 
 /** Kinds of control run (see `HarnessInfo.control`). */
-export type ControlKind = 'order-reversed';
+export type ControlKind = 'order-reversed' | 'fixed-order';
 
 /**
  * Control-run marker recorded on `harness.control`.
  *
  * - `order-reversed`: the runtimes execute in the exact reverse of
  *   `RUNTIME_EXECUTION_ORDER`; within a runtime, catalog order is kept.
+ * - `fixed-order` (since bench 0.9.7): the runtimes execute in
+ *   `RUNTIME_EXECUTION_ORDER` itself, as a protocol run does. It is the
+ *   same-build, same-day reference series for an order-reversed series:
+ *   protocol runs on the leaderboard may come from another browser build, so
+ *   comparing the two orders within one build needs a reference series
+ *   recorded beside the reversed one, and kept out of the leaderboard.
  */
 export interface HarnessControl {
   kind: ControlKind;

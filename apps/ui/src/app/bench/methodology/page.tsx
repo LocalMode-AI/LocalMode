@@ -283,8 +283,11 @@ export default function BenchMethodologyPage() {
               <code className="font-mono text-sm">/bench/run?control=order-reversed</code> runs the same
               suite with the runtimes in the exact reverse of the protocol&apos;s execution order, a
               control experiment for the methodology: under the protocol order a lane is tied to its
-              position in the suite, and comparing the lane ratios of the two orders separates the two.
-              Cells, rules, traces and the environment capture are those of a protocol run; the run file
+              position in the suite, and comparing the lane ratios of the two orders separates the two.{' '}
+              <code className="font-mono text-sm">/bench/run?control=fixed-order</code> runs the suite in
+              the protocol&apos;s own order, marked as a control run: a reference series recorded with the
+              same browser build on the same day as a reversed series, so the two orders are compared
+              within one build. Cells, rules, traces and the environment capture are those of a protocol run; the run file
               carries <code className="font-mono text-sm">harness.control</code> (the kind and the order
               used). A control run is never uploaded (Export JSON only, and the submission route refuses
               one), never enters the leaderboard and is never scored, so it needs no protocol version.

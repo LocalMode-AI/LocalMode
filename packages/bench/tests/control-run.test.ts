@@ -1,7 +1,8 @@
 /**
- * Control runs (`harness.control`, kind `order-reversed`): a control
- * experiment for the methodology that runs the same suite with the runtime
- * execution order reversed. The runner executes real mock adapters through
+ * Control runs (`harness.control`, kinds `order-reversed` and `fixed-order`):
+ * a control experiment for the methodology that runs the same suite with the
+ * runtime execution order reversed, or in the protocol order as a same-build
+ * reference series. The runner executes real mock adapters through
  * the public `runBenchmarkSuite`, so the asserted order is the order the
  * cells actually ran in (observed through the `onCellStart` hook and the
  * result's cell order), not a re-derivation of it.
@@ -94,7 +95,27 @@ describe('controlRuntimeOrder()', () => {
     reversed.pop();
     expect(controlRuntimeOrder('order-reversed')).toHaveLength(8);
     expect(RUNTIME_EXECUTION_ORDER[0]).toBe('transformers-wasm');
-    expect(CONTROL_KINDS).toEqual(['order-reversed']);
+    expect(CONTROL_KINDS).toEqual(['order-reversed', 'fixed-order']);
+  });
+
+  it('fixed-order is exactly RUNTIME_EXECUTION_ORDER, every runtime once, as a fresh array', () => {
+    const fixed = controlRuntimeOrder('fixed-order');
+    expect(fixed).toEqual([
+      'transformers-wasm',
+      'transformers-webgpu',
+      'chrome-ai',
+      'webllm',
+      'mediapipe',
+      'litert',
+      'wllama-webgpu',
+      'wllama',
+    ]);
+    expect(fixed).toEqual([...RUNTIME_EXECUTION_ORDER]);
+    expect(fixed).not.toBe(RUNTIME_EXECUTION_ORDER);
+    fixed.reverse();
+    expect(controlRuntimeOrder('fixed-order')[0]).toBe('transformers-wasm');
+    expect(RUNTIME_EXECUTION_ORDER[0]).toBe('transformers-wasm');
+    expect(createHarnessControl('fixed-order')).toEqual({ kind: 'fixed-order', runtimeOrder: [...RUNTIME_EXECUTION_ORDER] });
   });
 
   it('orderCells with the reversed order keeps every cell exactly once and catalog order within a runtime', () => {
@@ -146,6 +167,32 @@ describe('runBenchmarkSuite() with harness.control', () => {
     expect(await verifyRunDigest(result)).toBe(true);
   });
 
+  it('fixed-order executes the cells in the protocol order and records the fixed-order marker', async () => {
+    const [fixed, protocol] = await Promise.all([
+      runSuite({ name: '@localmode/bench', version: 'test', control: createHarnessControl('fixed-order') }),
+      runSuite({ name: '@localmode/bench', version: 'test' }),
+    ]);
+    const expected = [
+      'transformers-wasm/embed/embed-single',
+      'transformers-webgpu/m1/chat-pp128-tg128',
+      'webllm/m1/chat-pp128-tg128',
+      'wllama-webgpu/m1/chat-pp128-tg128',
+      'wllama/m1/chat-pp128-tg128',
+      'wllama/m2/chat-pp128-tg128',
+    ];
+    expect(fixed.started).toEqual(expected);
+    expect(fixed.result.cells.map((c) => c.cellId)).toEqual(expected);
+    expect(protocol.started).toEqual(expected);
+    expect(fixed.result.cells.every((c) => c.status === 'ok')).toBe(true);
+    expect(fixed.result.harness.control).toEqual({ kind: 'fixed-order', runtimeOrder: [...RUNTIME_EXECUTION_ORDER] });
+    expect(isControlRun(fixed.result)).toBe(true);
+    expect(isControlRun(protocol.result)).toBe(false);
+    expect(validateRunShape(fixed.result)).toEqual([]);
+    expect(validateSubmission(fixed.result).shapeErrors).toEqual([]);
+    fixed.result.digest = await computeRunDigest(fixed.result);
+    expect(await verifyRunDigest(fixed.result)).toBe(true);
+  });
+
   it('a protocol run of the same suite runs the same cells, under the same rules, in the protocol order', async () => {
     const [control, protocol] = await Promise.all([
       runSuite({ name: '@localmode/bench', version: 'test', control: createHarnessControl('order-reversed') }),
@@ -189,6 +236,30 @@ describe('runBenchmarkSuite() with harness.control', () => {
     ).rejects.toThrow("harness.control.runtimeOrder must be the order-reversed order [wllama, wllama-webgpu, litert, mediapipe, webllm, chrome-ai, transformers-webgpu, transformers-wasm]; use createHarnessControl('order-reversed')");
     expect(adapter.loadCalls).toBe(0);
   });
+
+  it('refuses a fixed-order marker carrying any order but the protocol order, and an unknown kind, before running anything', async () => {
+    const adapter = makeMockLLMAdapter();
+    const attempt = (control: unknown) =>
+      runBenchmarkSuite({
+        suite: 'custom',
+        cells: [{ model: MODEL_REF, workload: LLM_WORKLOADS[0] }],
+        policy: TEST_POLICY,
+        llmAdapters: new Map([[adapter.runtimeId, adapter]]),
+        embedAdapters: new Map(),
+        harness: { name: 'x', version: 'y', control: control as never },
+        skipFingerprint: true,
+      });
+    await expect(attempt({ kind: 'fixed-order', runtimeOrder: controlRuntimeOrder('order-reversed') })).rejects.toThrow(
+      "harness.control.runtimeOrder must be the fixed-order order [transformers-wasm, transformers-webgpu, chrome-ai, webllm, mediapipe, litert, wllama-webgpu, wllama]; use createHarnessControl('fixed-order')",
+    );
+    await expect(attempt({ kind: 'fixed-order', runtimeOrder: RUNTIME_EXECUTION_ORDER.slice(1) })).rejects.toThrow(
+      'harness.control.runtimeOrder must be the fixed-order order',
+    );
+    await expect(attempt({ kind: 'order-shuffled', runtimeOrder: [...RUNTIME_EXECUTION_ORDER] })).rejects.toThrow(
+      'harness.control.kind must be one of order-reversed, fixed-order; got order-shuffled',
+    );
+    expect(adapter.loadCalls).toBe(0);
+  });
 });
 
 describe('validateRunShape() on harness.control', () => {
@@ -199,12 +270,24 @@ describe('validateRunShape() on harness.control', () => {
       validateRunShape({ ...makeRun(), harness: { name: 'n', version: 'v', control } });
     expect(withControl(null)).toEqual(['harness.control must be an object {kind, runtimeOrder}']);
     expect(withControl(['order-reversed'])).toEqual(['harness.control must be an object {kind, runtimeOrder}']);
-    expect(withControl({ kind: 'order-shuffled', runtimeOrder: [] })).toEqual(['harness.control.kind must be one of order-reversed']);
+    expect(withControl({ kind: 'order-shuffled', runtimeOrder: [] })).toEqual(['harness.control.kind must be one of order-reversed, fixed-order']);
     const orderError =
       'harness.control.runtimeOrder must be the order-reversed order [wllama, wllama-webgpu, litert, mediapipe, webllm, chrome-ai, transformers-webgpu, transformers-wasm]';
     expect(withControl({ kind: 'order-reversed', runtimeOrder: [...RUNTIME_EXECUTION_ORDER] })).toEqual([orderError]);
     expect(withControl({ kind: 'order-reversed' })).toEqual([orderError]);
     expect(withControl({ kind: 'order-reversed', runtimeOrder: controlRuntimeOrder('order-reversed').slice(1) })).toEqual([orderError]);
+  });
+
+  it('accepts a well-formed fixed-order marker and rejects any other order for it', () => {
+    const ok = makeRun({ harness: { name: 'n', version: 'v', control: createHarnessControl('fixed-order') } });
+    expect(validateRunShape(ok)).toEqual([]);
+    const withControl = (control: unknown) =>
+      validateRunShape({ ...makeRun(), harness: { name: 'n', version: 'v', control } });
+    const orderError =
+      'harness.control.runtimeOrder must be the fixed-order order [transformers-wasm, transformers-webgpu, chrome-ai, webllm, mediapipe, litert, wllama-webgpu, wllama]';
+    expect(withControl({ kind: 'fixed-order', runtimeOrder: controlRuntimeOrder('order-reversed') })).toEqual([orderError]);
+    expect(withControl({ kind: 'fixed-order' })).toEqual([orderError]);
+    expect(withControl({ kind: 'fixed-order', runtimeOrder: [...RUNTIME_EXECUTION_ORDER, 'wllama'] })).toEqual([orderError]);
   });
 
   it('isControlRun() counts any present marker, malformed included, and nothing else', () => {
@@ -234,6 +317,24 @@ describe('aggregation of control runs', () => {
     expect(csv[1].endsWith(',,')).toBe(true);
     expect(csv[2].endsWith(
       ',order-reversed,wllama>wllama-webgpu>litert>mediapipe>webllm>chrome-ai>transformers-webgpu>transformers-wasm',
+    )).toBe(true);
+  });
+
+  it('a fixed-order control run contributes to no leaderboard row; runs.csv names its kind and the protocol order', () => {
+    const protocolRun = makeRun({ runId: 'run-protocol-1' });
+    const fixedRun = makeRun({
+      runId: 'run-fixed-1',
+      harness: { name: '@localmode/bench', version: '0.1.0', control: createHarnessControl('fixed-order') },
+    });
+    const rows = aggregateRuns([protocolRun, fixedRun], 1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].submissions).toBe(1);
+    expect(aggregateRuns([fixedRun], 1)).toEqual([]);
+
+    const csv = runsToRunsCSV([protocolRun, fixedRun]).trimEnd().split('\n');
+    expect(csv[1].endsWith(',,')).toBe(true);
+    expect(csv[2].endsWith(
+      ',fixed-order,transformers-wasm>transformers-webgpu>chrome-ai>webllm>mediapipe>litert>wllama-webgpu>wllama',
     )).toBe(true);
   });
 });

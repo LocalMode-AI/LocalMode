@@ -163,10 +163,11 @@ the warmup and the warm reload re-downloaded the 3.46 GB weights.
   (`DESKTOP-XXXXXXX`, `LAPTOP-XXXXXXX`, `WIN-XXXXXXXXXXX`) from it.
   Since 0.9.6 a run may carry `harness.control` (`{ kind, runtimeOrder }`):
   it marks a control run, which is not a protocol run (see Control runs
-  below). The only kind is `order-reversed`, whose `runtimeOrder` must be
-  exactly the reverse of `RUNTIME_EXECUTION_ORDER`; the validator rejects any
-  other kind or order, and the digest covers the field like the rest of
-  `harness`.
+  below). The kinds are `order-reversed`, whose `runtimeOrder` must be
+  exactly the reverse of `RUNTIME_EXECUTION_ORDER`, and (since 0.9.7)
+  `fixed-order`, whose `runtimeOrder` must be `RUNTIME_EXECUTION_ORDER`
+  itself; the validator rejects any other kind or order, and the digest
+  covers the field like the rest of `harness`.
 - **Statistics** - median headline; mean ± SD, IQR, 95% CI (Student-t), CV;
   CV > 5% ⇒ high-variance flag; geomean only within a device run.
 - **Quality-fidelity lane** - tinyMMLU (MIT) accuracy + STS-B Spearman (scores
@@ -187,8 +188,8 @@ the warmup and the warm reload re-downloaded the 3.46 GB weights.
 The protocol executes its cells in the fixed `RUNTIME_EXECUTION_ORDER`, a
 reproducibility measure; a lane is therefore tied to its position in the
 suite (what ran before it, how long the page has been busy). A control run,
-a control experiment for the methodology, runs the same suite with a
-different runtime order so that the lane ratios of the two orders can be
+a control experiment for the methodology, runs the same suite in the
+runtime order its kind names, so that the lane ratios of two orders can be
 compared:
 
 ```ts
@@ -201,18 +202,34 @@ const control = await runBenchmarkSuite({
 // control.harness.control = { kind: 'order-reversed', runtimeOrder: ['wllama', 'wllama-webgpu', ..., 'transformers-wasm'] }
 ```
 
-- `order-reversed` (the only kind) runs the runtimes in the exact reverse of
+- `order-reversed` runs the runtimes in the exact reverse of
   `RUNTIME_EXECUTION_ORDER` (`controlRuntimeOrder()`); within a runtime the
   catalog order is kept. It also runs the Transformers.js WebGPU lane before
   its WASM lane, which the protocol order avoids; a WebGPU session failure
   that takes the WASM lane with it is recorded as an error, as on any run.
+- `fixed-order` (since 0.9.7) runs the runtimes in `RUNTIME_EXECUTION_ORDER`
+  itself, exactly as a protocol run does, but marked as a control run. It is
+  the same-build, same-day reference series for an order-reversed series:
+  the protocol runs on the leaderboard may come from another browser build,
+  and a browser update can move a lane on its own, so comparing the two
+  orders within one browser build needs a reference recorded beside the
+  reversed series and kept out of the leaderboard. Record a `fixed-order`
+  series and an `order-reversed` series on the same machine, the same
+  browser build and the same day, with the same suite and settings.
+- Leave a cool-down between the runs of a series (`cooldown=5` in the
+  runner link, five minutes between runs; the parameter is in minutes,
+  capped at 30): on a laptop that is still warm from the previous run, the
+  Compute Pressure state can reach `serious` or `critical` during the next
+  one, and an analysis that excludes runs by their `pressureCriticalFraction`
+  would then drop them.
 - The runner orders the cells by `harness.control.runtimeOrder` and refuses
   any order that is not the kind's canonical one, so the record names the
   order the run used. Cells, the run policy, validity gates, traces and the
   environment capture are those of a protocol run.
 - A control run is not a protocol run: it is never submitted, published or
   scored, which is why the field needed no protocol version. The localmode.ai
-  runner offers Export JSON only (`/bench/run?control=order-reversed`, see
+  runner offers Export JSON only (`/bench/run?control=order-reversed` or
+  `/bench/run?control=fixed-order`, see
   SETUP.md), the submission route answers 422 `control-run`, and
   `aggregateRuns` leaves control runs out of every leaderboard row.
   `isControlRun(run)` is the check.
@@ -394,7 +411,7 @@ cell without timed iterations keeps one placeholder row):
 | `reportedChassis` | Since 0.9.4: `environment.userReportedHardware.chassis`, `laptop`, `desktop` or `other`; empty when absent |
 | `reportedRamGB` | Since 0.9.4: `environment.userReportedHardware.ramGB`, the reported RAM bucket in GB (the top bucket "128 GB or more" is 128); empty when absent or answered "Not sure" (`null`) |
 | `reportedOtherApps` | Since 0.9.4: `environment.userReportedHardware.otherAppsRunning`, `true` or `false`; empty when absent |
-| `controlKind`, `controlRuntimeOrder` | Since 0.9.6, after `reportedOtherApps`: `harness.control.kind` (`order-reversed`) and the runtime order the control run used, joined by `>`; empty on a protocol run. `leaderboard.csv` never includes a control run |
+| `controlKind`, `controlRuntimeOrder` | Since 0.9.6, after `reportedOtherApps`: `harness.control.kind` (`order-reversed`, or since 0.9.7 `fixed-order`) and the runtime order the control run used, joined by `>`; empty on a protocol run. `leaderboard.csv` never includes a control run |
 
 ## Dataset licenses
 

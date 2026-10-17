@@ -139,7 +139,8 @@ export const SERIES_MAX_IDLE_BEFORE_MS = 30 * 86_400_000;
 /**
  * Optional series membership (with the series cool-down and the idle time
  * measured before the run, bench 0.9.1), cold-start marker on `harness`
- * (bench 0.9.0), and control-run marker (bench 0.9.6). The shape check
+ * (bench 0.9.0), and control-run marker (bench 0.9.6; kind `fixed-order` since
+ * 0.9.7). The shape check
  * accepts a well-formed control marker, so an exported control run validates
  * offline; refusing to publish it is the submission route's job.
  */

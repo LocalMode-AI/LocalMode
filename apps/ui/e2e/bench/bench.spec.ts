@@ -1990,8 +1990,8 @@ test.describe('full-completion study mode (ccmode=full)', () => {
   });
 });
 
-test.describe('control run: reversed runtime order (never uploaded)', () => {
-  /** The protocol's runtime order (packages/bench RUNTIME_EXECUTION_ORDER); the control run must use its exact reverse. */
+test.describe('control run: reversed and fixed runtime order (never uploaded)', () => {
+  /** The protocol's runtime order (packages/bench RUNTIME_EXECUTION_ORDER); order-reversed uses its exact reverse, fixed-order the order itself. */
   const PROTOCOL_ORDER = [
     'transformers-wasm',
     'transformers-webgpu',
@@ -2004,6 +2004,7 @@ test.describe('control run: reversed runtime order (never uploaded)', () => {
   ];
   const REVERSED = [...PROTOCOL_ORDER].reverse();
   const BANNER = 'Control run: reversed runtime order; not published to the leaderboard';
+  const FIXED_BANNER = 'Control run: protocol runtime order; not published to the leaderboard';
 
   test('a study link or an unknown kind with the control parameter is refused: Run stays disabled, nothing loads', async ({ page }) => {
     const consoleErrors: string[] = [];
@@ -2024,7 +2025,83 @@ test.describe('control run: reversed runtime order (never uploaded)', () => {
       'Unknown control run kind "order-shuffled"',
     );
     await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeDisabled();
+
+    // The second kind is refused on a study link the same way.
+    await page.goto('/bench/run?PROLIFIC_PID=e2e-control-pid&cc=TESTCODE9&control=fixed-order');
+    await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByRole('alert', { name: 'Control run refused' })).toContainText(
+      'A paid-study link cannot start a control run',
+    );
+    await expect(page.getByRole('button', { name: 'Run benchmark' })).toBeDisabled();
+    await expect(page.getByRole('note', { name: 'Control run' })).toHaveCount(0);
     expect(modelRequests).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test('?control=fixed-order: banner, a real Quick run in the protocol order, exported with the fixed-order marker, no upload request', async ({
+    page,
+  }) => {
+    test.setTimeout(30 * 60 * 1000);
+    const consoleErrors: string[] = [];
+    collectConsoleErrors(page, consoleErrors);
+    const benchApi: string[] = [];
+    page.on('request', (req) => {
+      const { pathname } = new URL(req.url());
+      if (pathname.startsWith('/api/bench/')) benchApi.push(`${req.method()} ${pathname}`);
+    });
+    const downloads = collectRunDownloads(page);
+
+    await page.goto('/bench/run?tier=quick&quality=off&runs=1&cooldown=0&cold=off&control=fixed-order&publish=on');
+    const banner = page.getByRole('note', { name: 'Control run' });
+    await expect(banner).toBeVisible();
+    await expect(banner.getByText(FIXED_BANNER, { exact: true })).toBeVisible();
+    await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+    // publish=on in the link is overridden: the toggle is locked off.
+    const publish = page.getByRole('switch', { name: /publish results/i });
+    await expect(publish).not.toBeChecked();
+    await expect(publish).toBeDisabled();
+    await expect(page.getByText('no WebGPU').first()).toBeVisible();
+    const runButton = page.getByRole('button', { name: 'Run benchmark' });
+    await expect(runButton).toBeEnabled();
+    await runButton.click();
+
+    await expect(page.getByRole('dialog', { name: /benchmark running/i })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('status').first()).toContainText('Suite complete', { timeout: 15 * 60 * 1000 });
+    await expect(page.getByRole('note', { name: 'Control run' }).getByText(FIXED_BANNER, { exact: true })).toBeVisible();
+    // Export JSON only: no Submit control on a control run's results.
+    await expect(page.getByRole('button', { name: 'Submit to leaderboard' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Retry submission' })).toHaveCount(0);
+    const exportButton = page.getByRole('button', { name: 'Export JSON' });
+    await expect(exportButton).toBeVisible();
+    await exportButton.click();
+    await expect.poll(() => downloads.length, { timeout: 30_000 }).toBe(1);
+    const [run] = (await Promise.all(downloads)) as Array<ExportedRun & { protocol?: string; nonce?: string; digest?: string }>;
+
+    expect(run.harness.control).toEqual({ kind: 'fixed-order', runtimeOrder: PROTOCOL_ORDER });
+    expect(run.harness.series).toBeUndefined();
+    expect(run.protocol).toBe('localmode-bench/5');
+    expect(run.digest).toMatch(/^[0-9a-f]{64}$/);
+    expect(run.nonce).toBeUndefined();
+    // Every quick cell is present exactly once, in the protocol runtime order (catalog order within a runtime).
+    const ids = run.cells.map((c) => c.cellId);
+    expect(new Set(ids).size).toBe(ids.length);
+    const ranks = run.cells.map((c) => PROTOCOL_ORDER.indexOf(c.runtimeId));
+    expect(ranks.every((r) => r >= 0)).toBe(true);
+    expect(ranks, `cells ran in the protocol order: ${run.cells.map((c) => c.runtimeId).join(' > ')}`).toEqual(
+      [...ranks].sort((a, b) => a - b),
+    );
+    expect(run.cells[0].runtimeId).toBe('transformers-wasm');
+    expect(run.cells.at(-1)!.runtimeId).toBe('wllama');
+    expect(run.cells.find((c) => c.cellId === 'wllama/smollm2-135m/chat-pp128-tg128')?.status).toBe('ok');
+    expect(run.cells.find((c) => c.cellId === 'transformers-wasm/bge-small-en/embed-single')?.status).toBe('ok');
+    expect(run.cells.find((c) => c.cellId === 'wllama-webgpu/smollm2-135m/chat-pp128-tg128')?.status).toBe('skipped');
+
+    // The run is kept under Saved exports, marked with its kind.
+    const panel = page.getByRole('region', { name: 'Saved exports' });
+    await expect(panel.getByRole('listitem', { name: `Saved run ${run.runId}` })).toContainText('control: fixed-order');
+
+    expect(benchApi.filter((r) => r.endsWith('/api/bench/submit')), 'no upload request').toEqual([]);
+    expect(benchApi, 'no bench API request at all: no upload token either').toEqual([]);
     expect(consoleErrors).toEqual([]);
   });
 

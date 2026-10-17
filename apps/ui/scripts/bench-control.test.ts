@@ -1,5 +1,5 @@
 /**
- * Control runs on /bench/run (`?control=order-reversed`), a control
+ * Control runs on /bench/run (`?control=order-reversed`, `?control=fixed-order`), a control
  * experiment for the methodology: the query parsing and its refusals, the
  * series state that carries the control kind across reloads, the preset link,
  * the upload guard and the completion-code guard. The page wiring (banner,
@@ -49,6 +49,11 @@ describe('parseControlRequest()', () => {
       status: 'control',
       kind: 'order-reversed',
     });
+    expect(parseControlRequest('?control=fixed-order')).toEqual({ status: 'control', kind: 'fixed-order' });
+    expect(parseControlRequest('tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=fixed-order')).toEqual({
+      status: 'control',
+      kind: 'fixed-order',
+    });
   });
 
   it('refuses an unknown or empty kind instead of running a protocol run', () => {
@@ -56,9 +61,11 @@ describe('parseControlRequest()', () => {
     expect(unknown).toEqual({
       status: 'refused',
       message:
-        'Unknown control run kind "order-shuffled"; the supported kind is order-reversed. Remove the control parameter for a protocol run.',
+        'Unknown control run kind "order-shuffled"; the supported kinds are order-reversed, fixed-order. Remove the control parameter for a protocol run.',
     });
     expect(parseControlRequest('?control=').status).toBe('refused');
+    expect(parseControlRequest('?control=Fixed-Order').status).toBe('refused');
+    expect(parseControlRequest('?control=fixed').status).toBe('refused');
   });
 
   it('refuses a paid-study link carrying the control parameter', () => {
@@ -68,6 +75,11 @@ describe('parseControlRequest()', () => {
     });
     expect(parseControlRequest('?cc=CODE1234&control=order-reversed').status).toBe('refused');
     expect(parseControlRequest('?PROLIFIC_PID=abc&control=order-reversed').status).toBe('refused');
+    expect(parseControlRequest('?PROLIFIC_PID=abc&cc=CODE1234&control=fixed-order')).toEqual({
+      status: 'refused',
+      message: CONTROL_STUDY_REFUSAL,
+    });
+    expect(parseControlRequest('?cc=CODE1234&control=fixed-order').status).toBe('refused');
   });
 });
 
@@ -81,6 +93,9 @@ describe('effectiveControlKind()', () => {
     expect(effectiveControlKind(none, 'order-reversed')).toBe('order-reversed');
     // A protocol series stays a protocol series.
     expect(effectiveControlKind(url, null)).toBeNull();
+    // A resumed series keeps its own kind whatever kind the URL names.
+    expect(effectiveControlKind(parseControlRequest('?control=fixed-order'), 'order-reversed')).toBe('order-reversed');
+    expect(effectiveControlKind(url, 'fixed-order')).toBe('fixed-order');
   });
 });
 
@@ -89,6 +104,9 @@ describe('banner, harness record and upload guard', () => {
     expect(controlBannerText('order-reversed')).toBe(
       'Control run: reversed runtime order; not published to the leaderboard',
     );
+    expect(controlBannerText('fixed-order')).toBe(
+      'Control run: protocol runtime order; not published to the leaderboard',
+    );
   });
 
   it('the harness record is the bench package one, with the exact reverse of the protocol order', () => {
@@ -96,9 +114,15 @@ describe('banner, harness record and upload guard', () => {
     expect(controlHarness('order-reversed').runtimeOrder).toEqual([...RUNTIME_EXECUTION_ORDER].reverse());
   });
 
+  it('the fixed-order harness record is the bench package one, with the protocol order itself', () => {
+    expect(controlHarness('fixed-order')).toEqual(createHarnessControl('fixed-order'));
+    expect(controlHarness('fixed-order')).toEqual({ kind: 'fixed-order', runtimeOrder: [...RUNTIME_EXECUTION_ORDER] });
+  });
+
   it('a run carrying harness.control may not be uploaded; a protocol run may', () => {
     expect(mayUpload(makeRun())).toBe(true);
     expect(mayUpload(makeRun({ harness: { name: 'n', version: 'v', control: controlHarness('order-reversed') } }))).toBe(false);
+    expect(mayUpload(makeRun({ harness: { name: 'n', version: 'v', control: controlHarness('fixed-order') } }))).toBe(false);
   });
 });
 
@@ -123,6 +147,23 @@ describe('a control series', () => {
     expect(seriesSummaryText(reloaded!)).toContain('LocalMode Bench control series (order-reversed) series-ctl');
   });
 
+  it('a fixed-order series carries its kind and never publishes, through storage and a reload', () => {
+    const created = createSeries({
+      seriesId: 'series-fixed',
+      count: 6,
+      settings: { ...settings, publish: true, control: 'fixed-order' },
+      now: 0,
+    });
+    expect(created.settings.control).toBe('fixed-order');
+    expect(created.settings.publish).toBe(false);
+    const reloaded = parseSeriesState(serializeSeriesState(startCooldown(
+        recordRunFinished(markRunStarted(created, 1), { runId: 'f1', durationMs: 10, outcome: 'exported' }, 2),
+        3,
+      )));
+    expect(reloaded?.settings.control).toBe('fixed-order');
+    expect(seriesSummaryText(reloaded!)).toContain('LocalMode Bench control series (fixed-order) series-fixed');
+  });
+
   it('a protocol series stores no control key', () => {
     const created = createSeries({ seriesId: 's', count: 2, settings: { ...settings, control: undefined }, now: 0 });
     expect('control' in created.settings).toBe(false);
@@ -144,6 +185,9 @@ describe('preset link and completion code', () => {
       'tier=quick&quality=off&runs=10&cooldown=1&cold=on&publish=off&control=order-reversed',
     );
     expect(presetQuery(p)).toBe('tier=quick&quality=off&runs=10&cooldown=1&cold=on&publish=on');
+    expect(presetQuery(p, 'fixed-order')).toBe(
+      'tier=quick&quality=off&runs=10&cooldown=1&cold=on&publish=off&control=fixed-order',
+    );
   });
 
   it('a control run never issues a completion code', () => {
