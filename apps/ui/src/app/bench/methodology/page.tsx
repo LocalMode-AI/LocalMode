@@ -287,9 +287,14 @@ export default function BenchMethodologyPage() {
               <code className="font-mono text-sm">/bench/run?control=fixed-order</code> runs the suite in
               the protocol&apos;s own order, marked as a control run: a reference series recorded with the
               same browser build on the same day as a reversed series, so the two orders are compared
-              within one build. Cells, rules, traces and the environment capture are those of a protocol run; the run file
+              within one build.{' '}
+              <code className="font-mono text-sm">/bench/run?control=wasm-default</code> runs the suite in
+              the protocol&apos;s order with the Transformers.js WASM lane at the runtime&apos;s own
+              defaults: its models load at q8 (Transformers.js&apos;s WASM default) and ONNX Runtime runs one
+              WASM thread per logical core instead of its default of at most four; every other lane is
+              unchanged. Cells, rules, traces and the environment capture are those of a protocol run; the run file
               carries <code className="font-mono text-sm">harness.control</code> (the kind and the order
-              used). A control run is never uploaded (Export JSON only, and the submission route refuses
+              used, and for wasm-default the WASM lane&apos;s dtype and thread count). A control run is never uploaded (Export JSON only, and the submission route refuses
               one), never enters the leaderboard and is never scored, so it needs no protocol version.
               Runs and the cool-down work as usual, and a series keeps its control mode across its
               reloads. A study link with the parameter is refused. Every run the page exports is first

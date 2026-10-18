@@ -7,7 +7,7 @@
  */
 
 import type { BenchEmbeddingModel, BenchLanguageModel, BenchStreamChunk } from '@localmode/bench';
-import type { WorkerRequest, WorkerResponse } from './transformers-worker';
+import type { WorkerLaneSettings, WorkerRequest, WorkerResponse } from './transformers-worker';
 
 type Device = 'webgpu' | 'wasm';
 
@@ -67,17 +67,24 @@ export class TransformersWorkerLane {
     kind: 'llm' | 'embedding',
     modelId: string,
     device: Device,
-    options: { onProgress?: (pct: number | undefined) => void; abortSignal?: AbortSignal },
-  ): Promise<{ dimensions?: number }> {
+    options: { onProgress?: (pct: number | undefined) => void; abortSignal?: AbortSignal; settings?: WorkerLaneSettings },
+  ): Promise<{ dimensions?: number; numThreads?: number }> {
     const id = this.nextId++;
-    const queue = this.send({ id, type: 'load', kind, modelId, device });
+    const queue = this.send({
+      id,
+      type: 'load',
+      kind,
+      modelId,
+      device,
+      ...(options.settings ? { settings: options.settings } : {}),
+    });
     const onAbort = () => this.abort(id);
     options.abortSignal?.addEventListener('abort', onAbort, { once: true });
     try {
       for (;;) {
         const msg = await queue.next();
         if (msg.type === 'progress') options.onProgress?.(msg.pct);
-        else if (msg.type === 'loaded') return { dimensions: msg.dimensions };
+        else if (msg.type === 'loaded') return { dimensions: msg.dimensions, numThreads: msg.numThreads };
         else if (msg.type === 'error') throw toError(msg);
       }
     } finally {

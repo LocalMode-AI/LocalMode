@@ -49,6 +49,7 @@ export type {
   HarnessInfo,
   HarnessSeries,
   HarnessControl,
+  HarnessControlWasmLane,
   ControlKind,
   UserReportedHardware,
   EnvironmentCapture,
@@ -72,11 +73,14 @@ export {
   RUNTIME_EXECUTION_ORDER,
   orderCells,
   CONTROL_KINDS,
+  CONTROL_WASM_DTYPE,
+  CONTROL_WASM_MAX_THREADS,
   controlRuntimeOrder,
+  controlWasmLaneError,
   createHarnessControl,
   isControlRun,
 } from './protocol.js';
-export type { RunPolicy } from './protocol.js';
+export type { RunPolicy, CreateHarnessControlOptions } from './protocol.js';
 
 // Adapters
 export type {

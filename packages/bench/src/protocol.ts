@@ -13,6 +13,7 @@ import type {
   ControlKind,
   EmbedWorkloadSpec,
   HarnessControl,
+  HarnessControlWasmLane,
   LLMWorkloadSpec,
   QualityWorkloadSpec,
 } from './types.js';
@@ -201,7 +202,13 @@ export function orderCells<T extends { model: { runtimeId: BenchRuntimeId } }>(
 }
 
 /** Control-run kinds a host may record on `harness.control`. */
-export const CONTROL_KINDS: readonly ControlKind[] = ['order-reversed', 'fixed-order'] as const;
+export const CONTROL_KINDS: readonly ControlKind[] = ['order-reversed', 'fixed-order', 'wasm-default'] as const;
+
+/** The dtype a `wasm-default` control run loads the Transformers.js WASM lane at (Transformers.js's WASM default). */
+export const CONTROL_WASM_DTYPE = 'q8' as const;
+
+/** Largest `harness.control.wasmLane.numThreads` a run may carry. */
+export const CONTROL_WASM_MAX_THREADS = 1024;
 
 /**
  * The runtime execution order of a control run.
@@ -219,6 +226,10 @@ export const CONTROL_KINDS: readonly ControlKind[] = ['order-reversed', 'fixed-o
  * come from another build), recorded as a control run so it stays out of
  * the leaderboard.
  *
+ * `wasm-default` is `RUNTIME_EXECUTION_ORDER` itself too: that kind changes
+ * the Transformers.js WASM lane's settings (see `HarnessControl.wasmLane`),
+ * never the order.
+ *
  * @param kind - The control kind.
  * @returns A new array of every runtime, each exactly once.
  * @example
@@ -230,20 +241,71 @@ export function controlRuntimeOrder(kind: ControlKind): BenchRuntimeId[] {
     case 'order-reversed':
       return [...RUNTIME_EXECUTION_ORDER].reverse();
     case 'fixed-order':
+    case 'wasm-default':
       return [...RUNTIME_EXECUTION_ORDER];
   }
+}
+
+/** Options for `createHarnessControl`. */
+export interface CreateHarnessControlOptions {
+  /**
+   * `wasm-default` only, required there: the ONNX Runtime WASM thread count
+   * the host sets for the Transformers.js WASM lane, the browser's
+   * `navigator.hardwareConcurrency` (an integer from 1 to `CONTROL_WASM_MAX_THREADS`).
+   */
+  numThreads?: number;
 }
 
 /**
  * The `harness.control` record of a control run of the given kind.
  *
  * @param kind - The control kind.
- * @returns `{ kind, runtimeOrder }` with the kind's canonical runtime order.
+ * @param options - `numThreads` for a `wasm-default` run (required there, refused on the other kinds).
+ * @returns `{ kind, runtimeOrder }` with the kind's canonical runtime order,
+ *   plus `wasmLane: { dtype: 'q8', numThreads, simd: true }` for `wasm-default`.
+ * @throws {TypeError} When `wasm-default` lacks a valid `numThreads`, or another kind is given one.
  * @example
  * const harness = { name, version, control: createHarnessControl('order-reversed') };
+ * const wasm = createHarnessControl('wasm-default', { numThreads: navigator.hardwareConcurrency });
  */
-export function createHarnessControl(kind: ControlKind): HarnessControl {
-  return { kind, runtimeOrder: controlRuntimeOrder(kind) };
+export function createHarnessControl(kind: ControlKind, options: CreateHarnessControlOptions = {}): HarnessControl {
+  const control: HarnessControl = { kind, runtimeOrder: controlRuntimeOrder(kind) };
+  if (kind !== 'wasm-default') {
+    if (options.numThreads !== undefined) {
+      throw new TypeError(`createHarnessControl('${kind}') takes no numThreads; only wasm-default sets the WASM lane's threads`);
+    }
+    return control;
+  }
+  const wasmLane: HarnessControlWasmLane = { dtype: CONTROL_WASM_DTYPE, numThreads: options.numThreads as number, simd: true };
+  const error = controlWasmLaneError({ ...control, wasmLane });
+  if (error) throw new TypeError(`${error}; pass { numThreads: navigator.hardwareConcurrency }`);
+  return { ...control, wasmLane };
+}
+
+/**
+ * The problem with a control marker's `wasmLane`, or undefined when it is
+ * right for the kind: `wasm-default` must carry
+ * `{ dtype: 'q8', numThreads: <integer 1-CONTROL_WASM_MAX_THREADS>, simd: true }`
+ * and nothing else; every other kind must carry no `wasmLane`. Shared by the
+ * runner (which refuses the run before anything loads) and `validateRunShape`.
+ *
+ * @param control - A control marker whose `kind` is one of `CONTROL_KINDS`.
+ * @returns The error message, or undefined.
+ * @example
+ * controlWasmLaneError(createHarnessControl('fixed-order')); // undefined
+ */
+export function controlWasmLaneError(control: { kind: ControlKind; wasmLane?: unknown }): string | undefined {
+  const lane = control.wasmLane;
+  if (control.kind !== 'wasm-default') {
+    return lane === undefined ? undefined : `harness.control.wasmLane is set only on a wasm-default control run, not on ${control.kind}`;
+  }
+  const shape = `harness.control.wasmLane must be { dtype: '${CONTROL_WASM_DTYPE}', numThreads: <integer 1-${CONTROL_WASM_MAX_THREADS}>, simd: true } on a wasm-default control run`;
+  if (typeof lane !== 'object' || lane === null || Array.isArray(lane)) return shape;
+  const { dtype, numThreads, simd, ...extra } = lane as Record<string, unknown>;
+  const threadsOk =
+    typeof numThreads === 'number' && Number.isInteger(numThreads) && numThreads >= 1 && numThreads <= CONTROL_WASM_MAX_THREADS;
+  if (dtype !== CONTROL_WASM_DTYPE || !threadsOk || simd !== true || Object.keys(extra).length > 0) return shape;
+  return undefined;
 }
 
 /**

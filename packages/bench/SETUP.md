@@ -234,7 +234,7 @@ series place.
 A control run is a control experiment for the methodology: the same suite as
 a protocol run, in the runtime execution order its kind names, so that the
 lane ratios under two orders can be compared (see the package README, Control
-runs). There are two kinds:
+runs). There are three kinds:
 
 - `order-reversed` runs the runtimes in the exact reverse of the protocol
   order.
@@ -243,6 +243,18 @@ runs). There are two kinds:
   both on the same machine, with the same browser build, on the same day and
   with the same settings, so the two orders are compared within one browser
   build (the protocol runs on the leaderboard may come from another build).
+- `wasm-default` runs them in the protocol order with the Transformers.js
+  WASM lane at the runtime's own defaults instead of the protocol's
+  configuration: the lane's models load at dtype `q8` (Transformers.js 4.2's
+  WASM default; the protocol loads the language model's `q4` files and the
+  embedding model at `fp32`) and ONNX Runtime's WASM thread count is set to
+  `navigator.hardwareConcurrency` (ONNX Runtime's own default is
+  `min(4, ceil(cores / 2))`). Every other lane and every rule is the
+  protocol's. Record it beside a `fixed-order` series on the same machine,
+  browser build, day and settings, so the WASM lane at the two
+  configurations is compared within one build. Run it on the Standard tier
+  (the link below), the smallest suite with a Transformers.js WASM
+  language-model cell (Qwen3 0.6B); the Quick suite has none.
 
 A control run is opted into only by the query parameter:
 
@@ -251,6 +263,7 @@ https://localmode.ai/bench/run?control=order-reversed
 https://localmode.ai/bench/run?control=fixed-order
 https://localmode.ai/bench/run?tier=quick&quality=off&runs=10&cooldown=0&cold=off&control=order-reversed
 https://localmode.ai/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=fixed-order
+https://localmode.ai/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=wasm-default
 ```
 
 Leave a cool-down between the runs of a series: `cooldown=5` waits five
@@ -260,12 +273,19 @@ reach `serious` or `critical` during the next one, and an analysis that
 excludes runs by their `pressureCriticalFraction` would drop them.
 
 For as long as control mode is on, the page shows "Control run: reversed
-runtime order; not published to the leaderboard" (`order-reversed`) or
+runtime order; not published to the leaderboard" (`order-reversed`),
 "Control run: protocol runtime order; not published to the leaderboard"
-(`fixed-order`). The run file carries
-`harness.control = { kind, runtimeOrder: [...] }` with the kind and the
-order the runner used; everything else (cells, rules, traces, environment
-capture) is a protocol run's. A control run is never uploaded: the publish
+(`fixed-order`) or "Control run: Transformers.js WASM lane at runtime
+defaults (q8, all cores); not published to the leaderboard" (`wasm-default`).
+The run file carries `harness.control = { kind, runtimeOrder: [...] }` with
+the kind and the order the runner used; a `wasm-default` run adds
+`wasmLane: { dtype: 'q8', numThreads, simd: true }` (`numThreads` is the
+page's `navigator.hardwareConcurrency`), and each of its
+`transformers-wasm` cells records `dtype: 'q8'` and the `numThreads` ONNX
+Runtime actually initialised with in its `runtimeConfig` (every run records
+that thread count for the lane, so a protocol or `fixed-order` run shows
+ONNX Runtime's default beside it). Everything else (cells, rules, traces,
+environment capture) is a protocol run's. A control run is never uploaded: the publish
 toggle is locked off, the results offer Export JSON only, the page fetches no
 upload token, and the submit route refuses a run carrying `harness.control`
 with 422 `control-run`. Runs N works as usual, so ten executions run
@@ -322,7 +342,7 @@ control run whose digest verifies and whose shape validates
 (`validateSubmission`; plausibility flags are printed and kept). The nonce is
 dropped if the file has one, and the run is written as compact JSON to
 `controls/<kind>/<YYYY-MM-DD>/<runId>.json`, the date being `createdAt` in
-UTC (`controls/order-reversed/...` or `controls/fixed-order/...`). `index/summary.json` is not read or written. A run id already under
+UTC (`controls/order-reversed/...`, `controls/fixed-order/...` or `controls/wasm-default/...`). `index/summary.json` is not read or written. A run id already under
 `runs/`, `quarantine/` or `controls/` is refused, and one refused file stops
 the whole batch before anything is written. Check `git diff` (only new files
 under `controls/`) and commit them in the dataset clone. The dataset's

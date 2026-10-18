@@ -22,6 +22,7 @@
     "block-source:generate": "tsx scripts/generate-block-source.ts"
   },
   "dependencies": {
+    "@huggingface/transformers": "~4.2.0",
     "@localmode/bench": "workspace:*",
     "@localmode/chrome-ai": "workspace:*",
     "@localmode/core": "workspace:*",

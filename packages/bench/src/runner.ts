@@ -31,6 +31,7 @@ import type {
 import { USAGE_FIDELITY } from './adapter.js';
 import {
   controlRuntimeOrder,
+  controlWasmLaneError,
   CONTROL_KINDS,
   MIN_GENERATED_CHARS,
   orderCells,
@@ -207,9 +208,10 @@ export async function runBenchmarkSuite(options: RunSuiteOptions): Promise<Bench
 
 /**
  * The runtime order a run executes: the protocol's, or a control run's. A
- * control marker whose kind is unknown or whose order is not the kind's
- * canonical order is refused before anything runs, so the recorded
- * `harness.control.runtimeOrder` always names the order the cells ran in.
+ * control marker whose kind is unknown, whose order is not the kind's
+ * canonical order, or whose `wasmLane` is wrong for the kind is refused
+ * before anything runs, so the recorded `harness.control.runtimeOrder`
+ * always names the order the cells ran in.
  */
 function resolveRuntimeOrder(harness: HarnessInfo): readonly BenchRuntimeId[] {
   const control = harness.control;
@@ -224,6 +226,8 @@ function resolveRuntimeOrder(harness: HarnessInfo): readonly BenchRuntimeId[] {
       `harness.control.runtimeOrder must be the ${control.kind} order [${expected.join(', ')}]; use createHarnessControl('${control.kind}')`,
     );
   }
+  const laneError = controlWasmLaneError(control);
+  if (laneError) throw new TypeError(`${laneError}; use createHarnessControl('${control.kind}')`);
   return expected;
 }
 

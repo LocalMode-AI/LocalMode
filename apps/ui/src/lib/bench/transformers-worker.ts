@@ -14,9 +14,21 @@ import type { EmbeddingModel, LanguageModel } from '@localmode/core';
 
 type Device = 'webgpu' | 'wasm';
 
+/**
+ * Lane settings a load may override. Absent fields keep the protocol's
+ * configuration: the provider's dtype (`q4` for a language model, `fp32` for
+ * an embedding model) and ONNX Runtime's own WASM thread count.
+ */
+export interface WorkerLaneSettings {
+  /** Load the model's `q8` files (Transformers.js's default on the WASM device). */
+  dtype?: 'q8';
+  /** ONNX Runtime WASM thread count (`env.backends.onnx.wasm.numThreads`), set before the worker's first session. */
+  numThreads?: number;
+}
+
 /** Requests from the client. */
 export type WorkerRequest =
-  | { id: number; type: 'load'; kind: 'llm' | 'embedding'; modelId: string; device: Device }
+  | { id: number; type: 'load'; kind: 'llm' | 'embedding'; modelId: string; device: Device; settings?: WorkerLaneSettings }
   | {
       id: number;
       type: 'stream';
@@ -29,7 +41,13 @@ export type WorkerRequest =
 /** Responses to the client. */
 export type WorkerResponse =
   | { id: number; type: 'progress'; pct?: number }
-  | { id: number; type: 'loaded'; dimensions?: number }
+  | {
+      id: number;
+      type: 'loaded';
+      dimensions?: number;
+      /** The WASM thread count ONNX Runtime initialised with in this worker (read back after the first session). */
+      numThreads?: number;
+    }
   | {
       id: number;
       type: 'chunk';
@@ -76,30 +94,67 @@ async function handle(req: WorkerRequest): Promise<void> {
   try {
     switch (req.type) {
       case 'load': {
-        const mod = await import('@localmode/transformers');
+        const [mod, tjs] = await Promise.all([import('@localmode/transformers'), import('@huggingface/transformers')]);
         const controller = new AbortController();
         controllers.set(id, controller);
-        await mod.preloadModel(req.modelId, {
-          device: req.device,
-          onProgress: (p: { progress?: number; loaded?: number; total?: number }) => {
-            const pct =
-              typeof p.progress === 'number'
-                ? p.progress
-                : typeof p.loaded === 'number' && typeof p.total === 'number' && p.total > 0
-                  ? (p.loaded / p.total) * 100
-                  : undefined;
-            reply({ id, type: 'progress', pct });
-          },
-        });
+        const settings = req.settings ?? {};
+        // The provider and this module share one Transformers.js instance, so
+        // this is the ONNX Runtime env every session in this worker reads.
+        // Each load runs in a fresh worker, so this precedes its first session.
+        const wasmEnv = tjs.env.backends.onnx.wasm as { numThreads?: number; initTimeout?: number } | undefined;
+        if (settings.numThreads !== undefined) {
+          if (!wasmEnv) throw new Error('Transformers.js exposes no ONNX Runtime WASM env to set the thread count on');
+          wasmEnv.numThreads = settings.numThreads;
+        }
+        const onProgress = (p: { progress?: number; loaded?: number; total?: number }) => {
+          const pct =
+            typeof p.progress === 'number'
+              ? p.progress
+              : typeof p.loaded === 'number' && typeof p.total === 'number' && p.total > 0
+                ? (p.loaded / p.total) * 100
+                : undefined;
+          reply({ id, type: 'progress', pct });
+        };
+        if (req.kind === 'llm' && settings.dtype !== undefined) {
+          // preloadModel loads a language model's q4 files whatever the device;
+          // this does the same download plus throwaway session at the dtype asked for.
+          mod.installResilientModelCache(tjs.env);
+          const pipe = await tjs.pipeline('text-generation', req.modelId, {
+            device: req.device,
+            dtype: settings.dtype,
+            progress_callback: onProgress,
+          } as Record<string, unknown>);
+          await (pipe as { dispose?: () => Promise<void> | void }).dispose?.();
+        } else {
+          await mod.preloadModel(req.modelId, {
+            device: req.device,
+            onProgress,
+            ...(settings.dtype === 'q8' ? { quantized: true } : {}),
+          });
+        }
         controller.signal.throwIfAborted();
+        // ONNX Runtime fills its flags (initTimeout among them) on the env it
+        // initialises from; without them the thread count set above never
+        // reached the runtime, and the lane would run on an unrecorded setting.
+        const initialised = typeof wasmEnv?.initTimeout === 'number';
+        if (settings.numThreads !== undefined && !initialised) {
+          throw new Error('ONNX Runtime did not initialise from the Transformers.js env the thread count was set on');
+        }
+        const numThreads = initialised && typeof wasmEnv?.numThreads === 'number' ? wasmEnv.numThreads : undefined;
         await unloadModel();
         if (req.kind === 'llm') {
-          model = mod.transformers.languageModel(req.modelId, { device: req.device });
-          reply({ id, type: 'loaded' });
+          model = mod.transformers.languageModel(req.modelId, {
+            device: req.device,
+            ...(settings.dtype !== undefined ? { dtype: settings.dtype } : {}),
+          });
+          reply({ id, type: 'loaded', numThreads });
         } else {
-          const embedder = mod.transformers.embedding(req.modelId, { device: req.device });
+          const embedder = mod.transformers.embedding(req.modelId, {
+            device: req.device,
+            ...(settings.dtype === 'q8' ? { quantized: true } : {}),
+          });
           model = embedder;
-          reply({ id, type: 'loaded', dimensions: embedder.dimensions });
+          reply({ id, type: 'loaded', dimensions: embedder.dimensions, numThreads });
         }
         controllers.delete(id);
         return;

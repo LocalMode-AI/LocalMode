@@ -1,5 +1,6 @@
 /**
- * Control runs on /bench/run (`?control=order-reversed`, `?control=fixed-order`), a control
+ * Control runs on /bench/run (`?control=order-reversed`, `?control=fixed-order`,
+ * `?control=wasm-default`), a control
  * experiment for the methodology: the query parsing and its refusals, the
  * series state that carries the control kind across reloads, the preset link,
  * the upload guard and the completion-code guard. The page wiring (banner,
@@ -15,6 +16,7 @@ import {
   effectiveControlKind,
   mayUpload,
   parseControlRequest,
+  wasmDefaultThreads,
 } from '../src/lib/bench/control';
 import {
   createSeries,
@@ -54,6 +56,15 @@ describe('parseControlRequest()', () => {
       status: 'control',
       kind: 'fixed-order',
     });
+    expect(parseControlRequest('?tier=quick&quality=off&runs=6&cooldown=5&cold=off&control=wasm-default')).toEqual({
+      status: 'control',
+      kind: 'wasm-default',
+    });
+    expect(parseControlRequest('?control=WASM-default').status).toBe('refused');
+    expect(parseControlRequest('?PROLIFIC_PID=abc&cc=CODE1234&control=wasm-default')).toEqual({
+      status: 'refused',
+      message: CONTROL_STUDY_REFUSAL,
+    });
   });
 
   it('refuses an unknown or empty kind instead of running a protocol run', () => {
@@ -61,7 +72,7 @@ describe('parseControlRequest()', () => {
     expect(unknown).toEqual({
       status: 'refused',
       message:
-        'Unknown control run kind "order-shuffled"; the supported kinds are order-reversed, fixed-order. Remove the control parameter for a protocol run.',
+        'Unknown control run kind "order-shuffled"; the supported kinds are order-reversed, fixed-order, wasm-default. Remove the control parameter for a protocol run.',
     });
     expect(parseControlRequest('?control=').status).toBe('refused');
     expect(parseControlRequest('?control=Fixed-Order').status).toBe('refused');
@@ -119,10 +130,39 @@ describe('banner, harness record and upload guard', () => {
     expect(controlHarness('fixed-order')).toEqual({ kind: 'fixed-order', runtimeOrder: [...RUNTIME_EXECUTION_ORDER] });
   });
 
+  it('the wasm-default banner names the WASM lane at runtime defaults and that the run is not published', () => {
+    expect(controlBannerText('wasm-default')).toBe(
+      'Control run: Transformers.js WASM lane at runtime defaults (q8, all cores); not published to the leaderboard',
+    );
+  });
+
+  it('the wasm-default harness record keeps the protocol order and records q8, every logical core and SIMD', () => {
+    expect(controlHarness('wasm-default', 12)).toEqual({
+      kind: 'wasm-default',
+      runtimeOrder: [...RUNTIME_EXECUTION_ORDER],
+      wasmLane: { dtype: 'q8', numThreads: 12, simd: true },
+    });
+    expect(controlHarness('wasm-default', 12)).toEqual(createHarnessControl('wasm-default', { numThreads: 12 }));
+    // The order kinds ignore the core count and carry no wasmLane.
+    expect(controlHarness('fixed-order', 12)).toEqual(createHarnessControl('fixed-order'));
+    expect(controlHarness('order-reversed', 12)).toEqual(createHarnessControl('order-reversed'));
+  });
+
+  it('wasmDefaultThreads is hardwareConcurrency, floored, at least 1 and at most 1024', () => {
+    expect(wasmDefaultThreads(8)).toBe(8);
+    expect(wasmDefaultThreads(1)).toBe(1);
+    expect(wasmDefaultThreads(undefined)).toBe(1);
+    expect(wasmDefaultThreads(0)).toBe(1);
+    expect(wasmDefaultThreads(Number.NaN)).toBe(1);
+    expect(wasmDefaultThreads(6.5)).toBe(6);
+    expect(wasmDefaultThreads(4096)).toBe(1024);
+  });
+
   it('a run carrying harness.control may not be uploaded; a protocol run may', () => {
     expect(mayUpload(makeRun())).toBe(true);
     expect(mayUpload(makeRun({ harness: { name: 'n', version: 'v', control: controlHarness('order-reversed') } }))).toBe(false);
     expect(mayUpload(makeRun({ harness: { name: 'n', version: 'v', control: controlHarness('fixed-order') } }))).toBe(false);
+    expect(mayUpload(makeRun({ harness: { name: 'n', version: 'v', control: controlHarness('wasm-default', 8) } }))).toBe(false);
   });
 });
 

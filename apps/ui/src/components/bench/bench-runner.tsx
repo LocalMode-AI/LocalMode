@@ -1388,7 +1388,9 @@ export function BenchRunner() {
       ]);
       const cells = buildCells();
       // A control run executes (and records) its own runtime order; everything else is the protocol run's.
-      const control = controlKind ? controlHarness(controlKind) : undefined;
+      const control = controlKind ? controlHarness(controlKind, navigator.hardwareConcurrency) : undefined;
+      // Only a wasm-default control run changes the Transformers.js WASM lane's settings.
+      const adapterOptions = control?.wasmLane ? { wasmLane: control.wasmLane } : {};
       // The overlay lists steps in the order the runner executes them.
       const ordered = orderCells(cells, control?.runtimeOrder);
       const orderedIds = ordered.map((c) => `${c.model.runtimeId}/${c.model.benchModelId}/${c.workload.id}`);
@@ -1437,8 +1439,8 @@ export function BenchRunner() {
         suite,
         cells,
         policy: RUN_POLICIES[suite],
-        llmAdapters: createLLMAdapters(),
-        embedAdapters: createEmbedAdapters(),
+        llmAdapters: createLLMAdapters(adapterOptions),
+        embedAdapters: createEmbedAdapters(adapterOptions),
         harness,
         userReportedDevice: study ? `prolific:${study.participantHash}` : undefined,
         abortSignal: controller.signal,
@@ -1957,7 +1959,9 @@ export function BenchRunner() {
           <p className="mt-1">
             {controlKind === 'fixed-order'
               ? 'The suite, its cells, rules, traces, environment capture and runtime order are those of a protocol run; the run file is marked as a control run in harness.control, a reference for a reversed-order series on the same browser build. Keep each run'
-              : 'The suite, its cells, rules, traces and environment capture are those of a protocol run; only the order of the runtimes differs, and the run file records it in harness.control. Keep each run'}
+              : controlKind === 'wasm-default'
+                ? "The suite, its cells, rules, traces, environment capture and runtime order are those of a protocol run; only the Transformers.js WASM lane differs: its models load at q8 (Transformers.js's WASM default) and ONNX Runtime runs one WASM thread per logical core, which the run file records in harness.control.wasmLane and each WASM cell's runtimeConfig. Keep each run"
+                : 'The suite, its cells, rules, traces and environment capture are those of a protocol run; only the order of the runtimes differs, and the run file records it in harness.control. Keep each run'}
             {' '}
             with Export JSON (a series exports every run by itself, and every run is also kept in this
             browser under Saved exports); nothing is uploaded.

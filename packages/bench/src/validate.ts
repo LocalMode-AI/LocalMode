@@ -19,7 +19,7 @@ import { BENCH_PROTOCOL_VERSION, ACCEPTED_SCHEMA_VERSIONS } from './types.js';
 import { summarize } from './stats.js';
 import { parseMMLUAnswer } from './quality.js';
 import { TINY_MMLU } from './datasets/tiny-mmlu.js';
-import { CONTROL_KINDS, controlRuntimeOrder, MIN_GENERATED_CHARS } from './protocol.js';
+import { CONTROL_KINDS, controlRuntimeOrder, controlWasmLaneError, MIN_GENERATED_CHARS } from './protocol.js';
 
 /** Version of the plausibility rule set (recorded alongside moderation). */
 export const PLAUSIBILITY_RULES_VERSION = 2;
@@ -140,7 +140,7 @@ export const SERIES_MAX_IDLE_BEFORE_MS = 30 * 86_400_000;
  * Optional series membership (with the series cool-down and the idle time
  * measured before the run, bench 0.9.1), cold-start marker on `harness`
  * (bench 0.9.0), and control-run marker (bench 0.9.6; kind `fixed-order` since
- * 0.9.7). The shape check
+ * 0.9.7, kind `wasm-default` with its `wasmLane` since 0.9.8). The shape check
  * accepts a well-formed control marker, so an exported control run validates
  * offline; refusing to publish it is the submission route's job.
  */
@@ -176,6 +176,8 @@ function validateHarnessExtras(harness: Record<string, unknown>, push: (m: strin
       const order = control.runtimeOrder;
       if (!Array.isArray(order) || order.length !== expected.length || order.some((id, i) => id !== expected[i]))
         push(`harness.control.runtimeOrder must be the ${String(control.kind)} order [${expected.join(', ')}]`);
+      const laneError = controlWasmLaneError(control as { kind: (typeof CONTROL_KINDS)[number]; wasmLane?: unknown });
+      if (laneError) push(laneError);
     }
   }
 }

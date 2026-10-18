@@ -5,12 +5,21 @@
  * position in the suite can be told apart from the lane itself;
  * `fixed-order` keeps the protocol order, a same-build, same-day reference
  * series so an order-reversed series can be compared within one browser
- * build. A control run is opted into only by the `?control=<kind>` query
+ * build; `wasm-default` keeps the protocol order and runs the
+ * Transformers.js WASM lane at the runtime's own defaults (dtype q8, ONNX
+ * Runtime's WASM thread count set to every logical core). A control run is opted into only by the `?control=<kind>` query
  * parameter (no other control on the page turns it on), is marked
  * `harness.control` in its run file, is never uploaded (Export JSON only),
  * and is refused on a paid-study link. Everything in this module is pure.
  */
-import { CONTROL_KINDS, createHarnessControl, isControlRun, type ControlKind, type HarnessControl } from '@localmode/bench';
+import {
+  CONTROL_KINDS,
+  CONTROL_WASM_MAX_THREADS,
+  createHarnessControl,
+  isControlRun,
+  type ControlKind,
+  type HarnessControl,
+} from '@localmode/bench';
 
 /** The query parameter that opts a page into a control run. */
 export const CONTROL_QUERY_PARAM = 'control';
@@ -25,6 +34,7 @@ export type ControlRequest =
 const BANNER_TEXT: Record<ControlKind, string> = {
   'order-reversed': 'Control run: reversed runtime order; not published to the leaderboard',
   'fixed-order': 'Control run: protocol runtime order; not published to the leaderboard',
+  'wasm-default': 'Control run: Transformers.js WASM lane at runtime defaults (q8, all cores); not published to the leaderboard',
 };
 
 /** Message for a paid-study link that also carries the control parameter. */
@@ -39,7 +49,7 @@ export const CONTROL_UPLOAD_REFUSAL =
  * Read the control request from a /bench/run query string.
  *
  * - No `control` parameter: `none`, a protocol run.
- * - A known kind (`order-reversed`, `fixed-order`): `control`, unless the query is a
+ * - A known kind (`order-reversed`, `fixed-order`, `wasm-default`): `control`, unless the query is a
  *   paid-study link (`PROLIFIC_PID` or `cc` present), which is `refused`.
  * - Any other value: `refused`, so a mistyped kind never quietly runs (and
  *   publishes) a protocol run.
@@ -91,13 +101,33 @@ export function controlBannerText(kind: ControlKind): string {
 }
 
 /**
+ * The ONNX Runtime WASM thread count a `wasm-default` control run sets for
+ * the Transformers.js WASM lane: every logical processor the browser reports
+ * (`navigator.hardwareConcurrency`), at least 1 and at most
+ * `CONTROL_WASM_MAX_THREADS`.
+ *
+ * @param hardwareConcurrency - The browser's `navigator.hardwareConcurrency`.
+ * @returns The thread count.
+ * @example
+ * wasmDefaultThreads(navigator.hardwareConcurrency); // 12 on a 12-thread CPU
+ */
+export function wasmDefaultThreads(hardwareConcurrency: number | undefined): number {
+  const n = typeof hardwareConcurrency === 'number' && Number.isFinite(hardwareConcurrency) ? Math.floor(hardwareConcurrency) : 1;
+  return Math.min(CONTROL_WASM_MAX_THREADS, Math.max(1, n));
+}
+
+/**
  * The `harness.control` record a control run of this kind carries.
  *
  * @param kind - The control kind.
- * @returns `{ kind, runtimeOrder }`; the runner executes exactly this order.
+ * @param hardwareConcurrency - The browser's `navigator.hardwareConcurrency`; used by `wasm-default` only.
+ * @returns `{ kind, runtimeOrder }` (plus `wasmLane` for `wasm-default`); the
+ *   runner executes exactly this order, and the adapters apply `wasmLane`.
  */
-export function controlHarness(kind: ControlKind): HarnessControl {
-  return createHarnessControl(kind);
+export function controlHarness(kind: ControlKind, hardwareConcurrency?: number): HarnessControl {
+  return kind === 'wasm-default'
+    ? createHarnessControl(kind, { numThreads: wasmDefaultThreads(hardwareConcurrency) })
+    : createHarnessControl(kind);
 }
 
 /**

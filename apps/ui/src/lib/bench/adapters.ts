@@ -13,12 +13,14 @@ import type {
   AdapterAvailability,
   BenchModelRef,
   EmbeddingRuntimeAdapter,
+  HarnessControlWasmLane,
   LLMRuntimeAdapter,
   LoadedEmbedder,
   LoadedLLM,
 } from '@localmode/bench';
 import { runtimeVersionFor } from './runtime-versions';
 import { TransformersWorkerLane } from './transformers-worker-client';
+import type { WorkerLaneSettings } from './transformers-worker';
 import {
   chromeAIDownloadInFlight,
   chromeAIDownloadPct,
@@ -129,8 +131,35 @@ export async function wllamaAvailability(): Promise<AdapterAvailability> {
   return { ok: true };
 }
 
+/**
+ * Options for `createLLMAdapters` / `createEmbedAdapters`. Absent on a
+ * protocol run and on every control kind but `wasm-default`.
+ */
+export interface BenchAdapterOptions {
+  /**
+   * Transformers.js WASM lane settings of a `wasm-default` control run
+   * (`harness.control.wasmLane`): the lane's models load at `dtype` and ONNX
+   * Runtime's WASM thread count is set to `numThreads`. No other lane reads it.
+   */
+  wasmLane?: HarnessControlWasmLane;
+}
+
+/** The worker settings for the WASM lane: none on a protocol run. */
+function wasmLaneSettings(wasmLane: HarnessControlWasmLane | undefined): WorkerLaneSettings | undefined {
+  return wasmLane ? { dtype: wasmLane.dtype, numThreads: wasmLane.numThreads } : undefined;
+}
+
+/**
+ * The WASM lane's runtimeConfig: the dtype the models loaded at and the ONNX
+ * Runtime WASM thread count the worker read back after the runtime initialised
+ * (omitted when the worker could not read it).
+ */
+function wasmRuntimeConfig(dtype: string, numThreads: number | undefined): Record<string, string | number | boolean> {
+  return { device: 'wasm', dtype, worker: true, ...(numThreads !== undefined ? { numThreads } : {}) };
+}
+
 /** Transformers.js lane (device pinned per lane: webgpu or wasm). */
-function makeTransformersLLMAdapter(device: 'webgpu' | 'wasm'): LLMRuntimeAdapter {
+function makeTransformersLLMAdapter(device: 'webgpu' | 'wasm', options: BenchAdapterOptions = {}): LLMRuntimeAdapter {
   return {
     runtimeId: device === 'webgpu' ? 'transformers-webgpu' : 'transformers-wasm',
     runtimeVersion: runtimeVersionFor(device === 'webgpu' ? 'transformers-webgpu' : 'transformers-wasm'),
@@ -150,9 +179,15 @@ function makeTransformersLLMAdapter(device: 'webgpu' | 'wasm'): LLMRuntimeAdapte
         // the calling thread, and a generation on the main thread would leave
         // the page unable to repaint (and the watchdog unable to fire) until
         // the request ends. The worker owns its own ONNX runtime instance.
+        const settings = wasmLaneSettings(options.wasmLane);
         const lane = new TransformersWorkerLane();
+        let numThreads: number | undefined;
         try {
-          await lane.load('llm', model.providerModelId, device, { onProgress: (pct) => onProgress?.({ pct }), abortSignal });
+          ({ numThreads } = await lane.load('llm', model.providerModelId, device, {
+            onProgress: (pct) => onProgress?.({ pct }),
+            abortSignal,
+            ...(settings ? { settings } : {}),
+          }));
         } catch (error) {
           await lane.dispose();
           throw error;
@@ -160,7 +195,7 @@ function makeTransformersLLMAdapter(device: 'webgpu' | 'wasm'): LLMRuntimeAdapte
         return {
           model: lane.languageModel(model.providerModelId) as unknown as LoadedLLM['model'],
           resolvedBackend: device,
-          runtimeConfig: { device, dtype: model.quantization ?? 'default', worker: true },
+          runtimeConfig: wasmRuntimeConfig(settings?.dtype ?? model.quantization ?? 'default', numThreads),
           dispose: () => lane.dispose(),
         };
       }
@@ -423,7 +458,7 @@ function makeChromeAIAdapter(): LLMRuntimeAdapter {
 }
 
 /** Transformers.js embedding lane. */
-function makeTransformersEmbedAdapter(device: 'webgpu' | 'wasm'): EmbeddingRuntimeAdapter {
+function makeTransformersEmbedAdapter(device: 'webgpu' | 'wasm', options: BenchAdapterOptions = {}): EmbeddingRuntimeAdapter {
   return {
     runtimeId: device === 'webgpu' ? 'transformers-webgpu' : 'transformers-wasm',
     runtimeVersion: runtimeVersionFor(device === 'webgpu' ? 'transformers-webgpu' : 'transformers-wasm'),
@@ -439,12 +474,15 @@ function makeTransformersEmbedAdapter(device: 'webgpu' | 'wasm'): EmbeddingRunti
     async load(model, { onProgress, abortSignal }): Promise<LoadedEmbedder> {
       abortSignal?.throwIfAborted();
       if (device === 'wasm') {
+        const settings = wasmLaneSettings(options.wasmLane);
         const lane = new TransformersWorkerLane();
         let dimensions: number | undefined;
+        let numThreads: number | undefined;
         try {
-          ({ dimensions } = await lane.load('embedding', model.providerModelId, device, {
+          ({ dimensions, numThreads } = await lane.load('embedding', model.providerModelId, device, {
             onProgress: (pct) => onProgress?.({ pct }),
             abortSignal,
+            ...(settings ? { settings } : {}),
           }));
         } catch (error) {
           await lane.dispose();
@@ -453,7 +491,8 @@ function makeTransformersEmbedAdapter(device: 'webgpu' | 'wasm'): EmbeddingRunti
         return {
           model: lane.embeddingModel(model.providerModelId, dimensions ?? 0) as unknown as LoadedEmbedder['model'],
           resolvedBackend: device,
-          runtimeConfig: { device, worker: true },
+          // The provider loads an embedding model at fp32 unless asked for its quantized (q8) files.
+          runtimeConfig: wasmRuntimeConfig(settings?.dtype ?? 'fp32', numThreads),
           dispose: () => lane.dispose(),
         };
       }
@@ -541,11 +580,15 @@ function makeMediaPipeEmbedAdapter(): EmbeddingRuntimeAdapter {
   };
 }
 
-/** All LLM adapters keyed by runtime lane. */
-export function createLLMAdapters(): Map<string, LLMRuntimeAdapter> {
+/**
+ * All LLM adapters keyed by runtime lane.
+ *
+ * @param options - `wasmLane` for a `wasm-default` control run; omit it on every other run.
+ */
+export function createLLMAdapters(options: BenchAdapterOptions = {}): Map<string, LLMRuntimeAdapter> {
   return new Map<string, LLMRuntimeAdapter>([
     ['transformers-webgpu', makeTransformersLLMAdapter('webgpu')],
-    ['transformers-wasm', makeTransformersLLMAdapter('wasm')],
+    ['transformers-wasm', makeTransformersLLMAdapter('wasm', options)],
     ['webllm', makeWebLLMAdapter()],
     ['wllama', makeWllamaAdapter(false)],
     ['wllama-webgpu', makeWllamaAdapter(true)],
@@ -554,11 +597,15 @@ export function createLLMAdapters(): Map<string, LLMRuntimeAdapter> {
   ]);
 }
 
-/** All embedding adapters keyed by runtime lane. */
-export function createEmbedAdapters(): Map<string, EmbeddingRuntimeAdapter> {
+/**
+ * All embedding adapters keyed by runtime lane.
+ *
+ * @param options - `wasmLane` for a `wasm-default` control run; omit it on every other run.
+ */
+export function createEmbedAdapters(options: BenchAdapterOptions = {}): Map<string, EmbeddingRuntimeAdapter> {
   return new Map<string, EmbeddingRuntimeAdapter>([
     ['transformers-webgpu', makeTransformersEmbedAdapter('webgpu')],
-    ['transformers-wasm', makeTransformersEmbedAdapter('wasm')],
+    ['transformers-wasm', makeTransformersEmbedAdapter('wasm', options)],
     ['wllama', makeWllamaEmbedAdapter(false)],
     ['wllama-webgpu', makeWllamaEmbedAdapter(true)],
     ['mediapipe', makeMediaPipeEmbedAdapter()],

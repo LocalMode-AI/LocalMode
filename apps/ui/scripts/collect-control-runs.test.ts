@@ -56,7 +56,10 @@ async function controlExport(
   const run = JSON.parse(readFileSync(join(FIXTURE, SOURCE_RUN), 'utf8')) as BenchRunResult;
   run.runId = runId;
   run.createdAt = createdAt;
-  if (withControl) run.harness = { ...run.harness, control: createHarnessControl(kind) };
+  if (withControl) {
+    const control = kind === 'wasm-default' ? createHarnessControl(kind, { numThreads: 8 }) : createHarnessControl(kind);
+    run.harness = { ...run.harness, control };
+  }
   delete run.nonce;
   run.digest = await computeRunDigest(run);
   return run;
@@ -148,6 +151,44 @@ describe('collect-control-runs', () => {
     const before = snapshot(dataset);
     await expect(collectControlRuns({ datasetDir: dataset, files: [file] })).rejects.toThrow(
       `${file}: invalid shape: harness.control.runtimeOrder must be the fixed-order order [${RUNTIME_EXECUTION_ORDER.join(', ')}]`,
+    );
+    expect(snapshot(dataset)).toEqual(before);
+  }, 120_000);
+
+  it('files a wasm-default export under controls/wasm-default/<date>/ with its wasmLane, index untouched', async () => {
+    const wasm = await controlExport('control-run-wasm', '2026-10-17T08:00:00.000Z', true, 'wasm-default');
+    const file = await writeExport('wasm.json', wasm);
+    const before = snapshot(dataset);
+
+    const out = cli('--file', file);
+    expect(out.stderr).toBe('');
+    expect(out.status).toBe(0);
+    expect(out.stdout).toContain(`controls/wasm-default/2026-10-17/control-run-wasm.json <- ${file} (wasm-default,`);
+    expect(out.stdout).toContain('1 control run; index/summary.json untouched');
+
+    const after = snapshot(dataset);
+    const added = [...after.keys()].filter((k) => !before.has(k)).sort();
+    expect(added).toEqual(['controls/wasm-default/2026-10-17/control-run-wasm.json']);
+    for (const [path, bytes] of before) expect(after.get(path)).toBe(bytes);
+    const filed = JSON.parse(after.get(added[0])!) as BenchRunResult;
+    expect(after.get(added[0])).toBe(JSON.stringify(wasm));
+    expect(await verifyRunDigest(filed)).toBe(true);
+    expect(filed.harness.control).toEqual({
+      kind: 'wasm-default',
+      runtimeOrder: [...RUNTIME_EXECUTION_ORDER],
+      wasmLane: { dtype: 'q8', numThreads: 8, simd: true },
+    });
+    expect(validateSubmission(filed).shapeErrors).toEqual([]);
+  }, 120_000);
+
+  it('refuses a wasm-default marker without its wasmLane, writing nothing', async () => {
+    const run = await controlExport('control-run-wasm-bad', '2026-10-17T09:00:00.000Z', true, 'wasm-default');
+    run.harness = { ...run.harness, control: { kind: 'wasm-default', runtimeOrder: [...RUNTIME_EXECUTION_ORDER] } };
+    run.digest = await computeRunDigest(run);
+    const file = await writeExport('wasm-bad.json', run);
+    const before = snapshot(dataset);
+    await expect(collectControlRuns({ datasetDir: dataset, files: [file] })).rejects.toThrow(
+      `${file}: invalid shape: harness.control.wasmLane must be { dtype: 'q8', numThreads: <integer 1-1024>, simd: true } on a wasm-default control run`,
     );
     expect(snapshot(dataset)).toEqual(before);
   }, 120_000);
