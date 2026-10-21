@@ -74,13 +74,14 @@ export {
   orderCells,
   CONTROL_KINDS,
   CONTROL_WASM_DTYPE,
+  CONTROL_WASM_LANE_SPECS,
   CONTROL_WASM_MAX_THREADS,
   controlRuntimeOrder,
   controlWasmLaneError,
   createHarnessControl,
   isControlRun,
 } from './protocol.js';
-export type { RunPolicy, CreateHarnessControlOptions } from './protocol.js';
+export type { RunPolicy, CreateHarnessControlOptions, ControlWasmLaneSpec } from './protocol.js';
 
 // Adapters
 export type {
@@ -134,6 +135,7 @@ export {
   SERIES_MAX_IDLE_BEFORE_MS,
   REPORTED_GPU_MAX_LENGTH,
   REPORTED_RAM_MAX_GB,
+  offloadReportError,
 } from './validate.js';
 export type { ValidateOptions } from './validate.js';
 export { canonicalJson, sha256Hex, computeRunDigest, computeLegacyRunDigest, verifyRunDigest } from './canonical.js';

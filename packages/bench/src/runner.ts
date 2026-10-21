@@ -619,6 +619,26 @@ async function runModelGroup(group: ModelGroup, ctx: GroupContext): Promise<Benc
         }
       );
       const end = hrNow();
+      // Untimed, after the timed span: an adapter that defers the engine load
+      // to first use (llama.cpp) finishes it here, so the record carries the
+      // engine's own report, as the timed cells' record does after the warmup.
+      // A failure leaves the record as the adapter reads it and keeps the cell.
+      if (reloaded.settle) {
+        const live = reloaded;
+        try {
+          await withWatchdog<void>((signal) => live.settle!({ abortSignal: signal }), {
+            parent: ctx.abortSignal,
+            stallMs: ctx.policy.loadStallMs,
+            timeoutMs: ctx.policy.loadTimeoutMs,
+            what: 'load',
+          });
+        } catch {
+          if (ctx.abortSignal?.aborted) {
+            await safeDispose(reloaded);
+            throw abortDomException();
+          }
+        }
+      }
       // Read the backend and configuration while the instance is alive: an
       // adapter may report them lazily off a provider that forgets its load
       // report once unloaded.

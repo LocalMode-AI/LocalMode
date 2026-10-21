@@ -202,13 +202,50 @@ export function orderCells<T extends { model: { runtimeId: BenchRuntimeId } }>(
 }
 
 /** Control-run kinds a host may record on `harness.control`. */
-export const CONTROL_KINDS: readonly ControlKind[] = ['order-reversed', 'fixed-order', 'wasm-default'] as const;
+export const CONTROL_KINDS: readonly ControlKind[] = [
+  'order-reversed',
+  'fixed-order',
+  'wasm-default',
+  'wasm-q8',
+  'wasm-threads',
+] as const;
 
 /** The dtype a `wasm-default` control run loads the Transformers.js WASM lane at (Transformers.js's WASM default). */
 export const CONTROL_WASM_DTYPE = 'q8' as const;
 
 /** Largest `harness.control.wasmLane.numThreads` a run may carry. */
 export const CONTROL_WASM_MAX_THREADS = 1024;
+
+/**
+ * How a WASM-lane control kind configures the Transformers.js WASM lane.
+ *
+ * - `dtype`: the dtype recorded on `wasmLane.dtype` (`q8`: every model of the
+ *   lane loads its q8 files; `q4`: the protocol's files).
+ * - `threads`: `all-cores` sets ONNX Runtime's WASM thread count to
+ *   `navigator.hardwareConcurrency` (recorded as `wasmLane.numThreads`);
+ *   `runtime-default` leaves it to the runtime (recorded as `null`).
+ */
+export interface ControlWasmLaneSpec {
+  dtype: HarnessControlWasmLane['dtype'];
+  threads: 'all-cores' | 'runtime-default';
+}
+
+/**
+ * The WASM-lane settings of each control kind that changes the
+ * Transformers.js WASM lane; the order kinds are absent. `wasm-q8` and
+ * `wasm-threads` each make one of the two changes `wasm-default` makes, so
+ * with `fixed-order` the four kinds form a 2x2 factorial.
+ */
+export const CONTROL_WASM_LANE_SPECS: Readonly<Partial<Record<ControlKind, ControlWasmLaneSpec>>> = {
+  'wasm-default': { dtype: 'q8', threads: 'all-cores' },
+  'wasm-q8': { dtype: 'q8', threads: 'runtime-default' },
+  'wasm-threads': { dtype: 'q4', threads: 'all-cores' },
+};
+
+/** The kinds that carry `wasmLane`, in `CONTROL_KINDS` order. */
+function wasmLaneKinds(): ControlKind[] {
+  return CONTROL_KINDS.filter((k) => CONTROL_WASM_LANE_SPECS[k] !== undefined);
+}
 
 /**
  * The runtime execution order of a control run.
@@ -226,9 +263,9 @@ export const CONTROL_WASM_MAX_THREADS = 1024;
  * come from another build), recorded as a control run so it stays out of
  * the leaderboard.
  *
- * `wasm-default` is `RUNTIME_EXECUTION_ORDER` itself too: that kind changes
- * the Transformers.js WASM lane's settings (see `HarnessControl.wasmLane`),
- * never the order.
+ * `wasm-default`, `wasm-q8` and `wasm-threads` are `RUNTIME_EXECUTION_ORDER`
+ * itself too: those kinds change the Transformers.js WASM lane's settings
+ * (see `HarnessControl.wasmLane`), never the order.
  *
  * @param kind - The control kind.
  * @returns A new array of every runtime, each exactly once.
@@ -242,6 +279,8 @@ export function controlRuntimeOrder(kind: ControlKind): BenchRuntimeId[] {
       return [...RUNTIME_EXECUTION_ORDER].reverse();
     case 'fixed-order':
     case 'wasm-default':
+    case 'wasm-q8':
+    case 'wasm-threads':
       return [...RUNTIME_EXECUTION_ORDER];
   }
 }
@@ -249,9 +288,10 @@ export function controlRuntimeOrder(kind: ControlKind): BenchRuntimeId[] {
 /** Options for `createHarnessControl`. */
 export interface CreateHarnessControlOptions {
   /**
-   * `wasm-default` only, required there: the ONNX Runtime WASM thread count
-   * the host sets for the Transformers.js WASM lane, the browser's
-   * `navigator.hardwareConcurrency` (an integer from 1 to `CONTROL_WASM_MAX_THREADS`).
+   * `wasm-default` and `wasm-threads` only, required there: the ONNX Runtime
+   * WASM thread count the host sets for the Transformers.js WASM lane, the
+   * browser's `navigator.hardwareConcurrency` (an integer from 1 to
+   * `CONTROL_WASM_MAX_THREADS`). Refused on every other kind.
    */
   numThreads?: number;
 }
@@ -260,34 +300,53 @@ export interface CreateHarnessControlOptions {
  * The `harness.control` record of a control run of the given kind.
  *
  * @param kind - The control kind.
- * @param options - `numThreads` for a `wasm-default` run (required there, refused on the other kinds).
+ * @param options - `numThreads` for a `wasm-default` or `wasm-threads` run (required there, refused on the other kinds).
  * @returns `{ kind, runtimeOrder }` with the kind's canonical runtime order,
- *   plus `wasmLane: { dtype: 'q8', numThreads, simd: true }` for `wasm-default`.
- * @throws {TypeError} When `wasm-default` lacks a valid `numThreads`, or another kind is given one.
+ *   plus `wasmLane` for a WASM-lane kind: `{ dtype: 'q8', numThreads, simd: true }`
+ *   for `wasm-default`, `{ dtype: 'q8', numThreads: null, simd: true }` for
+ *   `wasm-q8`, `{ dtype: 'q4', numThreads, simd: true }` for `wasm-threads`.
+ * @throws {TypeError} When a kind that sets the thread count lacks a valid `numThreads`, or another kind is given one.
  * @example
  * const harness = { name, version, control: createHarnessControl('order-reversed') };
  * const wasm = createHarnessControl('wasm-default', { numThreads: navigator.hardwareConcurrency });
+ * const q8 = createHarnessControl('wasm-q8'); // wasmLane.numThreads: null
  */
 export function createHarnessControl(kind: ControlKind, options: CreateHarnessControlOptions = {}): HarnessControl {
   const control: HarnessControl = { kind, runtimeOrder: controlRuntimeOrder(kind) };
-  if (kind !== 'wasm-default') {
-    if (options.numThreads !== undefined) {
-      throw new TypeError(`createHarnessControl('${kind}') takes no numThreads; only wasm-default sets the WASM lane's threads`);
-    }
-    return control;
+  const spec = CONTROL_WASM_LANE_SPECS[kind];
+  if (spec?.threads !== 'all-cores' && options.numThreads !== undefined) {
+    throw new TypeError(
+      spec === undefined
+        ? `createHarnessControl('${kind}') takes no numThreads; only ${threadKindsText()} set the WASM lane's threads`
+        : `createHarnessControl('${kind}') takes no numThreads; it leaves ONNX Runtime's WASM thread count at the runtime's default`,
+    );
   }
-  const wasmLane: HarnessControlWasmLane = { dtype: CONTROL_WASM_DTYPE, numThreads: options.numThreads as number, simd: true };
+  if (spec === undefined) return control;
+  const wasmLane: HarnessControlWasmLane = {
+    dtype: spec.dtype,
+    numThreads: spec.threads === 'all-cores' ? (options.numThreads as number) : null,
+    simd: true,
+  };
   const error = controlWasmLaneError({ ...control, wasmLane });
   if (error) throw new TypeError(`${error}; pass { numThreads: navigator.hardwareConcurrency }`);
   return { ...control, wasmLane };
 }
 
+/** "wasm-default" or "wasm-default and wasm-threads": the kinds that set the thread count. */
+function threadKindsText(): string {
+  const kinds = wasmLaneKinds().filter((k) => CONTROL_WASM_LANE_SPECS[k]?.threads === 'all-cores');
+  return kinds.length === 1 ? kinds[0] : `${kinds.slice(0, -1).join(', ')} and ${kinds.at(-1)}`;
+}
+
 /**
  * The problem with a control marker's `wasmLane`, or undefined when it is
- * right for the kind: `wasm-default` must carry
- * `{ dtype: 'q8', numThreads: <integer 1-CONTROL_WASM_MAX_THREADS>, simd: true }`
- * and nothing else; every other kind must carry no `wasmLane`. Shared by the
- * runner (which refuses the run before anything loads) and `validateRunShape`.
+ * right for the kind. A WASM-lane kind must carry exactly its spec
+ * (`CONTROL_WASM_LANE_SPECS`) and nothing else:
+ * `wasm-default` `{ dtype: 'q8', numThreads: <integer 1-CONTROL_WASM_MAX_THREADS>, simd: true }`,
+ * `wasm-q8` `{ dtype: 'q8', numThreads: null, simd: true }`,
+ * `wasm-threads` `{ dtype: 'q4', numThreads: <integer 1-CONTROL_WASM_MAX_THREADS>, simd: true }`;
+ * every other kind must carry no `wasmLane`. Shared by the runner (which
+ * refuses the run before anything loads) and `validateRunShape`.
  *
  * @param control - A control marker whose `kind` is one of `CONTROL_KINDS`.
  * @returns The error message, or undefined.
@@ -296,15 +355,22 @@ export function createHarnessControl(kind: ControlKind, options: CreateHarnessCo
  */
 export function controlWasmLaneError(control: { kind: ControlKind; wasmLane?: unknown }): string | undefined {
   const lane = control.wasmLane;
-  if (control.kind !== 'wasm-default') {
-    return lane === undefined ? undefined : `harness.control.wasmLane is set only on a wasm-default control run, not on ${control.kind}`;
+  const spec = CONTROL_WASM_LANE_SPECS[control.kind];
+  if (spec === undefined) {
+    if (lane === undefined) return undefined;
+    const kinds = wasmLaneKinds();
+    const named = kinds.length === 1 ? kinds[0] : `${kinds.slice(0, -1).join(', ')} or ${kinds.at(-1)}`;
+    return `harness.control.wasmLane is set only on a ${named} control run, not on ${control.kind}`;
   }
-  const shape = `harness.control.wasmLane must be { dtype: '${CONTROL_WASM_DTYPE}', numThreads: <integer 1-${CONTROL_WASM_MAX_THREADS}>, simd: true } on a wasm-default control run`;
+  const threadsText = spec.threads === 'all-cores' ? `<integer 1-${CONTROL_WASM_MAX_THREADS}>` : 'null';
+  const shape = `harness.control.wasmLane must be { dtype: '${spec.dtype}', numThreads: ${threadsText}, simd: true } on a ${control.kind} control run`;
   if (typeof lane !== 'object' || lane === null || Array.isArray(lane)) return shape;
   const { dtype, numThreads, simd, ...extra } = lane as Record<string, unknown>;
   const threadsOk =
-    typeof numThreads === 'number' && Number.isInteger(numThreads) && numThreads >= 1 && numThreads <= CONTROL_WASM_MAX_THREADS;
-  if (dtype !== CONTROL_WASM_DTYPE || !threadsOk || simd !== true || Object.keys(extra).length > 0) return shape;
+    spec.threads === 'all-cores'
+      ? typeof numThreads === 'number' && Number.isInteger(numThreads) && numThreads >= 1 && numThreads <= CONTROL_WASM_MAX_THREADS
+      : numThreads === null;
+  if (dtype !== spec.dtype || !threadsOk || simd !== true || Object.keys(extra).length > 0) return shape;
   return undefined;
 }
 

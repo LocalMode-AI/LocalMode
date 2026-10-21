@@ -92,16 +92,36 @@ the warmup and the warm reload re-downloaded the 3.46 GB weights.
   it is ONNX Runtime's own default on a protocol run), and its embedding
   cells record the `dtype` they load at (`fp32`, the provider's default).
   `model.quantization` is the catalog's label for a pairing, not a recorded
-  fact: the Transformers.js `bge-small-en` pairing is labelled `q8`, but
-  every run before 0.9.8 loaded fp32 on both Transformers.js lanes (the
-  provider's default; the harness never passed the label), and on the WASM
-  lane its preload fetched the q8 files while the timed model used the fp32
-  file, so that pairing's cold-start `load` measures the preload and the fp32
-  download falls in the first warmup. `runtimeConfig.dtype` is the recorded
-  dtype from 0.9.8 on: every `transformers-wasm` cell, and the
+  fact: the Transformers.js `bge-small-en` pairing is labelled `q8`, but on
+  a protocol run both Transformers.js lanes load it at fp32 (the provider's
+  default; the harness never passes the label), in every release so far. On
+  the WASM lane of a protocol run the preload fetches the q8 files
+  (Transformers.js's WASM default) while the timed model uses the fp32 file,
+  also in every release so far, so that pairing's cold-start `load` measures
+  the preload and the fp32 download falls in the first warmup; changing the
+  preload would be a protocol change. What 0.9.8 changed is the record:
+  before it, no cell recorded the loaded dtype; `runtimeConfig.dtype` names
+  the loaded dtype from 0.9.8 on: every `transformers-wasm` cell, and the
   `transformers-webgpu` language-model cells (there it is the catalog label,
   which the provider's `q4` default matches; the `transformers-webgpu`
   embedding cells record none).
+  On the llama.cpp lanes (since 0.9.9) `resolvedBackend` follows the engine's
+  offload report alone: `webgpu` only when llama.cpp offloaded at least one
+  layer, `wasm` otherwise, and `unknown` when the record was read before the
+  engine loaded (wllama loads on first use). A cell of the WebGPU lane
+  (`n_gpu_layers` not 0) whose engine loaded also carries `gpu_fallback`:
+  `true` when no layer was offloaded (`offloadedLayers` `0/M`, or
+  `unreported`, which llama.cpp prints when it found no GPU device), so the
+  lane ran on the CPU, `false` otherwise; the CPU lane carries none. Before
+  0.9.9 an `unreported` WebGPU-lane cell recorded the lane's requested
+  `webgpu`. The warm-reload cell carries the same report: after its timed
+  span the runner calls the reloaded handle's untimed `settle()`
+  (`LoadedLLM.settle` / `LoadedEmbedder.settle`, optional), which loads the
+  engine with the warmup probe, as the timed cells' warmup does; the timed
+  span itself is unchanged. `validateRunShape` rejects a cell whose
+  `resolvedBackend` disagrees with its `offloadedLayers` count or its
+  `gpu_fallback` (`offloadReportError()`); an `unreported` cell without
+  `gpu_fallback`, the record of every run before 0.9.9, is not checked.
 - **Execution order** - deterministic runtime order (`RUNTIME_EXECUTION_ORDER`:
   transformers-wasm, transformers-webgpu, chrome-ai, webllm, mediapipe, litert,
   wllama-webgpu, wllama; `orderCells()` applies it and the runner enforces it;
@@ -187,9 +207,14 @@ the warmup and the warm reload re-downloaded the 3.46 GB weights.
   `wasmLane: { dtype: 'q8', numThreads, simd: true }`: the Transformers.js
   WASM lane settings the run applied (`numThreads` the ONNX Runtime WASM
   thread count the host set, the browser's `navigator.hardwareConcurrency`,
-  an integer from 1 to 1024). `wasmLane` is required on `wasm-default` and
-  refused on every other kind; the validator rejects any other kind, order
-  or `wasmLane`, and the digest covers the field like the rest of `harness`.
+  an integer from 1 to 1024), and (since 0.9.9) `wasm-q8`, with
+  `wasmLane: { dtype: 'q8', numThreads: null, simd: true }` (`null`: the
+  host left the thread count to ONNX Runtime), and `wasm-threads`, with
+  `wasmLane: { dtype: 'q4', numThreads, simd: true }`, both in
+  `RUNTIME_EXECUTION_ORDER`. `wasmLane` is required on the three WASM-lane
+  kinds, exactly as `CONTROL_WASM_LANE_SPECS` gives it, and refused on every
+  other kind; the validator rejects any other kind, order or `wasmLane`, and
+  the digest covers the field like the rest of `harness`.
 - **Statistics** - median headline; mean ± SD, IQR, 95% CI (Student-t), CV;
   CV > 5% ⇒ high-variance flag; geomean only within a device run.
 - **Quality-fidelity lane** - tinyMMLU (MIT) accuracy + STS-B Spearman (scores
@@ -258,6 +283,31 @@ const control = await runBenchmarkSuite({
   the smallest suite with a Transformers.js WASM language-model cell
   (Qwen3 0.6B):
   `/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=wasm-default`.
+- `wasm-q8` and `wasm-threads` (since 0.9.9) each make one of the two
+  changes `wasm-default` makes, so that its effect can be split between
+  them. Both run the runtimes in `RUNTIME_EXECUTION_ORDER`, and every other
+  lane and every rule is the protocol's. `wasm-q8` loads the Transformers.js
+  WASM lane's models at `q8` and leaves ONNX Runtime's WASM thread count at
+  the runtime's own default (the host does not set it; `min(4, ceil(cores / 2))`
+  on a cross-origin-isolated page); its `wasmLane` is
+  `{ dtype: 'q8', numThreads: null, simd: true }`. `wasm-threads` keeps the
+  protocol's files (the language model's `q4` files, the embedding model at
+  `fp32`) and sets the thread count to `navigator.hardwareConcurrency`; its
+  `wasmLane` is `{ dtype: 'q4', numThreads, simd: true }`, where `q4` names
+  the protocol's files and each cell's `runtimeConfig.dtype` records the
+  dtype that model loaded at (`fp32` on an embedding cell). With
+  `fixed-order` (neither change) and `wasm-default` (both), the four kinds
+  form a 2x2 factorial over the dtype and the thread count; the per-kind
+  settings are the `CONTROL_WASM_LANE_SPECS` table
+  (`{ dtype, threads: 'all-cores' | 'runtime-default' }`). Build the markers
+  with `createHarnessControl('wasm-q8')` and
+  `createHarnessControl('wasm-threads', { numThreads: navigator.hardwareConcurrency })`
+  (`wasm-q8` refuses a thread count). Each WASM cell's `runtimeConfig`
+  records the `dtype` and the `numThreads` ONNX Runtime ran with. On
+  localmode.ai run them on the Standard tier, beside a `fixed-order` and a
+  `wasm-default` series on the same machine, browser build and day:
+  `/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=wasm-q8` and
+  `/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=wasm-threads`.
 - Leave a cool-down between the runs of a series (`cooldown=5` in the
   runner link, five minutes between runs; the parameter is in minutes,
   capped at 30): on a laptop that is still warm from the previous run, the
@@ -265,14 +315,15 @@ const control = await runBenchmarkSuite({
   one, and an analysis that excludes runs by their `pressureCriticalFraction`
   would then drop them.
 - The runner orders the cells by `harness.control.runtimeOrder` and refuses
-  any order that is not the kind's canonical one (and a `wasm-default`
-  marker without a valid `wasmLane`, or a `wasmLane` on another kind), so
+  any order that is not the kind's canonical one (and a WASM-lane marker
+  without the `wasmLane` its kind requires, or a `wasmLane` on another kind), so
   the record names the order the run used. Cells, the run policy, validity gates, traces and the
   environment capture are those of a protocol run.
 - A control run is not a protocol run: it is never submitted, published or
   scored, which is why the field needed no protocol version. The localmode.ai
   runner offers Export JSON only (`/bench/run?control=order-reversed`,
-  `/bench/run?control=fixed-order` or `/bench/run?control=wasm-default`, see
+  `/bench/run?control=fixed-order`, `/bench/run?control=wasm-default`,
+  `/bench/run?control=wasm-q8` or `/bench/run?control=wasm-threads`, see
   SETUP.md), the submission route answers 422 `control-run`, and
   `aggregateRuns` leaves control runs out of every leaderboard row.
   `isControlRun(run)` is the check.
@@ -416,7 +467,7 @@ cell without timed iterations keeps one placeholder row):
 | `loadDeclaredBytes` | Catalog-declared download size |
 | `loadProgressEvents` | Number of load progress samples recorded |
 | `loadProgressSpanMs` | Time from the first to the last progress sample |
-| `n_threads`, `n_threads_used`, `multithread`, `n_ctx`, `n_gpu_layers`, `offloadedLayers`, `webgpu_adapter`, `cache_prompt`, `mmproj` | The llama.cpp lanes' `runtimeConfig` (requested threads, the pool built, context size, GPU layers requested and llama.cpp's offload report, ...) |
+| `n_threads`, `n_threads_used`, `multithread`, `n_ctx`, `n_gpu_layers`, `offloadedLayers`, `webgpu_adapter`, `cache_prompt`, `mmproj` | The llama.cpp lanes' `runtimeConfig` (requested threads, the pool built, context size, GPU layers requested and llama.cpp's offload report, ...; since 0.9.9 `gpu_fallback` is in the run file only, not a column) |
 | `dtype`, `device`, `worker` | The Transformers.js lanes' `runtimeConfig` (the WASM lane's `numThreads` is in the run file only, not a column) |
 | `memoryBaseline`, `memoryPostLoad`, `memoryPostRun`, `memoryAtError` | Memory samples in bytes at the protocol points and when the cell errored |
 | `memoryApi` | The API that measured them: `uaSpecific`, `legacyHeap` or `none` |
@@ -454,7 +505,7 @@ cell without timed iterations keeps one placeholder row):
 | `reportedChassis` | Since 0.9.4: `environment.userReportedHardware.chassis`, `laptop`, `desktop` or `other`; empty when absent |
 | `reportedRamGB` | Since 0.9.4: `environment.userReportedHardware.ramGB`, the reported RAM bucket in GB (the top bucket "128 GB or more" is 128); empty when absent or answered "Not sure" (`null`) |
 | `reportedOtherApps` | Since 0.9.4: `environment.userReportedHardware.otherAppsRunning`, `true` or `false`; empty when absent |
-| `controlKind`, `controlRuntimeOrder` | Since 0.9.6, after `reportedOtherApps`: `harness.control.kind` (`order-reversed`, since 0.9.7 `fixed-order`, since 0.9.8 `wasm-default`) and the runtime order the control run used, joined by `>`; empty on a protocol run. `leaderboard.csv` never includes a control run |
+| `controlKind`, `controlRuntimeOrder` | Since 0.9.6, after `reportedOtherApps`: `harness.control.kind` (`order-reversed`, since 0.9.7 `fixed-order`, since 0.9.8 `wasm-default`, since 0.9.9 `wasm-q8` and `wasm-threads`) and the runtime order the control run used, joined by `>`; empty on a protocol run. `leaderboard.csv` never includes a control run |
 
 ## Dataset licenses
 

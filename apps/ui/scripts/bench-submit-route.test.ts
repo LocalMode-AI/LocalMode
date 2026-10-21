@@ -274,6 +274,35 @@ describe('POST /api/bench/submit', () => {
     expect(committed[0].run.harness.control).toBeUndefined();
   });
 
+  it.each([
+    { kind: 'wasm-q8' as const, control: () => createHarnessControl('wasm-q8') },
+    { kind: 'wasm-threads' as const, control: () => createHarnessControl('wasm-threads', { numThreads: 8 }) },
+  ])('rejects a $kind control run with 422 before the nonce is spent, storing nothing', async ({ kind, control }) => {
+    // An address of its own, so these posts do not count against the shared one's hourly limit.
+    const ip = kind === 'wasm-q8' ? '198.51.100.21' : '198.51.100.22';
+    const nonce = issueNonce();
+    const run = makeRun({
+      nonce,
+      runId: `run-${kind}-${Math.random().toString(16).slice(2)}`,
+      harness: { name: '@localmode/bench', version: '0.1.0', control: control() },
+    });
+    run.digest = await computeRunDigest(run);
+    const { status, body } = await post(run, ip);
+    expect(status).toBe(422);
+    expect(body).toEqual({
+      ok: false,
+      code: 'control-run',
+      message: `This is a control run (harness.control kind ${kind}). Control runs are never published to the leaderboard; keep the exported JSON and collect it into a dataset clone with scripts/collect-control-runs.ts.`,
+    });
+    expect(committed).toHaveLength(0);
+    expect(indexPuts).toBe(0);
+    const protocolRun = makeRun({ nonce, runId: `run-after-${kind}-${Math.random().toString(16).slice(2)}` });
+    protocolRun.digest = await computeRunDigest(protocolRun);
+    expect((await post(protocolRun, ip)).status).toBe(200);
+    expect(committed).toHaveLength(1);
+    expect(committed[0].run.harness.control).toBeUndefined();
+  });
+
   it('refuses a nonce the second time it is presented', async () => {
     const nonce = issueNonce();
     const first = makeRun({ nonce, runId: `run-a-${Math.random().toString(16).slice(2)}` });

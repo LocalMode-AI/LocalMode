@@ -116,8 +116,12 @@ export default function BenchMethodologyPage() {
               records first-inference readiness (engine init, shader/JIT compilation) as its own
               number; cold start = load + warmup is the cross-runtime comparable figure. The
               warm-reload cell repeats the preload path against a populated cache, so for wllama it
-              times the cache probe and its <code className="font-mono text-sm">offloadedLayers</code>{' '}
-              stays &quot;unreported&quot; (llama.cpp loads in the warmup). Chrome
+              times the cache probe; after that timed span the runner loads llama.cpp untimed, so
+              the cell records the same offload report as the timed cells (before site build
+              2.16.15 its <code className="font-mono text-sm">offloadedLayers</code> read
+              &quot;unreported&quot;). On the llama.cpp lanes the recorded backend is WebGPU only
+              when llama.cpp offloaded at least one layer; a WebGPU-lane cell that offloaded none
+              records WASM with <code className="font-mono text-sm">gpu_fallback: true</code>. Chrome
               Built-in AI is the exception: Chrome downloads Gemini Nano once, browser-wide, and
               only from a user activation, so the Run click starts that download while the other
               lanes run; the lane is recorded cold in that case and its load phase measures the
@@ -292,9 +296,15 @@ export default function BenchMethodologyPage() {
               the protocol&apos;s order with the Transformers.js WASM lane at the runtime&apos;s own
               defaults: its models load at q8 (Transformers.js&apos;s WASM default) and ONNX Runtime runs one
               WASM thread per logical core instead of its default of at most four; every other lane is
-              unchanged. Cells, rules, traces and the environment capture are those of a protocol run; the run file
+              unchanged.{' '}
+              <code className="font-mono text-sm">/bench/run?control=wasm-q8</code> and{' '}
+              <code className="font-mono text-sm">/bench/run?control=wasm-threads</code> each make one of
+              those two changes, in the protocol&apos;s order: wasm-q8 loads the WASM lane at q8 and leaves
+              ONNX Runtime&apos;s thread count at its default; wasm-threads keeps the protocol&apos;s files (q4
+              language model, fp32 embedding model) and runs one WASM thread per logical core. With
+              fixed-order they separate the effect of the dtype from that of the thread count. Cells, rules, traces and the environment capture are those of a protocol run; the run file
               carries <code className="font-mono text-sm">harness.control</code> (the kind and the order
-              used, and for wasm-default the WASM lane&apos;s dtype and thread count). A control run is never uploaded (Export JSON only, and the submission route refuses
+              used, and for wasm-default, wasm-q8 and wasm-threads the WASM lane&apos;s dtype and thread count). A control run is never uploaded (Export JSON only, and the submission route refuses
               one), never enters the leaderboard and is never scored, so it needs no protocol version.
               Runs and the cool-down work as usual, and a series keeps its control mode across its
               reloads. A study link with the parameter is refused. Every run the page exports is first

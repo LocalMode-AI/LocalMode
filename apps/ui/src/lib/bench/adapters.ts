@@ -78,6 +78,40 @@ function withoutPromptCache<T extends { doGenerate: (o: never) => unknown; doStr
   });
 }
 
+/**
+ * Wrap a lazily loading wllama model so the adapter knows when llama.cpp has
+ * loaded: after the first `doGenerate`/`doEmbed` resolves, or once `doStream`
+ * yields its first chunk (the load precedes every token). The wrapped model
+ * behaves exactly as the original.
+ */
+function trackEngineLoad<T extends object>(model: T, onLoaded: () => void): T {
+  return new Proxy(model, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value !== 'function') return value;
+      if (prop === 'doGenerate' || prop === 'doEmbed') {
+        return async (...args: unknown[]) => {
+          const result = await (value as (...a: unknown[]) => Promise<unknown>).apply(target, args);
+          onLoaded();
+          return result;
+        };
+      }
+      if (prop === 'doStream') {
+        return (...args: unknown[]) => {
+          const inner = (value as (...a: unknown[]) => AsyncIterable<unknown>).apply(target, args);
+          return (async function* () {
+            for await (const chunk of inner) {
+              onLoaded();
+              yield chunk;
+            }
+          })();
+        };
+      }
+      return value;
+    },
+  });
+}
+
 /** WebGPU adapter probe with a 3s guard (isWebGPUSupported() from core is async). */
 async function hasWebGPUAdapter(): Promise<boolean> {
   try {
@@ -133,20 +167,31 @@ export async function wllamaAvailability(): Promise<AdapterAvailability> {
 
 /**
  * Options for `createLLMAdapters` / `createEmbedAdapters`. Absent on a
- * protocol run and on every control kind but `wasm-default`.
+ * protocol run and on every control kind but the WASM-lane kinds
+ * (`wasm-default`, `wasm-q8`, `wasm-threads`).
  */
 export interface BenchAdapterOptions {
   /**
-   * Transformers.js WASM lane settings of a `wasm-default` control run
-   * (`harness.control.wasmLane`): the lane's models load at `dtype` and ONNX
-   * Runtime's WASM thread count is set to `numThreads`. No other lane reads it.
+   * Transformers.js WASM lane settings of a WASM-lane control run
+   * (`harness.control.wasmLane`): with `dtype` `q8` the lane's models load
+   * their q8 files (`q4` keeps the protocol's files), and a non-null
+   * `numThreads` sets ONNX Runtime's WASM thread count (`null` leaves the
+   * runtime's default). No other lane reads it.
    */
   wasmLane?: HarnessControlWasmLane;
 }
 
-/** The worker settings for the WASM lane: none on a protocol run. */
+/**
+ * The worker settings for the WASM lane: none on a protocol run; otherwise
+ * only what the control kind changes from the protocol's configuration
+ * (`dtype: 'q8'` when the lane loads q8, `numThreads` when the host sets it).
+ */
 function wasmLaneSettings(wasmLane: HarnessControlWasmLane | undefined): WorkerLaneSettings | undefined {
-  return wasmLane ? { dtype: wasmLane.dtype, numThreads: wasmLane.numThreads } : undefined;
+  if (!wasmLane) return undefined;
+  return {
+    ...(wasmLane.dtype === 'q8' ? { dtype: 'q8' as const } : {}),
+    ...(wasmLane.numThreads !== null ? { numThreads: wasmLane.numThreads } : {}),
+  };
 }
 
 /**
@@ -271,28 +316,38 @@ export function wllamaThreads(): number {
 export const WLLAMA_BENCH_CONTEXT_LLM = 2048;
 export const WLLAMA_BENCH_CONTEXT_EMBED = 512;
 
+/** The prompt a llama.cpp warm-reload handle's untimed settle() sends: the runner's warmup probe. */
+const WLLAMA_SETTLE_PROMPT = 'Reply with the single word: ready';
+
 /**
  * Backend and configuration record for a loaded wllama model, from what
  * llama.cpp itself reported at load (`offloaded N/M layers to GPU`), never
  * from the lane's intent. wllama 3.5 offloads every layer to WebGPU by
  * default wherever `navigator.gpu` exists, which is why each lane pins
  * `n_gpu_layers` explicitly: the CPU lane to 0, the WebGPU lane to all.
+ *
+ * The backend is `webgpu` only when llama.cpp offloaded at least one layer,
+ * and `wasm` otherwise, including a WebGPU-lane load where llama.cpp printed
+ * no offload line (it prints one only when it found a GPU device): that lane
+ * then records `gpu_fallback: true`. Until the engine has loaded (wllama
+ * loads on first use) there is no report, so the backend reads `unknown` and
+ * `gpu_fallback` is absent; it never falls back to the lane's prediction.
  */
 function wllamaLoadedInfo(
   llm: {
-    gpuAccelerated?: boolean;
     offloadedLayers?: { gpu: number; total: number } | null;
     threadPool?: { multithread: boolean; threads: number } | null;
   },
   requestedGpuLayers: number,
   webgpuAdapter: boolean,
+  engineLoaded: boolean,
   options: { textOnly?: boolean; nCtx?: number } = {},
 ): { resolvedBackend: string; runtimeConfig: Record<string, string | number | boolean> } {
   const offloaded = llm.offloadedLayers ?? null;
-  const gpu = offloaded ? offloaded.gpu > 0 : Boolean(llm.gpuAccelerated);
+  const gpu = offloaded !== null && offloaded.gpu > 0;
   const pool = llm.threadPool ?? null;
   return {
-    resolvedBackend: gpu ? 'webgpu' : 'wasm',
+    resolvedBackend: engineLoaded ? (gpu ? 'webgpu' : 'wasm') : 'unknown',
     runtimeConfig: {
       n_threads: wllamaThreads(),
       // What wllama built, from its own report: a lane whose pool fell back to
@@ -304,6 +359,8 @@ function wllamaLoadedInfo(
       // "unreported" together with webgpu_adapter: false is an unambiguous CPU run.
       webgpu_adapter: webgpuAdapter,
       offloadedLayers: offloaded ? `${offloaded.gpu}/${offloaded.total}` : 'unreported',
+      // A lane that asked for GPU layers and got none ran on the CPU.
+      ...(engineLoaded && requestedGpuLayers !== 0 ? { gpu_fallback: !gpu } : {}),
       cache_prompt: false,
       // Language lanes load without a vision projector (see makeWllamaAdapter).
       ...(options.textOnly ? { mmproj: false } : {}),
@@ -349,20 +406,30 @@ function makeWllamaAdapter(gpu: boolean): LLMRuntimeAdapter {
         contextLength: WLLAMA_BENCH_CONTEXT_LLM,
       });
       const webgpuAdapter = await hasWebGPUAdapter();
-      // The model loads on first use (the runner's untimed warmup), so the
-      // backend and offload report are read lazily, after that load.
+      // The model loads on first use (the runner's untimed warmup, or settle()
+      // on a warm reload), so the backend and offload report are read lazily,
+      // after that load.
+      let engineLoaded = false;
+      const tracked = trackEngineLoad(withoutPromptCache(llm), () => {
+        engineLoaded = true;
+      });
       const info = () =>
-        wllamaLoadedInfo(llm as unknown as Parameters<typeof wllamaLoadedInfo>[0], requestedGpuLayers, webgpuAdapter, {
+        wllamaLoadedInfo(llm as unknown as Parameters<typeof wllamaLoadedInfo>[0], requestedGpuLayers, webgpuAdapter, engineLoaded, {
           textOnly: true,
           nCtx: WLLAMA_BENCH_CONTEXT_LLM,
         });
       return {
-        model: withoutPromptCache(llm) as unknown as LoadedLLM['model'],
+        model: tracked as unknown as LoadedLLM['model'],
         get resolvedBackend() {
           return info().resolvedBackend;
         },
         get runtimeConfig() {
           return info().runtimeConfig;
+        },
+        // Untimed: load llama.cpp with the same probe the runner's warmup sends.
+        async settle({ abortSignal }) {
+          if (engineLoaded) return;
+          await tracked.doGenerate({ prompt: WLLAMA_SETTLE_PROMPT, maxTokens: 4, temperature: 0, abortSignal } as never);
         },
         dispose: () => disposeModel(llm),
       };
@@ -537,17 +604,26 @@ function makeWllamaEmbedAdapter(gpu: boolean): EmbeddingRuntimeAdapter {
         contextLength: WLLAMA_BENCH_CONTEXT_EMBED,
       });
       const webgpuAdapter = await hasWebGPUAdapter();
+      let engineLoaded = false;
+      const tracked = trackEngineLoad(embedder, () => {
+        engineLoaded = true;
+      });
       const info = () =>
-        wllamaLoadedInfo(embedder as unknown as Parameters<typeof wllamaLoadedInfo>[0], requestedGpuLayers, webgpuAdapter, {
+        wllamaLoadedInfo(embedder as unknown as Parameters<typeof wllamaLoadedInfo>[0], requestedGpuLayers, webgpuAdapter, engineLoaded, {
           nCtx: WLLAMA_BENCH_CONTEXT_EMBED,
         });
       return {
-        model: embedder as unknown as LoadedEmbedder['model'],
+        model: tracked as unknown as LoadedEmbedder['model'],
         get resolvedBackend() {
           return info().resolvedBackend;
         },
         get runtimeConfig() {
           return info().runtimeConfig;
+        },
+        // Untimed: load llama.cpp with the same probe the runner's warmup sends.
+        async settle({ abortSignal }) {
+          if (engineLoaded) return;
+          await tracked.doEmbed({ values: ['warmup probe'], abortSignal });
         },
         dispose: () => disposeModel(embedder),
       };
@@ -583,7 +659,7 @@ function makeMediaPipeEmbedAdapter(): EmbeddingRuntimeAdapter {
 /**
  * All LLM adapters keyed by runtime lane.
  *
- * @param options - `wasmLane` for a `wasm-default` control run; omit it on every other run.
+ * @param options - `wasmLane` for a `wasm-default`, `wasm-q8` or `wasm-threads` control run; omit it on every other run.
  */
 export function createLLMAdapters(options: BenchAdapterOptions = {}): Map<string, LLMRuntimeAdapter> {
   return new Map<string, LLMRuntimeAdapter>([
@@ -600,7 +676,7 @@ export function createLLMAdapters(options: BenchAdapterOptions = {}): Map<string
 /**
  * All embedding adapters keyed by runtime lane.
  *
- * @param options - `wasmLane` for a `wasm-default` control run; omit it on every other run.
+ * @param options - `wasmLane` for a `wasm-default`, `wasm-q8` or `wasm-threads` control run; omit it on every other run.
  */
 export function createEmbedAdapters(options: BenchAdapterOptions = {}): Map<string, EmbeddingRuntimeAdapter> {
   return new Map<string, EmbeddingRuntimeAdapter>([

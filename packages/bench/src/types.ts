@@ -686,7 +686,8 @@ export interface HarnessInfo {
   coldStart?: 'provider-caches-cleared';
   /**
    * Set only on a control run (since bench 0.9.6; kind `fixed-order` since
-   * 0.9.7, kind `wasm-default` since 0.9.8): the same suite, cells, rules,
+   * 0.9.7, kind `wasm-default` since 0.9.8, kinds `wasm-q8` and
+   * `wasm-threads` since 0.9.9): the same suite, cells, rules,
    * traces and environment capture as a protocol run, executed in the order
    * the kind names, a control experiment for the methodology.
    * `order-reversed` runs the runtimes in the reverse of the protocol order,
@@ -695,7 +696,9 @@ export interface HarnessInfo {
    * recorded with the same browser build on the same day, so that an
    * order-reversed series can be compared within one browser build;
    * `wasm-default` runs them in the protocol order with the Transformers.js
-   * WASM lane at the runtime's own defaults (see `wasmLane`).
+   * WASM lane at the runtime's own defaults (see `wasmLane`); `wasm-q8`
+   * and `wasm-threads` run them in the protocol order with one of those two
+   * changes each (q8 alone, or every logical core alone).
    * `runtimeOrder` is the order the runner actually executed (the runner
    * orders the cells by it and refuses an order that is not the kind's
    * canonical one, so the record cannot disagree with the run).
@@ -710,7 +713,7 @@ export interface HarnessInfo {
 }
 
 /** Kinds of control run (see `HarnessInfo.control`). */
-export type ControlKind = 'order-reversed' | 'fixed-order' | 'wasm-default';
+export type ControlKind = 'order-reversed' | 'fixed-order' | 'wasm-default' | 'wasm-q8' | 'wasm-threads';
 
 /**
  * Control-run marker recorded on `harness.control`.
@@ -736,33 +739,59 @@ export type ControlKind = 'order-reversed' | 'fixed-order' | 'wasm-default';
  *   protocol's. The run records the settings in `wasmLane`; each WASM cell's
  *   `runtimeConfig` records the `dtype` and the `numThreads` ONNX Runtime
  *   actually ran with.
+ * - `wasm-q8` (since bench 0.9.9): `wasm-default`'s dtype change alone. The
+ *   runtimes execute in `RUNTIME_EXECUTION_ORDER`, and the Transformers.js
+ *   WASM lane loads its models at `q8` while the ONNX Runtime WASM thread
+ *   count is left at the runtime's own default (the host does not set it;
+ *   `min(4, ceil(cores / 2))` on a cross-origin-isolated page).
+ *   `wasmLane.numThreads` is `null`; each WASM cell's
+ *   `runtimeConfig.numThreads` records the count ONNX Runtime ran with.
+ * - `wasm-threads` (since bench 0.9.9): `wasm-default`'s thread change
+ *   alone. The runtimes execute in `RUNTIME_EXECUTION_ORDER`, and the
+ *   Transformers.js WASM lane loads the protocol's files (the language
+ *   model's `q4` files, the embedding model at `fp32`) while ONNX Runtime's
+ *   WASM thread count is set to `navigator.hardwareConcurrency`.
+ *   `wasmLane.dtype` is `q4`.
+ *
+ * The three WASM-lane kinds form a factorial over the two settings
+ * `wasm-default` changes: `fixed-order` (neither), `wasm-q8` (dtype only),
+ * `wasm-threads` (threads only), `wasm-default` (both).
  */
 export interface HarnessControl {
   kind: ControlKind;
   /** The runtime execution order the run used, first runtime first. */
   runtimeOrder: BenchRuntimeId[];
   /**
-   * The Transformers.js WASM lane settings of a `wasm-default` control run
-   * (since bench 0.9.8). Present on that kind, and only on it.
+   * The Transformers.js WASM lane settings of a `wasm-default` (since bench
+   * 0.9.8), `wasm-q8` or `wasm-threads` (since 0.9.9) control run. Present on
+   * those kinds, and only on them.
    */
   wasmLane?: HarnessControlWasmLane;
 }
 
 /**
- * Transformers.js WASM lane settings a `wasm-default` control run applies
- * (recorded on `harness.control.wasmLane`).
+ * Transformers.js WASM lane settings a `wasm-default`, `wasm-q8` or
+ * `wasm-threads` control run applies (recorded on
+ * `harness.control.wasmLane`; see `CONTROL_WASM_LANE_SPECS` for each kind's).
  */
 export interface HarnessControlWasmLane {
-  /** dtype every model of the lane loads at: Transformers.js's WASM default. */
-  dtype: 'q8';
+  /**
+   * dtype the lane's models load at. `q8` (`wasm-default`, `wasm-q8`):
+   * Transformers.js's WASM default, for every model of the lane. `q4`
+   * (`wasm-threads`): the protocol's files, the language model's `q4` files
+   * with the embedding model at its protocol `fp32`; each cell's
+   * `runtimeConfig.dtype` records the dtype that model loaded at.
+   */
+  dtype: 'q8' | 'q4';
   /**
    * ONNX Runtime WASM thread count the host set (`env.backends.onnx.wasm.numThreads`):
    * the browser's `navigator.hardwareConcurrency` (an integer from 1 to
-   * `CONTROL_WASM_MAX_THREADS`). ONNX Runtime falls back to one thread when
-   * the page cannot run WASM threads; the cell's `runtimeConfig.numThreads`
-   * records the count it actually ran with.
+   * `CONTROL_WASM_MAX_THREADS`) on `wasm-default` and `wasm-threads`, or
+   * `null` on `wasm-q8`, which leaves it to the runtime. ONNX Runtime falls
+   * back to one thread when the page cannot run WASM threads; the cell's
+   * `runtimeConfig.numThreads` records the count it actually ran with.
    */
-  numThreads: number;
+  numThreads: number | null;
   /** WASM SIMD: always on (ONNX Runtime Web ships SIMD builds only). */
   simd: true;
 }

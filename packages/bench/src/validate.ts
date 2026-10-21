@@ -140,7 +140,8 @@ export const SERIES_MAX_IDLE_BEFORE_MS = 30 * 86_400_000;
  * Optional series membership (with the series cool-down and the idle time
  * measured before the run, bench 0.9.1), cold-start marker on `harness`
  * (bench 0.9.0), and control-run marker (bench 0.9.6; kind `fixed-order` since
- * 0.9.7, kind `wasm-default` with its `wasmLane` since 0.9.8). The shape check
+ * 0.9.7, kind `wasm-default` with its `wasmLane` since 0.9.8, kinds `wasm-q8`
+ * and `wasm-threads` with theirs since 0.9.9). The shape check
  * accepts a well-formed control marker, so an exported control run validates
  * offline; refusing to publish it is the submission route's job.
  */
@@ -240,6 +241,8 @@ function validateCellShape(value: unknown, index: number, push: (m: string) => v
   if (!model || typeof model.benchModelId !== 'string' || typeof model.providerModelId !== 'string') {
     push(`${at}.model {benchModelId, providerModelId} is required`);
   }
+  const offloadError = offloadReportError(cell);
+  if (offloadError) push(`${at}: ${offloadError}`);
   const quality = cell.quality as Record<string, unknown> | undefined;
   if (quality && Array.isArray(quality.outputs)) {
     if ((quality.outputs as unknown[]).some((o) => typeof o !== 'string' || (o as string).length > 500)) {
@@ -266,6 +269,62 @@ function validateCellShape(value: unknown, index: number, push: (m: string) => v
       push(`${at}.iterations[${j}].text exceeds 20000 chars`);
     }
   });
+}
+
+/**
+ * The disagreement between a llama.cpp cell's `resolvedBackend` and the
+ * engine's offload report in its `runtimeConfig`, or undefined when they
+ * agree (or the cell carries no offload report).
+ *
+ * - `offloadedLayers: "N/M"` (llama.cpp's `offloaded N/M layers to GPU`
+ *   line): `resolvedBackend` is `webgpu` when N > 0 and `wasm` when N = 0.
+ * - `gpu_fallback` (since bench 0.9.9, on cells of a lane that requested GPU
+ *   layers, `n_gpu_layers` not 0, once the engine loaded): a boolean, `true`
+ *   exactly when no layer was offloaded (N = 0, or `"unreported"`: llama.cpp
+ *   prints the line only when it found a GPU device), with `resolvedBackend`
+ *   `wasm`; `false` with `webgpu`. It never appears on a lane that requested
+ *   none.
+ * - `"unreported"` without `gpu_fallback` is not checked: runs before 0.9.9
+ *   recorded the lane's requested backend there (warm-reload cells, and the
+ *   WebGPU lane's CPU fallback), and a record read before the engine loaded
+ *   carries `resolvedBackend: "unknown"`.
+ *
+ * @param cell - A cell-shaped value.
+ * @returns The error message, or undefined.
+ * @example
+ * offloadReportError({ resolvedBackend: 'webgpu', runtimeConfig: { offloadedLayers: '0/31' } });
+ * // 'resolvedBackend is "webgpu" but llama.cpp offloaded 0/31 layers (expected "wasm")'
+ */
+export function offloadReportError(cell: { resolvedBackend?: unknown; runtimeConfig?: unknown }): string | undefined {
+  const rc = cell.runtimeConfig;
+  if (typeof rc !== 'object' || rc === null) return undefined;
+  const config = rc as Record<string, unknown>;
+  if (!('offloadedLayers' in config)) return undefined;
+  const report = config.offloadedLayers;
+  const backend = cell.resolvedBackend;
+  const match = typeof report === 'string' ? /^(\d+)\/(\d+)$/.exec(report) : null;
+  if (report !== 'unreported' && !match) {
+    return `runtimeConfig.offloadedLayers must be "N/M" or "unreported", got ${JSON.stringify(report)}`;
+  }
+  const offloaded = match ? Number(match[1]) > 0 : false;
+  if (match) {
+    const expected = offloaded ? 'webgpu' : 'wasm';
+    if (backend !== expected) {
+      return `resolvedBackend is ${JSON.stringify(backend)} but llama.cpp offloaded ${report} layers (expected "${expected}")`;
+    }
+  }
+  if (!('gpu_fallback' in config)) return undefined;
+  const fallback = config.gpu_fallback;
+  if (typeof fallback !== 'boolean') return 'runtimeConfig.gpu_fallback must be a boolean';
+  if (config.n_gpu_layers === 0) return 'runtimeConfig.gpu_fallback is set only on a lane that requested GPU layers (n_gpu_layers not 0)';
+  if (fallback !== !offloaded) {
+    return `runtimeConfig.gpu_fallback is ${fallback} but llama.cpp offloaded ${match ? `${report} layers` : 'no layers (unreported)'}`;
+  }
+  const expected = offloaded ? 'webgpu' : 'wasm';
+  if (backend !== expected) {
+    return `resolvedBackend is ${JSON.stringify(backend)} but runtimeConfig.gpu_fallback is ${fallback} (expected "${expected}")`;
+  }
+  return undefined;
 }
 
 /** True when the iteration array is the LLM shape (has chunk traces). */

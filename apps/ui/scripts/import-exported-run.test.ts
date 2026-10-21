@@ -260,6 +260,28 @@ describe('import-exported-run', () => {
     expect(readText('index/summary.json')).toBe(indexText);
   }, 120_000);
 
+  it.each([
+    { kind: 'wasm-q8' as const, control: () => createHarnessControl('wasm-q8') },
+    { kind: 'wasm-threads' as const, control: () => createHarnessControl('wasm-threads', { numThreads: 8 }) },
+  ])('refuses a $kind control run: it never enters the index, runs/ or quarantine/', async ({ kind, control }) => {
+    const run = JSON.parse(readFileSync(exportPath, 'utf8')) as BenchRunResult;
+    run.harness = { ...run.harness, control: control() };
+    run.digest = await computeRunDigest(run);
+    writeFileSync(exportPath, JSON.stringify(run));
+    const indexText = readText('index/summary.json');
+    await expect(importExportedRun({ datasetDir: dataset, file: exportPath })).rejects.toThrow(
+      new ImportRunError(
+        `run ${RUN_ID} is a control run (harness.control kind ${kind}); a control run never enters the dataset index. Collect it with scripts/collect-control-runs.ts instead.`,
+      ),
+    );
+    const out = cli();
+    expect(out.status).toBe(1);
+    expect(out.stderr).toContain(`run ${RUN_ID} is a control run (harness.control kind ${kind})`);
+    expect(existsSync(join(dataset, RUN_PATH))).toBe(false);
+    expect(existsSync(join(dataset, `quarantine/2026/10/${RUN_ID}.json`))).toBe(false);
+    expect(readText('index/summary.json')).toBe(indexText);
+  }, 120_000);
+
   it('--dry-run prints what it would write and writes nothing', () => {
     const indexText = readText('index/summary.json');
     const out = cli('--dry-run');

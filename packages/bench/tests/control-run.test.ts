@@ -1,9 +1,10 @@
 /**
- * Control runs (`harness.control`, kinds `order-reversed`, `fixed-order` and
- * `wasm-default`): a control experiment for the methodology that runs the
- * same suite with the runtime execution order reversed, in the protocol order
- * as a same-build reference series, or in the protocol order with the
- * Transformers.js WASM lane at the runtime's defaults (`wasmLane`). The runner executes real mock adapters through
+ * Control runs (`harness.control`, kinds `order-reversed`, `fixed-order`,
+ * `wasm-default`, `wasm-q8` and `wasm-threads`): a control experiment for the
+ * methodology that runs the same suite with the runtime execution order
+ * reversed, in the protocol order as a same-build reference series, or in the
+ * protocol order with the Transformers.js WASM lane at the runtime's defaults
+ * or with one of those two changes (`wasmLane`). The runner executes real mock adapters through
  * the public `runBenchmarkSuite`, so the asserted order is the order the
  * cells actually ran in (observed through the `onCellStart` hook and the
  * result's cell order), not a re-derivation of it.
@@ -14,6 +15,7 @@ import {
   computeRunDigest,
   CONTROL_KINDS,
   CONTROL_WASM_DTYPE,
+  CONTROL_WASM_LANE_SPECS,
   CONTROL_WASM_MAX_THREADS,
   controlRuntimeOrder,
   controlWasmLaneError,
@@ -99,7 +101,7 @@ describe('controlRuntimeOrder()', () => {
     reversed.pop();
     expect(controlRuntimeOrder('order-reversed')).toHaveLength(8);
     expect(RUNTIME_EXECUTION_ORDER[0]).toBe('transformers-wasm');
-    expect(CONTROL_KINDS).toEqual(['order-reversed', 'fixed-order', 'wasm-default']);
+    expect(CONTROL_KINDS).toEqual(['order-reversed', 'fixed-order', 'wasm-default', 'wasm-q8', 'wasm-threads']);
   });
 
   it('fixed-order is exactly RUNTIME_EXECUTION_ORDER, every runtime once, as a fresh array', () => {
@@ -260,7 +262,7 @@ describe('runBenchmarkSuite() with harness.control', () => {
       'harness.control.runtimeOrder must be the fixed-order order',
     );
     await expect(attempt({ kind: 'order-shuffled', runtimeOrder: [...RUNTIME_EXECUTION_ORDER] })).rejects.toThrow(
-      'harness.control.kind must be one of order-reversed, fixed-order, wasm-default; got order-shuffled',
+      'harness.control.kind must be one of order-reversed, fixed-order, wasm-default, wasm-q8, wasm-threads; got order-shuffled',
     );
     expect(adapter.loadCalls).toBe(0);
   });
@@ -274,7 +276,7 @@ describe('validateRunShape() on harness.control', () => {
       validateRunShape({ ...makeRun(), harness: { name: 'n', version: 'v', control } });
     expect(withControl(null)).toEqual(['harness.control must be an object {kind, runtimeOrder}']);
     expect(withControl(['order-reversed'])).toEqual(['harness.control must be an object {kind, runtimeOrder}']);
-    expect(withControl({ kind: 'order-shuffled', runtimeOrder: [] })).toEqual(['harness.control.kind must be one of order-reversed, fixed-order, wasm-default']);
+    expect(withControl({ kind: 'order-shuffled', runtimeOrder: [] })).toEqual(['harness.control.kind must be one of order-reversed, fixed-order, wasm-default, wasm-q8, wasm-threads']);
     const orderError =
       'harness.control.runtimeOrder must be the order-reversed order [wllama, wllama-webgpu, litert, mediapipe, webllm, chrome-ai, transformers-webgpu, transformers-wasm]';
     expect(withControl({ kind: 'order-reversed', runtimeOrder: [...RUNTIME_EXECUTION_ORDER] })).toEqual([orderError]);
@@ -370,7 +372,7 @@ describe('wasm-default control kind', () => {
       expect(() => createHarnessControl('wasm-default', { numThreads: bad })).toThrow(shape);
     }
     expect(() => createHarnessControl('fixed-order', { numThreads: 8 })).toThrow(
-      "createHarnessControl('fixed-order') takes no numThreads; only wasm-default sets the WASM lane's threads",
+      "createHarnessControl('fixed-order') takes no numThreads; only wasm-default and wasm-threads set the WASM lane's threads",
     );
     expect(() => createHarnessControl('order-reversed', { numThreads: 8 })).toThrow(TypeError);
   });
@@ -389,14 +391,14 @@ describe('wasm-default control kind', () => {
     expect(controlWasmLaneError({ kind: 'wasm-default', wasmLane: { dtype: 'q8', numThreads: '8', simd: true } })).toBe(shape);
     expect(controlWasmLaneError({ kind: 'fixed-order' })).toBeUndefined();
     expect(controlWasmLaneError({ kind: 'fixed-order', wasmLane: lane(8) })).toBe(
-      'harness.control.wasmLane is set only on a wasm-default control run, not on fixed-order',
+      'harness.control.wasmLane is set only on a wasm-default, wasm-q8 or wasm-threads control run, not on fixed-order',
     );
     expect(validateRunShape(makeRun({ harness: { name: 'n', version: 'v', control: createHarnessControl('wasm-default', { numThreads: 8 }) } }))).toEqual([]);
     const withControl = (control: unknown) => validateRunShape({ ...makeRun(), harness: { name: 'n', version: 'v', control } });
     expect(withControl({ kind: 'wasm-default', runtimeOrder: order })).toEqual([shape]);
     expect(withControl({ kind: 'wasm-default', runtimeOrder: order, wasmLane: { ...lane(8), numThreads: 2000 } })).toEqual([shape]);
     expect(withControl({ kind: 'order-reversed', runtimeOrder: controlRuntimeOrder('order-reversed'), wasmLane: lane(8) })).toEqual([
-      'harness.control.wasmLane is set only on a wasm-default control run, not on order-reversed',
+      'harness.control.wasmLane is set only on a wasm-default, wasm-q8 or wasm-threads control run, not on order-reversed',
     ]);
     expect(withControl({ kind: 'wasm-default', runtimeOrder: controlRuntimeOrder('order-reversed'), wasmLane: lane(8) })).toEqual([
       'harness.control.runtimeOrder must be the wasm-default order [transformers-wasm, transformers-webgpu, chrome-ai, webllm, mediapipe, litert, wllama-webgpu, wllama]',
@@ -447,7 +449,7 @@ describe('wasm-default control kind', () => {
       'harness.control.wasmLane must be',
     );
     await expect(attempt({ kind: 'fixed-order', runtimeOrder: order, wasmLane: lane(4) })).rejects.toThrow(
-      "harness.control.wasmLane is set only on a wasm-default control run, not on fixed-order; use createHarnessControl('fixed-order')",
+      "harness.control.wasmLane is set only on a wasm-default, wasm-q8 or wasm-threads control run, not on fixed-order; use createHarnessControl('fixed-order')",
     );
     expect(adapter.loadCalls).toBe(0);
   });
@@ -468,5 +470,150 @@ describe('wasm-default control kind', () => {
     expect(csv[2].endsWith(
       ',wasm-default,transformers-wasm>transformers-webgpu>chrome-ai>webllm>mediapipe>litert>wllama-webgpu>wllama',
     )).toBe(true);
+  });
+});
+
+describe('wasm-q8 and wasm-threads control kinds: the two halves of wasm-default', () => {
+  const order = [...RUNTIME_EXECUTION_ORDER];
+  const Q8_SHAPE = "harness.control.wasmLane must be { dtype: 'q8', numThreads: null, simd: true } on a wasm-q8 control run";
+  const THREADS_SHAPE =
+    "harness.control.wasmLane must be { dtype: 'q4', numThreads: <integer 1-1024>, simd: true } on a wasm-threads control run";
+
+  it('the per-kind spec table is the 2x2 factorial over dtype and thread policy; the order kinds have no entry', () => {
+    expect(CONTROL_WASM_LANE_SPECS).toEqual({
+      'wasm-default': { dtype: 'q8', threads: 'all-cores' },
+      'wasm-q8': { dtype: 'q8', threads: 'runtime-default' },
+      'wasm-threads': { dtype: 'q4', threads: 'all-cores' },
+    });
+    expect(CONTROL_WASM_LANE_SPECS['fixed-order']).toBeUndefined();
+    expect(CONTROL_WASM_LANE_SPECS['order-reversed']).toBeUndefined();
+  });
+
+  it('both keep the protocol order and record their exact wasmLane', () => {
+    for (const kind of ['wasm-q8', 'wasm-threads'] as const) {
+      expect(controlRuntimeOrder(kind)).toEqual(order);
+      expect(controlRuntimeOrder(kind)).not.toBe(RUNTIME_EXECUTION_ORDER);
+    }
+    expect(createHarnessControl('wasm-q8')).toEqual({
+      kind: 'wasm-q8',
+      runtimeOrder: order,
+      wasmLane: { dtype: 'q8', numThreads: null, simd: true },
+    });
+    expect(createHarnessControl('wasm-threads', { numThreads: 12 })).toEqual({
+      kind: 'wasm-threads',
+      runtimeOrder: order,
+      wasmLane: { dtype: 'q4', numThreads: 12, simd: true },
+    });
+    // The recorded JSON keeps the key order and the explicit null.
+    expect(JSON.stringify(createHarnessControl('wasm-q8').wasmLane)).toBe('{"dtype":"q8","numThreads":null,"simd":true}');
+    expect(JSON.stringify(createHarnessControl('wasm-threads', { numThreads: 8 }).wasmLane)).toBe(
+      '{"dtype":"q4","numThreads":8,"simd":true}',
+    );
+    // wasm-default's record is unchanged.
+    expect(JSON.stringify(createHarnessControl('wasm-default', { numThreads: 8 }))).toBe(
+      `{"kind":"wasm-default","runtimeOrder":${JSON.stringify(order)},"wasmLane":{"dtype":"q8","numThreads":8,"simd":true}}`,
+    );
+  });
+
+  it('createHarnessControl: wasm-q8 refuses a thread count; wasm-threads requires a valid one', () => {
+    expect(() => createHarnessControl('wasm-q8', { numThreads: 8 })).toThrow(
+      "createHarnessControl('wasm-q8') takes no numThreads; it leaves ONNX Runtime's WASM thread count at the runtime's default",
+    );
+    expect(() => createHarnessControl('wasm-threads')).toThrow(`${THREADS_SHAPE}; pass { numThreads: navigator.hardwareConcurrency }`);
+    for (const bad of [0, -1, 2.5, Number.NaN, 1025]) {
+      expect(() => createHarnessControl('wasm-threads', { numThreads: bad })).toThrow(THREADS_SHAPE);
+    }
+    expect(createHarnessControl('wasm-threads', { numThreads: CONTROL_WASM_MAX_THREADS }).wasmLane?.numThreads).toBe(1024);
+  });
+
+  it('controlWasmLaneError and validateRunShape accept exactly each kind\'s recorded shape', () => {
+    const q8 = { dtype: 'q8', numThreads: null, simd: true };
+    const threads = (n: unknown) => ({ dtype: 'q4', numThreads: n, simd: true });
+    expect(controlWasmLaneError({ kind: 'wasm-q8', wasmLane: q8 })).toBeUndefined();
+    expect(controlWasmLaneError({ kind: 'wasm-threads', wasmLane: threads(6) })).toBeUndefined();
+    // wasm-q8: numThreads must be null, not a number, not absent; dtype q8 only.
+    expect(controlWasmLaneError({ kind: 'wasm-q8' })).toBe(Q8_SHAPE);
+    expect(controlWasmLaneError({ kind: 'wasm-q8', wasmLane: { ...q8, numThreads: 4 } })).toBe(Q8_SHAPE);
+    expect(controlWasmLaneError({ kind: 'wasm-q8', wasmLane: { dtype: 'q8', simd: true } })).toBe(Q8_SHAPE);
+    expect(controlWasmLaneError({ kind: 'wasm-q8', wasmLane: { ...q8, dtype: 'q4' } })).toBe(Q8_SHAPE);
+    expect(controlWasmLaneError({ kind: 'wasm-q8', wasmLane: { ...q8, simd: false } })).toBe(Q8_SHAPE);
+    expect(controlWasmLaneError({ kind: 'wasm-q8', wasmLane: { ...q8, extra: 1 } })).toBe(Q8_SHAPE);
+    // wasm-threads: dtype q4 only, an integer thread count, never null.
+    expect(controlWasmLaneError({ kind: 'wasm-threads' })).toBe(THREADS_SHAPE);
+    expect(controlWasmLaneError({ kind: 'wasm-threads', wasmLane: threads(null) })).toBe(THREADS_SHAPE);
+    expect(controlWasmLaneError({ kind: 'wasm-threads', wasmLane: threads(0) })).toBe(THREADS_SHAPE);
+    expect(controlWasmLaneError({ kind: 'wasm-threads', wasmLane: threads('8') })).toBe(THREADS_SHAPE);
+    expect(controlWasmLaneError({ kind: 'wasm-threads', wasmLane: { ...threads(8), dtype: 'q8' } })).toBe(THREADS_SHAPE);
+    // wasm-default never accepts the null thread count of wasm-q8.
+    expect(controlWasmLaneError({ kind: 'wasm-default', wasmLane: q8 })).toBe(
+      "harness.control.wasmLane must be { dtype: 'q8', numThreads: <integer 1-1024>, simd: true } on a wasm-default control run",
+    );
+
+    expect(validateRunShape(makeRun({ harness: { name: 'n', version: 'v', control: createHarnessControl('wasm-q8') } }))).toEqual([]);
+    expect(
+      validateRunShape(makeRun({ harness: { name: 'n', version: 'v', control: createHarnessControl('wasm-threads', { numThreads: 8 }) } })),
+    ).toEqual([]);
+    const withControl = (control: unknown) => validateRunShape({ ...makeRun(), harness: { name: 'n', version: 'v', control } });
+    // The exported JSON (null survives a round trip) validates too.
+    expect(withControl(JSON.parse(JSON.stringify(createHarnessControl('wasm-q8'))))).toEqual([]);
+    expect(withControl({ kind: 'wasm-q8', runtimeOrder: order, wasmLane: { ...q8, numThreads: 4 } })).toEqual([Q8_SHAPE]);
+    expect(withControl({ kind: 'wasm-threads', runtimeOrder: order, wasmLane: threads(2000) })).toEqual([THREADS_SHAPE]);
+    expect(withControl({ kind: 'wasm-threads', runtimeOrder: controlRuntimeOrder('order-reversed'), wasmLane: threads(8) })).toEqual([
+      'harness.control.runtimeOrder must be the wasm-threads order [transformers-wasm, transformers-webgpu, chrome-ai, webllm, mediapipe, litert, wllama-webgpu, wllama]',
+    ]);
+  });
+
+  it('runs the suite in the protocol order and records the marker; the run validates, digests and is a control run', async () => {
+    for (const control of [createHarnessControl('wasm-q8'), createHarnessControl('wasm-threads', { numThreads: 16 })]) {
+      const { result, started } = await runSuite({ name: '@localmode/bench', version: 'test', control });
+      expect(started[0]).toBe('transformers-wasm/embed/embed-single');
+      expect(started.at(-1)).toBe('wllama/m2/chat-pp128-tg128');
+      expect(result.cells.every((c) => c.status === 'ok')).toBe(true);
+      expect(result.harness.control).toEqual(control);
+      expect(isControlRun(result)).toBe(true);
+      expect(validateRunShape(result)).toEqual([]);
+      expect(validateSubmission(result).shapeErrors).toEqual([]);
+      result.digest = await computeRunDigest(result);
+      expect(await verifyRunDigest(result)).toBe(true);
+    }
+  });
+
+  it('the runner refuses a wrong wasmLane for either kind before loading anything', async () => {
+    const adapter = makeMockLLMAdapter();
+    const attempt = (control: unknown) =>
+      runBenchmarkSuite({
+        suite: 'custom',
+        cells: [{ model: MODEL_REF, workload: LLM_WORKLOADS[0] }],
+        policy: TEST_POLICY,
+        llmAdapters: new Map([[adapter.runtimeId, adapter]]),
+        embedAdapters: new Map(),
+        harness: { name: 'x', version: 'y', control: control as never },
+        skipFingerprint: true,
+      });
+    await expect(attempt({ kind: 'wasm-q8', runtimeOrder: order, wasmLane: { dtype: 'q8', numThreads: 4, simd: true } })).rejects.toThrow(
+      `${Q8_SHAPE}; use createHarnessControl('wasm-q8')`,
+    );
+    await expect(attempt({ kind: 'wasm-threads', runtimeOrder: order })).rejects.toThrow(
+      `${THREADS_SHAPE}; use createHarnessControl('wasm-threads')`,
+    );
+    expect(adapter.loadCalls).toBe(0);
+  });
+
+  it('neither contributes to a leaderboard row; runs.csv names each kind and the protocol order', () => {
+    const protocolRun = makeRun({ runId: 'run-protocol-1' });
+    const q8Run = makeRun({ runId: 'run-wasm-q8-1', harness: { name: '@localmode/bench', version: '0.1.0', control: createHarnessControl('wasm-q8') } });
+    const threadsRun = makeRun({
+      runId: 'run-wasm-threads-1',
+      harness: { name: '@localmode/bench', version: '0.1.0', control: createHarnessControl('wasm-threads', { numThreads: 8 }) },
+    });
+    const rows = aggregateRuns([protocolRun, q8Run, threadsRun], 1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].submissions).toBe(1);
+    expect(aggregateRuns([q8Run, threadsRun], 1)).toEqual([]);
+    const csv = runsToRunsCSV([protocolRun, q8Run, threadsRun]).trimEnd().split('\n');
+    const protocolOrder = 'transformers-wasm>transformers-webgpu>chrome-ai>webllm>mediapipe>litert>wllama-webgpu>wllama';
+    expect(csv[1].endsWith(',,')).toBe(true);
+    expect(csv[2].endsWith(`,wasm-q8,${protocolOrder}`)).toBe(true);
+    expect(csv[3].endsWith(`,wasm-threads,${protocolOrder}`)).toBe(true);
   });
 });

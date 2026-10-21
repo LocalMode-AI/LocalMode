@@ -74,6 +74,15 @@ export interface LoadedLLM {
   resolvedBackend: string;
   /** Post-load runtime configuration worth recording on every cell (threads, GPU layers, dtype, ...). */
   runtimeConfig?: Record<string, string | number | boolean>;
+  /**
+   * Optional, untimed (since bench 0.9.9): finish any engine load the adapter
+   * defers to first use, so `resolvedBackend` and `runtimeConfig` read the
+   * engine's own report instead of a prediction. The runner calls it on a
+   * warm-reload handle after the reload's timed span ends, before reading the
+   * record; the timed cells read the record after the untimed warmup, which
+   * loads the engine the same way. Adapters that load eagerly omit it.
+   */
+  settle?(options: { abortSignal?: AbortSignal }): Promise<void>;
   dispose(): Promise<void>;
 }
 
@@ -82,6 +91,8 @@ export interface LoadedEmbedder {
   model: BenchEmbeddingModel;
   resolvedBackend: string;
   runtimeConfig?: Record<string, string | number | boolean>;
+  /** See `LoadedLLM.settle`. */
+  settle?(options: { abortSignal?: AbortSignal }): Promise<void>;
   dispose(): Promise<void>;
 }
 

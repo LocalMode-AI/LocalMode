@@ -2000,7 +2000,7 @@ test.describe('full-completion study mode (ccmode=full)', () => {
   });
 });
 
-test.describe('control run: reversed and fixed runtime order, WASM lane at runtime defaults (never uploaded)', () => {
+test.describe('control run: reversed and fixed runtime order, WASM lane at runtime defaults and its two factorial halves (never uploaded)', () => {
   /** The protocol's runtime order (packages/bench RUNTIME_EXECUTION_ORDER); order-reversed uses its exact reverse, fixed-order the order itself. */
   const PROTOCOL_ORDER = [
     'transformers-wasm',
@@ -2017,6 +2017,36 @@ test.describe('control run: reversed and fixed runtime order, WASM lane at runti
   const FIXED_BANNER = 'Control run: protocol runtime order; not published to the leaderboard';
   const WASM_DEFAULT_BANNER =
     'Control run: Transformers.js WASM lane at runtime defaults (q8, all cores); not published to the leaderboard';
+  /**
+   * The two factorial kinds: each makes one of wasm-default's two changes to
+   * the Transformers.js WASM lane. The Quick suite's WASM cells are the
+   * bge-small embedding cells, whose protocol dtype is fp32.
+   */
+  const FACTORIAL_KINDS = [
+    {
+      kind: 'wasm-q8',
+      banner: 'Control run: Transformers.js WASM lane at q8, runtime thread default; not published to the leaderboard',
+      what: 'q8 with ONNX Runtime at its own default thread count',
+      wasmLane: (_cores: number) => ({ dtype: 'q8', numThreads: null, simd: true }),
+      cellDtype: 'q8',
+      cellThreads: (cores: number) => Math.min(4, Math.ceil(cores / 2)),
+      onnxFile: /\/onnx\/model_quantized\.onnx$/,
+      notOnnxFile: /\/onnx\/model\.onnx$/ as RegExp | null,
+    },
+    {
+      kind: 'wasm-threads',
+      banner: 'Control run: Transformers.js WASM lane at q4 on all cores; not published to the leaderboard',
+      what: "the protocol's files (fp32 embedding) on every logical core",
+      wasmLane: (cores: number) => ({ dtype: 'q4', numThreads: cores, simd: true }),
+      cellDtype: 'fp32',
+      cellThreads: (cores: number) => cores,
+      onnxFile: /\/onnx\/model\.onnx$/,
+      // The protocol's embedding path is kept as is: the provider's preload
+      // fetches Transformers.js's WASM default (the q8 file) before the timed
+      // model loads the fp32 one, exactly as on a protocol run.
+      notOnnxFile: null,
+    },
+  ] as const;
 
   test('a study link or an unknown kind with the control parameter is refused: Run stays disabled, nothing loads', async ({ page }) => {
     const consoleErrors: string[] = [];
@@ -2208,6 +2238,86 @@ test.describe('control run: reversed and fixed runtime order, WASM lane at runti
     expect(benchApi, 'no bench API request at all: no upload token either').toEqual([]);
     expect(consoleErrors).toEqual([]);
   });
+
+  for (const spec of FACTORIAL_KINDS) {
+    test(`?control=${spec.kind}: banner, a real Quick run in the protocol order whose WASM cells ran at ${spec.what}, exported with the wasmLane record, no upload request`, async ({
+      page,
+    }) => {
+      test.setTimeout(30 * 60 * 1000);
+      const consoleErrors: string[] = [];
+      collectConsoleErrors(page, consoleErrors);
+      const benchApi: string[] = [];
+      page.on('request', (req) => {
+        const { pathname } = new URL(req.url());
+        if (pathname.startsWith('/api/bench/')) benchApi.push(`${req.method()} ${pathname}`);
+      });
+      // Which ONNX files of the WASM lane's model the lane downloads.
+      const modelFiles: string[] = [];
+      page.on('request', (req) => {
+        if (/huggingface\.co\/Xenova\/bge-small-en-v1\.5\/resolve\/[^/]+\/onnx\//.test(req.url())) modelFiles.push(req.url());
+      });
+      const downloads = collectRunDownloads(page);
+
+      await page.goto(`/bench/run?tier=quick&quality=off&runs=1&cooldown=0&cold=off&control=${spec.kind}&publish=on`);
+      const banner = page.getByRole('note', { name: 'Control run' });
+      await expect(banner).toBeVisible();
+      await expect(banner.getByText(spec.banner, { exact: true })).toBeVisible();
+      await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+      const publish = page.getByRole('switch', { name: /publish results/i });
+      await expect(publish).not.toBeChecked();
+      await expect(publish).toBeDisabled();
+      const cores = await page.evaluate(() => navigator.hardwareConcurrency);
+      expect(await page.evaluate(() => crossOriginIsolated), 'threads need a cross-origin-isolated page').toBe(true);
+      const runButton = page.getByRole('button', { name: 'Run benchmark' });
+      await expect(runButton).toBeEnabled();
+      await runButton.click();
+
+      await expect(page.getByRole('dialog', { name: /benchmark running/i })).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByRole('status').first()).toContainText('Suite complete', { timeout: 15 * 60 * 1000 });
+      await expect(page.getByRole('button', { name: 'Submit to leaderboard' })).toHaveCount(0);
+      const exportButton = page.getByRole('button', { name: 'Export JSON' });
+      await expect(exportButton).toBeVisible();
+      await exportButton.click();
+      await expect.poll(() => downloads.length, { timeout: 30_000 }).toBe(1);
+      const [run] = (await Promise.all(downloads)) as Array<ExportedRun & { protocol?: string; nonce?: string; digest?: string }>;
+
+      expect(run.harness.control).toEqual({ kind: spec.kind, runtimeOrder: PROTOCOL_ORDER, wasmLane: spec.wasmLane(cores) });
+      expect(run.protocol).toBe('localmode-bench/5');
+      expect(run.digest).toMatch(/^[0-9a-f]{64}$/);
+      expect(run.nonce).toBeUndefined();
+      const ids = run.cells.map((c) => c.cellId);
+      expect(new Set(ids).size).toBe(ids.length);
+      const ranks = run.cells.map((c) => PROTOCOL_ORDER.indexOf(c.runtimeId));
+      expect(ranks.every((r) => r >= 0)).toBe(true);
+      expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
+      expect(run.cells[0].runtimeId).toBe('transformers-wasm');
+      // Every WASM cell (the bge-small embedding cells) ran at the kind's dtype
+      // with the thread count read back from the runtime env after it initialised.
+      const wasmCells = run.cells.filter((c) => c.runtimeId === 'transformers-wasm');
+      expect(wasmCells.length).toBeGreaterThan(0);
+      for (const cell of wasmCells) {
+        expect(cell.status, cell.cellId).toBe('ok');
+        expect(cell.runtimeConfig, cell.cellId).toEqual({
+          device: 'wasm',
+          dtype: spec.cellDtype,
+          worker: true,
+          numThreads: spec.cellThreads(cores),
+        });
+      }
+      expect(modelFiles.some((u) => spec.onnxFile.test(u)), modelFiles.join('\n')).toBe(true);
+      if (spec.notOnnxFile) expect(modelFiles.filter((u) => spec.notOnnxFile!.test(u))).toEqual([]);
+      // Every other lane is the protocol's.
+      expect(run.cells.find((c) => c.cellId === 'wllama/smollm2-135m/chat-pp128-tg128')?.status).toBe('ok');
+      expect(run.cells.find((c) => c.cellId === 'wllama-webgpu/smollm2-135m/chat-pp128-tg128')?.status).toBe('skipped');
+
+      const panel = page.getByRole('region', { name: 'Saved exports' });
+      await expect(panel.getByRole('listitem', { name: `Saved run ${run.runId}` })).toContainText(`control: ${spec.kind}`);
+
+      expect(benchApi.filter((r) => r.endsWith('/api/bench/submit')), 'no upload request').toEqual([]);
+      expect(benchApi, 'no bench API request at all: no upload token either').toEqual([]);
+      expect(consoleErrors).toEqual([]);
+    });
+  }
 
   test('?control=order-reversed&runs=2: banner, a real 2-run Quick series in the reversed order, each run exported with harness.control, no upload request', async ({
     page,

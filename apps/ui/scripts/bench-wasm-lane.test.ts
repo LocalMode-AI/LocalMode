@@ -1,7 +1,9 @@
 /**
- * The Transformers.js WASM lane settings of a `wasm-default` control run
- * (`harness.control.wasmLane`): dtype q8 and ONNX Runtime's WASM thread count
- * set to the logical core count, applied ONLY in that mode.
+ * The Transformers.js WASM lane settings of the WASM-lane control runs
+ * (`harness.control.wasmLane`): `wasm-default` (dtype q8 and ONNX Runtime's
+ * WASM thread count set to the logical core count), `wasm-q8` (q8 alone, the
+ * thread count left to the runtime) and `wasm-threads` (the thread count
+ * alone, the protocol's q4/fp32 files), each applied ONLY in its mode.
  *
  * Two layers are exercised through their real code:
  * - the adapters (`createLLMAdapters` / `createEmbedAdapters`) with the worker
@@ -20,7 +22,7 @@
  * fixed-order lane checks the protocol default on the same build.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BenchModelRef, HarnessControlWasmLane } from '@localmode/bench';
+import { createHarnessControl, type BenchModelRef, type HarnessControlWasmLane } from '@localmode/bench';
 
 // ---------------------------------------------------------------------------
 // Adapter layer: a recording fake of the worker client.
@@ -168,6 +170,43 @@ describe('WASM lane adapters: settings sent and recorded per mode', () => {
     expect(embed.runtimeConfig).toEqual({ device: 'wasm', dtype: 'q8', worker: true, numThreads: CORES });
   });
 
+  it('a wasm-q8 run sends dtype q8 only (no thread count), and records q8 with the runtime\'s own count', async () => {
+    reportedThreads = 4; // ONNX Runtime's default, min(4, ceil(12 / 2))
+    const wasmLane = createHarnessControl('wasm-q8').wasmLane;
+    expect(wasmLane).toEqual({ dtype: 'q8', numThreads: null, simd: true });
+    const { createLLMAdapters, createEmbedAdapters } = await import('../src/lib/bench/adapters');
+    const llm = await createLLMAdapters({ wasmLane }).get('transformers-wasm')!.load(LLM_MODEL, {});
+    const embed = await createEmbedAdapters({ wasmLane }).get('transformers-wasm')!.load(EMBED_MODEL, {});
+    expect(loadCalls).toEqual([
+      { kind: 'llm', modelId: LLM_MODEL.providerModelId, device: 'wasm', settings: { dtype: 'q8' } },
+      { kind: 'embedding', modelId: EMBED_MODEL.providerModelId, device: 'wasm', settings: { dtype: 'q8' } },
+    ]);
+    expect(llm.runtimeConfig).toEqual({ device: 'wasm', dtype: 'q8', worker: true, numThreads: 4 });
+    expect(embed.runtimeConfig).toEqual({ device: 'wasm', dtype: 'q8', worker: true, numThreads: 4 });
+  });
+
+  it('a wasm-threads run sends the thread count only (no dtype), and records the protocol dtypes on every core', async () => {
+    reportedThreads = CORES;
+    const wasmLane = createHarnessControl('wasm-threads', { numThreads: CORES }).wasmLane;
+    expect(wasmLane).toEqual({ dtype: 'q4', numThreads: CORES, simd: true });
+    const { createLLMAdapters, createEmbedAdapters } = await import('../src/lib/bench/adapters');
+    const llm = await createLLMAdapters({ wasmLane }).get('transformers-wasm')!.load(LLM_MODEL, {});
+    const embed = await createEmbedAdapters({ wasmLane }).get('transformers-wasm')!.load(EMBED_MODEL, {});
+    expect(loadCalls).toEqual([
+      { kind: 'llm', modelId: LLM_MODEL.providerModelId, device: 'wasm', settings: { numThreads: CORES } },
+      { kind: 'embedding', modelId: EMBED_MODEL.providerModelId, device: 'wasm', settings: { numThreads: CORES } },
+    ]);
+    expect(llm.runtimeConfig).toEqual({ device: 'wasm', dtype: 'q4', worker: true, numThreads: CORES });
+    // The protocol's embedding files: fp32, as on a protocol run.
+    expect(embed.runtimeConfig).toEqual({ device: 'wasm', dtype: 'fp32', worker: true, numThreads: CORES });
+  });
+
+  it('the wasm-default settings sent are unchanged by the kind table', async () => {
+    const { createLLMAdapters } = await import('../src/lib/bench/adapters');
+    await createLLMAdapters({ wasmLane: createHarnessControl('wasm-default', { numThreads: CORES }).wasmLane }).get('transformers-wasm')!.load(LLM_MODEL, {});
+    expect(JSON.stringify(loadCalls[0].settings)).toBe(`{"dtype":"q8","numThreads":${CORES}}`);
+  });
+
   it('the thread count recorded is the one the worker read back, not the one requested', async () => {
     reportedThreads = 1; // the runtime fell back to one thread
     const { createLLMAdapters } = await import('../src/lib/bench/adapters');
@@ -261,6 +300,44 @@ describe('transformers-worker: applies the settings only when asked', () => {
     expect(events).toEqual([
       `preloadModel Xenova/bge-small-en-v1.5 device=wasm quantized=true threadsAtCreate=${CORES}`,
       'embedding Xenova/bge-small-en-v1.5 {"device":"wasm","quantized":true}',
+    ]);
+  });
+
+  it('wasm-q8 LLM load: no thread count set, q8 download + throwaway session, the runtime default read back', async () => {
+    const reply = await load({ kind: 'llm', modelId: 'onnx-community/Qwen3-0.6B-ONNX', settings: { dtype: 'q8' } });
+    expect(reply).toEqual({ id: 1, type: 'loaded', numThreads: 4 });
+    expect(events).toEqual([
+      'installResilientModelCache',
+      'pipeline text-generation onnx-community/Qwen3-0.6B-ONNX device=wasm dtype=q8 threadsAtCreate=undefined',
+      'pipeline.dispose',
+      'languageModel onnx-community/Qwen3-0.6B-ONNX {"device":"wasm","dtype":"q8"}',
+    ]);
+  });
+
+  it('wasm-q8 embedding load: the q8 files, the runtime default thread count', async () => {
+    const reply = await load({ kind: 'embedding', modelId: 'Xenova/bge-small-en-v1.5', settings: { dtype: 'q8' } });
+    expect(reply).toEqual({ id: 1, type: 'loaded', dimensions: 384, numThreads: 4 });
+    expect(events).toEqual([
+      'preloadModel Xenova/bge-small-en-v1.5 device=wasm quantized=true threadsAtCreate=undefined',
+      'embedding Xenova/bge-small-en-v1.5 {"device":"wasm","quantized":true}',
+    ]);
+  });
+
+  it('wasm-threads LLM load: the provider preload at its own (q4) files, thread count set before the first session', async () => {
+    const reply = await load({ kind: 'llm', modelId: 'onnx-community/Qwen3-0.6B-ONNX', settings: { numThreads: CORES } });
+    expect(reply).toEqual({ id: 1, type: 'loaded', numThreads: CORES });
+    expect(events).toEqual([
+      `preloadModel onnx-community/Qwen3-0.6B-ONNX device=wasm quantized=undefined threadsAtCreate=${CORES}`,
+      'languageModel onnx-community/Qwen3-0.6B-ONNX {"device":"wasm"}',
+    ]);
+  });
+
+  it('wasm-threads embedding load: the protocol fp32 files, thread count set before the first session', async () => {
+    const reply = await load({ kind: 'embedding', modelId: 'Xenova/bge-small-en-v1.5', settings: { numThreads: CORES } });
+    expect(reply).toEqual({ id: 1, type: 'loaded', dimensions: 384, numThreads: CORES });
+    expect(events).toEqual([
+      `preloadModel Xenova/bge-small-en-v1.5 device=wasm quantized=undefined threadsAtCreate=${CORES}`,
+      'embedding Xenova/bge-small-en-v1.5 {"device":"wasm"}',
     ]);
   });
 

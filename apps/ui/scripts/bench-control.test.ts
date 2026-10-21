@@ -1,6 +1,6 @@
 /**
  * Control runs on /bench/run (`?control=order-reversed`, `?control=fixed-order`,
- * `?control=wasm-default`), a control
+ * `?control=wasm-default`, `?control=wasm-q8`, `?control=wasm-threads`), a control
  * experiment for the methodology: the query parsing and its refusals, the
  * series state that carries the control kind across reloads, the preset link,
  * the upload guard and the completion-code guard. The page wiring (banner,
@@ -61,6 +61,24 @@ describe('parseControlRequest()', () => {
       kind: 'wasm-default',
     });
     expect(parseControlRequest('?control=WASM-default').status).toBe('refused');
+    expect(parseControlRequest('?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=wasm-q8')).toEqual({
+      status: 'control',
+      kind: 'wasm-q8',
+    });
+    expect(parseControlRequest('?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=wasm-threads')).toEqual({
+      status: 'control',
+      kind: 'wasm-threads',
+    });
+    expect(parseControlRequest('?control=wasm-q4').status).toBe('refused');
+    expect(parseControlRequest('?control=wasm-thread').status).toBe('refused');
+    expect(parseControlRequest('?PROLIFIC_PID=abc&cc=CODE1234&control=wasm-q8')).toEqual({
+      status: 'refused',
+      message: CONTROL_STUDY_REFUSAL,
+    });
+    expect(parseControlRequest('?cc=CODE1234&control=wasm-threads')).toEqual({
+      status: 'refused',
+      message: CONTROL_STUDY_REFUSAL,
+    });
     expect(parseControlRequest('?PROLIFIC_PID=abc&cc=CODE1234&control=wasm-default')).toEqual({
       status: 'refused',
       message: CONTROL_STUDY_REFUSAL,
@@ -72,7 +90,7 @@ describe('parseControlRequest()', () => {
     expect(unknown).toEqual({
       status: 'refused',
       message:
-        'Unknown control run kind "order-shuffled"; the supported kinds are order-reversed, fixed-order, wasm-default. Remove the control parameter for a protocol run.',
+        'Unknown control run kind "order-shuffled"; the supported kinds are order-reversed, fixed-order, wasm-default, wasm-q8, wasm-threads. Remove the control parameter for a protocol run.',
     });
     expect(parseControlRequest('?control=').status).toBe('refused');
     expect(parseControlRequest('?control=Fixed-Order').status).toBe('refused');
@@ -148,6 +166,37 @@ describe('banner, harness record and upload guard', () => {
     expect(controlHarness('order-reversed', 12)).toEqual(createHarnessControl('order-reversed'));
   });
 
+  it('the wasm-q8 and wasm-threads banners name the configuration and that the run is not published', () => {
+    expect(controlBannerText('wasm-q8')).toBe(
+      'Control run: Transformers.js WASM lane at q8, runtime thread default; not published to the leaderboard',
+    );
+    expect(controlBannerText('wasm-threads')).toBe(
+      'Control run: Transformers.js WASM lane at q4 on all cores; not published to the leaderboard',
+    );
+  });
+
+  it('wasm-q8 records q8 with the thread count left to the runtime (null), whatever the core count', () => {
+    expect(controlHarness('wasm-q8', 12)).toEqual({
+      kind: 'wasm-q8',
+      runtimeOrder: [...RUNTIME_EXECUTION_ORDER],
+      wasmLane: { dtype: 'q8', numThreads: null, simd: true },
+    });
+    expect(controlHarness('wasm-q8', 12)).toEqual(createHarnessControl('wasm-q8'));
+    expect(controlHarness('wasm-q8')).toEqual(controlHarness('wasm-q8', 64));
+  });
+
+  it('wasm-threads records the protocol q4 files on every logical core', () => {
+    expect(controlHarness('wasm-threads', 12)).toEqual({
+      kind: 'wasm-threads',
+      runtimeOrder: [...RUNTIME_EXECUTION_ORDER],
+      wasmLane: { dtype: 'q4', numThreads: 12, simd: true },
+    });
+    expect(controlHarness('wasm-threads', 12)).toEqual(createHarnessControl('wasm-threads', { numThreads: 12 }));
+    // The same clamping as wasm-default.
+    expect(controlHarness('wasm-threads', undefined).wasmLane?.numThreads).toBe(1);
+    expect(controlHarness('wasm-threads', 4096).wasmLane?.numThreads).toBe(1024);
+  });
+
   it('wasmDefaultThreads is hardwareConcurrency, floored, at least 1 and at most 1024', () => {
     expect(wasmDefaultThreads(8)).toBe(8);
     expect(wasmDefaultThreads(1)).toBe(1);
@@ -163,6 +212,8 @@ describe('banner, harness record and upload guard', () => {
     expect(mayUpload(makeRun({ harness: { name: 'n', version: 'v', control: controlHarness('order-reversed') } }))).toBe(false);
     expect(mayUpload(makeRun({ harness: { name: 'n', version: 'v', control: controlHarness('fixed-order') } }))).toBe(false);
     expect(mayUpload(makeRun({ harness: { name: 'n', version: 'v', control: controlHarness('wasm-default', 8) } }))).toBe(false);
+    expect(mayUpload(makeRun({ harness: { name: 'n', version: 'v', control: controlHarness('wasm-q8', 8) } }))).toBe(false);
+    expect(mayUpload(makeRun({ harness: { name: 'n', version: 'v', control: controlHarness('wasm-threads', 8) } }))).toBe(false);
   });
 });
 
@@ -204,6 +255,17 @@ describe('a control series', () => {
     expect(seriesSummaryText(reloaded!)).toContain('LocalMode Bench control series (fixed-order) series-fixed');
   });
 
+  it.each(['wasm-q8', 'wasm-threads'] as const)('a %s series carries its kind and never publishes, through storage and a reload', (kind) => {
+    const created = createSeries({ seriesId: `series-${kind}`, count: 6, settings: { ...settings, publish: true, control: kind }, now: 0 });
+    expect(created.settings.publish).toBe(false);
+    const reloaded = parseSeriesState(serializeSeriesState(startCooldown(
+        recordRunFinished(markRunStarted(created, 1), { runId: 'w1', durationMs: 10, outcome: 'exported' }, 2),
+        3,
+      )));
+    expect(reloaded?.settings.control).toBe(kind);
+    expect(seriesSummaryText(reloaded!)).toContain(`LocalMode Bench control series (${kind}) series-${kind}`);
+  });
+
   it('a protocol series stores no control key', () => {
     const created = createSeries({ seriesId: 's', count: 2, settings: { ...settings, control: undefined }, now: 0 });
     expect('control' in created.settings).toBe(false);
@@ -227,6 +289,11 @@ describe('preset link and completion code', () => {
     expect(presetQuery(p)).toBe('tier=quick&quality=off&runs=10&cooldown=1&cold=on&publish=on');
     expect(presetQuery(p, 'fixed-order')).toBe(
       'tier=quick&quality=off&runs=10&cooldown=1&cold=on&publish=off&control=fixed-order',
+    );
+    const standard = { suite: 'standard' as const, includeQuality: false, runs: 6, cooldownMinutes: 5, clearAfterRun: false, publish: false };
+    expect(presetQuery(standard, 'wasm-q8')).toBe('tier=standard&quality=off&runs=6&cooldown=5&cold=off&publish=off&control=wasm-q8');
+    expect(presetQuery(standard, 'wasm-threads')).toBe(
+      'tier=standard&quality=off&runs=6&cooldown=5&cold=off&publish=off&control=wasm-threads',
     );
   });
 
