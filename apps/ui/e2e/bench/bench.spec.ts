@@ -2531,3 +2531,143 @@ test.describe('control run: reversed and fixed runtime order, WASM lane at runti
     }
   });
 });
+
+test.describe('bench LiteRT lane: pinned model file and the engine-reported backend', () => {
+  /** The Qwen3 0.6B LiteRT file the catalog pins (packages/litert/src/models.ts). */
+  const QWEN_LITERT_REVISION = 'a3c5d805ae362dff7f580bc25f2dfb9a5a7eaa76';
+  const QWEN_LITERT_URL = `https://huggingface.co/litert-community/Qwen3-0.6B/resolve/${QWEN_LITERT_REVISION}/Qwen3-0.6B.litertlm`;
+  const QWEN_LITERT_BYTES = 614_236_160;
+
+  test('Qwen3 0.6B on LiteRT alone: the pinned file loads, pp128 and pp512 follow the prompt, and the cells record the revision, the bytes and the backend the engine ran', async ({
+    page,
+  }) => {
+    test.setTimeout(20 * 60 * 1000);
+    const consoleErrors: string[] = [];
+    page.on('console', (msg: ConsoleMessage) => {
+      if (msg.type() !== 'error') return;
+      const url = msg.location()?.url ?? '';
+      const text = msg.text();
+      if (url.includes('/_vercel/') || text.includes('/_vercel/')) return;
+      // ALLOWLIST (documented, this lane only): the LiteRT-LM WASM runtime routes
+      // its absl INFO/WARNING logging through Emscripten's Module.printErr, which
+      // defaults to console.error (same entry and rationale as chat.spec.ts).
+      // Scoped to the prefix AND the @litert-lm wasm bundle as the source.
+      if (/^(INFO|WARNING): /.test(text) && /@litert-lm\/core@[\d.]+\/wasm\/litertlm_wasm/.test(url)) return;
+      consoleErrors.push(`[console.error] ${text} @ ${url}`);
+    });
+    page.on('pageerror', (err) => consoleErrors.push(`[pageerror] ${err.message}`));
+    const litertRequests: string[] = [];
+    page.on('request', (req) => {
+      if (/\.litertlm(\?|$)/.test(req.url())) litertRequests.push(req.url());
+    });
+
+    await page.goto('/bench/run?tier=standard&quality=on&publish=off');
+    const runButton = page.getByRole('button', { name: 'Run benchmark' });
+    await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+    await expect(runButton).toBeEnabled();
+    const webgpu = await page.evaluate(async () => {
+      const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
+      return gpu ? (await gpu.requestAdapter()) !== null : false;
+    });
+
+    // Every lane but Qwen3 0.6B on LiteRT is switched off.
+    const target = 'Include Qwen3 0.6B (LiteRT)';
+    const switches = page.getByRole('group', { name: 'Model lanes' }).getByRole('switch');
+    for (const sw of await switches.all()) {
+      const name = await sw.getAttribute('aria-label');
+      if (name === target) {
+        await expect(sw).toBeChecked();
+        continue;
+      }
+      if ((await sw.isEnabled()) && (await sw.isChecked())) await sw.click();
+    }
+    for (const sw of await switches.all()) {
+      const name = await sw.getAttribute('aria-label');
+      if (name === target) await expect(sw).toBeChecked();
+      else await expect(sw, String(name)).not.toBeChecked();
+    }
+
+    await runButton.click();
+    const status = page.getByRole('status').first();
+    await expect(status).toContainText('Suite complete', { timeout: 18 * 60 * 1000 });
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export JSON' }).click();
+    type LiteRtCell = ExportedRun['cells'][number] & {
+      resolvedBackend: string;
+      iterations: Array<{ text?: string }>;
+      quality?: { score?: number; parseRate?: number };
+    };
+    const run = JSON.parse(readFileSync((await (await downloadPromise).path())!, 'utf8')) as Omit<ExportedRun, 'cells'> & {
+      cells: LiteRtCell[];
+    };
+    const { validateRunShape } = await import('@localmode/bench');
+    expect(validateRunShape(run as never)).toEqual([]);
+
+    const litert = run.cells.filter((c) => c.runtimeId === 'litert' && c.cellId.startsWith('litert/qwen3-0.6b/'));
+    expect(litert.map((c) => c.cellId).sort()).toEqual([
+      'litert/qwen3-0.6b/chat-pp128-tg128',
+      'litert/qwen3-0.6b/chat-pp512-tg128',
+      'litert/qwen3-0.6b/quality-mmlu-25',
+      'litert/qwen3-0.6b/warm-reload',
+    ]);
+    // The pinned file generates: every timed iteration is non-degenerate and
+    // carries the thinking preamble the September file produces (the replaced
+    // file answered without the prompt, on the thought channel).
+    for (const id of ['litert/qwen3-0.6b/chat-pp128-tg128', 'litert/qwen3-0.6b/chat-pp512-tg128']) {
+      const cell = litert.find((c) => c.cellId === id)!;
+      expect(cell.status, `${id} ${JSON.stringify(cell.iterations.map((i) => i.text))}`).toBe('ok');
+      expect(cell.iterations.length).toBeGreaterThan(0);
+      for (const it of cell.iterations) {
+        expect((it.text ?? '').length, id).toBeGreaterThanOrEqual(16);
+        expect(it.text, id).toContain('<think>');
+      }
+    }
+    const quality = litert.find((c) => c.cellId === 'litert/qwen3-0.6b/quality-mmlu-25')!;
+    expect(quality.status).toBe('ok');
+    expect(quality.quality?.parseRate ?? 0).toBeGreaterThan(0);
+
+    // Every cell records the pinned revision, the bytes the engine read, and
+    // the backend it actually loaded on.
+    for (const cell of litert) {
+      expect(cell.runtimeConfig, cell.cellId).toMatchObject({
+        modelRevision: QWEN_LITERT_REVISION,
+        modelBytes: QWEN_LITERT_BYTES,
+        webgpu_adapter: webgpu,
+        requestedBackend: webgpu ? 'gpu' : 'cpu',
+      });
+      const fallback = cell.runtimeConfig?.gpu_fallback;
+      if (webgpu) {
+        expect(typeof fallback, cell.cellId).toBe('boolean');
+        expect(cell.resolvedBackend, cell.cellId).toBe(fallback ? 'cpu' : 'gpu');
+      } else {
+        expect(fallback, cell.cellId).toBeUndefined();
+        expect(cell.resolvedBackend, cell.cellId).toBe('cpu');
+      }
+    }
+    // The page fetched the pinned file only.
+    expect(litertRequests.length).toBeGreaterThan(0);
+    for (const url of litertRequests) expect(url).toBe(QWEN_LITERT_URL);
+    test.info().annotations.push({
+      type: 'litert-record',
+      description: JSON.stringify(
+        litert.map((c) => ({ cellId: c.cellId, resolvedBackend: c.resolvedBackend, runtimeConfig: c.runtimeConfig })),
+      ),
+    });
+    console.log(
+      'LITERT_RECORD',
+      JSON.stringify({
+        browser: (run.environment as { browser?: unknown }).browser,
+        cells: litert.map((c) => ({
+          cellId: c.cellId,
+          status: c.status,
+          resolvedBackend: c.resolvedBackend,
+          runtimeConfig: c.runtimeConfig,
+          firstText: c.iterations[0]?.text?.slice(0, 120),
+          quality: c.quality ? { score: c.quality.score, parseRate: c.quality.parseRate } : undefined,
+        })),
+      }),
+    );
+    expect(consoleErrors).toEqual([]);
+  });
+});

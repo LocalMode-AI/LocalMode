@@ -40,8 +40,17 @@ export interface LiteRTModelEntry {
   /** Short description */
   description: string;
 
-  /** HuggingFace download URL */
+  /**
+   * HuggingFace download URL, pinned to a repository revision
+   * (`/resolve/<40-hex commit>/`). A `resolve/main` URL follows every upstream
+   * replacement of the file, and the provider caches the file by URL without
+   * revalidating it, so which file a browser runs would depend on when it first
+   * downloaded it.
+   */
   url: string;
+
+  /** SHA-256 of the file at the pinned revision (the Hugging Face LFS object id). */
+  sha256?: string;
 
   /** Approximate parameter count */
   parameterCount: number;
@@ -61,7 +70,8 @@ export interface LiteRTModelEntry {
  * LiteRT models curated for browser use.
  *
  * These are quantized `.litertlm` models for on-device inference via Google's
- * LiteRT-LM engine. All URLs point to public HuggingFace repositories.
+ * LiteRT-LM engine. All URLs point to public HuggingFace repositories and are
+ * pinned to a repository revision.
  */
 export const LITERT_MODELS = {
   'gemma-4-E2B': {
@@ -71,7 +81,8 @@ export const LITERT_MODELS = {
     size: '2.0GB',
     description:
       'Google Gemma 4 E2B — web-optimized .litertlm build. One of the two models officially supported by the LiteRT-LM JS API. WebGPU-only (GPU-compiled build).',
-    url: 'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm',
+    url: 'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/73d35ec36cf24347ab4eec1a46f0aafbb9c3a89d/gemma-4-E2B-it-web.litertlm',
+    sha256: '3a08e8d94e23b814ae5414469c370c503813949acb8ceaa17e4ebf8a35af35b5',
     parameterCount: 2_000_000_000,
     requiresWebGPU: true,
   },
@@ -82,7 +93,8 @@ export const LITERT_MODELS = {
     size: '3.0GB',
     description:
       'Google Gemma 4 E4B — web-optimized .litertlm build, higher quality than E2B. One of the two models officially supported by the LiteRT-LM JS API. WebGPU-only (GPU-compiled build).',
-    url: 'https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it-web.litertlm',
+    url: 'https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/4f479a5ff97de64f5c1711ec439a2cb89e6a8fb4/gemma-4-E4B-it-web.litertlm',
+    sha256: '3904d826d5dddd25ea173e85204caec09e68ba038116e9b992b69cbdc94f57a0',
     parameterCount: 4_000_000_000,
     requiresWebGPU: true,
   },
@@ -93,7 +105,11 @@ export const LITERT_MODELS = {
     size: '614MB',
     description:
       'Alibaba Qwen3 0.6B — small, fast .litertlm model. Not part of the official LiteRT-LM JS API support list, but verified to load and generate end-to-end.',
-    url: 'https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B.litertlm',
+    // Builds of this file from 2026-10-12 on target litert-lm 0.18.0: on @litert-lm/core
+    // 0.12.1 their chat template renders an empty user turn and the reply arrives on the
+    // thought channel. This revision holds the earlier build, unchanged since 2026-07-17.
+    url: 'https://huggingface.co/litert-community/Qwen3-0.6B/resolve/a3c5d805ae362dff7f580bc25f2dfb9a5a7eaa76/Qwen3-0.6B.litertlm',
+    sha256: '555579ff2f4fd13379abe69c1c3ab5200f7338bc92471557f1d6614a6e5ab0b4',
     parameterCount: 600_000_000,
   },
 } as const;

@@ -471,7 +471,7 @@ const WLLAMA_SMALL = {
   key: 'wllama:SmolLM2-135M-Instruct-Q4_K_M',
   /** Raw catalog URL (packages/wllama/src/models.ts) — also the ?model= handoff payload. */
   ggufUrl:
-    'https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/main/SmolLM2-135M-Instruct-Q4_K_M.gguf',
+    'https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/d255afaffd3441b95abca9b5cc4c819b93f66936/SmolLM2-135M-Instruct-Q4_K_M.gguf',
 } as const;
 
 /** litert inference + agent lane model (614MB — the CPU-capable litert entry, ≥500MB agent gate). */

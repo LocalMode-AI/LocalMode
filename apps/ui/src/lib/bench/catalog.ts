@@ -62,7 +62,7 @@ const AUTHORED_MODELS: readonly BenchModelRef[] = [
     quantization: 'Q4_K_M',
     sizeBytes: 396_705_472,
     contextLength: 40960,
-    url: 'https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf',
+    url: 'https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/f2d6f9ca53a254cc379437c49e4b2eb447f779df/Qwen3-0.6B-Q4_K_M.gguf',
     qualityPromptSuffix: ' /no_think',
   },
   {
@@ -75,7 +75,7 @@ const AUTHORED_MODELS: readonly BenchModelRef[] = [
     quantization: 'litertlm',
     sizeBytes: 614_236_160,
     contextLength: 4096,
-    url: 'https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B.litertlm',
+    url: 'https://huggingface.co/litert-community/Qwen3-0.6B/resolve/a3c5d805ae362dff7f580bc25f2dfb9a5a7eaa76/Qwen3-0.6B.litertlm',
     qualityPromptSuffix: ' /no_think',
   },
   {
@@ -127,7 +127,7 @@ const AUTHORED_MODELS: readonly BenchModelRef[] = [
     quantization: 'Q4_K_M',
     sizeBytes: 807_694_464,
     contextLength: 131072,
-    url: 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
+    url: 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/9971ce1bbba2f8b55de026a783323a808b3eeedb/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
   },
   {
     benchModelId: 'llama-3.2-1b',
@@ -156,7 +156,7 @@ const AUTHORED_MODELS: readonly BenchModelRef[] = [
     quantization: 'litertlm',
     sizeBytes: 2_008_432_640,
     contextLength: 8192,
-    url: 'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it-web.litertlm',
+    url: 'https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/73d35ec36cf24347ab4eec1a46f0aafbb9c3a89d/gemma-4-E2B-it-web.litertlm',
     requiresWebGPU: true,
   },
   {
@@ -169,7 +169,7 @@ const AUTHORED_MODELS: readonly BenchModelRef[] = [
     quantization: 'Q4_K_M',
     sizeBytes: 3_462_680_032,
     contextLength: 131072,
-    url: 'https://huggingface.co/bartowski/google_gemma-4-E2B-it-GGUF/resolve/main/google_gemma-4-E2B-it-Q4_K_M.gguf',
+    url: 'https://huggingface.co/bartowski/google_gemma-4-E2B-it-GGUF/resolve/81012ba3538e061d5ee003f11f25335b17f82e2d/google_gemma-4-E2B-it-Q4_K_M.gguf',
   },
   {
     benchModelId: 'gemma-4-e2b',
@@ -224,7 +224,7 @@ const AUTHORED_MODELS: readonly BenchModelRef[] = [
     quantization: 'Q8_0',
     sizeBytes: 36_806_944,
     contextLength: 512,
-    url: 'https://huggingface.co/CompendiumLabs/bge-small-en-v1.5-gguf/resolve/main/bge-small-en-v1.5-q8_0.gguf',
+    url: 'https://huggingface.co/CompendiumLabs/bge-small-en-v1.5-gguf/resolve/d32f8c040ea3b516330eeb75b72bcc2d3a780ab7/bge-small-en-v1.5-q8_0.gguf',
   },
 
   // --- MediaPipe Universal Sentence Encoder — the non-transformer baseline ---

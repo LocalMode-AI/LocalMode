@@ -84,6 +84,24 @@ previous version's rows therefore stay on the leaderboard beside the new
 version's as those runs arrive. Archived runs stay in `runs/` as-is and are
 never re-scored.
 
+Model files are pinned. Every LiteRT and llama.cpp file URL in the bench
+catalog (`apps/ui/src/lib/bench/catalog.ts`, which must equal the provider
+catalogs `packages/litert/src/models.ts` and `packages/wllama/src/models.ts`)
+names a repository revision, `/resolve/<40-hex commit>/`, never
+`resolve/main`; `apps/ui/scripts/bench-catalog.test.ts` fails on an unpinned
+URL. A branch URL follows upstream replacements, and the providers cache a
+file by its URL, so browsers end up running different files under one label
+(the `Qwen3-0.6B.litertlm` replaced on 2026-10-12 is the case that led to the
+pin; site build 2.16.16). To move a lane to a newer file, change the pinned
+revision and the declared `sizeBytes` together, check the file with the
+Hugging Face API (`POST /api/models/<repo>/paths-info/<revision>` with
+`paths=<file>&expand=true` gives its size and LFS sha256), and bump the
+protocol version: a new file is a new configuration, and leaderboard rows must
+not mix the two. Pinning to the file a protocol version already measured, as
+2.16.16 did, is not a protocol change. LiteRT cells record the revision they
+loaded in `runtimeConfig.modelRevision` and the bytes the engine read in
+`modelBytes`.
+
 ## 5. Rebuilding the index
 
 `index/summary.json` is derived data: every entry can be regenerated from the

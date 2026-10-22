@@ -33,6 +33,7 @@ export type {
   LiteRTModelSettings,
   LiteRTLoadProgress,
   LiteRTBrowserCompat,
+  LiteRTLoadInfo,
 } from './types.js';
 
 // Models catalog

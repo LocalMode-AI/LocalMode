@@ -121,7 +121,13 @@ export default function BenchMethodologyPage() {
               2.16.15 its <code className="font-mono text-sm">offloadedLayers</code> read
               &quot;unreported&quot;). On the llama.cpp lanes the recorded backend is WebGPU only
               when llama.cpp offloaded at least one layer; a WebGPU-lane cell that offloaded none
-              records WASM with <code className="font-mono text-sm">gpu_fallback: true</code>. Chrome
+              records WASM with <code className="font-mono text-sm">gpu_fallback: true</code>. On the
+              LiteRT lane the recorded backend is the one the engine loaded on (since site build
+              2.16.16): LiteRT-LM 0.12.1&apos;s GPU backend refuses to stream-load some builds, the
+              Qwen3 0.6B file among them, and the provider then creates the engine on the CPU
+              backend, which the cell records as CPU with{' '}
+              <code className="font-mono text-sm">gpu_fallback: true</code>; earlier LiteRT cells
+              recorded GPU whenever the browser had a WebGPU adapter. Chrome
               Built-in AI is the exception: Chrome downloads Gemini Nano once, browser-wide, and
               only from a user activation, so the Run click starts that download while the other
               lanes run; the lane is recorded cold in that case and its load phase measures the
@@ -493,6 +499,30 @@ export default function BenchMethodologyPage() {
               Pinning the date (or sending one fixed system prompt on every lane) and recording a
               digest of the rendered prompt per cell would be a protocol change and are reserved
               for a future version; no run is re-scored.
+            </li>
+            <li>
+              Known model-file limitation: until site build 2.16.16 the bench downloaded the LiteRT
+              and llama.cpp model files from each Hugging Face repository&apos;s{' '}
+              <code className="font-mono text-sm">main</code> branch, and the providers cache a file
+              by its URL without checking it again. On 2026-10-12 and 2026-10-13 the{' '}
+              <code className="font-mono text-sm">litert-community/Qwen3-0.6B</code> repository
+              replaced <code className="font-mono text-sm">Qwen3-0.6B.litertlm</code> with builds
+              made for LiteRT-LM 0.18.0. On the LiteRT-LM 0.12.1 the bench runs, their chat template
+              renders an empty user turn and the reply arrives on a channel the provider does not
+              read, so a browser that downloaded the file after 2026-10-12 produced empty pp128
+              text and pp512 replies that ignore the prompt; browsers that had cached the earlier
+              file kept running it. Eleven published v5 Thorough runs (one RTX 3080 Ti, 12 and 13
+              October) loaded the replaced file: their LiteRT Qwen3 pp128 and pp512 cells are
+              invalid (degenerate output), and their LiteRT Qwen3 MMLU cell is recorded ok with a
+              score of 0 at a parse rate of 0, which is not a fidelity reading. The dataset README
+              lists the runs; nothing is re-scored. Since 2.16.16 every model file URL is pinned to
+              a repository revision (Qwen3 0.6B to the file every valid v5 LiteRT Qwen3 cell
+              measured, unchanged from 2026-07-17 to 2026-10-12; the other files to the revisions
+              they have had since before v5), and LiteRT cells record the revision and the bytes
+              the engine read. This is not a protocol change: no prompt, budget, policy number or
+              integrity rule changes, and the pin restores the file v5 measured. Moving the lane to
+              the new file or to a newer LiteRT-LM would change the model and its template contract,
+              and would bump the version.
             </li>
           </ul>
         </Section>

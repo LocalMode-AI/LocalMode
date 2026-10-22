@@ -243,6 +243,8 @@ function validateCellShape(value: unknown, index: number, push: (m: string) => v
   }
   const offloadError = offloadReportError(cell);
   if (offloadError) push(`${at}: ${offloadError}`);
+  const liteRtError = liteRtLoadReportError(cell);
+  if (liteRtError) push(`${at}: ${liteRtError}`);
   const quality = cell.quality as Record<string, unknown> | undefined;
   if (quality && Array.isArray(quality.outputs)) {
     if ((quality.outputs as unknown[]).some((o) => typeof o !== 'string' || (o as string).length > 500)) {
@@ -323,6 +325,77 @@ export function offloadReportError(cell: { resolvedBackend?: unknown; runtimeCon
   const expected = offloaded ? 'webgpu' : 'wasm';
   if (backend !== expected) {
     return `resolvedBackend is ${JSON.stringify(backend)} but runtimeConfig.gpu_fallback is ${fallback} (expected "${expected}")`;
+  }
+  return undefined;
+}
+
+/**
+ * The disagreement between a LiteRT cell's `resolvedBackend` and the
+ * provider's load report in its `runtimeConfig`, or undefined when they agree
+ * (or the cell carries no load report).
+ *
+ * Since bench 0.9.10 a LiteRT cell whose engine loaded records
+ * `requestedBackend` (`gpu` or `cpu`, the first load attempt) and, when that
+ * was `gpu`, `gpu_fallback`: `true` exactly when the GPU backend refused the
+ * model and the engine was created on the CPU backend. `resolvedBackend` is
+ * then `cpu` for a CPU request or a fallback and `gpu` otherwise. The record
+ * also carries `modelRevision` (the 40-hex commit the model URL is pinned to,
+ * or `unpinned`) and `modelBytes` (the bytes the engine read). Cells of
+ * earlier runs carry no `runtimeConfig` and are not checked; their `gpu` came
+ * from a WebGPU probe, not from the engine.
+ *
+ * @param cell - A cell-shaped value.
+ * @returns The error message, or undefined.
+ * @example
+ * liteRtLoadReportError({
+ *   runtimeId: 'litert',
+ *   resolvedBackend: 'gpu',
+ *   runtimeConfig: { requestedBackend: 'gpu', gpu_fallback: true },
+ * });
+ * // 'resolvedBackend is "gpu" but runtimeConfig.gpu_fallback is true (expected "cpu")'
+ */
+export function liteRtLoadReportError(cell: {
+  runtimeId?: unknown;
+  resolvedBackend?: unknown;
+  runtimeConfig?: unknown;
+}): string | undefined {
+  if (cell.runtimeId !== 'litert') return undefined;
+  const rc = cell.runtimeConfig;
+  if (typeof rc !== 'object' || rc === null) return undefined;
+  const config = rc as Record<string, unknown>;
+  if ('modelRevision' in config) {
+    const rev = config.modelRevision;
+    if (rev !== 'unpinned' && !(typeof rev === 'string' && /^[0-9a-f]{40}$/.test(rev))) {
+      return `runtimeConfig.modelRevision must be a 40-hex commit or "unpinned", got ${JSON.stringify(rev)}`;
+    }
+  }
+  if ('modelBytes' in config) {
+    const bytes = config.modelBytes;
+    if (typeof bytes !== 'number' || !Number.isInteger(bytes) || bytes <= 0) {
+      return `runtimeConfig.modelBytes must be a positive integer, got ${JSON.stringify(bytes)}`;
+    }
+  }
+  if (!('requestedBackend' in config)) {
+    return 'gpu_fallback' in config ? 'runtimeConfig.gpu_fallback is set only with requestedBackend "gpu"' : undefined;
+  }
+  const requested = config.requestedBackend;
+  if (requested !== 'gpu' && requested !== 'cpu') {
+    return `runtimeConfig.requestedBackend must be "gpu" or "cpu", got ${JSON.stringify(requested)}`;
+  }
+  let expected: 'gpu' | 'cpu' = 'cpu';
+  if (requested === 'cpu') {
+    if ('gpu_fallback' in config) return 'runtimeConfig.gpu_fallback is set only with requestedBackend "gpu"';
+  } else {
+    const fallback = config.gpu_fallback;
+    if (typeof fallback !== 'boolean') return 'runtimeConfig.gpu_fallback must be a boolean when requestedBackend is "gpu"';
+    expected = fallback ? 'cpu' : 'gpu';
+    if (cell.resolvedBackend !== expected) {
+      return `resolvedBackend is ${JSON.stringify(cell.resolvedBackend)} but runtimeConfig.gpu_fallback is ${fallback} (expected "${expected}")`;
+    }
+    return undefined;
+  }
+  if (cell.resolvedBackend !== expected) {
+    return `resolvedBackend is ${JSON.stringify(cell.resolvedBackend)} but runtimeConfig.requestedBackend is "cpu" (expected "cpu")`;
   }
   return undefined;
 }

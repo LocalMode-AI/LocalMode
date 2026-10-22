@@ -1,5 +1,12 @@
 # @localmode/litert
 
+## 2.0.3
+
+### Patch Changes
+
+- fix: the catalog URLs are pinned to a repository revision instead of `resolve/main`. `litert-community/Qwen3-0.6B` replaced `Qwen3-0.6B.litertlm` on 2026-10-12 and 2026-10-13 with builds made for litert-lm 0.18.0, whose chat template renders an empty user turn on `@litert-lm/core` 0.12.1 and answers on the thought channel; `qwen3-0.6B` is pinned to a3c5d805 (the 614,236,160-byte file the catalog always declared), `gemma-4-E2B` to 73d35ec3 and `gemma-4-E4B` to 4f479a5f. `LiteRTModelEntry.sha256` (new, optional) records each file's LFS sha256. Each browser downloads the pinned file once (the Cache API key is the URL).
+- feat: `LiteRTLanguageModel.loadInfo` (type `LiteRTLoadInfo`): `requestedBackend`, `backend` after the automatic CPU retry, `gpuFallback`, `modelUrl` and `modelBytes` (the bytes the engine read); `null` before the first generation and after `unload()`.
+
 ## 2.0.2
 
 ### Patch Changes

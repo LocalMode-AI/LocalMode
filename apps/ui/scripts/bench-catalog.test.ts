@@ -137,6 +137,30 @@ describe('bench catalog drift guard', () => {
     }
   });
 
+  it('pins every model file URL to a repository revision, never resolve/main', () => {
+    // A `resolve/main` URL follows every upstream replacement of the file, and
+    // the providers cache by URL without revalidating: the Qwen3-0.6B.litertlm
+    // replaced upstream on 2026-10-12 gave browsers that downloaded it after
+    // that date a different model than the cached file other browsers ran.
+    // Checked: each bench lane's file (its own url, or the provider catalog's
+    // url it loads) and every LiteRT catalog entry.
+    const PINNED = /^https:\/\/huggingface\.co\/[^/]+\/[^/]+\/resolve\/[0-9a-f]{40}\/[^/]+$/;
+    const urls = new Map<string, string>();
+    for (const m of BENCH_MODELS) {
+      const url = m.url ?? providerEntry(m.runtimeId, m.providerModelId)?.url;
+      if (url !== undefined) urls.set(`bench ${m.runtimeId} / ${m.providerModelId}`, url);
+    }
+    for (const [id, entry] of Object.entries(LITERT_MODELS as Record<string, CatalogEntry>)) {
+      urls.set(`litert catalog ${id}`, entry.url!);
+    }
+    // The file lanes: 5 GGUFs on two llama.cpp lanes, 2 LiteRT files, and the 3 LiteRT catalog entries.
+    expect(urls.size).toBe(15);
+    for (const [where, url] of urls) {
+      expect(url, where).not.toMatch(/\/resolve\/main\//);
+      expect(url, where).toMatch(PINNED);
+    }
+  });
+
   it('every suite references only existing benchModelIds', () => {
     const known = new Set(BENCH_MODELS.map((m) => m.benchModelId));
     for (const ids of Object.values(SUITE_MODELS)) {

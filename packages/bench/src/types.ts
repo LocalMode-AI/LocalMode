@@ -215,7 +215,8 @@ export interface BenchCellResult {
   /**
    * Runtime configuration the adapter reports once the model is loaded
    * (thread count, GPU layers requested and llama.cpp's offload report,
-   * dtype, ...): the equal-care record for the lane, per cell.
+   * dtype, the LiteRT model revision and bytes read, ...): the equal-care
+   * record for the lane, per cell.
    */
   runtimeConfig?: Record<string, string | number | boolean>;
   load: LoadRecord | null;

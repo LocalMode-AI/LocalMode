@@ -18,7 +18,7 @@ import type {
   ContentPart,
 } from '@localmode/core';
 import { ModelLoadError, GenerationError } from '@localmode/core';
-import type { LiteRTModelSettings } from './types.js';
+import type { LiteRTLoadInfo, LiteRTModelSettings } from './types.js';
 import { LITERT_MODELS, type LiteRTModelEntry } from './models.js';
 import { resolveModelUrl, fetchModelStream, isWebGPUDeviceUsable } from './utils.js';
 
@@ -42,6 +42,28 @@ function extractText(content: string | ContentPart[]): string {
     .filter((p): p is Extract<ContentPart, { type: 'text' }> => p.type === 'text')
     .map((p) => p.text)
     .join(' ');
+}
+
+/**
+ * Pass a model stream through unchanged while counting the bytes read from it.
+ *
+ * @param stream - The model stream handed to the engine.
+ * @returns The counted stream and a reader of the running byte count.
+ */
+function countingStream(stream: ReadableStream<Uint8Array>): {
+  stream: ReadableStream<Uint8Array>;
+  bytes: () => number;
+} {
+  let bytes = 0;
+  const counted = stream.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        bytes += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
+    }),
+  );
+  return { stream: counted, bytes: () => bytes };
 }
 
 /** Whether the stopSequences warning has been emitted */
@@ -70,6 +92,7 @@ export class LiteRTLanguageModel implements LanguageModel {
   readonly contextLength: number;
 
   private engine: LiteRTEngine | null = null;
+  private engineInfo: LiteRTLoadInfo | null = null;
   private loadPromise: Promise<LiteRTEngine> | null = null;
   private baseModelId: string;
   private settings: LiteRTModelSettings;
@@ -81,6 +104,21 @@ export class LiteRTLanguageModel implements LanguageModel {
 
     const catalogEntry = getCatalogEntry(baseModelId);
     this.contextLength = settings.contextLength ?? catalogEntry?.contextLength ?? 4096;
+  }
+
+  /**
+   * The backend the engine loaded on (after any CPU fallback) and the model
+   * file it read, or `null` until the model has loaded.
+   *
+   * @example
+   * ```ts
+   * const model = new LiteRTLanguageModel('qwen3-0.6B');
+   * await generateText({ model, prompt: 'Hi' });
+   * console.log(model.loadInfo?.backend); // 'GPU' or 'CPU'
+   * ```
+   */
+  get loadInfo(): LiteRTLoadInfo | null {
+    return this.engineInfo ? { ...this.engineInfo } : null;
   }
 
   private async loadEngine(): Promise<LiteRTEngine> {
@@ -159,7 +197,7 @@ export class LiteRTLanguageModel implements LanguageModel {
           text: 'Initializing model',
         });
 
-        const engine = await this.createEngine(
+        const { engine, info } = await this.createEngine(
           modelUrl,
           stream,
           explicitBackend,
@@ -170,6 +208,7 @@ export class LiteRTLanguageModel implements LanguageModel {
         this.settings.onProgress?.({ status: 'ready', progress: 100, text: 'Model ready for inference' });
 
         this.engine = engine;
+        this.engineInfo = info;
         return engine;
       } catch (error) {
         this.loadPromise = null;
@@ -193,18 +232,28 @@ export class LiteRTLanguageModel implements LanguageModel {
    * `@litert-lm/core` build cannot stream-load this model on the GPU backend
    * ("Streaming ... is not supported yet"), retry once on the CPU backend —
    * unless the model is GPU-only, in which case a CPU retry cannot help.
+   * Returns the engine with the backend it actually loaded on.
    */
   private async createEngine(
     modelUrl: string,
     stream: ReadableStream<Uint8Array>,
     explicitBackend: number | undefined,
     requiresWebGPU: boolean,
-  ): Promise<LiteRTEngine> {
+  ): Promise<{ engine: LiteRTEngine; info: LiteRTLoadInfo }> {
     const { Engine, Backend } = await import('@litert-lm/core');
+    // No explicit backend means LiteRT-LM's default, its streaming GPU backend.
+    const requestedBackend: 'GPU' | 'CPU' = explicitBackend === Backend.CPU ? 'CPU' : 'GPU';
+    const first = countingStream(stream);
     try {
-      return await Engine.create(
-        explicitBackend !== undefined ? { model: stream, backend: explicitBackend } : { model: stream },
+      const engine = await Engine.create(
+        explicitBackend !== undefined
+          ? { model: first.stream, backend: explicitBackend }
+          : { model: first.stream },
       );
+      return {
+        engine,
+        info: { requestedBackend, backend: requestedBackend, gpuFallback: false, modelUrl, modelBytes: first.bytes() },
+      };
     } catch (err) {
       const msg = (err as Error)?.message ?? String(err);
       if (!requiresWebGPU && explicitBackend !== Backend.CPU && /Streaming\s.*is not supported yet/i.test(msg)) {
@@ -214,8 +263,12 @@ export class LiteRTLanguageModel implements LanguageModel {
           progress: 95,
           text: 'GPU streaming unsupported for this model — retrying on CPU',
         });
-        const retryStream = await fetchModelStream(modelUrl, undefined);
-        return Engine.create({ model: retryStream, backend: Backend.CPU });
+        const retry = countingStream(await fetchModelStream(modelUrl, undefined));
+        const engine = await Engine.create({ model: retry.stream, backend: Backend.CPU });
+        return {
+          engine,
+          info: { requestedBackend, backend: 'CPU', gpuFallback: true, modelUrl, modelBytes: retry.bytes() },
+        };
       }
       throw err;
     }
@@ -364,6 +417,7 @@ export class LiteRTLanguageModel implements LanguageModel {
         // Ignore cleanup errors
       }
       this.engine = null;
+      this.engineInfo = null;
       this.loadPromise = null;
     }
   }

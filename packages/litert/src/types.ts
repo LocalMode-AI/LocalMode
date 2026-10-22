@@ -33,6 +33,40 @@ export interface LiteRTLoadProgress {
 }
 
 /**
+ * What a loaded LiteRT engine actually runs: the backend after any fallback,
+ * and the model file it read.
+ *
+ * Read it from {@link LiteRTLanguageModel.loadInfo} once the model has loaded
+ * (it is `null` before the first generation, and again after `unload()`).
+ */
+export interface LiteRTLoadInfo {
+  /**
+   * Backend of the first load attempt: `'CPU'` when the caller or the
+   * WebGPU probe pinned the CPU backend, `'GPU'` otherwise (an explicit GPU
+   * setting, or LiteRT-LM's default, which is its streaming GPU backend).
+   */
+  requestedBackend: 'GPU' | 'CPU';
+
+  /** Backend the engine loaded on, after any fallback. */
+  backend: 'GPU' | 'CPU';
+
+  /**
+   * `true` when the GPU backend refused the model ("Streaming ... is not
+   * supported yet") and the engine was created on the CPU backend instead.
+   */
+  gpuFallback: boolean;
+
+  /** URL of the model file the engine loaded. */
+  modelUrl: string;
+
+  /**
+   * Bytes the engine read from the model stream: the downloaded file on a
+   * network load, the cached file on a Cache API load.
+   */
+  modelBytes: number;
+}
+
+/**
  * Model-level settings for LiteRT.
  */
 export interface LiteRTModelSettings {

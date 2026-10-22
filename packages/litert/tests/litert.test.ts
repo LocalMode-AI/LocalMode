@@ -58,11 +58,19 @@ vi.mock('@litert-lm/core', () => {
 
   return {
     Engine: {
-      create: (...args: unknown[]) => {
+      create: async (...args: unknown[]) => {
         const result = mockState.engineCreate(...args);
         // A test may make engineCreate throw to exercise the CPU fallback.
-        if (result instanceof Error) return Promise.reject(result);
-        return Promise.resolve(engineFactory());
+        if (result instanceof Error) throw result;
+        // The real engine reads the whole model stream before it resolves.
+        const source = (args[0] as { model?: unknown })?.model;
+        if (source instanceof ReadableStream) {
+          const reader = source.getReader();
+          while (!(await reader.read()).done) {
+            /* drain */
+          }
+        }
+        return engineFactory();
       },
     },
     Backend,
@@ -153,6 +161,24 @@ describe('@localmode/litert', () => {
         expect(entry.url, `${id} url ends with .litertlm`).toMatch(/\.litertlm$/);
         expect(entry.parameterCount, `${id} parameterCount`).toBeGreaterThan(0);
       }
+    });
+
+    it('pins every URL to a repository revision and records the file digest', () => {
+      // `resolve/main` follows upstream replacements of the file, and the
+      // provider caches by URL without revalidating.
+      for (const [id, entry] of Object.entries(LITERT_MODELS)) {
+        expect(entry.url, `${id} url`).toMatch(/\/resolve\/[0-9a-f]{40}\/[^/]+\.litertlm$/);
+        expect(entry.url, `${id} url`).not.toContain('/resolve/main/');
+        expect(entry.sha256, `${id} sha256`).toMatch(/^[0-9a-f]{64}$/);
+      }
+    });
+
+    it('pins qwen3-0.6B to the build that runs on @litert-lm/core 0.12.1', () => {
+      expect(LITERT_MODELS['qwen3-0.6B'].url).toBe(
+        'https://huggingface.co/litert-community/Qwen3-0.6B/resolve/a3c5d805ae362dff7f580bc25f2dfb9a5a7eaa76/Qwen3-0.6B.litertlm',
+      );
+      expect(LITERT_MODELS['qwen3-0.6B'].sha256).toBe('555579ff2f4fd13379abe69c1c3ab5200f7338bc92471557f1d6614a6e5ab0b4');
+      expect(LITERT_MODELS['qwen3-0.6B'].sizeBytes).toBe(614_236_160);
     });
   });
 
@@ -300,6 +326,83 @@ describe('@localmode/litert', () => {
       expect(result.text).toBe('Hello, world!');
       expect(mockState.engineCreate).toHaveBeenCalledTimes(2);
       expect(mockState.engineCreate).toHaveBeenLastCalledWith({ model: expect.anything(), backend: Backend.CPU });
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Load report (loadInfo)
+  // ─────────────────────────────────────────────────────────────
+
+  describe('loadInfo', () => {
+    const QWEN_URL = LITERT_MODELS['qwen3-0.6B'].url;
+
+    it('is null until the model has loaded', () => {
+      expect(new LiteRTLanguageModel('qwen3-0.6B').loadInfo).toBeNull();
+    });
+
+    it('reports the GPU backend and the bytes the engine read on a default load', async () => {
+      const model = new LiteRTLanguageModel('qwen3-0.6B');
+      await model.doGenerate({ prompt: 'Hi' });
+      expect(model.loadInfo).toEqual({
+        requestedBackend: 'GPU',
+        backend: 'GPU',
+        gpuFallback: false,
+        modelUrl: QWEN_URL,
+        modelBytes: 4,
+      });
+      expect(globalThis.fetch).toHaveBeenCalledWith(QWEN_URL, expect.anything());
+    });
+
+    it('reports the CPU backend and gpuFallback after the GPU backend refuses the stream', async () => {
+      mockState.engineCreate
+        .mockReturnValueOnce(new Error('Streaming kTfLitePrefillDecode models is not supported yet'))
+        .mockReturnValue(undefined);
+      const model = new LiteRTLanguageModel('qwen3-0.6B');
+      await model.doGenerate({ prompt: 'Hi' });
+      expect(model.loadInfo).toEqual({
+        requestedBackend: 'GPU',
+        backend: 'CPU',
+        gpuFallback: true,
+        modelUrl: QWEN_URL,
+        modelBytes: 4,
+      });
+      // The CPU retry re-fetched the file; the bytes are the retry stream's.
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('reports a CPU request (no GPU attempt) when WebGPU has no usable device', async () => {
+      (globalThis as { navigator?: unknown }).navigator = {};
+      resetWebGPUUsableCache();
+      const model = new LiteRTLanguageModel('qwen3-0.6B');
+      await model.doGenerate({ prompt: 'Hi' });
+      expect(model.loadInfo).toMatchObject({ requestedBackend: 'CPU', backend: 'CPU', gpuFallback: false });
+      expect(mockState.engineCreate).toHaveBeenCalledTimes(1);
+    });
+
+    it('counts the bytes of a multi-chunk model stream', async () => {
+      globalThis.fetch = vi.fn(async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array(1000));
+              controller.enqueue(new Uint8Array(24));
+              controller.close();
+            },
+          }),
+          { status: 200, headers: { 'Content-Length': '1024' } },
+        ),
+      ) as typeof fetch;
+      const model = new LiteRTLanguageModel('qwen3-0.6B');
+      await model.doGenerate({ prompt: 'Hi' });
+      expect(model.loadInfo?.modelBytes).toBe(1024);
+    });
+
+    it('is cleared by unload()', async () => {
+      const model = new LiteRTLanguageModel('qwen3-0.6B');
+      await model.doGenerate({ prompt: 'Hi' });
+      expect(model.loadInfo).not.toBeNull();
+      await model.unload();
+      expect(model.loadInfo).toBeNull();
     });
   });
 

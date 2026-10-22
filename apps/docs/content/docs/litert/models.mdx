@@ -136,7 +136,8 @@ interface LiteRTModelEntry {
   sizeBytes: number;
   size: string;           // e.g. '2.0GB'
   description: string;
-  url: string;            // HuggingFace .litertlm URL
+  url: string;            // HuggingFace .litertlm URL, pinned to a repository revision
+  sha256?: string;        // SHA-256 of the file at that revision
   parameterCount: number;
   requiresWebGPU?: boolean; // true = GPU-compiled build, cannot run on CPU backend
 }

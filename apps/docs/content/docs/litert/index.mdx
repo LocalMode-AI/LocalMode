@@ -82,14 +82,14 @@ import { litert } from '@localmode/litert';
 // Curated catalog entry
 const model = litert.languageModel('gemma-4-E2B');
 
-// HuggingFace shorthand (repo:filename)
+// HuggingFace shorthand (repo:filename), resolved to the repo's main branch
 const model2 = litert.languageModel(
-  'litert-community/Qwen3-0.6B:Qwen3-0.6B.litertlm'
+  'litert-community/gemma-4-E2B-it-litert-lm:gemma-4-E2B-it-web.litertlm'
 );
 
-// Full URL
+// Full URL, pinned to a repository revision
 const model3 = litert.languageModel(
-  'https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B.litertlm'
+  'https://huggingface.co/litert-community/Qwen3-0.6B/resolve/a3c5d805ae362dff7f580bc25f2dfb9a5a7eaa76/Qwen3-0.6B.litertlm'
 );
 ```
 

@@ -437,7 +437,65 @@ function makeWllamaAdapter(gpu: boolean): LLMRuntimeAdapter {
   };
 }
 
-/** LiteRT lane (.litertlm; GPU-compiled builds require WebGPU, others pin CPU). */
+/**
+ * The repository revision a pinned Hugging Face model URL names (the 40-hex
+ * commit in `/resolve/<commit>/`), or `unpinned` for a URL that follows a
+ * branch.
+ *
+ * @param url - The model file URL.
+ * @returns The commit hash, or `unpinned`.
+ */
+export function modelRevisionOf(url: string | undefined): string {
+  const match = url ? /\/resolve\/([0-9a-f]{40})\//.exec(url) : null;
+  return match ? match[1] : 'unpinned';
+}
+
+/** The LiteRT provider's load report (`LiteRTLanguageModel.loadInfo`). */
+interface LiteRTLoadReport {
+  requestedBackend: 'GPU' | 'CPU';
+  backend: 'GPU' | 'CPU';
+  gpuFallback: boolean;
+  modelUrl: string;
+  modelBytes: number;
+}
+
+/**
+ * Backend and configuration record for a LiteRT model, from the provider's
+ * load report, never from a WebGPU probe: on `@litert-lm/core` 0.12.1 the GPU
+ * backend refuses to stream-load some builds (Qwen3 0.6B among them) and the
+ * provider creates the engine on the CPU backend instead. `resolvedBackend` is
+ * `gpu` or `cpu` from the backend the engine loaded on, and `unknown` until
+ * the engine has loaded (the provider loads on first use). `gpu_fallback` is
+ * present once loaded when the first attempt used the GPU backend, `true`
+ * exactly when the engine ended on the CPU. `modelRevision` is the commit the
+ * catalog URL is pinned to; `modelBytes` is what the engine read (the cached
+ * file on a warm load).
+ */
+export function liteRtLoadedInfo(
+  report: LiteRTLoadReport | null,
+  catalogUrl: string | undefined,
+  webgpuAdapter: boolean,
+): { resolvedBackend: string; runtimeConfig: Record<string, string | number | boolean> } {
+  return {
+    resolvedBackend: report ? (report.backend === 'GPU' ? 'gpu' : 'cpu') : 'unknown',
+    runtimeConfig: {
+      modelRevision: modelRevisionOf(report?.modelUrl ?? catalogUrl),
+      webgpu_adapter: webgpuAdapter,
+      ...(report
+        ? {
+            modelBytes: report.modelBytes,
+            requestedBackend: report.requestedBackend === 'GPU' ? 'gpu' : 'cpu',
+            ...(report.requestedBackend === 'GPU' ? { gpu_fallback: report.gpuFallback } : {}),
+          }
+        : {}),
+    },
+  };
+}
+
+/** The prompt a LiteRT warm-reload handle's untimed settle() sends: the runner's warmup probe. */
+const LITERT_SETTLE_PROMPT = 'Reply with the single word: ready';
+
+/** LiteRT lane (.litertlm; GPU-compiled builds require WebGPU, others fall back to CPU). */
 function makeLiteRTAdapter(): LLMRuntimeAdapter {
   return {
     runtimeId: 'litert',
@@ -458,10 +516,24 @@ function makeLiteRTAdapter(): LLMRuntimeAdapter {
       await mod.preloadModel(model.providerModelId, { onProgress: normalizeProgress(onProgress) });
       abortSignal?.throwIfAborted();
       const llm = mod.litert.languageModel(model.providerModelId, {});
-      const gpuUsable = await hasWebGPUAdapter();
+      const webgpuAdapter = await hasWebGPUAdapter();
+      // The engine loads on first use (the runner's untimed warmup, or
+      // settle() on a warm reload); the record is read from its load report.
+      const report = () => (llm as unknown as { loadInfo?: LiteRTLoadReport | null }).loadInfo ?? null;
+      const info = () => liteRtLoadedInfo(report(), model.url, webgpuAdapter);
       return {
         model: llm as unknown as LoadedLLM['model'],
-        resolvedBackend: gpuUsable ? 'gpu' : 'cpu',
+        get resolvedBackend() {
+          return info().resolvedBackend;
+        },
+        get runtimeConfig() {
+          return info().runtimeConfig;
+        },
+        // Untimed: load the engine with the same probe the runner's warmup sends.
+        async settle({ abortSignal }) {
+          if (report()) return;
+          await llm.doGenerate({ prompt: LITERT_SETTLE_PROMPT, maxTokens: 4, temperature: 0, abortSignal } as never);
+        },
         dispose: () => disposeModel(llm),
       };
     },

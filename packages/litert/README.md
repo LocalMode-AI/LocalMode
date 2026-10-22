@@ -93,12 +93,25 @@ Pass a HuggingFace `repo:file` shorthand or a full URL to load any `.litertlm`
 file outside the catalog:
 
 ```typescript
-// HuggingFace shorthand — resolved to the main branch of the given repo
-litert.languageModel('litert-community/Qwen3-0.6B:Qwen3-0.6B.litertlm');
+// HuggingFace shorthand, resolved to the main branch of the given repo
+litert.languageModel('litert-community/gemma-4-E2B-it-litert-lm:gemma-4-E2B-it-web.litertlm');
 
 // Full URL passthrough
 litert.languageModel('https://huggingface.co/.../model.litertlm');
 ```
+
+A shorthand follows `main`, so it loads whatever file the repository holds at
+that moment, and the provider caches the file by URL without revalidating it.
+The catalog URLs are pinned to a repository revision (`/resolve/<commit>/`) for
+that reason: the `Qwen3-0.6B.litertlm` on `main` since 2026-10-12 targets
+litert-lm 0.18.0 and gets an empty prompt on the `@litert-lm/core` 0.12.1 this
+package uses. For a reproducible load outside the catalog, pass a full URL
+pinned to a commit the same way.
+
+After the first generation, `model.loadInfo` reports what the engine actually
+runs: `requestedBackend`, `backend` (after the automatic CPU retry when the GPU
+backend refuses to stream-load a model), `gpuFallback`, `modelUrl` and
+`modelBytes` (the bytes the engine read).
 
 Google's gated models (Gemma 3n, Gemma 3 1B, FunctionGemma) require a
 HuggingFace login and Gemma-license acceptance, which a browser `fetch()` cannot
@@ -240,6 +253,7 @@ await model.unload();
 | `LiteRTModelSettings`      | type      | Per-model settings                                              |
 | `LiteRTLoadProgress`       | type      | Progress event shape for download/load callbacks                |
 | `LiteRTBrowserCompat`      | type      | Result of `checkLiteRTBrowserCompat()`                          |
+| `LiteRTLoadInfo`           | type      | `LiteRTLanguageModel.loadInfo`: backend after fallback, model file and bytes read |
 | `LiteRTModelId`            | type      | Union of curated catalog keys                                   |
 | `LiteRTModelEntry`         | type      | Shape of a catalog entry                                        |
 

@@ -1,5 +1,11 @@
 # @localmode/wllama
 
+## 3.4.3
+
+### Patch Changes
+
+- fix: the catalog URLs of `Qwen3-0.6B-Q4_K_M`, `Llama-3.2-1B-Instruct-Q4_K_M`, `Gemma-4-E2B-IT-Q4_K_M`, `bge-small-en-v1.5-Q8_0` and `SmolLM2-135M-Instruct-Q4_K_M` are pinned to a repository revision (the commit that last changed each file; same bytes) instead of `resolve/main`, so an upstream replacement can no longer change the file a cached URL stands for.
+
 ## 3.4.2
 
 ### Patch Changes

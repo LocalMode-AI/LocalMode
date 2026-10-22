@@ -136,6 +136,7 @@ export {
   REPORTED_GPU_MAX_LENGTH,
   REPORTED_RAM_MAX_GB,
   offloadReportError,
+  liteRtLoadReportError,
 } from './validate.js';
 export type { ValidateOptions } from './validate.js';
 export { canonicalJson, sha256Hex, computeRunDigest, computeLegacyRunDigest, verifyRunDigest } from './canonical.js';

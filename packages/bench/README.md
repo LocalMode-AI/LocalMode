@@ -122,6 +122,35 @@ the warmup and the warm reload re-downloaded the 3.46 GB weights.
   `resolvedBackend` disagrees with its `offloadedLayers` count or its
   `gpu_fallback` (`offloadReportError()`); an `unreported` cell without
   `gpu_fallback`, the record of every run before 0.9.9, is not checked.
+  On the LiteRT lane (since 0.9.10, site build 2.16.16) `resolvedBackend`
+  follows the provider's load report (`LiteRTLanguageModel.loadInfo`): `gpu`
+  or `cpu` from the backend the engine loaded on, `unknown` before it loaded.
+  LiteRT-LM 0.12.1's GPU backend refuses to stream-load some builds (Qwen3
+  0.6B among them) and the provider then creates the engine on the CPU
+  backend, so a WebGPU browser can run the lane on the CPU; earlier LiteRT
+  cells recorded `gpu` whenever the browser had a WebGPU adapter and carry no
+  `runtimeConfig`. A LiteRT cell's `runtimeConfig` holds `modelRevision` (the
+  40-hex commit the model URL is pinned to, or `unpinned`), `webgpu_adapter`,
+  and once the engine loaded `modelBytes` (the bytes the engine read: the
+  download on a network load, the cached file otherwise), `requestedBackend`
+  (`gpu` or `cpu`, the first load attempt) and, when that was `gpu`,
+  `gpu_fallback` (`true` when the engine ended on the CPU). The warm-reload
+  handle's `settle()` loads the engine as on the llama.cpp lanes.
+  `validateRunShape` rejects a LiteRT cell whose backend disagrees with its
+  report, or whose `modelRevision`/`modelBytes` are malformed
+  (`liteRtLoadReportError()`).
+- **Model files** - every model file URL the bench downloads (the LiteRT
+  `.litertlm` files and the llama.cpp `.gguf` files) is pinned to a Hugging
+  Face repository revision (`/resolve/<40-hex commit>/`); the app's catalog
+  test refuses a `resolve/main` URL. A branch URL follows upstream
+  replacements of the file, and the providers cache by URL without
+  revalidating, so which file a browser ran depended on when it first
+  downloaded it: the `Qwen3-0.6B.litertlm` replaced upstream on 2026-10-12
+  renders an empty prompt on LiteRT-LM 0.12.1. Pinning restored the file
+  every valid v5 LiteRT Qwen3 cell measured, so it is not a protocol change;
+  moving to another file is. The lanes that load by provider model id
+  (Transformers.js ONNX repositories, WebLLM MLC builds) resolve `main`
+  inside their libraries and are not pinned.
 - **Execution order** - deterministic runtime order (`RUNTIME_EXECUTION_ORDER`:
   transformers-wasm, transformers-webgpu, chrome-ai, webllm, mediapipe, litert,
   wllama-webgpu, wllama; `orderCells()` applies it and the runner enforces it;
