@@ -277,9 +277,10 @@ describe('POST /api/bench/submit', () => {
   it.each([
     { kind: 'wasm-q8' as const, control: () => createHarnessControl('wasm-q8') },
     { kind: 'wasm-threads' as const, control: () => createHarnessControl('wasm-threads', { numThreads: 8 }) },
+    { kind: 'wllama-compat' as const, control: () => createHarnessControl('wllama-compat') },
   ])('rejects a $kind control run with 422 before the nonce is spent, storing nothing', async ({ kind, control }) => {
     // An address of its own, so these posts do not count against the shared one's hourly limit.
-    const ip = kind === 'wasm-q8' ? '198.51.100.21' : '198.51.100.22';
+    const ip = { 'wasm-q8': '198.51.100.21', 'wasm-threads': '198.51.100.22', 'wllama-compat': '198.51.100.23' }[kind];
     const nonce = issueNonce();
     const run = makeRun({
       nonce,

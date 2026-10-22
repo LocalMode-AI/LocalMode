@@ -16,6 +16,7 @@ import type {
   HarnessControlWasmLane,
   LLMWorkloadSpec,
   QualityWorkloadSpec,
+  WllamaBuild,
 } from './types.js';
 
 /**
@@ -208,7 +209,23 @@ export const CONTROL_KINDS: readonly ControlKind[] = [
   'wasm-default',
   'wasm-q8',
   'wasm-threads',
+  'wllama-compat',
 ] as const;
+
+/** The values a llama.cpp cell's `runtimeConfig.wllamaBuild` may take (see `WllamaBuild`). */
+export const WLLAMA_BUILDS: readonly WllamaBuild[] = ['compat', 'memory64'] as const;
+
+/** The llama.cpp lanes, the only cells that carry `runtimeConfig.wllamaBuild`. */
+const LLAMA_CPP_RUNTIMES: readonly BenchRuntimeId[] = ['wllama', 'wllama-webgpu'];
+
+/**
+ * The wllama build each control kind that changes the llama.cpp lanes loads
+ * them through (recorded on `harness.control.wllamaBuild`); every other kind
+ * is absent and leaves the build to wllama.
+ */
+export const CONTROL_WLLAMA_BUILDS: Readonly<Partial<Record<ControlKind, 'compat'>>> = {
+  'wllama-compat': 'compat',
+};
 
 /** The dtype a `wasm-default` control run loads the Transformers.js WASM lane at (Transformers.js's WASM default). */
 export const CONTROL_WASM_DTYPE = 'q8' as const;
@@ -265,7 +282,9 @@ function wasmLaneKinds(): ControlKind[] {
  *
  * `wasm-default`, `wasm-q8` and `wasm-threads` are `RUNTIME_EXECUTION_ORDER`
  * itself too: those kinds change the Transformers.js WASM lane's settings
- * (see `HarnessControl.wasmLane`), never the order.
+ * (see `HarnessControl.wasmLane`), never the order. So is `wllama-compat`,
+ * which changes only the wllama build of the llama.cpp lanes (see
+ * `HarnessControl.wllamaBuild`).
  *
  * @param kind - The control kind.
  * @returns A new array of every runtime, each exactly once.
@@ -281,6 +300,7 @@ export function controlRuntimeOrder(kind: ControlKind): BenchRuntimeId[] {
     case 'wasm-default':
     case 'wasm-q8':
     case 'wasm-threads':
+    case 'wllama-compat':
       return [...RUNTIME_EXECUTION_ORDER];
   }
 }
@@ -304,7 +324,8 @@ export interface CreateHarnessControlOptions {
  * @returns `{ kind, runtimeOrder }` with the kind's canonical runtime order,
  *   plus `wasmLane` for a WASM-lane kind: `{ dtype: 'q8', numThreads, simd: true }`
  *   for `wasm-default`, `{ dtype: 'q8', numThreads: null, simd: true }` for
- *   `wasm-q8`, `{ dtype: 'q4', numThreads, simd: true }` for `wasm-threads`.
+ *   `wasm-q8`, `{ dtype: 'q4', numThreads, simd: true }` for `wasm-threads`;
+ *   plus `wllamaBuild: 'compat'` for `wllama-compat`.
  * @throws {TypeError} When a kind that sets the thread count lacks a valid `numThreads`, or another kind is given one.
  * @example
  * const harness = { name, version, control: createHarnessControl('order-reversed') };
@@ -312,7 +333,12 @@ export interface CreateHarnessControlOptions {
  * const q8 = createHarnessControl('wasm-q8'); // wasmLane.numThreads: null
  */
 export function createHarnessControl(kind: ControlKind, options: CreateHarnessControlOptions = {}): HarnessControl {
-  const control: HarnessControl = { kind, runtimeOrder: controlRuntimeOrder(kind) };
+  const build = CONTROL_WLLAMA_BUILDS[kind];
+  const control: HarnessControl = {
+    kind,
+    runtimeOrder: controlRuntimeOrder(kind),
+    ...(build !== undefined ? { wllamaBuild: build } : {}),
+  };
   const spec = CONTROL_WASM_LANE_SPECS[kind];
   if (spec?.threads !== 'all-cores' && options.numThreads !== undefined) {
     throw new TypeError(
@@ -371,6 +397,83 @@ export function controlWasmLaneError(control: { kind: ControlKind; wasmLane?: un
       ? typeof numThreads === 'number' && Number.isInteger(numThreads) && numThreads >= 1 && numThreads <= CONTROL_WASM_MAX_THREADS
       : numThreads === null;
   if (dtype !== spec.dtype || !threadsOk || simd !== true || Object.keys(extra).length > 0) return shape;
+  return undefined;
+}
+
+/**
+ * The problem with a control marker's `wllamaBuild`, or undefined when it is
+ * right for the kind: a kind listed in `CONTROL_WLLAMA_BUILDS` must carry
+ * exactly its build (`wllama-compat`: `'compat'`), every other kind none.
+ * Shared by the runner (which refuses the run before anything loads) and
+ * `validateRunShape`.
+ *
+ * @param control - A control marker whose `kind` is one of `CONTROL_KINDS`.
+ * @returns The error message, or undefined.
+ * @example
+ * controlWllamaBuildError(createHarnessControl('wllama-compat')); // undefined
+ * controlWllamaBuildError({ kind: 'fixed-order', wllamaBuild: 'compat' });
+ * // 'harness.control.wllamaBuild is set only on a wllama-compat control run, not on fixed-order'
+ */
+export function controlWllamaBuildError(control: { kind: ControlKind; wllamaBuild?: unknown }): string | undefined {
+  const expected = CONTROL_WLLAMA_BUILDS[control.kind];
+  if (expected === undefined) {
+    if (control.wllamaBuild === undefined) return undefined;
+    const kinds = CONTROL_KINDS.filter((k) => CONTROL_WLLAMA_BUILDS[k] !== undefined);
+    return `harness.control.wllamaBuild is set only on a ${kinds.join(' or ')} control run, not on ${control.kind}`;
+  }
+  if (control.wllamaBuild !== expected) {
+    return `harness.control.wllamaBuild must be '${expected}' on a ${control.kind} control run`;
+  }
+  return undefined;
+}
+
+/**
+ * The problem with a cell's `runtimeConfig.wllamaBuild`, or undefined when it
+ * is fine (since bench 0.9.13).
+ *
+ * - The value is `compat` or `memory64` (`WLLAMA_BUILDS`), on a llama.cpp
+ *   cell (`wllama`, `wllama-webgpu`) only.
+ * - On a run whose control marker names a build (`wllama-compat`), a
+ *   llama.cpp cell that carries a `runtimeConfig` and whose engine loaded
+ *   (`resolvedBackend` `wasm` or `webgpu`) must record that build.
+ * - A cell without the record is otherwise not checked: every run before
+ *   0.9.13 lacks it, and a cell whose engine never started has none.
+ *
+ * @param cell - A cell-shaped value.
+ * @param control - The run's `harness.control`, when it has one.
+ * @returns The error message, or undefined.
+ * @example
+ * wllamaBuildError({ runtimeId: 'wllama', runtimeConfig: { wllamaBuild: 'wasm64' } });
+ * // 'runtimeConfig.wllamaBuild must be "compat" or "memory64", got "wasm64"'
+ */
+export function wllamaBuildError(
+  cell: { runtimeId?: unknown; resolvedBackend?: unknown; runtimeConfig?: unknown },
+  control?: { kind?: unknown; wllamaBuild?: unknown } | null,
+): string | undefined {
+  const rc = cell.runtimeConfig;
+  const config = typeof rc === 'object' && rc !== null ? (rc as Record<string, unknown>) : undefined;
+  const isLlamaCpp = LLAMA_CPP_RUNTIMES.includes(cell.runtimeId as BenchRuntimeId);
+  const present = config !== undefined && 'wllamaBuild' in config;
+  if (present) {
+    if (!isLlamaCpp) {
+      return `runtimeConfig.wllamaBuild is set only on a llama.cpp cell (${LLAMA_CPP_RUNTIMES.join(', ')}), not on ${String(cell.runtimeId)}`;
+    }
+    const value = config.wllamaBuild;
+    if (!WLLAMA_BUILDS.includes(value as WllamaBuild)) {
+      return `runtimeConfig.wllamaBuild must be ${WLLAMA_BUILDS.map((b) => `"${b}"`).join(' or ')}, got ${JSON.stringify(value)}`;
+    }
+  }
+  const required = control && CONTROL_KINDS.includes(control.kind as ControlKind) ? CONTROL_WLLAMA_BUILDS[control.kind as ControlKind] : undefined;
+  if (required === undefined || !isLlamaCpp) return undefined;
+  if (present) {
+    if (config.wllamaBuild !== required) {
+      return `runtimeConfig.wllamaBuild is ${JSON.stringify(config.wllamaBuild)} on a ${String(control?.kind)} control run, which loads every llama.cpp lane through the compatibility build`;
+    }
+    return undefined;
+  }
+  if (config !== undefined && (cell.resolvedBackend === 'wasm' || cell.resolvedBackend === 'webgpu')) {
+    return `runtimeConfig.wllamaBuild is missing on a llama.cpp cell of a ${String(control?.kind)} control run`;
+  }
   return undefined;
 }
 

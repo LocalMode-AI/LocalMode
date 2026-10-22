@@ -13,8 +13,8 @@ export { createWllama, wllama } from './provider.js';
 
 // Model implementations
 export { WllamaLanguageModel, createLanguageModel, resolveGpuLayers, predictGpuAccelerated, resolveMmprojUrl } from './model.js';
-export { createOffloadCapturingLogger } from './wllama-loader.js';
-export type { OffloadedLayers, WllamaLoggerLike } from './wllama-loader.js';
+export { createOffloadCapturingLogger, WLLAMA_COMPAT_CDN } from './wllama-loader.js';
+export type { OffloadedLayers, WllamaLoggerLike, WllamaWasmBuild, WllamaWasmBuildSetting } from './wllama-loader.js';
 export { WllamaEmbeddingModel } from './embedding.js';
 export { WllamaRerankerModel, createRerankerModel } from './reranker.js';
 

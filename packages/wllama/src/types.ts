@@ -138,6 +138,20 @@ export interface WllamaModelSettings {
   mmprojUrl?: string;
 
   /**
+   * The wllama WASM build to start the worker on. `'auto'` leaves the choice
+   * to wllama, which starts its compatibility build (`@wllama/wllama-compat`:
+   * 32-bit memory, no JSPI) only on a browser without JSPI or Memory64, such
+   * as Safari, and never on Firefox; `'compat'` starts the compatibility
+   * build in every browser (fetched from the jsDelivr CDN, pinned to the
+   * runtime's version). The compatibility build is slower; it exists for
+   * browsers the default build cannot run on, and for measuring the
+   * difference. `loadedBuild` on the model reports the build the worker
+   * started on.
+   * @default 'auto'
+   */
+  wasmBuild?: 'auto' | 'compat';
+
+  /**
    * Load the vision projector so image parts work. Defaults to true, which
    * loads the catalog's projector for models that ship one (Gemma 4, Holo2)
    * or an explicit `mmprojUrl`. Set false for text-only use: the language
@@ -242,6 +256,20 @@ export interface WllamaEmbeddingSettings {
 
   /** Number of transformer layers to offload to GPU (0 pins the CPU). */
   nGpuLayers?: number;
+
+  /**
+   * The wllama WASM build to start the worker on. `'auto'` leaves the choice
+   * to wllama, which starts its compatibility build (`@wllama/wllama-compat`:
+   * 32-bit memory, no JSPI) only on a browser without JSPI or Memory64, such
+   * as Safari, and never on Firefox; `'compat'` starts the compatibility
+   * build in every browser (fetched from the jsDelivr CDN, pinned to the
+   * runtime's version). The compatibility build is slower; it exists for
+   * browsers the default build cannot run on, and for measuring the
+   * difference. `loadedBuild` on the model reports the build the worker
+   * started on.
+   * @default 'auto'
+   */
+  wasmBuild?: 'auto' | 'compat';
 }
 
 /**

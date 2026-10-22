@@ -1,5 +1,12 @@
 # @localmode/wllama
 
+## 3.4.4
+
+### Patch Changes
+
+- feat: `wasmBuild: 'auto' | 'compat'` on the `languageModel()` and `embedding()` settings. wllama 3.5.1 starts its compatibility build (`@wllama/wllama-compat`: 32-bit memory, no JSPI) only where the browser lacks JSPI or Memory64, and its constructor clears the compatibility resources on Firefox, so there was no way to run the compatibility build in Chrome or Firefox. `'compat'` starts the worker on it in every browser (from the jsDelivr CDN, pinned to 3.5.1; the URLs are exported as `WLLAMA_COMPAT_CDN`) by wrapping the instance's public `getWorkerResources()`; `'auto'`, the default, leaves the choice to wllama. A runtime without `getWorkerResources()` fails a `'compat'` load with `ModelLoadError` rather than run the default build.
+- feat: `loadedBuild` on `WllamaLanguageModel` and `WllamaEmbeddingModel`: the build the worker started on (`'memory64'` or `'compat'`), known as soon as wllama starts its worker (so a load that fails later still reports it); null before that or when the runtime does not expose its worker resources. Types `WllamaWasmBuild` and `WllamaWasmBuildSetting` are exported. The README's Safari section documents both.
+
 ## 3.4.3
 
 ### Patch Changes

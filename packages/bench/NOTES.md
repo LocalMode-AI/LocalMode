@@ -186,6 +186,21 @@ probe, as the timed cells' warmup does; the timed span itself is unchanged.
 `unreported` cell without `gpu_fallback`, the record of every run before
 0.9.9, is not checked.
 
+Since 0.9.13 (site build 2.16.19) every llama.cpp cell, on protocol and
+control runs alike, also records `wllamaBuild`: the wllama WASM build its
+worker started on, `memory64` (wllama's default build, 64-bit memory with
+JSPI where the browser has it) or `compat` (its compatibility build,
+`@wllama/wllama-compat`: 32-bit memory, no JSPI), as the provider recorded
+it (`loadedBuild` on the `@localmode/wllama` model), never the lane's
+intent. wllama 3.5.1 starts the compatibility build only where the browser
+lacks JSPI or Memory64 and never on Firefox, so a protocol run records
+`memory64` in Chrome and Firefox. The field appears once wllama has started
+its worker (a cell whose engine never started has none, and runs before
+0.9.13 have none). `validateRunShape` rejects a value other than `compat` or
+`memory64`, the field on a cell that is not llama.cpp, and, on a
+`wllama-compat` control run, a llama.cpp cell whose engine loaded with a
+`runtimeConfig` but without `wllamaBuild: 'compat'` (`wllamaBuildError()`).
+
 ### LiteRT lane
 
 Since 0.9.10 (site build 2.16.16) `resolvedBackend` follows the provider's
@@ -298,11 +313,12 @@ control characters, `ramGB` an integer from 1 to 1024 or `null`);
 which since 0.9.5 also removes URLs, email addresses and computer names
 (`DESKTOP-XXXXXXX`, `LAPTOP-XXXXXXX`, `WIN-XXXXXXXXXXX`) from it.
 
-### Control marker (0.9.6 to 0.9.9)
+### Control marker (0.9.6 to 0.9.13)
 
 Since 0.9.6 a run may carry `harness.control` (`{ kind, runtimeOrder }`): it
 marks a control run, which is not a protocol run (see
-[Control runs](#control-runs)).
+[Control runs](#control-runs)). The WASM-lane kinds add `wasmLane` (0.9.8,
+0.9.9) and `wllama-compat` adds `wllamaBuild` (0.9.13).
 
 ## Statistics
 
@@ -332,7 +348,8 @@ reproducibility measure; a lane is therefore tied to its position in the
 suite (what ran before it, how long the page has been busy). A control run,
 a control experiment for the methodology, runs the same suite in the runtime
 order its kind names (and, for three kinds, with the Transformers.js WASM
-lane configured differently), so that lane ratios can be compared:
+lane configured differently, and for one, with the llama.cpp lanes on
+wllama's compatibility build), so that lane ratios can be compared:
 
 ```ts
 import { createHarnessControl, runBenchmarkSuite } from '@localmode/bench';
@@ -358,10 +375,14 @@ from 1 to 1024), and (since 0.9.9) `wasm-q8`, with
 `wasmLane: { dtype: 'q8', numThreads: null, simd: true }` (`null`: the host
 left the thread count to ONNX Runtime), and `wasm-threads`, with
 `wasmLane: { dtype: 'q4', numThreads, simd: true }`, both in
-`RUNTIME_EXECUTION_ORDER`. `wasmLane` is required on the three WASM-lane
-kinds, exactly as `CONTROL_WASM_LANE_SPECS` gives it, and refused on every
-other kind; the validator rejects any other kind, order or `wasmLane`, and
-the digest covers the field like the rest of `harness`.
+`RUNTIME_EXECUTION_ORDER`, and (since 0.9.13) `wllama-compat`, in
+`RUNTIME_EXECUTION_ORDER` with `wllamaBuild: 'compat'`. `wasmLane` is
+required on the three WASM-lane kinds, exactly as `CONTROL_WASM_LANE_SPECS`
+gives it, and refused on every other kind; `wllamaBuild` is required on
+`wllama-compat`, exactly as `CONTROL_WLLAMA_BUILDS` gives it
+(`controlWllamaBuildError()`), and refused on every other kind. The validator
+rejects any other kind, order, `wasmLane` or `wllamaBuild`, and the digest
+covers the fields like the rest of `harness`.
 
 ### The kinds
 
@@ -423,6 +444,26 @@ the digest covers the field like the rest of `harness`.
   `wasm-default` series on the same machine, browser build and day:
   `/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=wasm-q8` and
   `/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=wasm-threads`.
+- `wllama-compat` (since 0.9.13) runs the runtimes in
+  `RUNTIME_EXECUTION_ORDER` with every lane at the protocol's configuration,
+  except that both llama.cpp lanes (`wllama-webgpu` and `wllama`, language
+  and embedding models alike) load through wllama's compatibility build
+  (`@wllama/wllama-compat`: 32-bit memory, no JSPI) instead of the memory64
+  build. wllama 3.5.1 itself picks the compatibility build only on a browser
+  without JSPI or Memory64, such as Safari, and never on Firefox (its
+  constructor clears the compatibility resources there), so Firefox's
+  llama.cpp lanes have always run the memory64 build; this kind measures
+  what the other build changes. The host forces the build through the
+  provider's `wasmBuild: 'compat'` setting, which starts wllama's worker on
+  the compatibility build in every browser, so the kind is
+  browser-independent. Build the marker with
+  `createHarnessControl('wllama-compat')` (no options); the run records
+  `harness.control.wllamaBuild: 'compat'`, and each llama.cpp cell records
+  the build its worker actually started on in `runtimeConfig.wllamaBuild`
+  (see [llama.cpp lanes](#llamacpp-lanes)). On localmode.ai run it on the
+  Standard tier, beside a `fixed-order` series on the same machine, browser
+  build and day:
+  `/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=wllama-compat`.
 
 ### Running a series
 
@@ -434,7 +475,8 @@ the digest covers the field like the rest of `harness`.
   would then drop them.
 - The runner orders the cells by `harness.control.runtimeOrder` and refuses
   any order that is not the kind's canonical one (and a WASM-lane marker
-  without the `wasmLane` its kind requires, or a `wasmLane` on another kind),
+  without the `wasmLane` its kind requires, or a `wasmLane` on another kind,
+  and likewise for `wllamaBuild`),
   so the record names the order the run used. Cells, the run policy, validity
   gates, traces and the environment capture are those of a protocol run.
 
@@ -444,7 +486,8 @@ the digest covers the field like the rest of `harness`.
   scored, which is why the field needed no protocol version. The localmode.ai
   runner offers Export JSON only (`/bench/run?control=order-reversed`,
   `/bench/run?control=fixed-order`, `/bench/run?control=wasm-default`,
-  `/bench/run?control=wasm-q8` or `/bench/run?control=wasm-threads`, see
+  `/bench/run?control=wasm-q8`, `/bench/run?control=wasm-threads` or
+  `/bench/run?control=wllama-compat`, see
   [SETUP.md](./SETUP.md), section 9), the submission route answers 422
   `control-run`, and `aggregateRuns` leaves control runs out of every
   leaderboard row. `isControlRun(run)` is the check.
@@ -608,7 +651,7 @@ cell without timed iterations keeps one placeholder row):
 | `loadDeclaredBytes` | Catalog-declared download size |
 | `loadProgressEvents` | Number of load progress samples recorded |
 | `loadProgressSpanMs` | Time from the first to the last progress sample |
-| `n_threads`, `n_threads_used`, `multithread`, `n_ctx`, `n_gpu_layers`, `offloadedLayers`, `webgpu_adapter`, `cache_prompt`, `mmproj` | The llama.cpp lanes' `runtimeConfig` (requested threads, the pool built, context size, GPU layers requested and llama.cpp's offload report, ...; since 0.9.9 `gpu_fallback` is in the run file only, not a column) |
+| `n_threads`, `n_threads_used`, `multithread`, `n_ctx`, `n_gpu_layers`, `offloadedLayers`, `webgpu_adapter`, `cache_prompt`, `mmproj` | The llama.cpp lanes' `runtimeConfig` (requested threads, the pool built, context size, GPU layers requested and llama.cpp's offload report, ...; since 0.9.9 `gpu_fallback` and since 0.9.13 `wllamaBuild` are in the run file only, not columns) |
 | `dtype`, `device`, `worker` | The Transformers.js lanes' `runtimeConfig` (the WASM lane's `numThreads` is in the run file only, not a column) |
 | `memoryBaseline`, `memoryPostLoad`, `memoryPostRun`, `memoryAtError` | Memory samples in bytes at the protocol points and when the cell errored |
 | `memoryApi` | The API that measured them: `uaSpecific`, `legacyHeap` or `none` |

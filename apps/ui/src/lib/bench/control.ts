@@ -10,7 +10,10 @@
  * Runtime's WASM thread count set to every logical core); `wasm-q8` and
  * `wasm-threads` keep the protocol order and make one of those two changes
  * each (q8 with the runtime's own thread count; the protocol's q4 files on
- * every logical core). A control run is opted into only by the `?control=<kind>` query
+ * every logical core); `wllama-compat` keeps the protocol order and every
+ * lane's protocol configuration, but loads both llama.cpp lanes through
+ * wllama's compatibility build (32-bit memory, no JSPI) instead of the
+ * memory64 build, in every browser. A control run is opted into only by the `?control=<kind>` query
  * parameter (no other control on the page turns it on), is marked
  * `harness.control` in its run file, is never uploaded (Export JSON only),
  * and is refused on a paid-study link. Everything in this module is pure.
@@ -24,6 +27,7 @@ import {
   type ControlKind,
   type HarnessControl,
 } from '@localmode/bench';
+import type { BenchAdapterOptions } from './adapters';
 
 /** The query parameter that opts a page into a control run. */
 export const CONTROL_QUERY_PARAM = 'control';
@@ -41,6 +45,7 @@ const BANNER_TEXT: Record<ControlKind, string> = {
   'wasm-default': 'Control run: Transformers.js WASM lane at runtime defaults (q8, all cores); not published to the leaderboard',
   'wasm-q8': 'Control run: Transformers.js WASM lane at q8, runtime thread default; not published to the leaderboard',
   'wasm-threads': 'Control run: Transformers.js WASM lane at q4 on all cores; not published to the leaderboard',
+  'wllama-compat': 'Control run: llama.cpp lanes on the wllama compatibility build; not published to the leaderboard',
 };
 
 /** Message for a paid-study link that also carries the control parameter. */
@@ -55,7 +60,7 @@ export const CONTROL_UPLOAD_REFUSAL =
  * Read the control request from a /bench/run query string.
  *
  * - No `control` parameter: `none`, a protocol run.
- * - A known kind (`order-reversed`, `fixed-order`, `wasm-default`, `wasm-q8`, `wasm-threads`): `control`, unless the query is a
+ * - A known kind (`order-reversed`, `fixed-order`, `wasm-default`, `wasm-q8`, `wasm-threads`, `wllama-compat`): `control`, unless the query is a
  *   paid-study link (`PROLIFIC_PID` or `cc` present), which is `refused`.
  * - Any other value: `refused`, so a mistyped kind never quietly runs (and
  *   publishes) a protocol run.
@@ -127,13 +132,34 @@ export function wasmDefaultThreads(hardwareConcurrency: number | undefined): num
  *
  * @param kind - The control kind.
  * @param hardwareConcurrency - The browser's `navigator.hardwareConcurrency`; used only by the kinds that set the WASM lane's thread count (`wasm-default`, `wasm-threads`).
- * @returns `{ kind, runtimeOrder }` (plus `wasmLane` for `wasm-default`, `wasm-q8` and `wasm-threads`); the
- *   runner executes exactly this order, and the adapters apply `wasmLane`.
+ * @returns `{ kind, runtimeOrder }` (plus `wasmLane` for `wasm-default`, `wasm-q8` and `wasm-threads`, and
+ *   `wllamaBuild` for `wllama-compat`); the runner executes exactly this order, and the adapters apply
+ *   `wasmLane` and `wllamaBuild` (see `controlAdapterOptions`).
  */
 export function controlHarness(kind: ControlKind, hardwareConcurrency?: number): HarnessControl {
   return CONTROL_WASM_LANE_SPECS[kind]?.threads === 'all-cores'
     ? createHarnessControl(kind, { numThreads: wasmDefaultThreads(hardwareConcurrency) })
     : createHarnessControl(kind);
+}
+
+/**
+ * What a control run changes in the runtime adapters, from its
+ * `harness.control` record: the Transformers.js WASM lane's settings
+ * (`wasmLane`, on the WASM-lane kinds) and the wllama build of the llama.cpp
+ * lanes (`wllamaBuild`, on `wllama-compat`). Empty on a protocol run and on
+ * the order kinds, so the adapters run at the protocol's configuration.
+ *
+ * @param control - The run's control record, or undefined on a protocol run.
+ * @returns The options for `createLLMAdapters` / `createEmbedAdapters`.
+ * @example
+ * controlAdapterOptions(controlHarness('wllama-compat')); // { wllamaBuild: 'compat' }
+ */
+export function controlAdapterOptions(control: HarnessControl | undefined): BenchAdapterOptions {
+  if (!control) return {};
+  return {
+    ...(control.wasmLane ? { wasmLane: control.wasmLane } : {}),
+    ...(control.wllamaBuild ? { wllamaBuild: control.wllamaBuild } : {}),
+  };
 }
 
 /**

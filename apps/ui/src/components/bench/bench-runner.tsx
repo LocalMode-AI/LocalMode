@@ -43,6 +43,7 @@ import { benchBuildCommit, benchHarnessVersion, benchRuntimeVersions } from '@/l
 import { describeRetryCause } from '@/lib/bench/overlay-text';
 import {
   CONTROL_UPLOAD_REFUSAL,
+  controlAdapterOptions,
   controlBannerText,
   controlHarness,
   effectiveControlKind,
@@ -211,6 +212,8 @@ const CONTROL_BANNER_DETAIL: Record<ControlKind, string> = {
     "The suite, its cells, rules, traces, environment capture and runtime order are those of a protocol run; only the Transformers.js WASM lane differs: its models load at q8 (Transformers.js's WASM default) while ONNX Runtime keeps its own WASM thread count, which the run file records in harness.control.wasmLane and each WASM cell's runtimeConfig. Keep each run",
   'wasm-threads':
     "The suite, its cells, rules, traces, environment capture and runtime order are those of a protocol run; only the Transformers.js WASM lane differs: its models load the protocol's files (q4 language model, fp32 embedding model) and ONNX Runtime runs one WASM thread per logical core, which the run file records in harness.control.wasmLane and each WASM cell's runtimeConfig. Keep each run",
+  'wllama-compat':
+    "The suite, its cells, rules, traces, environment capture, runtime order and every lane's settings are those of a protocol run; only the llama.cpp lanes (WebGPU and CPU) differ: both load through wllama's compatibility build (32-bit memory, no JSPI) instead of the memory64 build wllama picks in this browser, which the run file records in harness.control.wllamaBuild and each llama.cpp cell's runtimeConfig.wllamaBuild. Keep each run",
 };
 
 /** Lightweight availability probes - no provider packages are imported here. */
@@ -1403,8 +1406,9 @@ export function BenchRunner() {
       const cells = buildCells();
       // A control run executes (and records) its own runtime order; everything else is the protocol run's.
       const control = controlKind ? controlHarness(controlKind, navigator.hardwareConcurrency) : undefined;
-      // Only a WASM-lane control run (wasm-default, wasm-q8, wasm-threads) changes the Transformers.js WASM lane's settings.
-      const adapterOptions = control?.wasmLane ? { wasmLane: control.wasmLane } : {};
+      // Only a WASM-lane control run (wasm-default, wasm-q8, wasm-threads) changes the Transformers.js
+      // WASM lane's settings, and only wllama-compat changes the llama.cpp lanes' build.
+      const adapterOptions = controlAdapterOptions(control);
       // The overlay lists steps in the order the runner executes them.
       const ordered = orderCells(cells, control?.runtimeOrder);
       const orderedIds = ordered.map((c) => `${c.model.runtimeId}/${c.model.benchModelId}/${c.workload.id}`);

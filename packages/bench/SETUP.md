@@ -279,7 +279,7 @@ series place.
 A control run is a control experiment for the methodology: the same suite as
 a protocol run, in the runtime execution order its kind names, so that the
 lane ratios under two orders can be compared (see the package README and
-NOTES.md, Control runs). There are five kinds:
+NOTES.md, Control runs). There are six kinds:
 
 - `order-reversed` runs the runtimes in the exact reverse of the protocol
   order.
@@ -310,6 +310,18 @@ NOTES.md, Control runs). There are five kinds:
   `wasm-default` (both) they form a 2x2 factorial: record all four series on
   the same machine, browser build, day and settings, on the Standard tier
   (the links below).
+- `wllama-compat` runs them in the protocol order with every lane at the
+  protocol's configuration, except that both llama.cpp lanes
+  (`wllama-webgpu` and `wllama`) load through wllama's compatibility build
+  (`@wllama/wllama-compat`: 32-bit memory, no JSPI) instead of the memory64
+  build. wllama 3.5.1 picks the compatibility build by itself only on a
+  browser without JSPI or Memory64, such as Safari, and never on Firefox, so
+  the llama.cpp lanes of every Firefox run so far ran the memory64 build. The
+  page forces the build through the provider's `wasmBuild: 'compat'` setting,
+  so the kind works in any browser; it is meant for one Standard series on
+  Firefox, recorded beside a `fixed-order` series on the same machine,
+  browser build, day and settings (the link below), so that the two builds
+  are compared within one browser build.
 
 A control run is opted into only by the query parameter:
 
@@ -321,7 +333,15 @@ https://localmode.ai/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=
 https://localmode.ai/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=wasm-default
 https://localmode.ai/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=wasm-q8
 https://localmode.ai/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=wasm-threads
+https://localmode.ai/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=wllama-compat
+https://localmode.ai/bench/run?tier=thorough&quality=off&runs=1&cooldown=0&cold=off&control=fixed-order
 ```
+
+Every kind runs on any tier (`tier=quick|standard|thorough`): the tier picks
+the cells, the kind changes only the order or a lane's settings. The last
+link above is a single Thorough-tier `fixed-order` run: every Thorough cell,
+the Gemini Nano cells included, exported with `harness.control.kind`
+`fixed-order` and `suite` `thorough`.
 
 Leave a cool-down between the runs of a series: `cooldown=5` waits five
 minutes between runs (the parameter is in minutes, capped at 30). On a
@@ -337,7 +357,8 @@ defaults (q8, all cores); not published to the leaderboard" (`wasm-default`),
 "Control run: Transformers.js WASM lane at q8, runtime thread default; not
 published to the leaderboard" (`wasm-q8`) or "Control run: Transformers.js
 WASM lane at q4 on all cores; not published to the leaderboard"
-(`wasm-threads`).
+(`wasm-threads`) or "Control run: llama.cpp lanes on the wllama
+compatibility build; not published to the leaderboard" (`wllama-compat`).
 The run file carries `harness.control = { kind, runtimeOrder: [...] }` with
 the kind and the order the runner used; a `wasm-default` run adds
 `wasmLane: { dtype: 'q8', numThreads, simd: true }` (`numThreads` is the
@@ -351,7 +372,14 @@ left the thread count to ONNX Runtime) and its WASM cells record `dtype:
 'q8'` with the count ONNX Runtime chose; a `wasm-threads` run adds
 `wasmLane: { dtype: 'q4', numThreads, simd: true }` and its WASM cells record
 the protocol's dtype (`q4` on the language-model cells, `fp32` on the
-embedding cells) with `numThreads` equal to the core count. Everything else (cells, rules, traces,
+embedding cells) with `numThreads` equal to the core count. A
+`wllama-compat` run adds `wllamaBuild: 'compat'`, and each of its llama.cpp
+cells (`wllama` and `wllama-webgpu`) records `wllamaBuild: 'compat'` in its
+`runtimeConfig`, the build wllama started its worker on as the provider
+recorded it. Every llama.cpp cell of every run records that field (since
+site build 2.16.19), so a protocol or `fixed-order` run shows `memory64` in
+Chrome and Firefox beside it; the validator refuses a `wllama-compat` run
+whose llama.cpp cell recorded anything but `compat`. Everything else (cells, rules, traces,
 environment capture) is a protocol run's. A control run is never uploaded: the publish
 toggle is locked off, the results offer Export JSON only, the page fetches no
 upload token, and the submit route refuses a run carrying `harness.control`
@@ -409,7 +437,7 @@ control run whose digest verifies and whose shape validates
 (`validateSubmission`; plausibility flags are printed and kept). The nonce is
 dropped if the file has one, and the run is written as compact JSON to
 `controls/<kind>/<YYYY-MM-DD>/<runId>.json`, the date being `createdAt` in
-UTC (`controls/order-reversed/...`, `controls/fixed-order/...`, `controls/wasm-default/...`, `controls/wasm-q8/...` or `controls/wasm-threads/...`). `index/summary.json` is not read or written. A run id already under
+UTC (`controls/order-reversed/...`, `controls/fixed-order/...`, `controls/wasm-default/...`, `controls/wasm-q8/...`, `controls/wasm-threads/...` or `controls/wllama-compat/...`). `index/summary.json` is not read or written. A run id already under
 `runs/`, `quarantine/` or `controls/` is refused, and one refused file stops
 the whole batch before anything is written. Check `git diff` (only new files
 under `controls/`) and commit them in the dataset clone. The dataset's

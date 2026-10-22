@@ -50,6 +50,7 @@ export type {
   HarnessSeries,
   HarnessControl,
   HarnessControlWasmLane,
+  WllamaBuild,
   ControlKind,
   UserReportedHardware,
   EnvironmentCapture,
@@ -78,7 +79,11 @@ export {
   CONTROL_WASM_MAX_THREADS,
   controlRuntimeOrder,
   controlWasmLaneError,
+  controlWllamaBuildError,
+  CONTROL_WLLAMA_BUILDS,
   createHarnessControl,
+  WLLAMA_BUILDS,
+  wllamaBuildError,
   isControlRun,
 } from './protocol.js';
 export type { RunPolicy, CreateHarnessControlOptions, ControlWasmLaneSpec } from './protocol.js';

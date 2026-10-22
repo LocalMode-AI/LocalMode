@@ -1,6 +1,7 @@
 /**
  * Control runs on /bench/run (`?control=order-reversed`, `?control=fixed-order`,
- * `?control=wasm-default`, `?control=wasm-q8`, `?control=wasm-threads`), a control
+ * `?control=wasm-default`, `?control=wasm-q8`, `?control=wasm-threads`,
+ * `?control=wllama-compat`), a control
  * experiment for the methodology: the query parsing and its refusals, the
  * series state that carries the control kind across reloads, the preset link,
  * the upload guard and the completion-code guard. The page wiring (banner,
@@ -8,7 +9,7 @@
  * bench e2e spec against a real run.
  */
 import { describe, expect, it } from 'vitest';
-import { createHarnessControl, RUNTIME_EXECUTION_ORDER } from '@localmode/bench';
+import { createHarnessControl, RUNTIME_EXECUTION_ORDER, validateRunShape } from '@localmode/bench';
 import {
   CONTROL_STUDY_REFUSAL,
   controlBannerText,
@@ -21,6 +22,7 @@ import {
 import {
   createSeries,
   markRunStarted,
+  parseRunPresets,
   parseSeriesState,
   presetQuery,
   recordRunFinished,
@@ -31,6 +33,7 @@ import {
   type SeriesSettings,
 } from '../src/lib/bench/series';
 import { shouldIssueCompletionCode } from '../src/lib/bench/study-completion';
+import { SUITE_MODELS, benchModelsFor } from '../src/lib/bench/catalog';
 import { makeRun } from '../../../packages/bench/tests/helpers';
 
 const settings: SeriesSettings = {
@@ -90,7 +93,7 @@ describe('parseControlRequest()', () => {
     expect(unknown).toEqual({
       status: 'refused',
       message:
-        'Unknown control run kind "order-shuffled"; the supported kinds are order-reversed, fixed-order, wasm-default, wasm-q8, wasm-threads. Remove the control parameter for a protocol run.',
+        'Unknown control run kind "order-shuffled"; the supported kinds are order-reversed, fixed-order, wasm-default, wasm-q8, wasm-threads, wllama-compat. Remove the control parameter for a protocol run.',
     });
     expect(parseControlRequest('?control=').status).toBe('refused');
     expect(parseControlRequest('?control=Fixed-Order').status).toBe('refused');
@@ -310,5 +313,65 @@ describe('preset link and completion code', () => {
     };
     expect(shouldIssueCompletionCode(base)).toBe(true);
     expect(shouldIssueCompletionCode({ ...base, controlRun: true })).toBe(false);
+  });
+});
+
+describe('the wllama-compat kind', () => {
+  const FIREFOX_STANDARD = 'tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=wllama-compat';
+
+  it('the author link opts in; a mistyped or browser-named kind is refused; a study link is refused', () => {
+    expect(parseControlRequest(`?${FIREFOX_STANDARD}`)).toEqual({ status: 'control', kind: 'wllama-compat' });
+    expect(parseRunPresets(`?${FIREFOX_STANDARD}`)).toEqual({ suite: 'standard', includeQuality: false, runs: 6, cooldownMinutes: 5, clearAfterRun: false });
+    expect(parseControlRequest('?control=firefox-compat').status).toBe('refused');
+    expect(parseControlRequest('?control=wllama').status).toBe('refused');
+    expect(parseControlRequest('?control=WLLAMA-compat').status).toBe('refused');
+    expect(parseControlRequest('?PROLIFIC_PID=abc&cc=CODE1234&control=wllama-compat')).toEqual({ status: 'refused', message: CONTROL_STUDY_REFUSAL });
+  });
+
+  it('the banner names the llama.cpp lanes, the compatibility build and that the run is not published', () => {
+    expect(controlBannerText('wllama-compat')).toBe(
+      'Control run: llama.cpp lanes on the wllama compatibility build; not published to the leaderboard',
+    );
+  });
+
+  it('the harness record is the bench package one: the protocol order and wllamaBuild compat, whatever the core count', () => {
+    expect(controlHarness('wllama-compat', 12)).toEqual({ kind: 'wllama-compat', runtimeOrder: [...RUNTIME_EXECUTION_ORDER], wllamaBuild: 'compat' });
+    expect(controlHarness('wllama-compat', 12)).toEqual(createHarnessControl('wllama-compat'));
+    expect(controlHarness('wllama-compat')).toEqual(controlHarness('wllama-compat', 64));
+    expect(controlHarness('wllama-compat', 8).wasmLane).toBeUndefined();
+  });
+
+  it('may not be uploaded, and a series keeps the kind and never publishes through a reload', () => {
+    expect(mayUpload(makeRun({ harness: { name: 'n', version: 'v', control: controlHarness('wllama-compat', 8) } }))).toBe(false);
+    const created = createSeries({ seriesId: 'series-compat', count: 6, settings: { ...settings, suite: 'standard', publish: true, control: 'wllama-compat' }, now: 0 });
+    expect(created.settings.publish).toBe(false);
+    const reloaded = parseSeriesState(serializeSeriesState(startCooldown(
+        recordRunFinished(markRunStarted(created, 1), { runId: 'c1', durationMs: 10, outcome: 'exported' }, 2),
+        3,
+      )));
+    expect(reloaded?.settings.control).toBe('wllama-compat');
+    expect(seriesSummaryText(reloaded!)).toContain('LocalMode Bench control series (wllama-compat) series-compat');
+    const standard = { suite: 'standard' as const, includeQuality: false, runs: 6, cooldownMinutes: 5, clearAfterRun: false, publish: false };
+    expect(presetQuery(standard, 'wllama-compat')).toBe(`${FIREFOX_STANDARD.replace('&control=', '&publish=off&control=')}`);
+  });
+});
+
+describe('a Thorough-tier control run', () => {
+  const THOROUGH_FIXED = 'tier=thorough&quality=off&runs=1&cooldown=0&cold=off&control=fixed-order';
+
+  it('the Thorough fixed-order link opts in with the thorough suite and one run', () => {
+    expect(parseControlRequest(`?${THOROUGH_FIXED}`)).toEqual({ status: 'control', kind: 'fixed-order' });
+    expect(parseRunPresets(`?${THOROUGH_FIXED}`)).toEqual({ suite: 'thorough', includeQuality: false, runs: 1, cooldownMinutes: 0, clearAfterRun: false });
+  });
+
+  it('the Thorough suite holds every pairing, the Gemini Nano lane included, and the control record does not depend on the tier', () => {
+    expect(SUITE_MODELS.thorough).toContain('gemini-nano');
+    expect(benchModelsFor(SUITE_MODELS.thorough).some((m) => m.runtimeId === 'chrome-ai')).toBe(true);
+    const control = controlHarness('fixed-order', 8);
+    expect(control).toEqual({ kind: 'fixed-order', runtimeOrder: [...RUNTIME_EXECUTION_ORDER] });
+    // A fixed-order run of the thorough suite validates like a protocol one.
+    expect(validateRunShape(makeRun({ suite: 'thorough', harness: { name: 'n', version: 'v', control } }))).toEqual([]);
+    const series = createSeries({ seriesId: 'thorough-fixed', count: 1, settings: { ...settings, suite: 'thorough', control: 'fixed-order' }, now: 0 });
+    expect(series.settings).toMatchObject({ suite: 'thorough', control: 'fixed-order', publish: false });
   });
 });

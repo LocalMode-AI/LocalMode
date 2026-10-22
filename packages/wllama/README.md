@@ -669,6 +669,14 @@ This package provides a fallback WASM build that works without Memory64. No code
 
 Two further WebKit requirements, verified 2026-09-19: the page must be cross-origin isolated (both WASM builds import a shared 4 GB WebAssembly memory, which needs SharedArrayBuffer; Safari does not implement `COEP: credentialless`, so serve `require-corp` to WebKit), and the Origin Private File System must be available (wllama's model cache lives there; a WebKit context that cannot open it fails with `DOMException UnknownError: The operation failed for an unknown transient reason (e.g. out of memory)` before any WASM runs). Probe `navigator.storage.getDirectory()` and `new WebAssembly.Memory({ initial: 16, maximum: 65536, shared: true })` up front to report the lane as unavailable instead of failing every request.
 
+wllama 3.5.1 starts the compatibility build only where the browser lacks JSPI or Memory64, and never on Firefox (its constructor clears the compat resources there). To start it in any browser, for example to measure the difference, pass `wasmBuild: 'compat'` to `languageModel()` or `embedding()`; the provider then starts the worker on `@wllama/wllama-compat` from the jsDelivr CDN, pinned to the runtime's version (`WLLAMA_COMPAT_CDN`). The compatibility build is slower. Either way, `loadedBuild` on the model reports the build the worker started on (`'memory64'` or `'compat'`; null before load):
+
+```typescript
+const model = wllama.languageModel('Qwen3-0.6B-Q4_K_M', { wasmBuild: 'compat' });
+await generateText({ model, prompt: 'Hello' });
+console.log(model.loadedBuild); // 'compat'
+```
+
 | Browser | Status |
 |---------|--------|
 | Chrome 80+ | Supported |

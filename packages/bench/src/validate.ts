@@ -19,7 +19,7 @@ import { BENCH_PROTOCOL_VERSION, ACCEPTED_SCHEMA_VERSIONS } from './types.js';
 import { summarize } from './stats.js';
 import { parseMMLUAnswer } from './quality.js';
 import { TINY_MMLU } from './datasets/tiny-mmlu.js';
-import { CONTROL_KINDS, controlRuntimeOrder, controlWasmLaneError, MIN_GENERATED_CHARS } from './protocol.js';
+import { CONTROL_KINDS, controlRuntimeOrder, controlWasmLaneError, controlWllamaBuildError, MIN_GENERATED_CHARS, wllamaBuildError } from './protocol.js';
 
 /** Version of the plausibility rule set (recorded alongside moderation). */
 export const PLAUSIBILITY_RULES_VERSION = 2;
@@ -116,7 +116,8 @@ export function validateRunShape(value: unknown, options: ValidateOptions = {}):
   else if ((run.cells as unknown[]).length === 0) push('cells must not be empty');
   else if ((run.cells as unknown[]).length > 500) push('cells exceeds the 500-cell limit');
   else {
-    (run.cells as unknown[]).forEach((c, i) => validateCellShape(c, i, push));
+    const control = harness && typeof harness.control === 'object' && harness.control !== null ? (harness.control as Record<string, unknown>) : null;
+    (run.cells as unknown[]).forEach((c, i) => validateCellShape(c, i, push, control));
   }
   if (!Array.isArray(run.events)) push('events must be an array');
   return errors;
@@ -141,7 +142,8 @@ export const SERIES_MAX_IDLE_BEFORE_MS = 30 * 86_400_000;
  * measured before the run, bench 0.9.1), cold-start marker on `harness`
  * (bench 0.9.0), and control-run marker (bench 0.9.6; kind `fixed-order` since
  * 0.9.7, kind `wasm-default` with its `wasmLane` since 0.9.8, kinds `wasm-q8`
- * and `wasm-threads` with theirs since 0.9.9). The shape check
+ * and `wasm-threads` with theirs since 0.9.9, kind `wllama-compat` with its
+ * `wllamaBuild` since 0.9.13). The shape check
  * accepts a well-formed control marker, so an exported control run validates
  * offline; refusing to publish it is the submission route's job.
  */
@@ -179,6 +181,8 @@ function validateHarnessExtras(harness: Record<string, unknown>, push: (m: strin
         push(`harness.control.runtimeOrder must be the ${String(control.kind)} order [${expected.join(', ')}]`);
       const laneError = controlWasmLaneError(control as { kind: (typeof CONTROL_KINDS)[number]; wasmLane?: unknown });
       if (laneError) push(laneError);
+      const buildError = controlWllamaBuildError(control as { kind: (typeof CONTROL_KINDS)[number]; wllamaBuild?: unknown });
+      if (buildError) push(buildError);
     }
   }
 }
@@ -224,7 +228,12 @@ function validateUserReportedHardware(env: Record<string, unknown>, push: (m: st
     push('environment.userReportedHardware.otherAppsRunning must be a boolean');
 }
 
-function validateCellShape(value: unknown, index: number, push: (m: string) => void): void {
+function validateCellShape(
+  value: unknown,
+  index: number,
+  push: (m: string) => void,
+  control: Record<string, unknown> | null = null,
+): void {
   if (typeof value !== 'object' || value === null) {
     push(`cells[${index}] must be an object`);
     return;
@@ -245,6 +254,8 @@ function validateCellShape(value: unknown, index: number, push: (m: string) => v
   if (offloadError) push(`${at}: ${offloadError}`);
   const liteRtError = liteRtLoadReportError(cell);
   if (liteRtError) push(`${at}: ${liteRtError}`);
+  const buildError = wllamaBuildError(cell, control);
+  if (buildError) push(`${at}: ${buildError}`);
   const quality = cell.quality as Record<string, unknown> | undefined;
   if (quality && Array.isArray(quality.outputs)) {
     if ((quality.outputs as unknown[]).some((o) => typeof o !== 'string' || (o as string).length > 500)) {

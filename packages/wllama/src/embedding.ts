@@ -21,9 +21,11 @@ import { predictGpuAccelerated, resolveGpuLayers, resolveWasmPath } from './mode
 
 import {
   createOffloadCapturingLogger,
+  hookWasmBuild,
   importWllama,
   readThreadPool,
   type OffloadedLayers,
+  type WllamaWasmBuild,
   type WllamaInstance,
 } from './wllama-loader.js';
 
@@ -61,6 +63,18 @@ export class WllamaEmbeddingModel implements EmbeddingModel {
    */
   threadPool: { multithread: boolean; threads: number } | null = null;
 
+  /**
+   * The wllama WASM build the model's worker started on: `memory64` (the
+   * default build) or `compat` (the compatibility build, `@wllama/wllama-compat`).
+   * Known as soon as wllama starts its worker, so a load that fails later
+   * still reports it; null before that, or when the runtime does not expose
+   * its worker resources.
+   */
+  get loadedBuild(): WllamaWasmBuild | null {
+    return this.wasmBuildHandle?.used ?? null;
+  }
+
+  private wasmBuildHandle: { readonly used: WllamaWasmBuild | null } | null = null;
   private wllamaInstance: WllamaInstance | null = null;
   private loadPromise: Promise<WllamaInstance> | null = null;
   private baseModelId: string;
@@ -122,6 +136,7 @@ export class WllamaEmbeddingModel implements EmbeddingModel {
 
         const offloadCapture = createOffloadCapturingLogger();
         const wllamaInstance = new Wllama(resolveWasmPath(), { logger: offloadCapture.logger });
+        this.wasmBuildHandle = hookWasmBuild(wllamaInstance, this.settings.wasmBuild ?? 'auto');
 
         const nGpuLayers = resolveGpuLayers(this.settings);
 

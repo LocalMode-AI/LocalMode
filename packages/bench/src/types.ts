@@ -215,8 +215,9 @@ export interface BenchCellResult {
   /**
    * Runtime configuration the adapter reports once the model is loaded
    * (thread count, GPU layers requested and llama.cpp's offload report,
-   * dtype, the LiteRT model revision and bytes read, ...): the equal-care
-   * record for the lane, per cell.
+   * dtype, the LiteRT model revision and bytes read, the wllama build a
+   * llama.cpp cell ran on as `wllamaBuild` (see `WllamaBuild`), ...): the
+   * equal-care record for the lane, per cell.
    */
   runtimeConfig?: Record<string, string | number | boolean>;
   load: LoadRecord | null;
@@ -688,7 +689,7 @@ export interface HarnessInfo {
   /**
    * Set only on a control run (since bench 0.9.6; kind `fixed-order` since
    * 0.9.7, kind `wasm-default` since 0.9.8, kinds `wasm-q8` and
-   * `wasm-threads` since 0.9.9): the same suite, cells, rules,
+   * `wasm-threads` since 0.9.9, kind `wllama-compat` since 0.9.13): the same suite, cells, rules,
    * traces and environment capture as a protocol run, executed in the order
    * the kind names, a control experiment for the methodology.
    * `order-reversed` runs the runtimes in the reverse of the protocol order,
@@ -699,7 +700,9 @@ export interface HarnessInfo {
    * `wasm-default` runs them in the protocol order with the Transformers.js
    * WASM lane at the runtime's own defaults (see `wasmLane`); `wasm-q8`
    * and `wasm-threads` run them in the protocol order with one of those two
-   * changes each (q8 alone, or every logical core alone).
+   * changes each (q8 alone, or every logical core alone); `wllama-compat`
+   * runs them in the protocol order with both llama.cpp lanes on wllama's
+   * compatibility build (see `wllamaBuild`).
    * `runtimeOrder` is the order the runner actually executed (the runner
    * orders the cells by it and refuses an order that is not the kind's
    * canonical one, so the record cannot disagree with the run).
@@ -714,7 +717,7 @@ export interface HarnessInfo {
 }
 
 /** Kinds of control run (see `HarnessInfo.control`). */
-export type ControlKind = 'order-reversed' | 'fixed-order' | 'wasm-default' | 'wasm-q8' | 'wasm-threads';
+export type ControlKind = 'order-reversed' | 'fixed-order' | 'wasm-default' | 'wasm-q8' | 'wasm-threads' | 'wllama-compat';
 
 /**
  * Control-run marker recorded on `harness.control`.
@@ -754,6 +757,17 @@ export type ControlKind = 'order-reversed' | 'fixed-order' | 'wasm-default' | 'w
  *   WASM thread count is set to `navigator.hardwareConcurrency`.
  *   `wasmLane.dtype` is `q4`.
  *
+ * - `wllama-compat` (since bench 0.9.13): the runtimes execute in
+ *   `RUNTIME_EXECUTION_ORDER`, every lane at the protocol's configuration,
+ *   but both llama.cpp lanes (`wllama-webgpu` and `wllama`) load through
+ *   wllama's compatibility build (`@wllama/wllama-compat`: 32-bit memory, no
+ *   JSPI, the build wllama itself picks only on a browser without JSPI or
+ *   Memory64, such as Safari) instead of the memory64 build. The host forces
+ *   the build in every browser, so the kind is browser-independent. The run
+ *   records `wllamaBuild: 'compat'`; each llama.cpp cell's
+ *   `runtimeConfig.wllamaBuild` records the build wllama started its worker
+ *   with.
+ *
  * The three WASM-lane kinds form a factorial over the two settings
  * `wasm-default` changes: `fixed-order` (neither), `wasm-q8` (dtype only),
  * `wasm-threads` (threads only), `wasm-default` (both).
@@ -768,7 +782,21 @@ export interface HarnessControl {
    * those kinds, and only on them.
    */
   wasmLane?: HarnessControlWasmLane;
+  /**
+   * The wllama build both llama.cpp lanes of a `wllama-compat` control run
+   * (since bench 0.9.13) load through: always `compat`. Present on that kind,
+   * and only on it.
+   */
+  wllamaBuild?: 'compat';
 }
+
+/**
+ * The wllama WASM build a llama.cpp cell ran on, recorded as
+ * `runtimeConfig.wllamaBuild` (since bench 0.9.13): `memory64`, wllama's
+ * default build (64-bit memory, JSPI where the browser has it), or `compat`,
+ * its compatibility build (`@wllama/wllama-compat`: 32-bit memory, no JSPI).
+ */
+export type WllamaBuild = 'compat' | 'memory64';
 
 /**
  * Transformers.js WASM lane settings a `wasm-default`, `wasm-q8` or

@@ -166,9 +166,10 @@ export async function wllamaAvailability(): Promise<AdapterAvailability> {
 }
 
 /**
- * Options for `createLLMAdapters` / `createEmbedAdapters`. Absent on a
- * protocol run and on every control kind but the WASM-lane kinds
- * (`wasm-default`, `wasm-q8`, `wasm-threads`).
+ * Options for `createLLMAdapters` / `createEmbedAdapters`. Empty on a
+ * protocol run and on the order kinds; a WASM-lane control kind
+ * (`wasm-default`, `wasm-q8`, `wasm-threads`) sets `wasmLane`, and
+ * `wllama-compat` sets `wllamaBuild` (see `controlAdapterOptions`).
  */
 export interface BenchAdapterOptions {
   /**
@@ -179,6 +180,23 @@ export interface BenchAdapterOptions {
    * runtime's default). No other lane reads it.
    */
   wasmLane?: HarnessControlWasmLane;
+  /**
+   * The wllama build of a `wllama-compat` control run
+   * (`harness.control.wllamaBuild`): both llama.cpp lanes, language and
+   * embedding, load through wllama's compatibility build
+   * (`@wllama/wllama-compat`) in every browser. Absent, wllama picks the
+   * build itself (memory64 wherever the browser has JSPI and Memory64, and
+   * on Firefox). No other lane reads it.
+   */
+  wllamaBuild?: 'compat';
+}
+
+/**
+ * The provider settings that put a llama.cpp lane on the build a control run
+ * asks for: none on a protocol run (the settings stay the protocol's).
+ */
+function wllamaBuildSettings(options: BenchAdapterOptions): { wasmBuild?: 'compat' } {
+  return options.wllamaBuild === 'compat' ? { wasmBuild: 'compat' } : {};
 }
 
 /**
@@ -332,11 +350,14 @@ const WLLAMA_SETTLE_PROMPT = 'Reply with the single word: ready';
  * then records `gpu_fallback: true`. Until the engine has loaded (wllama
  * loads on first use) there is no report, so the backend reads `unknown` and
  * `gpu_fallback` is absent; it never falls back to the lane's prediction.
+ * `wllamaBuild` is the WASM build wllama started its worker on (`memory64`
+ * or `compat`), as the provider recorded it.
  */
 function wllamaLoadedInfo(
   llm: {
     offloadedLayers?: { gpu: number; total: number } | null;
     threadPool?: { multithread: boolean; threads: number } | null;
+    loadedBuild?: 'memory64' | 'compat' | null;
   },
   requestedGpuLayers: number,
   webgpuAdapter: boolean,
@@ -346,6 +367,7 @@ function wllamaLoadedInfo(
   const offloaded = llm.offloadedLayers ?? null;
   const gpu = offloaded !== null && offloaded.gpu > 0;
   const pool = llm.threadPool ?? null;
+  const build = llm.loadedBuild ?? null;
   return {
     resolvedBackend: engineLoaded ? (gpu ? 'webgpu' : 'wasm') : 'unknown',
     runtimeConfig: {
@@ -354,6 +376,9 @@ function wllamaLoadedInfo(
       // one thread says so here whatever n_threads asked for.
       ...(pool ? { multithread: pool.multithread, n_threads_used: pool.threads } : {}),
       ...(options.nCtx !== undefined ? { n_ctx: options.nCtx } : {}),
+      // The wllama build the worker started on, from the provider's own
+      // record (known once wllama starts its worker, absent before).
+      ...(build ? { wllamaBuild: build } : {}),
       n_gpu_layers: requestedGpuLayers,
       // llama.cpp prints its offload line only when it found a GPU device, so
       // "unreported" together with webgpu_adapter: false is an unambiguous CPU run.
@@ -374,7 +399,7 @@ function wllamaLoadedInfo(
  * to WebGPU (`n_gpu_layers: -1`). The recorded backend comes from llama.cpp's
  * own load report, so a lane that did not get what it asked for says so.
  */
-function makeWllamaAdapter(gpu: boolean): LLMRuntimeAdapter {
+function makeWllamaAdapter(gpu: boolean, options: BenchAdapterOptions = {}): LLMRuntimeAdapter {
   const runtimeId = gpu ? 'wllama-webgpu' : 'wllama';
   const requestedGpuLayers = gpu ? -1 : 0;
   return {
@@ -404,6 +429,7 @@ function makeWllamaAdapter(gpu: boolean): LLMRuntimeAdapter {
         vision: false,
         numThreads: wllamaThreads(),
         contextLength: WLLAMA_BENCH_CONTEXT_LLM,
+        ...wllamaBuildSettings(options),
       });
       const webgpuAdapter = await hasWebGPUAdapter();
       // The model loads on first use (the runner's untimed warmup, or settle()
@@ -650,7 +676,7 @@ function makeTransformersEmbedAdapter(device: 'webgpu' | 'wasm', options: BenchA
 }
 
 /** wllama GGUF embedding lanes (CPU-pinned and WebGPU, like the LLM lanes). */
-function makeWllamaEmbedAdapter(gpu: boolean): EmbeddingRuntimeAdapter {
+function makeWllamaEmbedAdapter(gpu: boolean, options: BenchAdapterOptions = {}): EmbeddingRuntimeAdapter {
   const runtimeId = gpu ? 'wllama-webgpu' : 'wllama';
   const requestedGpuLayers = gpu ? -1 : 0;
   return {
@@ -674,6 +700,7 @@ function makeWllamaEmbedAdapter(gpu: boolean): EmbeddingRuntimeAdapter {
         nGpuLayers: requestedGpuLayers,
         numThreads: wllamaThreads(),
         contextLength: WLLAMA_BENCH_CONTEXT_EMBED,
+        ...wllamaBuildSettings(options),
       });
       const webgpuAdapter = await hasWebGPUAdapter();
       let engineLoaded = false;
@@ -731,15 +758,16 @@ function makeMediaPipeEmbedAdapter(): EmbeddingRuntimeAdapter {
 /**
  * All LLM adapters keyed by runtime lane.
  *
- * @param options - `wasmLane` for a `wasm-default`, `wasm-q8` or `wasm-threads` control run; omit it on every other run.
+ * @param options - `wasmLane` for a `wasm-default`, `wasm-q8` or `wasm-threads` control run, `wllamaBuild` for a
+ *   `wllama-compat` one (see `controlAdapterOptions`); empty on every other run.
  */
 export function createLLMAdapters(options: BenchAdapterOptions = {}): Map<string, LLMRuntimeAdapter> {
   return new Map<string, LLMRuntimeAdapter>([
     ['transformers-webgpu', makeTransformersLLMAdapter('webgpu')],
     ['transformers-wasm', makeTransformersLLMAdapter('wasm', options)],
     ['webllm', makeWebLLMAdapter()],
-    ['wllama', makeWllamaAdapter(false)],
-    ['wllama-webgpu', makeWllamaAdapter(true)],
+    ['wllama', makeWllamaAdapter(false, options)],
+    ['wllama-webgpu', makeWllamaAdapter(true, options)],
     ['litert', makeLiteRTAdapter()],
     ['chrome-ai', makeChromeAIAdapter()],
   ]);
@@ -748,14 +776,15 @@ export function createLLMAdapters(options: BenchAdapterOptions = {}): Map<string
 /**
  * All embedding adapters keyed by runtime lane.
  *
- * @param options - `wasmLane` for a `wasm-default`, `wasm-q8` or `wasm-threads` control run; omit it on every other run.
+ * @param options - `wasmLane` for a `wasm-default`, `wasm-q8` or `wasm-threads` control run, `wllamaBuild` for a
+ *   `wllama-compat` one (see `controlAdapterOptions`); empty on every other run.
  */
 export function createEmbedAdapters(options: BenchAdapterOptions = {}): Map<string, EmbeddingRuntimeAdapter> {
   return new Map<string, EmbeddingRuntimeAdapter>([
     ['transformers-webgpu', makeTransformersEmbedAdapter('webgpu')],
     ['transformers-wasm', makeTransformersEmbedAdapter('wasm', options)],
-    ['wllama', makeWllamaEmbedAdapter(false)],
-    ['wllama-webgpu', makeWllamaEmbedAdapter(true)],
+    ['wllama', makeWllamaEmbedAdapter(false, options)],
+    ['wllama-webgpu', makeWllamaEmbedAdapter(true, options)],
     ['mediapipe', makeMediaPipeEmbedAdapter()],
   ]);
 }

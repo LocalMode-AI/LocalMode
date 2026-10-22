@@ -263,6 +263,7 @@ describe('import-exported-run', () => {
   it.each([
     { kind: 'wasm-q8' as const, control: () => createHarnessControl('wasm-q8') },
     { kind: 'wasm-threads' as const, control: () => createHarnessControl('wasm-threads', { numThreads: 8 }) },
+    { kind: 'wllama-compat' as const, control: () => createHarnessControl('wllama-compat') },
   ])('refuses a $kind control run: it never enters the index, runs/ or quarantine/', async ({ kind, control }) => {
     const run = JSON.parse(readFileSync(exportPath, 'utf8')) as BenchRunResult;
     run.harness = { ...run.harness, control: control() };

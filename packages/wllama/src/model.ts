@@ -25,10 +25,12 @@ import { parseGGUFMetadata } from './gguf.js';
 
 import {
   createOffloadCapturingLogger,
+  hookWasmBuild,
   importWllama,
   readThreadPool,
   WLLAMA_CDN_WASM,
   type OffloadedLayers,
+  type WllamaWasmBuild,
   type WllamaInstance,
 } from './wllama-loader.js';
 
@@ -158,6 +160,18 @@ export class WllamaLanguageModel implements LanguageModel {
    */
   threadPool: { multithread: boolean; threads: number } | null = null;
 
+  /**
+   * The wllama WASM build the model's worker started on: `memory64` (the
+   * default build) or `compat` (the compatibility build, `@wllama/wllama-compat`).
+   * Known as soon as wllama starts its worker, so a load that fails later
+   * still reports it; null before that, or when the runtime does not expose
+   * its worker resources.
+   */
+  get loadedBuild(): WllamaWasmBuild | null {
+    return this.wasmBuildHandle?.used ?? null;
+  }
+
+  private wasmBuildHandle: { readonly used: WllamaWasmBuild | null } | null = null;
   private wllamaInstance: WllamaInstance | null = null;
   private loadPromise: Promise<WllamaInstance> | null = null;
   private baseModelId: string;
@@ -235,6 +249,7 @@ export class WllamaLanguageModel implements LanguageModel {
 
         const offloadCapture = createOffloadCapturingLogger();
         const wllamaInstance = new Wllama(resolveWasmPath(), { logger: offloadCapture.logger });
+        this.wasmBuildHandle = hookWasmBuild(wllamaInstance, this.settings.wasmBuild ?? 'auto');
 
         const mmprojUrl = resolveMmprojUrl(this.baseModelId, this.settings);
         const modelSource = mmprojUrl ? { url: modelUrl, mmprojUrl } : modelUrl;

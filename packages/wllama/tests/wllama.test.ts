@@ -25,10 +25,20 @@ const mockState: {
   /** What the mock runtime's `isMultithread()` / `getNumThreads()` answer; undefined = methods absent. */
   multithread: boolean | undefined;
   numThreads: number | undefined;
+  /**
+   * What the mock runtime's own `getWorkerResources()` picks (wllama 3.5's
+   * build choice: `compat: true` only where it needs and has the
+   * compatibility build); undefined = method absent.
+   */
+  workerResources: { wasmPath: string; jsPath?: string; compat: boolean } | undefined;
+  /** The worker resources the mock runtime started its worker with at load, as wllama's loadModel() reads them. */
+  usedResources: { wasmPath: string; jsPath?: string; compat: boolean } | null;
 } = {
   logger: null,
   multithread: undefined,
   numThreads: undefined,
+  workerResources: undefined,
+  usedResources: null,
   loadModelFromUrl: vi.fn().mockResolvedValue(undefined),
   createChatCompletion: vi.fn().mockResolvedValue({
     id: 'chatcmpl-1',
@@ -79,8 +89,13 @@ vi.mock('../src/wllama-loader.js', async (importOriginal) => ({
 
 function MockWllama(_paths: unknown, config?: { logger?: { debug: (...a: unknown[]) => void } }) {
     mockState.logger = config?.logger ?? null;
-    return {
-      loadModelFromUrl: (...args: unknown[]) => mockState.loadModelFromUrl(...args),
+    const instance: Record<string, unknown> = {
+      // Like wllama's loadModel(): read the worker resources (the build) once, then load.
+      loadModelFromUrl: (...args: unknown[]) => {
+        const get = instance.getWorkerResources as (() => typeof mockState.usedResources) | undefined;
+        if (typeof get === 'function') mockState.usedResources = get();
+        return mockState.loadModelFromUrl(...args);
+      },
       createChatCompletion: (...args: unknown[]) => mockState.createChatCompletion(...args),
       createCompletion: (...args: unknown[]) => mockState.createCompletion(...args),
       createEmbedding: vi.fn().mockResolvedValue({
@@ -96,7 +111,11 @@ function MockWllama(_paths: unknown, config?: { logger?: { debug: (...a: unknown
       ...(mockState.multithread === undefined
         ? {}
         : { isMultithread: () => mockState.multithread, getNumThreads: () => mockState.numThreads }),
+      ...(mockState.workerResources === undefined
+        ? {}
+        : { getWorkerResources: () => ({ ...mockState.workerResources! }) }),
     };
+    return instance;
 }
 
 vi.mock('@huggingface/gguf', () => ({
@@ -920,6 +939,89 @@ describe('@localmode/wllama', () => {
       const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
       await model.doGenerate({ prompt: 'hi' });
       expect(model.threadPool).toBeNull();
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // WASM build (memory64 vs the compatibility build)
+  // ─────────────────────────────────────────────────────────────
+  describe('WASM build', () => {
+    // wllama 3.5.1 picks its compatibility build only where the browser lacks
+    // JSPI or Memory64 AND compat resources are set, and its constructor
+    // clears them on Firefox, so Firefox always ran the memory64 build. The
+    // provider records the build the worker started with, and `wasmBuild:
+    // 'compat'` forces the compatibility build in every browser.
+    const MEMORY64 = { wasmPath: 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.5.1/src/wasm/wllama.wasm', compat: false };
+
+    afterEach(() => {
+      mockState.workerResources = undefined;
+      mockState.usedResources = null;
+    });
+
+    it('records memory64 when wllama starts its worker on the default build, leaving the resources untouched', async () => {
+      mockState.workerResources = MEMORY64;
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      expect(model.loadedBuild).toBeNull();
+      await model.doGenerate({ prompt: 'hi' });
+      expect(mockState.usedResources).toEqual(MEMORY64);
+      expect(model.loadedBuild).toBe('memory64');
+    });
+
+    it('records compat when wllama picks the compatibility build itself (Safari)', async () => {
+      mockState.workerResources = { wasmPath: 'https://example.com/compat.wasm', jsPath: 'https://example.com/compat.js', compat: true };
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      await model.doGenerate({ prompt: 'hi' });
+      expect(mockState.usedResources?.compat).toBe(true);
+      expect(model.loadedBuild).toBe('compat');
+    });
+
+    it("wasmBuild: 'compat' starts the worker on the pinned compatibility build where wllama would pick memory64", async () => {
+      mockState.workerResources = MEMORY64;
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf', wasmBuild: 'compat' });
+      await model.doGenerate({ prompt: 'hi' });
+      expect(mockState.usedResources).toEqual({
+        wasmPath: 'https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.5.1/wasm/wllama.wasm',
+        jsPath: 'https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.5.1/wasm/wllama.js',
+        compat: true,
+      });
+      expect(model.loadedBuild).toBe('compat');
+    });
+
+    it("wasmBuild: 'compat' keeps wllama's own compat resources where it already picked them", async () => {
+      const own = { wasmPath: 'https://example.com/compat.wasm', jsPath: 'https://example.com/compat.js', compat: true };
+      mockState.workerResources = own;
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf', wasmBuild: 'compat' });
+      await model.doGenerate({ prompt: 'hi' });
+      expect(mockState.usedResources).toEqual(own);
+      expect(model.loadedBuild).toBe('compat');
+    });
+
+    it("wasmBuild: 'compat' fails the load on a runtime that cannot be told which build to start", async () => {
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf', wasmBuild: 'compat' });
+      const error = await model.doGenerate({ prompt: 'hi' }).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ModelLoadError);
+      expect(String((error as Error).cause)).toContain('compatibility build');
+      expect(mockState.loadModelFromUrl).not.toHaveBeenCalled();
+      expect(model.loadedBuild).toBeNull();
+    });
+
+    it('leaves loadedBuild null on a runtime that does not expose its worker resources', async () => {
+      const model = new WllamaLanguageModel('test-model', { modelUrl: 'https://example.com/test.gguf' });
+      await model.doGenerate({ prompt: 'hi' });
+      expect(model.loadedBuild).toBeNull();
+    });
+
+    it('the embedding model records and forces the build the same way', async () => {
+      mockState.workerResources = MEMORY64;
+      const auto = new WllamaEmbeddingModel('test-embed', { modelUrl: 'https://example.com/e.gguf' });
+      expect(auto.loadedBuild).toBeNull();
+      await auto.doEmbed({ values: ['a'] });
+      expect(auto.loadedBuild).toBe('memory64');
+      const forced = new WllamaEmbeddingModel('test-embed', { modelUrl: 'https://example.com/e.gguf', wasmBuild: 'compat' });
+      await forced.doEmbed({ values: ['a'] });
+      expect(mockState.usedResources?.compat).toBe(true);
+      expect(mockState.usedResources?.jsPath).toBe('https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.5.1/wasm/wllama.js');
+      expect(forced.loadedBuild).toBe('compat');
     });
   });
 

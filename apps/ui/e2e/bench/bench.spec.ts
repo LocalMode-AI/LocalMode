@@ -101,6 +101,7 @@ interface ExportedRun {
       kind: string;
       runtimeOrder: string[];
       wasmLane?: { dtype: string; numThreads: number; simd: boolean };
+      wllamaBuild?: string;
     };
   };
   cells: Array<{
@@ -2000,7 +2001,7 @@ test.describe('full-completion study mode (ccmode=full)', () => {
   });
 });
 
-test.describe('control run: reversed and fixed runtime order, WASM lane at runtime defaults and its two factorial halves (never uploaded)', () => {
+test.describe('control run: reversed and fixed runtime order, WASM lane at runtime defaults and its two factorial halves, llama.cpp lanes on the compatibility build (never uploaded)', () => {
   /** The protocol's runtime order (packages/bench RUNTIME_EXECUTION_ORDER); order-reversed uses its exact reverse, fixed-order the order itself. */
   const PROTOCOL_ORDER = [
     'transformers-wasm',
@@ -2137,6 +2138,10 @@ test.describe('control run: reversed and fixed runtime order, WASM lane at runti
     expect(run.cells.find((c) => c.cellId === 'wllama/smollm2-135m/chat-pp128-tg128')?.status).toBe('ok');
     expect(run.cells.find((c) => c.cellId === 'transformers-wasm/bge-small-en/embed-single')?.status).toBe('ok');
     expect(run.cells.find((c) => c.cellId === 'wllama-webgpu/smollm2-135m/chat-pp128-tg128')?.status).toBe('skipped');
+    // The llama.cpp lane records the build wllama picked here: memory64 (Chromium has JSPI and Memory64).
+    const llamaCells = run.cells.filter((c) => c.runtimeId === 'wllama' && c.status === 'ok');
+    expect(llamaCells.length).toBeGreaterThan(0);
+    for (const cell of llamaCells) expect(cell.runtimeConfig?.wllamaBuild, cell.cellId).toBe('memory64');
     // The WASM lane runs at the protocol's configuration: the provider's fp32
     // embedding files and ONNX Runtime's own thread count, min(4, ceil(cores / 2))
     // on this cross-origin-isolated page, read back from the runtime env.
@@ -2318,6 +2323,81 @@ test.describe('control run: reversed and fixed runtime order, WASM lane at runti
       expect(consoleErrors).toEqual([]);
     });
   }
+
+  test('?control=wllama-compat: banner, a real Quick run in the protocol order whose llama.cpp cells ran on the wllama compatibility build, exported with the wllamaBuild record, no upload request', async ({
+    page,
+  }) => {
+    test.setTimeout(30 * 60 * 1000);
+    const consoleErrors: string[] = [];
+    collectConsoleErrors(page, consoleErrors);
+    const benchApi: string[] = [];
+    page.on('request', (req) => {
+      const { pathname } = new URL(req.url());
+      if (pathname.startsWith('/api/bench/')) benchApi.push(`${req.method()} ${pathname}`);
+    });
+    // Which wllama builds the page fetches (the worker glue and WASM binary of each).
+    const wllamaAssets: string[] = [];
+    page.context().on('request', (req) => {
+      if (/cdn\.jsdelivr\.net\/npm\/@wllama\/wllama(-compat)?@[^/]+\/(wasm|src\/wasm)\/wllama\.(js|wasm)$/.test(req.url())) wllamaAssets.push(req.url());
+    });
+    const downloads = collectRunDownloads(page);
+
+    await page.goto('/bench/run?tier=quick&quality=off&runs=1&cooldown=0&cold=off&control=wllama-compat&publish=on');
+    const banner = page.getByRole('note', { name: 'Control run' });
+    await expect(banner).toBeVisible();
+    await expect(
+      banner.getByText('Control run: llama.cpp lanes on the wllama compatibility build; not published to the leaderboard', { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+    const publish = page.getByRole('switch', { name: /publish results/i });
+    await expect(publish).not.toBeChecked();
+    await expect(publish).toBeDisabled();
+    const runButton = page.getByRole('button', { name: 'Run benchmark' });
+    await expect(runButton).toBeEnabled();
+    await runButton.click();
+
+    await expect(page.getByRole('dialog', { name: /benchmark running/i })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('status').first()).toContainText('Suite complete', { timeout: 15 * 60 * 1000 });
+    await expect(page.getByRole('button', { name: 'Submit to leaderboard' })).toHaveCount(0);
+    const exportButton = page.getByRole('button', { name: 'Export JSON' });
+    await expect(exportButton).toBeVisible();
+    await exportButton.click();
+    await expect.poll(() => downloads.length, { timeout: 30_000 }).toBe(1);
+    const [run] = (await Promise.all(downloads)) as Array<ExportedRun & { protocol?: string; nonce?: string; digest?: string }>;
+
+    expect(run.harness.control).toEqual({ kind: 'wllama-compat', runtimeOrder: PROTOCOL_ORDER, wllamaBuild: 'compat' });
+    expect(run.protocol).toBe('localmode-bench/5');
+    expect(run.digest).toMatch(/^[0-9a-f]{64}$/);
+    expect(run.nonce).toBeUndefined();
+    const ranks = run.cells.map((c) => PROTOCOL_ORDER.indexOf(c.runtimeId));
+    expect(ranks.every((r) => r >= 0)).toBe(true);
+    expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
+    // Every llama.cpp cell that ran recorded the compatibility build, at the protocol's configuration.
+    const llamaCells = run.cells.filter((c) => (c.runtimeId === 'wllama' || c.runtimeId === 'wllama-webgpu') && c.status === 'ok');
+    expect(llamaCells.length).toBeGreaterThan(0);
+    for (const cell of llamaCells) {
+      expect(cell.runtimeConfig?.wllamaBuild, cell.cellId).toBe('compat');
+      expect(cell.runtimeConfig?.cache_prompt, cell.cellId).toBe(false);
+    }
+    expect(run.cells.find((c) => c.cellId === 'wllama/smollm2-135m/chat-pp128-tg128')?.runtimeConfig).toMatchObject({
+      n_gpu_layers: 0,
+      n_ctx: 2048,
+      wllamaBuild: 'compat',
+    });
+    // The worker started on @wllama/wllama-compat, and never on the memory64 binary.
+    expect(wllamaAssets.some((u) => u.includes('/@wllama/wllama-compat@3.5.1/wasm/wllama.wasm')), wllamaAssets.join('\n')).toBe(true);
+    expect(wllamaAssets.filter((u) => u.includes('/@wllama/wllama@'))).toEqual([]);
+    // Every other lane is the protocol's: the WASM lane at its protocol configuration.
+    const cores = await page.evaluate(() => navigator.hardwareConcurrency);
+    for (const cell of run.cells.filter((c) => c.runtimeId === 'transformers-wasm' && c.status === 'ok')) {
+      expect(cell.runtimeConfig, cell.cellId).toEqual({ device: 'wasm', dtype: 'fp32', worker: true, numThreads: Math.min(4, Math.ceil(cores / 2)) });
+    }
+
+    const panel = page.getByRole('region', { name: 'Saved exports' });
+    await expect(panel.getByRole('listitem', { name: `Saved run ${run.runId}` })).toContainText('control: wllama-compat');
+    expect(benchApi, 'no bench API request at all: no upload token either').toEqual([]);
+    expect(consoleErrors).toEqual([]);
+  });
 
   test('?control=order-reversed&runs=2: banner, a real 2-run Quick series in the reversed order, each run exported with harness.control, no upload request', async ({
     page,

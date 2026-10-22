@@ -121,7 +121,12 @@ export default function BenchMethodologyPage() {
               2.16.15 its <code className="font-mono text-sm">offloadedLayers</code> read
               &quot;unreported&quot;). On the llama.cpp lanes the recorded backend is WebGPU only
               when llama.cpp offloaded at least one layer; a WebGPU-lane cell that offloaded none
-              records WASM with <code className="font-mono text-sm">gpu_fallback: true</code>. On the
+              records WASM with <code className="font-mono text-sm">gpu_fallback: true</code>. Since
+              site build 2.16.19 every llama.cpp cell also records{' '}
+              <code className="font-mono text-sm">wllamaBuild</code>, the WASM build wllama started
+              its worker on: memory64 (its default build) or compat (its compatibility build, 32-bit
+              memory without JSPI). wllama picks the compatibility build only on a browser without
+              JSPI or Memory64, such as Safari, and never on Firefox. On the
               LiteRT lane the recorded backend is the one the engine loaded on (since site build
               2.16.16): LiteRT-LM 0.12.1&apos;s GPU backend refuses to stream-load some builds, the
               Qwen3 0.6B file among them, and the provider then creates the engine on the CPU
@@ -308,9 +313,16 @@ export default function BenchMethodologyPage() {
               those two changes, in the protocol&apos;s order: wasm-q8 loads the WASM lane at q8 and leaves
               ONNX Runtime&apos;s thread count at its default; wasm-threads keeps the protocol&apos;s files (q4
               language model, fp32 embedding model) and runs one WASM thread per logical core. With
-              fixed-order they separate the effect of the dtype from that of the thread count. Cells, rules, traces and the environment capture are those of a protocol run; the run file
+              fixed-order they separate the effect of the dtype from that of the thread count.{' '}
+              <code className="font-mono text-sm">/bench/run?control=wllama-compat</code> runs the suite
+              in the protocol&apos;s order with every lane at the protocol&apos;s configuration, except
+              that both llama.cpp lanes load through wllama&apos;s compatibility build instead of the
+              memory64 build, in any browser; beside a fixed-order series it shows what the build
+              changes, for instance on Firefox, where wllama never picks the compatibility build by
+              itself. Every kind runs on any tier. Cells, rules, traces and the environment capture are those of a protocol run; the run file
               carries <code className="font-mono text-sm">harness.control</code> (the kind and the order
-              used, and for wasm-default, wasm-q8 and wasm-threads the WASM lane&apos;s dtype and thread count). A control run is never uploaded (Export JSON only, and the submission route refuses
+              used, for wasm-default, wasm-q8 and wasm-threads the WASM lane&apos;s dtype and thread count,
+              and for wllama-compat the llama.cpp build). A control run is never uploaded (Export JSON only, and the submission route refuses
               one), never enters the leaderboard and is never scored, so it needs no protocol version.
               Runs and the cool-down work as usual, and a series keeps its control mode across its
               reloads. A study link with the parameter is refused. Every run the page exports is first

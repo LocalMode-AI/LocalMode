@@ -29,6 +29,83 @@ export const WLLAMA_CDN_ESM = `${WLLAMA_CDN_BASE}/esm/index.js`;
 /** CDN URL of the single-thread/multi-thread wllama WASM binary. */
 export const WLLAMA_CDN_WASM = `${WLLAMA_CDN_BASE}/src/wasm/wllama.wasm`;
 
+/**
+ * CDN URLs of wllama's compatibility build (`@wllama/wllama-compat`, the
+ * same version as the runtime): the worker glue and the 32-bit, JSPI-free
+ * WASM binary. They equal wllama's own `WasmCompatFromCDN`, which the package
+ * does not export.
+ */
+export const WLLAMA_COMPAT_CDN = {
+  worker: 'https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.5.1/wasm/wllama.js',
+  wasm: 'https://cdn.jsdelivr.net/npm/@wllama/wllama-compat@3.5.1/wasm/wllama.wasm',
+} as const;
+
+/**
+ * The wllama WASM build a worker runs: `memory64`, the default build (64-bit
+ * memory, JSPI where the browser has it), or `compat`, the compatibility
+ * build (32-bit memory, no JSPI).
+ */
+export type WllamaWasmBuild = 'memory64' | 'compat';
+
+/**
+ * Which build to start the worker on: `auto` leaves the choice to wllama
+ * (3.5.1 starts the compatibility build only where the browser lacks JSPI or
+ * Memory64, and never on Firefox); `compat` starts the compatibility build in
+ * every browser.
+ */
+export type WllamaWasmBuildSetting = 'auto' | 'compat';
+
+/** The worker resources wllama's `getWorkerResources()` returns (its `WllamaWorkerResources`). */
+interface WorkerResourcesLike {
+  wasmPath: string;
+  jsPath?: string | { code: string };
+  compat: boolean;
+}
+
+/**
+ * Hook the build choice of a wllama instance before it loads: record the
+ * build its worker starts with and, for `compat`, start the compatibility
+ * build wherever wllama would have picked the default one. wllama reads its
+ * worker resources from its public `getWorkerResources()` when it loads a
+ * model, so the hook wraps that method on this instance only.
+ *
+ * @param instance - A wllama instance that has not loaded a model yet.
+ * @param setting - `auto` (record only) or `compat` (force the compatibility build).
+ * @returns A handle whose `used` is the build the worker started with, null until wllama read its resources.
+ * @throws {Error} For `compat`, when the runtime has no `getWorkerResources()` to hook.
+ * @example
+ * const build = hookWasmBuild(wllamaInstance, 'compat');
+ * await wllamaInstance.loadModelFromUrl(url);
+ * build.used; // 'compat'
+ */
+export function hookWasmBuild(instance: object, setting: WllamaWasmBuildSetting): { readonly used: WllamaWasmBuild | null } {
+  const target = instance as { getWorkerResources?: () => WorkerResourcesLike };
+  let used: WllamaWasmBuild | null = null;
+  const handle = {
+    get used() {
+      return used;
+    },
+  };
+  if (typeof target.getWorkerResources !== 'function') {
+    if (setting === 'compat') {
+      throw new Error(
+        'this wllama runtime exposes no getWorkerResources(), so it cannot be started on its compatibility build; use wasmBuild: "auto"'
+      );
+    }
+    return handle;
+  }
+  const original = target.getWorkerResources.bind(instance);
+  target.getWorkerResources = () => {
+    let resources = original();
+    if (setting === 'compat' && !resources.compat) {
+      resources = { ...resources, wasmPath: WLLAMA_COMPAT_CDN.wasm, jsPath: WLLAMA_COMPAT_CDN.worker, compat: true };
+    }
+    used = resources.compat ? 'compat' : 'memory64';
+    return resources;
+  };
+  return handle;
+}
+
 /** Instance type of the wllama runtime class (types come from the npm dep). */
 export type WllamaInstance = InstanceType<
   Awaited<typeof import('@wllama/wllama')>['Wllama']

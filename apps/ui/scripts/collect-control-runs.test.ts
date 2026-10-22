@@ -234,6 +234,44 @@ describe('collect-control-runs', () => {
     expect(snapshot(dataset)).toEqual(before);
   }, 120_000);
 
+  it('files a wllama-compat export under controls/wllama-compat/<date>/ with its build record, index untouched', async () => {
+    const run = await controlExport('control-run-wllama-compat', '2026-10-22T08:00:00.000Z', true, 'wllama-compat');
+    // As a real wllama-compat run records it: the llama.cpp cell ran on the compatibility build.
+    run.cells = run.cells.map((c) => ({ ...c, runtimeConfig: { n_gpu_layers: 0, offloadedLayers: '0/31', wllamaBuild: 'compat' } }));
+    run.digest = await computeRunDigest(run);
+    const file = await writeExport('wllama-compat.json', run);
+    const before = snapshot(dataset);
+
+    const out = cli('--file', file);
+    expect(out.stderr).toBe('');
+    expect(out.status).toBe(0);
+    expect(out.stdout).toContain(`controls/wllama-compat/2026-10-22/control-run-wllama-compat.json <- ${file} (wllama-compat,`);
+    expect(out.stdout).toContain('1 control run; index/summary.json untouched');
+
+    const after = snapshot(dataset);
+    const added = [...after.keys()].filter((k) => !before.has(k)).sort();
+    expect(added).toEqual(['controls/wllama-compat/2026-10-22/control-run-wllama-compat.json']);
+    for (const [path, bytes] of before) expect(after.get(path)).toBe(bytes);
+    const filed = JSON.parse(after.get(added[0])!) as BenchRunResult;
+    expect(after.get(added[0])).toBe(JSON.stringify(run));
+    expect(await verifyRunDigest(filed)).toBe(true);
+    expect(filed.harness.control).toEqual({ kind: 'wllama-compat', runtimeOrder: [...RUNTIME_EXECUTION_ORDER], wllamaBuild: 'compat' });
+    expect(filed.cells.map((c) => c.runtimeConfig?.wllamaBuild)).toEqual(['compat']);
+    expect(validateSubmission(filed).shapeErrors).toEqual([]);
+  }, 120_000);
+
+  it('refuses a wllama-compat export whose llama.cpp cell ran on the memory64 build, writing nothing', async () => {
+    const run = await controlExport('control-run-compat-bad', '2026-10-22T09:00:00.000Z', true, 'wllama-compat');
+    run.cells = run.cells.map((c) => ({ ...c, runtimeConfig: { n_gpu_layers: 0, offloadedLayers: '0/31', wllamaBuild: 'memory64' } }));
+    run.digest = await computeRunDigest(run);
+    const file = await writeExport('compat-bad.json', run);
+    const before = snapshot(dataset);
+    await expect(collectControlRuns({ datasetDir: dataset, files: [file] })).rejects.toThrow(
+      `${file}: invalid shape: cells[0]: runtimeConfig.wllamaBuild is "memory64" on a wllama-compat control run, which loads every llama.cpp lane through the compatibility build`,
+    );
+    expect(snapshot(dataset)).toEqual(before);
+  }, 120_000);
+
   it('drops a nonce an export carries, as the publication scrub does, keeping the digest', async () => {
     const run = await controlExport('control-run-nonce', '2026-10-14T10:00:00.000Z');
     run.nonce = 'expired.session.token';
