@@ -10,13 +10,16 @@ The dataset lives at **https://github.com/LocalMode-AI/LocalMode-Bench**
 branch must stay `main`). It is scaffolded with:
 
 ```
-README.md          # dataset description, integrity model, reproduce/analyze instructions
+README.md          # dataset overview: layout, reading a run, contributing, citing
+NOTES.md           # dataset notes: known limitations, the errata record, control runs, native baselines
 SCHEMA.md          # the BenchRunResult run-file schema + metric recompute definitions
 CITATION.cff       # makes the dataset citable
 LICENSE            # CC0 1.0 (public domain) for the data
 .gitattributes     # run JSONs marked linguist-generated
 runs/  quarantine/  index/
 controls/          # control runs, filed by collect-control-runs.ts (section 9); never indexed
+native/            # maintainer-committed native llama-bench baselines; not part of the leaderboard
+tools/             # run-llama-bench.sh (native baselines), scrub-publication.mjs (schema 3 scrub)
 ```
 
 The submission API creates missing `runs/YYYY/MM/` paths on first write.
@@ -275,8 +278,8 @@ series place.
 
 A control run is a control experiment for the methodology: the same suite as
 a protocol run, in the runtime execution order its kind names, so that the
-lane ratios under two orders can be compared (see the package README, Control
-runs). There are five kinds:
+lane ratios under two orders can be compared (see the package README and
+NOTES.md, Control runs). There are five kinds:
 
 - `order-reversed` runs the runtimes in the exact reverse of the protocol
   order.

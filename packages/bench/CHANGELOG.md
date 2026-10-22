@@ -1,5 +1,9 @@
 # @localmode/bench
 
+## 0.9.12
+
+- docs: the README is a short npm README (install, quick start, protocol in brief, API table, analysis CLI, control-run kinds, errata, links, license). Its detailed reference (protocol history, metric definitions, validity gates, `runtimeConfig` record, model file pinning, trace events, environment capture, quality lane, control runs, publication rule, errata, the ONNX Runtime heap limitation, analysis tooling and CSV columns) moves unchanged to the new `NOTES.md`. No code changes.
+
 ## 0.9.11
 
 - feat: per-cell errata, an exclusion with a stated reason, never a re-score. New module exports `ERRATA_FILE` (`'index/errata.json'`), `validateErrataShape(value)`, `validateErrata(errata, runs)`, `errataExclusions(errata)` and the types `ErratumEntry` (`{ runId, cellIds, reason, recordedAt, reference }`), `ErrataRunRef`, `ErrataExclusions` and `ErrataTally` (`{ cells, runs }`). `validateErrata` refuses a list that is not an array, an entry with an unknown field, a blank `runId`/`reason`/`reference`, a `recordedAt` that is not an ISO 8601 date or date-time, an empty or non-string `cellIds`, a cell listed twice, a run the dataset does not hold, a cell the run does not have, and a cell whose status is not `ok` (a non-ok cell already enters no aggregate, so it needs no entry). `aggregateRuns(runs, minSubmissions?, errata?)` takes an optional third argument, and the new `aggregateRunsWithErrata(runs, { minSubmissions?, errata? })` returns `{ rows, excludedByErratum }`: listed cells enter no median, each `LeaderboardRow` gains `excludedByErratum` (the cells of its key that were left out), and a row whose every cell is listed stays with `submissions: 0`, so an exclusion is never silent. Control runs are skipped before errata, so their cells are never counted. `rowsToCSV` appends an `excludedByErratum` column after `provisional`; every other column keeps its name, position and value (`0` when no errata apply).

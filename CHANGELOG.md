@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.18] - 2026-10-22
+
+**Released:** `@localmode/bench` 0.9.12.
+
+### Documentation
+
+- **bench (docs):** the `@localmode/bench` README is rewritten as a short npm README: what the package is, install, a quick start (run a suite with injected adapters, digest, validate, aggregate with errata), the protocol in brief with the methodology link, the API grouped in one table, the analysis CLI, a control-run kinds table, errata in one paragraph, links and license. Nothing is removed: the protocol's version history, metric definitions, validity gates, the per-runtime `runtimeConfig` record, model file pinning, trace events, the environment capture, the quality-fidelity lane, control-run details, the publication rule, errata, the ONNX Runtime heap limitation, the analysis tooling and every CSV column move to the new `packages/bench/NOTES.md`, organized by topic. `SETUP.md` lists the dataset's current layout (`NOTES.md`, `native/`, `tools/`). README and docs only; no code, protocol or recorded value changes, and the protocol stays `localmode-bench/5`.
+
 ## [2.16.17] - 2026-10-22
 
 **Released:** `@localmode/bench` 0.9.11.
