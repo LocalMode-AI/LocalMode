@@ -1,6 +1,9 @@
 /**
  * GET /api/bench/leaderboard — aggregated leaderboard rows as JSON (used by
  * the bench pages for refresh and freely consumable by third parties).
+ * `excludedByErratum` is the number of cells (and runs) the rows leave out
+ * because the dataset's `index/errata.json` lists them; each row carries its
+ * own count.
  */
 
 import { NextResponse } from 'next/server';
@@ -14,13 +17,13 @@ export async function GET(): Promise<NextResponse> {
   const repo = config?.repo ?? process.env.BENCH_GITHUB_REPO;
   if (!repo) {
     return NextResponse.json(
-      { rows: [], runs: 0, repo: null, note: 'results store not configured' },
+      { rows: [], runs: 0, excludedByErratum: { cells: 0, runs: 0 }, repo: null, note: 'results store not configured' },
       { headers: { 'Cache-Control': 'public, s-maxage=60' } },
     );
   }
-  const { rows, runs, protocols } = await getLeaderboardSnapshot(repo);
+  const { rows, runs, protocols, excludedByErratum } = await getLeaderboardSnapshot(repo);
   return NextResponse.json(
-    { rows, runs, protocols, repo },
+    { rows, runs, protocols, excludedByErratum, repo },
     {
       headers: {
         // Stale window capped to one revalidation period: with an hour of

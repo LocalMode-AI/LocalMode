@@ -40,6 +40,7 @@ const { GET } = await import('../src/app/api/bench/leaderboard/route');
 
 const REPO = 'example/bench-data';
 const RAW_URL = `https://raw.githubusercontent.com/${REPO}/main/index/summary.json`;
+const ERRATA_URL = `https://raw.githubusercontent.com/${REPO}/main/index/errata.json`;
 const TWO_MB = 2 * 1024 * 1024;
 
 /** One real index entry from the public dataset (65 ok cells, protocol 5). */
@@ -83,12 +84,23 @@ function nextEntrySize(body: string): number {
 }
 
 let served: string[] = [];
+/** Body of index/errata.json; null serves 404 (a dataset without errata). */
+let errataServed: string | null = null;
 const inits: RequestInit[] = [];
+const errataInits: RequestInit[] = [];
 
 beforeEach(() => {
   served = [];
+  errataServed = null;
   inits.length = 0;
+  errataInits.length = 0;
   vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (String(input) === ERRATA_URL) {
+      errataInits.push(init ?? {});
+      return errataServed === null
+        ? new Response('404: Not Found', { status: 404 })
+        : new Response(errataServed, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+    }
     expect(String(input)).toBe(RAW_URL);
     inits.push(init ?? {});
     const body = served.length > 1 ? served.shift()! : served[0];
@@ -198,7 +210,7 @@ describe('stale-cache condition', () => {
     expect(snapshot.entries).toBe(5);
     expect(cacheCalls).toHaveLength(1);
     expect(cacheCalls[0].options?.revalidate).toBe(300);
-    expect(cacheCalls[0].keyParts).toEqual(['bench-leaderboard-snapshot', ...LEADERBOARD_PROTOCOL_VERSIONS]);
+    expect(cacheCalls[0].keyParts).toEqual(['bench-leaderboard-snapshot', 'errata-1', ...LEADERBOARD_PROTOCOL_VERSIONS]);
     // The repository is the cached function's argument, so it is in the key.
     expect(cachedInvocations.at(-1)).toEqual([REPO]);
     expect(store.LEADERBOARD_REVALIDATE_SEC).toBe(300);
@@ -217,7 +229,7 @@ describe('stale-cache condition', () => {
 });
 
 describe('GET /api/bench/leaderboard', () => {
-  it('keeps the response shape: rows, runs, protocols, repo', async () => {
+  it('keeps the response shape: rows, runs, protocols, repo, plus the excluded-by-erratum tally', async () => {
     process.env.BENCH_GITHUB_REPO = REPO;
     const entries = syntheticIndex();
     served = [JSON.stringify(entries)];
@@ -225,7 +237,8 @@ describe('GET /api/bench/leaderboard', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('public, s-maxage=300, stale-while-revalidate=300');
     const body = (await res.json()) as Record<string, unknown>;
-    expect(Object.keys(body).sort()).toEqual(['protocols', 'repo', 'rows', 'runs']);
+    expect(Object.keys(body).sort()).toEqual(['excludedByErratum', 'protocols', 'repo', 'rows', 'runs']);
+    expect(body.excludedByErratum).toEqual({ cells: 0, runs: 0 });
     expect(body.repo).toBe(REPO);
     expect(body.protocols).toEqual(LEADERBOARD_PROTOCOL_VERSIONS);
     expect(body.runs).toBe(
@@ -233,5 +246,45 @@ describe('GET /api/bench/leaderboard', () => {
     );
     expect(body.rows).toEqual(JSON.parse(JSON.stringify(store.aggregateIndex(entries))));
     expect(inits.every((init) => init.cache === 'no-store')).toBe(true);
+  });
+
+  it('applies index/errata.json: the listed cells leave their rows and are counted, per row and in total', async () => {
+    process.env.BENCH_GITHUB_REPO = REPO;
+    const entries = syntheticIndex(20);
+    served = [JSON.stringify(entries)];
+    const before = (await (await GET()).json()) as { rows: Array<Record<string, unknown>>; excludedByErratum: unknown };
+
+    // Two unflagged v5 runs on one subclass; exclude one quality cell of each.
+    const targets = entries.filter((e) => !e.flagged && e.protocol === 'localmode-bench/5' && e.deviceSubclass === entries[0].deviceSubclass).slice(0, 2);
+    expect(targets).toHaveLength(2);
+    const cell = TEMPLATE.cells.find((c) => c.qualityScore !== undefined)!;
+    expect(cell).toBeDefined();
+    errataServed = JSON.stringify(
+      targets.map((t) => ({ runId: t.runId, cellIds: [cell.cellId], reason: 'fixture', recordedAt: '2026-10-22', reference: 'README.md' })),
+    );
+    const after = (await (await GET()).json()) as { rows: Array<Record<string, unknown>>; excludedByErratum: unknown };
+    expect(errataInits.every((init) => init.cache === 'no-store')).toBe(true);
+    expect(after.excludedByErratum).toEqual({ cells: 2, runs: 2 });
+    const key = (r: Record<string, unknown>) => [r.protocol, r.deviceSubclass, r.runtimeId, r.benchModelId, r.workloadId].join('|');
+    const rowKey = ['localmode-bench/5', targets[0].deviceSubclass, cell.runtimeId, cell.benchModelId, cell.workloadId].join('|');
+    const b = before.rows.find((r) => key(r) === rowKey)!;
+    const a = after.rows.find((r) => key(r) === rowKey)!;
+    expect(a.excludedByErratum).toBe(2);
+    expect(a.submissions).toBe((b.submissions as number) - 2);
+    // Every other row is unchanged.
+    expect(after.rows.filter((r) => key(r) !== rowKey)).toEqual(before.rows.filter((r) => key(r) !== rowKey));
+  });
+
+  it('serves an empty board (logged), never a silently unexcluded one, when the errata name a run the index lacks', async () => {
+    process.env.BENCH_GITHUB_REPO = REPO;
+    served = [JSON.stringify(syntheticIndex(5))];
+    errataServed = JSON.stringify([
+      { runId: 'not-in-index', cellIds: ['x/y/z'], reason: 'fixture', recordedAt: '2026-10-22', reference: 'README.md' },
+    ]);
+    await expect(store.computeLeaderboardSnapshot(REPO)).rejects.toMatchObject({ code: 'errata-invalid' });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const body = (await (await GET()).json()) as { rows: unknown[] };
+    expect(body.rows).toEqual([]);
+    expect(String(error.mock.calls[0]?.[1])).toMatch(/run not-in-index is not in the dataset/);
   });
 });

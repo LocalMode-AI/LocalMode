@@ -8,6 +8,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import type { IndexLeaderboardRow } from '@/lib/bench/store';
 import { LEADERBOARD_DEFAULT_PAGE_SIZE, LEADERBOARD_PAGE_SIZES, pageWindow } from '@/lib/bench/paginate';
 import { Badge } from '@/registry/localmode/ui/badge';
@@ -68,6 +69,9 @@ export function LeaderboardTable({ rows }: { rows: IndexLeaderboardRow[] }) {
 
   const win = pageWindow(filtered.length, page, pageSize);
   const pageRows = filtered.slice(win.start, win.end);
+  // Cells the displayed rows leave out because the dataset's errata list them.
+  const erratumCells = pageRows.reduce((n, r) => n + (r.excludedByErratum ?? 0), 0);
+  const erratumRows = pageRows.filter((r) => (r.excludedByErratum ?? 0) > 0).length;
 
   if (rows.length === 0) return null;
 
@@ -172,6 +176,14 @@ export function LeaderboardTable({ rows }: { rows: IndexLeaderboardRow[] }) {
                 </TableCell>
                 <TableCell className="text-right">
                   {r.submissions}
+                  {(r.excludedByErratum ?? 0) > 0 && (
+                    <span
+                      className="text-xs text-muted-foreground"
+                      title="Cells listed in the dataset's index/errata.json: excluded from this row with a stated reason, not re-scored."
+                    >
+                      {' '}(+{r.excludedByErratum} excluded by erratum)
+                    </span>
+                  )}
                   {r.provisional && (
                     <Badge variant="outline" className="ml-2">
                       provisional
@@ -183,6 +195,19 @@ export function LeaderboardTable({ rows }: { rows: IndexLeaderboardRow[] }) {
           </TableBody>
         </Table>
       </div>
+
+      {erratumCells > 0 && (
+        <p className="text-sm text-muted-foreground">
+          Errata: {erratumRows} row{erratumRows === 1 ? '' : 's'} shown exclude {erratumCells} published cell
+          {erratumCells === 1 ? '' : 's'} listed in the dataset&apos;s{' '}
+          <code className="font-mono text-xs">index/errata.json</code>, each with its reason; nothing is
+          re-scored (
+          <Link className="underline underline-offset-2" href="/bench/methodology#errata">
+            how errata work
+          </Link>
+          ).
+        </p>
+      )}
 
       <nav aria-label="Leaderboard pages" className="flex flex-wrap items-center justify-between gap-3 text-sm">
         <p role="status" aria-live="polite" className="text-muted-foreground">

@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RunIndexEntry } from '../src/lib/bench/store';
 import {
   aggregateIndex,
+  buildLeaderboardSnapshot,
   NONCE_CONSUMED_TTL_SEC,
   rateLimitWithRetry,
   SUBMIT_RATE_LIMIT,
@@ -48,6 +49,67 @@ function entry(overrides: Partial<RunIndexEntry> & { runId: string }): RunIndexE
     ...overrides,
   };
 }
+
+describe('aggregateIndex() with errata', () => {
+  const mmlu = (runId: string, qualityScore: number, qualityParseRate: number) =>
+    entry({
+      runId,
+      deviceClass: 'windows/nvidia-ampere',
+      deviceSubclass: 'windows/nvidia-geforce-rtx-3080-ti',
+      cells: [
+        {
+          cellId: 'litert/qwen3-0.6b/quality-mmlu-25',
+          runtimeId: 'litert',
+          benchModelId: 'qwen3-0.6b',
+          modelName: 'Qwen3 0.6B (LiteRT)',
+          workloadId: 'quality-mmlu-25',
+          resolvedBackend: 'gpu',
+          qualityScore,
+          qualityParseRate,
+          highVariance: false,
+        },
+      ],
+    });
+  const entries = [mmlu('good-1', 0.4, 1), mmlu('good-2', 0.48, 0.96), mmlu('replaced', 0, 0)];
+  const erratum = {
+    runId: 'replaced',
+    cellIds: ['litert/qwen3-0.6b/quality-mmlu-25'],
+    reason: 'loaded the replaced model file',
+    recordedAt: '2026-10-22',
+    reference: 'README.md',
+  };
+
+  it('without errata the zero-score cell is in the quality median', () => {
+    const [row] = aggregateIndex(entries);
+    expect([row.submissions, row.qualityScore, row.qualityParseRate, row.excludedByErratum]).toEqual([3, 0.4, 0.96, 0]);
+  });
+
+  it('an erratum entry changes the quality median and n, and the row counts it', () => {
+    const [row] = aggregateIndex(entries, undefined, [erratum]);
+    expect([row.submissions, row.qualityScore, row.qualityParseRate, row.excludedByErratum]).toEqual([2, 0.44, 0.98, 1]);
+  });
+
+  it('the snapshot carries the total tally; a row with every cell excluded stays with zero runs', () => {
+    const snap = buildLeaderboardSnapshot([mmlu('replaced', 0, 0)], undefined, [erratum]);
+    expect(snap.excludedByErratum).toEqual({ cells: 1, runs: 1 });
+    expect(snap.rows).toHaveLength(1);
+    expect(snap.rows[0]).toMatchObject({ submissions: 0, excludedByErratum: 1, provisional: true });
+    expect(snap.rows[0].qualityScore).toBeUndefined();
+    expect(buildLeaderboardSnapshot(entries).excludedByErratum).toEqual({ cells: 0, runs: 0 });
+  });
+
+  it('refuses errata that are malformed or name a run or cell the index does not hold', () => {
+    expect(() => buildLeaderboardSnapshot(entries, undefined, [{ ...erratum, runId: 'gone' }])).toThrow(
+      /run gone is not in the dataset/,
+    );
+    expect(() => buildLeaderboardSnapshot(entries, undefined, [{ ...erratum, cellIds: ['litert/qwen3-0.6b/x'] }])).toThrow(
+      /has no cell litert\/qwen3-0.6b\/x/,
+    );
+    expect(() => buildLeaderboardSnapshot(entries, undefined, [{ ...erratum, recordedAt: 'yesterday' }])).toThrow(
+      /recordedAt/,
+    );
+  });
+});
 
 describe('aggregateIndex()', () => {
   it('shows the current and the previous protocol side by side, never mixed, and nothing older', () => {

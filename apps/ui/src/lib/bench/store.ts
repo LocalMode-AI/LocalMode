@@ -6,11 +6,14 @@
  * leaderboard aggregates from that index. Server-only.
  */
 
-import type { BenchRunResult, CellSummary } from '@localmode/bench';
+import type { BenchRunResult, CellSummary, ErrataTally, ErratumEntry } from '@localmode/bench';
 import { NONCE_MAX_AGE_MS } from './nonce';
 import {
+  ERRATA_FILE,
   LEADERBOARD_PROTOCOL_VERSIONS,
   deviceClassOf,
+  errataExclusions,
+  validateErrata,
   deviceSubclassOf,
   gpuArchitectureOf,
   median,
@@ -141,6 +144,12 @@ export interface IndexLeaderboardRow {
   resolvedBackends: string[];
   browsers: string[];
   provisional: boolean;
+  /**
+   * Cells of this row's key listed in the dataset's `index/errata.json`: they
+   * would have entered the row and contribute nothing to it. A row whose every
+   * cell is excluded stays, with `submissions: 0`, so an exclusion is never silent.
+   */
+  excludedByErratum: number;
 }
 
 /**
@@ -240,7 +249,14 @@ export async function commitRun(
 
 export class BenchStoreError extends Error {
   constructor(
-    public readonly code: 'duplicate-run' | 'github-error' | 'index-conflict' | 'index-unreadable' | 'index-shrink',
+    public readonly code:
+      | 'duplicate-run'
+      | 'github-error'
+      | 'index-conflict'
+      | 'index-unreadable'
+      | 'index-shrink'
+      | 'errata-unreadable'
+      | 'errata-invalid',
     message: string,
   ) {
     super(message);
@@ -460,6 +476,27 @@ export async function readIndex(repo: string): Promise<RunIndexEntry[]> {
   return parsed as RunIndexEntry[];
 }
 
+/**
+ * Read `index/errata.json` from the dataset's main branch (uncached, like the
+ * index): the published cells excluded from every aggregate, with a reason.
+ *
+ * @returns The parsed file (validated against the index by
+ *   `buildLeaderboardSnapshot()`); `[]` when the dataset has none (404).
+ * @throws {BenchStoreError} `github-error` on any other failed request,
+ *   `errata-unreadable` when the body is not JSON, so a transient failure
+ *   never drops the exclusions from a cached board.
+ */
+export async function readErrata(repo: string): Promise<unknown> {
+  const res = await fetch(`https://raw.githubusercontent.com/${repo}/main/${ERRATA_FILE}`, { cache: 'no-store' });
+  if (res.status === 404) return [];
+  if (!res.ok) throw new BenchStoreError('github-error', `GET raw errata failed: ${res.status}`);
+  try {
+    return (await res.json()) as unknown;
+  } catch {
+    throw new BenchStoreError('errata-unreadable', 'raw errata file is not valid JSON');
+  }
+}
+
 /** Seconds the cached leaderboard aggregate stays fresh (the page's ISR period too). */
 export const LEADERBOARD_REVALIDATE_SEC = 300;
 
@@ -489,6 +526,8 @@ export interface LeaderboardSnapshot {
   entries: number;
   /** When the index was read (ISO 8601). */
   generatedAt: string;
+  /** Cells (and their runs) the rows leave out because `index/errata.json` lists them. */
+  excludedByErratum: ErrataTally;
 }
 
 /**
@@ -508,24 +547,40 @@ export function dataCacheEntrySize(value: unknown, revalidate = LEADERBOARD_REVA
  *
  * @param entries - The whole index.
  * @param protocols - Protocol versions the leaderboard shows.
+ * @param errata - The parsed `index/errata.json` (`[]` when the dataset has none).
+ * @throws {BenchStoreError} `errata-invalid` when the errata file is malformed
+ *   or names a run or cell the index does not hold (an index entry holds the
+ *   run's ok cells, the only ones an erratum may name).
  */
 export function buildLeaderboardSnapshot(
   entries: readonly RunIndexEntry[],
   protocols: readonly string[] = LEADERBOARD_PROTOCOL_VERSIONS,
+  errata: unknown = [],
 ): LeaderboardSnapshot {
+  const errataErrors = validateErrata(errata, entries);
+  if (errataErrors.length > 0) {
+    throw new BenchStoreError('errata-invalid', `index/errata.json: ${errataErrors.slice(0, 5).join('; ')}`);
+  }
+  const applied = errata as ErratumEntry[];
   // Same rule as the rows: unflagged runs measured under a protocol the leaderboard shows.
   const current = entries.filter((e) => !e.flagged && !!e.protocol && protocols.includes(e.protocol));
   const recentSubmissions = [...current]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, RECENT_SUBMISSIONS_LIMIT)
     .map(({ cells: _cells, ...rest }) => rest);
+  const rows = aggregateIndex(entries, protocols, applied);
+  const excluded = errataExclusions(applied);
+  const excludedRuns = new Set(
+    current.filter((e) => e.cells.some((c) => excluded.has(e.runId, c.cellId))).map((e) => e.runId),
+  );
   return {
-    rows: aggregateIndex(entries, protocols),
+    rows,
     runs: current.length,
     protocols: [...protocols],
     recentSubmissions,
     entries: entries.length,
     generatedAt: new Date().toISOString(),
+    excludedByErratum: { cells: rows.reduce((n, r) => n + r.excludedByErratum, 0), runs: excludedRuns.size },
   };
 }
 
@@ -538,8 +593,8 @@ export function buildLeaderboardSnapshot(
  * @throws {BenchStoreError} when the index cannot be read (see `readIndex()`).
  */
 export async function computeLeaderboardSnapshot(repo: string): Promise<LeaderboardSnapshot> {
-  const entries = await readIndex(repo);
-  const snapshot = buildLeaderboardSnapshot(entries);
+  const [entries, errata] = await Promise.all([readIndex(repo), readErrata(repo)]);
+  const snapshot = buildLeaderboardSnapshot(entries, LEADERBOARD_PROTOCOL_VERSIONS, errata);
   const size = dataCacheEntrySize(snapshot);
   if (size > NEXT_DATA_CACHE_ENTRY_LIMIT) {
     console.error(
@@ -559,11 +614,16 @@ export const INDEX_HEADLINE_MIN = 3;
  * between protocol versions, so one row must never mix them. Entries with no
  * `protocol` field predate v2 and are excluded from the current leaderboard
  * (they stay in the dataset, published as v1).
+ *
+ * Cells listed in `errata` are excluded, never re-scored: each row counts the
+ * cells it left out in `excludedByErratum`.
  */
 export function aggregateIndex(
   entries: readonly RunIndexEntry[],
   protocols: readonly string[] = LEADERBOARD_PROTOCOL_VERSIONS,
+  errata: readonly ErratumEntry[] = [],
 ): IndexLeaderboardRow[] {
+  const excluded = errataExclusions(errata);
   interface Bucket {
     row: Pick<
       IndexLeaderboardRow,
@@ -573,6 +633,7 @@ export function aggregateIndex(
     backends: Set<string>;
     browsers: Set<string>;
     runIds: Set<string>;
+    excludedByErratum: number;
   }
   const buckets = new Map<string, Bucket>();
   for (const entry of entries) {
@@ -600,8 +661,14 @@ export function aggregateIndex(
           backends: new Set(),
           browsers: new Set(),
           runIds: new Set(),
+          excludedByErratum: 0,
         };
         buckets.set(key, bucket);
+      }
+      if (excluded.has(entry.runId, cell.cellId)) {
+        // Listed in the errata: counted, never aggregated.
+        bucket.excludedByErratum += 1;
+        continue;
       }
       bucket.runIds.add(entry.runId);
       bucket.backends.add(cell.resolvedBackend);
@@ -641,6 +708,7 @@ export function aggregateIndex(
       resolvedBackends: [...bucket.backends].sort(),
       browsers: [...bucket.browsers].sort(),
       provisional: bucket.runIds.size < INDEX_HEADLINE_MIN,
+      excludedByErratum: bucket.excludedByErratum,
     });
   }
   rows.sort(

@@ -515,7 +515,9 @@ export default function BenchMethodologyPage() {
               October) loaded the replaced file: their LiteRT Qwen3 pp128 and pp512 cells are
               invalid (degenerate output), and their LiteRT Qwen3 MMLU cell is recorded ok with a
               score of 0 at a parse rate of 0, which is not a fidelity reading. The dataset README
-              lists the runs; nothing is re-scored. Since 2.16.16 every model file URL is pinned to
+              lists the runs, and since site build 2.16.17 those MMLU cells and the one warm-reload
+              cell that timed the replaced file are excluded from the leaderboard by erratum (see
+              Errata); nothing is re-scored. Since 2.16.16 every model file URL is pinned to
               a repository revision (Qwen3 0.6B to the file every valid v5 LiteRT Qwen3 cell
               measured, unchanged from 2026-07-17 to 2026-10-12; the other files to the revisions
               they have had since before v5), and LiteRT cells record the revision and the bytes
@@ -525,6 +527,27 @@ export default function BenchMethodologyPage() {
               and would bump the version.
             </li>
           </ul>
+        </Section>
+
+        <Section id="errata" title="Errata">
+          <p>
+            A published cell that turns out not to measure what the protocol describes is
+            excluded, never re-scored. The dataset keeps the list in{' '}
+            <code className="font-mono text-sm">index/errata.json</code>: one entry per run, naming
+            the run, the cells excluded, the reason, the date the erratum was recorded and where the
+            evidence is documented. An entry names only cells recorded{' '}
+            <code className="font-mono text-sm">ok</code>, because a cell with any other status
+            already enters no aggregate. The run file is not changed: the cell keeps its status and
+            its values. The leaderboard, the leaderboard API and the analysis tooling leave the listed
+            cells out of every median and count them in an &quot;excluded by erratum&quot; tally, per
+            row and in total, so an exclusion is never silent; a row whose every cell is excluded
+            stays with zero runs. An entry that names a run or a cell the dataset does not hold is
+            refused. Errata change no measurement rule, so they never bump the protocol version.
+            The first entries exclude twelve cells of the eleven runs that loaded the replaced
+            LiteRT Qwen3 file (see Residual limits): each run&apos;s MMLU cell, recorded ok with a
+            score of 0 at a parse rate of 0, which is not a fidelity reading, and one run&apos;s
+            warm-reload cell, recorded ok but timing the replaced file.
+          </p>
         </Section>
 
         <Section id="changelog" title="Protocol changelog">

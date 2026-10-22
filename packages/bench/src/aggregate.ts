@@ -9,6 +9,7 @@ import { isIncrementalStream, summarizeRun, validateSubmission, type ValidateOpt
 import { median } from './stats.js';
 import { pressureStateFractions } from './pressure.js';
 import { isControlRun } from './protocol.js';
+import { errataExclusions, type ErrataTally, type ErratumEntry } from './errata.js';
 
 /**
  * Architecture of AMD integrated GPUs whose WebGPU label is wrong in Chromium,
@@ -168,6 +169,20 @@ export interface LeaderboardRow {
   highVariance: boolean;
   /** Rows below the min-N threshold are provisional. */
   provisional: boolean;
+  /**
+   * Cells of this row's key that an erratum (`index/errata.json`) excluded:
+   * they would have entered the row and contribute nothing to it. A row whose
+   * every cell is excluded is kept with `submissions: 0`, so an exclusion is
+   * never silent.
+   */
+  excludedByErratum: number;
+}
+
+/** Leaderboard rows plus what errata left out of them. */
+export interface AggregateResult {
+  rows: LeaderboardRow[];
+  /** Cells (and their runs) excluded by errata across all rows. */
+  excludedByErratum: ErrataTally;
 }
 
 /** Minimum concordant submissions for a non-provisional headline row. */
@@ -177,16 +192,43 @@ export const HEADLINE_MIN_SUBMISSIONS = 3;
  * Aggregate validated runs into leaderboard rows.
  *
  * Control runs (`harness.control`) are never scored and contribute to no row.
+ * Cells listed in `errata` are excluded, never re-scored: each row counts the
+ * cells it left out in `excludedByErratum`.
  *
  * @param runs - Validated (non-quarantined) run results.
  * @param minSubmissions - Min submissions before a row loses `provisional`.
+ * @param errata - Erratum entries (`index/errata.json`), validated with `validateErrata()`.
  * @example
  * const rows = aggregateRuns(allRuns);
+ * @see aggregateRunsWithErrata
  */
 export function aggregateRuns(
   runs: readonly BenchRunResult[],
   minSubmissions = HEADLINE_MIN_SUBMISSIONS,
+  errata: readonly ErratumEntry[] = [],
 ): LeaderboardRow[] {
+  return aggregateRunsWithErrata(runs, { minSubmissions, errata }).rows;
+}
+
+/**
+ * Aggregate validated runs into leaderboard rows and report what errata
+ * excluded: the per-row `excludedByErratum` counts and their total.
+ *
+ * @param runs - Validated (non-quarantined) run results.
+ * @param options - `minSubmissions` (default {@link HEADLINE_MIN_SUBMISSIONS}) and `errata`.
+ * @returns The rows and the total excluded-by-erratum tally.
+ * @example
+ * const { rows, excludedByErratum } = aggregateRunsWithErrata(runs, { errata });
+ * @see validateErrata
+ */
+export function aggregateRunsWithErrata(
+  runs: readonly BenchRunResult[],
+  options: { minSubmissions?: number; errata?: readonly ErratumEntry[] } = {},
+): AggregateResult {
+  const minSubmissions = options.minSubmissions ?? HEADLINE_MIN_SUBMISSIONS;
+  const excluded = errataExclusions(options.errata);
+  const excludedRuns = new Set<string>();
+  let excludedCells = 0;
   interface Bucket {
     row: Omit<
       LeaderboardRow,
@@ -201,6 +243,7 @@ export function aggregateRuns(
       | 'qualityScore'
       | 'qualityParseRate'
       | 'provisional'
+      | 'excludedByErratum'
     >;
     ttft: number[];
     decode: number[];
@@ -212,6 +255,7 @@ export function aggregateRuns(
     quality: number[];
     parseRate: number[];
     runIds: Set<string>;
+    excludedByErratum: number;
   }
   const buckets = new Map<string, Bucket>();
 
@@ -253,8 +297,16 @@ export function aggregateRuns(
           quality: [],
           parseRate: [],
           runIds: new Set(),
+          excludedByErratum: 0,
         };
         buckets.set(key, bucket);
+      }
+      if (excluded.has(run.runId, cell.cellId)) {
+        // Listed in the errata: counted, never aggregated.
+        bucket.excludedByErratum += 1;
+        excludedCells += 1;
+        excludedRuns.add(run.runId);
+        continue;
       }
       bucket.runIds.add(run.runId);
       pushUnique(bucket.row.resolvedBackends, cell.resolvedBackend);
@@ -288,6 +340,7 @@ export function aggregateRuns(
       qualityScore: maybeMedian(bucket.quality),
       qualityParseRate: maybeMedian(bucket.parseRate),
       provisional: bucket.runIds.size < minSubmissions,
+      excludedByErratum: bucket.excludedByErratum,
     });
   }
   rows.sort(
@@ -300,7 +353,7 @@ export function aggregateRuns(
       a.runtimeId.localeCompare(b.runtimeId) ||
       a.workloadId.localeCompare(b.workloadId),
   );
-  return rows;
+  return { rows, excludedByErratum: { cells: excludedCells, runs: excludedRuns.size } };
 }
 
 function pushUnique(list: string[], value: string): void {
@@ -332,6 +385,8 @@ export function rowsToCSV(rows: readonly LeaderboardRow[]): string {
     'ttftMs', 'decodeCharsPerSec', 'overallCharsPerSec', 'singleLatencyMs', 'batchTextsPerSec',
     'loadColdMs', 'loadWarmMs', 'qualityScore', 'qualityParseRate', 'resolvedBackends', 'browsers',
     'highVariance', 'provisional',
+    // Additive column: appended so the legacy columns keep their positions.
+    'excludedByErratum',
   ];
   const lines = [header.join(',')];
   for (const r of rows) {
@@ -340,7 +395,7 @@ export function rowsToCSV(rows: readonly LeaderboardRow[]): string {
         r.protocol, r.deviceClass, r.deviceSubclass, r.runtimeId, r.benchModelId, r.modelName, r.workloadId, r.submissions,
         r.ttftMs, r.decodeCharsPerSec, r.overallCharsPerSec, r.singleLatencyMs, r.batchTextsPerSec,
         r.loadColdMs, r.loadWarmMs, r.qualityScore, r.qualityParseRate, r.resolvedBackends.join(';'), r.browsers.join(';'),
-        r.highVariance, r.provisional,
+        r.highVariance, r.provisional, r.excludedByErratum,
       ]
         .map(csvField)
         .join(','),

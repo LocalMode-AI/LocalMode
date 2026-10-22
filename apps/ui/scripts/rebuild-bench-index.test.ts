@@ -17,6 +17,7 @@ import { makeRun } from '../../../packages/bench/tests/helpers';
 import { issueNonce } from '../src/lib/bench/nonce';
 import type { RunIndexEntry } from '../src/lib/bench/store';
 import { buildIndexFromDataset, checkRebuildAgainst, INDEX_FILE, serializeIndex } from './rebuild-bench-index';
+import { ERRATA_FILE } from '@localmode/bench';
 import { importExportedRun } from './import-exported-run';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -202,5 +203,52 @@ describe('rebuild-bench-index', () => {
     const forced = cli('--allow-shrink');
     expect(forced.status, forced.stderr).toBe(0);
     expect(readFileSync(join(dataset, INDEX_FILE), 'utf8')).toBe('[]');
+  }, 120_000);
+
+  it('checks index/errata.json against the run files; the index itself is unchanged by errata', async () => {
+    writeDatasetFile('runs/2026/09/fixture-one.json', JSON.stringify(await freshRun('fixture-one', '2026-09-24T00:00:00.000Z')));
+    const without = serializeIndex(buildIndexFromDataset(dataset).entries);
+    const erratum = {
+      runId: 'fixture-one',
+      cellIds: ['wllama/test-model/chat-pp128-tg128'],
+      reason: 'fixture reason',
+      recordedAt: '2026-10-22',
+      reference: 'README.md',
+    };
+    writeDatasetFile(ERRATA_FILE, JSON.stringify([erratum]));
+    const withErrata = buildIndexFromDataset(dataset);
+    expect(withErrata.errata).toEqual({ path: ERRATA_FILE, entries: 1, cells: 1, errors: [] });
+    // Excluded cells keep their index entries: the leaderboard leaves them out and counts them.
+    expect(serializeIndex(withErrata.entries)).toBe(without);
+
+    const ok = cli();
+    expect(ok.status, ok.stderr).toBe(0);
+    expect(ok.stdout).toContain(`${ERRATA_FILE}: 1 entries, 1 cells excluded by erratum from the leaderboard`);
+    expect(readFileSync(join(dataset, INDEX_FILE), 'utf8')).toBe(without);
+  }, 120_000);
+
+  it('refuses to write when index/errata.json names a run or cell the dataset does not hold', async () => {
+    writeDatasetFile('runs/2026/09/fixture-one.json', JSON.stringify(await freshRun('fixture-one', '2026-09-24T00:00:00.000Z')));
+    writeDatasetFile(INDEX_FILE, '[]');
+    const base = { reason: 'fixture reason', recordedAt: '2026-10-22', reference: 'README.md' };
+    writeDatasetFile(
+      ERRATA_FILE,
+      JSON.stringify([
+        { ...base, runId: 'not-in-dataset', cellIds: ['wllama/test-model/chat-pp128-tg128'] },
+        { ...base, runId: 'fixture-one', cellIds: ['litert/qwen3-0.6b/quality-mmlu-25'] },
+      ]),
+    );
+    expect(buildIndexFromDataset(dataset).errata.errors).toEqual([
+      'errata[0]: run not-in-dataset is not in the dataset',
+      'errata[1].cellIds[0]: run fixture-one has no cell litert/qwen3-0.6b/quality-mmlu-25',
+    ]);
+    const refused = cli();
+    expect(refused.status).toBe(1);
+    expect(refused.stderr).toContain('errata[0]: run not-in-dataset is not in the dataset');
+    expect(refused.stderr).toContain(`nothing written; fix ${ERRATA_FILE} first`);
+    expect(readFileSync(join(dataset, INDEX_FILE), 'utf8')).toBe('[]');
+
+    writeDatasetFile(ERRATA_FILE, '{"not": "a list"}');
+    expect(buildIndexFromDataset(dataset).errata.errors).toEqual(['errata: not a JSON array']);
   }, 120_000);
 });

@@ -16,6 +16,13 @@
  * one, or that drops a run the current index lists, unless `--allow-shrink`
  * is passed (for example after deleting a run file on purpose).
  *
+ * When the dataset has `index/errata.json` (published cells excluded from
+ * every aggregate, each with a reason), the tool checks it against the run
+ * files and refuses to write when an entry is malformed or names a run or a
+ * cell the dataset does not hold, or a cell that is not `ok`. The index
+ * itself is unchanged by errata: listed cells keep their entries, and the
+ * leaderboard leaves them out and counts them.
+ *
  * Usage (from apps/ui):
  *   pnpm exec tsx scripts/rebuild-bench-index.ts --dataset ../../../LocalMode-Bench
  *   pnpm exec tsx scripts/rebuild-bench-index.ts --dataset <dir> --dry-run
@@ -25,7 +32,7 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validateSubmission, type BenchRunResult } from '@localmode/bench';
+import { ERRATA_FILE, validateErrata, validateSubmission, type BenchRunResult, type ErrataRunRef } from '@localmode/bench';
 import { assertIndexNotShrinking, toIndexEntry, type RunIndexEntry } from '../src/lib/bench/store';
 
 /** Dataset-relative path of the index. */
@@ -37,9 +44,22 @@ export interface RebuildProblem {
   reason: string;
 }
 
+/** The dataset's errata file, checked against its run files. */
+export interface RebuildErrata {
+  /** Dataset-relative path, or null when the dataset has no errata file. */
+  path: string | null;
+  /** Entries in the file. */
+  entries: number;
+  /** Cells the file lists. */
+  cells: number;
+  /** Why the file cannot be applied; empty when it can. */
+  errors: string[];
+}
+
 export interface RebuildResult {
   entries: RunIndexEntry[];
   problems: RebuildProblem[];
+  errata: RebuildErrata;
 }
 
 function listJson(root: string, dir: string): string[] {
@@ -73,6 +93,7 @@ export function buildIndexFromDataset(datasetDir: string, current: readonly RunI
   const entries: RunIndexEntry[] = [];
   const problems: RebuildProblem[] = [];
   const seen = new Map<string, string>();
+  const refs: ErrataRunRef[] = [];
   for (const path of [...listJson(datasetDir, 'runs'), ...listJson(datasetDir, 'quarantine')]) {
     let run: BenchRunResult;
     try {
@@ -92,6 +113,7 @@ export function buildIndexFromDataset(datasetDir: string, current: readonly RunI
       continue;
     }
     seen.set(run.runId, path);
+    refs.push({ runId: run.runId, cells: run.cells.map((c) => ({ cellId: c.cellId, status: c.status })) });
     // The directory is the publication decision: quarantine/ holds the runs
     // the submit path flagged, runs/ the verified ones.
     const entry = toIndexEntry(run, report.summaries, path.startsWith('quarantine/'), path);
@@ -100,7 +122,28 @@ export function buildIndexFromDataset(datasetDir: string, current: readonly RunI
     entries.push(imported === undefined ? entry : { ...entry, ...imported });
   }
   entries.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.path.localeCompare(b.path));
-  return { entries, problems };
+  return { entries, problems, errata: checkDatasetErrata(datasetDir, refs) };
+}
+
+/**
+ * Check the dataset's `index/errata.json`, when present, against its runs.
+ *
+ * @param datasetDir - Root of the dataset clone.
+ * @param runs - Every run file of the dataset (`runs/` and `quarantine/`).
+ */
+export function checkDatasetErrata(datasetDir: string, runs: readonly ErrataRunRef[]): RebuildErrata {
+  const abs = join(datasetDir, ERRATA_FILE);
+  if (!existsSync(abs)) return { path: null, entries: 0, cells: 0, errors: [] };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(abs, 'utf8'));
+  } catch (error) {
+    return { path: ERRATA_FILE, entries: 0, cells: 0, errors: [`not valid JSON: ${(error as Error).message}`] };
+  }
+  const errors = validateErrata(parsed, runs);
+  const list = Array.isArray(parsed) ? (parsed as Array<{ cellIds?: unknown }>) : [];
+  const cells = list.reduce((n, e) => n + (Array.isArray(e?.cellIds) ? e.cellIds.length : 0), 0);
+  return { path: ERRATA_FILE, entries: list.length, cells, errors };
 }
 
 /** Serialize entries exactly as the submit path writes the index. */
@@ -152,11 +195,21 @@ function main(argv: string[]): number {
   }
 
   const current = readCurrentIndex(indexPath);
-  const { entries, problems } = buildIndexFromDataset(datasetDir, current);
+  const { entries, problems, errata } = buildIndexFromDataset(datasetDir, current);
   if (problems.length > 0) {
     for (const p of problems) console.error(`[rebuild-bench-index] cannot index ${p.path}: ${p.reason}`);
     console.error('[rebuild-bench-index] nothing written; fix or remove these files first');
     return 1;
+  }
+  if (errata.errors.length > 0) {
+    for (const e of errata.errors) console.error(`[rebuild-bench-index] ${errata.path}: ${e}`);
+    console.error(`[rebuild-bench-index] nothing written; fix ${errata.path} first`);
+    return 1;
+  }
+  if (errata.path) {
+    console.log(
+      `[rebuild-bench-index] ${errata.path}: ${errata.entries} entries, ${errata.cells} cells excluded by erratum from the leaderboard`,
+    );
   }
   try {
     checkRebuildAgainst(current, entries, allowShrink);

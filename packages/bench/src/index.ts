@@ -148,6 +148,7 @@ export type { PublicationScrub } from './publication.js';
 // Aggregation (leaderboard + analysis tooling)
 export {
   aggregateRuns,
+  aggregateRunsWithErrata,
   amdArchitectureFromRenderer,
   AMD_DEVICE_ID_ARCHITECTURE,
   deviceClassOf,
@@ -161,7 +162,11 @@ export {
   runtimeVersionColumn,
   HEADLINE_MIN_SUBMISSIONS,
 } from './aggregate.js';
-export type { LeaderboardRow } from './aggregate.js';
+export type { AggregateResult, LeaderboardRow } from './aggregate.js';
+
+// Per-cell errata (exclusions with a stated reason, never re-scores)
+export { ERRATA_FILE, errataExclusions, validateErrata, validateErrataShape } from './errata.js';
+export type { ErrataExclusions, ErrataRunRef, ErrataTally, ErratumEntry } from './errata.js';
 export { pressureStateFractions } from './pressure.js';
 export type { PressureState, PressureStateSummary } from './pressure.js';
 

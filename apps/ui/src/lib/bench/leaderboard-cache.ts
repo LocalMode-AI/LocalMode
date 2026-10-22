@@ -12,15 +12,22 @@ import {
 } from '@/lib/bench/store';
 
 /**
+ * Version of the cached snapshot's shape. `errata-1`: rows carry
+ * `excludedByErratum` and the snapshot its total.
+ */
+export const LEADERBOARD_SNAPSHOT_SHAPE = 'errata-1';
+
+/**
  * `computeLeaderboardSnapshot()` behind Next's data cache. The repository is
  * the call argument, so it is part of the cache key; the key parts carry the
- * protocol list so a release that changes it never reads an older aggregate.
+ * protocol list and the snapshot shape (`LEADERBOARD_SNAPSHOT_SHAPE`), so a
+ * release that changes either never reads an older aggregate.
  * The raw index fetch inside is `no-store`, so the only cached value is the
  * aggregate, which stays well under the 2 MB entry limit.
  */
 const cachedSnapshot = unstable_cache(
   (repo: string) => computeLeaderboardSnapshot(repo),
-  ['bench-leaderboard-snapshot', ...LEADERBOARD_PROTOCOL_VERSIONS],
+  ['bench-leaderboard-snapshot', LEADERBOARD_SNAPSHOT_SHAPE, ...LEADERBOARD_PROTOCOL_VERSIONS],
   { revalidate: LEADERBOARD_REVALIDATE_SEC, tags: ['bench-leaderboard'] },
 );
 
@@ -33,6 +40,7 @@ function emptySnapshot(): LeaderboardSnapshot {
     recentSubmissions: [],
     entries: 0,
     generatedAt: new Date().toISOString(),
+    excludedByErratum: { cells: 0, runs: 0 },
   };
 }
 

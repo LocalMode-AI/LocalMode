@@ -56,8 +56,12 @@ const runs = () => [makeAnalysisRun(), makeSecondAnalysisRun()];
 const lines = (csv: string) => csv.replace(/\n$/, '').split('\n');
 
 describe('legacy columns stay byte-identical', () => {
-  it('leaderboard.csv is unchanged', () => {
-    expect(lines(rowsToCSV(aggregateRuns(runs())))).toEqual(LEGACY_LEADERBOARD_CSV);
+  it('leaderboard.csv keeps every legacy column, row for row, with excludedByErratum appended', () => {
+    const out = lines(rowsToCSV(aggregateRuns(runs())));
+    expect(out).toHaveLength(LEGACY_LEADERBOARD_CSV.length);
+    expect(out[0]).toBe(`${LEGACY_LEADERBOARD_CSV[0]},excludedByErratum`);
+    // Without errata every row excludes nothing.
+    out.slice(1).forEach((line, i) => expect(line).toBe(`${LEGACY_LEADERBOARD_CSV[i + 1]},0`));
   });
 
   it('iterations.csv keeps the old header and every old field as a prefix, row for row', () => {

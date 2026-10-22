@@ -142,6 +142,30 @@ such runs (two 0x164C and two 0x15E7 moving from `windows/amd-rdna-2` to
 unchanged). Runs submitted after the deploy are indexed with the correction
 directly.
 
+### Errata
+
+`index/errata.json` (since bench 0.9.11, site build 2.16.17) lists published
+cells that every aggregate leaves out, each with a reason: a JSON array of
+`{ runId, cellIds, reason, recordedAt, reference }` (schema in the package
+README and the dataset's SCHEMA.md). A maintainer edits it by hand in the
+dataset clone; nothing writes it automatically. An entry names only `ok`
+cells (any other status already enters no aggregate). Before committing,
+check it with the rebuild tool's dry run, which validates it against the run
+files and refuses (exit 1, nothing written) when an entry is malformed or
+names a run or cell the dataset does not hold:
+
+```
+cd apps/ui
+pnpm exec tsx scripts/rebuild-bench-index.ts --dataset ../../../LocalMode-Bench --dry-run
+# [rebuild-bench-index] index/errata.json: 12 entries, 12 cells excluded by erratum from the leaderboard
+```
+
+The leaderboard reads the file from `main` beside the index on every
+revalidation and validates it against the index; a file that fails is logged,
+and the previously cached board (or, before one exists, an empty board) is
+served instead of a board without the exclusions. The index itself is
+unchanged by errata. Errata never re-score a cell and never bump the protocol.
+
 ## 6. Matching participants of a paid study
 
 A paid-study link (`/bench/run?...&cc=<code>&PROLIFIC_PID=<id>`) records the

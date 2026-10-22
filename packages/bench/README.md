@@ -425,6 +425,7 @@ Community submissions are stored in a public GitHub repository:
 runs/YYYY/MM/<runId>.json    verified submissions (auto-published)
 quarantine/YYYY/MM/<runId>.json  flagged submissions (public, hidden from charts)
 index/summary.json           aggregated leaderboard rows (rebuilt on write)
+index/errata.json            published cells excluded from every aggregate, with a reason
 controls/<kind>/<YYYY-MM-DD>/<runId>.json  control runs (harness.control), never indexed
 ```
 
@@ -433,6 +434,34 @@ UTC date of `createdAt`. They are never submitted, so the submission API
 never writes there: a maintainer files exported control runs into a clone
 with `apps/ui/scripts/collect-control-runs.ts` (SETUP.md, section 9). They
 never appear in `index/summary.json` and never on the leaderboard.
+
+### Errata (`index/errata.json`)
+
+A published cell that turns out not to measure what the protocol describes
+is excluded, never re-scored. `index/errata.json` is a JSON array of
+`ErratumEntry` objects:
+
+| Field | Meaning |
+| --- | --- |
+| `runId` | The run the cells belong to |
+| `cellIds` | Non-empty list of that run's cell ids (`runtime/model/workload`), each recorded `ok` |
+| `reason` | Why the cells are excluded, for a reader of the dataset |
+| `recordedAt` | When the erratum was recorded (ISO 8601 date or date-time) |
+| `reference` | Where the evidence is documented (a README section, an issue, a commit) |
+
+An entry names only `ok` cells: a cell with any other status already enters
+no aggregate, so it needs no entry. `validateErrata(errata, runs)` refuses a
+malformed list (`validateErrataShape`), a run the dataset does not hold, a
+cell the run does not have, a non-`ok` cell, and a cell listed twice; the
+leaderboard, `apps/ui/scripts/rebuild-bench-index.ts` and the analysis CLI
+all apply it and refuse an errata file that fails. The run files are not
+changed. `aggregateRuns(runs, minSubmissions, errata)` and
+`aggregateRunsWithErrata(runs, { errata })` leave listed cells out of every
+median and count them: each `LeaderboardRow` carries `excludedByErratum`
+(a row whose every cell is excluded stays, with `submissions: 0`), and
+`aggregateRunsWithErrata` also returns the total (`{ cells, runs }`), which
+the leaderboard API reports as `excludedByErratum`. Errata change no
+measurement rule, so they never bump the protocol version.
 
 Environment variables for the submission API (see `apps/ui`):
 
@@ -448,7 +477,7 @@ export - runs are never lost.
 ## Analysis tooling
 
 ```ts
-import { aggregateRuns, rowsToCSV, runsToLongCSV, runsToCellsCSV, runsToRunsCSV } from '@localmode/bench';
+import { aggregateRuns, aggregateRunsWithErrata, rowsToCSV, runsToLongCSV, runsToCellsCSV, runsToRunsCSV } from '@localmode/bench';
 ```
 
 `runsToLongCSV(runs)` emits one row per timed iteration with full device
@@ -457,17 +486,30 @@ identity columns - feed it directly to R/pandas. It carries
 decode blank for non-incremental ones; `rowsToCSV(rows)` (leaderboard rows)
 carries `overallCharsPerSec` and `qualityParseRate`.
 
-`npx tsx packages/bench/scripts/analyze.ts <runs-dir> [out-dir]` writes all of
-them for a clone of the dataset: `leaderboard.csv` (`rowsToCSV`),
-`iterations.csv` (`runsToLongCSV`), `cells.csv` (`runsToCellsCSV`),
-`runs.csv` (`runsToRunsCSV`) and `validation.txt`. Run files are read in
-sorted path order; rows follow run order, then cell order, then iteration
+`npx tsx packages/bench/scripts/analyze.ts <runs-dir> [out-dir] [--errata <file> | --no-errata]`
+writes all of them for a clone of the dataset: `leaderboard.csv`
+(`rowsToCSV`), `iterations.csv` (`runsToLongCSV`), `cells.csv`
+(`runsToCellsCSV`), `runs.csv` (`runsToRunsCSV`), `validation.txt` and
+`errata.txt` (the errata file applied, the excluded-by-erratum tally, and
+each excluded cell with its reason). The CLI applies the dataset's
+`index/errata.json` (found in `<runs-dir>/index/` or next to `<runs-dir>`,
+or named with `--errata`; `--no-errata` applies none) to `leaderboard.csv`
+only; the other exports keep every cell. An errata file that fails
+`validateErrata` against the runs read stops the CLI before anything is
+written. Run files are read in sorted path order (an `index/` directory is
+never read as runs); rows follow run order, then cell order, then iteration
 order. A field the record does not carry is an empty string, never zero.
 
 ### CSV columns
 
 New columns are only ever appended, so a reader that addresses columns by
 name or by position keeps working.
+
+**leaderboard.csv**, appended after `provisional`:
+
+| Column | Meaning |
+| --- | --- |
+| `excludedByErratum` | Since 0.9.11: cells of the row's key listed in `index/errata.json`, left out of every median of the row; `0` when none. A row whose every cell is listed has `submissions` 0 and no metric |
 
 **iterations.csv**, appended after `status` (one row per timed iteration; a
 cell without timed iterations keeps one placeholder row):
