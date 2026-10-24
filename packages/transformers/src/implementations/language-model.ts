@@ -189,6 +189,48 @@ export class TransformersLanguageModel implements LanguageModel {
     this.supportsVision = isVLMModel(baseModelId);
   }
 
+  /** The `session_options` load option, when `settings.sessionOptions` is set. @internal */
+  private sessionOptionsSetting(): { session_options?: Record<string, unknown> } {
+    return this.settings.sessionOptions ? { session_options: { ...this.settings.sessionOptions } } : {};
+  }
+
+  /**
+   * Load the model now (downloading what the cache lacks, then creating its
+   * inference sessions) without running it. Generation loads the model on
+   * first use anyway; this lets a caller finish the load first, for example
+   * to reach the sessions through `getInferenceSessions()` before the first
+   * run.
+   *
+   * @returns Resolves once the model is loaded.
+   * @throws {ModelLoadError} When the model cannot be loaded.
+   * @example
+   * await model.preload();
+   * Object.keys(model.getInferenceSessions()); // ['model']
+   */
+  async preload(): Promise<void> {
+    await this.load();
+  }
+
+  /**
+   * The ONNX Runtime inference sessions of the loaded model, keyed by the
+   * names Transformers.js gives them (a single-file text-generation model
+   * has one, `model`; a split multimodal model one per component). Empty
+   * before the model has loaded and after `unload()`. Meant for diagnostics,
+   * such as ending a profile started with
+   * `sessionOptions: { enableProfiling: true }`.
+   *
+   * @returns The sessions, as Transformers.js holds them.
+   * @example
+   * const model = transformers.languageModel(id, { sessionOptions: { enableProfiling: true } });
+   * await model.doGenerate({ prompt: 'Hi' });
+   * for (const session of Object.values(model.getInferenceSessions())) session.endProfiling();
+   */
+  getInferenceSessions(): Record<string, { endProfiling?: () => void; run?: (...args: unknown[]) => unknown }> {
+    const owner = this.loaded?.type === 'pipeline' ? (this.loaded.pipeline as unknown as { model?: unknown })?.model : this.loaded?.model;
+    const sessions = (owner as { sessions?: Record<string, unknown> } | undefined)?.sessions;
+    return sessions ? ({ ...sessions } as Record<string, { endProfiling?: () => void }>) : {};
+  }
+
   /**
    * Determine the device to use for inference.
    * @internal
@@ -251,6 +293,7 @@ export class TransformersLanguageModel implements LanguageModel {
       device,
       dtype: this.settings.dtype ?? 'q4',
       progress_callback: this.settings.onProgress,
+      ...this.sessionOptionsSetting(),
     } as Record<string, unknown>);
 
     const result: LoadedModel = { type: 'pipeline', pipeline: pipe };
@@ -289,6 +332,7 @@ export class TransformersLanguageModel implements LanguageModel {
       dtype,
       device,
       progress_callback: this.settings.onProgress,
+      ...this.sessionOptionsSetting(),
     } as Record<string, unknown>;
 
     let loadModel: Promise<unknown>;
@@ -341,11 +385,13 @@ export class TransformersLanguageModel implements LanguageModel {
             dtype,
             device,
             progress_callback: this.settings.onProgress,
+            ...this.sessionOptionsSetting(),
           } as Record<string, unknown>)
       : tjs.AutoModelForCausalLM.from_pretrained(this.baseModelId, {
             dtype,
             device,
             progress_callback: this.settings.onProgress,
+            ...this.sessionOptionsSetting(),
           } as Record<string, unknown>);
 
     const [processor, model] = await Promise.all([

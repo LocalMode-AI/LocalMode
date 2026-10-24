@@ -60,6 +60,12 @@ export type {
   BenchRunResult,
   PlausibilityFlag,
   ValidationReport,
+  BenchCellProfile,
+  OrtOperatorProfile,
+  OrtOperatorRow,
+  LlamaCppDeliveryProfile,
+  LlamaCppIterationProfile,
+  GapStats,
 } from './types.js';
 
 // Workloads + run policy
@@ -84,6 +90,17 @@ export {
   createHarnessControl,
   WLLAMA_BUILDS,
   wllamaBuildError,
+  CONTROL_CURRENT_RELEASE_PACKAGES,
+  CONTROL_CURRENT_RELEASE_OPTIONAL_PACKAGES,
+  CURRENT_RELEASE_LANE_PACKAGES,
+  controlRuntimeVersionsError,
+  runtimeVersionCellError,
+  CONTROL_PROFILE_SPECS,
+  PROFILE_MAX_OPERATOR_ROWS,
+  PROFILE_MAX_ITERATIONS,
+  LLAMACPP_PROFILE_BIN_EDGES_MS,
+  cellProfileError,
+  summarizeGaps,
   isControlRun,
 } from './protocol.js';
 export type { RunPolicy, CreateHarnessControlOptions, ControlWasmLaneSpec } from './protocol.js';
@@ -97,6 +114,8 @@ export type {
   AdapterLoadProgress,
   LoadedLLM,
   LoadedEmbedder,
+  BenchCellProfiler,
+  BenchProfileCollection,
   LLMRuntimeAdapter,
   EmbeddingRuntimeAdapter,
 } from './adapter.js';

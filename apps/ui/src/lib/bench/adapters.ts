@@ -9,18 +9,29 @@
  * is the figure comparable across runtimes.
  */
 
-import type {
-  AdapterAvailability,
-  BenchModelRef,
-  EmbeddingRuntimeAdapter,
-  HarnessControlWasmLane,
-  LLMRuntimeAdapter,
-  LoadedEmbedder,
-  LoadedLLM,
+import {
+  CURRENT_RELEASE_LANE_PACKAGES,
+  LLAMACPP_PROFILE_BIN_EDGES_MS,
+  PROFILE_MAX_ITERATIONS,
+  type AdapterAvailability,
+  type BenchCellProfiler,
+  type BenchModelRef,
+  type BenchProfileCollection,
+  type BenchRuntimeId,
+  type EmbeddingRuntimeAdapter,
+  type HarnessControlWasmLane,
+  type LlamaCppIterationProfile,
+  type LLMRuntimeAdapter,
+  type LoadedEmbedder,
+  type LoadedLLM,
+  type OrtOperatorProfile,
 } from '@localmode/bench';
 import { runtimeVersionFor } from './runtime-versions';
 import { TransformersWorkerLane } from './transformers-worker-client';
 import type { WorkerLaneSettings } from './transformers-worker';
+import { CURRENT_RELEASE_RUNTIME_VERSIONS } from './current-releases/versions.generated';
+import { createDeliveryProbe, deliveryIterationProfile, type RequestStamps } from './llamacpp-delivery';
+import { gzipText } from './ort-profile';
 import {
   chromeAIDownloadInFlight,
   chromeAIDownloadPct,
@@ -189,6 +200,301 @@ export interface BenchAdapterOptions {
    * on Firefox). No other lane reads it.
    */
   wllamaBuild?: 'compat';
+  /**
+   * `current`: a `current-releases` control run. The Transformers.js, WebLLM,
+   * wllama and LiteRT lanes load the second bundle of their provider
+   * packages, built against the runtimes' current npm releases
+   * (`src/lib/bench/current-releases/`), and every cell of those lanes
+   * records the version it ran as `runtimeConfig.runtimeVersion`.
+   */
+  runtimeSet?: 'current';
+  /**
+   * The profiler of a profile control run: `ort` (`ort-profile`) on the
+   * Transformers.js Qwen3 generation cells, `llamacpp` (`llamacpp-profile`)
+   * on the llama.cpp generation cells.
+   */
+  profile?: 'ort' | 'llamacpp';
+  /**
+   * Receives the raw profile files a profile control run produces (the ONNX
+   * Runtime events of each profiling pass, gzip-compressed; the llama.cpp
+   * delivery stamps), which the page keeps beside the run's saved export.
+   */
+  onProfileFile?: (file: ProfileFile) => void;
+}
+
+/** A raw profile file a profile control run hands to the page. */
+export interface ProfileFile {
+  /** File name suffix, e.g. `transformers-webgpu-qwen3-0.6b-chat-pp128-tg128-ort-profile.json.gz`. */
+  name: string;
+  contentType: string;
+  bytes: Uint8Array<ArrayBuffer>;
+}
+
+/** The bench model whose Transformers.js generation cells `ort-profile` profiles. */
+export const ORT_PROFILE_BENCH_MODEL = 'qwen3-0.6b';
+
+/** New tokens of the warmup request that opens an `ort-profile` profiling pass. */
+export const ORT_PROFILE_WARMUP_TOKENS = 4;
+
+/** Smallest token budget an `ort-profile` pass falls back to when the profiled session runs out of WASM memory. */
+export const ORT_PROFILE_MIN_TOKENS = 16;
+
+/** Whether an error message is a WASM heap exhaustion (ONNX Runtime's `std::bad_alloc`, an allocation failure). */
+export function isOutOfMemory(message: string): boolean {
+  return /bad_alloc|out of memory|could not allocate|allocation failed|Aborted\(OOM\)/i.test(message);
+}
+
+/** The runtime version a lane records: the current release on a `current-releases` run, the pinned one otherwise. */
+function laneRuntimeVersion(lane: BenchRuntimeId, options: BenchAdapterOptions): string | undefined {
+  const pkg = CURRENT_RELEASE_LANE_PACKAGES[lane];
+  if (options.runtimeSet === 'current' && pkg) return CURRENT_RELEASE_RUNTIME_VERSIONS[pkg];
+  return runtimeVersionFor(lane);
+}
+
+/** `runtimeConfig.runtimeVersion` on a `current-releases` run; nothing otherwise. */
+function currentReleaseConfig(lane: BenchRuntimeId, options: BenchAdapterOptions): { runtimeVersion?: string } {
+  const version = options.runtimeSet === 'current' ? laneRuntimeVersion(lane, options) : undefined;
+  return version ? { runtimeVersion: version } : {};
+}
+
+/** The provider modules of a run: the pinned packages, or the `current-releases` bundle. */
+function transformersModule(options: BenchAdapterOptions): Promise<typeof import('@localmode/transformers')> {
+  return options.runtimeSet === 'current' ? import('./current-releases/transformers.generated.js') : import('@localmode/transformers');
+}
+function webllmModule(options: BenchAdapterOptions): Promise<typeof import('@localmode/webllm')> {
+  return options.runtimeSet === 'current' ? import('./current-releases/webllm.generated.js') : import('@localmode/webllm');
+}
+function wllamaModule(options: BenchAdapterOptions): Promise<typeof import('@localmode/wllama')> {
+  return options.runtimeSet === 'current' ? import('./current-releases/wllama.generated.js') : import('@localmode/wllama');
+}
+function litertModule(options: BenchAdapterOptions): Promise<typeof import('@localmode/litert')> {
+  return options.runtimeSet === 'current' ? import('./current-releases/litert.generated.js') : import('@localmode/litert');
+}
+
+/** A request a profiled cell made, as the model wrapper saw it. */
+interface SeenRequest {
+  prompt: string;
+  systemPrompt?: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+/** Hooks of `observeRequests`. */
+interface RequestHooks {
+  onRequest(options: SeenRequest): void;
+  onChunk?(): void;
+  onRequestEnd?(): void;
+}
+
+/**
+ * Wrap a model so every `doStream` / `doGenerate` call reports its options
+ * first and its end last, and every streamed chunk with text reports itself;
+ * the wrapped model otherwise behaves exactly as the original.
+ */
+function observeRequests<T extends object>(model: T, hooks: RequestHooks): T {
+  return new Proxy(model, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value !== 'function') return value;
+      if (prop === 'doGenerate') {
+        return async (options: SeenRequest) => {
+          hooks.onRequest(options);
+          try {
+            return await (value as (o: SeenRequest) => Promise<unknown>).call(target, options);
+          } finally {
+            hooks.onRequestEnd?.();
+          }
+        };
+      }
+      if (prop === 'doStream') {
+        return (options: SeenRequest) => {
+          hooks.onRequest(options);
+          const inner = (value as (o: SeenRequest) => AsyncIterable<{ text?: string }>).call(target, options);
+          return (async function* () {
+            try {
+              for await (const chunk of inner) {
+                if (chunk.text) hooks.onChunk?.();
+                yield chunk;
+              }
+            } finally {
+              hooks.onRequestEnd?.();
+            }
+          })();
+        };
+      }
+      return value;
+    },
+  });
+}
+
+/**
+ * The `ort-profile` profiler of a Transformers.js Qwen3 language model: it
+ * notes the first request of each generation cell, and after the group runs
+ * one profiling pass per cell (`runPass`) in a fresh profiled session, with
+ * that request's prompt and token budget.
+ */
+function createOrtProfiler(
+  model: BenchModelRef,
+  options: BenchAdapterOptions,
+  runPass: (
+    cellId: string,
+    request: SeenRequest & { maxTokens: number },
+  ) => Promise<{ profile: OrtOperatorProfile; rawGzip?: Uint8Array<ArrayBuffer> }>,
+): { profiler: BenchCellProfiler; hooks: RequestHooks } {
+  let open: string | null = null;
+  const requests = new Map<string, SeenRequest>();
+  return {
+    hooks: {
+      onRequest(request) {
+        if (open && !requests.has(open)) {
+          const { prompt, systemPrompt, temperature, maxTokens } = request;
+          requests.set(open, { prompt, systemPrompt, temperature, maxTokens });
+        }
+      },
+    },
+    profiler: {
+      beginCell({ cellId, workloadKind }) {
+        open = workloadKind === 'llm-generate' ? cellId : null;
+      },
+      endCell() {
+        open = null;
+      },
+      async collect(): Promise<BenchProfileCollection> {
+        const out: BenchProfileCollection = { profiles: {}, errors: {} };
+        for (const [cellId, request] of requests) {
+          try {
+            // ONNX Runtime keeps every profiled event in the WASM heap; on the
+            // WASM lane a long prompt exhausts it within a few dozen runs. A
+            // pass that runs out of memory is repeated in a fresh session at
+            // half the token budget (down to ORT_PROFILE_MIN_TOKENS), and the
+            // budgets that failed are recorded on the profile.
+            const failedMaxTokens: number[] = [];
+            let budget = request.maxTokens ?? 128;
+            let result: Awaited<ReturnType<typeof runPass>> | null = null;
+            for (;;) {
+              try {
+                result = await runPass(cellId, { ...request, maxTokens: budget });
+                break;
+              } catch (error) {
+                const message = (error as Error)?.message ?? String(error);
+                if (!isOutOfMemory(message) || budget <= ORT_PROFILE_MIN_TOKENS) throw error;
+                failedMaxTokens.push(budget);
+                budget = Math.max(ORT_PROFILE_MIN_TOKENS, Math.floor(budget / 2));
+              }
+            }
+            const { profile, rawGzip } = result;
+            out.profiles[cellId] = failedMaxTokens.length > 0 ? { ...profile, pass: { ...profile.pass, failedMaxTokens } } : profile;
+            if (rawGzip) {
+              const workload = cellId.split('/').pop() ?? 'cell';
+              options.onProfileFile?.({
+                name: `${model.runtimeId}-${model.benchModelId}-${workload}-ort-profile.json.gz`,
+                contentType: 'application/gzip',
+                bytes: rawGzip,
+              });
+            }
+          } catch (error) {
+            out.errors![cellId] = (error as Error)?.message ?? String(error);
+          }
+        }
+        return out;
+      },
+    },
+  };
+}
+
+/**
+ * An `ort-profile` profiling pass in a fresh dedicated worker, on either
+ * lane's device: the pass's profiled session, and the ONNX Runtime WASM heap
+ * its buffered events fill (a heap that never shrinks), end with the worker,
+ * so no pass inherits the memory of the timed model or of an earlier pass.
+ */
+function ortPassInWorker(
+  model: BenchModelRef,
+  device: 'webgpu' | 'wasm',
+  options: BenchAdapterOptions,
+  settings?: WorkerLaneSettings,
+): (cellId: string, request: SeenRequest & { maxTokens: number }) => Promise<{ profile: OrtOperatorProfile; rawGzip?: Uint8Array<ArrayBuffer> }> {
+  return async (cellId, request) => {
+    const lane = new TransformersWorkerLane();
+    try {
+      return await lane.profilePass(
+        model.providerModelId,
+        device,
+        { cellId, request, warmupTokens: ORT_PROFILE_WARMUP_TOKENS, keepRaw: Boolean(options.onProfileFile) },
+        settings,
+      );
+    } finally {
+      await lane.dispose();
+    }
+  };
+}
+
+/**
+ * The `llamacpp-profile` profiler of a wllama language model: per request of
+ * an open generation cell, the delivery stamps the probe collected, reduced
+ * to the iteration statistics; the raw stamps go to the page as one
+ * gzip-compressed JSON file per model.
+ */
+function createLlamaCppProfiler(
+  model: BenchModelRef,
+  options: BenchAdapterOptions,
+  probe: ReturnType<typeof createDeliveryProbe>,
+): { profiler: BenchCellProfiler; hooks: RequestHooks } {
+  let open: string | null = null;
+  let recording: string | null = null;
+  const iterations = new Map<string, LlamaCppIterationProfile[]>();
+  const raw: Array<{ cellId: string; request: number; stamps: RequestStamps }> = [];
+  return {
+    hooks: {
+      onRequest() {
+        recording = open;
+        if (recording) probe.startRequest();
+      },
+      onChunk() {
+        if (recording) probe.chunk();
+      },
+      onRequestEnd() {
+        const cellId = recording;
+        recording = null;
+        if (!cellId) return;
+        const stamps = probe.endRequest();
+        if (!stamps) return;
+        const list = iterations.get(cellId) ?? [];
+        raw.push({ cellId, request: raw.filter((r) => r.cellId === cellId).length, stamps });
+        if (list.length < PROFILE_MAX_ITERATIONS) list.push(deliveryIterationProfile(stamps));
+        iterations.set(cellId, list);
+      },
+    },
+    profiler: {
+      beginCell({ cellId, workloadKind }) {
+        open = workloadKind === 'llm-generate' ? cellId : null;
+      },
+      endCell() {
+        open = null;
+      },
+      async collect(): Promise<BenchProfileCollection> {
+        const out: BenchProfileCollection = { profiles: {}, errors: {} };
+        for (const [cellId, list] of iterations) {
+          if (!probe.attached) {
+            out.errors![cellId] = 'no wllama worker was stamped, so the delivery path could not be timed';
+            continue;
+          }
+          out.profiles[cellId] = { kind: 'llamacpp-delivery', binEdgesMs: [...LLAMACPP_PROFILE_BIN_EDGES_MS], iterations: list };
+        }
+        if (raw.length > 0 && options.onProfileFile) {
+          // gzip-compressed like the ONNX Runtime profiles, so a folder of
+          // exports holds only run files as .json (the collector's --dir).
+          const text = JSON.stringify({ clock: 'performance.timeOrigin + performance.now(), ms', requests: raw });
+          options.onProfileFile({
+            name: `${model.runtimeId}-${model.benchModelId}-llamacpp-delivery.json.gz`,
+            contentType: 'application/gzip',
+            bytes: await gzipText(text),
+          });
+        }
+        return out;
+      },
+    },
+  };
 }
 
 /**
@@ -204,11 +510,13 @@ function wllamaBuildSettings(options: BenchAdapterOptions): { wasmBuild?: 'compa
  * only what the control kind changes from the protocol's configuration
  * (`dtype: 'q8'` when the lane loads q8, `numThreads` when the host sets it).
  */
-function wasmLaneSettings(wasmLane: HarnessControlWasmLane | undefined): WorkerLaneSettings | undefined {
-  if (!wasmLane) return undefined;
+function wasmLaneSettings(options: BenchAdapterOptions): WorkerLaneSettings | undefined {
+  const wasmLane: HarnessControlWasmLane | undefined = options.wasmLane;
+  if (!wasmLane && options.runtimeSet !== 'current') return undefined;
   return {
-    ...(wasmLane.dtype === 'q8' ? { dtype: 'q8' as const } : {}),
-    ...(wasmLane.numThreads !== null ? { numThreads: wasmLane.numThreads } : {}),
+    ...(wasmLane?.dtype === 'q8' ? { dtype: 'q8' as const } : {}),
+    ...(wasmLane && wasmLane.numThreads !== null ? { numThreads: wasmLane.numThreads } : {}),
+    ...(options.runtimeSet === 'current' ? { runtime: 'current' as const } : {}),
   };
 }
 
@@ -217,32 +525,39 @@ function wasmLaneSettings(wasmLane: HarnessControlWasmLane | undefined): WorkerL
  * Runtime WASM thread count the worker read back after the runtime initialised
  * (omitted when the worker could not read it).
  */
-function wasmRuntimeConfig(dtype: string, numThreads: number | undefined): Record<string, string | number | boolean> {
-  return { device: 'wasm', dtype, worker: true, ...(numThreads !== undefined ? { numThreads } : {}) };
+function wasmRuntimeConfig(
+  dtype: string,
+  numThreads: number | undefined,
+  extra: Record<string, string | number | boolean> = {},
+): Record<string, string | number | boolean> {
+  return { device: 'wasm', dtype, worker: true, ...(numThreads !== undefined ? { numThreads } : {}), ...extra };
 }
 
 /** Transformers.js lane (device pinned per lane: webgpu or wasm). */
 function makeTransformersLLMAdapter(device: 'webgpu' | 'wasm', options: BenchAdapterOptions = {}): LLMRuntimeAdapter {
+  const runtimeId = device === 'webgpu' ? 'transformers-webgpu' : 'transformers-wasm';
   return {
-    runtimeId: device === 'webgpu' ? 'transformers-webgpu' : 'transformers-wasm',
-    runtimeVersion: runtimeVersionFor(device === 'webgpu' ? 'transformers-webgpu' : 'transformers-wasm'),
+    runtimeId,
+    runtimeVersion: laneRuntimeVersion(runtimeId, options),
     displayName: `Transformers.js (${device.toUpperCase()})`,
     async isAvailable() {
       if (device === 'webgpu' && !(await hasWebGPUAdapter())) return NO_WEBGPU;
       return { ok: true };
     },
     async isModelCached(model: BenchModelRef) {
-      const { isModelCached } = await import('@localmode/transformers');
+      const { isModelCached } = await transformersModule(options);
       return isModelCached(model.providerModelId);
     },
     async load(model, { onProgress, abortSignal }): Promise<LoadedLLM> {
       abortSignal?.throwIfAborted();
+      const profiled = options.profile === 'ort' && model.benchModelId === ORT_PROFILE_BENCH_MODEL;
+      const versionConfig = currentReleaseConfig(runtimeId, options);
       if (device === 'wasm') {
         // The WASM lane runs in a dedicated worker: ONNX Runtime computes on
         // the calling thread, and a generation on the main thread would leave
         // the page unable to repaint (and the watchdog unable to fire) until
         // the request ends. The worker owns its own ONNX runtime instance.
-        const settings = wasmLaneSettings(options.wasmLane);
+        const settings = wasmLaneSettings(options);
         const lane = new TransformersWorkerLane();
         let numThreads: number | undefined;
         try {
@@ -255,24 +570,29 @@ function makeTransformersLLMAdapter(device: 'webgpu' | 'wasm', options: BenchAda
           await lane.dispose();
           throw error;
         }
+        const ort = profiled ? createOrtProfiler(model, options, ortPassInWorker(model, device, options, settings)) : null;
+        const languageModel = lane.languageModel(model.providerModelId);
         return {
-          model: lane.languageModel(model.providerModelId) as unknown as LoadedLLM['model'],
+          model: (ort ? observeRequests(languageModel, ort.hooks) : languageModel) as unknown as LoadedLLM['model'],
           resolvedBackend: device,
-          runtimeConfig: wasmRuntimeConfig(settings?.dtype ?? model.quantization ?? 'default', numThreads),
+          runtimeConfig: wasmRuntimeConfig(settings?.dtype ?? model.quantization ?? 'default', numThreads, versionConfig),
+          ...(ort ? { profiler: ort.profiler } : {}),
           dispose: () => lane.dispose(),
         };
       }
-      const mod = await import('@localmode/transformers');
+      const mod = await transformersModule(options);
       // Preload on the lane's own device so the cached artifacts and the
       // throwaway session match what the timed lane runs (the preload
       // disposes its session; the runner's warmup builds the real one).
       await mod.preloadModel(model.providerModelId, { onProgress: normalizeProgress(onProgress), device });
       abortSignal?.throwIfAborted();
       const llm = mod.transformers.languageModel(model.providerModelId, { device });
+      const ort = profiled ? createOrtProfiler(model, options, ortPassInWorker(model, device, options)) : null;
       return {
-        model: llm as unknown as LoadedLLM['model'],
+        model: (ort ? observeRequests(llm, ort.hooks) : llm) as unknown as LoadedLLM['model'],
         resolvedBackend: device,
-        runtimeConfig: { device, dtype: model.quantization ?? 'default', worker: false },
+        runtimeConfig: { device, dtype: model.quantization ?? 'default', worker: false, ...versionConfig },
+        ...(ort ? { profiler: ort.profiler } : {}),
         dispose: () => disposeModel(llm),
       };
     },
@@ -280,27 +600,29 @@ function makeTransformersLLMAdapter(device: 'webgpu' | 'wasm', options: BenchAda
 }
 
 /** WebLLM lane (WebGPU-only, MLC engine). */
-function makeWebLLMAdapter(): LLMRuntimeAdapter {
+function makeWebLLMAdapter(options: BenchAdapterOptions = {}): LLMRuntimeAdapter {
   return {
     runtimeId: 'webllm',
-    runtimeVersion: runtimeVersionFor('webllm'),
+    runtimeVersion: laneRuntimeVersion('webllm', options),
     displayName: 'WebLLM (MLC)',
     async isAvailable() {
       return (await hasWebGPUAdapter()) ? { ok: true } : NO_WEBGPU;
     },
     async isModelCached(model) {
-      const { isModelCached } = await import('@localmode/webllm');
+      const { isModelCached } = await webllmModule(options);
       return isModelCached(model.providerModelId);
     },
     async load(model, { onProgress, abortSignal }): Promise<LoadedLLM> {
-      const mod = await import('@localmode/webllm');
+      const mod = await webllmModule(options);
       abortSignal?.throwIfAborted();
       await mod.preloadModel(model.providerModelId, { onProgress: normalizeProgress(onProgress) });
       abortSignal?.throwIfAborted();
       const llm = mod.webllm.languageModel(model.providerModelId, {});
+      const versionConfig = currentReleaseConfig('webllm', options);
       return {
         model: llm as unknown as LoadedLLM['model'],
         resolvedBackend: 'webgpu',
+        ...(versionConfig.runtimeVersion ? { runtimeConfig: versionConfig } : {}),
         dispose: () => disposeModel(llm),
       };
     },
@@ -362,7 +684,7 @@ function wllamaLoadedInfo(
   requestedGpuLayers: number,
   webgpuAdapter: boolean,
   engineLoaded: boolean,
-  options: { textOnly?: boolean; nCtx?: number } = {},
+  options: { textOnly?: boolean; nCtx?: number; extra?: Record<string, string | number | boolean> } = {},
 ): { resolvedBackend: string; runtimeConfig: Record<string, string | number | boolean> } {
   const offloaded = llm.offloadedLayers ?? null;
   const gpu = offloaded !== null && offloaded.gpu > 0;
@@ -389,6 +711,7 @@ function wllamaLoadedInfo(
       cache_prompt: false,
       // Language lanes load without a vision projector (see makeWllamaAdapter).
       ...(options.textOnly ? { mmproj: false } : {}),
+      ...options.extra,
     },
   };
 }
@@ -404,18 +727,18 @@ function makeWllamaAdapter(gpu: boolean, options: BenchAdapterOptions = {}): LLM
   const requestedGpuLayers = gpu ? -1 : 0;
   return {
     runtimeId,
-    runtimeVersion: runtimeVersionFor(runtimeId),
+    runtimeVersion: laneRuntimeVersion(runtimeId, options),
     displayName: gpu ? 'wllama (llama.cpp WebGPU)' : 'wllama (llama.cpp WASM, CPU)',
     async isAvailable() {
       if (gpu && !(await hasWebGPUAdapter())) return NO_WEBGPU;
       return wllamaAvailability();
     },
     async isModelCached(model) {
-      const { isModelCached } = await import('@localmode/wllama');
+      const { isModelCached } = await wllamaModule(options);
       return isModelCached(model.providerModelId);
     },
     async load(model, { onProgress, abortSignal }): Promise<LoadedLLM> {
-      const mod = await import('@localmode/wllama');
+      const mod = await wllamaModule(options);
       abortSignal?.throwIfAborted();
       await mod.preloadModel(model.providerModelId, { onProgress: normalizeProgress(onProgress) });
       abortSignal?.throwIfAborted();
@@ -432,20 +755,28 @@ function makeWllamaAdapter(gpu: boolean, options: BenchAdapterOptions = {}): LLM
         ...wllamaBuildSettings(options),
       });
       const webgpuAdapter = await hasWebGPUAdapter();
-      // The model loads on first use (the runner's untimed warmup, or settle()
-      // on a warm reload), so the backend and offload report are read lazily,
+      // llamacpp-profile: stamp the worker wllama starts at the engine load
+      // (the runner's warmup), then put the page's Worker back.
+      const probe = options.profile === 'llamacpp' ? createDeliveryProbe() : null;
+      const delivery = probe ? createLlamaCppProfiler(model, options, probe) : null;
+      probe?.arm();
+      // The model loads on first use (the runner's untimed warmup, or
+      // settle() on a warm reload), so the backend and offload report are read lazily,
       // after that load.
       let engineLoaded = false;
       const tracked = trackEngineLoad(withoutPromptCache(llm), () => {
         engineLoaded = true;
+        probe?.disarm();
       });
+      const served = delivery ? observeRequests(tracked, delivery.hooks) : tracked;
       const info = () =>
         wllamaLoadedInfo(llm as unknown as Parameters<typeof wllamaLoadedInfo>[0], requestedGpuLayers, webgpuAdapter, engineLoaded, {
           textOnly: true,
           nCtx: WLLAMA_BENCH_CONTEXT_LLM,
+          extra: currentReleaseConfig(runtimeId, options),
         });
       return {
-        model: tracked as unknown as LoadedLLM['model'],
+        model: served as unknown as LoadedLLM['model'],
         get resolvedBackend() {
           return info().resolvedBackend;
         },
@@ -457,7 +788,11 @@ function makeWllamaAdapter(gpu: boolean, options: BenchAdapterOptions = {}): LLM
           if (engineLoaded) return;
           await tracked.doGenerate({ prompt: WLLAMA_SETTLE_PROMPT, maxTokens: 4, temperature: 0, abortSignal } as never);
         },
-        dispose: () => disposeModel(llm),
+        ...(delivery ? { profiler: delivery.profiler } : {}),
+        dispose: async () => {
+          probe?.disarm();
+          await disposeModel(llm);
+        },
       };
     },
   };
@@ -522,10 +857,10 @@ export function liteRtLoadedInfo(
 const LITERT_SETTLE_PROMPT = 'Reply with the single word: ready';
 
 /** LiteRT lane (.litertlm; GPU-compiled builds require WebGPU, others fall back to CPU). */
-function makeLiteRTAdapter(): LLMRuntimeAdapter {
+function makeLiteRTAdapter(options: BenchAdapterOptions = {}): LLMRuntimeAdapter {
   return {
     runtimeId: 'litert',
-    runtimeVersion: runtimeVersionFor('litert'),
+    runtimeVersion: laneRuntimeVersion('litert', options),
     displayName: 'LiteRT-LM',
     async isAvailable() {
       // The catalog's CPU-capable models run without WebGPU; hard-gated models
@@ -533,16 +868,23 @@ function makeLiteRTAdapter(): LLMRuntimeAdapter {
       return { ok: true };
     },
     async isModelCached(model) {
-      const { isModelCached } = await import('@localmode/litert');
+      const { isModelCached } = await litertModule(options);
       return isModelCached(model.providerModelId);
     },
     async load(model, { onProgress, abortSignal }): Promise<LoadedLLM> {
-      const mod = await import('@localmode/litert');
+      const mod = await litertModule(options);
       abortSignal?.throwIfAborted();
       await mod.preloadModel(model.providerModelId, { onProgress: normalizeProgress(onProgress) });
       abortSignal?.throwIfAborted();
-      const llm = mod.litert.languageModel(model.providerModelId, {});
+      // On a current-releases run the engine is LiteRT-LM 0.18 or later,
+      // which streams the reasoning of some models on a separate thought
+      // channel; the lane keeps it inline, in one <think> block, the form in
+      // which the pinned release delivered it inside the content, so no
+      // generated text drops out of what the cell measures.
+      const current = options.runtimeSet === 'current';
+      const llm = mod.litert.languageModel(model.providerModelId, current ? { thoughtChannel: 'inline' } : {});
       const webgpuAdapter = await hasWebGPUAdapter();
+      const extra = current ? { ...currentReleaseConfig('litert', options), thoughtChannel: 'inline' } : {};
       // The engine loads on first use (the runner's untimed warmup, or
       // settle() on a warm reload); the record is read from its load report.
       const report = () => (llm as unknown as { loadInfo?: LiteRTLoadReport | null }).loadInfo ?? null;
@@ -553,7 +895,7 @@ function makeLiteRTAdapter(): LLMRuntimeAdapter {
           return info().resolvedBackend;
         },
         get runtimeConfig() {
-          return info().runtimeConfig;
+          return { ...info().runtimeConfig, ...extra };
         },
         // Untimed: load the engine with the same probe the runner's warmup sends.
         async settle({ abortSignal }) {
@@ -624,22 +966,24 @@ function makeChromeAIAdapter(): LLMRuntimeAdapter {
 
 /** Transformers.js embedding lane. */
 function makeTransformersEmbedAdapter(device: 'webgpu' | 'wasm', options: BenchAdapterOptions = {}): EmbeddingRuntimeAdapter {
+  const runtimeId = device === 'webgpu' ? 'transformers-webgpu' : 'transformers-wasm';
   return {
-    runtimeId: device === 'webgpu' ? 'transformers-webgpu' : 'transformers-wasm',
-    runtimeVersion: runtimeVersionFor(device === 'webgpu' ? 'transformers-webgpu' : 'transformers-wasm'),
+    runtimeId,
+    runtimeVersion: laneRuntimeVersion(runtimeId, options),
     displayName: `Transformers.js embeddings (${device.toUpperCase()})`,
     async isAvailable() {
       if (device === 'webgpu' && !(await hasWebGPUAdapter())) return NO_WEBGPU;
       return { ok: true };
     },
     async isModelCached(model) {
-      const { isModelCached } = await import('@localmode/transformers');
+      const { isModelCached } = await transformersModule(options);
       return isModelCached(model.providerModelId);
     },
     async load(model, { onProgress, abortSignal }): Promise<LoadedEmbedder> {
       abortSignal?.throwIfAborted();
+      const versionConfig = currentReleaseConfig(runtimeId, options);
       if (device === 'wasm') {
-        const settings = wasmLaneSettings(options.wasmLane);
+        const settings = wasmLaneSettings(options);
         const lane = new TransformersWorkerLane();
         let dimensions: number | undefined;
         let numThreads: number | undefined;
@@ -657,18 +1001,18 @@ function makeTransformersEmbedAdapter(device: 'webgpu' | 'wasm', options: BenchA
           model: lane.embeddingModel(model.providerModelId, dimensions ?? 0) as unknown as LoadedEmbedder['model'],
           resolvedBackend: device,
           // The provider loads an embedding model at fp32 unless asked for its quantized (q8) files.
-          runtimeConfig: wasmRuntimeConfig(settings?.dtype ?? 'fp32', numThreads),
+          runtimeConfig: wasmRuntimeConfig(settings?.dtype ?? 'fp32', numThreads, versionConfig),
           dispose: () => lane.dispose(),
         };
       }
-      const mod = await import('@localmode/transformers');
+      const mod = await transformersModule(options);
       await mod.preloadModel(model.providerModelId, { onProgress: normalizeProgress(onProgress), device });
       abortSignal?.throwIfAborted();
       const embedder = mod.transformers.embedding(model.providerModelId, { device });
       return {
         model: embedder as unknown as LoadedEmbedder['model'],
         resolvedBackend: device,
-        runtimeConfig: { device, worker: false },
+        runtimeConfig: { device, worker: false, ...versionConfig },
         dispose: () => disposeModel(embedder),
       };
     },
@@ -681,18 +1025,18 @@ function makeWllamaEmbedAdapter(gpu: boolean, options: BenchAdapterOptions = {})
   const requestedGpuLayers = gpu ? -1 : 0;
   return {
     runtimeId,
-    runtimeVersion: runtimeVersionFor(runtimeId),
+    runtimeVersion: laneRuntimeVersion(runtimeId, options),
     displayName: gpu ? 'wllama embeddings (GGUF, WebGPU)' : 'wllama embeddings (GGUF, CPU)',
     async isAvailable() {
       if (gpu && !(await hasWebGPUAdapter())) return NO_WEBGPU;
       return wllamaAvailability();
     },
     async isModelCached(model) {
-      const { isModelCached } = await import('@localmode/wllama');
+      const { isModelCached } = await wllamaModule(options);
       return isModelCached(model.providerModelId);
     },
     async load(model, { onProgress, abortSignal }): Promise<LoadedEmbedder> {
-      const mod = await import('@localmode/wllama');
+      const mod = await wllamaModule(options);
       abortSignal?.throwIfAborted();
       await mod.preloadModel(model.providerModelId, { onProgress: normalizeProgress(onProgress) });
       abortSignal?.throwIfAborted();
@@ -710,6 +1054,7 @@ function makeWllamaEmbedAdapter(gpu: boolean, options: BenchAdapterOptions = {})
       const info = () =>
         wllamaLoadedInfo(embedder as unknown as Parameters<typeof wllamaLoadedInfo>[0], requestedGpuLayers, webgpuAdapter, engineLoaded, {
           nCtx: WLLAMA_BENCH_CONTEXT_EMBED,
+          extra: currentReleaseConfig(runtimeId, options),
         });
       return {
         model: tracked as unknown as LoadedEmbedder['model'],
@@ -759,16 +1104,17 @@ function makeMediaPipeEmbedAdapter(): EmbeddingRuntimeAdapter {
  * All LLM adapters keyed by runtime lane.
  *
  * @param options - `wasmLane` for a `wasm-default`, `wasm-q8` or `wasm-threads` control run, `wllamaBuild` for a
- *   `wllama-compat` one (see `controlAdapterOptions`); empty on every other run.
+ *   `wllama-compat` one, `runtimeSet` for `current-releases`, `profile` (with the page's `onProfileFile`) for
+ *   `ort-profile` and `llamacpp-profile` (see `controlAdapterOptions`); empty on every other run.
  */
 export function createLLMAdapters(options: BenchAdapterOptions = {}): Map<string, LLMRuntimeAdapter> {
   return new Map<string, LLMRuntimeAdapter>([
-    ['transformers-webgpu', makeTransformersLLMAdapter('webgpu')],
+    ['transformers-webgpu', makeTransformersLLMAdapter('webgpu', options)],
     ['transformers-wasm', makeTransformersLLMAdapter('wasm', options)],
-    ['webllm', makeWebLLMAdapter()],
+    ['webllm', makeWebLLMAdapter(options)],
     ['wllama', makeWllamaAdapter(false, options)],
     ['wllama-webgpu', makeWllamaAdapter(true, options)],
-    ['litert', makeLiteRTAdapter()],
+    ['litert', makeLiteRTAdapter(options)],
     ['chrome-ai', makeChromeAIAdapter()],
   ]);
 }
@@ -777,11 +1123,12 @@ export function createLLMAdapters(options: BenchAdapterOptions = {}): Map<string
  * All embedding adapters keyed by runtime lane.
  *
  * @param options - `wasmLane` for a `wasm-default`, `wasm-q8` or `wasm-threads` control run, `wllamaBuild` for a
- *   `wllama-compat` one (see `controlAdapterOptions`); empty on every other run.
+ *   `wllama-compat` one, `runtimeSet` for `current-releases`, `profile` (with the page's `onProfileFile`) for
+ *   `ort-profile` and `llamacpp-profile` (see `controlAdapterOptions`); empty on every other run.
  */
 export function createEmbedAdapters(options: BenchAdapterOptions = {}): Map<string, EmbeddingRuntimeAdapter> {
   return new Map<string, EmbeddingRuntimeAdapter>([
-    ['transformers-webgpu', makeTransformersEmbedAdapter('webgpu')],
+    ['transformers-webgpu', makeTransformersEmbedAdapter('webgpu', options)],
     ['transformers-wasm', makeTransformersEmbedAdapter('wasm', options)],
     ['wllama', makeWllamaEmbedAdapter(false, options)],
     ['wllama-webgpu', makeWllamaEmbedAdapter(true, options)],

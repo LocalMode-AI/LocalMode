@@ -24,6 +24,8 @@ const eslintConfig = defineConfig([
     'playwright-report/**',
     // Emitted by scripts/generate-block-source.ts; never hand-edited.
     'src/lib/block-source.generated.ts',
+    // Emitted by scripts/build-current-release-providers.ts; never hand-edited.
+    'src/lib/bench/current-releases/*.generated.js',
   ]),
 ]);
 

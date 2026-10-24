@@ -48,8 +48,8 @@ function runWith(cells: BenchCellResult[], control?: BenchRunResult['harness']['
 }
 
 describe('the wllama-compat control kind', () => {
-  it('is listed after the five earlier kinds and keeps the protocol order as a fresh array', () => {
-    expect(CONTROL_KINDS).toEqual(['order-reversed', 'fixed-order', 'wasm-default', 'wasm-q8', 'wasm-threads', 'wllama-compat']);
+  it('is listed after the five earlier kinds (before the 0.9.14 kinds) and keeps the protocol order as a fresh array', () => {
+    expect(CONTROL_KINDS).toEqual(['order-reversed', 'fixed-order', 'wasm-default', 'wasm-q8', 'wasm-threads', 'wllama-compat', 'current-releases', 'ort-profile', 'llamacpp-profile']);
     const order = controlRuntimeOrder('wllama-compat');
     expect(order).toEqual(ORDER);
     expect(order).not.toBe(RUNTIME_EXECUTION_ORDER);
@@ -98,9 +98,9 @@ describe('the wllama-compat control kind', () => {
     expect(withControl({ kind: 'wllama-compat', runtimeOrder: controlRuntimeOrder('order-reversed'), wllamaBuild: 'compat' })).toEqual([
       'harness.control.runtimeOrder must be the wllama-compat order [transformers-wasm, transformers-webgpu, chrome-ai, webllm, mediapipe, litert, wllama-webgpu, wllama]',
     ]);
-    // An unknown kind lists all six.
+    // An unknown kind lists all nine.
     expect(withControl({ kind: 'firefox-compat', runtimeOrder: ORDER })).toEqual([
-      'harness.control.kind must be one of order-reversed, fixed-order, wasm-default, wasm-q8, wasm-threads, wllama-compat',
+      'harness.control.kind must be one of order-reversed, fixed-order, wasm-default, wasm-q8, wasm-threads, wllama-compat, current-releases, ort-profile, llamacpp-profile',
     ]);
   });
 

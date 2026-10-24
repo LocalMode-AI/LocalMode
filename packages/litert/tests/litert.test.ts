@@ -584,6 +584,56 @@ describe('@localmode/litert', () => {
       expect(deltas).toEqual(['Hello', ', world!']);
       expect(deltas.join('')).toBe('Hello, world!');
     });
+
+    /** A stream as @litert-lm/core 0.18 delivers it for a model that reasons on the thought channel. */
+    function thoughtStream(parts: Array<{ thought?: string; content?: string | Array<{ type: string; text?: string }> }>) {
+      return () =>
+        new ReadableStream({
+          start(controller) {
+            for (const p of parts) {
+              controller.enqueue({
+                role: 'assistant',
+                ...(p.content !== undefined ? { content: p.content } : {}),
+                ...(p.thought !== undefined ? { channels: { thought: p.thought } } : {}),
+              });
+            }
+            controller.close();
+          },
+        });
+    }
+
+    it('drops the thought channel by default, yielding only the content', async () => {
+      mockState.sendMessageStreaming.mockImplementation(
+        thoughtStream([{ thought: 'Okay, ' }, { thought: 'the user wants a plan.' }, { content: 'Week 1: label.' }]),
+      );
+      const model = new LiteRTLanguageModel('qwen3-0.6B');
+      const deltas: string[] = [];
+      for await (const chunk of model.doStream({ prompt: 'Hi' })) if (!chunk.done) deltas.push(chunk.text);
+      expect(deltas).toEqual(['Week 1: label.']);
+    });
+
+    it("thoughtChannel 'inline' yields the thought text in one <think> block before the content", async () => {
+      mockState.sendMessageStreaming.mockImplementation(
+        thoughtStream([
+          { thought: 'Okay, ' },
+          { thought: 'the user wants a plan.' },
+          { content: [{ type: 'text', text: 'Week 1: ' }, { type: 'image' }] },
+          { content: 'label.' },
+        ]),
+      );
+      const model = new LiteRTLanguageModel('qwen3-0.6B', { thoughtChannel: 'inline' });
+      const deltas: string[] = [];
+      for await (const chunk of model.doStream({ prompt: 'Hi' })) if (!chunk.done) deltas.push(chunk.text);
+      expect(deltas).toEqual(['<think>Okay, ', 'the user wants a plan.', '</think>', 'Week 1: ', 'label.']);
+      expect(deltas.join('')).toBe('<think>Okay, the user wants a plan.</think>Week 1: label.');
+    });
+
+    it("thoughtChannel 'inline' closes a block the stream ends inside (all output on the thought channel)", async () => {
+      mockState.sendMessageStreaming.mockImplementation(thoughtStream([{ thought: 'only ' }, { thought: 'thinking' }]));
+      const model = new LiteRTLanguageModel('qwen3-0.6B', { thoughtChannel: 'inline' });
+      const { text } = await model.doGenerate({ prompt: 'Hi' });
+      expect(text).toBe('<think>only thinking</think>');
+    });
   });
 
   // ─────────────────────────────────────────────────────────────

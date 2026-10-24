@@ -20,6 +20,8 @@ import {
   verifyRunDigest,
   type BenchRunResult,
   type ControlKind,
+  LLAMACPP_PROFILE_BIN_EDGES_MS,
+  summarizeGaps,
 } from '@localmode/bench';
 import { collectControlRuns, CollectControlRunsError, controlRunPath } from './collect-control-runs';
 
@@ -58,7 +60,11 @@ async function controlExport(
   run.createdAt = createdAt;
   if (withControl) {
     const control =
-      kind === 'wasm-default' || kind === 'wasm-threads' ? createHarnessControl(kind, { numThreads: 8 }) : createHarnessControl(kind);
+      kind === 'wasm-default' || kind === 'wasm-threads'
+        ? createHarnessControl(kind, { numThreads: 8 })
+        : kind === 'current-releases'
+          ? createHarnessControl(kind, { runtimeVersions: { '@huggingface/transformers': '4.3.1', '@mlc-ai/web-llm': '0.2.86', '@wllama/wllama': '3.8.1', '@wllama/wllama-compat': '3.8.1', '@litert-lm/core': '0.18.0' } })
+          : createHarnessControl(kind);
     run.harness = { ...run.harness, control };
   }
   delete run.nonce;
@@ -268,6 +274,68 @@ describe('collect-control-runs', () => {
     const before = snapshot(dataset);
     await expect(collectControlRuns({ datasetDir: dataset, files: [file] })).rejects.toThrow(
       `${file}: invalid shape: cells[0]: runtimeConfig.wllamaBuild is "memory64" on a wllama-compat control run, which loads every llama.cpp lane through the compatibility build`,
+    );
+    expect(snapshot(dataset)).toEqual(before);
+  }, 120_000);
+
+  it('files current-releases, ort-profile and llamacpp-profile exports under controls/<kind>/<date>/ with their records, index untouched', async () => {
+    const current = await controlExport('control-run-current', '2026-10-23T08:00:00.000Z', true, 'current-releases');
+    // As a real current-releases run records it: the llama.cpp cell ran wllama 3.8.1.
+    current.cells = current.cells.map((c) => ({ ...c, runtimeVersion: '3.8.1', runtimeConfig: { n_gpu_layers: 0, offloadedLayers: '0/31', runtimeVersion: '3.8.1' } }));
+    current.digest = await computeRunDigest(current);
+    const delivery = await controlExport('control-run-llamacpp', '2026-10-23T09:00:00.000Z', true, 'llamacpp-profile');
+    const gaps = summarizeGaps([647, 648]);
+    delivery.cells = delivery.cells.map((c) => ({
+      ...c,
+      profile: {
+        kind: 'llamacpp-delivery' as const,
+        binEdgesMs: [...LLAMACPP_PROFILE_BIN_EDGES_MS],
+        iterations: [{ tokens: 3, chunks: 3, messages: 3, emitGapMs: gaps, recvGapMs: gaps, chunkGapMs: gaps, workerMs: gaps, roundTripTransitMs: gaps, receiptToChunkMs: gaps, pageTurnaroundMs: gaps, clockOffsetMs: 0.4 }],
+      },
+    }));
+    delivery.digest = await computeRunDigest(delivery);
+    const ort = await controlExport('control-run-ort', '2026-10-23T10:00:00.000Z', true, 'ort-profile');
+    const files = [await writeExport('current.json', current), await writeExport('delivery.json', delivery), await writeExport('ort.json', ort)];
+    const before = snapshot(dataset);
+
+    const out = cli(...files.flatMap((f) => ['--file', f]));
+    expect(out.stderr).toBe('');
+    expect(out.status).toBe(0);
+    expect(out.stdout).toContain('3 control runs; index/summary.json untouched');
+    const after = snapshot(dataset);
+    const added = [...after.keys()].filter((k) => !before.has(k)).sort();
+    expect(added).toEqual([
+      'controls/current-releases/2026-10-23/control-run-current.json',
+      'controls/llamacpp-profile/2026-10-23/control-run-llamacpp.json',
+      'controls/ort-profile/2026-10-23/control-run-ort.json',
+    ]);
+    for (const [path, bytes] of before) expect(after.get(path)).toBe(bytes);
+    const filed = JSON.parse(after.get(added[0])!) as BenchRunResult;
+    expect(filed.harness.control?.runtimeVersions?.['@huggingface/transformers']).toBe('4.3.1');
+    expect(await verifyRunDigest(filed)).toBe(true);
+    const filedDelivery = JSON.parse(after.get(added[1])!) as BenchRunResult;
+    expect(filedDelivery.cells[0].profile?.kind).toBe('llamacpp-delivery');
+    expect(validateSubmission(filedDelivery).shapeErrors).toEqual([]);
+  }, 120_000);
+
+  it('refuses a profile on a run of another kind, and a current-releases cell that ran the pinned release, writing nothing', async () => {
+    const stray = await controlExport('control-run-stray-profile', '2026-10-23T11:00:00.000Z', true, 'fixed-order');
+    stray.cells = stray.cells.map((c) => ({
+      ...c,
+      profile: { kind: 'llamacpp-delivery' as const, binEdgesMs: [...LLAMACPP_PROFILE_BIN_EDGES_MS], iterations: [] },
+    }));
+    stray.digest = await computeRunDigest(stray);
+    const strayFile = await writeExport('stray.json', stray);
+    const pinned = await controlExport('control-run-pinned', '2026-10-23T12:00:00.000Z', true, 'current-releases');
+    pinned.cells = pinned.cells.map((c) => ({ ...c, runtimeConfig: { n_gpu_layers: 0, runtimeVersion: '3.5.1' } }));
+    pinned.digest = await computeRunDigest(pinned);
+    const pinnedFile = await writeExport('pinned.json', pinned);
+    const before = snapshot(dataset);
+    await expect(collectControlRuns({ datasetDir: dataset, files: [strayFile] })).rejects.toThrow(
+      `${strayFile}: invalid shape: cells[0]: profile is set only on a ort-profile or llamacpp-profile control run`,
+    );
+    await expect(collectControlRuns({ datasetDir: dataset, files: [pinnedFile] })).rejects.toThrow(
+      `${pinnedFile}: invalid shape: cells[0]: runtimeConfig.runtimeVersion is "3.5.1" but harness.control.runtimeVersions gives @wllama/wllama "3.8.1"`,
     );
     expect(snapshot(dataset)).toEqual(before);
   }, 120_000);

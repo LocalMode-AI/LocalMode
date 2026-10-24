@@ -348,6 +348,8 @@ export class LiteRTLanguageModel implements LanguageModel {
 
       let outputTokens = 0;
       const inputTokens = Math.ceil(messageInput.length / 4);
+      const inlineThought = this.settings.thoughtChannel === 'inline';
+      let thinking = false;
 
       try {
         while (true) {
@@ -356,6 +358,10 @@ export class LiteRTLanguageModel implements LanguageModel {
           const { done, value } = await reader.read();
 
           if (done) {
+            if (thinking) {
+              thinking = false;
+              yield { text: '</think>', done: false };
+            }
             yield {
               text: '',
               done: true,
@@ -375,10 +381,25 @@ export class LiteRTLanguageModel implements LanguageModel {
           // chunk, not cumulative. Yield it as-is.
           const delta = typeof value.content === 'string'
             ? value.content
-            : (value.content ?? [])
-                .filter((item: { type: string }) => item.type === 'text')
-                .map((item: { text?: string }) => item.text ?? '')
+            : ((value.content ?? []) as Array<{ type: string; text?: string }>)
+                .filter((item) => item.type === 'text')
+                .map((item) => item.text ?? '')
                 .join('');
+
+          // Reasoning a newer engine streams on the thought channel, kept
+          // only when the caller asked for it (see `thoughtChannel`).
+          const thought = inlineThought
+            ? ((value as { channels?: Record<string, unknown> }).channels?.thought ?? '')
+            : '';
+          if (typeof thought === 'string' && thought.length > 0) {
+            outputTokens += Math.ceil(thought.length / 4);
+            yield { text: thinking ? thought : `<think>${thought}`, done: false };
+            thinking = true;
+          }
+          if (delta.length > 0 && thinking) {
+            thinking = false;
+            yield { text: '</think>', done: false };
+          }
 
           if (delta.length > 0) {
             outputTokens += Math.ceil(delta.length / 4);

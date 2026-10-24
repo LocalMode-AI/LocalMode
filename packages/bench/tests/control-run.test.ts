@@ -101,7 +101,7 @@ describe('controlRuntimeOrder()', () => {
     reversed.pop();
     expect(controlRuntimeOrder('order-reversed')).toHaveLength(8);
     expect(RUNTIME_EXECUTION_ORDER[0]).toBe('transformers-wasm');
-    expect(CONTROL_KINDS).toEqual(['order-reversed', 'fixed-order', 'wasm-default', 'wasm-q8', 'wasm-threads', 'wllama-compat']);
+    expect(CONTROL_KINDS).toEqual(['order-reversed', 'fixed-order', 'wasm-default', 'wasm-q8', 'wasm-threads', 'wllama-compat', 'current-releases', 'ort-profile', 'llamacpp-profile']);
   });
 
   it('fixed-order is exactly RUNTIME_EXECUTION_ORDER, every runtime once, as a fresh array', () => {
@@ -262,7 +262,7 @@ describe('runBenchmarkSuite() with harness.control', () => {
       'harness.control.runtimeOrder must be the fixed-order order',
     );
     await expect(attempt({ kind: 'order-shuffled', runtimeOrder: [...RUNTIME_EXECUTION_ORDER] })).rejects.toThrow(
-      'harness.control.kind must be one of order-reversed, fixed-order, wasm-default, wasm-q8, wasm-threads, wllama-compat; got order-shuffled',
+      'harness.control.kind must be one of order-reversed, fixed-order, wasm-default, wasm-q8, wasm-threads, wllama-compat, current-releases, ort-profile, llamacpp-profile; got order-shuffled',
     );
     expect(adapter.loadCalls).toBe(0);
   });
@@ -276,7 +276,7 @@ describe('validateRunShape() on harness.control', () => {
       validateRunShape({ ...makeRun(), harness: { name: 'n', version: 'v', control } });
     expect(withControl(null)).toEqual(['harness.control must be an object {kind, runtimeOrder}']);
     expect(withControl(['order-reversed'])).toEqual(['harness.control must be an object {kind, runtimeOrder}']);
-    expect(withControl({ kind: 'order-shuffled', runtimeOrder: [] })).toEqual(['harness.control.kind must be one of order-reversed, fixed-order, wasm-default, wasm-q8, wasm-threads, wllama-compat']);
+    expect(withControl({ kind: 'order-shuffled', runtimeOrder: [] })).toEqual(['harness.control.kind must be one of order-reversed, fixed-order, wasm-default, wasm-q8, wasm-threads, wllama-compat, current-releases, ort-profile, llamacpp-profile']);
     const orderError =
       'harness.control.runtimeOrder must be the order-reversed order [wllama, wllama-webgpu, litert, mediapipe, webllm, chrome-ai, transformers-webgpu, transformers-wasm]';
     expect(withControl({ kind: 'order-reversed', runtimeOrder: [...RUNTIME_EXECUTION_ORDER] })).toEqual([orderError]);

@@ -279,7 +279,7 @@ series place.
 A control run is a control experiment for the methodology: the same suite as
 a protocol run, in the runtime execution order its kind names, so that the
 lane ratios under two orders can be compared (see the package README and
-NOTES.md, Control runs). There are six kinds:
+NOTES.md, Control runs). There are nine kinds:
 
 - `order-reversed` runs the runtimes in the exact reverse of the protocol
   order.
@@ -322,6 +322,66 @@ NOTES.md, Control runs). There are six kinds:
   Firefox, recorded beside a `fixed-order` series on the same machine,
   browser build, day and settings (the link below), so that the two builds
   are compared within one browser build.
+- `current-releases` runs them in the protocol order with every lane at the
+  protocol's configuration, but on the runtimes' current npm releases
+  instead of the pinned ones: Transformers.js 4.3.1 (both lanes, with the
+  ONNX Runtime Web build it ships, 1.31.0-dev.20260914), WebLLM 0.2.86,
+  wllama 3.8.1 (both llama.cpp lanes and the embedding lane; its
+  compatibility build at the same version) and LiteRT-LM 0.18.0. The page
+  loads a second bundle of the four provider packages, built from the same
+  provider source against those releases (`apps/ui` installs them under the
+  aliases `@huggingface/transformers-current`, `@mlc-ai/web-llm-current`,
+  `@wllama/wllama-current` and `@litert-lm/core-current`;
+  `pnpm bench:current-releases` rebuilds the bundle into
+  `apps/ui/src/lib/bench/current-releases/`, and `predev`/`prebuild` run it).
+  The bundle is fetched only on this kind. MediaPipe and Chrome Built-in AI
+  are unchanged. On LiteRT-LM 0.18 the provider also keeps text the engine
+  streams on a message's thought channel, inline in one `<think>` block
+  (`runtimeConfig.thoughtChannel: 'inline'`), so a model whose metadata
+  routes its reasoning there does not leave an empty cell. A lane that fails
+  on a current release (for example a WebGPU language model on Transformers.js
+  4.3.x on Apple Silicon, the reason the monorepo pins 4.2) is recorded as an
+  error cell like any other. Record it as a Standard series beside a
+  `fixed-order` series on the same machine, browser build, day and settings.
+- `ort-profile` runs them in the protocol order with every lane at the
+  protocol's configuration, and profiles ONNX Runtime Web on the
+  Transformers.js Qwen3 0.6B generation cells (WebGPU and WASM). The timed
+  iterations run unprofiled: ONNX Runtime keeps every profiled event in the
+  WASM heap until the session ends, which on the WASM lane exhausts the heap
+  (`std::bad_alloc`) within a few dozen runs at the 512-token prompt and on
+  the WebGPU lane holds gigabytes over a Standard cell. After the model's
+  cells, the page runs an untimed profiling pass per cell in a fresh session
+  created with `enableProfiling`, in a fresh dedicated worker on either lane
+  (the timed model is disposed first, and each pass gets an ONNX Runtime
+  heap of its own): one
+  warmup request of 4 new tokens, then one request with the cell's prompt and
+  token budget, then `endProfiling()`. The session's node events (and, on
+  WebGPU, the GPU timestamps of each program) are aggregated per phase
+  (prefill, decode), operator type, kernel and execution provider into the
+  cell's `profile`; a pass that runs out of WASM memory is repeated at half
+  the token budget, down to 16, and the budgets that failed are recorded in
+  `profile.pass.failedMaxTokens`. The raw events of each pass are kept beside
+  the run as `localmode-bench-<runId>-<runtime>-<model>-<workload>-ort-profile.json.gz`.
+  Use the Standard tier (Quick has no Transformers.js language-model cell).
+  Chrome quantizes WebGPU timestamps unless it runs with
+  `--enable-webgpu-developer-features`; the node times are unaffected.
+- `llamacpp-profile` runs them in the protocol order with every lane at the
+  protocol's configuration, and time-stamps the llama.cpp lanes' token
+  delivery path. wllama drives llama.cpp in a module worker by request and
+  reply (a streamed completion is a loop of `get_result` round trips); the
+  page wraps that worker, while it starts, in a module that imports a stamp
+  module before wllama's own worker code, and records per round trip the
+  page's send, the worker's receipt, the worker's reply, the page's receipt,
+  and the chunk the provider then hands to the runner, all on
+  `performance.timeOrigin + performance.now()`. Each llama.cpp generation
+  cell carries a `profile` with, per request, the token and reply counts and
+  the median, 90th and 99th percentile, maximum, mean and a fixed histogram
+  of each gap and stage (emission, receipt and chunk gaps; worker time;
+  the round trip's transit, free of the two contexts' clock offset; page
+  turnaround), with the clock offset estimated beside them. The raw stamps are kept beside the run
+  as `localmode-bench-<runId>-<runtime>-<model>-llamacpp-delivery.json.gz`.
+  It works in Chrome and Firefox; the Quick tier already has a llama.cpp
+  generation cell (SmolLM2 135M on both lanes).
 
 A control run is opted into only by the query parameter:
 
@@ -334,6 +394,9 @@ https://localmode.ai/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=
 https://localmode.ai/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=wasm-q8
 https://localmode.ai/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=wasm-threads
 https://localmode.ai/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=wllama-compat
+https://localmode.ai/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=current-releases
+https://localmode.ai/bench/run?tier=standard&quality=off&runs=3&cooldown=5&cold=off&control=ort-profile
+https://localmode.ai/bench/run?tier=standard&quality=off&runs=3&cooldown=5&cold=off&control=llamacpp-profile
 https://localmode.ai/bench/run?tier=thorough&quality=off&runs=1&cooldown=0&cold=off&control=fixed-order
 ```
 
@@ -358,7 +421,12 @@ defaults (q8, all cores); not published to the leaderboard" (`wasm-default`),
 published to the leaderboard" (`wasm-q8`) or "Control run: Transformers.js
 WASM lane at q4 on all cores; not published to the leaderboard"
 (`wasm-threads`) or "Control run: llama.cpp lanes on the wllama
-compatibility build; not published to the leaderboard" (`wllama-compat`).
+compatibility build; not published to the leaderboard" (`wllama-compat`),
+"Control run: runtimes at their current npm releases; not published to the
+leaderboard" (`current-releases`), "Control run: ONNX Runtime operator
+profile of the Transformers.js Qwen3 cells; not published to the
+leaderboard" (`ort-profile`) or "Control run: llama.cpp token delivery time
+stamps; not published to the leaderboard" (`llamacpp-profile`).
 The run file carries `harness.control = { kind, runtimeOrder: [...] }` with
 the kind and the order the runner used; a `wasm-default` run adds
 `wasmLane: { dtype: 'q8', numThreads, simd: true }` (`numThreads` is the
@@ -379,7 +447,18 @@ cells (`wllama` and `wllama-webgpu`) records `wllamaBuild: 'compat'` in its
 recorded it. Every llama.cpp cell of every run records that field (since
 site build 2.16.19), so a protocol or `fixed-order` run shows `memory64` in
 Chrome and Firefox beside it; the validator refuses a `wllama-compat` run
-whose llama.cpp cell recorded anything but `compat`. Everything else (cells, rules, traces,
+whose llama.cpp cell recorded anything but `compat`. A `current-releases`
+run adds `runtimeVersions` (package name to version: the five packages above
+and `onnxruntime-web`), and each cell of the Transformers.js, WebLLM, wllama
+and LiteRT lanes records the version its lane ran as
+`runtimeConfig.runtimeVersion` (and as the cell's `runtimeVersion`); the
+validator refuses a cell whose version differs from the record, and the
+field on any other run. A profile run's cells carry `profile` (see NOTES.md,
+Control runs, for both shapes); the validator refuses a profile on any other
+kind or lane, checks its bounded shape (at most 100 operator rows plus the
+`(other)` rows, at most 64 requests, histograms over the fixed bin edges),
+and a cell whose profile could not be taken is recorded as a `profile-error`
+trace event, its measurements kept. Everything else (cells, rules, traces,
 environment capture) is a protocol run's. A control run is never uploaded: the publish
 toggle is locked off, the results offer Export JSON only, the page fetches no
 upload token, and the submit route refuses a run carrying `harness.control`
@@ -413,6 +492,11 @@ when its download last started.
 - **Download** on a row saves that one run file.
 - **Remove** (it asks first) deletes the browser's copy; do this once the file
   is safe on disk.
+- A profile run (`ort-profile`, `llamacpp-profile`) also lists its raw
+  profile files under the run, each with its own **Download**; Download all
+  puts them in the archive beside the run file. They are gzip-compressed JSON
+  (`.json.gz`), so a folder of exports still holds only run files as `.json`
+  for the collector.
 
 Every saved file is byte for byte the file Export JSON and the series'
 automatic download save (two-space indented JSON with the page's digest), so
@@ -437,7 +521,7 @@ control run whose digest verifies and whose shape validates
 (`validateSubmission`; plausibility flags are printed and kept). The nonce is
 dropped if the file has one, and the run is written as compact JSON to
 `controls/<kind>/<YYYY-MM-DD>/<runId>.json`, the date being `createdAt` in
-UTC (`controls/order-reversed/...`, `controls/fixed-order/...`, `controls/wasm-default/...`, `controls/wasm-q8/...`, `controls/wasm-threads/...` or `controls/wllama-compat/...`). `index/summary.json` is not read or written. A run id already under
+UTC (`controls/order-reversed/...`, `controls/fixed-order/...`, `controls/wasm-default/...`, `controls/wasm-q8/...`, `controls/wasm-threads/...`, `controls/wllama-compat/...`, `controls/current-releases/...`, `controls/ort-profile/...` or `controls/llamacpp-profile/...`). `index/summary.json` is not read or written. The raw profile files are not filed: keep them with the run files, or attach them to a dataset release. A run id already under
 `runs/`, `quarantine/` or `controls/` is refused, and one refused file stops
 the whole batch before anything is written. Check `git diff` (only new files
 under `controls/`) and commit them in the dataset clone. The dataset's

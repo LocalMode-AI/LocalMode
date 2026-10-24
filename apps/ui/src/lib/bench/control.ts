@@ -13,7 +13,14 @@
  * every logical core); `wllama-compat` keeps the protocol order and every
  * lane's protocol configuration, but loads both llama.cpp lanes through
  * wllama's compatibility build (32-bit memory, no JSPI) instead of the
- * memory64 build, in every browser. A control run is opted into only by the `?control=<kind>` query
+ * memory64 build, in every browser; `current-releases` keeps the protocol
+ * order and configuration but loads the Transformers.js, WebLLM, wllama and
+ * LiteRT lanes from a second bundle of the provider packages built against
+ * those runtimes' current npm releases; `ort-profile` and `llamacpp-profile`
+ * keep the protocol order and configuration and add a profiler (ONNX Runtime
+ * Web's session profiler in an untimed pass after each Transformers.js Qwen3
+ * generation cell; time stamps on the llama.cpp token delivery path). A
+ * control run is opted into only by the `?control=<kind>` query
  * parameter (no other control on the page turns it on), is marked
  * `harness.control` in its run file, is never uploaded (Export JSON only),
  * and is refused on a paid-study link. Everything in this module is pure.
@@ -28,6 +35,7 @@ import {
   type HarnessControl,
 } from '@localmode/bench';
 import type { BenchAdapterOptions } from './adapters';
+import { CURRENT_RELEASE_RUNTIME_VERSIONS } from './current-releases/versions.generated';
 
 /** The query parameter that opts a page into a control run. */
 export const CONTROL_QUERY_PARAM = 'control';
@@ -46,6 +54,9 @@ const BANNER_TEXT: Record<ControlKind, string> = {
   'wasm-q8': 'Control run: Transformers.js WASM lane at q8, runtime thread default; not published to the leaderboard',
   'wasm-threads': 'Control run: Transformers.js WASM lane at q4 on all cores; not published to the leaderboard',
   'wllama-compat': 'Control run: llama.cpp lanes on the wllama compatibility build; not published to the leaderboard',
+  'current-releases': 'Control run: runtimes at their current npm releases; not published to the leaderboard',
+  'ort-profile': 'Control run: ONNX Runtime operator profile of the Transformers.js Qwen3 cells; not published to the leaderboard',
+  'llamacpp-profile': 'Control run: llama.cpp token delivery time stamps; not published to the leaderboard',
 };
 
 /** Message for a paid-study link that also carries the control parameter. */
@@ -60,7 +71,8 @@ export const CONTROL_UPLOAD_REFUSAL =
  * Read the control request from a /bench/run query string.
  *
  * - No `control` parameter: `none`, a protocol run.
- * - A known kind (`order-reversed`, `fixed-order`, `wasm-default`, `wasm-q8`, `wasm-threads`, `wllama-compat`): `control`, unless the query is a
+ * - A known kind (`order-reversed`, `fixed-order`, `wasm-default`, `wasm-q8`, `wasm-threads`, `wllama-compat`,
+ *   `current-releases`, `ort-profile`, `llamacpp-profile`): `control`, unless the query is a
  *   paid-study link (`PROLIFIC_PID` or `cc` present), which is `refused`.
  * - Any other value: `refused`, so a mistyped kind never quietly runs (and
  *   publishes) a protocol run.
@@ -132,11 +144,18 @@ export function wasmDefaultThreads(hardwareConcurrency: number | undefined): num
  *
  * @param kind - The control kind.
  * @param hardwareConcurrency - The browser's `navigator.hardwareConcurrency`; used only by the kinds that set the WASM lane's thread count (`wasm-default`, `wasm-threads`).
- * @returns `{ kind, runtimeOrder }` (plus `wasmLane` for `wasm-default`, `wasm-q8` and `wasm-threads`, and
- *   `wllamaBuild` for `wllama-compat`); the runner executes exactly this order, and the adapters apply
- *   `wasmLane` and `wllamaBuild` (see `controlAdapterOptions`).
+ * @param runtimeVersions - The current releases the `current-releases` bundle loads (default: the build's
+ *   `CURRENT_RELEASE_RUNTIME_VERSIONS`); used only by that kind.
+ * @returns `{ kind, runtimeOrder }` (plus `wasmLane` for `wasm-default`, `wasm-q8` and `wasm-threads`,
+ *   `wllamaBuild` for `wllama-compat`, and `runtimeVersions` for `current-releases`); the runner executes
+ *   exactly this order, and the adapters apply the rest (see `controlAdapterOptions`).
  */
-export function controlHarness(kind: ControlKind, hardwareConcurrency?: number): HarnessControl {
+export function controlHarness(
+  kind: ControlKind,
+  hardwareConcurrency?: number,
+  runtimeVersions: Readonly<Record<string, string>> = CURRENT_RELEASE_RUNTIME_VERSIONS,
+): HarnessControl {
+  if (kind === 'current-releases') return createHarnessControl(kind, { runtimeVersions: { ...runtimeVersions } });
   return CONTROL_WASM_LANE_SPECS[kind]?.threads === 'all-cores'
     ? createHarnessControl(kind, { numThreads: wasmDefaultThreads(hardwareConcurrency) })
     : createHarnessControl(kind);
@@ -145,9 +164,12 @@ export function controlHarness(kind: ControlKind, hardwareConcurrency?: number):
 /**
  * What a control run changes in the runtime adapters, from its
  * `harness.control` record: the Transformers.js WASM lane's settings
- * (`wasmLane`, on the WASM-lane kinds) and the wllama build of the llama.cpp
- * lanes (`wllamaBuild`, on `wllama-compat`). Empty on a protocol run and on
- * the order kinds, so the adapters run at the protocol's configuration.
+ * (`wasmLane`, on the WASM-lane kinds), the wllama build of the llama.cpp
+ * lanes (`wllamaBuild`, on `wllama-compat`), the provider bundle
+ * (`runtimeSet: 'current'`, on `current-releases`) and the profiler
+ * (`profile`, on `ort-profile` and `llamacpp-profile`). Empty on a protocol
+ * run and on the order kinds, so the adapters run at the protocol's
+ * configuration.
  *
  * @param control - The run's control record, or undefined on a protocol run.
  * @returns The options for `createLLMAdapters` / `createEmbedAdapters`.
@@ -159,6 +181,9 @@ export function controlAdapterOptions(control: HarnessControl | undefined): Benc
   return {
     ...(control.wasmLane ? { wasmLane: control.wasmLane } : {}),
     ...(control.wllamaBuild ? { wllamaBuild: control.wllamaBuild } : {}),
+    ...(control.kind === 'current-releases' ? { runtimeSet: 'current' as const } : {}),
+    ...(control.kind === 'ort-profile' ? { profile: 'ort' as const } : {}),
+    ...(control.kind === 'llamacpp-profile' ? { profile: 'llamacpp' as const } : {}),
   };
 }
 

@@ -102,6 +102,7 @@ interface ExportedRun {
       runtimeOrder: string[];
       wasmLane?: { dtype: string; numThreads: number; simd: boolean };
       wllamaBuild?: string;
+      runtimeVersions?: Record<string, string>;
     };
   };
   cells: Array<{
@@ -110,7 +111,10 @@ interface ExportedRun {
     status: string;
     load: { cached?: boolean; startT: number; endT: number } | null;
     runtimeConfig?: Record<string, string | number | boolean>;
+    runtimeVersion?: string;
+    profile?: Record<string, unknown>;
   }>;
+  events?: Array<{ type: string; detail?: string }>;
 }
 
 /** Every run file the page hands to the download manager, across reloads. */
@@ -2749,5 +2753,142 @@ test.describe('bench LiteRT lane: pinned model file and the engine-reported back
       }),
     );
     expect(consoleErrors).toEqual([]);
+  });
+});
+
+test.describe('control run: current releases, ONNX Runtime operator profile, llama.cpp delivery stamps (never uploaded)', () => {
+  const PROTOCOL_ORDER = [
+    'transformers-wasm',
+    'transformers-webgpu',
+    'chrome-ai',
+    'webllm',
+    'mediapipe',
+    'litert',
+    'wllama-webgpu',
+    'wllama',
+  ];
+
+  /** A control run started from `query` (lanes not listed in `keep` switched off when given), exported, with every bench API request and console error. */
+  async function runControl(page: Page, query: string, keep?: string[]) {
+    const consoleErrors: string[] = [];
+    collectConsoleErrors(page, consoleErrors);
+    const benchApi: string[] = [];
+    page.on('request', (req) => {
+      const { pathname } = new URL(req.url());
+      if (pathname.startsWith('/api/bench/')) benchApi.push(`${req.method()} ${pathname}`);
+    });
+    const downloads = collectRunDownloads(page);
+    await page.goto(`/bench/run?${query}`);
+    await expect(page.getByRole('note', { name: 'Control run' })).toBeVisible();
+    await expect(page.getByText(/probing device capabilities/i)).toHaveCount(0, { timeout: 15_000 });
+    if (keep) {
+      const switches = page.getByRole('switch', { name: /^Include / });
+      for (let i = 0; i < (await switches.count()); i++) {
+        const sw = switches.nth(i);
+        const name = ((await sw.getAttribute('aria-label')) ?? '').replace(/^Include /, '');
+        if (!keep.includes(name) && (await sw.isChecked()) && (await sw.isEnabled())) await sw.click();
+      }
+    }
+    await page.getByRole('button', { name: 'Run benchmark' }).click();
+    await expect(page.getByRole('dialog', { name: /benchmark running/i })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('status').first()).toContainText('Suite complete', { timeout: 25 * 60 * 1000 });
+    await expect(page.getByRole('button', { name: 'Submit to leaderboard' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Export JSON' }).click();
+    await expect.poll(() => downloads.length, { timeout: 30_000 }).toBe(1);
+    const [run] = (await Promise.all(downloads)) as Array<ExportedRun & { protocol?: string; digest?: string; nonce?: string }>;
+    const ranks = run.cells.map((c) => PROTOCOL_ORDER.indexOf(c.runtimeId));
+    expect(ranks).toEqual([...ranks].sort((a, b) => a - b));
+    expect(run.digest).toMatch(/^[0-9a-f]{64}$/);
+    expect(run.nonce).toBeUndefined();
+    return { run, benchApi, consoleErrors };
+  }
+
+  test('?control=current-releases: a real Quick run on the current releases, each changed lane recording its version, no upload request', async ({ page }) => {
+    test.setTimeout(30 * 60 * 1000);
+    const assets: string[] = [];
+    page.context().on('request', (req) => {
+      if (/cdn\.jsdelivr\.net\/npm\/(@wllama\/wllama(-compat)?|onnxruntime-web)@/.test(req.url())) assets.push(req.url());
+    });
+    const { run, benchApi, consoleErrors } = await runControl(page, 'tier=quick&quality=off&runs=1&cooldown=0&cold=off&control=current-releases');
+    expect(run.harness.control?.kind).toBe('current-releases');
+    const versions = run.harness.control?.runtimeVersions ?? {};
+    expect(versions).toMatchObject({ '@huggingface/transformers': '4.3.1', '@mlc-ai/web-llm': '0.2.86', '@wllama/wllama': '3.8.1', '@litert-lm/core': '0.18.0' });
+    const lanePackage: Record<string, string> = {
+      'transformers-wasm': '@huggingface/transformers',
+      'transformers-webgpu': '@huggingface/transformers',
+      webllm: '@mlc-ai/web-llm',
+      wllama: '@wllama/wllama',
+      'wllama-webgpu': '@wllama/wllama',
+      litert: '@litert-lm/core',
+    };
+    const changed = run.cells.filter((c) => lanePackage[c.runtimeId] && c.runtimeConfig);
+    expect(changed.length).toBeGreaterThan(0);
+    for (const cell of changed) {
+      expect(cell.runtimeConfig?.runtimeVersion, cell.cellId).toBe(versions[lanePackage[cell.runtimeId]]);
+      expect(cell.runtimeVersion, cell.cellId).toBe(versions[lanePackage[cell.runtimeId]]);
+    }
+    expect(run.cells.find((c) => c.cellId === 'wllama/smollm2-135m/chat-pp128-tg128')?.status).toBe('ok');
+    // The page fetched the current wllama release and the ONNX Runtime Web build Transformers.js 4.3.1 ships.
+    expect(assets.some((u) => u.includes('/@wllama/wllama@3.8.1/')), assets.join('\n')).toBe(true);
+    expect(assets.filter((u) => u.includes('/@wllama/wllama@3.5.1/'))).toEqual([]);
+    expect(assets.some((u) => u.includes(`/onnxruntime-web@${versions['onnxruntime-web']}/`)), assets.join('\n')).toBe(true);
+    expect(benchApi).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test('?control=llamacpp-profile: a real Quick run whose llama.cpp generation cells carry the delivery profile, the raw stamps kept under Saved exports', async ({ page }) => {
+    test.setTimeout(30 * 60 * 1000);
+    const { run, benchApi, consoleErrors } = await runControl(page, 'tier=quick&quality=off&runs=1&cooldown=0&cold=off&control=llamacpp-profile');
+    expect(run.harness.control).toEqual({ kind: 'llamacpp-profile', runtimeOrder: PROTOCOL_ORDER });
+    const cell = run.cells.find((c) => c.cellId === 'wllama/smollm2-135m/chat-pp128-tg128')!;
+    expect(cell.status).toBe('ok');
+    const profile = cell.profile as { kind: string; iterations: Array<{ tokens: number; chunks: number; workerMs: { n: number; p50: number }; recvGapMs: { n: number } }> };
+    expect(profile.kind).toBe('llamacpp-delivery');
+    expect(profile.iterations).toHaveLength(3);
+    for (const it of profile.iterations) {
+      expect(it.tokens).toBeGreaterThan(16);
+      expect(it.chunks).toBe(it.tokens);
+      expect(it.workerMs.n).toBe(it.tokens);
+      expect(it.workerMs.p50).toBeGreaterThan(0);
+      expect(it.recvGapMs.n).toBe(it.tokens - 1);
+    }
+    // Only llama.cpp generation cells carry a profile.
+    expect(run.cells.filter((c) => c.profile).every((c) => c.runtimeId.startsWith('wllama') && c.cellId.includes('chat-'))).toBe(true);
+    expect((run.events ?? []).filter((e) => e.type === 'profile-error')).toEqual([]);
+    const saved = page.getByRole('region', { name: 'Saved exports' }).getByRole('listitem', { name: `Saved run ${run.runId}` });
+    await expect(saved.getByRole('button', { name: `Download localmode-bench-${run.runId}-wllama-smollm2-135m-llamacpp-delivery.json.gz` })).toBeVisible();
+    expect(benchApi).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+  });
+
+  test('?control=ort-profile: a real Standard run on the Transformers.js Qwen3 WASM lane, the cells profiled by an untimed pass, the raw profile kept under Saved exports', async ({ page }) => {
+    test.setTimeout(45 * 60 * 1000);
+    const { run, benchApi, consoleErrors } = await runControl(
+      page,
+      'tier=standard&quality=off&runs=1&cooldown=0&cold=off&control=ort-profile',
+      ['Qwen3 0.6B (ONNX, WASM)'],
+    );
+    expect(run.harness.control).toEqual({ kind: 'ort-profile', runtimeOrder: PROTOCOL_ORDER });
+    const cells = run.cells.filter((c) => c.runtimeId === 'transformers-wasm' && c.cellId.includes('qwen3-0.6b/chat-'));
+    expect(cells).toHaveLength(2);
+    for (const cell of cells) {
+      expect(cell.status, cell.cellId).toBe('ok');
+      const profile = cell.profile as { kind: string; runs: number; pass: { maxTokens: number }; operators: Array<{ opType: string; provider: string; phase: string }> };
+      expect(profile.kind).toBe('ort-operators');
+      expect(profile.runs).toBeGreaterThan(1);
+      expect(profile.operators.some((r) => r.opType === 'MatMulNBits' && r.provider === 'CPUExecutionProvider' && r.phase === 'decode')).toBe(true);
+      const saved = page.getByRole('region', { name: 'Saved exports' }).getByRole('listitem', { name: `Saved run ${run.runId}` });
+      const workload = cell.cellId.split('/').pop();
+      await expect(saved.getByRole('button', { name: `Download localmode-bench-${run.runId}-transformers-wasm-qwen3-0.6b-${workload}-ort-profile.json.gz` })).toBeVisible();
+    }
+    expect(benchApi).toEqual([]);
+    // ALLOWLIST (documented): a profiling pass that exhausts the WASM heap
+    // makes Transformers.js log the failed run (the error and the inputs
+    // given) before the pass is repeated at half the budget. Allowed only as
+    // many times as the profiles record a failed budget; anything else fails.
+    const failedBudgets = cells.reduce((n, c) => n + (((c.profile as { pass: { failedMaxTokens?: number[] } }).pass.failedMaxTokens ?? []).length), 0);
+    const oom = consoleErrors.filter((e) => /failed to call OrtRun\(\)\. ERROR_CODE: 6, ERROR_MESSAGE: std::bad_alloc|Inputs given to model:/.test(e));
+    expect(oom.length).toBeLessThanOrEqual(2 * failedBudgets);
+    expect(consoleErrors.filter((e) => !oom.includes(e))).toEqual([]);
   });
 });

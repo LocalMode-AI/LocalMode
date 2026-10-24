@@ -319,10 +319,26 @@ export default function BenchMethodologyPage() {
               that both llama.cpp lanes load through wllama&apos;s compatibility build instead of the
               memory64 build, in any browser; beside a fixed-order series it shows what the build
               changes, for instance on Firefox, where wllama never picks the compatibility build by
-              itself. Every kind runs on any tier. Cells, rules, traces and the environment capture are those of a protocol run; the run file
+              itself.{' '}
+              <code className="font-mono text-sm">/bench/run?control=current-releases</code> runs the
+              suite in the protocol&apos;s order and configuration on the current npm releases of
+              Transformers.js, WebLLM, wllama and LiteRT-LM instead of the pinned ones (a second build
+              of the provider packages, loaded only on this kind); every cell of those lanes records the
+              version it ran, and a lane that fails on a current release is an error cell like any
+              other.{' '}
+              <code className="font-mono text-sm">/bench/run?control=ort-profile</code> runs the suite in
+              the protocol&apos;s order and configuration, its timed iterations unprofiled, and after the
+              Transformers.js Qwen3 cells runs an untimed pass per cell in a fresh session with ONNX
+              Runtime Web&apos;s profiler on; the cell carries the operator times of that pass (per
+              phase, operator type, kernel and provider), and the raw profile is kept beside the run.{' '}
+              <code className="font-mono text-sm">/bench/run?control=llamacpp-profile</code> runs the
+              suite in the protocol&apos;s order and configuration and time-stamps the llama.cpp
+              lanes&apos; token delivery path (the wllama worker&apos;s receipt and reply, the
+              page&apos;s send and receipt, and the chunk handed to the runner); each llama.cpp
+              generation cell carries the per-request gaps and stage times. Every kind runs on any tier. Cells, rules, traces and the environment capture are those of a protocol run; the run file
               carries <code className="font-mono text-sm">harness.control</code> (the kind and the order
               used, for wasm-default, wasm-q8 and wasm-threads the WASM lane&apos;s dtype and thread count,
-              and for wllama-compat the llama.cpp build). A control run is never uploaded (Export JSON only, and the submission route refuses
+              for wllama-compat the llama.cpp build, and for current-releases the runtime versions). A control run is never uploaded (Export JSON only, and the submission route refuses
               one), never enters the leaderboard and is never scored, so it needs no protocol version.
               Runs and the cool-down work as usual, and a series keeps its control mode across its
               reloads. A study link with the parameter is refused. Every run the page exports is first

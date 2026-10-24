@@ -116,6 +116,18 @@ export interface LiteRTModelSettings {
    * If not set, LiteRT-LM picks its own default (WebGPU when available).
    */
   backend?: 'GPU' | 'CPU';
+
+  /**
+   * What to do with text the engine streams on a message's `thought`
+   * channel (`Message.channels.thought`, which `@litert-lm/core` 0.18 and
+   * later fill for models whose metadata routes reasoning there). `drop`
+   * yields only the message content, as before; `inline` also yields the
+   * thought text, wrapped in one `<think>` ... `</think>` block, the form in
+   * which earlier `@litert-lm/core` releases delivered the same reasoning
+   * inside the content.
+   * @default 'drop'
+   */
+  thoughtChannel?: 'drop' | 'inline';
 }
 
 /**

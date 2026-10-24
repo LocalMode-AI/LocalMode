@@ -32,7 +32,7 @@ import {
   sampleMemoryBytes,
 } from '@localmode/bench';
 import { BENCH_MODELS, SUITE_MODELS, estimateDownloadBytes } from '@/lib/bench/catalog';
-import { wllamaAvailability } from '@/lib/bench/adapters';
+import { wllamaAvailability, type ProfileFile } from '@/lib/bench/adapters';
 import {
   chromeAIStatus,
   onChromeAIDownloadProgress,
@@ -214,6 +214,12 @@ const CONTROL_BANNER_DETAIL: Record<ControlKind, string> = {
     "The suite, its cells, rules, traces, environment capture and runtime order are those of a protocol run; only the Transformers.js WASM lane differs: its models load the protocol's files (q4 language model, fp32 embedding model) and ONNX Runtime runs one WASM thread per logical core, which the run file records in harness.control.wasmLane and each WASM cell's runtimeConfig. Keep each run",
   'wllama-compat':
     "The suite, its cells, rules, traces, environment capture, runtime order and every lane's settings are those of a protocol run; only the llama.cpp lanes (WebGPU and CPU) differ: both load through wllama's compatibility build (32-bit memory, no JSPI) instead of the memory64 build wllama picks in this browser, which the run file records in harness.control.wllamaBuild and each llama.cpp cell's runtimeConfig.wllamaBuild. Keep each run",
+  'current-releases':
+    "The suite, its cells, rules, traces, environment capture, runtime order and every lane's settings are those of a protocol run; only the runtime versions differ: the Transformers.js, WebLLM, wllama and LiteRT lanes load a second build of the provider packages made against those runtimes' current npm releases instead of the pinned ones, which the run file records in harness.control.runtimeVersions and each of those cells' runtimeConfig.runtimeVersion. A lane that fails on a current release is recorded as an error cell. Keep each run",
+  'ort-profile':
+    "The suite, its cells, rules, traces, environment capture, runtime order and every lane's settings are those of a protocol run, and the timed iterations run unprofiled. After each Transformers.js Qwen3 generation cell (WebGPU and WASM), an untimed pass in a fresh session with ONNX Runtime Web's profiler on runs the cell's prompt once more; its operator times, per operator type, kernel and provider, go into the cell's profile, and the raw profile is kept beside the run in Saved exports. Keep each run",
+  'llamacpp-profile':
+    "The suite, its cells, rules, traces, environment capture, runtime order and every lane's settings are those of a protocol run; on the llama.cpp lanes the token delivery path is time-stamped (the wllama worker's request receipt and reply, the page's send and receipt, the chunk the provider hands over), summarized per iteration in each generation cell's profile, with the raw stamps kept beside the run in Saved exports. Keep each run",
 };
 
 /** Lightweight availability probes - no provider packages are imported here. */
@@ -1406,9 +1412,17 @@ export function BenchRunner() {
       const cells = buildCells();
       // A control run executes (and records) its own runtime order; everything else is the protocol run's.
       const control = controlKind ? controlHarness(controlKind, navigator.hardwareConcurrency) : undefined;
+      // A profile control run's raw profile files, kept beside the run when it is saved.
+      const profileFiles: ProfileFile[] = [];
       // Only a WASM-lane control run (wasm-default, wasm-q8, wasm-threads) changes the Transformers.js
-      // WASM lane's settings, and only wllama-compat changes the llama.cpp lanes' build.
-      const adapterOptions = controlAdapterOptions(control);
+      // WASM lane's settings, only wllama-compat changes the llama.cpp lanes' build, only
+      // current-releases changes the provider bundle, and only the profile kinds add a profiler.
+      const adapterOptions = {
+        ...controlAdapterOptions(control),
+        ...(control?.kind === 'ort-profile' || control?.kind === 'llamacpp-profile'
+          ? { onProfileFile: (file: ProfileFile) => void profileFiles.push(file) }
+          : {}),
+      };
       // The overlay lists steps in the order the runner executes them.
       const ordered = orderCells(cells, control?.runtimeOrder);
       const orderedIds = ordered.map((c) => `${c.model.runtimeId}/${c.model.benchModelId}/${c.workload.id}`);
@@ -1585,7 +1599,7 @@ export function BenchRunner() {
       // page reloads right after), and a single run that is only exported.
       const saved =
         seriesAtStart || !upload
-          ? await saveFinishedRun(suiteResult, seriesAtStart ? 'series' : control ? 'control' : 'publish-off')
+          ? await saveFinishedRun(suiteResult, seriesAtStart ? 'series' : control ? 'control' : 'publish-off', profileFiles)
           : null;
       if (saved) refreshSavedExports();
       /** Download the run file; the saved copy is the record if the browser blocks the download. */

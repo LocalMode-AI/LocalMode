@@ -75,7 +75,7 @@ in the public CC0 [LocalMode-Bench dataset](https://github.com/LocalMode-AI/Loca
 | Integrity and publication | `canonicalJson`, `sha256Hex`, `computeRunDigest`, `computeLegacyRunDigest`, `verifyRunDigest`, `scrubRunForPublication`, `sanitizeReportedGpu` |
 | Aggregation | `aggregateRuns`, `aggregateRunsWithErrata`, `HEADLINE_MIN_SUBMISSIONS`, `deviceClassOf`, `deviceSubclassOf`, `gpuArchitectureOf`, `refineDeviceClass`, `amdArchitectureFromRenderer`, `pressureStateFractions` |
 | Errata | `ERRATA_FILE`, `validateErrata`, `validateErrataShape`, `errataExclusions`, type `ErratumEntry` |
-| Control runs | `CONTROL_KINDS`, `CONTROL_WASM_LANE_SPECS`, `CONTROL_WLLAMA_BUILDS`, `WLLAMA_BUILDS`, `createHarnessControl`, `controlRuntimeOrder`, `controlWasmLaneError`, `controlWllamaBuildError`, `isControlRun` |
+| Control runs | `CONTROL_KINDS`, `CONTROL_WASM_LANE_SPECS`, `CONTROL_WLLAMA_BUILDS`, `WLLAMA_BUILDS`, `CONTROL_CURRENT_RELEASE_PACKAGES`, `CURRENT_RELEASE_LANE_PACKAGES`, `CONTROL_PROFILE_SPECS`, `createHarnessControl`, `controlRuntimeOrder`, `controlWasmLaneError`, `controlWllamaBuildError`, `controlRuntimeVersionsError`, `runtimeVersionCellError`, `cellProfileError`, `summarizeGaps`, profiler types (`BenchCellProfiler`, `BenchCellProfile`, ...), `isControlRun` |
 | Statistics and quality | `median`, `mean`, `stddev`, `quantile`, `geomean`, `summarize`, `spearman`, `runMMLUFidelity`, `runSTSQuality`, `parseMMLUAnswer`, `TINY_MMLU`, `STSB_SUBSET` |
 | Analysis exports | `rowsToCSV`, `runsToLongCSV`, `runsToCellsCSV`, `runsToRunsCSV`, `runtimeVersionColumn` |
 
@@ -111,6 +111,19 @@ or scored (`aggregateRuns` skips it and the submit route answers 422
 | `wasm-q8` | protocol order | `q8` | ONNX Runtime default | wllama's choice | 0.9.9 |
 | `wasm-threads` | protocol order | protocol files (`q4`) | `navigator.hardwareConcurrency` | wllama's choice | 0.9.9 |
 | `wllama-compat` | protocol order | protocol files | ONNX Runtime default | `compat` in every browser | 0.9.13 |
+| `current-releases` | protocol order | protocol files | ONNX Runtime default | wllama's choice | 0.9.14 |
+| `ort-profile` | protocol order | protocol files | ONNX Runtime default | wllama's choice | 0.9.14 |
+| `llamacpp-profile` | protocol order | protocol files | ONNX Runtime default | wllama's choice | 0.9.14 |
+
+`current-releases` runs the Transformers.js, WebLLM, wllama and LiteRT-LM
+lanes on the runtimes' current npm releases instead of the pinned ones
+(`harness.control.runtimeVersions`; each of those cells records
+`runtimeConfig.runtimeVersion`). `ort-profile` and `llamacpp-profile` add a
+per-cell `profile`: an ONNX Runtime Web operator profile from an untimed
+pass after each Transformers.js Qwen3 generation cell, or the llama.cpp
+token delivery stamps (worker receipt and reply, page send and receipt,
+chunk) summarized per request. The host supplies the profiler through
+`LoadedLLM.profiler`.
 
 wllama's choice is the memory64 build wherever the browser has JSPI and
 Memory64, and on Firefox; the compatibility build elsewhere (Safari). Every

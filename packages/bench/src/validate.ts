@@ -19,7 +19,17 @@ import { BENCH_PROTOCOL_VERSION, ACCEPTED_SCHEMA_VERSIONS } from './types.js';
 import { summarize } from './stats.js';
 import { parseMMLUAnswer } from './quality.js';
 import { TINY_MMLU } from './datasets/tiny-mmlu.js';
-import { CONTROL_KINDS, controlRuntimeOrder, controlWasmLaneError, controlWllamaBuildError, MIN_GENERATED_CHARS, wllamaBuildError } from './protocol.js';
+import {
+  cellProfileError,
+  CONTROL_KINDS,
+  controlRuntimeOrder,
+  controlRuntimeVersionsError,
+  controlWasmLaneError,
+  controlWllamaBuildError,
+  MIN_GENERATED_CHARS,
+  runtimeVersionCellError,
+  wllamaBuildError,
+} from './protocol.js';
 
 /** Version of the plausibility rule set (recorded alongside moderation). */
 export const PLAUSIBILITY_RULES_VERSION = 2;
@@ -143,7 +153,9 @@ export const SERIES_MAX_IDLE_BEFORE_MS = 30 * 86_400_000;
  * (bench 0.9.0), and control-run marker (bench 0.9.6; kind `fixed-order` since
  * 0.9.7, kind `wasm-default` with its `wasmLane` since 0.9.8, kinds `wasm-q8`
  * and `wasm-threads` with theirs since 0.9.9, kind `wllama-compat` with its
- * `wllamaBuild` since 0.9.13). The shape check
+ * `wllamaBuild` since 0.9.13, kind `current-releases` with its
+ * `runtimeVersions` and kinds `ort-profile` and `llamacpp-profile` since
+ * 0.9.14). The shape check
  * accepts a well-formed control marker, so an exported control run validates
  * offline; refusing to publish it is the submission route's job.
  */
@@ -183,6 +195,8 @@ function validateHarnessExtras(harness: Record<string, unknown>, push: (m: strin
       if (laneError) push(laneError);
       const buildError = controlWllamaBuildError(control as { kind: (typeof CONTROL_KINDS)[number]; wllamaBuild?: unknown });
       if (buildError) push(buildError);
+      const versionsError = controlRuntimeVersionsError(control as { kind: (typeof CONTROL_KINDS)[number]; runtimeVersions?: unknown });
+      if (versionsError) push(versionsError);
     }
   }
 }
@@ -256,6 +270,10 @@ function validateCellShape(
   if (liteRtError) push(`${at}: ${liteRtError}`);
   const buildError = wllamaBuildError(cell, control);
   if (buildError) push(`${at}: ${buildError}`);
+  const versionError = runtimeVersionCellError(cell, control);
+  if (versionError) push(`${at}: ${versionError}`);
+  const profileError = cellProfileError(cell, control);
+  if (profileError) push(`${at}: ${profileError}`);
   const quality = cell.quality as Record<string, unknown> | undefined;
   if (quality && Array.isArray(quality.outputs)) {
     if ((quality.outputs as unknown[]).some((o) => typeof o !== 'string' || (o as string).length > 500)) {

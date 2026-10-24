@@ -23,6 +23,7 @@ import type {
 } from './types.js';
 import { BENCH_PROTOCOL_VERSION, BENCH_SCHEMA_VERSION } from './types.js';
 import type {
+  BenchCellProfiler,
   EmbeddingRuntimeAdapter,
   LLMRuntimeAdapter,
   LoadedEmbedder,
@@ -33,6 +34,7 @@ import {
   controlRuntimeOrder,
   controlWasmLaneError,
   controlWllamaBuildError,
+  controlRuntimeVersionsError,
   CONTROL_KINDS,
   MIN_GENERATED_CHARS,
   orderCells,
@@ -231,6 +233,8 @@ function resolveRuntimeOrder(harness: HarnessInfo): readonly BenchRuntimeId[] {
   if (laneError) throw new TypeError(`${laneError}; use createHarnessControl('${control.kind}')`);
   const buildError = controlWllamaBuildError(control);
   if (buildError) throw new TypeError(`${buildError}; use createHarnessControl('${control.kind}')`);
+  const versionsError = controlRuntimeVersionsError(control);
+  if (versionsError) throw new TypeError(`${versionsError}; use createHarnessControl('${control.kind}')`);
   return expected;
 }
 
@@ -484,6 +488,9 @@ async function runModelGroup(group: ModelGroup, ctx: GroupContext): Promise<Benc
     ctx.hooks?.onCellStart?.(cell.cellId, index, ctx.totalCells);
 
     const live = loaded;
+    // A profile control run's profiler sees where each cell's requests start
+    // and end; the group's warmup ran before, outside every cell.
+    live.profiler?.beginCell({ cellId: cell.cellId, workloadKind: workload.kind });
     const runOnce = async (): Promise<void> => {
       switch (workload.kind) {
         case 'llm-generate':
@@ -578,6 +585,7 @@ async function runModelGroup(group: ModelGroup, ctx: GroupContext): Promise<Benc
         cell.error = described;
       }
     }
+    live.profiler?.endCell(cell.cellId);
 
     if (ctx.memApi !== 'none' && (cell.status === 'ok' || cell.status === 'error')) {
       const sample = await sampleMemoryBytes(5_000);
@@ -594,6 +602,8 @@ async function runModelGroup(group: ModelGroup, ctx: GroupContext): Promise<Benc
   }
 
   await safeDispose(loaded);
+  // Untimed, after the model is gone: a profiler may load a session of its own.
+  if (loaded.profiler) await attachProfiles(loaded.profiler, results, ctx);
 
   // Warm-reload lane: after a cold load, reload to measure the cache-hit path.
   if (ctx.policy.measureWarmReload && loadRecord?.cached === false) {
@@ -1046,6 +1056,39 @@ function describeError(error: unknown): NonNullable<BenchCellResult['error']> {
 function finishCell(cell: BenchCellResult, ctx: GroupContext): BenchCellResult {
   ctx.hooks?.onCellFinish?.(cell);
   return cell;
+}
+
+/** Longest the runner waits for a profiler's `collect()` before recording the failure and moving on. */
+const PROFILE_COLLECT_TIMEOUT_MS = 20 * 60_000;
+
+/**
+ * Untimed, on a profile control run, after the group's model was disposed:
+ * ask the model's profiler for the per-cell profiles of the group and attach
+ * each to its cell. A cell the profiler reports as failed, and every cell
+ * of a profiler that throws or times out, is left without a profile and
+ * recorded as a `profile-error` trace event (`<cellId>: <reason>`, the
+ * group's first cell for a throw); the cells' measurements stand.
+ */
+async function attachProfiles(profiler: BenchCellProfiler, cells: BenchCellResult[], ctx: GroupContext): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const { profiles, errors } = await Promise.race([
+      profiler.collect(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`profile collection took longer than ${PROFILE_COLLECT_TIMEOUT_MS} ms`)), PROFILE_COLLECT_TIMEOUT_MS);
+      }),
+    ]);
+    for (const cell of cells) {
+      const profile = profiles[cell.cellId];
+      if (profile) cell.profile = profile;
+    }
+    for (const [cellId, message] of Object.entries(errors ?? {})) ctx.trace.record('profile-error', `${cellId}: ${message}`);
+  } catch (error) {
+    const first = cells[0]?.cellId ?? 'unknown cell';
+    ctx.trace.record('profile-error', `${first}: ${(error as Error)?.message ?? String(error)}`);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 /**

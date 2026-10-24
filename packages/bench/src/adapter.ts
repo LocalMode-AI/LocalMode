@@ -10,7 +10,7 @@
  * works, including models from other libraries.
  */
 
-import type { BenchModelRef, BenchRuntimeId, ProviderUsage } from './types.js';
+import type { BenchCellProfile, BenchModelRef, BenchRuntimeId, BenchWorkloadKind, ProviderUsage } from './types.js';
 
 /** Structural subset of `@localmode/core`'s StreamChunk. */
 export interface BenchStreamChunk {
@@ -67,6 +67,34 @@ export interface AdapterLoadProgress {
   pct?: number;
 }
 
+/**
+ * A loaded model's profiler on a profile control run (since bench 0.9.14):
+ * `ort-profile` (Transformers.js lanes) or `llamacpp-profile` (llama.cpp
+ * lanes). The runner calls `beginCell` before a cell's first request and
+ * `endCell` after its last (retries included; the group's untimed warmup
+ * runs before the first cell, outside every cell), then `collect` once,
+ * untimed, after the group's last cell and after `dispose` (so a profiler
+ * that runs a profiling pass of its own has the memory to itself). The profiler
+ * returns a profile for the cells it profiled, keyed by cell id (and the
+ * cells it failed to profile, with the reason), and decides itself which
+ * cells those are (the host profiles only some models and workloads).
+ */
+export interface BenchCellProfiler {
+  beginCell(cell: { cellId: string; workloadKind: BenchWorkloadKind }): void;
+  endCell(cellId: string): void;
+  collect(): Promise<BenchProfileCollection>;
+}
+
+/**
+ * What a profiler's `collect()` returns: a profile per profiled cell, and the
+ * cells whose profile could not be taken with the reason (the runner records
+ * each as a `profile-error` trace event; the cell's measurements stand).
+ */
+export interface BenchProfileCollection {
+  profiles: Record<string, BenchCellProfile>;
+  errors?: Record<string, string>;
+}
+
 /** A loaded LLM handle: the model plus its resolved execution backend. */
 export interface LoadedLLM {
   model: BenchLanguageModel;
@@ -83,6 +111,8 @@ export interface LoadedLLM {
    * loads the engine the same way. Adapters that load eagerly omit it.
    */
   settle?(options: { abortSignal?: AbortSignal }): Promise<void>;
+  /** Optional: the model's profiler on a profile control run (see `BenchCellProfiler`). */
+  profiler?: BenchCellProfiler;
   dispose(): Promise<void>;
 }
 
@@ -93,6 +123,8 @@ export interface LoadedEmbedder {
   runtimeConfig?: Record<string, string | number | boolean>;
   /** See `LoadedLLM.settle`. */
   settle?(options: { abortSignal?: AbortSignal }): Promise<void>;
+  /** See `LoadedLLM.profiler`. */
+  profiler?: BenchCellProfiler;
   dispose(): Promise<void>;
 }
 

@@ -16,7 +16,19 @@ import {
   type BenchRunResult,
 } from '@localmode/bench';
 import { makeRun } from '../../../packages/bench/tests/helpers';
-import { issueNonce } from '../src/lib/bench/nonce';
+import { issueNonce as issueNonceAt } from '../src/lib/bench/nonce';
+
+/**
+ * A nonce of its own for every call: nonces are time-stamped to the
+ * millisecond and spent once, so two tests issuing one in the same
+ * millisecond would share it and the second would be refused as used.
+ */
+let lastNonceAt = 0;
+function issueNonce(at?: number): string {
+  if (at !== undefined) return issueNonceAt(at);
+  lastNonceAt = Math.max(Date.now(), lastNonceAt + 1);
+  return issueNonceAt(lastNonceAt);
+}
 
 const committed: Array<{ path: string; run: BenchRunResult }> = [];
 let indexBody = '[]';
@@ -278,9 +290,19 @@ describe('POST /api/bench/submit', () => {
     { kind: 'wasm-q8' as const, control: () => createHarnessControl('wasm-q8') },
     { kind: 'wasm-threads' as const, control: () => createHarnessControl('wasm-threads', { numThreads: 8 }) },
     { kind: 'wllama-compat' as const, control: () => createHarnessControl('wllama-compat') },
+    { kind: 'current-releases' as const, control: () => createHarnessControl('current-releases', { runtimeVersions: { '@huggingface/transformers': '4.3.1', '@mlc-ai/web-llm': '0.2.86', '@wllama/wllama': '3.8.1', '@wllama/wllama-compat': '3.8.1', '@litert-lm/core': '0.18.0' } }) },
+    { kind: 'ort-profile' as const, control: () => createHarnessControl('ort-profile') },
+    { kind: 'llamacpp-profile' as const, control: () => createHarnessControl('llamacpp-profile') },
   ])('rejects a $kind control run with 422 before the nonce is spent, storing nothing', async ({ kind, control }) => {
     // An address of its own, so these posts do not count against the shared one's hourly limit.
-    const ip = { 'wasm-q8': '198.51.100.21', 'wasm-threads': '198.51.100.22', 'wllama-compat': '198.51.100.23' }[kind];
+    const ip = {
+      'wasm-q8': '198.51.100.21',
+      'wasm-threads': '198.51.100.22',
+      'wllama-compat': '198.51.100.23',
+      'current-releases': '198.51.100.24',
+      'ort-profile': '198.51.100.25',
+      'llamacpp-profile': '198.51.100.26',
+    }[kind];
     const nonce = issueNonce();
     const run = makeRun({
       nonce,

@@ -1,5 +1,12 @@
 # @localmode/litert
 
+## 2.0.4
+
+### Patch Changes
+
+- feat: `thoughtChannel: 'drop' | 'inline'` on `languageModel()` settings (default `'drop'`, the behavior so far). `@litert-lm/core` 0.18 and later stream the reasoning of some models on a message's `channels.thought`; `'inline'` also yields that text, wrapped in one `<think>` ... `</think>` block (closed when the content starts or the stream ends), the form in which earlier releases delivered the same reasoning inside the content.
+- fix: the streamed content parts are typed for `@litert-lm/core` 0.18, whose `Message.content` is a union of text, image and audio parts; only text parts are yielded, as before.
+
 ## 2.0.3
 
 ### Patch Changes

@@ -9,7 +9,9 @@
  * downloaded later from the Saved exports panel is byte for byte the file the
  * series would have saved, and the collect and import tools accept it as is.
  * Records are kept until the user removes them; nothing deletes them by age
- * unless `SAVED_EXPORT_MAX_AGE_DAYS` is set.
+ * unless `SAVED_EXPORT_MAX_AGE_DAYS` is set. A profile control run's record
+ * also keeps the run's raw profile files (`attachments`), downloadable from
+ * the same panel.
  */
 
 import type { BenchRunResult } from '@localmode/bench';
@@ -44,11 +46,39 @@ export interface SavedExportMeta {
   /** When the page last triggered a download of this file (automatic or from a click); absent if never. */
   exportedAt?: string;
   reason: SavedExportReason;
+  /** Raw profile files kept with the run (a profile control run), without their bytes. */
+  attachments?: SavedAttachmentMeta[];
 }
 
-/** A saved export with the file's exact text. */
-export interface SavedExport extends SavedExportMeta {
+/** A file kept beside a saved run (a profile control run's raw profile), without its bytes. */
+export interface SavedAttachmentMeta {
+  /** File name the download uses: `localmode-bench-<runId>-<suffix>`. */
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+}
+
+/** A kept file with its bytes. */
+export interface SavedAttachment extends SavedAttachmentMeta {
+  bytes: Uint8Array<ArrayBuffer>;
+}
+
+/** A file a run hands over to be kept beside it: a name suffix, its type and bytes. */
+export interface RunAttachment {
+  name: string;
+  contentType: string;
+  bytes: Uint8Array<ArrayBuffer>;
+}
+
+/** A saved export with the file's exact text (and its attachments' bytes). */
+export interface SavedExport extends Omit<SavedExportMeta, 'attachments'> {
   json: string;
+  attachments?: SavedAttachment[];
+}
+
+/** File name of a file kept beside a run: `localmode-bench-<runId>-<suffix>`. */
+export function runAttachmentFileName(runId: string, suffix: string): string {
+  return `localmode-bench-${runId}-${suffix.replace(/[^\w.-]/g, '_')}`;
 }
 
 /**
@@ -76,7 +106,7 @@ export function runExportFileName(runId: string): string {
  * @param now - Time of saving.
  * @returns The record, with the export text in `json`.
  */
-export function toSavedExport(run: BenchRunResult, reason: SavedExportReason, now: Date): SavedExport {
+export function toSavedExport(run: BenchRunResult, reason: SavedExportReason, now: Date, attachments: RunAttachment[] = []): SavedExport {
   const json = serializeRunExport(run);
   const series = run.harness.series;
   const control = run.harness.control;
@@ -91,13 +121,23 @@ export function toSavedExport(run: BenchRunResult, reason: SavedExportReason, no
     savedAt: now.toISOString(),
     reason,
     json,
+    ...(attachments.length > 0
+      ? {
+          attachments: attachments.map((a) => ({
+            fileName: runAttachmentFileName(run.runId, a.name),
+            contentType: a.contentType,
+            sizeBytes: a.bytes.byteLength,
+            bytes: a.bytes,
+          })),
+        }
+      : {}),
   };
 }
 
 /** Drop the file text from a record. */
 export function toMeta(record: SavedExport): SavedExportMeta {
-  const { json: _json, ...meta } = record;
-  return meta;
+  const { json: _json, attachments, ...meta } = record;
+  return attachments ? { ...meta, attachments: attachments.map(({ bytes: _bytes, ...a }) => a) } : meta;
 }
 
 /** Newest first: by `savedAt`, then by series index (later first), then by run id. */
@@ -123,11 +163,16 @@ export function expiredSavedExports<T extends SavedExportMeta>(records: T[], max
  *
  * @param run - The finished run, exactly as exported.
  * @param reason - Why it is kept.
+ * @param attachments - Raw profile files to keep beside it (a profile control run).
  * @returns The saved record, or null where IndexedDB is unavailable or the write failed.
  */
-export async function saveFinishedRun(run: BenchRunResult, reason: SavedExportReason): Promise<SavedExport | null> {
+export async function saveFinishedRun(
+  run: BenchRunResult,
+  reason: SavedExportReason,
+  attachments: RunAttachment[] = [],
+): Promise<SavedExport | null> {
   if (!hasIndexedDB()) return null;
-  const record = toSavedExport(run, reason, new Date());
+  const record = toSavedExport(run, reason, new Date(), attachments);
   try {
     const existing = await inStore<SavedExport | undefined>(FINISHED_RUNS_STORE, 'readonly', (s) => s.get(run.runId));
     if (existing) return existing;
@@ -226,7 +271,8 @@ export function savedExportsArchiveName(now: Date): string {
 
 /**
  * The "Download all" archive: one stored (uncompressed) entry per saved
- * export, named as its single download is, holding the same bytes.
+ * export, named as its single download is, holding the same bytes, followed
+ * by its attachments (raw profile files), each under its own file name.
  *
  * @param records - Saved exports with their file text.
  * @returns The ZIP bytes.
@@ -234,7 +280,10 @@ export function savedExportsArchiveName(now: Date): string {
 export function savedExportsArchive(records: SavedExport[]): Uint8Array<ArrayBuffer> {
   const encoder = new TextEncoder();
   return createStoredZip(
-    records.map((r) => ({ name: r.fileName, data: encoder.encode(r.json), modified: new Date(r.finishedAt) })),
+    records.flatMap((r) => [
+      { name: r.fileName, data: encoder.encode(r.json), modified: new Date(r.finishedAt) },
+      ...(r.attachments ?? []).map((a) => ({ name: a.fileName, data: a.bytes, modified: new Date(r.finishedAt) })),
+    ]),
   );
 }
 

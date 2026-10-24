@@ -6,7 +6,9 @@
  * from a click. A click carries user activation, so Chrome allows the
  * download even where it blocked the page's automatic ones; "Download all"
  * saves one ZIP archive (one download per click) whose files are byte for
- * byte the files a single download saves.
+ * byte the files a single download saves. A profile control run also lists
+ * its raw profile files, each downloadable on its own and included in the
+ * archive.
  */
 
 import { useCallback, useState } from 'react';
@@ -61,6 +63,21 @@ export function SavedExportsPanel({ exports, onChanged }: SavedExportsPanelProps
       await markExported(runId);
       setMessage(`Download started: ${record.fileName}`);
       onChanged();
+    },
+    [onChanged],
+  );
+
+  const downloadAttachment = useCallback(
+    async (runId: string, fileName: string) => {
+      const record = await getSavedExport(runId);
+      const file = record?.attachments?.find((a) => a.fileName === fileName);
+      if (!file) {
+        setMessage('That file is no longer saved in this browser.');
+        onChanged();
+        return;
+      }
+      triggerDownload(new Blob([file.bytes], { type: file.contentType }), file.fileName);
+      setMessage(`Download started: ${file.fileName}`);
     },
     [onChanged],
   );
@@ -144,6 +161,24 @@ export function SavedExportsPanel({ exports, onChanged }: SavedExportsPanelProps
                     finished {new Date(r.finishedAt).toLocaleString()} · {formatSize(r.sizeBytes)} · {REASON_TEXT[r.reason]} ·{' '}
                     {r.exportedAt ? `download last started ${new Date(r.exportedAt).toLocaleString()}` : 'not downloaded yet'}
                   </div>
+                  {r.attachments && r.attachments.length > 0 && (
+                    <ul className="mt-2 flex flex-col gap-1" aria-label={`Raw profile files of ${label}`}>
+                      {r.attachments.map((a) => (
+                        <li key={a.fileName} className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="break-all font-mono">{a.fileName}</span>
+                          <span className="text-muted-foreground">{formatSize(a.sizeBytes)}</span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void downloadAttachment(r.runId, a.fileName)}
+                            aria-label={`Download ${a.fileName}`}
+                          >
+                            Download
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
                 {confirming === r.runId ? (
                   <div role="group" aria-label={`Confirm removing ${label}`} className="flex flex-wrap items-center gap-2">

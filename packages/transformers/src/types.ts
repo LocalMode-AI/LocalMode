@@ -223,6 +223,14 @@ export interface LanguageModelSettings extends ModelSettings {
    * ```
    */
   dtype?: string | Record<string, string>;
+
+  /**
+   * ONNX Runtime session options for the model's inference sessions, passed
+   * to Transformers.js as `session_options` on every load path (for example
+   * `{ enableProfiling: true }`, whose profile `getInferenceSessions()` lets
+   * the caller end and read). Unset, Transformers.js uses its own.
+   */
+  sessionOptions?: Record<string, unknown>;
 }
 
 /**

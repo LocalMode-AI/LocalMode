@@ -286,6 +286,51 @@ describe('a saved export is the Export JSON file', () => {
   });
 });
 
+describe('raw profile files kept beside a profile control run', () => {
+  it('saves them with the run, lists them without their bytes, survives a reload, and puts them in the archive', async () => {
+    const { store } = await loadPage();
+    const run = await controlRun('saved-run-profile', '2026-10-23T09:00:00.000Z');
+    run.harness = { ...run.harness, control: createHarnessControl('ort-profile') };
+    run.digest = await computeRunDigest(run);
+    const gz = new Uint8Array([0x1f, 0x8b, 8, 0, 1, 2, 3, 4]);
+    const json = new TextEncoder().encode('{"requests":[]}');
+    await store.saveFinishedRun(run, 'control', [
+      { name: 'transformers-wasm-qwen3-0.6b-chat-pp128-tg128-ort-profile.json.gz', contentType: 'application/gzip', bytes: gz },
+      { name: 'wllama-smollm2-135m-llamacpp-delivery.json.gz', contentType: 'application/json', bytes: json },
+    ]);
+    const { store: reloaded } = await loadPage();
+    const [meta] = await reloaded.listSavedExports();
+    expect(meta.controlKind).toBe('ort-profile');
+    expect(meta.attachments).toEqual([
+      {
+        fileName: 'localmode-bench-saved-run-profile-transformers-wasm-qwen3-0.6b-chat-pp128-tg128-ort-profile.json.gz',
+        contentType: 'application/gzip',
+        sizeBytes: 8,
+      },
+      { fileName: 'localmode-bench-saved-run-profile-wllama-smollm2-135m-llamacpp-delivery.json.gz', contentType: 'application/json', sizeBytes: 15 },
+    ]);
+    const record = (await reloaded.getSavedExport('saved-run-profile'))!;
+    expect(Array.from(record.attachments![0].bytes)).toEqual(Array.from(gz));
+    // The run file itself is unchanged by its attachments.
+    expect(record.json).toBe(JSON.stringify(run, null, 2));
+    const entries = readStoredZip(reloaded.savedExportsArchive([record]));
+    expect(entries.map((e) => e.name)).toEqual([
+      'localmode-bench-saved-run-profile.json',
+      'localmode-bench-saved-run-profile-transformers-wasm-qwen3-0.6b-chat-pp128-tg128-ort-profile.json.gz',
+      'localmode-bench-saved-run-profile-wllama-smollm2-135m-llamacpp-delivery.json.gz',
+    ]);
+    expect(entries[1].data.equals(Buffer.from(gz))).toBe(true);
+    expect(entries[2].data.toString('utf8')).toBe('{"requests":[]}');
+  });
+
+  it('a run saved without files has no attachments key', async () => {
+    const { store } = await loadPage();
+    await store.saveFinishedRun(await controlRun('saved-run-plain', '2026-10-23T10:00:00.000Z'), 'control');
+    const [meta] = await store.listSavedExports();
+    expect('attachments' in meta).toBe(false);
+  });
+});
+
 describe('stored zip writer', () => {
   it('writes entries an independent reader accepts, CRCs checked by zlib', async () => {
     const { createStoredZip, crc32 } = await import('../src/lib/bench/stored-zip');

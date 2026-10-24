@@ -1,5 +1,11 @@
 # @localmode/transformers
 
+## 4.1.5
+
+### Patch Changes
+
+- feat: `sessionOptions` on `languageModel()` settings, passed to Transformers.js as `session_options` on every load path (text-generation pipeline, split vision-language models, image-text-to-text), for example `{ enableProfiling: true }`. `TransformersLanguageModel.getInferenceSessions()` returns the loaded model's ONNX Runtime sessions (empty before load and after `unload()`), and `preload()` loads the model without running it. Used by the bench's `ort-profile` control kind to end and read an ONNX Runtime Web session profile.
+
 ## 4.1.4
 
 ### Patch Changes

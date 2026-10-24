@@ -239,6 +239,13 @@ export interface BenchCellResult {
    * policy's `maxAttempts`; nothing is retried silently.
    */
   attempts?: Array<{ error: NonNullable<BenchCellResult['error']>; at: number }>;
+  /**
+   * Profile of the cell on a profile control run (since bench 0.9.14):
+   * `ort-operators` on the Transformers.js cells of an `ort-profile` run,
+   * `llamacpp-delivery` on the llama.cpp cells of a `llamacpp-profile` run.
+   * Aggregated and bounded in size; absent on every other run and cell.
+   */
+  profile?: BenchCellProfile;
   /** Error that ended the cell; `cause` carries the wrapped provider error's message when present. */
   error?: {
     name: string;
@@ -281,6 +288,7 @@ export interface TraceEvent {
     | 'cell-timeout'
     | 'cell-retry'
     | 'iteration-redo'
+    | 'profile-error'
     | 'abort';
   detail?: string;
 }
@@ -689,7 +697,8 @@ export interface HarnessInfo {
   /**
    * Set only on a control run (since bench 0.9.6; kind `fixed-order` since
    * 0.9.7, kind `wasm-default` since 0.9.8, kinds `wasm-q8` and
-   * `wasm-threads` since 0.9.9, kind `wllama-compat` since 0.9.13): the same suite, cells, rules,
+   * `wasm-threads` since 0.9.9, kind `wllama-compat` since 0.9.13, kinds
+   * `current-releases`, `ort-profile` and `llamacpp-profile` since 0.9.14): the same suite, cells, rules,
    * traces and environment capture as a protocol run, executed in the order
    * the kind names, a control experiment for the methodology.
    * `order-reversed` runs the runtimes in the reverse of the protocol order,
@@ -702,7 +711,11 @@ export interface HarnessInfo {
    * and `wasm-threads` run them in the protocol order with one of those two
    * changes each (q8 alone, or every logical core alone); `wllama-compat`
    * runs them in the protocol order with both llama.cpp lanes on wllama's
-   * compatibility build (see `wllamaBuild`).
+   * compatibility build (see `wllamaBuild`); `current-releases` runs them
+   * in the protocol order on the current npm releases of four runtimes (see
+   * `runtimeVersions`); `ort-profile` and `llamacpp-profile` run them in the
+   * protocol order with a profiler on the Transformers.js or the llama.cpp
+   * lanes (see `BenchCellResult.profile`).
    * `runtimeOrder` is the order the runner actually executed (the runner
    * orders the cells by it and refuses an order that is not the kind's
    * canonical one, so the record cannot disagree with the run).
@@ -717,7 +730,16 @@ export interface HarnessInfo {
 }
 
 /** Kinds of control run (see `HarnessInfo.control`). */
-export type ControlKind = 'order-reversed' | 'fixed-order' | 'wasm-default' | 'wasm-q8' | 'wasm-threads' | 'wllama-compat';
+export type ControlKind =
+  | 'order-reversed'
+  | 'fixed-order'
+  | 'wasm-default'
+  | 'wasm-q8'
+  | 'wasm-threads'
+  | 'wllama-compat'
+  | 'current-releases'
+  | 'ort-profile'
+  | 'llamacpp-profile';
 
 /**
  * Control-run marker recorded on `harness.control`.
@@ -768,6 +790,31 @@ export type ControlKind = 'order-reversed' | 'fixed-order' | 'wasm-default' | 'w
  *   `runtimeConfig.wllamaBuild` records the build wllama started its worker
  *   with.
  *
+ * - `current-releases` (since bench 0.9.14): the runtimes execute in
+ *   `RUNTIME_EXECUTION_ORDER`, every lane at the protocol's configuration,
+ *   but four runtimes load at the npm releases current when the kind was
+ *   added instead of the harness's pinned ones: Transformers.js (both
+ *   lanes), WebLLM, wllama (both llama.cpp lanes, with its compatibility
+ *   build at the same version) and LiteRT-LM. The host loads a second
+ *   bundle of the provider packages built against those releases only on
+ *   this kind. The run records the versions in `runtimeVersions`; every cell
+ *   of those lanes records the version it ran as
+ *   `runtimeConfig.runtimeVersion` (and as `runtimeVersion`). MediaPipe and
+ *   Chrome Built-in AI are unchanged.
+ * - `ort-profile` (since bench 0.9.14): the runtimes execute in
+ *   `RUNTIME_EXECUTION_ORDER`, every lane at the protocol's configuration,
+ *   and each Transformers.js Qwen3 0.6B generation cell (WebGPU and WASM) is
+ *   followed by an untimed profiling pass in a fresh session with ONNX
+ *   Runtime Web's session profiler enabled; the cell carries `profile` (see
+ *   `OrtOperatorProfile`), the pass's operator events aggregated per
+ *   operator. The timed iterations themselves run unprofiled.
+ * - `llamacpp-profile` (since bench 0.9.14): the runtimes execute in
+ *   `RUNTIME_EXECUTION_ORDER`, every lane at the protocol's configuration,
+ *   with the llama.cpp lanes' token delivery path time-stamped: when the
+ *   wllama worker posts a token, when the page receives it, and when the
+ *   provider hands the chunk to the runner. Each llama.cpp generation cell
+ *   carries `profile` (see `LlamaCppDeliveryProfile`).
+ *
  * The three WASM-lane kinds form a factorial over the two settings
  * `wasm-default` changes: `fixed-order` (neither), `wasm-q8` (dtype only),
  * `wasm-threads` (threads only), `wasm-default` (both).
@@ -788,6 +835,13 @@ export interface HarnessControl {
    * and only on it.
    */
   wllamaBuild?: 'compat';
+  /**
+   * The runtime package versions a `current-releases` control run (since
+   * bench 0.9.14) loads instead of the pinned ones, package name to version
+   * (see `CONTROL_CURRENT_RELEASE_PACKAGES`). Present on that kind, and only
+   * on it.
+   */
+  runtimeVersions?: Record<string, string>;
 }
 
 /**
@@ -895,4 +949,152 @@ export interface ValidationReport {
   shapeErrors: string[];
   flags: PlausibilityFlag[];
   summaries: CellSummary[];
+}
+
+/** A cell's profile on a profile control run (`BenchCellResult.profile`, since bench 0.9.14). */
+export type BenchCellProfile = OrtOperatorProfile | LlamaCppDeliveryProfile;
+
+/**
+ * ONNX Runtime Web operator profile of one cell of an `ort-profile` control
+ * run. The cell's timed iterations run unprofiled, exactly as on a protocol
+ * run; the profile comes from an untimed pass after the model's cells: a
+ * fresh session created with ONNX Runtime's `enableProfiling`, in a fresh
+ * dedicated worker on either lane, runs one warmup request of `pass.warmupTokens` new tokens
+ * and then one request with the cell's prompt and `pass.maxTokens` new
+ * tokens, and `endProfiling()` hands over its events. The profiler holds
+ * every event in the WASM heap until then, so profiling the timed
+ * iterations themselves exhausts the WASM lane's heap. The node events of
+ * the profiled request's session runs (the first is the prefill, the rest
+ * decode steps) are aggregated per operator; durations are the profiler's
+ * own (microseconds, reported here in milliseconds).
+ */
+export interface OrtOperatorProfile {
+  kind: 'ort-operators';
+  /**
+   * The profiling pass: the warmup request's new tokens, the profiled
+   * request's token budget (the cell's own, unless a pass ran out of WASM
+   * memory), and the budgets of the passes that did, each repeated in a
+   * fresh session at half the budget (absent when none did).
+   */
+  pass: { warmupTokens: number; maxTokens: number; failedMaxTokens?: number[] };
+  /** Session runs of the profiled request (one per forward pass: the prefill, then one per decode step). */
+  runs: number;
+  /** Sum of those runs' `model_run` durations, ms. */
+  modelRunMs: number;
+  /** Node events aggregated into `operators`. */
+  nodeEvents: number;
+  /** Sum of the `node` rows' `totalMs`, ms. */
+  nodeMs: number;
+  /** Sum of the `gpu` rows' `totalMs`, ms; present when the WebGPU provider reported GPU timestamps. */
+  gpuMs?: number;
+  /**
+   * One row per phase, timing source, operator type, kernel and execution
+   * provider, largest total first, at most `PROFILE_MAX_OPERATOR_ROWS` rows;
+   * the rest are folded into an `(other)` row per phase and timing source and
+   * counted in `foldedRows`.
+   */
+  operators: OrtOperatorRow[];
+  /** Rows folded into the `(other)` rows; absent when none were. */
+  foldedRows?: number;
+  /**
+   * The profiler recorded fewer runs than the request made (ONNX Runtime
+   * caps a session's events), so the last runs are missing; absent when
+   * every run was recorded.
+   */
+  truncated?: true;
+}
+
+/** One operator row of an `OrtOperatorProfile`. */
+export interface OrtOperatorRow {
+  /** `prefill` (the request's first session run) or `decode` (every later run). */
+  phase: 'prefill' | 'decode';
+  /**
+   * `node`: ONNX Runtime's per-node kernel time on the host thread (the
+   * computation itself on the CPU provider; recording and dispatch on the
+   * WebGPU provider). `gpu`: the WebGPU provider's GPU timestamps for a
+   * program (Chrome quantizes them unless WebGPU developer features are on).
+   */
+  timing: 'node' | 'gpu';
+  /** Operator type (`args.op_name`, e.g. `MatMulNBits`). */
+  opType: string;
+  /** Kernel: the WebGPU program name on a `gpu` row; on a `node` row the node name's last segment (e.g. `MatMul_Q4`). */
+  kernel: string;
+  /** Execution provider (`args.provider`, e.g. `WebGpuExecutionProvider`). */
+  provider: string;
+  /** Total duration over the request, ms. */
+  totalMs: number;
+  /** Events counted. */
+  count: number;
+}
+
+/**
+ * Token delivery profile of one llama.cpp generation cell of a
+ * `llamacpp-profile` control run. wllama drives llama.cpp in a worker by
+ * request and reply (a streamed completion is a loop of `get_result` round
+ * trips), and five stamps per round trip, all on the shared clock
+ * `performance.timeOrigin + performance.now()` so the worker's and the
+ * page's stamps compare, locate where a token's time goes: `send` when the
+ * page posts the request, `wrecv` when the worker receives it, `emit` when
+ * the worker posts the reply, `recv` when the page receives it, and `chunk`
+ * when the provider hands the token's text to the runner. A reply carries a
+ * token when a chunk follows it before the next reply arrives. The two
+ * contexts' clocks can differ by a fraction of a millisecond, so the
+ * statistics pair stamps of one clock, except `roundTripTransitMs`, which
+ * cancels the offset, and `clockOffsetMs`, which estimates it.
+ */
+export interface LlamaCppDeliveryProfile {
+  kind: 'llamacpp-delivery';
+  /** Histogram bin edges, ms (`LLAMACPP_PROFILE_BIN_EDGES_MS`); bin i counts values in [edge i, edge i+1), the last bin is open. */
+  binEdgesMs: number[];
+  /** One entry per request the cell made (warmup excluded), in order. */
+  iterations: LlamaCppIterationProfile[];
+}
+
+/** Delivery statistics of one request of a llama.cpp cell. */
+export interface LlamaCppIterationProfile {
+  /** Replies that carried a token. */
+  tokens: number;
+  /** Chunks the provider handed to the runner. */
+  chunks: number;
+  /** Every reply the page received during the request (token replies and empty polls). */
+  messages: number;
+  /** Gap between consecutive token replies' worker emissions. */
+  emitGapMs: GapStats;
+  /** Gap between consecutive token replies' receipts on the page. */
+  recvGapMs: GapStats;
+  /** Gap between consecutive chunks. */
+  chunkGapMs: GapStats;
+  /** Worker receipt of the request to its reply's emission (the work done for the reply; worker clock only), per token reply. */
+  workerMs: GapStats;
+  /**
+   * The round trip's time in transit, both ways together: page send to page
+   * receipt minus the worker's time (`(recv - send) - (emit - wrecv)`),
+   * which holds no clock offset, per token reply.
+   */
+  roundTripTransitMs: GapStats;
+  /** Page receipt to chunk (page clock only), per chunk (the latest reply received at or before it). */
+  receiptToChunkMs: GapStats;
+  /** Page receipt of a reply to the page's next request (page clock only), over every reply. */
+  pageTurnaroundMs: GapStats;
+  /**
+   * The worker clock's offset from the page clock, ms, the median over the
+   * token replies of `((wrecv - send) + (emit - recv)) / 2`, assuming equal
+   * transit each way; may be negative. The one-way transits, which this
+   * offset distorts, are in the raw stamps only. Absent when no reply had
+   * all four stamps.
+   */
+  clockOffsetMs?: number;
+}
+
+/** Summary and histogram of a set of durations, ms. */
+export interface GapStats {
+  n: number;
+  /** Median and percentiles; 0 when `n` is 0. */
+  p50: number;
+  p90: number;
+  p99: number;
+  max: number;
+  mean: number;
+  /** Counts per `binEdgesMs` bin (same length as the edges). */
+  histogram: number[];
 }

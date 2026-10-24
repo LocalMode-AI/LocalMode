@@ -240,7 +240,9 @@ to a newer file is in [SETUP.md](./SETUP.md), section 4.
 
 Visibility, wake lock, GPU device loss, aborts, cool-downs, and
 compute-pressure transitions (recorded on state change only; the gate itself
-reads every one-second sample).
+reads every one-second sample). Since 0.9.14, `profile-error` records a cell
+of a profile control run whose profile could not be taken (detail
+`<cellId>: <reason>`).
 
 Wake lock: `wakelock-acquired` when the screen wake lock is granted,
 `wakelock-released` when it ends, and since 0.9.2 `wakelock-denied` (detail:
@@ -313,12 +315,14 @@ control characters, `ramGB` an integer from 1 to 1024 or `null`);
 which since 0.9.5 also removes URLs, email addresses and computer names
 (`DESKTOP-XXXXXXX`, `LAPTOP-XXXXXXX`, `WIN-XXXXXXXXXXX`) from it.
 
-### Control marker (0.9.6 to 0.9.13)
+### Control marker (0.9.6 to 0.9.14)
 
 Since 0.9.6 a run may carry `harness.control` (`{ kind, runtimeOrder }`): it
 marks a control run, which is not a protocol run (see
 [Control runs](#control-runs)). The WASM-lane kinds add `wasmLane` (0.9.8,
-0.9.9) and `wllama-compat` adds `wllamaBuild` (0.9.13).
+0.9.9), `wllama-compat` adds `wllamaBuild` (0.9.13) and `current-releases`
+adds `runtimeVersions` (0.9.14); the profile kinds (0.9.14) add a
+`profile` to their profiled cells.
 
 ## Statistics
 
@@ -348,8 +352,9 @@ reproducibility measure; a lane is therefore tied to its position in the
 suite (what ran before it, how long the page has been busy). A control run,
 a control experiment for the methodology, runs the same suite in the runtime
 order its kind names (and, for three kinds, with the Transformers.js WASM
-lane configured differently, and for one, with the llama.cpp lanes on
-wllama's compatibility build), so that lane ratios can be compared:
+lane configured differently, for one, with the llama.cpp lanes on wllama's
+compatibility build, for one, on the runtimes' current releases, and for two,
+with a profiler), so that lane ratios can be compared:
 
 ```ts
 import { createHarnessControl, runBenchmarkSuite } from '@localmode/bench';
@@ -376,13 +381,21 @@ from 1 to 1024), and (since 0.9.9) `wasm-q8`, with
 left the thread count to ONNX Runtime), and `wasm-threads`, with
 `wasmLane: { dtype: 'q4', numThreads, simd: true }`, both in
 `RUNTIME_EXECUTION_ORDER`, and (since 0.9.13) `wllama-compat`, in
-`RUNTIME_EXECUTION_ORDER` with `wllamaBuild: 'compat'`. `wasmLane` is
+`RUNTIME_EXECUTION_ORDER` with `wllamaBuild: 'compat'`, and (since 0.9.14)
+`current-releases`, in `RUNTIME_EXECUTION_ORDER` with `runtimeVersions`
+(package name to version for each of `CONTROL_CURRENT_RELEASE_PACKAGES`:
+`@huggingface/transformers`, `@mlc-ai/web-llm`, `@wllama/wllama`,
+`@wllama/wllama-compat`, `@litert-lm/core`; optionally `onnxruntime-web`;
+`controlRuntimeVersionsError()`), `ort-profile` and `llamacpp-profile`, both
+in `RUNTIME_EXECUTION_ORDER` with no further field. `wasmLane` is
 required on the three WASM-lane kinds, exactly as `CONTROL_WASM_LANE_SPECS`
 gives it, and refused on every other kind; `wllamaBuild` is required on
 `wllama-compat`, exactly as `CONTROL_WLLAMA_BUILDS` gives it
-(`controlWllamaBuildError()`), and refused on every other kind. The validator
-rejects any other kind, order, `wasmLane` or `wllamaBuild`, and the digest
-covers the fields like the rest of `harness`.
+(`controlWllamaBuildError()`), and refused on every other kind;
+`runtimeVersions` likewise belongs to `current-releases` alone. The validator
+rejects any other kind, order, `wasmLane`, `wllamaBuild` or
+`runtimeVersions`, and the digest covers the fields like the rest of
+`harness`.
 
 ### The kinds
 
@@ -464,6 +477,113 @@ covers the fields like the rest of `harness`.
   Standard tier, beside a `fixed-order` series on the same machine, browser
   build and day:
   `/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=wllama-compat`.
+- `current-releases` (since 0.9.14) runs the runtimes in
+  `RUNTIME_EXECUTION_ORDER` with every lane at the protocol's configuration,
+  on the runtimes' current npm releases instead of the pinned ones. The host
+  loads a second bundle of its provider packages, built from the same
+  provider source against those releases, only on this kind; on
+  localmode.ai that is Transformers.js 4.3.1 (with ONNX Runtime Web
+  1.31.0-dev.20260914), WebLLM 0.2.86, wllama 3.8.1 (and its compatibility
+  build at the same version) and LiteRT-LM 0.18.0, while MediaPipe and
+  Chrome Built-in AI keep their versions. Every cell of a lane whose runtime
+  the kind changes (`CURRENT_RELEASE_LANE_PACKAGES`: both Transformers.js
+  lanes, WebLLM, both llama.cpp lanes, LiteRT) records the version it ran as
+  `runtimeConfig.runtimeVersion`, which the validator holds to
+  `harness.control.runtimeVersions` (`runtimeVersionCellError()`; the field
+  is refused on any other run or lane). The cell's own `runtimeVersion` names
+  the same release. A lane that fails on a current release (the monorepo pins
+  Transformers.js 4.2 because 4.3.0's ONNX Runtime Web build broke the 4-bit
+  `MatMulNBits` WebGPU kernel on Apple Silicon Chrome) is recorded as an error
+  cell, which is a result of the control, not a gap. On LiteRT-LM 0.18 the
+  localmode.ai provider keeps the text the engine streams on a message's
+  thought channel inline, in one `<think>` block, the form in which the
+  pinned release delivered the same reasoning inside the content, and records
+  `runtimeConfig.thoughtChannel: 'inline'`. Build the marker with
+  `createHarnessControl('current-releases', { runtimeVersions })`. On
+  localmode.ai run it on the Standard tier, beside a `fixed-order` series on
+  the same machine, browser build and day:
+  `/bench/run?tier=standard&quality=off&runs=6&cooldown=5&cold=off&control=current-releases`.
+- `ort-profile` (since 0.9.14) runs the runtimes in `RUNTIME_EXECUTION_ORDER`
+  with every lane at the protocol's configuration and attaches an ONNX
+  Runtime Web operator profile to each Transformers.js Qwen3 0.6B generation
+  cell (WebGPU and WASM). The timed iterations run unprofiled, so their
+  numbers compare with a `fixed-order` run's: ONNX Runtime's profiler keeps
+  every event in the WASM heap until the session ends, and over a
+  Standard cell set that exhausted the WASM lane's heap (`std::bad_alloc`
+  within 32 to 40 runs at the 512-token prompt, in Chrome 156 on an M4) and
+  held about 3.8 GB on the WebGPU lane. After the model's last cell, the
+  host runs one untimed pass per cell in a fresh session created with
+  `enableProfiling`, in a fresh dedicated worker on either lane (a pass on
+  the page's own ONNX Runtime heap, which never shrinks, failed to load the
+  model for the second WebGPU pass in Chrome 156): a warmup request of
+  4 new tokens, then one request with the cell's prompt, temperature and
+  token budget, then `endProfiling()`. ONNX Runtime Web prints the events
+  through the WASM module's stdout, one Chrome-trace event per line, inside
+  that call; the host routes the lines into an aggregator. The cell's
+  `profile` (`OrtOperatorProfile`) is `{ kind: 'ort-operators', pass:
+  { warmupTokens, maxTokens, failedMaxTokens? }, runs, modelRunMs,
+  nodeEvents, nodeMs, gpuMs?, operators, foldedRows?, truncated? }`, where
+  each operator row is `{ phase, timing, opType, kernel, provider, totalMs,
+  count }`: `phase` `prefill` for the request's first session run and
+  `decode` for the rest; `timing` `node` for ONNX Runtime's per-node kernel
+  time on the host thread (the computation on the CPU provider; recording
+  and dispatch on the WebGPU provider) and `gpu` for the WebGPU provider's
+  GPU timestamps per program (Chrome quantizes them to about 66 us unless it
+  runs with `--enable-webgpu-developer-features`). Rows are largest first, at
+  most `PROFILE_MAX_OPERATOR_ROWS` (100), the rest folded into an `(other)`
+  row per phase and timing. A pass that runs out of WASM memory is repeated
+  in a fresh session at half the budget, down to 16 tokens, and the budgets
+  that failed are listed in `pass.failedMaxTokens`; `truncated` marks a
+  profile that holds fewer runs than the request made. The run file carries
+  only the aggregate; the raw events of each pass (the session's own events,
+  every node event and GPU event of the profiled request) are a separate
+  gzip-compressed Chrome-trace JSON file. Profiled requests run at a fraction
+  of the unprofiled speed (the WebGPU lane at about half), so a profile gives
+  operator shares, not throughput.
+- `llamacpp-profile` (since 0.9.14) runs the runtimes in
+  `RUNTIME_EXECUTION_ORDER` with every lane at the protocol's configuration
+  and time-stamps the llama.cpp lanes' token delivery path on every
+  generation cell. wllama drives llama.cpp in a module worker by request and
+  reply; a streamed completion is a loop of `get_result` round trips, and a
+  reply that carries a token leads the provider to hand a chunk to the
+  runner. Five stamps per round trip, all on `performance.timeOrigin +
+  performance.now()` (comparable across the page and the worker): the page's
+  send, the worker's receipt, the worker's reply (emission), the page's
+  receipt, and the chunk. The host gets the worker's stamps without
+  changing wllama: while the engine starts, the page's `Worker` constructor
+  wraps each Blob-URL module worker in a module that imports a stamp module
+  (which listens for requests ahead of wllama's handler and adds the stamps
+  to every reply) and then wllama's own worker code. The cell's `profile`
+  (`LlamaCppDeliveryProfile`) is `{ kind: 'llamacpp-delivery', binEdgesMs,
+  iterations }`, one entry per request (warmup excluded, at most
+  `PROFILE_MAX_ITERATIONS`, 64) with `tokens`, `chunks`, `messages` and a
+  `GapStats` (`n`, nearest-rank `p50`, `p90`, `p99`, `max`, `mean`, and a
+  histogram over `LLAMACPP_PROFILE_BIN_EDGES_MS`) for each of `emitGapMs`,
+  `recvGapMs`, `chunkGapMs` (the per-token periods at the worker, the page
+  and the runner), `workerMs` (the worker's time on the request),
+  `roundTripTransitMs` (page send to page receipt minus the worker's time:
+  the transit both ways together), `receiptToChunkMs` and `pageTurnaroundMs`
+  (a reply's receipt to the next request), plus `clockOffsetMs`. The page's
+  and the worker's clocks can be a fraction of a millisecond apart (Chrome
+  156 on an M4 showed a page-to-worker transit of 0.85 ms against a
+  worker-to-page transit at or below zero), so each statistic pairs stamps
+  of one clock, except `roundTripTransitMs`, which cancels the offset;
+  `clockOffsetMs` estimates the offset as the median of
+  `((wrecv - send) + (emit - recv)) / 2`, and the one-way transits stay in
+  the raw stamps. A fixed per-token period that sits in `workerMs` is
+  computation in the worker; one that sits in the round-trip transit or the
+  page turnaround is delivery. The raw stamps are a separate
+  gzip-compressed JSON file. The kind works in any
+  browser that runs module workers (Chrome, Firefox).
+- On both profile kinds a profile that could not be taken leaves the cell's
+  measurements as they are and records a `profile-error` trace event
+  (`<cellId>: <reason>`). The runner calls the adapter's profiler
+  (`LoadedLLM.profiler`, a `BenchCellProfiler`) around each cell and asks for
+  the profiles after disposing the model (`collect()`, untimed). The
+  validator (`cellProfileError()`) refuses a profile on any other kind or
+  lane and checks its bounded shape. On localmode.ai:
+  `/bench/run?tier=standard&quality=off&runs=3&cooldown=5&cold=off&control=ort-profile` and
+  `/bench/run?tier=standard&quality=off&runs=3&cooldown=5&cold=off&control=llamacpp-profile`.
 
 ### Running a series
 
@@ -486,8 +606,9 @@ covers the fields like the rest of `harness`.
   scored, which is why the field needed no protocol version. The localmode.ai
   runner offers Export JSON only (`/bench/run?control=order-reversed`,
   `/bench/run?control=fixed-order`, `/bench/run?control=wasm-default`,
-  `/bench/run?control=wasm-q8`, `/bench/run?control=wasm-threads` or
-  `/bench/run?control=wllama-compat`, see
+  `/bench/run?control=wasm-q8`, `/bench/run?control=wasm-threads`,
+  `/bench/run?control=wllama-compat`, `/bench/run?control=current-releases`,
+  `/bench/run?control=ort-profile` or `/bench/run?control=llamacpp-profile`, see
   [SETUP.md](./SETUP.md), section 9), the submission route answers 422
   `control-run`, and `aggregateRuns` leaves control runs out of every
   leaderboard row. `isControlRun(run)` is the check.

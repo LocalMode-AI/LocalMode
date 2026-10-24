@@ -1,7 +1,8 @@
 /**
  * Control runs on /bench/run (`?control=order-reversed`, `?control=fixed-order`,
  * `?control=wasm-default`, `?control=wasm-q8`, `?control=wasm-threads`,
- * `?control=wllama-compat`), a control
+ * `?control=wllama-compat`, `?control=current-releases`, `?control=ort-profile`,
+ * `?control=llamacpp-profile`), a control
  * experiment for the methodology: the query parsing and its refusals, the
  * series state that carries the control kind across reloads, the preset link,
  * the upload guard and the completion-code guard. The page wiring (banner,
@@ -12,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { createHarnessControl, RUNTIME_EXECUTION_ORDER, validateRunShape } from '@localmode/bench';
 import {
   CONTROL_STUDY_REFUSAL,
+  controlAdapterOptions,
   controlBannerText,
   controlHarness,
   effectiveControlKind,
@@ -35,6 +37,8 @@ import {
 import { shouldIssueCompletionCode } from '../src/lib/bench/study-completion';
 import { SUITE_MODELS, benchModelsFor } from '../src/lib/bench/catalog';
 import { makeRun } from '../../../packages/bench/tests/helpers';
+import { createEmbedAdapters, createLLMAdapters } from '../src/lib/bench/adapters';
+import { CURRENT_RELEASE_RUNTIME_VERSIONS } from '../src/lib/bench/current-releases/versions.generated';
 
 const settings: SeriesSettings = {
   suite: 'quick',
@@ -93,7 +97,7 @@ describe('parseControlRequest()', () => {
     expect(unknown).toEqual({
       status: 'refused',
       message:
-        'Unknown control run kind "order-shuffled"; the supported kinds are order-reversed, fixed-order, wasm-default, wasm-q8, wasm-threads, wllama-compat. Remove the control parameter for a protocol run.',
+        'Unknown control run kind "order-shuffled"; the supported kinds are order-reversed, fixed-order, wasm-default, wasm-q8, wasm-threads, wllama-compat, current-releases, ort-profile, llamacpp-profile. Remove the control parameter for a protocol run.',
     });
     expect(parseControlRequest('?control=').status).toBe('refused');
     expect(parseControlRequest('?control=Fixed-Order').status).toBe('refused');
@@ -373,5 +377,78 @@ describe('a Thorough-tier control run', () => {
     expect(validateRunShape(makeRun({ suite: 'thorough', harness: { name: 'n', version: 'v', control } }))).toEqual([]);
     const series = createSeries({ seriesId: 'thorough-fixed', count: 1, settings: { ...settings, suite: 'thorough', control: 'fixed-order' }, now: 0 });
     expect(series.settings).toMatchObject({ suite: 'thorough', control: 'fixed-order', publish: false });
+  });
+});
+
+describe('the current-releases, ort-profile and llamacpp-profile kinds', () => {
+  const STANDARD = 'tier=standard&quality=off&runs=6&cooldown=5&cold=off';
+
+  it.each(['current-releases', 'ort-profile', 'llamacpp-profile'] as const)('the %s author link opts in; a study link is refused', (kind) => {
+    expect(parseControlRequest(`?${STANDARD}&control=${kind}`)).toEqual({ status: 'control', kind });
+    expect(parseControlRequest(`?PROLIFIC_PID=abc&cc=CODE1234&control=${kind}`)).toEqual({ status: 'refused', message: CONTROL_STUDY_REFUSAL });
+    expect(mayUpload(makeRun({ harness: { name: 'n', version: 'v', control: controlHarness(kind, 8) } }))).toBe(false);
+  });
+
+  it('a mistyped kind is refused, naming all nine kinds', () => {
+    const refused = parseControlRequest('?control=current-release');
+    expect(refused.status).toBe('refused');
+    expect(refused.status === 'refused' && refused.message).toContain(
+      'order-reversed, fixed-order, wasm-default, wasm-q8, wasm-threads, wllama-compat, current-releases, ort-profile, llamacpp-profile',
+    );
+  });
+
+  it('the banners name what each kind changes and that the run is not published', () => {
+    expect(controlBannerText('current-releases')).toBe('Control run: runtimes at their current npm releases; not published to the leaderboard');
+    expect(controlBannerText('ort-profile')).toBe(
+      'Control run: ONNX Runtime operator profile of the Transformers.js Qwen3 cells; not published to the leaderboard',
+    );
+    expect(controlBannerText('llamacpp-profile')).toBe('Control run: llama.cpp token delivery time stamps; not published to the leaderboard');
+  });
+
+  it('current-releases records the versions the build bundled, in the protocol order', () => {
+    const control = controlHarness('current-releases', 12);
+    expect(control).toEqual({ kind: 'current-releases', runtimeOrder: [...RUNTIME_EXECUTION_ORDER], runtimeVersions: { ...CURRENT_RELEASE_RUNTIME_VERSIONS } });
+    expect(control.runtimeVersions).toEqual({
+      '@huggingface/transformers': '4.3.1',
+      '@mlc-ai/web-llm': '0.2.86',
+      '@wllama/wllama': '3.8.1',
+      '@wllama/wllama-compat': '3.8.1',
+      '@litert-lm/core': '0.18.0',
+      'onnxruntime-web': '1.31.0-dev.20260914-8d85527a0',
+    });
+    expect(validateRunShape(makeRun({ cells: [], harness: { name: 'n', version: 'v', control } })).filter((e) => e.includes('control'))).toEqual([]);
+  });
+
+  it('controlAdapterOptions turns each kind into its adapter options, and nothing else', () => {
+    expect(controlAdapterOptions(controlHarness('current-releases'))).toEqual({ runtimeSet: 'current' });
+    expect(controlAdapterOptions(controlHarness('ort-profile'))).toEqual({ profile: 'ort' });
+    expect(controlAdapterOptions(controlHarness('llamacpp-profile'))).toEqual({ profile: 'llamacpp' });
+    expect(controlAdapterOptions(controlHarness('fixed-order'))).toEqual({});
+    expect(controlAdapterOptions(undefined)).toEqual({});
+  });
+
+  it('the adapters of a current-releases run report the current versions; a protocol run reports the pinned ones', () => {
+    const current = createLLMAdapters(controlAdapterOptions(controlHarness('current-releases')));
+    expect(current.get('transformers-webgpu')?.runtimeVersion).toBe('4.3.1');
+    expect(current.get('transformers-wasm')?.runtimeVersion).toBe('4.3.1');
+    expect(current.get('webllm')?.runtimeVersion).toBe('0.2.86');
+    expect(current.get('wllama')?.runtimeVersion).toBe('3.8.1');
+    expect(current.get('wllama-webgpu')?.runtimeVersion).toBe('3.8.1');
+    expect(current.get('litert')?.runtimeVersion).toBe('0.18.0');
+    const embed = createEmbedAdapters(controlAdapterOptions(controlHarness('current-releases')));
+    expect(embed.get('transformers-wasm')?.runtimeVersion).toBe('4.3.1');
+    expect(embed.get('wllama')?.runtimeVersion).toBe('3.8.1');
+    const pinned = createLLMAdapters({});
+    expect(pinned.get('transformers-webgpu')?.runtimeVersion).not.toBe('4.3.1');
+    expect(pinned.get('webllm')?.runtimeVersion).not.toBe('0.2.86');
+  });
+
+  it('a series of each kind keeps it and never publishes through a reload', () => {
+    for (const kind of ['current-releases', 'ort-profile', 'llamacpp-profile'] as const) {
+      const created = createSeries({ seriesId: `series-${kind}`, count: 3, settings: { ...settings, suite: 'standard', publish: true, control: kind }, now: 0 });
+      expect(created.settings.publish).toBe(false);
+      const reloaded = parseSeriesState(serializeSeriesState(created));
+      expect(reloaded?.settings.control).toBe(kind);
+    }
   });
 });

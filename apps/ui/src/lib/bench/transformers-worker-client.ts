@@ -6,8 +6,8 @@
  * a worker-hosted model, which is how an application would run it.
  */
 
-import type { BenchEmbeddingModel, BenchLanguageModel, BenchStreamChunk } from '@localmode/bench';
-import type { WorkerLaneSettings, WorkerRequest, WorkerResponse } from './transformers-worker';
+import type { BenchEmbeddingModel, BenchLanguageModel, BenchStreamChunk, OrtOperatorProfile } from '@localmode/bench';
+import type { WorkerLaneSettings, WorkerProfilePass, WorkerRequest, WorkerResponse } from './transformers-worker';
 
 type Device = 'webgpu' | 'wasm';
 
@@ -89,6 +89,31 @@ export class TransformersWorkerLane {
       }
     } finally {
       options.abortSignal?.removeEventListener('abort', onAbort);
+      this.queues.delete(id);
+    }
+  }
+
+  /**
+   * Run an `ort-profile` profiling pass in this worker: a fresh profiled
+   * session, the warmup request, the cell's request, then the profile.
+   * Use a worker of its own (the pass unloads its model, and ONNX Runtime's
+   * WASM heap never shrinks).
+   */
+  async profilePass(
+    modelId: string,
+    device: Device,
+    pass: WorkerProfilePass,
+    settings?: WorkerLaneSettings,
+  ): Promise<{ profile: OrtOperatorProfile; rawGzip?: Uint8Array<ArrayBuffer> }> {
+    const id = this.nextId++;
+    const queue = this.send({ id, type: 'profile-pass', modelId, device, pass, ...(settings ? { settings } : {}) });
+    try {
+      for (;;) {
+        const msg = await queue.next();
+        if (msg.type === 'profiled') return { profile: msg.profile, ...(msg.rawGzip ? { rawGzip: new Uint8Array(msg.rawGzip) } : {}) };
+        if (msg.type === 'error') throw toError(msg);
+      }
+    } finally {
       this.queues.delete(id);
     }
   }
