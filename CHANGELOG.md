@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.22] - 2026-10-28
+
+**Released:** `@localmode/bench` 0.10.1.
+
+### Fixed
+
+- **ui:** on /bench/tasks the Translator pairs created from the Run click are created one at a time in the plan's order, each with its own `availability()` reading and `create()` span as its cell's load (`createOrder`, `activationAtCreate` recorded); before, they were created together and shared one span.
+- **bench 0.10.1, ui:** a task cell's download bytes are measured on the model's own profile folders (`TranslateKit`, `OptGuideOnDeviceModel`, `optimization_guide_model_store`): the driver's per-click reading, else the session's folder sizes, as `modelBytesDelta`; the whole-profile change is kept apart as `wholeProfileBytesDelta`.
+
+### Documentation
+
+- **ui, bench (docs):** the `/bench/methodology` control-runs list and `packages/bench/NOTES.md` (The kinds) name the export-only `chrome-ai-tasks` kind: Chrome's built-in Summarizer, Translator and Language Detector against open fallbacks run in the page, per item; the protocol stays `localmode-bench/5` and its schema fields are additive. Docs only.
+
 ## [2.16.21] - 2026-10-28
 
 **Released:** `@localmode/chrome-ai` 2.3.0, `@localmode/core` 2.6.0, `@localmode/transformers` 4.2.0, `@localmode/bench` 0.10.0.

@@ -1156,7 +1156,7 @@ export const TASKS_PROTOCOL_VERSION = 'tasks/1';
 export type TaskKind = 'summarize' | 'translate' | 'detect-language';
 
 /** What a task session measures: model download, output quality, latency, or a pilot. */
-export type TaskPhase = 'download' | 'quality' | 'latency' | 'pilot';
+export type TaskPhase = 'download' | 'quality' | 'latency' | 'pilot' | 'pilot-sizing';
 
 /** The item set a task session draws from. */
 export type TaskSet = 'cnndm-test' | 'cnndm-reserve' | 'xsum-test' | 'flores-devtest' | 'wili-test';
@@ -1172,6 +1172,14 @@ export interface TaskItemListRef {
   id: string;
   count: number;
   sha256: string;
+  /**
+   * A `pilot-sizing` session ran only a prefix of the list (since bench
+   * 0.10.1): the first `limit` items, or the first `perDirection` items of
+   * each translation direction, in list order. `count` and `sha256` (the same
+   * digest rule) describe the items kept; the list's own `count` and
+   * `sha256` stay those of the full pinned list. Present on that phase only.
+   */
+  limitedTo?: { count: number; sha256: string; limit?: number; perDirection?: number };
 }
 
 /**
@@ -1265,7 +1273,19 @@ export interface TaskDownloadRecord {
   events: Array<{ t: number; loaded: number; total: number }>;
   /** Wall time from the user activation that started the download to `available`, ms. */
   wallMs: number;
-  /** Profile folder bytes after minus before, from the driver's captures. */
+  /** The profile's top-level folders that hold this model (e.g. `TranslateKit`, `OptGuideOnDeviceModel`). */
+  modelFolders?: string[];
+  /**
+   * Bytes the model folders gained: from the driver's measurement around the
+   * click that started the download (`driver-click`), else from the
+   * session's start and end sizes of those folders (`session-folders`).
+   */
+  modelBytesDelta?: number;
+  /** `driver` is accepted as an alias of `driver-click`, `page` of `session-folders`; the runner writes the long forms. */
+  modelBytesSource?: 'driver-click' | 'session-folders' | 'driver' | 'page';
+  /** The whole profile's change over the same interval, as the driver measured it (unrelated churn included). */
+  wholeProfileBytesDelta?: number;
+  /** Before bench 0.10.1: the whole-profile delta under this name (still accepted). */
   profileBytesDelta?: number;
 }
 

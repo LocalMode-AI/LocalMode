@@ -30,7 +30,7 @@ import {
   runtimeVersionCellError,
   wllamaBuildError,
 } from './protocol.js';
-import { controlTasksError, taskCellError, taskCellOrderError, TASK_KINDS } from './tasks/protocol.js';
+import { controlTasksError, taskCellError, taskCellOrderError, taskLimitError, TASK_KINDS } from './tasks/protocol.js';
 import type { TaskIteration, TaskKind } from './types.js';
 
 /** True for a cell of a `chrome-ai-tasks` run (a task workload kind). */
@@ -164,13 +164,13 @@ export function validateRunShape(value: unknown, options: ValidateOptions = {}):
   else {
     const control = harness && typeof harness.control === 'object' && harness.control !== null ? (harness.control as Record<string, unknown>) : null;
     (run.cells as unknown[]).forEach((c, i) => validateCellShape(c, i, push, control));
-    const tasks = control?.kind === 'chrome-ai-tasks' ? (control.tasks as { systemOrder?: unknown } | undefined) : undefined;
+    const tasks = control?.kind === 'chrome-ai-tasks' ? (control.tasks as { systemOrder?: unknown; itemList?: { limitedTo?: { count?: unknown } } } | undefined) : undefined;
     if (tasks && Array.isArray(tasks.systemOrder)) {
-      const orderError = taskCellOrderError(
-        (run.cells as unknown[]).filter((c): c is Record<string, never> => typeof c === 'object' && c !== null),
-        tasks.systemOrder as string[],
-      );
+      const cellObjects = (run.cells as unknown[]).filter((c): c is Record<string, never> => typeof c === 'object' && c !== null);
+      const orderError = taskCellOrderError(cellObjects, tasks.systemOrder as string[]);
       if (orderError) push(`cells: ${orderError}`);
+      const limitError = taskLimitError(cellObjects, tasks.itemList?.limitedTo);
+      if (limitError) push(`cells: ${limitError}`);
     }
   }
   if (!Array.isArray(run.events)) push('events must be an array');

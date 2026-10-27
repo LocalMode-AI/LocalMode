@@ -335,7 +335,12 @@ export default function BenchMethodologyPage() {
               suite in the protocol&apos;s order and configuration and time-stamps the llama.cpp
               lanes&apos; token delivery path (the wllama worker&apos;s receipt and reply, the
               page&apos;s send and receipt, and the chunk handed to the runner); each llama.cpp
-              generation cell carries the per-request gaps and stage times. Every kind runs on any tier. Cells, rules, traces and the environment capture are those of a protocol run; the run file
+              generation cell carries the per-request gaps and stage times. Every kind runs on any tier.{' '}
+              <code className="font-mono text-sm">chrome-ai-tasks</code> is not a suite run: on its own
+              page it runs Chrome&apos;s built-in Summarizer, Translator and Language Detector against
+              open fallback models run in the page, one item per call, and records each item&apos;s
+              timings and output; it is export-only like every kind, the protocol stays
+              localmode-bench/5, and its fields add to the schema without changing it. Cells, rules, traces and the environment capture are those of a protocol run; the run file
               carries <code className="font-mono text-sm">harness.control</code> (the kind and the order
               used, for wasm-default, wasm-q8 and wasm-threads the WASM lane&apos;s dtype and thread count,
               for wllama-compat the llama.cpp build, and for current-releases the runtime versions). A control run is never uploaded (Export JSON only, and the submission route refuses

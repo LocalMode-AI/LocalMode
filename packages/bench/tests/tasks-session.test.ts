@@ -319,7 +319,7 @@ describe('runTaskSession()', () => {
     expect(d.onDeviceInternals.end?.performanceClass).toBe('High');
     expect(d.freeDiskBytes).toEqual({ start: 1000, end: 900 });
     expect(d.profileFolderBytes.end).toEqual({ TranslateKit: 110 });
-    expect(run.cells[0].task?.download).toEqual({ events: [{ t: 1, loaded: 0, total: 1 }, { t: 2, loaded: 1, total: 1 }], wallMs: 12, profileBytesDelta: 100 });
+    expect(run.cells[0].task?.download).toEqual({ events: [{ t: 1, loaded: 0, total: 1 }, { t: 2, loaded: 1, total: 1 }], wallMs: 12, wholeProfileBytesDelta: 100 });
     // The caller's record is untouched.
     expect((options.harness.control!.tasks!.driver as typeof driver & { freeDiskBytes: { end?: number } }).freeDiskBytes.end).toBeUndefined();
     expect(await verifyRunDigest(run)).toBe(true);

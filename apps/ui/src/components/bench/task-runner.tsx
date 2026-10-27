@@ -19,6 +19,8 @@ import {
   type TaskSystemAdapter,
 } from '@localmode/bench';
 import {
+  applyLimit,
+  limitedToRecord,
   parseTaskRequest,
   planTaskSession,
   taskControl,
@@ -46,7 +48,10 @@ interface BenchTasksStatus {
   message?: string;
   cell?: string;
   itemsDone: number;
+  /** Items of the list the session runs (the kept prefix on a pilot-sizing session). */
   itemsTotal: number;
+  /** Item calls the session makes over all its cells (progress). */
+  itemsPlanned?: number;
   runId?: string;
   downloadCell?: string;
 }
@@ -159,6 +164,7 @@ export function TaskRunner() {
   const finalizeWaiters = useRef<Array<() => void>>([]);
   const finalizeResolve = useRef<((c: TaskFinalizeCaptures) => void) | null>(null);
   const downloadClick = useRef<(() => void) | null>(null);
+  const limitedToRef = useRef<Awaited<ReturnType<typeof limitedToRecord>>>(undefined);
 
   const update = useCallback((patch: Partial<BenchTasksStatus>) => {
     statusRef.current = { ...statusRef.current, ...patch };
@@ -202,10 +208,13 @@ export function TaskRunner() {
           update({ phase: 'refused', message: `Item list refused: ${verified.message}` });
           return;
         }
-        const p = planTaskSession(parsed.request, verified.items);
+        // A pilot-sizing session verified the whole list above and runs only its prefix.
+        const kept = applyLimit(parsed.request, verified.items);
+        limitedToRef.current = await limitedToRecord(parsed.request, kept);
+        const p = planTaskSession(parsed.request, kept);
         setItems(verified.items);
         setPlan(p);
-        update({ phase: 'ready', itemsTotal: p.cells.reduce((n, c) => n + c.items.length, 0) });
+        update({ phase: 'ready', itemsTotal: kept.length, itemsPlanned: p.cells.reduce((n, c) => n + c.items.length, 0) });
       } catch (error) {
         update({ phase: 'refused', message: `Item list could not be loaded: ${(error as Error).message}` });
       }
@@ -249,7 +258,7 @@ export function TaskRunner() {
               },
             }
           : {}),
-        control: taskControl(request, plan, driverStartRef.current),
+        control: taskControl(request, plan, driverStartRef.current, limitedToRef.current),
       };
       let done = 0;
       const runResult = await runTaskSession({
@@ -320,13 +329,15 @@ export function TaskRunner() {
           <dt className="text-muted-foreground">Session</dt>
           <dd>
             {request.sessionIndex}, {request.order} order{request.processCold ? ', process-cold' : ''}
+            {request.limit !== undefined ? `, first ${request.limit} items` : ''}
+            {request.limitPerDirection !== undefined ? `, first ${request.limitPerDirection} per direction` : ''}
           </dd>
         </dl>
       )}
       <p role="status" className="text-sm">
         {status.phase === 'loading-items' && 'Loading the item list from the local item server...'}
-        {status.phase === 'ready' && `Ready: ${status.itemsTotal} items. Nothing has loaded yet.`}
-        {status.phase === 'running' && `Running ${status.cell ?? ''} (${status.itemsDone}/${status.itemsTotal} items)`}
+        {status.phase === 'ready' && `Ready: ${status.itemsTotal} items, ${status.itemsPlanned ?? 0} item calls. Nothing has loaded yet.`}
+        {status.phase === 'running' && `Running ${status.cell ?? ''} (${status.itemsDone}/${status.itemsPlanned ?? 0} item calls)`}
         {status.phase === 'awaiting-download-click' && `Waiting for the download click: ${status.downloadCell}`}
         {status.phase === 'awaiting-finalize' && 'Waiting for the driver end captures'}
         {status.phase === 'done' && `Done: run ${status.runId}`}

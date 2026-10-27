@@ -71,6 +71,9 @@ export interface TaskRequest {
   repeat?: number;
   /** Chrome full version the session must run on (preflight), when pinned. */
   chromeBuild?: string;
+  /** A `pilot-sizing` session runs only the first `limit` items, or the first `limitPerDirection` of each direction. */
+  limit?: number;
+  limitPerDirection?: number;
 }
 
 /** A refused request, with the reason shown on the page. */
@@ -143,6 +146,18 @@ export function parseTaskRequest(search: string): TaskRequestResult {
     repeat = Number(repeatRaw);
     if (list.subset !== 'R' || !Number.isInteger(repeat) || repeat < 1) return { ok: false, message: 'repeat is set only on an R list, as an integer from 1' };
   }
+  const readLimit = (key: string) => (p.has(key) ? Number(p.get(key)) : undefined);
+  const limit = readLimit('limit');
+  const limitPerDirection = readLimit('limitPerDirection');
+  if (limit !== undefined || limitPerDirection !== undefined) {
+    if (phase !== 'pilot-sizing') return { ok: false, message: 'limit and limitPerDirection are set only on a pilot-sizing session' };
+    if (limit !== undefined && limitPerDirection !== undefined) return { ok: false, message: 'set limit or limitPerDirection, not both' };
+    const n = (limit ?? limitPerDirection) as number;
+    if (!Number.isInteger(n) || n < 1) return { ok: false, message: 'a limit is a positive integer' };
+    if (limitPerDirection !== undefined && task !== 'translate') return { ok: false, message: 'limitPerDirection is set only on a translate session' };
+  } else if (phase === 'pilot-sizing') {
+    return { ok: false, message: 'a pilot-sizing session needs limit or limitPerDirection' };
+  }
   const chromeBuild = p.get('chrome') ?? undefined;
   if (chromeBuild !== undefined && !/^\d+\.\d+\.\d+\.\d+$/.test(chromeBuild)) return { ok: false, message: 'chrome must be a full version (e.g. 156.0.8078.48)' };
   return {
@@ -158,7 +173,52 @@ export function parseTaskRequest(search: string): TaskRequestResult {
       processCold: p.get('cold') === '1',
       ...(repeat !== undefined ? { repeat } : {}),
       ...(chromeBuild ? { chromeBuild } : {}),
+      ...(limit !== undefined ? { limit } : {}),
+      ...(limitPerDirection !== undefined ? { limitPerDirection } : {}),
     },
+  };
+}
+
+/**
+ * The items a session runs: the whole verified list, or on a `pilot-sizing`
+ * session its first `limit` items, or the first `limitPerDirection` items of
+ * each translation direction, in list order.
+ *
+ * @param request - The parsed request.
+ * @param items - The full verified list.
+ * @returns The items to run.
+ */
+export function applyLimit(request: Pick<TaskRequest, 'limit' | 'limitPerDirection'>, items: readonly TaskItem[]): TaskItem[] {
+  if (request.limit !== undefined) return items.slice(0, request.limit);
+  if (request.limitPerDirection !== undefined) {
+    const seen = new Map<string, number>();
+    return items.filter((i) => {
+      const key = `${i.src}-${i.tgt}`;
+      const n = (seen.get(key) ?? 0) + 1;
+      seen.set(key, n);
+      return n <= request.limitPerDirection!;
+    });
+  }
+  return [...items];
+}
+
+/**
+ * The `itemList.limitedTo` record of a limited session (undefined otherwise):
+ * the kept items' count and digest, and the limit applied.
+ *
+ * @param request - The parsed request.
+ * @param kept - The items the session runs (`applyLimit`).
+ * @returns The record.
+ */
+export async function limitedToRecord(
+  request: Pick<TaskRequest, 'limit' | 'limitPerDirection'>,
+  kept: readonly TaskItem[],
+): Promise<{ count: number; sha256: string; limit?: number; perDirection?: number } | undefined> {
+  if (request.limit === undefined && request.limitPerDirection === undefined) return undefined;
+  return {
+    count: kept.length,
+    sha256: await itemListDigest(kept),
+    ...(request.limit !== undefined ? { limit: request.limit } : { perDirection: request.limitPerDirection }),
   };
 }
 
@@ -323,7 +383,12 @@ export function planTaskSession(request: TaskRequest, items: readonly TaskItem[]
  * @param driver - The driver's start captures, when a driver injected them.
  * @returns The marker (`createHarnessControl('chrome-ai-tasks', { tasks })`).
  */
-export function taskControl(request: TaskRequest, plan: TaskSessionPlan, driver?: TaskDriverRecord): HarnessControl {
+export function taskControl(
+  request: TaskRequest,
+  plan: TaskSessionPlan,
+  driver?: TaskDriverRecord,
+  limitedTo?: { count: number; sha256: string; limit?: number; perDirection?: number },
+): HarnessControl {
   return createHarnessControl('chrome-ai-tasks', {
     tasks: {
       protocol: 'tasks/1',
@@ -331,7 +396,7 @@ export function taskControl(request: TaskRequest, plan: TaskSessionPlan, driver?
       task: request.task,
       set: request.list.set,
       subset: request.list.subset as TaskSubset,
-      itemList: { id: request.list.id, count: request.list.count, sha256: request.list.sha256 },
+      itemList: { id: request.list.id, count: request.list.count, sha256: request.list.sha256, ...(limitedTo ? { limitedTo } : {}) },
       sessionIndex: request.sessionIndex,
       order: request.order,
       systemOrder: plan.systemOrder,

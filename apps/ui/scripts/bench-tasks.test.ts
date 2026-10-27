@@ -183,3 +183,68 @@ describe('follow-ups: sample lists, the secondary lane, the Translator pack, tru
     expect(tasksModule.TASK_PAGE_CONTRACT).toBe('bench-tasks-driver/1');
   });
 });
+
+describe('precreateTranslators(): one create() per pair, in order, each with its own span', () => {
+  it('starts the next pair only after the previous one resolved, and records each pair separately', async () => {
+    const { precreateTranslators } = await import('../src/lib/bench/task-adapters');
+    const calls: string[] = [];
+    const g = globalThis as Record<string, unknown>;
+    const previous = g.Translator;
+    g.Translator = {
+      availability: async (o: { sourceLanguage: string; targetLanguage: string }) => (calls.push(`availability ${o.sourceLanguage}-${o.targetLanguage}`), 'downloadable'),
+      create: (o: { sourceLanguage: string; targetLanguage: string }) => {
+        calls.push(`create ${o.sourceLanguage}-${o.targetLanguage}`);
+        return new Promise((resolve) => setTimeout(() => (calls.push(`created ${o.sourceLanguage}-${o.targetLanguage}`), resolve({ destroy() {} })), 30));
+      },
+    };
+    try {
+      const made = precreateTranslators([
+        { src: 'en', tgt: 'de', pack: 'Chrome TranslateKit de-en 1' },
+        { src: 'de', tgt: 'en', pack: 'Chrome TranslateKit de-en 1' },
+      ]);
+      // Only the first pair is started synchronously, inside the click.
+      expect(calls).toEqual(['availability en-de', 'create en-de']);
+      const a = made.get('en-de')!;
+      const b = made.get('de-en')!;
+      const [aEnd, bStart, bEnd] = [await a.endT, await b.startT, await b.endT];
+      expect(calls).toEqual(['availability en-de', 'create en-de', 'created en-de', 'availability de-en', 'create de-en', 'created de-en']);
+      expect(bStart).toBeGreaterThanOrEqual(aEnd);
+      expect(aEnd - (await a.startT)).toBeGreaterThanOrEqual(25);
+      expect(bEnd - bStart).toBeGreaterThanOrEqual(25);
+      expect(a.order).toBe(1);
+      expect(b.order).toBe(2);
+      expect(await b.availability).toBe('downloadable');
+    } finally {
+      g.Translator = previous;
+    }
+  });
+});
+
+describe('pilot-sizing: a limit on the session plan', async () => {
+  const tasksModule = await import('../src/lib/bench/tasks');
+  it('reads limit / limitPerDirection only on a pilot-sizing session, one of them required there', () => {
+    const base = '?phase=pilot-sizing&task=summarize&list=summarize-cnndm-test-S&items=http://127.0.0.1:3101';
+    const ok = parseTaskRequest(`${base}&limit=3`);
+    expect(ok).toMatchObject({ ok: true, request: { limit: 3 } });
+    expect(parseTaskRequest(base)).toMatchObject({ ok: false });
+    expect(parseTaskRequest(`${base}&limit=3&limitPerDirection=2`)).toMatchObject({ ok: false });
+    expect(parseTaskRequest(base.replace('pilot-sizing', 'quality') + '&limit=3')).toMatchObject({ ok: false });
+    expect(parseTaskRequest(`${base}&limit=0`)).toMatchObject({ ok: false });
+  });
+  it('runs only the prefix (per direction for translation) and records limitedTo beside the full digest', async () => {
+    const list = await listOf(translateItems);
+    const r = parseTaskRequest('?phase=pilot-sizing&task=translate&list=pilot-e2e-translate-flores-5&items=http://127.0.0.1:3101&limitPerDirection=1');
+    if (!r.ok) throw new Error(r.message);
+    const request = { ...r.request, list };
+    const kept = tasksModule.applyLimit(request, translateItems as TaskItem[]);
+    expect(kept.map((i) => i.id)).toEqual(['a/en-de', 'c/de-en']);
+    const limitedTo = await tasksModule.limitedToRecord(request, kept);
+    expect(limitedTo).toEqual({ count: 2, sha256: await itemListDigest(kept), perDirection: 1 });
+    const plan = planTaskSession(request, kept);
+    expect(plan.cells.reduce((n, c) => n + c.items.length, 0)).toBe(4);
+    const control = taskControl(request, plan, undefined, limitedTo);
+    expect(control.tasks!.itemList).toEqual({ id: 'unit', count: 3, sha256: list.sha256, limitedTo });
+    expect(controlTasksError(control)).toBeUndefined();
+    expect(tasksModule.applyLimit({ ...request, limitPerDirection: undefined, limit: 2 }, translateItems as TaskItem[]).map((i) => i.id)).toEqual(['a/en-de', 'b/en-de']);
+  });
+});

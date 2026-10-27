@@ -66,6 +66,11 @@ export function pilotLists(): Record<string, ServedItem[]> {
   };
 }
 
+/** A whole sample list as the page fetches it (the summarize S list for the pilot-sizing lane). */
+export function sampleLists(): Record<string, ServedItem[]> {
+  return { 'summarize-cnndm-test-S': readRows('subset_crossdevice_summarization.jsonl').map((r) => toItem(r)) };
+}
+
 /** The list digest: SHA-256 over `<id>\t<sha256>\n` per item. */
 export function listDigest(items: readonly ServedItem[]): string {
   return sha256(items.map((i) => `${i.id}\t${i.sha256}\n`).join(''));

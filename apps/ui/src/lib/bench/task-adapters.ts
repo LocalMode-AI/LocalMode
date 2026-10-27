@@ -32,6 +32,18 @@ import type {
 import { PINNED_FALLBACK_MODELS, PINNED_MEDIAPIPE_LANGUAGE_DETECTOR, type PinnedFile } from './task-model-pins';
 import type { PlannedTaskCell } from './tasks';
 
+/**
+ * The profile folders that hold each built-in model: the Translator's
+ * language packs, Gemini Nano (the Summarizer's model), and the
+ * optimization-guide model store that holds the language detection model.
+ * A download's bytes are measured on these folders only.
+ */
+export const MODEL_FOLDERS = {
+  Translator: ['TranslateKit'],
+  Summarizer: ['OptGuideOnDeviceModel'],
+  LanguageDetector: ['optimization_guide_model_store'],
+} as const;
+
 /** Deadline for one `availability()` call (some builds never settle it). */
 const AVAILABILITY_TIMEOUT_MS = 3_000;
 
@@ -206,7 +218,7 @@ export function chromeSummarizerAdapter(set: 'cnndm-test' | 'xsum-test', default
         cached: !downloaded,
         availabilityAtCreate: atCreate,
         inputQuota: quotaOf(session).inputQuota,
-        ...(downloaded ? { download: { events: dl.events, wallMs: ended - started } } : {}),
+        ...(downloaded ? { download: { events: dl.events, wallMs: ended - started, modelFolders: [...MODEL_FOLDERS.Summarizer] } } : {}),
         measureInputUsage: (item, signal) => measureChrome(session, item.text, signal),
         async runItem(item, ctx) {
           const out = await readStream(session.summarizeStreaming(item.text, { signal: ctx.abortSignal }), ctx.abortSignal, ctx.onChunk);
@@ -226,18 +238,25 @@ interface ChromeTranslatorSession extends ChromeStreamingSession {
 }
 
 /**
- * A Translator `create()` started inside the user activation of the Run
- * click, before the session reached the pair's cell: Chrome keeps an
- * installed pack `downloadable` in a new process until a `create()` under a
- * user activation, so a pair whose pack `chrome://components` lists is
- * created there and the cell's load step adopts it.
+ * A Translator `create()` started from the Run click, before the session
+ * reached the pair's cell: Chrome keeps an installed pack `downloadable` in a
+ * new process until a `create()` under a user activation, so each pair whose
+ * pack `chrome://components` lists is created from the click, and the cell's
+ * load step adopts it. Pairs are created one at a time in the plan's order,
+ * so each `create()` span is that pair's own; the first one also carries the
+ * translation service's start in the process.
  */
 export interface PrecreatedTranslator {
-  /** The `availability()` reading taken in the same tick, before `create()`. */
+  /** 1-based position in the creation chain. */
+  order: number;
+  /** The `availability()` reading taken right before this pair's `create()`. */
   availability: Promise<string>;
+  /** Whether the page still held the user activation when this pair's `create()` was called. */
+  activationAtCreate: Promise<boolean>;
   session: Promise<ChromeTranslatorSession>;
-  startT: number;
-  /** Settles with `create()`. */
+  /** When this pair's `create()` was called (after the previous pair's settled). */
+  startT: Promise<number>;
+  /** When it settled. */
   endT: Promise<number>;
   events: Array<{ t: number; loaded: number; total: number }>;
   /** The `chrome://components` entry that shows the pack installed. */
@@ -245,32 +264,52 @@ export interface PrecreatedTranslator {
 }
 
 /**
- * Start `create()` for each translation pair whose pack is installed, from
- * inside a click handler (synchronously: no await before the calls).
+ * Create each translation pair whose pack is installed, one after another,
+ * starting from a click handler: the first pair's `availability()` and
+ * `create()` are called synchronously (inside the user activation), each
+ * later pair's as soon as the one before it settled.
  *
- * @param pairs - The pairs with the component entry that lists each pack.
- * @returns The started creations by `src-tgt`.
+ * @param pairs - The pairs in the plan's order, with the component entry that lists each pack.
+ * @returns The creations by `src-tgt`.
  */
 export function precreateTranslators(pairs: ReadonlyArray<{ src: string; tgt: string; pack: string }>): Map<string, PrecreatedTranslator> {
   const out = new Map<string, PrecreatedTranslator>();
   const factory = chromeGlobal<ChromeTranslatorSession>('Translator');
   if (!factory) return out;
-  for (const { src, tgt, pack } of pairs) {
+  const activation = () => (navigator as { userActivation?: { isActive?: boolean } }).userActivation?.isActive === true;
+  let previous: Promise<unknown> | undefined;
+  pairs.forEach(({ src, tgt, pack }, index) => {
     const options = { sourceLanguage: src, targetLanguage: tgt };
     const events: PrecreatedTranslator['events'] = [];
-    const availability = factory.availability(options).catch((e: unknown) => `error:${(e as Error)?.name ?? 'Error'}`.slice(0, 32));
-    const startT = performance.now();
-    const session = factory.create({
-      ...options,
-      monitor: (m: ChromeMonitorTarget) =>
-        m.addEventListener('downloadprogress', (e) => events.push({ t: performance.now(), loaded: e.loaded ?? 0, total: e.total ?? 0 })),
-    });
+    const start = () => {
+      const availability = factory.availability(options).catch((e: unknown) => `error:${(e as Error)?.name ?? 'Error'}`.slice(0, 32));
+      const active = activation();
+      const startT = performance.now();
+      const session = factory.create({
+        ...options,
+        monitor: (m: ChromeMonitorTarget) =>
+          m.addEventListener('downloadprogress', (e) => events.push({ t: performance.now(), loaded: e.loaded ?? 0, total: e.total ?? 0 })),
+      });
+      return { availability, active, startT, session };
+    };
+    const started = previous === undefined ? Promise.resolve(start()) : previous.then(start, start);
+    const session = started.then((s) => s.session);
     const endT = session.then(
       () => performance.now(),
       () => performance.now(),
     );
-    out.set(`${src}-${tgt}`, { availability, session, startT, endT, events, pack });
-  }
+    previous = endT;
+    out.set(`${src}-${tgt}`, {
+      order: index + 1,
+      availability: started.then((s) => s.availability),
+      activationAtCreate: started.then((s) => s.active),
+      session,
+      startT: started.then((s) => s.startT),
+      endT,
+      events,
+      pack,
+    });
+  });
   return out;
 }
 
@@ -301,11 +340,13 @@ export function chromeTranslatorAdapter(precreated: ReadonlyMap<string, Precreat
       let span: { startT: number; endT: number } | undefined;
       let started: number;
       let ended: number;
+      let activationAtCreate: boolean | undefined;
       if (early) {
         atCreate = await early.availability;
         session = await early.session;
-        started = early.startT;
+        started = await early.startT;
         ended = await early.endT;
+        activationAtCreate = await early.activationAtCreate;
         span = { startT: started, endT: ended };
         events = early.events;
       } else {
@@ -328,14 +369,15 @@ export function chromeTranslatorAdapter(precreated: ReadonlyMap<string, Precreat
         runtimeConfig: {
           langPair: key,
           createdInRunClick: Boolean(early),
-          ...(early ? { packInComponents: early.pack } : {}),
+          ...(early ? { packInComponents: early.pack, createOrder: early.order } : {}),
+          ...(activationAtCreate !== undefined ? { activationAtCreate } : {}),
           ...(quota.raw ? { inputQuotaRaw: quota.raw } : {}),
         },
         cached: !downloaded || Boolean(early),
         availabilityAtCreate: atCreate,
         inputQuota: quota.inputQuota,
         ...(span ? { loadSpan: span } : {}),
-        ...(downloaded ? { download: { events, wallMs: ended - started } } : {}),
+        ...(downloaded ? { download: { events, wallMs: ended - started, modelFolders: [...MODEL_FOLDERS.Translator] } } : {}),
         measureInputUsage: (item, signal) => measureChrome(session, item.text, signal),
         async runItem(item, ctx) {
           const out = await readStream(session.translateStreaming(item.text, { signal: ctx.abortSignal }), ctx.abortSignal, ctx.onChunk);
@@ -372,7 +414,7 @@ export function chromeLanguageDetectorAdapter(): TaskSystemAdapter {
         cached: !downloaded,
         availabilityAtCreate: atCreate,
         inputQuota: quotaOf(session).inputQuota,
-        ...(downloaded ? { download: { events: dl.events, wallMs: ended - started } } : {}),
+        ...(downloaded ? { download: { events: dl.events, wallMs: ended - started, modelFolders: [...MODEL_FOLDERS.LanguageDetector] } } : {}),
         measureInputUsage: (item, signal) => measureChrome(session, item.text, signal),
         async runItem(item, ctx) {
           const raw = await session.detect(item.text, { signal: ctx.abortSignal });

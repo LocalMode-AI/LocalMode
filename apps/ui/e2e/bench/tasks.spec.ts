@@ -36,7 +36,7 @@ import {
   type TaskDriverRecord,
   type TaskIteration,
 } from '@localmode/bench';
-import { listBody, listDigest, pilotLists } from './task-items';
+import { listBody, listDigest, pilotLists, sampleLists } from './task-items';
 import { TASK_ITEM_LISTS } from '../../src/lib/bench/task-item-lists';
 
 const CHROME = process.env.TASKS_CHROME ?? '/Users/dev/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -217,11 +217,18 @@ async function waitForHttp(url: string, timeoutMs: number): Promise<void> {
  * download button a download session asks for), hand over the end captures
  * through the finalize handshake, and return the file Export JSON saved.
  */
-async function runSession(query: string, opts: { withDriver: boolean; downloadCells?: string[] }): Promise<BenchRunResult> {
+async function runSession(
+  query: string,
+  opts: { withDriver: boolean; downloadCells?: string[]; expectItemsTotal?: number },
+): Promise<BenchRunResult> {
   let startFolders: Record<string, number> | undefined;
   await page.goto(`${PAGE_ORIGIN}/bench/tasks?${query}`);
   await expect(page.getByRole('note')).toHaveText('Control run: Chrome built-in task APIs; not published to the leaderboard');
   await expect(page.getByRole('status')).toContainText('Ready:', { timeout: 30_000 });
+  if (opts.expectItemsTotal !== undefined) {
+    // The driver's readiness check: the page reports the kept items, so it applies the limit.
+    expect((await page.evaluate(() => window.__benchTasks!.status())).itemsTotal).toBe(opts.expectItemsTotal);
+  }
   // Nothing model-related was requested by opening the page.
   expect(requests.filter((u) => ALLOWED_REMOTE_HOSTS.some((h) => h.test(new URL(u).hostname)))).toEqual([]);
   if (opts.withDriver) {
@@ -239,10 +246,17 @@ async function runSession(query: string, opts: { withDriver: boolean; downloadCe
       await page.getByRole('button', { name: /^Start download:/ }).click();
     } else if (status.phase === 'awaiting-finalize') {
       const end = await captures();
-      // The bytes the Translator packs gained over the session, given to every cell that may have downloaded.
+      // As the driver does per click, here over the session: the Translator pack folder's change and,
+      // apart from it, the whole profile's.
       const packDelta = (end.profileFolderBytes.TranslateKit ?? 0) - (startFolders?.TranslateKit ?? 0);
-      const profileBytesDeltaByCell = Object.fromEntries((opts.downloadCells ?? []).map((id) => [id, packDelta]));
-      await page.evaluate((c) => window.__benchTasks!.finalize(c), { ...end, profileBytesDeltaByCell });
+      const sum = (f: Record<string, number> | undefined) => Object.values(f ?? {}).reduce((a, b) => a + b, 0);
+      const wholeDelta = sum(end.profileFolderBytes) - sum(startFolders);
+      const cells = opts.downloadCells ?? [];
+      await page.evaluate((c) => window.__benchTasks!.finalize(c), {
+        ...end,
+        modelBytesDeltaByCell: Object.fromEntries(cells.map((id) => [id, packDelta])),
+        profileBytesDeltaByCell: Object.fromEntries(cells.map((id) => [id, wholeDelta])),
+      });
     }
     if (Date.now() > deadline) throw new Error(`session did not finish: ${JSON.stringify(status)}`);
     await page.waitForTimeout(1_000);
@@ -329,7 +343,7 @@ test.describe('/bench/tasks in an installed Chrome', () => {
 
     // Item server: the five-item lists, each checked against its compiled pin.
     const dir = mkdtempSync(path.join(tmpdir(), 'task-items-'));
-    for (const [id, items] of Object.entries(pilotLists())) {
+    for (const [id, items] of Object.entries({ ...pilotLists(), ...sampleLists() })) {
       const pin = TASK_ITEM_LISTS.find((l) => l.id === id);
       expect(pin, id).toBeDefined();
       expect(listDigest(items)).toBe(pin!.sha256);
@@ -456,8 +470,9 @@ test.describe('/bench/tasks in an installed Chrome', () => {
             expect(['available', 'downloadable']).toContain(cell.task!.availabilityAtCreate);
             if (cell.task!.availabilityAtCreate === 'downloadable') {
               translatorDownloadableAtCreate.push(cell.cellId);
-              // An installed pack: the create() downloads nothing.
-              expect(cell.task!.download?.profileBytesDelta).toBe(0);
+              // An installed pack: the create() downloads nothing into the pack folder.
+              expect(cell.task!.download).toMatchObject({ modelFolders: ['TranslateKit'], modelBytesSource: 'driver-click', modelBytesDelta: 0 });
+              expect(typeof cell.task!.download!.wholeProfileBytesDelta).toBe('number');
             }
           } else {
             expect(cell.task!.availabilityAtCreate).toBe('available');
@@ -498,7 +513,14 @@ test.describe('/bench/tasks in an installed Chrome', () => {
           }
         }
       }
-      if (spec.task === 'translate') writeFileSync(path.join(ARTIFACTS, 'translator-downloadable-at-create.json'), JSON.stringify(translatorDownloadableAtCreate));
+      if (spec.task === 'translate') {
+        writeFileSync(path.join(ARTIFACTS, 'translator-downloadable-at-create.json'), JSON.stringify(translatorDownloadableAtCreate));
+        // One create() per pair, in the plan's order, each timed on its own: the spans follow each other.
+        const pairs = run.cells.filter((c) => c.model.benchModelId === 'chrome-translator');
+        expect(pairs.map((c) => c.runtimeConfig?.createOrder)).toEqual(pairs.map((_, i) => i + 1));
+        for (let i = 1; i < pairs.length; i++) expect(pairs[i].load!.startT).toBeGreaterThanOrEqual(pairs[i - 1].load!.endT);
+        expect(new Set(pairs.map((c) => `${c.load!.startT}-${c.load!.endT}`)).size).toBe(pairs.length);
+      }
       if (spec.task === 'detect-language') {
         const builtInCell = run.cells.find((c) => c.runtimeId === 'chrome-ai')!;
         // The raw list is kept: Chrome returns `und` beside a clear sentence.
@@ -539,10 +561,26 @@ test.describe('/bench/tasks in an installed Chrome', () => {
     });
   }
 
+
+  test('pilot-sizing: the first 3 items of the summarize S list, with the full list digest kept', async () => {
+    const run = await runSession(
+      `phase=pilot-sizing&task=summarize&list=summarize-cnndm-test-S&items=${ITEMS_ORIGIN}&session=1&order=fixed&cold=0&limit=3&systems=chrome-ai/chrome-summarizer,transformers-wasm/distilbart-cnn-6-6@fp32`,
+      { withDriver: true, expectItemsTotal: 3 },
+    );
+    await expectValidRun(run, 'pilot-sizing');
+    const list = run.harness.control!.tasks!.itemList;
+    const pin = TASK_ITEM_LISTS.find((l) => l.id === 'summarize-cnndm-test-S')!;
+    expect(list).toMatchObject({ id: pin.id, count: 300, sha256: pin.sha256, limitedTo: { count: 3, limit: 3 } });
+    const firstThree = sampleLists()['summarize-cnndm-test-S'].slice(0, 3);
+    expect(list.limitedTo!.sha256).toBe(listDigest(firstThree));
+    expectItems(run, 3);
+    for (const cell of run.cells) expect((cell.iterations as TaskIteration[]).map((it) => it.itemId)).toEqual(firstThree.map((i) => i.id));
+  });
+
   test('a download session clicks create() for each Translator pair and records availability and the download', async () => {
     const run = await runSession(
       `phase=download&task=translate&list=pilot-e2e-translate-flores-5&items=${ITEMS_ORIGIN}&systems=chrome-ai/chrome-translator`,
-      { withDriver: false },
+      { withDriver: true, downloadCells: ['chrome-ai/chrome-translator/translate-en-de-pilot', 'chrome-ai/chrome-translator/translate-de-en-pilot'] },
     );
     await expectValidRun(run, 'download');
     expect(run.cells.map((c) => c.workloadId)).toEqual(['translate-en-de-pilot', 'translate-de-en-pilot']);
@@ -550,7 +588,11 @@ test.describe('/bench/tasks in an installed Chrome', () => {
       expect(cell.iterations).toEqual([]);
       expect(cell.task!.availabilityAfter).toBe('available');
       expect(['available', 'downloadable', 'downloading']).toContain(cell.task!.availabilityAtCreate);
-      if (cell.task!.availabilityAtCreate !== 'available') expect(cell.task!.download).toBeDefined();
+      if (cell.task!.availabilityAtCreate !== 'available') {
+        expect(cell.task!.download).toMatchObject({ modelFolders: ['TranslateKit'], modelBytesSource: 'driver-click' });
+        expect(Number.isInteger(cell.task!.download!.modelBytesDelta)).toBe(true);
+        expect(Number.isInteger(cell.task!.download!.wholeProfileBytesDelta)).toBe(true);
+      }
     }
   });
 

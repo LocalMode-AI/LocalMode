@@ -105,6 +105,7 @@ export {
   controlTasksError,
   taskCellError,
   taskCellOrderError,
+  taskLimitError,
 } from './tasks/protocol.js';
 export { sha256HexSync } from './tasks/sha256.js';
 export { runTaskSession, TaskPreflightError } from './tasks/session.js';

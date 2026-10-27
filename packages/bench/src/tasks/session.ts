@@ -105,7 +105,7 @@ export interface LoadedTaskSystem {
   availabilityAtCreate?: string;
   inputQuota?: number | null;
   /** A download the load triggered: the progress events and its wall time. */
-  download?: { events: Array<{ t: number; loaded: number; total: number }>; wallMs: number };
+  download?: { events: Array<{ t: number; loaded: number; total: number }>; wallMs: number; modelFolders?: string[] };
   /** Untimed, before the item's request: the input's size in the system's own units. */
   measureInputUsage?(item: TaskItem, abortSignal: AbortSignal): Promise<{ value: number; unit: 'chrome-quota' | 'tokens' } | undefined>;
   /**
@@ -138,8 +138,10 @@ export interface TaskFinalizeCaptures {
   onDeviceInternals?: TaskOnDeviceInternalsCapture;
   freeDiskBytes?: number;
   profileFolderBytes?: Record<string, number>;
-  /** Profile bytes a cell's download added, by cell id (filled into `task.download.profileBytesDelta`). */
+  /** Bytes the whole profile changed around each cell's download click, by cell id (`task.download.wholeProfileBytesDelta`). */
   profileBytesDeltaByCell?: Record<string, number>;
+  /** Bytes the cell's model folders changed around its download click, by cell id (`task.download.modelBytesDelta`). */
+  modelBytesDeltaByCell?: Record<string, number>;
 }
 
 /** Progress callbacks of `runTaskSession`. */
@@ -463,7 +465,13 @@ export async function runTaskSession(options: TaskSessionOptions): Promise<Bench
       task.api = loaded.api;
       if (loaded.availabilityAtCreate !== undefined) task.availabilityAtCreate = loaded.availabilityAtCreate;
       if (loaded.inputQuota !== undefined) task.inputQuota = loaded.inputQuota;
-      if (loaded.download) task.download = { events: loaded.download.events.slice(0, 10_000), wallMs: loaded.download.wallMs };
+      if (loaded.download) {
+        task.download = {
+          events: loaded.download.events.slice(0, 10_000),
+          wallMs: loaded.download.wallMs,
+          ...(loaded.download.modelFolders?.length ? { modelFolders: [...loaded.download.modelFolders] } : {}),
+        };
+      }
       if (loaded.verify) {
         try {
           const extra = await loaded.verify();
@@ -594,9 +602,25 @@ export async function runTaskSession(options: TaskSessionOptions): Promise<Bench
       if (captures.freeDiskBytes !== undefined) d.freeDiskBytes.end = captures.freeDiskBytes;
       if (captures.profileFolderBytes) d.profileFolderBytes.end = captures.profileFolderBytes;
     }
-    for (const [cellId, delta] of Object.entries(captures?.profileBytesDeltaByCell ?? {})) {
-      const target = cells.find((c) => c.cellId === cellId);
-      if (target?.task?.download) target.task.download.profileBytesDelta = Math.round(delta);
+    // Download bytes: the model folders' own change (the driver's per-click reading, else the session's
+    // start and end sizes of those folders), kept apart from the whole profile's change.
+    const folderStart = finalTasks.driver?.profileFolderBytes.start;
+    const folderEnd = finalTasks.driver?.profileFolderBytes.end;
+    for (const cell of cells) {
+      const download = cell.task?.download;
+      if (!download) continue;
+      const whole = captures?.profileBytesDeltaByCell?.[cell.cellId];
+      if (typeof whole === 'number') download.wholeProfileBytesDelta = Math.round(whole);
+      const folders = download.modelFolders;
+      if (!folders?.length) continue;
+      const fromDriver = captures?.modelBytesDeltaByCell?.[cell.cellId];
+      if (typeof fromDriver === 'number') {
+        download.modelBytesDelta = Math.round(fromDriver);
+        download.modelBytesSource = 'driver-click';
+      } else if (folderStart && folderEnd) {
+        download.modelBytesDelta = folders.reduce((sum, f) => sum + ((folderEnd[f] ?? 0) - (folderStart[f] ?? 0)), 0);
+        download.modelBytesSource = 'session-folders';
+      }
     }
     const result: BenchRunResult = {
       protocol: BENCH_PROTOCOL_VERSION,

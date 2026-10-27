@@ -21,7 +21,7 @@ import { sha256HexSync } from './sha256.js';
 export const TASK_KINDS: readonly TaskKind[] = ['summarize', 'translate', 'detect-language'] as const;
 
 /** Session phases. */
-export const TASK_PHASES: readonly TaskPhase[] = ['download', 'quality', 'latency', 'pilot'] as const;
+export const TASK_PHASES: readonly TaskPhase[] = ['download', 'quality', 'latency', 'pilot', 'pilot-sizing'] as const;
 
 /** Item sets, and the tasks each serves. */
 export const TASK_SETS: Readonly<Record<TaskSet, readonly TaskKind[]>> = {
@@ -271,6 +271,23 @@ export function controlTasksError(control: { kind: string; runtimeOrder?: unknow
   ) {
     return `${at}.itemList must be { id, count (1 to ${TASK_LIST_MAX_ITEMS}), sha256 (64 hex) }`;
   }
+  const limited = (list as Record<string, unknown>).limitedTo;
+  if (limited !== undefined) {
+    if (t.phase !== 'pilot-sizing') return `${at}.itemList.limitedTo is set only on a pilot-sizing session`;
+    const l = limited as Record<string, unknown> | null;
+    if (typeof l !== 'object' || l === null || !isInt(l.count, 1, TASK_LIST_MAX_ITEMS) || typeof l.sha256 !== 'string' || !HEX64.test(l.sha256)) {
+      return `${at}.itemList.limitedTo must be { count, sha256, limit | perDirection }`;
+    }
+    const hasLimit = l.limit !== undefined;
+    const hasPer = l.perDirection !== undefined;
+    if (hasLimit === hasPer || (hasLimit && !isInt(l.limit, 1, TASK_LIST_MAX_ITEMS)) || (hasPer && !isInt(l.perDirection, 1, TASK_LIST_MAX_ITEMS))) {
+      return `${at}.itemList.limitedTo needs exactly one of limit or perDirection (a positive integer)`;
+    }
+    if ((l.count as number) > (list.count as number)) return `${at}.itemList.limitedTo.count must be at most itemList.count`;
+    if (hasLimit && l.count !== Math.min(l.limit as number, list.count as number)) return `${at}.itemList.limitedTo.count must be the limit (or the whole list when shorter)`;
+  } else if (t.phase === 'pilot-sizing') {
+    return `${at}: a pilot-sizing session needs itemList.limitedTo`;
+  }
   if (!isInt(t.sessionIndex, 1, 10_000)) return `${at}.sessionIndex must be an integer from 1 to 10000`;
   if (!TASK_ORDERS.includes(t.order as TaskOrder)) return `${at}.order must be fixed or reversed`;
   if (typeof t.processCold !== 'boolean') return `${at}.processCold must be a boolean`;
@@ -413,7 +430,7 @@ export function taskCellError(
     if (isTaskKind) return `workloadKind ${String(cell.workloadKind)} is used only on a chrome-ai-tasks control run`;
     return undefined;
   }
-  const tasks = control.tasks as { task?: TaskKind; systemOrder?: unknown; itemList?: { count?: unknown } } | undefined;
+  const tasks = control.tasks as { task?: TaskKind; systemOrder?: unknown; itemList?: { count?: unknown; limitedTo?: { count?: unknown } } } | undefined;
   if (!tasks || typeof tasks !== 'object') return undefined; // the session record's own error is reported
   if (cell.workloadKind !== tasks.task) return `workloadKind must be the session's task ${String(tasks.task)}, got ${JSON.stringify(cell.workloadKind)}`;
   const model = cell.model as { benchModelId?: unknown } | undefined;
@@ -432,7 +449,7 @@ export function taskCellError(
   if ('download' in record && record.download !== undefined) {
     const d = record.download as Record<string, unknown> | null;
     if (typeof d !== 'object' || d === null || !Array.isArray(d.events) || d.events.length > 10_000 || !isNonNegative(d.wallMs)) {
-      return 'task.download must be { events: { t, loaded, total }[], wallMs, profileBytesDelta? }';
+      return 'task.download must be { events: { t, loaded, total }[], wallMs, modelFolders?, modelBytesDelta?, modelBytesSource?, wholeProfileBytesDelta? }';
     }
     for (const e of d.events) {
       const x = e as Record<string, unknown> | null;
@@ -440,13 +457,22 @@ export function taskCellError(
         return 'task.download.events entries must be { t, loaded, total }';
       }
     }
-    if ('profileBytesDelta' in d && d.profileBytesDelta !== undefined && !(typeof d.profileBytesDelta === 'number' && Number.isInteger(d.profileBytesDelta))) {
-      return 'task.download.profileBytesDelta must be an integer';
+    for (const key of ['profileBytesDelta', 'wholeProfileBytesDelta', 'modelBytesDelta'] as const) {
+      if (key in d && d[key] !== undefined && !(typeof d[key] === 'number' && Number.isInteger(d[key]))) return `task.download.${key} must be an integer`;
+    }
+    if ('modelFolders' in d && d.modelFolders !== undefined && !(Array.isArray(d.modelFolders) && d.modelFolders.length <= 20 && d.modelFolders.every((f) => isShort(f, 200)))) {
+      return 'task.download.modelFolders must list folder names';
+    }
+    if ('modelBytesDelta' in d && d.modelBytesDelta !== undefined) {
+      if (!Array.isArray(d.modelFolders) || d.modelFolders.length === 0 || !['driver-click', 'session-folders', 'driver', 'page'].includes(d.modelBytesSource as string)) {
+        return 'task.download.modelBytesDelta needs modelFolders and modelBytesSource (driver-click or session-folders; driver and page as aliases)';
+      }
     }
   }
   const iterations = cell.iterations;
   if (!Array.isArray(iterations)) return undefined; // reported by the base shape check
-  const count = typeof tasks.itemList?.count === 'number' ? tasks.itemList.count : Number.POSITIVE_INFINITY;
+  const limitCount = tasks.itemList?.limitedTo?.count;
+  const count = typeof limitCount === 'number' ? limitCount : typeof tasks.itemList?.count === 'number' ? tasks.itemList.count : Number.POSITIVE_INFINITY;
   if (iterations.length > count) return `the cell ran ${iterations.length} items, more than the list's ${count}`;
   const seen = new Set<string>();
   for (let j = 0; j < iterations.length; j++) {
@@ -484,4 +510,34 @@ export function taskCellOrderError(
   }
   const missing = systemOrder.find((arm) => !covered.has(arm));
   return missing ? `no cell records the arm ${missing} of harness.control.tasks.systemOrder` : undefined;
+}
+
+/**
+ * The problem with the item count of a limited (`pilot-sizing`) run, or
+ * undefined: every arm that loaded ran exactly `itemList.limitedTo.count`
+ * items over its cells (an arm whose every cell errored before any item is
+ * not counted).
+ *
+ * @param cells - The run's cells (shape-checked).
+ * @param limitedTo - `harness.control.tasks.itemList.limitedTo`.
+ * @returns The error message, or undefined.
+ */
+export function taskLimitError(
+  cells: ReadonlyArray<{ runtimeId?: unknown; model?: { benchModelId?: unknown }; status?: unknown; iterations?: unknown }>,
+  limitedTo: { count?: unknown } | undefined,
+): string | undefined {
+  if (!limitedTo || typeof limitedTo.count !== 'number') return undefined;
+  const byArm = new Map<string, { items: number; ran: boolean }>();
+  for (const cell of cells) {
+    const arm = taskArmId(String(cell.runtimeId), String(cell.model?.benchModelId));
+    const entry = byArm.get(arm) ?? { items: 0, ran: false };
+    const n = Array.isArray(cell.iterations) ? cell.iterations.length : 0;
+    entry.items += n;
+    entry.ran = entry.ran || cell.status !== 'error' || n > 0;
+    byArm.set(arm, entry);
+  }
+  for (const [arm, { items, ran }] of byArm) {
+    if (ran && items !== limitedTo.count) return `arm ${arm} ran ${items} items; itemList.limitedTo.count is ${limitedTo.count}`;
+  }
+  return undefined;
 }

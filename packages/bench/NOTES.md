@@ -585,6 +585,11 @@ rejects any other kind, order, `wasmLane`, `wllamaBuild` or
   lane and checks its bounded shape. On localmode.ai:
   `/bench/run?tier=standard&quality=off&runs=3&cooldown=5&cold=off&control=ort-profile` and
   `/bench/run?tier=standard&quality=off&runs=3&cooldown=5&cold=off&control=llamacpp-profile`.
+- `chrome-ai-tasks` (since 0.10.0) is not a suite run: it runs Chrome's
+  built-in Summarizer, Translator and Language Detector against open
+  fallback models run in the page, per item, export-only; protocol
+  unchanged at `localmode-bench/5`, schema fields additive (see
+  [Task sessions](#task-sessions-chrome-ai-tasks)).
 
 ### Task sessions (chrome-ai-tasks)
 
@@ -597,11 +602,14 @@ and never filed in the results dataset (the item texts and outputs it
 carries are not CC0).
 
 - **`harness.control.tasks`** (`TaskSessionRecord`, `protocol: 'tasks/1'`):
-  `phase` (`download | quality | latency | pilot`), `task`, `set`
+  `phase` (`download | quality | latency | pilot | pilot-sizing`), `task`, `set`
   (`cnndm-test`, `cnndm-reserve`, `xsum-test` for summarize; `flores-devtest`
   for translate and detect-language; `wili-test` for detect-language),
   `subset` (`full | S | R | L | pilot`), `itemList { id, count, sha256 }`
-  (SHA-256 over `<id>\t<text sha256>\n` per item), 1-based `sessionIndex`,
+  (SHA-256 over `<id>\t<text sha256>\n` per item; a `pilot-sizing` session
+  that ran only the first `limit` items, or `perDirection` per direction,
+  adds `limitedTo { count, sha256, limit | perDirection }` and every arm runs
+  exactly that many items), 1-based `sessionIndex`,
   `order`, `systemOrder` (arm ids `<runtimeId>/<systemId>`), `processCold`,
   `repeat` (R only) and `driver` (`TaskDriverRecord`: launch, profile id,
   `chrome://version`, `chrome://components` and `chrome://on-device-internals`
@@ -620,7 +628,11 @@ carries are not CC0).
   `transformers-wasm/opus-mt-en-de@q8/translate-en-de-S`), `workloadKind`
   the session's task, `model.task: 'task'`. `task` (`TaskCellRecord`): `api`,
   `availabilityBefore`, `availabilityAtCreate`, `availabilityAfter`,
-  `inputQuota`, `download { events, wallMs, profileBytesDelta? }`. `load` is
+  `inputQuota`, `download { events, wallMs, modelFolders?, modelBytesDelta?,
+  modelBytesSource?, wholeProfileBytesDelta? }` (since 0.10.1: the model
+  folders' own change, from the driver's per-click reading or else the
+  session's folder sizes, apart from the whole profile's change; 0.10.0
+  files carry the whole-profile `profileBytesDelta`). `load` is
   the `create()` or pipeline load. `iterations` are `TaskIteration`s (an
   `LLMIteration` plus `itemId`, `index`, `chunkMode` `delta |
   cumulative-converted | none`, `outputSha256`, `inputChars`, `inputUsage
@@ -646,7 +658,7 @@ carries are not CC0).
   (visibility and, with `TraceRecorder({ trackFocus: true })`, focus are
   recorded). **Finalize handshake:** after the last item the runner awaits
   `finalize()`; its captures fill the driver record's `end` readings and
-  each cell's `download.profileBytesDelta`, and only then are the client
+  each download cell's `modelBytesDelta` and `wholeProfileBytesDelta`, and only then are the client
   summaries and the digest computed, so the end captures are inside the
   digest.
 - **Summaries.** `firstOutputMs` (first non-empty chunk minus `startT`) only
