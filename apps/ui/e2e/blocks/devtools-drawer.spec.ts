@@ -7,7 +7,7 @@
  *
  * WHAT IS REAL vs WHAT IS STUBBED
  * - REAL: both model downloads (the chat block's default
- *   onnx-community/granite-4.0-350m-ONNX-web ~120MB with the drawer open,
+ *   onnx-community/granite-4.0-350m-ONNX-web ~580MB with the drawer open,
  *   then the SmolLM2-135M GGUF ~70MB while the drawer is hidden — both from
  *   the HuggingFace Hub) and the inference turn run for real in the browser.
  *   Nothing at the model boundary is mocked and no route interception touches
@@ -344,7 +344,7 @@ test.describe('blocks/devtools-drawer', () => {
 
   test('drawer lifecycle: lazy chunk, real-activity observability, hidden continuity, power-off', async ({ page }, testInfo) => {
     // One journey on one page ON PURPOSE: each model downloads exactly once —
-    // Granite (~120MB, loaded + inferred with the drawer open) and SmolLM2
+    // Granite (~580MB, loaded + inferred with the drawer open) and SmolLM2
     // (~70MB, loaded while the drawer is hidden as the bridge-visible
     // hidden-period activity).
     test.setTimeout(25 * 60 * 1000);

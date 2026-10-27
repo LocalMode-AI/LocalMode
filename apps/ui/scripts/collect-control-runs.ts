@@ -106,6 +106,11 @@ async function checkOne(file: string, now: Date): Promise<CollectedControlRun> {
       `${file}: not a control run (no harness.control); import a protocol run with scripts/import-exported-run.ts`,
     );
   }
+  if (run.harness.control?.kind === 'chrome-ai-tasks') {
+    throw new CollectControlRunsError(
+      `${file}: a chrome-ai-tasks session carries item text and is never filed in the results dataset`,
+    );
+  }
   if (!(await verifyRunDigest(run))) {
     throw new CollectControlRunsError(`${file}: the digest is missing or wrong; the file is not what the page exported`);
   }

@@ -222,6 +222,9 @@ function resolveRuntimeOrder(harness: HarnessInfo): readonly BenchRuntimeId[] {
   if (!CONTROL_KINDS.includes(control.kind)) {
     throw new TypeError(`harness.control.kind must be one of ${CONTROL_KINDS.join(', ')}; got ${String(control.kind)}`);
   }
+  if (control.kind === 'chrome-ai-tasks') {
+    throw new TypeError('runBenchmarkSuite does not run a chrome-ai-tasks control run; use runTaskSession');
+  }
   const expected = controlRuntimeOrder(control.kind);
   const given = control.runtimeOrder;
   if (!Array.isArray(given) || given.length !== expected.length || given.some((id, i) => id !== expected[i])) {

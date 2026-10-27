@@ -168,4 +168,5 @@ export const USAGE_FIDELITY: Record<BenchRuntimeId, ProviderUsage['fidelity']> =
   litert: 'estimated',
   'chrome-ai': 'estimated',
   mediapipe: 'estimated',
+  'transformers-wasm-current': 'estimated',
 };

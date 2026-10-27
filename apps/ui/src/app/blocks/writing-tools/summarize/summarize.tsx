@@ -70,9 +70,9 @@ function modeToChromeStyle(mode: SummaryMode): SummaryStyle {
   return mode === 'extractive' ? 'key-points' : 'tldr';
 }
 
-/** The abstractive summarization model (DistilBART CNN, ~120 MB quantized). */
+/** The abstractive summarization model (DistilBART CNN, loaded as fp32: 1,128.6 MB). */
 const SUMMARIZER_MODEL_ID = 'Xenova/distilbart-cnn-6-6';
-const SUMMARIZER_MODEL_SIZE = '~120 MB';
+const SUMMARIZER_MODEL_SIZE = '~1.13 GB (fp32)';
 
 /** Reading speed used for the time-saved estimate (words/minute). */
 const READING_WPM = 238;

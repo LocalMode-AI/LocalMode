@@ -135,6 +135,7 @@ export class TransformersSpeechToTextModel implements SpeechToTextModel {
     private baseModelId: string,
     private settings: {
       device?: TransformersDevice;
+      revision?: string;
       quantized?: boolean;
       onProgress?: (progress: ModelLoadProgress) => void;
     } = {}
@@ -177,6 +178,7 @@ export class TransformersSpeechToTextModel implements SpeechToTextModel {
       const pipe = await pipeline('automatic-speech-recognition', this.baseModelId, {
         device: this.settings.device ?? 'auto',
         dtype,
+        revision: this.settings.revision ?? 'main',
         progress_callback: this.settings.onProgress,
       });
 

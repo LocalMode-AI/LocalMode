@@ -43,7 +43,12 @@ export {
 } from './audio-classifier.js';
 
 // Translation & Summarization
-export { TransformersTranslationModel, createTranslationModel } from './translator.js';
+export {
+  TransformersTranslationModel,
+  createTranslationModel,
+  OPUS_MT_TARGET_LANGUAGE_TOKENS,
+  resolveTargetLanguageToken,
+} from './translator.js';
 export { TransformersSummarizationModel, createSummarizationModel } from './summarizer.js';
 
 // Language Understanding

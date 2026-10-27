@@ -37,6 +37,7 @@ export class TransformersOCRModel implements OCRModel {
     private baseModelId: string,
     private settings: {
       device?: TransformersDevice;
+      revision?: string;
       quantized?: boolean;
       onProgress?: (progress: ModelLoadProgress) => void;
     } = {}
@@ -64,6 +65,7 @@ export class TransformersOCRModel implements OCRModel {
       const pipe = await pipeline('image-to-text', this.baseModelId, {
         device: this.settings.device ?? 'auto',
         dtype: this.settings.quantized === true ? 'q8' : 'fp32',
+        revision: this.settings.revision ?? 'main',
         progress_callback: this.settings.onProgress,
       });
 

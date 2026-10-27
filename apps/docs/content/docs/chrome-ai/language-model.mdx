@@ -63,7 +63,7 @@ The factory accepts a `ChromeAILanguageModelSettings` object:
 | `temperature` | `number` | Chrome default | Sampling temperature (0–1). See the sampling-parameters caveat below. |
 | `topK` | `number` | Chrome default | Top-K sampling cutoff. See the sampling-parameters caveat below. |
 | `contextLength` | `number` | `6144` | Soft documentation value for `model.contextLength` |
-| `onProgress` | `(p: { loaded: number; total: number }) => void` | — | Forwarded to `monitor` for Gemini Nano download progress |
+| `onProgress` | `(p: { loaded: number; total: number }) => void` | — | Forwarded to `monitor` for Gemini Nano download progress as a fraction: `loaded` runs 0 to 1, `total` is 1 (not bytes) |
 
 <Callout type="info">
   For full API reference, options, and result types, see the [Core Text Generation](/docs/core/generation) guide.

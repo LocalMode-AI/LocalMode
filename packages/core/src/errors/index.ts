@@ -109,6 +109,43 @@ export class ValidationError extends LocalModeError {
 }
 
 /**
+ * Decide whether a failed operation is worth retrying.
+ *
+ * Returns `false` for a {@link ValidationError} (the same input fails the same way)
+ * and for any error carrying `retryable: false` — the marker a provider sets on an
+ * error that a retry cannot fix, such as a browser API that is missing, a model that
+ * must first be downloaded from a user activation, or a refused permission. Every
+ * other value is treated as transient and returns `true`.
+ *
+ * Core functions with a retry loop (for example `detectLanguage()`) rethrow a
+ * non-retryable error at once instead of waiting through their backoff.
+ *
+ * @param error - The thrown value
+ * @returns `true` if a retry may succeed, `false` otherwise
+ *
+ * @example
+ * ```ts
+ * import { isRetryableError } from '@localmode/core';
+ *
+ * const err = Object.assign(new Error('download required'), { retryable: false });
+ * isRetryableError(err); // false
+ * ```
+ *
+ * @see detectLanguage
+ */
+export function isRetryableError(error: unknown): boolean {
+  if (error instanceof ValidationError) return false;
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { retryable?: unknown }).retryable === false
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Error for vector dimension mismatches.
  */
 export class DimensionMismatchError extends ValidationError {

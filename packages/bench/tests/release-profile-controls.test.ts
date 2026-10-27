@@ -104,10 +104,10 @@ function ortProfile(rows = 2): OrtOperatorProfile {
 }
 
 describe('the current-releases, ort-profile and llamacpp-profile control kinds', () => {
-  it('are listed after the six earlier kinds, each in the protocol order as a fresh array', () => {
+  it('are listed after the six earlier kinds (before chrome-ai-tasks), each in the protocol order as a fresh array', () => {
     expect(CONTROL_KINDS).toEqual([
       'order-reversed', 'fixed-order', 'wasm-default', 'wasm-q8', 'wasm-threads', 'wllama-compat',
-      'current-releases', 'ort-profile', 'llamacpp-profile',
+      'current-releases', 'ort-profile', 'llamacpp-profile', 'chrome-ai-tasks',
     ]);
     for (const kind of ['current-releases', 'ort-profile', 'llamacpp-profile'] as const) {
       const order = controlRuntimeOrder(kind);

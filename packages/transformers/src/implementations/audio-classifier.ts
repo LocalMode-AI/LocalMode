@@ -41,6 +41,7 @@ export class TransformersAudioClassificationModel implements AudioClassification
     private baseModelId: string,
     private settings: {
       device?: TransformersDevice;
+      revision?: string;
       quantized?: boolean;
       onProgress?: (progress: ModelLoadProgress) => void;
     } = {}
@@ -66,6 +67,7 @@ export class TransformersAudioClassificationModel implements AudioClassification
       const pipe = await pipeline('audio-classification', this.baseModelId, {
         device: this.settings.device ?? 'auto',
         dtype: this.settings.quantized === true ? 'q8' : 'fp32',
+        revision: this.settings.revision ?? 'main',
         progress_callback: this.settings.onProgress,
       });
 
@@ -153,6 +155,7 @@ export class TransformersZeroShotAudioClassificationModel
     private baseModelId: string,
     private settings: {
       device?: TransformersDevice;
+      revision?: string;
       quantized?: boolean;
       onProgress?: (progress: ModelLoadProgress) => void;
     } = {}
@@ -178,6 +181,7 @@ export class TransformersZeroShotAudioClassificationModel
       const pipe = await pipeline('zero-shot-audio-classification', this.baseModelId, {
         device: this.settings.device ?? 'auto',
         dtype: this.settings.quantized === true ? 'q8' : 'fp32',
+        revision: this.settings.revision ?? 'main',
         progress_callback: this.settings.onProgress,
       });
 

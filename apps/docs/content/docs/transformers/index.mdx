@@ -18,7 +18,7 @@ HuggingFace Transformers.js provider for LocalMode. Run ML models locally in the
 - 🚀 **Browser-Native** — Run ML models directly in the browser
 - 🔒 **Privacy-First** — All processing happens locally
 - 📦 **Model Caching** — Model files cached in the browser Cache API (`transformers-cache`) for instant subsequent loads, with a resilient write path that never fails a load
-- ⚡ **Optimized** — Uses quantized models for smaller size and faster inference
+- ⚡ **Optimized** — Opt into int8-quantized (`q8`) weights with `quantized: true` for smaller downloads and faster inference
 
 ## Installation
 
@@ -294,7 +294,8 @@ const workerTransformers = createTransformers({
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `device` | `'webgpu' \| 'wasm' \| 'cpu' \| 'auto'` | `'auto'` | Inference device |
-| `quantized` | `boolean` | `false` | Use quantized models |
+| `quantized` | `boolean` | `false` | Load `q8` weights instead of `fp32` (task models; `languageModel()` takes `dtype`) |
+| `revision` | `string` | `'main'` | Hugging Face revision (branch, tag, or commit hash) every model load requests; per-model settings override it |
 | `onProgress` | `(progress) => void` | — | Model loading progress callback |
 | `useWorker` | `boolean` | `false` | Run inference in a Web Worker |
 
@@ -509,7 +510,7 @@ const result = await streamText({
 ## Performance Tips
 
 <Callout type="tip" title="Performance">
-  1. **Use quantized models** - Smaller and faster with minimal quality loss
+  1. **Use quantized models** (`quantized: true`) - Smaller and faster with minimal quality loss; the default loads fp32
   2. **Preload models** - Load during app init for instant inference
   3. **Use WebGPU when available** - 3-5x faster than WASM
   4. **Batch operations** - Process multiple inputs together

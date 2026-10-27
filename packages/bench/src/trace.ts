@@ -29,6 +29,16 @@ export class TraceRecorder {
   private hidden = false;
   private lastPressureState: string | undefined;
   private wakeLockSentinel: WakeLockSentinelLike | null = null;
+  private readonly trackFocus: boolean;
+
+  /**
+   * @param options - `trackFocus` also records window focus loss and gain
+   *   (`focus-lost`, `focus-gained`; since bench 0.10.0, used by task
+   *   sessions only, so protocol runs record exactly what they did before).
+   */
+  constructor(options: { trackFocus?: boolean } = {}) {
+    this.trackFocus = options.trackFocus === true;
+  }
 
   /** Append an event at the current timestamp. */
   record(type: TraceEvent['type'], detail?: string): void {
@@ -63,6 +73,19 @@ export class TraceRecorder {
       document.addEventListener('visibilitychange', onVisibility);
       this.disposers.push(() => document.removeEventListener('visibilitychange', onVisibility));
       this.hidden = document.visibilityState === 'hidden';
+    }
+    if (this.trackFocus && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      const onBlur = () => this.record('focus-lost');
+      const onFocus = () => this.record('focus-gained');
+      window.addEventListener('blur', onBlur);
+      window.addEventListener('focus', onFocus);
+      this.disposers.push(() => {
+        window.removeEventListener('blur', onBlur);
+        window.removeEventListener('focus', onFocus);
+      });
+      if (typeof document !== 'undefined' && typeof document.hasFocus === 'function' && !document.hasFocus()) {
+        this.record('focus-lost', 'at-start');
+      }
     }
 
     const PressureObserverCtor = (

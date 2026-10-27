@@ -1,5 +1,17 @@
 # @localmode/transformers
 
+## 4.2.0
+
+### Minor Changes
+
+- feat: the translator gives multi-target Opus-MT models their sentence-initial target token as a single vocabulary id (`Xenova/opus-mt-en-zh` → `>>cmn_Hans<<`, `Xenova/opus-mt-en-ar` → `>>ara<<`). `targetLanguageToken` on `translator()` settings or per call in `providerOptions.transformers` picks another token or disables it with `false`; a `>>id<<` already at the start of the text is read the same way (Transformers.js 4.2 would split it into sub-word pieces). New exports `OPUS_MT_TARGET_LANGUAGE_TOKENS`, `resolveTargetLanguageToken()` and the `TranslatorSettings` type.
+- feat: `revision` on provider and model settings, passed to Transformers.js as the `revision` load option by every factory (default `'main'`).
+
+### Patch Changes
+
+- docs: `quantized` defaults to `false` (fp32 weights), matching the code; the JSDoc and README said `true`.
+- fix: Granite 4.0 350M's catalog size is its q4 file set, 580,070,509 bytes (was ~120MB).
+
 ## 4.1.5
 
 ### Patch Changes

@@ -12,6 +12,7 @@ import type {
   DetectLanguageOptions,
   DetectLanguageResult,
 } from './types.js';
+import { isRetryableError } from '../errors/index.js';
 
 // Global provider for string model ID resolution
 let globalLanguageDetectionProvider: LanguageDetectionModelFactory | null = null;
@@ -70,6 +71,8 @@ function resolveModel(
  * ```
  *
  * @throws {Error} If detection fails after all retries
+ * @throws {Error} At once, without retrying, if the error is not retryable
+ *   (a `ValidationError` or an error carrying `retryable: false`; see {@link isRetryableError})
  * @throws {Error} If aborted via AbortSignal
  */
 export async function detectLanguage(
@@ -127,7 +130,7 @@ export async function detectLanguage(
         throw error;
       }
 
-      if (attempt === maxRetries) {
+      if (attempt === maxRetries || !isRetryableError(error)) {
         throw error;
       }
 

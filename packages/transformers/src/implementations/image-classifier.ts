@@ -34,6 +34,7 @@ export class TransformersImageClassificationModel implements ImageClassification
     private baseModelId: string,
     private settings: {
       device?: TransformersDevice;
+      revision?: string;
       quantized?: boolean;
       onProgress?: (progress: ModelLoadProgress) => void;
     } = {}
@@ -60,6 +61,7 @@ export class TransformersImageClassificationModel implements ImageClassification
       const pipe = await pipeline('image-classification', this.baseModelId, {
         device: this.settings.device ?? 'auto',
         dtype: this.settings.quantized === true ? 'q8' : 'fp32',
+        revision: this.settings.revision ?? 'main',
         progress_callback: this.settings.onProgress,
       });
 

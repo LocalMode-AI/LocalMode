@@ -32,6 +32,7 @@ export class TransformersEmbeddingModel implements EmbeddingModel {
     private baseModelId: string,
     private settings: {
       device?: TransformersDevice;
+      revision?: string;
       quantized?: boolean;
       onProgress?: (progress: ModelLoadProgress) => void;
     } = {}
@@ -119,6 +120,7 @@ export class TransformersEmbeddingModel implements EmbeddingModel {
       const pipe = await pipeline('feature-extraction', this.baseModelId, {
         device: this.settings.device ?? 'auto',
         dtype,
+        revision: this.settings.revision ?? 'main',
         progress_callback: this.settings.onProgress,
       });
 

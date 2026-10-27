@@ -315,14 +315,15 @@ control characters, `ramGB` an integer from 1 to 1024 or `null`);
 which since 0.9.5 also removes URLs, email addresses and computer names
 (`DESKTOP-XXXXXXX`, `LAPTOP-XXXXXXX`, `WIN-XXXXXXXXXXX`) from it.
 
-### Control marker (0.9.6 to 0.9.14)
+### Control marker (0.9.6 to 0.10.0)
 
 Since 0.9.6 a run may carry `harness.control` (`{ kind, runtimeOrder }`): it
 marks a control run, which is not a protocol run (see
 [Control runs](#control-runs)). The WASM-lane kinds add `wasmLane` (0.9.8,
 0.9.9), `wllama-compat` adds `wllamaBuild` (0.9.13) and `current-releases`
 adds `runtimeVersions` (0.9.14); the profile kinds (0.9.14) add a
-`profile` to their profiled cells.
+`profile` to their profiled cells; `chrome-ai-tasks` (0.10.0) adds `tasks`
+and a `task` record on every cell (see [Task sessions](#task-sessions-chrome-ai-tasks)).
 
 ## Statistics
 
@@ -584,6 +585,90 @@ rejects any other kind, order, `wasmLane`, `wllamaBuild` or
   lane and checks its bounded shape. On localmode.ai:
   `/bench/run?tier=standard&quality=off&runs=3&cooldown=5&cold=off&control=ort-profile` and
   `/bench/run?tier=standard&quality=off&runs=3&cooldown=5&cold=off&control=llamacpp-profile`.
+
+### Task sessions (chrome-ai-tasks)
+
+Since 0.10.0. Not a suite run: `runTaskSession()` runs one task over one
+item list on the session's systems, one item per call, and produces an
+ordinary `BenchRunResult` (`localmode-bench/5`, schema 3, `suite: 'custom'`)
+with `harness.control.kind: 'chrome-ai-tasks'`. `runBenchmarkSuite` and
+`controlRuntimeOrder` refuse the kind. Export-only like every control kind,
+and never filed in the results dataset (the item texts and outputs it
+carries are not CC0).
+
+- **`harness.control.tasks`** (`TaskSessionRecord`, `protocol: 'tasks/1'`):
+  `phase` (`download | quality | latency | pilot`), `task`, `set`
+  (`cnndm-test`, `cnndm-reserve`, `xsum-test` for summarize; `flores-devtest`
+  for translate and detect-language; `wili-test` for detect-language),
+  `subset` (`full | S | R | L | pilot`), `itemList { id, count, sha256 }`
+  (SHA-256 over `<id>\t<text sha256>\n` per item), 1-based `sessionIndex`,
+  `order`, `systemOrder` (arm ids `<runtimeId>/<systemId>`), `processCold`,
+  `repeat` (R only) and `driver` (`TaskDriverRecord`: launch, profile id,
+  `chrome://version`, `chrome://components` and `chrome://on-device-internals`
+  text and parsed entries, free disk and profile folder bytes, each
+  `{ start, end? }`). Any change to options, item lists or rules bumps
+  `tasks/1`; archived sessions are never re-scored.
+- **Order.** `fixed` is Chrome's built-in systems first (the options-of-record
+  arm before a `-default` arm), then the fallbacks by lane
+  (`transformers-wasm`, `transformers-webgpu`, `transformers-wasm-current`,
+  `mediapipe`) and dtype (q8,
+  fp16, fp32), arms of equal rank in their given order; `reversed` is the
+  exact reverse (`taskSystemOrder()`). `runtimeOrder` is
+  `taskRuntimeOrder(systemOrder)`. Cells run arm by arm in `systemOrder`.
+- **Cells.** One per (system, lane, workload), `cellId`
+  `<runtimeId>/<systemId>/<workloadId>` (e.g.
+  `transformers-wasm/opus-mt-en-de@q8/translate-en-de-S`), `workloadKind`
+  the session's task, `model.task: 'task'`. `task` (`TaskCellRecord`): `api`,
+  `availabilityBefore`, `availabilityAtCreate`, `availabilityAfter`,
+  `inputQuota`, `download { events, wallMs, profileBytesDelta? }`. `load` is
+  the `create()` or pipeline load. `iterations` are `TaskIteration`s (an
+  `LLMIteration` plus `itemId`, `index`, `chunkMode` `delta |
+  cumulative-converted | none`, `outputSha256`, `inputChars`, `inputUsage
+  { value, unit: 'chrome-quota' | 'tokens' }`, `sourceSha256`, `source`
+  (translation only), `detect` (at most 20 candidates, `und` kept),
+  `targetToken` (translation only), `error`, and the input-truncation record
+  `inputTruncated`, `inputTokens`, `modelMaxTokens`: all three or none, null
+  on a built-in or MediaPipe item, the flag equal to tokens over the limit).
+  `transformers-wasm-current` is a task-only lane: Transformers.js on WASM
+  from the host's current-releases bundle. A non-streaming item records
+  one chunk `{ t: endT, c: text.length }`; a failed item has an empty text.
+- **Runner.** Environment, fingerprint, the host's preflight (a failure
+  records a `preflight` event and throws `TaskPreflightError`: no result),
+  then per cell: availability, `beforeLoad` (a download session waits for
+  the click that starts the download), the timed load (or the system's own
+  `loadSpan` when the host started its `create()` earlier, inside a user
+  activation), an untimed
+  `verify()`, the items with a per-item watchdog (summarize 180 s, translate
+  60 s, detect 10 s; a timeout is that item's error, `item-error` event,
+  nothing retried), availability after, dispose. A pressure gate (30 s cap)
+  runs between arms. No warmup item (item 0 of a `processCold` session is
+  the process-cold sample, left out of the summaries) and no hidden-tab redo
+  (visibility and, with `TraceRecorder({ trackFocus: true })`, focus are
+  recorded). **Finalize handshake:** after the last item the runner awaits
+  `finalize()`; its captures fill the driver record's `end` readings and
+  each cell's `download.profileBytesDelta`, and only then are the client
+  summaries and the digest computed, so the end captures are inside the
+  digest.
+- **Summaries.** `firstOutputMs` (first non-empty chunk minus `startT`) only
+  from incremental streams, `itemTotalMs` over items that did not fail,
+  `itemsFailed`.
+
+Validator rules on a task run:
+
+| Rule | Decision |
+| --- | --- |
+| protocol, schema 2 or 3, `harness.series` bounds | kept |
+| control kind and `runtimeOrder` | adapted: `systemOrder` fixed or reversed and matching `order`, `runtimeOrder` derived from it |
+| `wasmLane`, `wllamaBuild`, `runtimeVersions`, `profile` off their kinds | kept |
+| `tasks` and `task` (well formed, refused elsewhere), item order and ids, `outputSha256` and `sourceSha256` recomputed, `detect` bounded, the truncation record, cell order | added |
+| `quality.outputs` | skipped (a task cell carries no `quality`) |
+| iteration base checks (numeric times, chunks array, text at most 20,000) | kept |
+| `fingerprint-*`, `load-time-reversed`, `trace-not-monotonic`, `timer-grid`, `env-cross-field`, `software-renderer`, digest | kept |
+| `text-chunk-mismatch` | adapted: on deltas, one chunk for a non-streaming item |
+| `ttft-implausible` | adapted: streamed summarize and translate items only |
+| stream coherence | adapted: per item; first output only from incremental items |
+| `client-summary-disagrees` | adapted: `firstOutputMs`, `itemTotalMs` |
+| `degenerate-generation`, decode and overall rate envelopes, MMLU and embedding checks | skipped |
 
 ### Running a series
 

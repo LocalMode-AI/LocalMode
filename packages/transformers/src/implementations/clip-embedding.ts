@@ -55,6 +55,7 @@ export class TransformersCLIPEmbeddingModel implements MultimodalEmbeddingModel 
     private baseModelId: string,
     private settings: {
       device?: TransformersDevice;
+      revision?: string;
       quantized?: boolean;
       dimensions?: number;
       onProgress?: (progress: ModelLoadProgress) => void;
@@ -108,11 +109,13 @@ export class TransformersCLIPEmbeddingModel implements MultimodalEmbeddingModel 
 
       const [tokenizer, model] = await Promise.all([
         AutoTokenizer.from_pretrained(this.baseModelId, {
+          revision: this.settings.revision ?? 'main',
           progress_callback: this.settings.onProgress,
         }),
         CLIPTextModelWithProjection.from_pretrained(this.baseModelId, {
           device: this.settings.device ?? 'auto',
           dtype,
+          revision: this.settings.revision ?? 'main',
           progress_callback: this.settings.onProgress,
         }),
       ]);
@@ -155,11 +158,13 @@ export class TransformersCLIPEmbeddingModel implements MultimodalEmbeddingModel 
 
       const [processor, model] = await Promise.all([
         AutoProcessor.from_pretrained(this.baseModelId, {
+          revision: this.settings.revision ?? 'main',
           progress_callback: this.settings.onProgress,
         }),
         CLIPVisionModelWithProjection.from_pretrained(this.baseModelId, {
           device: this.settings.device ?? 'auto',
           dtype,
+          revision: this.settings.revision ?? 'main',
           progress_callback: this.settings.onProgress,
         }),
       ]);

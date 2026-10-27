@@ -76,6 +76,7 @@ in the public CC0 [LocalMode-Bench dataset](https://github.com/LocalMode-AI/Loca
 | Aggregation | `aggregateRuns`, `aggregateRunsWithErrata`, `HEADLINE_MIN_SUBMISSIONS`, `deviceClassOf`, `deviceSubclassOf`, `gpuArchitectureOf`, `refineDeviceClass`, `amdArchitectureFromRenderer`, `pressureStateFractions` |
 | Errata | `ERRATA_FILE`, `validateErrata`, `validateErrataShape`, `errataExclusions`, type `ErratumEntry` |
 | Control runs | `CONTROL_KINDS`, `CONTROL_WASM_LANE_SPECS`, `CONTROL_WLLAMA_BUILDS`, `WLLAMA_BUILDS`, `CONTROL_CURRENT_RELEASE_PACKAGES`, `CURRENT_RELEASE_LANE_PACKAGES`, `CONTROL_PROFILE_SPECS`, `createHarnessControl`, `controlRuntimeOrder`, `controlWasmLaneError`, `controlWllamaBuildError`, `controlRuntimeVersionsError`, `runtimeVersionCellError`, `cellProfileError`, `summarizeGaps`, profiler types (`BenchCellProfiler`, `BenchCellProfile`, ...), `isControlRun` |
+| Task sessions | `runTaskSession`, `TaskPreflightError`, `TASKS_PROTOCOL_VERSION`, `TASK_KINDS`, `taskArmId`, `taskSystemOrder`, `taskRuntimeOrder`, `controlTasksError`, `taskCellError`, `sha256HexSync`, task types (`TaskSessionRecord`, `TaskIteration`, `TaskSystemAdapter`, ...) |
 | Statistics and quality | `median`, `mean`, `stddev`, `quantile`, `geomean`, `summarize`, `spearman`, `runMMLUFidelity`, `runSTSQuality`, `parseMMLUAnswer`, `TINY_MMLU`, `STSB_SUBSET` |
 | Analysis exports | `rowsToCSV`, `runsToLongCSV`, `runsToCellsCSV`, `runsToRunsCSV`, `runtimeVersionColumn` |
 
@@ -114,6 +115,7 @@ or scored (`aggregateRuns` skips it and the submit route answers 422
 | `current-releases` | protocol order | protocol files | ONNX Runtime default | wllama's choice | 0.9.14 |
 | `ort-profile` | protocol order | protocol files | ONNX Runtime default | wllama's choice | 0.9.14 |
 | `llamacpp-profile` | protocol order | protocol files | ONNX Runtime default | wllama's choice | 0.9.14 |
+| `chrome-ai-tasks` | the session's `systemOrder` | per system (`runtimeConfig.dtype`) | ONNX Runtime default | not used | 0.10.0 |
 
 `current-releases` runs the Transformers.js, WebLLM, wllama and LiteRT-LM
 lanes on the runtimes' current npm releases instead of the pinned ones
@@ -124,6 +126,13 @@ pass after each Transformers.js Qwen3 generation cell, or the llama.cpp
 token delivery stamps (worker receipt and reply, page send and receipt,
 chunk) summarized per request. The host supplies the profiler through
 `LoadedLLM.profiler`.
+
+`chrome-ai-tasks` is not a suite run: `runTaskSession()` runs one task
+(`summarize`, `translate` or `detect-language`) over one item list, one item
+per call, on Chrome's built-in Summarizer, Translator or Language Detector
+and on-device fallbacks, recording the `tasks/1` session on
+`harness.control.tasks` and a `task` record on each cell.
+`runBenchmarkSuite` refuses the kind.
 
 wllama's choice is the memory64 build wherever the browser has JSPI and
 Memory64, and on Firefox; the compatibility build elsewhere (Safari). Every

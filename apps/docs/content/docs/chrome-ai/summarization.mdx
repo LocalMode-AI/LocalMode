@@ -82,6 +82,22 @@ const { summary } = await summarize({
 });
 ```
 
+## Languages
+
+Set the summary language and the expected input and context languages. Chrome logs a console
+warning when `outputLanguage` is missing; all three are unset by default.
+
+```ts
+chromeAI.summarizer({
+  outputLanguage: 'en',            // en, es, ja, de, fr
+  expectedInputLanguages: ['en', 'de'],
+  expectedContextLanguages: ['en'],
+});
+```
+
+They go to `availability()` and `create()` only when set, can be overridden per call through
+`providerOptions.chromeAI` (which recreates the session), and appear in `getModelInfo()`.
+
 ## Model Availability & Download
 
 The Summarizer API can be present while its on-device model is not yet downloaded. Ask Chrome first:
@@ -127,6 +143,57 @@ const { summary } = await summarize({ model, text: article });
 | `self.Summarizer` is undefined | Requires Chrome 138+ stable on desktop |
 | `availability()` reports `unavailable` | This device or Chrome build cannot run the model |
 | Model not downloaded and `allowDownload` unset | Set `allowDownload: true` and call from a user activation |
+| `summarizeStreaming()` / `measureInputUsage()` missing (`code: 'chrome-ai-streaming-not-supported'` / `'chrome-ai-measure-not-supported'`, `retryable: false`) | Use `doSummarize()` / a character budget |
+| Stream failed (`code: 'chrome-ai-summarization-failed'`, Chrome's error as `cause`) | Check the input against the quota |
+
+## Streaming
+
+`doStreamSummarize()` streams one summary through Chrome's `summarizeStreaming()`. Each
+chunk arrives as Chrome sent it, stamped with `performance.now()`; the last item carries the
+timing and usage.
+
+```ts
+const model = chromeAI.summarizer({ type: 'tldr', length: 'short' });
+
+for await (const chunk of model.doStreamSummarize({ text: article })) {
+  if (!chunk.done) {
+    output.textContent += chunk.text;
+  } else {
+    const { requestedAt, firstChunkAt, endedAt } = chunk.timing!;
+    console.log(`first chunk ${firstChunkAt! - requestedAt} ms, total ${endedAt - requestedAt} ms`);
+  }
+}
+```
+
+Options: `text`, `context` (per call), `maxLength`, `abortSignal`, `providerOptions`. `requestedAt`
+is taken after the session exists, so the timings exclude session creation and any download.
+An abort surfaces as an `AbortError`.
+
+## Input Quota
+
+```ts
+const quota = await model.getInputQuota();           // number, or null if not exposed
+const usage = await model.measureInputUsage(article); // Chrome's own count
+if (quota !== null && usage > quota) { /* shorten the input */ }
+```
+
+## Model Info
+
+`getModelInfo()` records what the page can see: the `availability()` state before `create()`
+(`'timeout'` if it never answered), the options passed to `create()` and as the session reports
+them, `inputQuota`, and the Chrome build (`brands`, `fullVersionList`) from
+`getChromeBuildInfo()`.
+
+```ts
+const info = await model.getModelInfo();
+// { api: 'Summarizer', availabilityAtCreate: 'available', sessionOptions: { type: 'tldr', ... },
+//   inputQuota: 9216, modelVersion: null, browser: { fullVersionList: [...] , ... } }
+```
+
+<Callout type="warn">
+  Chrome does not expose the on-device model version to web pages, so `modelVersion` is always
+  `null`. Read it from `chrome://components` (Optimization Guide On Device Model) outside the page.
+</Callout>
 
 ## With AbortSignal
 

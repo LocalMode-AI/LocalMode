@@ -41,6 +41,7 @@ async function loadKokoroInstance(
   dtype: KokoroDtype,
   device: TransformersDevice,
   onProgress?: (progress: ModelLoadProgress) => void,
+  revision = 'main',
 ): Promise<KokoroInstance> {
   if (kokoroInstance) return kokoroInstance;
   if (kokoroLoadPromise) return kokoroLoadPromise;
@@ -54,9 +55,10 @@ async function loadKokoroInstance(
       const model = await StyleTextToSpeech2Model.from_pretrained(modelId, {
         dtype,
         device,
+        revision,
         progress_callback: onProgress,
       });
-      const tokenizer = await AutoTokenizer.from_pretrained(modelId);
+      const tokenizer = await AutoTokenizer.from_pretrained(modelId, { revision });
 
       kokoroInstance = {
         model: (inputs: Record<string, unknown>) => (model as unknown as { (inputs: Record<string, unknown>): Promise<{ waveform: { data: Float32Array } }> })(inputs),
@@ -160,6 +162,8 @@ export async function kokoroSynthesize(options: {
   device?: TransformersDevice;
   abortSignal?: AbortSignal;
   onProgress?: (progress: ModelLoadProgress) => void;
+  /** Hugging Face revision of the model files. @default 'main' */
+  revision?: string;
 }): Promise<{
   audio: Float32Array;
   sampleRate: number;
@@ -173,6 +177,7 @@ export async function kokoroSynthesize(options: {
     device = 'wasm',
     abortSignal,
     onProgress,
+    revision,
   } = options;
 
   abortSignal?.throwIfAborted();
@@ -184,7 +189,7 @@ export async function kokoroSynthesize(options: {
     );
   }
 
-  const instance = await loadKokoroInstance(modelId, dtype, device, onProgress);
+  const instance = await loadKokoroInstance(modelId, dtype, device, onProgress, revision);
 
   abortSignal?.throwIfAborted();
 

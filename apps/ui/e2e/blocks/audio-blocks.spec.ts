@@ -88,7 +88,7 @@ const ROUTES = {
 
 /**
  * Cold-cache ceiling for steps that trigger a real model download (Whisper
- * tiny ~40MB, bge-small ~34MB, DistilBART ~200MB, Granite 350M ~120MB,
+ * tiny ~40MB, bge-small ~34MB, DistilBART ~200MB, Granite 350M ~580MB,
  * Kokoro ~90MB) plus inference. Warm runs finish in seconds.
  */
 const COLD_MODEL_TIMEOUT_MS = 8 * 60 * 1000;
@@ -452,7 +452,7 @@ test('meeting-assistant: pasted fixture transcript → summary + action items + 
     `Summary "${summary}" mentions none of [${MEETING_TOPIC_WORDS.join(', ')}] — expected an on-topic summary`,
   ).toBeGreaterThanOrEqual(1);
 
-  // Extract: REAL Granite 4.0 350M structured generation (~120MB cold).
+  // Extract: REAL Granite 4.0 350M structured generation (~580MB cold).
   const extractOutcome = blockAlert(page).or(actionItems);
   await expect(extractOutcome.first()).toBeVisible({ timeout: COLD_MODEL_TIMEOUT_MS });
   await expectNoBlockError(page);

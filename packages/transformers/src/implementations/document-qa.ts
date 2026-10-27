@@ -38,6 +38,7 @@ export class TransformersDocumentQAModel implements DocumentQAModel, TableQAMode
     private baseModelId: string,
     private settings: {
       device?: TransformersDevice;
+      revision?: string;
       quantized?: boolean;
       onProgress?: (progress: ModelLoadProgress) => void;
     } = {}
@@ -68,6 +69,7 @@ export class TransformersDocumentQAModel implements DocumentQAModel, TableQAMode
       const pipe = await (pipeline as Function)(task, this.baseModelId, {
         device: this.settings.device ?? 'auto',
         dtype: this.settings.quantized === true ? 'q8' : 'fp32',
+        revision: this.settings.revision ?? 'main',
         progress_callback: this.settings.onProgress,
       }) as DocQAPipeline;
 

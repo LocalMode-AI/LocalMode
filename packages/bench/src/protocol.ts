@@ -17,9 +17,11 @@ import type {
   HarnessControl,
   HarnessControlWasmLane,
   LLMWorkloadSpec,
+  TaskSessionRecord,
   QualityWorkloadSpec,
   WllamaBuild,
 } from './types.js';
+import { controlTasksError, taskRuntimeOrder } from './tasks/protocol.js';
 
 /**
  * ~128-token prompt (509 characters). Original text, public domain.
@@ -215,6 +217,7 @@ export const CONTROL_KINDS: readonly ControlKind[] = [
   'current-releases',
   'ort-profile',
   'llamacpp-profile',
+  'chrome-ai-tasks',
 ] as const;
 
 /** The values a llama.cpp cell's `runtimeConfig.wllamaBuild` may take (see `WllamaBuild`). */
@@ -293,8 +296,13 @@ function wasmLaneKinds(): ControlKind[] {
  * versions, see `HarnessControl.runtimeVersions`), `ort-profile` and
  * `llamacpp-profile` (a profiler, see `BenchCellResult.profile`).
  *
+ * `chrome-ai-tasks` has no canonical order: a task session records the
+ * runtimes of its own `systemOrder` (see `taskRuntimeOrder`), so this
+ * function refuses that kind.
+ *
  * @param kind - The control kind.
  * @returns A new array of every runtime, each exactly once.
+ * @throws {TypeError} For `chrome-ai-tasks`.
  * @example
  * controlRuntimeOrder('order-reversed')[0]; // 'wllama'
  * controlRuntimeOrder('fixed-order')[0]; // 'transformers-wasm'
@@ -312,6 +320,10 @@ export function controlRuntimeOrder(kind: ControlKind): BenchRuntimeId[] {
     case 'ort-profile':
     case 'llamacpp-profile':
       return [...RUNTIME_EXECUTION_ORDER];
+    case 'chrome-ai-tasks':
+      throw new TypeError(
+        'chrome-ai-tasks has no fixed runtime order: a task session records the runtimes of its systemOrder (taskRuntimeOrder)',
+      );
   }
 }
 
@@ -331,6 +343,12 @@ export interface CreateHarnessControlOptions {
    * `CONTROL_CURRENT_RELEASE_OPTIONAL_PACKAGES`). Refused on every other kind.
    */
   runtimeVersions?: Record<string, string>;
+  /**
+   * `chrome-ai-tasks` only, required there (since bench 0.10.0): the task
+   * session record (see `TaskSessionRecord`); the marker's `runtimeOrder` is
+   * derived from its `systemOrder`. Refused on every other kind.
+   */
+  tasks?: TaskSessionRecord;
 }
 
 /**
@@ -404,20 +422,34 @@ export const LLAMACPP_PROFILE_BIN_EDGES_MS: readonly number[] = [0, 1, 2, 5, 10,
  *
  * @param kind - The control kind.
  * @param options - `numThreads` for a `wasm-default` or `wasm-threads` run, `runtimeVersions` for a
- *   `current-releases` run (each required on its kinds, refused on the others).
+ *   `current-releases` run, `tasks` for a `chrome-ai-tasks` run (each required on its kinds, refused on the others).
  * @returns `{ kind, runtimeOrder }` with the kind's canonical runtime order,
  *   plus `wasmLane` for a WASM-lane kind: `{ dtype: 'q8', numThreads, simd: true }`
  *   for `wasm-default`, `{ dtype: 'q8', numThreads: null, simd: true }` for
  *   `wasm-q8`, `{ dtype: 'q4', numThreads, simd: true }` for `wasm-threads`;
- *   plus `wllamaBuild: 'compat'` for `wllama-compat`; plus `runtimeVersions` for `current-releases`.
+ *   plus `wllamaBuild: 'compat'` for `wllama-compat`; plus `runtimeVersions` for `current-releases`;
+ *   for `chrome-ai-tasks`, `{ kind, runtimeOrder, tasks }` with the runtimes of `tasks.systemOrder`.
  * @throws {TypeError} When a kind that sets the thread count lacks a valid `numThreads`, or another kind is given one;
- *   when `current-releases` lacks valid `runtimeVersions`, or another kind is given them.
+ *   when `current-releases` lacks valid `runtimeVersions`, or another kind is given them; when
+ *   `chrome-ai-tasks` lacks a valid `tasks` record, or another kind is given one.
  * @example
  * const harness = { name, version, control: createHarnessControl('order-reversed') };
  * const wasm = createHarnessControl('wasm-default', { numThreads: navigator.hardwareConcurrency });
  * const q8 = createHarnessControl('wasm-q8'); // wasmLane.numThreads: null
  */
 export function createHarnessControl(kind: ControlKind, options: CreateHarnessControlOptions = {}): HarnessControl {
+  if (kind === 'chrome-ai-tasks' || options.tasks !== undefined) {
+    if (kind !== 'chrome-ai-tasks') throw new TypeError(controlTasksError({ kind, tasks: options.tasks }));
+    if (options.numThreads !== undefined || options.runtimeVersions !== undefined) {
+      throw new TypeError("createHarnessControl('chrome-ai-tasks') takes only { tasks }");
+    }
+    const tasks = options.tasks;
+    const order = Array.isArray(tasks?.systemOrder) ? taskRuntimeOrder(tasks.systemOrder) : [];
+    const control: HarnessControl = { kind, runtimeOrder: order, tasks: tasks as TaskSessionRecord };
+    const error = controlTasksError(control);
+    if (error) throw new TypeError(error);
+    return { kind, runtimeOrder: order, tasks: structuredCloneRecord(tasks as TaskSessionRecord) };
+  }
   const build = CONTROL_WLLAMA_BUILDS[kind];
   const control: HarnessControl = {
     kind,
@@ -444,6 +476,11 @@ export function createHarnessControl(kind: ControlKind, options: CreateHarnessCo
   const error = controlWasmLaneError({ ...control, wasmLane });
   if (error) throw new TypeError(`${error}; pass { numThreads: navigator.hardwareConcurrency }`);
   return { ...control, wasmLane };
+}
+
+/** A deep copy of a JSON-shaped task record, so the marker never aliases the caller's object. */
+function structuredCloneRecord<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 /** "wasm-default" or "wasm-default and wasm-threads": the kinds that set the thread count. */

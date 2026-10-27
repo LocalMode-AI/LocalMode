@@ -33,6 +33,7 @@ export class TransformersDepthEstimationModel implements DepthEstimationModel {
     private baseModelId: string,
     private settings: {
       device?: TransformersDevice;
+      revision?: string;
       quantized?: boolean;
       onProgress?: (progress: ModelLoadProgress) => void;
     } = {}
@@ -58,6 +59,7 @@ export class TransformersDepthEstimationModel implements DepthEstimationModel {
       const pipe = await pipeline('depth-estimation', this.baseModelId, {
         device: this.settings.device ?? 'auto',
         dtype: this.settings.quantized === true ? 'q8' : 'fp32',
+        revision: this.settings.revision ?? 'main',
         progress_callback: this.settings.onProgress,
       });
 

@@ -220,6 +220,8 @@ const CONTROL_BANNER_DETAIL: Record<ControlKind, string> = {
     "The suite, its cells, rules, traces, environment capture, runtime order and every lane's settings are those of a protocol run, and the timed iterations run unprofiled. After each Transformers.js Qwen3 generation cell (WebGPU and WASM), an untimed pass in a fresh session with ONNX Runtime Web's profiler on runs the cell's prompt once more; its operator times, per operator type, kernel and provider, go into the cell's profile, and the raw profile is kept beside the run in Saved exports. Keep each run",
   'llamacpp-profile':
     "The suite, its cells, rules, traces, environment capture, runtime order and every lane's settings are those of a protocol run; on the llama.cpp lanes the token delivery path is time-stamped (the wllama worker's request receipt and reply, the page's send and receipt, the chunk the provider hands over), summarized per iteration in each generation cell's profile, with the raw stamps kept beside the run in Saved exports. Keep each run",
+  'chrome-ai-tasks':
+    'A task session runs on /bench/tasks, not on this page. Keep each run',
 };
 
 /** Lightweight availability probes - no provider packages are imported here. */

@@ -6,7 +6,7 @@
  * @packageDocumentation
  */
 
-import type { TransformersProvider, TransformersProviderSettings, ModelSettings, LanguageModelSettings } from './types.js';
+import type { TransformersProvider, TransformersProviderSettings, ModelSettings, LanguageModelSettings, TranslatorSettings } from './types.js';
 import {
   // Core implementations
   createEmbeddingModel,
@@ -82,6 +82,7 @@ export function createTransformers(settings?: TransformersProviderSettings): Tra
     device: settings?.device,
     quantized: settings?.quantized ?? false,
     onProgress: settings?.onProgress,
+    revision: settings?.revision,
   };
 
   return {
@@ -187,7 +188,7 @@ export function createTransformers(settings?: TransformersProviderSettings): Tra
       });
     },
 
-    translator(modelId: string, modelSettings?: ModelSettings) {
+    translator(modelId: string, modelSettings?: TranslatorSettings) {
       return createTranslationModel(modelId, {
         ...defaultSettings,
         ...modelSettings,

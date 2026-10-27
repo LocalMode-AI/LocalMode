@@ -34,6 +34,7 @@ export class TransformersFillMaskModel implements FillMaskModel {
     private baseModelId: string,
     private settings: {
       device?: TransformersDevice;
+      revision?: string;
       quantized?: boolean;
       maskToken?: string;
       onProgress?: (progress: ModelLoadProgress) => void;
@@ -64,6 +65,7 @@ export class TransformersFillMaskModel implements FillMaskModel {
       const pipe = await pipeline('fill-mask', this.baseModelId, {
         device: this.settings.device ?? 'auto',
         dtype: this.settings.quantized === true ? 'q8' : 'fp32',
+        revision: this.settings.revision ?? 'main',
         progress_callback: this.settings.onProgress,
       });
 

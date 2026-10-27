@@ -21,7 +21,7 @@ Zero-download, instant AI inference via Chrome's built-in Gemini Nano model. No 
 - Zero model downloads — Gemini Nano ships with Chrome
 - Zero bundle size impact — browser-native APIs
 - Instant inference — no model loading delay
-- Implements `SummarizationModel`, `TranslationModel`, and `LanguageModel` from `@localmode/core`
+- Implements `SummarizationModel`, `TranslationModel`, `LanguageDetectionModel`, and `LanguageModel` from `@localmode/core`
 - Feature detection utilities for graceful fallback
 
 The `LanguageModel` implementation wraps Chrome 148+ `window.LanguageModel` (the Prompt API) so `generateText()`, `streamText()`, `generateObject()`, and the `useGenerateText()` / `useStreamText()` / `useModelWarmup()` React hooks work on Gemini Nano with zero changes from any other provider.
@@ -82,7 +82,7 @@ console.log(summary);
 |-----|--------|-------------------|----------------|
 | Summarizer | **Stable** | `SummarizationModel` | 138+ |
 | Translator | **Stable** | `TranslationModel` | 138+ |
-| Language Detector | **Stable** | — | 138+ |
+| Language Detector | **Stable** | `LanguageDetectionModel` | 138+ |
 | Prompt API | **Stable** | `LanguageModel` | **148+** |
 | Writer | Developer trial | — | — |
 | Rewriter | Developer trial | — | — |
@@ -93,7 +93,7 @@ console.log(summary);
 </Callout>
 
 <Callout type="info">
-  All stable APIs (Summarizer, Translator, Prompt) are supported by `@localmode/chrome-ai`. The Prompt API exposes Gemini Nano text generation via `chromeAI.languageModel()` — see the [Language Model](/docs/chrome-ai/language-model) guide.
+  All stable APIs (Summarizer, Translator, Language Detector, Prompt) are supported by `@localmode/chrome-ai`. The Prompt API exposes Gemini Nano text generation via `chromeAI.languageModel()` — see the [Language Model](/docs/chrome-ai/language-model) guide.
 </Callout>
 
 ## Requirements
@@ -120,6 +120,7 @@ Verify the state in the DevTools console:
 'LanguageModel' in self; // Prompt API   — Chrome 148+
 'Summarizer' in self; //    Summarizer   — Chrome 138+
 'Translator' in self; //    Translator   — Chrome 138+
+'LanguageDetector' in self; // Language Detector — Chrome 138+
 
 // Is the model ready? Returns one of:
 //   'available'    — ready to use right now
@@ -129,6 +130,7 @@ Verify the state in the DevTools console:
 await LanguageModel.availability();
 await Summarizer.availability();
 await Translator.availability({ sourceLanguage: 'en', targetLanguage: 'es' });
+await LanguageDetector.availability();
 ```
 
 <Callout type="info">
@@ -147,6 +149,7 @@ import { createChromeAI, chromeAI } from '@localmode/chrome-ai';
 // Default instance
 const summarizer = chromeAI.summarizer();
 const translator = chromeAI.translator({ targetLanguage: 'de' });
+const detector = chromeAI.languageDetector({ topK: 3 });
 const llm = chromeAI.languageModel({ systemPrompt: 'You are concise.' });
 
 // Custom instance
@@ -159,6 +162,7 @@ const customSummarizer = provider.summarizer({ type: 'key-points', format: 'mark
 ```ts
 import {
   isChromeAISupported,
+  isLanguageDetectorSupported,
   isPromptAPISupported,
   isSummarizerAPISupported,
   isTranslatorAPISupported,
@@ -175,6 +179,27 @@ if (isPromptAPISupported()) {
 if (isSummarizerAPISupported()) {
   console.log('Summarizer API is ready');
 }
+
+if (isLanguageDetectorSupported()) {
+  console.log('Language Detector API is ready');
+}
+```
+
+## Language Detection
+
+`chromeAI.languageDetector()` wraps Chrome's [Language Detector API](https://developer.chrome.com/docs/ai/language-detection) as a `LanguageDetectionModel`, so it works with `detectLanguage()` from `@localmode/core`. Results are BCP 47 codes with confidences, highest first; Chrome's `und` (undetermined) entry is dropped. Very short phrases and single words give low-accuracy results.
+
+```ts
+import { detectLanguage } from '@localmode/core';
+import { chromeAI, isLanguageDetectorSupported } from '@localmode/chrome-ai';
+import { mediapipe } from '@localmode/mediapipe';
+
+const model = isLanguageDetectorSupported()
+  ? chromeAI.languageDetector({ topK: 3 })
+  : mediapipe.languageDetector();
+
+const { languages } = await detectLanguage({ model, text: 'Hallo und herzlich willkommen!' });
+// [{ languageCode: 'de', confidence: 0.99… }, …]
 ```
 
 ## Next Steps

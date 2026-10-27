@@ -14,7 +14,7 @@ HuggingFace Transformers.js provider for LocalMode — run ML models locally in 
 - **Browser-Native** - Run ML models directly in the browser with WebGPU/WASM
 - **Privacy-First** - All processing happens locally, no data leaves the device
 - **Model Caching** - Model files are cached in the browser Cache API (`transformers-cache`) for instant subsequent loads, with a resilient write path that never fails a model load (opt out: `createTransformers({ resilientCache: false })`)
-- **Optimized** - Uses quantized models for smaller size and faster inference
+- **Optimized** - Opt into int8-quantized (`q8`) weights with `quantized: true` for smaller downloads and faster inference
 
 ## Installation
 
@@ -516,9 +516,20 @@ Languages: American English, British English.
 
 ```typescript
 const model = transformers.embedding('Xenova/bge-small-en-v1.5', {
-  quantized: true, // Use quantized model (smaller, faster)
+  quantized: true, // Load q8 weights (default: false, which loads fp32)
   device: 'webgpu', // Use WebGPU for acceleration (falls back to WASM)
+  revision: 'main', // Hugging Face branch, tag, or commit hash (default: 'main')
 });
+```
+
+`revision` pins the model files every factory downloads; set it per model or for all models with `createTransformers({ revision })`.
+
+### Multi-Target Translation Models
+
+`Xenova/opus-mt-en-zh` and `Xenova/opus-mt-en-ar` translate into several languages or scripts and need a sentence-initial target token. The translator adds `>>cmn_Hans<<` and `>>ara<<` respectively, as a single vocabulary id. Choose another target with `targetLanguageToken` (for example `'>>cmn_Hant<<'`), or send the text unchanged with `targetLanguageToken: false`:
+
+```typescript
+const zhHant = transformers.translator('Xenova/opus-mt-en-zh', { targetLanguageToken: '>>cmn_Hant<<' });
 ```
 
 ### Language Model Options
@@ -611,7 +622,7 @@ import {
 
 ## Performance Tips
 
-1. **Use quantized models** - Smaller and faster with minimal quality loss
+1. **Use quantized models** (`quantized: true`) - Smaller and faster with minimal quality loss; the default loads fp32
 2. **Preload models** - Load during app init for instant inference
 3. **Use WebGPU when available** - 3-5x faster than WASM
 4. **Batch operations** - Process multiple inputs together

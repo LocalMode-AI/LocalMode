@@ -1,6 +1,6 @@
 {
   "name": "@localmode/chrome-ai",
-  "version": "2.2.1",
+  "version": "2.3.0",
   "description": "Chrome AI provider for @localmode - on-device inference via Chrome's built-in Gemini Nano",
   "license": "MIT",
   "author": "LocalMode",
@@ -38,7 +38,7 @@
   },
   "dependencies": {},
   "peerDependencies": {
-    "@localmode/core": ">=2.0.0"
+    "@localmode/core": ">=2.2.0"
   },
   "devDependencies": {
     "@localmode/core": "workspace:*",
@@ -54,6 +54,7 @@
     "ai",
     "summarization",
     "translation",
+    "language-detection",
     "offline",
     "browser-native"
   ],

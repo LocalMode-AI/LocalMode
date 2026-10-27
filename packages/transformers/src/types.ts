@@ -105,10 +105,20 @@ export interface TransformersProviderSettings {
   cacheDir?: string;
 
   /**
-   * Whether to use quantized models for smaller size.
-   * @default true
+   * Whether to load the int8-quantized (`q8`) weights instead of full-precision
+   * (`fp32`) ones. Applies to the task models (embeddings, classifiers,
+   * translators, summarizers, and the rest); `languageModel()` takes `dtype`.
+   * @default false (fp32)
    */
   quantized?: boolean;
+
+  /**
+   * Hugging Face revision (branch, tag, or commit hash) every model load
+   * requests. Pin a commit hash to keep the downloaded files fixed when the
+   * model repository changes.
+   * @default 'main'
+   */
+  revision?: string;
 
   /**
    * Whether to install the resilient model-file cache into the Transformers.js
@@ -149,14 +159,55 @@ export interface ModelSettings {
   useWorker?: boolean;
 
   /**
-   * Override quantization for this specific model.
+   * Override quantization for this specific model: `true` loads `q8`
+   * weights, `false` loads `fp32`.
+   * @default false (fp32), or the provider-level setting
    */
   quantized?: boolean;
+
+  /**
+   * Hugging Face revision (branch, tag, or commit hash) for this model's
+   * files, passed to Transformers.js as its `revision` load option.
+   * @default 'main', or the provider-level setting
+   */
+  revision?: string;
 
   /**
    * Progress callback for this specific model.
    */
   onProgress?: (progress: ModelLoadProgress) => void;
+}
+
+/**
+ * Settings for translation model instances.
+ *
+ * Extends {@link ModelSettings} with the target-language token that
+ * multi-target Opus-MT models require at the start of the source text.
+ *
+ * @example
+ * ```ts
+ * import { transformers } from '@localmode/transformers';
+ *
+ * // Prepends '>>cmn_Hans<<' automatically (Simplified Mandarin).
+ * const zh = transformers.translator('Xenova/opus-mt-en-zh');
+ *
+ * // Traditional script instead.
+ * const zhHant = transformers.translator('Xenova/opus-mt-en-zh', {
+ *   targetLanguageToken: '>>cmn_Hant<<',
+ * });
+ * ```
+ */
+export interface TranslatorSettings extends ModelSettings {
+  /**
+   * Sentence-initial `>>id<<` target token prepended to every source text.
+   * A string is used as given; `false` sends the text unchanged. When unset,
+   * the known multi-target Opus-MT models get their default token
+   * (`Xenova/opus-mt-en-zh` → `'>>cmn_Hans<<'`, `Xenova/opus-mt-en-ar` →
+   * `'>>ara<<'`, see `OPUS_MT_TARGET_LANGUAGE_TOKENS`) and every other model
+   * none. Text that already starts with a `>>id<<` token is never changed.
+   * A per-call `providerOptions.transformers.targetLanguageToken` overrides it.
+   */
+  targetLanguageToken?: string | false;
 }
 
 /**
@@ -417,7 +468,7 @@ export interface TransformersProvider {
    * const { text } = await translate({ model, text: 'Hello', targetLanguage: 'de' });
    * ```
    */
-  translator(modelId: string, settings?: ModelSettings): TranslationModel;
+  translator(modelId: string, settings?: TranslatorSettings): TranslationModel;
 
   /**
    * Create a summarization model.

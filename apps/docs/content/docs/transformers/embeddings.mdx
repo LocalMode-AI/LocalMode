@@ -24,7 +24,7 @@ Generate dense vector representations of text for semantic search, clustering, a
 import { transformers } from '@localmode/transformers';
 
 const model = transformers.embedding('Xenova/bge-small-en-v1.5', {
-  quantized: true,     // Use quantized model (default: true)
+  quantized: true,     // Load q8 weights (default: false, which loads fp32)
   device: 'webgpu',    // 'webgpu' or 'wasm' (auto-detected if omitted)
   onProgress: (p) => {
     console.log(`Loading model: ${(p.progress * 100).toFixed(1)}%`);

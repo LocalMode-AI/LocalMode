@@ -30,6 +30,42 @@ import {
   runtimeVersionCellError,
   wllamaBuildError,
 } from './protocol.js';
+import { controlTasksError, taskCellError, taskCellOrderError, TASK_KINDS } from './tasks/protocol.js';
+import type { TaskIteration, TaskKind } from './types.js';
+
+/** True for a cell of a `chrome-ai-tasks` run (a task workload kind). */
+function isTaskCell(cell: BenchCellResult): boolean {
+  return TASK_KINDS.includes(cell.workloadKind as TaskKind);
+}
+
+/**
+ * Task-cell summary (since bench 0.10.0): first output (first non-empty
+ * chunk minus `startT`) only from items whose stream was incremental (a
+ * streamed item passing the stream-coherence test; a non-streaming item has
+ * a total only), item total over every item that did not fail, and the count
+ * of failed items (an error or an empty output). With `excludeFirst` (a
+ * `processCold` session), item 0 enters neither median.
+ */
+function summarizeTaskIterations(cell: BenchCellResult, out: CellSummary, excludeFirst: boolean): void {
+  const firsts: number[] = [];
+  const totals: number[] = [];
+  let failed = 0;
+  for (const it of cell.iterations as TaskIteration[]) {
+    const failedItem = it.error !== undefined || it.text.length === 0;
+    if (failedItem) failed++;
+    if (failedItem || (excludeFirst && it.index === 0)) continue;
+    const total = it.endT - it.startT;
+    if (total >= 0) totals.push(total);
+    if (it.chunkMode !== 'none' && isIncrementalStream(it)) {
+      const first = it.chunks.find((c) => c.c > 0);
+      if (first) firsts.push(first.t - it.startT);
+    }
+  }
+  out.itemsFailed = failed;
+  out.streamIncremental = firsts.length > 0;
+  if (firsts.length > 0) out.firstOutputMs = summarize(firsts);
+  if (totals.length > 0) out.itemTotalMs = summarize(totals);
+}
 
 /** Version of the plausibility rule set (recorded alongside moderation). */
 export const PLAUSIBILITY_RULES_VERSION = 2;
@@ -128,6 +164,14 @@ export function validateRunShape(value: unknown, options: ValidateOptions = {}):
   else {
     const control = harness && typeof harness.control === 'object' && harness.control !== null ? (harness.control as Record<string, unknown>) : null;
     (run.cells as unknown[]).forEach((c, i) => validateCellShape(c, i, push, control));
+    const tasks = control?.kind === 'chrome-ai-tasks' ? (control.tasks as { systemOrder?: unknown } | undefined) : undefined;
+    if (tasks && Array.isArray(tasks.systemOrder)) {
+      const orderError = taskCellOrderError(
+        (run.cells as unknown[]).filter((c): c is Record<string, never> => typeof c === 'object' && c !== null),
+        tasks.systemOrder as string[],
+      );
+      if (orderError) push(`cells: ${orderError}`);
+    }
   }
   if (!Array.isArray(run.events)) push('events must be an array');
   return errors;
@@ -187,10 +231,15 @@ function validateHarnessExtras(harness: Record<string, unknown>, push: (m: strin
     else if (!CONTROL_KINDS.includes(control.kind as never))
       push(`harness.control.kind must be one of ${CONTROL_KINDS.join(', ')}`);
     else {
-      const expected = controlRuntimeOrder(control.kind as (typeof CONTROL_KINDS)[number]);
-      const order = control.runtimeOrder;
-      if (!Array.isArray(order) || order.length !== expected.length || order.some((id, i) => id !== expected[i]))
-        push(`harness.control.runtimeOrder must be the ${String(control.kind)} order [${expected.join(', ')}]`);
+      // A task session's order is its own systemOrder (checked by controlTasksError).
+      if (control.kind !== 'chrome-ai-tasks') {
+        const expected = controlRuntimeOrder(control.kind as (typeof CONTROL_KINDS)[number]);
+        const order = control.runtimeOrder;
+        if (!Array.isArray(order) || order.length !== expected.length || order.some((id, i) => id !== expected[i]))
+          push(`harness.control.runtimeOrder must be the ${String(control.kind)} order [${expected.join(', ')}]`);
+      }
+      const tasksError = controlTasksError(control as { kind: string; runtimeOrder?: unknown; tasks?: unknown });
+      if (tasksError) push(tasksError);
       const laneError = controlWasmLaneError(control as { kind: (typeof CONTROL_KINDS)[number]; wasmLane?: unknown });
       if (laneError) push(laneError);
       const buildError = controlWllamaBuildError(control as { kind: (typeof CONTROL_KINDS)[number]; wllamaBuild?: unknown });
@@ -274,6 +323,8 @@ function validateCellShape(
   if (versionError) push(`${at}: ${versionError}`);
   const profileError = cellProfileError(cell, control);
   if (profileError) push(`${at}: ${profileError}`);
+  const taskError = taskCellError(cell, control);
+  if (taskError) push(`${at}: ${taskError}`);
   const quality = cell.quality as Record<string, unknown> | undefined;
   if (quality && Array.isArray(quality.outputs)) {
     if ((quality.outputs as unknown[]).some((o) => typeof o !== 'string' || (o as string).length > 500)) {
@@ -465,6 +516,7 @@ export function summarizeCell(
   cell: BenchCellResult,
   highVarianceCv = 0.05,
   approxPromptTokens?: number,
+  options: { excludeFirstItem?: boolean } = {},
 ): CellSummary {
   const out: CellSummary = {
     cellId: cell.cellId,
@@ -474,6 +526,11 @@ export function summarizeCell(
   if (cell.load) {
     out.loadMs = cell.load.endT - cell.load.startT;
     out.loadCached = cell.load.cached;
+  }
+  if (isTaskCell(cell)) {
+    summarizeTaskIterations(cell, out, options.excludeFirstItem === true);
+    out.highVariance = [out.firstOutputMs, out.itemTotalMs].some((m) => m !== undefined && m.n >= 2 && m.cv > highVarianceCv);
+    return out;
   }
   if (cell.quality) {
     out.qualityScore = cell.quality.score;
@@ -555,7 +612,9 @@ export function summarizeRun(
     ['chat-pp512-tg128', 512],
   ]);
   const lookup = promptTokensByWorkload ?? defaults;
-  return run.cells.map((cell) => summarizeCell(cell, highVarianceCv, lookup.get(cell.workloadId)));
+  // R7: the process-cold item of a session Chrome was launched for is never pooled with warm items.
+  const excludeFirstItem = run.harness.control?.tasks?.processCold === true;
+  return run.cells.map((cell) => summarizeCell(cell, highVarianceCv, lookup.get(cell.workloadId), { excludeFirstItem }));
 }
 
 /**
@@ -588,6 +647,11 @@ export function checkPlausibility(run: BenchRunResult): PlausibilityFlag[] {
 
     if (cell.load && cell.load.endT < cell.load.startT) {
       flag('load-time-reversed', 'load endT precedes startT', 'reject', cell.cellId);
+    }
+
+    if (isTaskCell(cell)) {
+      checkTaskCellPlausibility(cell, grid, flag);
+      continue;
     }
 
     if (isLLMIterations(cell.iterations)) {
@@ -742,6 +806,64 @@ export function checkPlausibility(run: BenchRunResult): PlausibilityFlag[] {
 }
 
 /**
+ * Plausibility rules for a task cell (since bench 0.10.0), adapted from the
+ * LLM rules: chunk timestamps monotonic within the item (`trace-not-monotonic`);
+ * text length equal to the chunk sum (`text-chunk-mismatch`, holding on
+ * deltas; a non-streaming item records one chunk of the text's length);
+ * `ttft-implausible` on summarize and translate cells only, over the items
+ * whose stream was incremental (a warm language detection takes well under
+ * 1 ms); the timer-grid warning. Not applied: `degenerate-generation` (a
+ * two-character language code or an empty output is data, counted offline)
+ * and the decode and overall rate envelopes (calibrated to LLM decode by
+ * model size).
+ */
+function checkTaskCellPlausibility(
+  cell: BenchCellResult,
+  grid: number | null | undefined,
+  flag: (code: string, message: string, severity: 'warn' | 'reject', cellId?: string) => void,
+): void {
+  const items = cell.iterations as TaskIteration[];
+  for (const it of items) {
+    let prev = it.startT;
+    let monotonic = true;
+    for (const c of it.chunks) {
+      if (c.t < prev) monotonic = false;
+      prev = c.t;
+    }
+    if (!monotonic || it.endT < prev) {
+      flag('trace-not-monotonic', `item ${it.itemId}: chunk timestamps are not monotonic`, 'reject', cell.cellId);
+      break;
+    }
+    const chunkChars = it.chunks.reduce((acc, c) => acc + c.c, 0);
+    if (it.text.length !== chunkChars) {
+      flag('text-chunk-mismatch', `item ${it.itemId}: text length ${it.text.length} != chunk sum ${chunkChars}`, 'reject', cell.cellId);
+      break;
+    }
+  }
+  if (cell.workloadKind === 'summarize' || cell.workloadKind === 'translate') {
+    const summary = summarizeCell(cell);
+    if (summary.firstOutputMs && summary.firstOutputMs.median < 1) {
+      flag('ttft-implausible', `median first output ${summary.firstOutputMs.median}ms < 1ms`, 'reject', cell.cellId);
+    }
+  }
+  if (grid !== null && grid !== undefined && grid >= 4) {
+    const quantumMs = grid / 1000;
+    let offGrid = 0;
+    let total = 0;
+    for (const it of items) {
+      for (const c of it.chunks) {
+        total++;
+        const remainder = Math.abs(c.t / quantumMs - Math.round(c.t / quantumMs));
+        if (remainder > 0.01) offGrid++;
+      }
+    }
+    if (total >= 20 && offGrid / total > 0.5) {
+      flag('timer-grid', `${offGrid}/${total} chunk timestamps off the ${grid}us timer grid`, 'warn', cell.cellId);
+    }
+  }
+}
+
+/**
  * Full validation pipeline for a submission: shape, digest-independent
  * summary recompute, client-summary agreement (>1% relative disagreement on
  * medians is flagged), and plausibility rules.
@@ -766,6 +888,8 @@ export function validateSubmission(run: BenchRunResult, options: ValidateOptions
         'overallCharsPerSec',
         'singleLatencyMs',
         'batchTextsPerSec',
+        'firstOutputMs',
+        'itemTotalMs',
       ] as const) {
         const c = client[key]?.median;
         const s = server[key]?.median;

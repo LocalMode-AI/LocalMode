@@ -88,6 +88,7 @@ export class TransformersGenerativeOCRModel implements OCRModel {
     private baseModelId: string,
     private settings: {
       device?: TransformersDevice;
+      revision?: string;
       dtype?: string | Record<string, string>;
       onProgress?: (progress: ModelLoadProgress) => void;
     } = {}
@@ -123,6 +124,7 @@ export class TransformersGenerativeOCRModel implements OCRModel {
 
         const [processor, model] = await Promise.all([
           tjs.AutoProcessor.from_pretrained(this.baseModelId, {
+            revision: this.settings.revision ?? 'main',
             progress_callback: this.settings.onProgress,
           } as Record<string, unknown>),
           (tjs as Record<string, unknown>).AutoModelForImageTextToText
@@ -130,11 +132,13 @@ export class TransformersGenerativeOCRModel implements OCRModel {
                 .AutoModelForImageTextToText.from_pretrained(this.baseModelId, {
                   dtype,
                   device,
+                  revision: this.settings.revision ?? 'main',
                   progress_callback: this.settings.onProgress,
                 } as Record<string, unknown>)
             : tjs.AutoModelForCausalLM.from_pretrained(this.baseModelId, {
                 dtype,
                 device,
+                revision: this.settings.revision ?? 'main',
                 progress_callback: this.settings.onProgress,
               } as Record<string, unknown>),
         ]);

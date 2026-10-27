@@ -5,6 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createChromeAI, chromeAI } from '../src/provider.js';
+import { ChromeAILanguageDetector } from '../src/implementations/language-detector.js';
 import { ChromeAILanguageModel } from '../src/implementations/language-model.js';
 import { ChromeAISummarizer } from '../src/implementations/summarizer.js';
 import { ChromeAITranslator } from '../src/implementations/translator.js';
@@ -37,11 +38,22 @@ beforeEach(() => {
 });
 
 describe('createChromeAI()', () => {
-  it('returns provider with summarizer, translator, and languageModel methods', () => {
+  it('returns provider with summarizer, translator, languageDetector, and languageModel methods', () => {
     const provider = createChromeAI();
     expect(provider.summarizer).toBeTypeOf('function');
     expect(provider.translator).toBeTypeOf('function');
+    expect(provider.languageDetector).toBeTypeOf('function');
     expect(provider.languageModel).toBeTypeOf('function');
+  });
+
+  it('languageDetector() returns a ChromeAILanguageDetector with its settings', () => {
+    const provider = createChromeAI();
+    const model = provider.languageDetector({ topK: 3, expectedInputLanguages: ['en'] });
+    expect(model).toBeInstanceOf(ChromeAILanguageDetector);
+    expect(model.modelId).toBe('chrome-ai:language-detector');
+    expect(model.provider).toBe('chrome-ai');
+    expect((model as any).settings.topK).toBe(3);
+    expect((model as any).settings.expectedInputLanguages).toEqual(['en']);
   });
 
   it('summarizer() returns a ChromeAISummarizer', () => {
@@ -102,6 +114,8 @@ describe('chromeAI (default instance)', () => {
     const summarizer = chromeAI.summarizer();
     const translator = chromeAI.translator();
     const llm = chromeAI.languageModel();
+    const detector = chromeAI.languageDetector();
+    expect(detector.modelId).toBe('chrome-ai:language-detector');
     expect(summarizer.modelId).toBe('chrome-ai:gemini-nano-summarizer');
     expect(translator.modelId).toBe('chrome-ai:gemini-nano-translator');
     expect(llm.modelId).toBe('chrome-ai:gemini-nano');

@@ -15,6 +15,7 @@ export {
   LEADERBOARD_PROTOCOL_VERSIONS,
   BENCH_SCHEMA_VERSION,
   ACCEPTED_SCHEMA_VERSIONS,
+  TASKS_PROTOCOL_VERSION,
 } from './types.js';
 export type {
   BenchSuiteId,
@@ -66,7 +67,57 @@ export type {
   LlamaCppDeliveryProfile,
   LlamaCppIterationProfile,
   GapStats,
+  TaskKind,
+  TaskPhase,
+  TaskSet,
+  TaskSubset,
+  TaskOrder,
+  TaskItemListRef,
+  TaskSessionRecord,
+  TaskDriverRecord,
+  TaskComponentEntry,
+  TaskComponentsCapture,
+  TaskOnDeviceInternalsCapture,
+  TaskStartEnd,
+  TaskDownloadRecord,
+  TaskCellRecord,
+  TaskDetectCandidate,
+  TaskIteration,
 } from './types.js';
+
+// Task sessions (the chrome-ai-tasks control kind, tasks/1)
+export {
+  TASK_KINDS,
+  TASK_PHASES,
+  TASK_SETS,
+  TASK_SUBSETS,
+  TASK_ORDERS,
+  TASK_RUNTIMES,
+  TASK_ITEM_WATCHDOG_MS,
+  TASK_PRESSURE_GATE_MS,
+  TASK_DETECT_MAX_CANDIDATES,
+  TASK_TEXT_MAX_CHARS,
+  TASK_CAPTURE_MAX_CHARS,
+  TASK_LIST_MAX_ITEMS,
+  taskArmId,
+  taskSystemOrder,
+  taskRuntimeOrder,
+  controlTasksError,
+  taskCellError,
+  taskCellOrderError,
+} from './tasks/protocol.js';
+export { sha256HexSync } from './tasks/sha256.js';
+export { runTaskSession, TaskPreflightError } from './tasks/session.js';
+export type {
+  TaskItem,
+  TaskPlannedCell,
+  TaskItemOutput,
+  LoadedTaskSystem,
+  TaskSystemAdapter,
+  TaskFinalizeCaptures,
+  TaskSessionHooks,
+  TaskSessionOptions,
+} from './tasks/session.js';
 
 // Workloads + run policy
 export {

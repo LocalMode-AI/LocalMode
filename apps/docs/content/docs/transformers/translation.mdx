@@ -35,6 +35,37 @@ Translate text between languages using Helsinki-NLP OPUS-MT models. Each model h
   [Helsinki-NLP on HuggingFace](https://huggingface.co/Helsinki-NLP).
 </Callout>
 
+## Multi-Target Models
+
+Some Opus-MT models translate into several languages or scripts and need a sentence-initial `>>id<<` token naming the target. The translator adds it for the multi-target models it knows: `Xenova/opus-mt-en-zh` gets `>>cmn_Hans<<` (Simplified Mandarin) and `Xenova/opus-mt-en-ar` gets `>>ara<<` (Modern Standard Arabic). The token reaches the model as a single vocabulary id; without it, `en-zh` can return an unrelated sentence for short inputs.
+
+```typescript
+import { transformers } from '@localmode/transformers';
+
+// Default target: '>>cmn_Hans<<'
+const zh = transformers.translator('Xenova/opus-mt-en-zh');
+
+// Another target from the model's vocabulary (Traditional script)
+const zhHant = transformers.translator('Xenova/opus-mt-en-zh', {
+  targetLanguageToken: '>>cmn_Hant<<',
+});
+
+// Send the text unchanged
+const raw = transformers.translator('Xenova/opus-mt-en-zh', { targetLanguageToken: false });
+```
+
+A token written at the start of the text (`'>>yue_Hant<< Hello'`) names the target for that text, and `providerOptions: { transformers: { targetLanguageToken } }` overrides the setting per call. A token that is not in the model's vocabulary throws. The defaults are exported as `OPUS_MT_TARGET_LANGUAGE_TOKENS`, and `resolveTargetLanguageToken(modelId, override?)` returns the token a model will use.
+
+## Pinning a Revision
+
+Pass `revision` (a branch, tag, or commit hash) to fix the model files a load downloads; it defaults to `'main'` and works on every model factory, or on `createTransformers({ revision })` for all of them:
+
+```typescript
+const model = transformers.translator('Xenova/opus-mt-en-zh', {
+  revision: '046f55aec303cdee3e0318604406d4df20f1e8ea',
+});
+```
+
 ## Multi-Language Support
 
 Based on the [Translator block](https://localmode.ai/blocks/writing-tools/translate) — use a different model per language pair:

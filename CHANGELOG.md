@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.21] - 2026-10-28
+
+**Released:** `@localmode/chrome-ai` 2.3.0, `@localmode/core` 2.6.0, `@localmode/transformers` 4.2.0, `@localmode/bench` 0.10.0.
+
+### Added
+
+- **chrome-ai 2.3.0:** `chromeAI.languageDetector()` implements `LanguageDetectionModel` over Chrome's Language Detector API (Chrome 138+ desktop): BCP 47 codes with confidences, `und` dropped, optional `topK`, the same `availability()` gate, 3 s deadline, `allowDownload` opt-in and `chrome-ai-*` error codes as the other models, and an `isLanguageDetectorSupported()` guard; the core peer range moves to `>=2.2.0`.
+- **chrome-ai 2.3.0:** streaming for the Summarizer and the Translator: `doStreamSummarize()` / `doStreamTranslate()` over Chrome's `summarizeStreaming()` / `translateStreaming()`, each chunk stamped with `performance.now()` and a final item with request, first-chunk and end times; `measureInputUsage()`, `getInputQuota()` and `getModelInfo()` (availability at creation, create options as requested and as the session reports them, `inputQuota`, the Chrome build) on both; `getChromeBuildInfo()` reads `brands` and `fullVersionList`. The summarizer takes `outputLanguage`, `expectedInputLanguages` and `expectedContextLanguages` (unset by default; `outputLanguage` silences Chrome's missing-language warning).
+- **core 2.6.0:** `isRetryableError()` returns `false` for a `ValidationError` or an error with `retryable: false`, and `detectLanguage()` rethrows such an error at once instead of retrying with 1 s and 2 s waits; chrome-ai sets `retryable: false` on its not-supported, model-not-available, download-required, permissions-denied and quota-exceeded errors.
+- **core 2.6.0:** `getLanguageName()` resolves script- and region-tagged BCP 47 codes to the base language (`zh-Hans` → `Chinese`).
+- **transformers 4.2.0:** the translator gives multi-target Opus-MT models their sentence-initial target token as one vocabulary id: `Xenova/opus-mt-en-zh` gets `>>cmn_Hans<<` and `Xenova/opus-mt-en-ar` gets `>>ara<<` (both previously ran without one; `en-zh` turned `Hello.` into an unrelated sentence). `targetLanguageToken` (setting or per-call `providerOptions.transformers`) picks another token or turns it off with `false`; a `>>id<<` at the start of the text is honoured the same way, where Transformers.js would otherwise split it into sub-word pieces. Exports `OPUS_MT_TARGET_LANGUAGE_TOKENS` and `resolveTargetLanguageToken()`.
+- **transformers 4.2.0:** `revision` on `createTransformers()` and every model factory pins the Hugging Face branch, tag or commit each load requests (default `'main'`, unchanged).
+- **bench 0.10.0:** export-only control kind `chrome-ai-tasks` with the `tasks/1` sub-protocol: `runTaskSession()` runs one task (summarize, translate, detect-language) over one item list, one item per call, with per-item streaming stamps, availability before/at/after `create()`, `inputQuota`, `measureInputUsage()`, download capture, a per-item watchdog and a finalize handshake that adds captures taken outside the page before the digest; validator rules kept, adapted or skipped for task cells; per-item `inputTruncated`, `inputTokens` and `modelMaxTokens` fields inside the digest, and the `transformers-wasm-current` runtime id for a fallback run through the current-releases bundle; `runBenchmarkSuite` and the submit route refuse the kind.
+- **ui:** unlinked, unindexed `/bench/tasks` page for task sessions: item lists from a local item server, each pinned by a compiled digest; Chrome's Summarizer, Translator and Language Detector against Transformers.js DistilBART-CNN / Opus-MT (q8 or fp32, explicit device, revision pinned by request rewriting and a SHA-256 check of every loaded file) and MediaPipe's detector (CPU delegate, pinned WASM path); `window.__benchTasks` driver contract (`bench-tasks-driver/1`); Export JSON only. Every sample list is pinned (file, file SHA-256, count, item digest; `scripts/pin-task-item-lists.ts`). A Translator pair whose pack `chrome://components` lists is created inside the Run click (Chrome reports an installed pack `downloadable` in a new process until then) and its `create()` span is the cell's load. Fallback items record input truncation. A secondary `transformers-wasm-current` arm runs the same pinned q8 files through the current-releases Transformers.js on WASM. `/bench/run?control=chrome-ai-tasks` and `collect-control-runs.ts` refuse the kind.
+- **tests:** `packages/chrome-ai/tests/streaming.test.ts` runs streaming, abort, quota, model info and `getChromeBuildInfo()` against fake `Summarizer` / `Translator` globals that return real `ReadableStream`s.
+- **tests:** `packages/chrome-ai/tests/language-detector.test.ts` runs the model and `detectLanguage()` against a fake `LanguageDetector` global; `packages/core/tests/language-detection.test.ts` covers the single attempt for a non-retryable error, backoff for others, and BCP 47 name lookup. The real-Chrome path was checked by hand (eight languages, `und` dropped, `topK`, a fresh-profile download; streamed summaries and en to de translations in Chrome 156).
+- **tests:** `packages/transformers/tests/opus-mt-target-token.integration.ts` (in `test:validate`) translates with the real en-zh and en-ar models at pinned revisions, with and without the token; `revision.test.ts` and `translator-target-token.test.ts` cover the load option and token selection; the writing-tools e2e lanes assert the size labels and that only fp32 weights are fetched.
+- **tests:** bench unit tests for the kind, every validator rule, the session runner and the analysis CLI; `scripts/bench-tasks.test.ts`; `e2e/bench/tasks.spec.ts` drives the page in an installed Chrome with built-in AI reachable.
+
+### Fixed
+
+- **chrome-ai 2.3.0:** a `providerOptions.chromeAI.length` override on the summarizer is applied, and the session is recreated only when a creation option changes, not on every call.
+- **transformers 4.2.0:** the catalog size of Granite 4.0 350M is its q4 file set, 580,070,509 bytes (declared ~120MB).
+- **ui:** the writing-tools summarize and translate size labels state the fp32 file sets the Transformers.js fallback loads: DistilBART ~1.13 GB, Opus-MT ~416-517 MB per pair (declared ~120 MB and ~80 MB); gallery badges follow. The blocks stay on fp32: q8 DistilBART and Opus-MT fail to create a WASM session in the browser under Transformers.js 4.2 (`TransposeDQWeightsForMatMulNBits Missing required scale`), while q8 works in Node.
+
+### Documentation
+
+- **chrome-ai:** `onProgress` receives a fraction (`loaded` 0 to 1, `total` 1), not bytes, now stated in the JSDoc and README for all four models.
+- **transformers:** `quantized` defaults to `false` (fp32), as the code always did; the JSDoc, README and docs said `true`.
+
 ## [2.16.20] - 2026-10-23
 
 **Released:** `@localmode/bench` 0.9.14, `@localmode/transformers` 4.1.5, `@localmode/litert` 2.0.4.

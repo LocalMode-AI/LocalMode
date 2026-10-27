@@ -5,7 +5,7 @@
  *
  * WHAT IS REAL vs WHAT IS STUBBED
  * - REAL: the model download (onnx-community/granite-4.0-350m-ONNX-web,
- *   ~120MB from the HuggingFace Hub) and every inference (first reply +
+ *   ~580MB from the HuggingFace Hub) and every inference (first reply +
  *   regenerated variant) run for real in the browser. Nothing at the model
  *   boundary is mocked and no route interception touches model fetches.
  * - FIXTURE GAP: none. The chat block needs no microphone/webcam/hardware,
@@ -428,9 +428,9 @@ test.describe('blocks/chat', () => {
  * - vision lane:           ~900MB ONNX (WASM q8/q8/q4 component mix)
  * - reasoning lane:        ~1.1GB GGUF
  * - custom-URL lane:       ~70MB GGUF re-download (fresh context) + ~8KB metadata
- * - provider-switch lane:  ~70MB GGUF + ~120MB Granite (switch-back is cached in-context)
+ * - provider-switch lane:  ~70MB GGUF + ~580MB Granite (switch-back is cached in-context)
  * - bundle isolation:      ~8KB metadata only
- * ≈ 2.6GB total without WebGPU, ≈ 2.7GB with (plus the `blocks/chat` describe's ~120MB Granite).
+ * ≈ 2.6GB total without WebGPU, ≈ 2.7GB with (plus the `blocks/chat` describe's ~580MB Granite).
  *
  * HARDWARE-GATED BRANCHES: WebGPU is probed at runtime with the SAME adapter
  * probe the block and the capability-gate primitive use (requestAdapter() —
@@ -499,7 +499,7 @@ const REASONING_MODEL = {
   key: 'wllama:DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M',
 } as const;
 
-/** provider-switch lane's second model (the Granite model the `blocks/chat` describe loads, ~120MB). */
+/** provider-switch lane's second model (the Granite model the `blocks/chat` describe loads, ~580MB). */
 const GRANITE = {
   rowText: 'Granite 4.0 350M (ONNX)',
   key: 'transformers:onnx-community/granite-4.0-350m-ONNX-web',
@@ -1392,7 +1392,7 @@ test.describe('blocks/chat extended lanes (6.3–6.12)', () => {
   });
 
   test('provider switch hygiene: wllama → transformers → back to wllama, conversation clears, zero console errors (6.11)', async ({ page }, testInfo) => {
-    // ~70MB + ~120MB cold; the switch-back wllama load is served from THIS
+    // ~70MB + ~580MB cold; the switch-back wllama load is served from THIS
     // context's provider cache (same page session), exercising the
     // dispose-on-switch + registry singleton re-init path. Teardown itself has
     // no DOM witness — its observable contract is: conversation cleared, the

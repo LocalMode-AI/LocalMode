@@ -4,7 +4,14 @@
  * @packageDocumentation
  */
 
-import type { AISummarizerFactory, AITranslatorFactory, ChromeAIAvailability } from './types.js';
+import type {
+  AILanguageDetectorFactory,
+  AISummarizerFactory,
+  AITranslatorFactory,
+  ChromeAIAvailability,
+  ChromeBrandVersion,
+  ChromeBuildInfo,
+} from './types.js';
 
 /**
  * Default deadline for a Chrome `availability()` probe.
@@ -52,6 +59,7 @@ interface LegacyAINamespace {
   summarizer?: unknown;
   translator?: unknown;
   languageModel?: unknown;
+  languageDetector?: unknown;
 }
 
 function legacyAI(): LegacyAINamespace | undefined {
@@ -62,13 +70,19 @@ function legacyAI(): LegacyAINamespace | undefined {
 /**
  * Check if any Chrome Built-in AI API is supported.
  *
- * Returns true when at least one of the Summarizer, Translator, or Prompt APIs is
+ * Returns true when at least one of the Summarizer, Translator, Language Detector, or
+ * Prompt APIs is
  * present, on either the modern top-level globals or the legacy `self.ai` namespace.
  *
  * @returns true if Chrome AI APIs are available
  */
 export function isChromeAISupported(): boolean {
-  return isSummarizerAPISupported() || isTranslatorAPISupported() || isPromptAPISupported();
+  return (
+    isSummarizerAPISupported() ||
+    isTranslatorAPISupported() ||
+    isLanguageDetectorSupported() ||
+    isPromptAPISupported()
+  );
 }
 
 /**
@@ -97,6 +111,33 @@ export function isTranslatorAPISupported(): boolean {
   if (typeof self === 'undefined') return false;
   if ('Translator' in self) return true;
   return Boolean(legacyAI()?.translator);
+}
+
+/**
+ * Check if Chrome AI Language Detector API (`self.LanguageDetector`) is supported.
+ *
+ * Reads the modern `self.LanguageDetector` global (Chrome 138+ on desktop), falling back
+ * to the legacy `self.ai.languageDetector` surface. Synchronous and never throws: in
+ * non-Chromium browsers, Web Workers (the API is window-only) and Node-like
+ * environments it returns `false`.
+ *
+ * @returns true if the Language Detector API is present
+ *
+ * @example
+ * ```ts
+ * import { isLanguageDetectorSupported } from '@localmode/chrome-ai';
+ *
+ * if (isLanguageDetectorSupported()) {
+ *   // Safe to call chromeAI.languageDetector()
+ * }
+ * ```
+ *
+ * @see https://developer.chrome.com/docs/ai/language-detection
+ */
+export function isLanguageDetectorSupported(): boolean {
+  if (typeof self === 'undefined') return false;
+  if ('LanguageDetector' in self) return true;
+  return Boolean(legacyAI()?.languageDetector);
 }
 
 /**
@@ -155,6 +196,17 @@ export function getTranslatorFactory(): AITranslatorFactory | null {
 }
 
 /**
+ * Resolve the Language Detector factory from the modern global or the legacy namespace.
+ * @internal
+ */
+export function getLanguageDetectorFactory(): AILanguageDetectorFactory | null {
+  if (typeof self === 'undefined') return null;
+  const top = (self as unknown as { LanguageDetector?: AILanguageDetectorFactory }).LanguageDetector;
+  if (top) return top;
+  return (legacyAI()?.languageDetector as AILanguageDetectorFactory | undefined) ?? null;
+}
+
+/**
  * Estimate token count from text.
  *
  * Uses a rough heuristic of ~0.75 words per token.
@@ -165,4 +217,117 @@ export function getTranslatorFactory(): AITranslatorFactory | null {
 export function estimateTokens(text: string): number {
   const words = text.trim().split(/\s+/).filter(Boolean).length;
   return Math.ceil(words / 0.75);
+}
+
+/**
+ * Read what the page can see about the running Chrome build.
+ *
+ * Returns `navigator.userAgent`, the low-entropy `navigator.userAgentData.brands` and
+ * `platform`, and the `fullVersionList`, `platformVersion` and `architecture` hints from
+ * `getHighEntropyValues()`. Fields the browser does not expose are `null` (Firefox and
+ * Safari have no `userAgentData`). Never throws.
+ *
+ * Chrome does not expose the version of its on-device models to web pages; read that
+ * from `chrome://components` or `chrome://on-device-internals` outside the page.
+ *
+ * @returns The Chrome build info
+ *
+ * @example
+ * ```ts
+ * import { getChromeBuildInfo } from '@localmode/chrome-ai';
+ *
+ * const { fullVersionList } = await getChromeBuildInfo();
+ * // [{ brand: 'Google Chrome', version: '156.0.8078.48' }, ...]
+ * ```
+ */
+export async function getChromeBuildInfo(): Promise<ChromeBuildInfo> {
+  const info: ChromeBuildInfo = {
+    userAgent: null,
+    brands: null,
+    fullVersionList: null,
+    platform: null,
+    platformVersion: null,
+    architecture: null,
+  };
+  if (typeof navigator === 'undefined') return info;
+  info.userAgent = typeof navigator.userAgent === 'string' ? navigator.userAgent : null;
+
+  const uaData = (navigator as unknown as {
+    userAgentData?: {
+      brands?: ChromeBrandVersion[];
+      platform?: string;
+      getHighEntropyValues?: (hints: string[]) => Promise<Record<string, unknown>>;
+    };
+  }).userAgentData;
+  if (!uaData) return info;
+
+  info.brands = Array.isArray(uaData.brands) ? uaData.brands.map((b) => ({ ...b })) : null;
+  info.platform = typeof uaData.platform === 'string' ? uaData.platform : null;
+
+  if (typeof uaData.getHighEntropyValues === 'function') {
+    try {
+      const high = await uaData.getHighEntropyValues([
+        'fullVersionList',
+        'platformVersion',
+        'architecture',
+      ]);
+      const list = high.fullVersionList;
+      if (Array.isArray(list)) {
+        info.fullVersionList = (list as ChromeBrandVersion[]).map((b) => ({ ...b }));
+      }
+      if (typeof high.platformVersion === 'string') info.platformVersion = high.platformVersion;
+      if (typeof high.architecture === 'string') info.architecture = high.architecture;
+    } catch {
+      // High-entropy hints can be refused; the low-entropy fields stay.
+    }
+  }
+  return info;
+}
+
+/**
+ * Read a `ReadableStream<string>` chunk by chunk, stamping each with `performance.now()`
+ * as it arrives. Empty chunks are skipped. The reader is cancelled and released when
+ * the consumer stops early or the stream errors.
+ * @internal
+ */
+export async function* readTimedTextStream(
+  stream: ReadableStream<string>,
+): AsyncGenerator<{ text: string; timestamp: number }> {
+  const reader = stream.getReader();
+  let finished = false;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      const timestamp = performance.now();
+      if (done) {
+        finished = true;
+        return;
+      }
+      if (typeof value === 'string' && value.length > 0) {
+        yield { text: value, timestamp };
+      }
+    }
+  } finally {
+    if (!finished) {
+      try {
+        await reader.cancel();
+      } catch {
+        // An errored stream rejects cancel(); the original error is already propagating.
+      }
+    }
+    reader.releaseLock();
+  }
+}
+
+/**
+ * Normalize a thrown value to an `Error`-shaped cause, keeping DOMExceptions (which are
+ * not `instanceof Error` in every realm) as they are.
+ * @internal
+ */
+export function toErrorCause(err: unknown): Error {
+  if (err instanceof Error) return err;
+  if (err && typeof err === 'object' && typeof (err as { name?: unknown }).name === 'string') {
+    return err as Error;
+  }
+  return new Error(String(err));
 }

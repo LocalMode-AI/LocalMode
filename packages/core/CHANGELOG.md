@@ -1,5 +1,13 @@
 # @localmode/core
 
+## 2.6.0
+
+### Minor Changes
+
+- **`isRetryableError(error)`** reports whether a failure is worth retrying: `false` for a `ValidationError` and for any error carrying `retryable: false`, `true` otherwise.
+- **`detectLanguage()` rethrows a non-retryable error at once** instead of retrying it with 1 s and 2 s waits. A provider marks such an error with `retryable: false` (`@localmode/chrome-ai` does for a missing API, an unavailable model, a required download, a refused permission and an input over the quota).
+- **`getLanguageName()` resolves BCP 47 tags with script or region subtags** to the base language (`'zh-Hans'` → `'Chinese'`, `'pt-BR'` → `'Portuguese'`), matching the primary subtag case-insensitively, and no longer returns an `Object.prototype` member for a code like `'constructor'`.
+
 ## 2.5.0
 
 ### Minor Changes

@@ -56,8 +56,8 @@ const NON_ENGLISH_CODES = LANGUAGES.filter((l) => l.code !== 'en').map((l) => l.
 /** Total directed pairs: 12 non-English languages × 2 directions = 24. */
 const DIRECTED_PAIR_COUNT = NON_ENGLISH_CODES.length * 2;
 
-/** Human-readable model-size hint for the Opus-MT fallback models. */
-const OPUS_MT_SIZE = '~80 MB per pair';
+/** Model-size hint for the Opus-MT fallback models (fp32: 416.1 to 516.8 MB per pair). */
+const OPUS_MT_SIZE = '~416-517 MB per pair (fp32)';
 
 /** Resolve the verified Opus-MT model id for an English-centric directed pair. */
 function opusMtModelId(source: string, target: string): string {

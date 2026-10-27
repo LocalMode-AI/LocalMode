@@ -328,12 +328,12 @@ export const TRANSFORMERS_LLM_MODELS: Record<
   // Tiny (<500MB)
   // ---------------------------------------------------------------------------
 
-  /** Granite 4.0 350M — IBM's ultra-compact multilingual model, 12 languages (~120MB) */
+  /** Granite 4.0 350M — IBM's ultra-compact multilingual model, 12 languages (~580MB) */
   'onnx-community/granite-4.0-350m-ONNX-web': {
     name: 'Granite 4.0 350M (ONNX)',
     contextLength: 4096,
-    size: '~120MB',
-    sizeBytes: 120 * 1024 * 1024,
+    size: '~580MB',
+    sizeBytes: 580_070_509, // q4 file set (verified on HF)
     description:
       'IBM Granite 4.0 350M — ultra-compact, 12 languages, 4K context. Fastest download.',
   },

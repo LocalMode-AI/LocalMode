@@ -128,9 +128,25 @@ export const SUPPORTED_LANGUAGES: Readonly<Record<string, string>> = {
 /**
  * Get the human-readable name for an ISO 639-1 language code.
  *
- * @param code - ISO 639-1 language code (e.g., 'fr')
+ * Accepts BCP 47 tags with script or region subtags (`'zh-Hans'`, `'sr-Latn'`,
+ * `'pt-BR'`) and resolves them to the base language's name. The primary subtag is
+ * matched case-insensitively.
+ *
+ * @param code - ISO 639-1 language code or BCP 47 tag (e.g., 'fr', 'zh-Hans')
  * @returns The language name, or the code itself if not recognized
+ *
+ * @example
+ * ```ts
+ * getLanguageName('zh-Hans'); // 'Chinese'
+ * getLanguageName('xx');      // 'xx'
+ * ```
  */
 export function getLanguageName(code: string): string {
-  return SUPPORTED_LANGUAGES[code] ?? code;
+  if (Object.prototype.hasOwnProperty.call(SUPPORTED_LANGUAGES, code)) {
+    return SUPPORTED_LANGUAGES[code];
+  }
+  const primary = code.split('-')[0].toLowerCase();
+  return Object.prototype.hasOwnProperty.call(SUPPORTED_LANGUAGES, primary)
+    ? SUPPORTED_LANGUAGES[primary]
+    : code;
 }

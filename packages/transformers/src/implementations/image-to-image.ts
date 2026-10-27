@@ -34,6 +34,7 @@ export class TransformersImageToImageModel implements ImageToImageModel {
     private baseModelId: string,
     private settings: {
       device?: TransformersDevice;
+      revision?: string;
       quantized?: boolean;
       taskType?: 'upscale' | 'style-transfer' | 'inpainting' | 'outpainting' | 'super-resolution';
       onProgress?: (progress: ModelLoadProgress) => void;
@@ -63,6 +64,7 @@ export class TransformersImageToImageModel implements ImageToImageModel {
         device: this.settings.device ?? 'auto',
         // Image-to-image models (super-resolution) rarely have quantized variants — default to fp32
         dtype: this.settings.quantized === true ? 'q8' : 'fp32',
+        revision: this.settings.revision ?? 'main',
         progress_callback: this.settings.onProgress,
       });
 

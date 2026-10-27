@@ -40,7 +40,13 @@ export type BenchRuntimeId =
   | 'wllama-webgpu'
   | 'litert'
   | 'chrome-ai'
-  | 'mediapipe';
+  | 'mediapipe'
+  /**
+   * Task sessions only (since bench 0.10.0): Transformers.js on the WASM
+   * device loaded from the host's current-releases bundle, a secondary
+   * fallback lane beside `transformers-wasm`. Never in a suite run.
+   */
+  | 'transformers-wasm-current';
 
 /** Workload kinds. Quality lanes are separate from timed performance lanes. */
 export type BenchWorkloadKind =
@@ -48,7 +54,11 @@ export type BenchWorkloadKind =
   | 'embed-single'
   | 'embed-batch'
   | 'quality-mmlu'
-  | 'quality-sts';
+  | 'quality-sts'
+  /** Task API workloads of a `chrome-ai-tasks` control run (since bench 0.10.0): one item per call. */
+  | 'summarize'
+  | 'translate'
+  | 'detect-language';
 
 /** A fixed LLM generation workload (public prompt, deterministic settings). */
 export interface LLMWorkloadSpec {
@@ -97,8 +107,8 @@ export interface BenchModelRef {
   /** The provider-native model id passed to the runtime. */
   providerModelId: string;
   displayName: string;
-  /** "llm" or "embedding". */
-  task: 'llm' | 'embedding';
+  /** "llm", "embedding", or "task" (a task API system of a `chrome-ai-tasks` control run, since bench 0.10.0). */
+  task: 'llm' | 'embedding' | 'task';
   parameterCount?: string;
   quantization?: string;
   sizeBytes?: number;
@@ -246,6 +256,13 @@ export interface BenchCellResult {
    * Aggregated and bounded in size; absent on every other run and cell.
    */
   profile?: BenchCellProfile;
+  /**
+   * Task API record of a cell of a `chrome-ai-tasks` control run (since bench
+   * 0.10.0): the API, its availability around `create()`, `inputQuota` and the
+   * download capture. Required on every cell of that kind and refused on any
+   * other run. The cell's `iterations` are `TaskIteration`s, one per item.
+   */
+  task?: TaskCellRecord;
   /** Error that ended the cell; `cause` carries the wrapped provider error's message when present. */
   error?: {
     name: string;
@@ -289,6 +306,13 @@ export interface TraceEvent {
     | 'cell-retry'
     | 'iteration-redo'
     | 'profile-error'
+    /** Window focus lost / regained (recorded on `chrome-ai-tasks` runs only, since bench 0.10.0). */
+    | 'focus-lost'
+    | 'focus-gained'
+    /** An item of a task cell failed (detail: `<cellId> <itemId>: <error name>`; since bench 0.10.0). */
+    | 'item-error'
+    /** The preflight of a task session (detail: `ok` or `failed: <reason>`; since bench 0.10.0). */
+    | 'preflight'
     | 'abort';
   detail?: string;
 }
@@ -661,6 +685,16 @@ export interface CellSummary {
   qualityScore?: number;
   /** Fraction of MMLU items whose answer parsed; a low value marks a format failure, not a fidelity one. */
   qualityParseRate?: number;
+  /**
+   * Task cells (since bench 0.10.0): first output (first non-empty chunk minus
+   * `startT`) over the items whose stream was incremental, and item total
+   * (`endT - startT`) over every item that did not fail. The process-cold item
+   * (index 0 of a `processCold` session) is left out of both.
+   */
+  firstOutputMs?: MetricSummary;
+  itemTotalMs?: MetricSummary;
+  /** Task cells: items that failed (an error, or an empty output). */
+  itemsFailed?: number;
   highVariance: boolean;
 }
 
@@ -739,7 +773,8 @@ export type ControlKind =
   | 'wllama-compat'
   | 'current-releases'
   | 'ort-profile'
-  | 'llamacpp-profile';
+  | 'llamacpp-profile'
+  | 'chrome-ai-tasks';
 
 /**
  * Control-run marker recorded on `harness.control`.
@@ -815,6 +850,16 @@ export type ControlKind =
  *   provider hands the chunk to the runner. Each llama.cpp generation cell
  *   carries `profile` (see `LlamaCppDeliveryProfile`).
  *
+ * - `chrome-ai-tasks` (since bench 0.10.0): not a suite run. A session runs
+ *   the task API systems of one task (`summarize`, `translate` or
+ *   `detect-language`) over one item list, one item per call: Chrome's
+ *   built-in Summarizer, Translator or Language Detector, and on-device
+ *   fallbacks (Transformers.js, MediaPipe). `runtimeOrder` lists the distinct
+ *   runtimes of `tasks.systemOrder` in executed order, and `tasks` (see
+ *   `TaskSessionRecord`) records the session. Produced by `runTaskSession`
+ *   only; `runBenchmarkSuite` refuses the kind. Never filed in the results
+ *   dataset.
+ *
  * The three WASM-lane kinds form a factorial over the two settings
  * `wasm-default` changes: `fixed-order` (neither), `wasm-q8` (dtype only),
  * `wasm-threads` (threads only), `wasm-default` (both).
@@ -842,6 +887,11 @@ export interface HarnessControl {
    * on it.
    */
   runtimeVersions?: Record<string, string>;
+  /**
+   * The task session a `chrome-ai-tasks` control run (since bench 0.10.0)
+   * recorded (see `TaskSessionRecord`). Present on that kind, and only on it.
+   */
+  tasks?: TaskSessionRecord;
 }
 
 /**
@@ -1097,4 +1147,183 @@ export interface GapStats {
   mean: number;
   /** Counts per `binEdgesMs` bin (same length as the edges). */
   histogram: number[];
+}
+
+/** Identifier of the task sub-protocol a `chrome-ai-tasks` control run records (`harness.control.tasks.protocol`). */
+export const TASKS_PROTOCOL_VERSION = 'tasks/1';
+
+/** The task of a `chrome-ai-tasks` session; also the workload kind of its cells. */
+export type TaskKind = 'summarize' | 'translate' | 'detect-language';
+
+/** What a task session measures: model download, output quality, latency, or a pilot. */
+export type TaskPhase = 'download' | 'quality' | 'latency' | 'pilot';
+
+/** The item set a task session draws from. */
+export type TaskSet = 'cnndm-test' | 'cnndm-reserve' | 'xsum-test' | 'flores-devtest' | 'wili-test';
+
+/** The item subset of a task session: the full set, a named subset, or a pilot list. */
+export type TaskSubset = 'full' | 'S' | 'R' | 'L' | 'pilot';
+
+/** System order of a task session: the task's fixed order, or its exact reverse. */
+export type TaskOrder = 'fixed' | 'reversed';
+
+/** The item list a session ran: its id, item count and digest (SHA-256 over `<id>\t<text sha256>\n` per item). */
+export interface TaskItemListRef {
+  id: string;
+  count: number;
+  sha256: string;
+}
+
+/**
+ * The task session a `chrome-ai-tasks` control run recorded on
+ * `harness.control.tasks` (since bench 0.10.0).
+ */
+export interface TaskSessionRecord {
+  /** Always `TASKS_PROTOCOL_VERSION`; any change to options, item lists or rules bumps it. */
+  protocol: typeof TASKS_PROTOCOL_VERSION;
+  phase: TaskPhase;
+  task: TaskKind;
+  set: TaskSet;
+  subset: TaskSubset;
+  itemList: TaskItemListRef;
+  /** 1-based index of the session in its block. */
+  sessionIndex: number;
+  order: TaskOrder;
+  /**
+   * The systems in executed order, as arm ids `<runtimeId>/<systemId>` (a
+   * system can run on two lanes). `fixed` is built-in systems first, then the
+   * fallbacks by lane (`RUNTIME_EXECUTION_ORDER`) and dtype (q8, fp16, fp32);
+   * `reversed` is the exact reverse.
+   */
+  systemOrder: string[];
+  /** Chrome was launched for this session, so item 0 of each cell is process-cold. */
+  processCold: boolean;
+  /** Repeat number of an R session (1-based); absent on other subsets. */
+  repeat?: number;
+  /** What the driver captured outside the page, injected before the digest (absent on a session run by hand). */
+  driver?: TaskDriverRecord;
+}
+
+/** One `chrome://components` entry as the driver parsed it. */
+export interface TaskComponentEntry {
+  name: string;
+  id: string;
+  version: string;
+  status: string;
+}
+
+/** A `chrome://components` capture: the page text and the parsed entries. */
+export interface TaskComponentsCapture {
+  text: string;
+  parsed: TaskComponentEntry[];
+}
+
+/** A `chrome://on-device-internals` capture: the page text and what the driver parsed from it. */
+export interface TaskOnDeviceInternalsCapture {
+  text: string;
+  performanceClass?: string;
+  criteria?: Record<string, string>;
+  assets?: Array<{ name: string; version?: string; state?: string }>;
+}
+
+/** A value captured at session start and, through the finalize handshake, at its end. */
+export interface TaskStartEnd<T> {
+  start: T;
+  end?: T;
+}
+
+/**
+ * Captures the driver supplies (`harness.control.tasks.driver`): how Chrome
+ * was launched and what the browser's internal pages, the disk and the
+ * profile folders read at session start and end. The start captures are
+ * injected before the session starts; the end captures arrive through the
+ * finalize handshake; both are inside the digest.
+ */
+export interface TaskDriverRecord {
+  driverVersion: string;
+  launch: {
+    executablePath: string;
+    args: string[];
+    ignoredDefaultArgs: string[];
+    /** The browser process command line as `chrome://version` shows it. */
+    commandLine: string;
+  };
+  /** Identifier of the persistent profile (never a path that names a person). */
+  profileId: string;
+  /** `chrome://version` page text. */
+  chromeVersionText: string;
+  components: TaskStartEnd<TaskComponentsCapture>;
+  onDeviceInternals: TaskStartEnd<TaskOnDeviceInternalsCapture>;
+  freeDiskBytes: TaskStartEnd<number>;
+  /** Bytes per top-level profile folder. */
+  profileFolderBytes: TaskStartEnd<Record<string, number>>;
+}
+
+/** The download a cell's `create()` or model load triggered (`TaskCellRecord.download`). */
+export interface TaskDownloadRecord {
+  /** `downloadprogress` events as reported (`t` page-relative ms; Chrome reports fractions, `total` 1). */
+  events: Array<{ t: number; loaded: number; total: number }>;
+  /** Wall time from the user activation that started the download to `available`, ms. */
+  wallMs: number;
+  /** Profile folder bytes after minus before, from the driver's captures. */
+  profileBytesDelta?: number;
+}
+
+/** Task API record of one cell (`BenchCellResult.task`). */
+export interface TaskCellRecord {
+  /** The API or pipeline the cell called (`Summarizer`, `Translator`, `LanguageDetector`, `transformers.js summarization`, ...). */
+  api: string;
+  /** `availability()` before the session touched the API, at `create()`, and after the cell's last item (built-in APIs). */
+  availabilityBefore?: string;
+  availabilityAtCreate?: string;
+  availabilityAfter?: string;
+  /** The session's `inputQuota` (built-in APIs; `null` where not exposed). */
+  inputQuota?: number | null;
+  download?: TaskDownloadRecord;
+}
+
+/** One candidate of a language detection item, as the detector returned it. */
+export interface TaskDetectCandidate {
+  language: string;
+  confidence: number;
+}
+
+/**
+ * One item of a task cell: the item's trace as an `LLMIteration` (so the
+ * monotonicity and chunk-sum checks apply) plus the item's identity and
+ * output record. `text` is the output (the top-1 label on a detect cell);
+ * chunks are deltas: a non-streaming item records one chunk `{ t: endT, c:
+ * text.length }` with `chunkMode: 'none'`, and a cumulative stream is
+ * converted to deltas and marked `cumulative-converted`.
+ */
+export interface TaskIteration extends LLMIteration {
+  itemId: string;
+  /** 0-based position of the item in the cell; 0 is the process-cold item when the session is `processCold`. */
+  index: number;
+  chunkMode: 'delta' | 'cumulative-converted' | 'none';
+  /** SHA-256 hex of `text`. */
+  outputSha256: string;
+  /** Characters (UTF-16 code units) of the input text. */
+  inputChars: number;
+  /** `measureInputUsage()` (Chrome quota units) or the fallback's token count, when known. */
+  inputUsage?: { value: number; unit: 'chrome-quota' | 'tokens' };
+  /** SHA-256 hex of the input text. */
+  sourceSha256: string;
+  /** The input text (translation cells only). */
+  source?: string;
+  /** The detector's candidates (detect cells only; `und` kept; at most `TASK_DETECT_MAX_CANDIDATES`). */
+  detect?: TaskDetectCandidate[];
+  /** Target-language token prepended to a multi-target translation model's input (e.g. `>>cmn_Hans<<`). */
+  targetToken?: string;
+  /** Why the item failed (an exception or a watchdog timeout); `text` is empty then. */
+  error?: { name: string; message: string; cause?: string };
+  /**
+   * Input truncation of a fallback model (all three set together): the
+   * input's token count, the model's maximum input length, and whether the
+   * input was longer (the pipeline then cut it). Null on a built-in or
+   * MediaPipe item, which exposes no tokenizer.
+   */
+  inputTruncated?: boolean | null;
+  inputTokens?: number | null;
+  modelMaxTokens?: number | null;
 }

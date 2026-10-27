@@ -48,7 +48,7 @@ import { createTransformers } from '@localmode/transformers';
 
 const myTransformers = createTransformers({
   device: 'webgpu',  // Use WebGPU for faster inference
-  quantized: true,    // Use quantized models (default)
+  quantized: true,    // Load q8 weights (default: false, which loads fp32)
   onProgress: (p) => console.log(`Loading: ${p.progress}%`),
 });
 
@@ -60,7 +60,7 @@ const model = myTransformers.multimodalEmbedding('Xenova/clip-vit-base-patch32')
 ```ts
 const model = transformers.multimodalEmbedding('Xenova/clip-vit-base-patch32', {
   device: 'wasm',     // Override device for this model
-  quantized: false,    // Use full-precision weights
+  quantized: false,    // Load fp32 weights (the default)
   onProgress: (p) => updateUI(p),
 });
 ```

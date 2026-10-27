@@ -292,6 +292,7 @@ export class TransformersLanguageModel implements LanguageModel {
     const pipe = await pipeline('text-generation', this.baseModelId, {
       device,
       dtype: this.settings.dtype ?? 'q4',
+      revision: this.settings.revision ?? 'main',
       progress_callback: this.settings.onProgress,
       ...this.sessionOptionsSetting(),
     } as Record<string, unknown>);
@@ -331,6 +332,7 @@ export class TransformersLanguageModel implements LanguageModel {
     const modelOpts = {
       dtype,
       device,
+      revision: this.settings.revision ?? 'main',
       progress_callback: this.settings.onProgress,
       ...this.sessionOptionsSetting(),
     } as Record<string, unknown>;
@@ -350,9 +352,11 @@ export class TransformersLanguageModel implements LanguageModel {
 
     const [tokenizer, processor, model] = await Promise.all([
       tjs.AutoTokenizer.from_pretrained(this.baseModelId, {
+        revision: this.settings.revision ?? 'main',
         progress_callback: this.settings.onProgress,
       } as Record<string, unknown>),
       tjs.AutoProcessor.from_pretrained(this.baseModelId, {
+        revision: this.settings.revision ?? 'main',
         progress_callback: this.settings.onProgress,
       } as Record<string, unknown>),
       loadModel,
@@ -384,24 +388,28 @@ export class TransformersLanguageModel implements LanguageModel {
           .AutoModelForImageTextToText.from_pretrained(this.baseModelId, {
             dtype,
             device,
+            revision: this.settings.revision ?? 'main',
             progress_callback: this.settings.onProgress,
             ...this.sessionOptionsSetting(),
           } as Record<string, unknown>)
       : tjs.AutoModelForCausalLM.from_pretrained(this.baseModelId, {
             dtype,
             device,
+            revision: this.settings.revision ?? 'main',
             progress_callback: this.settings.onProgress,
             ...this.sessionOptionsSetting(),
           } as Record<string, unknown>);
 
     const [processor, model] = await Promise.all([
       tjs.AutoProcessor.from_pretrained(this.baseModelId, {
+        revision: this.settings.revision ?? 'main',
         progress_callback: this.settings.onProgress,
       } as Record<string, unknown>),
       modelLoader,
     ]);
 
     const tokenizer = await tjs.AutoTokenizer.from_pretrained(this.baseModelId, {
+      revision: this.settings.revision ?? 'main',
       progress_callback: this.settings.onProgress,
     } as Record<string, unknown>);
 

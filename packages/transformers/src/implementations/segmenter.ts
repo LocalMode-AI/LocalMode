@@ -35,6 +35,7 @@ export class TransformersSegmentationModel implements SegmentationModel {
     private baseModelId: string,
     private settings: {
       device?: TransformersDevice;
+      revision?: string;
       quantized?: boolean;
       segmentationType?: 'semantic' | 'instance' | 'panoptic';
       onProgress?: (progress: ModelLoadProgress) => void;
@@ -65,6 +66,7 @@ export class TransformersSegmentationModel implements SegmentationModel {
       const pipe = await pipeline('image-segmentation', this.baseModelId, {
         device: this.settings.device ?? 'auto',
         dtype: this.settings.quantized === true ? 'q8' : 'fp32',
+        revision: this.settings.revision ?? 'main',
         progress_callback: this.settings.onProgress,
       });
 

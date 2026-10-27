@@ -39,6 +39,7 @@ export class TransformersTextToSpeechModel implements TextToSpeechModel {
     private baseModelId: string,
     private settings: {
       device?: TransformersDevice;
+      revision?: string;
       quantized?: boolean;
       sampleRate?: number;
       onProgress?: (progress: ModelLoadProgress) => void;
@@ -77,6 +78,7 @@ export class TransformersTextToSpeechModel implements TextToSpeechModel {
       const pipe = await pipeline('text-to-speech', this.baseModelId, {
         device,
         dtype,
+        revision: this.settings.revision ?? 'main',
         progress_callback: this.settings.onProgress,
       });
 
@@ -146,6 +148,7 @@ export class TransformersTextToSpeechModel implements TextToSpeechModel {
       device: this.settings.device ?? 'wasm',
       abortSignal,
       onProgress: this.settings.onProgress,
+      revision: this.settings.revision,
     });
 
     const wavBlob = this.floatToWav(result.audio, result.sampleRate);

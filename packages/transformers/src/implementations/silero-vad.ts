@@ -105,6 +105,7 @@ export class TransformersSileroVAD implements VADProvider {
     const device: TransformersDevice = this.settings.device ?? 'wasm';
     const session = await AutoModel.from_pretrained(this.baseModelId, {
       device,
+      revision: this.settings.revision ?? 'main',
       progress_callback: this.settings.onProgress as ((progress: ModelLoadProgress) => void) | undefined,
       // silero is small (~1.8MB); keep at default precision.
     });

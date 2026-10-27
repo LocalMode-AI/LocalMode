@@ -102,7 +102,40 @@ const model = chromeAI.translator({
 
 `ChromeAITranslator` throws a typed `TranslationError` from `@localmode/core` when
 `self.Translator` is absent, when Chrome reports the pair `unavailable`, or when the pack
-needs downloading and `allowDownload` was not set.
+needs downloading and `allowDownload` was not set. Streaming and quota calls add the codes
+`chrome-ai-streaming-not-supported` and `chrome-ai-measure-not-supported` (`retryable: false`)
+and `chrome-ai-translation-failed` (Chrome's error as `cause`).
+
+## Streaming
+
+`doStreamTranslate()` streams one translation through Chrome's `translateStreaming()`, each
+chunk stamped with `performance.now()`; the last item carries `timing` (`requestedAt`,
+`firstChunkAt`, `endedAt`, `chunkCount`, `chars`) and `usage`.
+
+```ts
+const model = chromeAI.translator({ sourceLanguage: 'en', targetLanguage: 'de' });
+
+for await (const chunk of model.doStreamTranslate({ text: 'Good morning, everyone.' })) {
+  if (!chunk.done) output.textContent += chunk.text;
+}
+```
+
+## Input Quota and Model Info
+
+Per language pair (default: the settings pair):
+
+```ts
+const pair = { sourceLanguage: 'en', targetLanguage: 'de' };
+await model.getInputQuota(pair);              // number, or null if not exposed
+await model.measureInputUsage('Hello', pair); // Chrome's own count
+await model.getModelInfo(pair);
+// { api: 'Translator', availabilityAtCreate, requestedOptions, sessionOptions,
+//   inputQuota, modelVersion: null, browser }
+```
+
+Chrome 156 reports `inputQuota` as `Infinity` and `measureInputUsage()` as `0` for the Translator.
+Chrome exposes no language-pack version to the page (`modelVersion` is `null`); read it from
+`chrome://components` outside the page.
 
 ## Session Caching
 

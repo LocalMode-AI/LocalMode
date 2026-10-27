@@ -14,12 +14,12 @@ On-device AI inference via Chrome's built-in Gemini Nano model. Your application
 - Your app ships no model files — Chrome supplies the model and downloads it once, browser-wide, on first use (opt in with `allowDownload`, track it with `onProgress`)
 - Zero bundle size impact — browser-native APIs
 - No per-call model loading once the on-device model is available
-- Implements `SummarizationModel`, `TranslationModel`, and `LanguageModel` from `@localmode/core`
+- Implements `SummarizationModel`, `TranslationModel`, `LanguageDetectionModel`, and `LanguageModel` from `@localmode/core`
 - Automatic fallback support — pair with `@localmode/transformers`, `@localmode/webllm`, `@localmode/wllama`, or `@localmode/litert` for non-Chrome browsers
 
 ## Requirements
 
-- **Summarizer & Translator APIs: Chrome 138+** on desktop (Windows 10+, macOS 13+, Linux, or ChromeOS on Chromebook Plus)
+- **Summarizer, Translator & Language Detector APIs: Chrome 138+** on desktop (Windows 10+, macOS 13+, Linux, or ChromeOS on Chromebook Plus)
 - **Prompt API (`languageModel()`): Chrome 148+** on desktop — Chrome 138 shipped the Prompt API for *extensions* only; it reached web pages in 148
 - **22 GB free disk space** on the volume containing your Chrome profile (for the Gemini Nano model)
 - **Hardware**: GPU with >4 GB VRAM, or CPU with 16 GB+ RAM and 4+ cores
@@ -35,6 +35,7 @@ Verify in the DevTools console:
 
 ```ts
 'Summarizer' in self;      // Summarizer  — Chrome 138+
+'LanguageDetector' in self; // Language Detector — Chrome 138+
 'LanguageModel' in self;   // Prompt API  — Chrome 148+
 
 // 'available' | 'downloadable' | 'downloading' | 'unavailable'
@@ -54,7 +55,7 @@ pnpm add @localmode/chrome-ai @localmode/core
 ## Quick Start
 
 ```typescript
-import { generateText, summarize, translate } from '@localmode/core';
+import { detectLanguage, generateText, summarize, translate } from '@localmode/core';
 import { chromeAI } from '@localmode/chrome-ai';
 
 // Summarize text (instant, no download)
@@ -67,6 +68,12 @@ const { summary } = await summarize({
 const { translation } = await translate({
   model: chromeAI.translator({ targetLanguage: 'de' }),
   text: 'Hello, world!',
+});
+
+// Detect the language of a text
+const { languages } = await detectLanguage({
+  model: chromeAI.languageDetector(),
+  text: 'Hallo und herzlich willkommen!',
 });
 
 // Generate text with Gemini Nano via the Prompt API
@@ -104,8 +111,11 @@ Creates a `SummarizationModel` using Chrome's Summarizer API.
 | `format` | `'markdown' \| 'plain-text'` | `'plain-text'` | Output format |
 | `length` | `'short' \| 'medium' \| 'long'` | `'medium'` | Summary length |
 | `sharedContext` | `string` | — | Context shared across calls |
+| `outputLanguage` | `string` | unset | Language of the summary (BCP 47; Chrome 156 accepts `en`, `es`, `ja`, `de`, `fr`). Chrome logs a console warning when unset. |
+| `expectedInputLanguages` | `string[]` | unset | Languages the input will be in |
+| `expectedContextLanguages` | `string[]` | unset | Languages `sharedContext` will be in |
 | `allowDownload` | `boolean` | `false` | Let Chrome download the model when `availability()` is `downloadable`. Requires a user activation. |
-| `onProgress` | `(p: { loaded: number; total: number }) => void` | — | Model download progress |
+| `onProgress` | `(p: { loaded: number; total: number }) => void` | — | Model download progress as a fraction: `loaded` runs 0 to 1, `total` is 1 (not bytes) |
 
 ### `chromeAI.translator(settings?)`
 
@@ -116,7 +126,41 @@ Creates a `TranslationModel` using Chrome's Translator API.
 | `sourceLanguage` | `string` | `'en'` | Source language (BCP 47) |
 | `targetLanguage` | `string` | `'es'` | Target language (BCP 47) |
 | `allowDownload` | `boolean` | `false` | Let Chrome download the language pack for this directed pair. Requires a user activation. |
-| `onProgress` | `(p: { loaded: number; total: number }) => void` | — | Language-pack download progress |
+| `onProgress` | `(p: { loaded: number; total: number }) => void` | — | Language-pack download progress as a fraction: `loaded` runs 0 to 1, `total` is 1 (not bytes) |
+
+### Streaming, input quota and model info (summarizer and translator)
+
+`chromeAI.summarizer()` and `chromeAI.translator()` return `ChromeAISummarizer` / `ChromeAITranslator`, which add:
+
+| Method | Description |
+|--------|-------------|
+| `doStreamSummarize({ text, context?, maxLength?, abortSignal?, providerOptions? })` / `doStreamTranslate({ text, sourceLanguage?, targetLanguage?, abortSignal? })` | Async iterable over Chrome's `summarizeStreaming()` / `translateStreaming()`: `{ text, done: false, timestamp }` per chunk (`performance.now()` on arrival), then `{ done: true, timing: { requestedAt, firstChunkAt, endedAt, chunkCount, chars }, usage }` |
+| `measureInputUsage(text, options?)` | Chrome's `measureInputUsage()` for the session (translator: per pair) |
+| `getInputQuota(options?)` | The session's `inputQuota`, or `null` |
+| `getModelInfo(options?)` | `availabilityAtCreate`, `requestedOptions`, `sessionOptions` (as the session reports them), `inputQuota`, `browser` (`getChromeBuildInfo()`), `modelVersion: null` |
+
+```typescript
+const model = chromeAI.summarizer({ type: 'tldr' });
+for await (const chunk of model.doStreamSummarize({ text: article })) {
+  if (!chunk.done) render(chunk.text);
+  else console.log(chunk.timing!.firstChunkAt! - chunk.timing!.requestedAt);
+}
+```
+
+`getChromeBuildInfo()` returns `userAgent`, `brands`, `fullVersionList`, `platform`, `platformVersion` and `architecture` from `navigator.userAgentData` (`null` where absent). Chrome does not expose the on-device model version to web pages; read it from `chrome://components`.
+
+### `chromeAI.languageDetector(settings?)`
+
+Creates a `LanguageDetectionModel` using Chrome's [Language Detector API](https://developer.chrome.com/docs/ai/language-detection). Returns BCP 47 codes with confidences, highest first; Chrome's `und` (undetermined) entry is dropped. Construction never throws; gate with `isLanguageDetectorSupported()`.
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `expectedInputLanguages` | `string[]` | — | Languages the input is expected to be in (BCP 47), forwarded to Chrome |
+| `topK` | `number` | all | Keep the `topK` most confident languages. Also settable per call via `providerOptions.chromeAI.topK`. |
+| `allowDownload` | `boolean` | `false` | Let Chrome download the detection model. Also settable per call via `providerOptions.chromeAI.allowDownload`. Requires a user activation. |
+| `onProgress` | `(p: { loaded: number; total: number }) => void` | — | Model download progress as a fraction: `loaded` runs 0 to 1, `total` is 1 (not bytes) |
+
+Errors are `TranslationError`s with a `code`: `chrome-ai-not-supported`, `chrome-ai-model-not-available`, `chrome-ai-download-required`, `chrome-ai-permissions-denied`, `chrome-ai-quota-exceeded`, or `chrome-ai-detection-failed`; all but the last carry `retryable: false`, so `detectLanguage()` fails at once instead of retrying. `ChromeAILanguageDetector` also has `warmUp()`, `isReady()`, and `destroy()`.
 
 ### `chromeAI.languageModel(settings?)`
 
@@ -128,7 +172,7 @@ Creates a `LanguageModel` using Chrome's Prompt API (Gemini Nano). Supports `gen
 | `temperature` | `number` | Chrome default | Sampling temperature (0–1) |
 | `topK` | `number` | Chrome default | Top-K sampling cutoff |
 | `contextLength` | `number` | `6144` | Soft documentation value for `model.contextLength` |
-| `onProgress` | `(p: { loaded: number; total: number }) => void` | — | Forwarded to `monitor` for Gemini Nano download progress |
+| `onProgress` | `(p: { loaded: number; total: number }) => void` | — | Forwarded to `monitor` for Gemini Nano download progress as a fraction: `loaded` runs 0 to 1, `total` is 1 (not bytes) |
 | `allowDownload` | `boolean` | `false` | Let Chrome download Gemini Nano. Also settable per call via `providerOptions.chromeAI.allowDownload`. Requires a user activation. |
 
 ```typescript
@@ -173,13 +217,16 @@ See the [Language Model docs](https://localmode.dev/docs/chrome-ai/language-mode
 
 ```typescript
 import {
+  getChromeBuildInfo,
   isChromeAISupported,
+  isLanguageDetectorSupported,
   isPromptAPISupported,
   isSummarizerAPISupported,
   isTranslatorAPISupported,
 } from '@localmode/chrome-ai';
 
 if (isChromeAISupported()) { /* Chrome AI available */ }
+if (isLanguageDetectorSupported()) { /* Language Detector API available */ }
 if (isPromptAPISupported()) { /* Prompt API (LanguageModel) available */ }
 if (isSummarizerAPISupported()) { /* Summarizer API available */ }
 if (isTranslatorAPISupported()) { /* Translator API available */ }
@@ -191,11 +238,12 @@ The package exports TypeScript types for Chrome's built-in AI APIs:
 
 | Type | Description |
 |------|-------------|
-| `ChromeAIProvider` | Provider interface with `summarizer()`, `translator()`, `languageModel()` |
+| `ChromeAIProvider` | Provider interface with `summarizer()`, `translator()`, `languageDetector()`, `languageModel()` |
 | `ChromeAIProviderSettings` | Provider-level configuration |
 | `ChromeAILanguageModelSettings` | Settings for `languageModel()` (systemPrompt, temperature, topK, etc.) |
 | `ChromeAISummarizerSettings` | Settings for `summarizer()` (type, format, length) |
 | `ChromeAITranslatorSettings` | Settings for `translator()` (sourceLanguage, targetLanguage) |
+| `ChromeAILanguageDetectorSettings` | Settings for `languageDetector()` (expectedInputLanguages, topK, allowDownload) |
 | `AILanguageModel` | Chrome Prompt API session interface |
 | `ChromeAIAvailability` | On-device model state reported by every factory's `availability()`: `'available' \| 'downloadable' \| 'downloading' \| 'unavailable'` |
 | `AILanguageModelAvailability` | Alias of `ChromeAIAvailability`, kept for backward compatibility |
@@ -210,6 +258,14 @@ The package exports TypeScript types for Chrome's built-in AI APIs:
 | `AITranslatorFactory` | Chrome Translator API factory |
 | `AITranslatorCapabilities` | Translator capability detection |
 | `AITranslatorCreateOptions` | Options for `Translator.create()` |
+| `AILanguageDetector` | Chrome Language Detector API session interface |
+| `AILanguageDetectorFactory` | Chrome Language Detector API factory (`self.LanguageDetector`) |
+| `AILanguageDetectorCreateOptions` | Options for `LanguageDetector.create()` |
+| `AILanguageDetectionResult` | One `{ detectedLanguage, confidence }` candidate from `detect()` |
+| `ChromeAIStreamChunk`, `ChromeAIStreamTiming` | Items and timing from `doStreamSummarize()` / `doStreamTranslate()` |
+| `ChromeAIStreamSummarizeOptions`, `ChromeAIStreamTranslateOptions` | Options for the streaming methods |
+| `ChromeAIModelInfo`, `ChromeAIAvailabilityAtCreate`, `ChromeAISummarizerInfoOptions`, `ChromeAITranslatorInfoOptions` | Result of `getModelInfo()` |
+| `ChromeBuildInfo`, `ChromeBrandVersion` | Result of `getChromeBuildInfo()` |
 
 ### Implementation Classes
 
@@ -220,6 +276,7 @@ The implementation classes are exported for direct instantiation or advanced wir
 | `ChromeAILanguageModel` | `LanguageModel` from `@localmode/core` |
 | `ChromeAISummarizer` | `SummarizationModel` from `@localmode/core` |
 | `ChromeAITranslator` | `TranslationModel` from `@localmode/core` |
+| `ChromeAILanguageDetector` | `LanguageDetectionModel` from `@localmode/core` |
 
 ```typescript
 import { ChromeAILanguageModel } from '@localmode/chrome-ai';

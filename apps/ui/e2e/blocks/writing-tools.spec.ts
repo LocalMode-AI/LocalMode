@@ -281,9 +281,13 @@ test.describe('writing-tools summarize', () => {
   }, testInfo) => {
     test.setTimeout(12 * 60 * 1000); // cold DistilBART download
 
+    const modelRequests: string[] = [];
+    collectModelRequests(page, modelRequests);
     await page.goto('/blocks/writing-tools/summarize');
 
     const block = page.locator('[data-block-preview]');
+    // The size label states the fp32 file set the fallback loads.
+    await expect(block.getByText('DistilBART · ~1.13 GB (fp32)')).toBeVisible();
     const input = block.getByRole('textbox'); // the single input textarea
     // The processed summary renders in the panel's live result region.
     const resultRegion = block.getByRole('region');
@@ -307,6 +311,13 @@ test.describe('writing-tools summarize', () => {
     // Badge truthfulness: the visible badge names the provider that served AND the
     // model id it served with; the two must agree.
     await expectTruthfulBadge(block, served, /^transformers:/, /^chrome-ai:gemini-nano-summarizer/);
+    if (served === 'transformers') {
+      // The fallback fetched the fp32 weights the label states, never q8.
+      const onnx = modelRequests.filter((u) => /\.onnx(\?|$)/.test(u));
+      expect(onnx.some((u) => /distilbart-cnn-6-6\/.*\/encoder_model\.onnx/.test(u))).toBe(true);
+      expect(onnx.some((u) => /distilbart-cnn-6-6\/.*\/decoder_model_merged\.onnx/.test(u))).toBe(true);
+      expect(onnx.filter((u) => /_quantized\.onnx/.test(u))).toEqual([]);
+    }
 
     // ── (b) extractive ──
     await block.getByRole('radio', { name: 'Extractive' }).click();
@@ -348,9 +359,13 @@ test.describe('writing-tools translate', () => {
   }, testInfo) => {
     test.setTimeout(14 * 60 * 1000); // two cold Opus-MT downloads
 
+    const modelRequests: string[] = [];
+    collectModelRequests(page, modelRequests);
     await page.goto('/blocks/writing-tools/translate');
 
     const block = page.locator('[data-block-preview]');
+    // The size label states the fp32 file sets the fallback loads.
+    await expect(block.getByText('Opus-MT · ~416-517 MB per pair (fp32)')).toBeVisible();
     const input = block.getByLabel('Text to translate');
     // The target panel is a named live region; the model id shows in the badge.
     const output = block.getByRole('region', { name: 'Translation' });
@@ -370,6 +385,12 @@ test.describe('writing-tools translate', () => {
       'transformers:Xenova/opus-mt-en-de',
       /^chrome-ai:gemini-nano-translator/,
     );
+    if (served === 'transformers') {
+      // The fallback fetched the fp32 weights the label states, never q8.
+      const onnx = modelRequests.filter((u) => /\.onnx(\?|$)/.test(u));
+      expect(onnx.some((u) => /opus-mt-en-de\/.*\/encoder_model\.onnx/.test(u))).toBe(true);
+      expect(onnx.filter((u) => /_quantized\.onnx/.test(u))).toEqual([]);
+    }
     // Char counts reflect both panels.
     await expect(block.getByText(`${TRANSLATE_INPUT.length} chars`).first()).toBeVisible();
 

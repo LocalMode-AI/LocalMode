@@ -57,7 +57,12 @@ const BANNER_TEXT: Record<ControlKind, string> = {
   'current-releases': 'Control run: runtimes at their current npm releases; not published to the leaderboard',
   'ort-profile': 'Control run: ONNX Runtime operator profile of the Transformers.js Qwen3 cells; not published to the leaderboard',
   'llamacpp-profile': 'Control run: llama.cpp token delivery time stamps; not published to the leaderboard',
+  'chrome-ai-tasks': 'Control run: Chrome built-in task APIs; not published to the leaderboard',
 };
+
+/** Why /bench/run refuses the task kind: its sessions run on their own page. */
+export const CONTROL_TASKS_REFUSAL =
+  'chrome-ai-tasks is a task session, not a suite run: open /bench/tasks with a session query instead. Remove the control parameter for a protocol run.';
 
 /** Message for a paid-study link that also carries the control parameter. */
 export const CONTROL_STUDY_REFUSAL =
@@ -89,9 +94,10 @@ export function parseControlRequest(search: string): ControlRequest {
   if (!CONTROL_KINDS.includes(value as ControlKind)) {
     return {
       status: 'refused',
-      message: `Unknown control run kind "${value}"; the supported kinds are ${CONTROL_KINDS.join(', ')}. Remove the control parameter for a protocol run.`,
+      message: `Unknown control run kind "${value}"; the supported kinds are ${CONTROL_KINDS.filter((k) => k !== 'chrome-ai-tasks').join(', ')}. Remove the control parameter for a protocol run.`,
     };
   }
+  if (value === 'chrome-ai-tasks') return { status: 'refused', message: CONTROL_TASKS_REFUSAL };
   if (params.has('PROLIFIC_PID') || params.has('cc')) return { status: 'refused', message: CONTROL_STUDY_REFUSAL };
   return { status: 'control', kind: value as ControlKind };
 }

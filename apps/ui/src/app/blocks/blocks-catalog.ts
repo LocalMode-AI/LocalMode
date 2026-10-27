@@ -123,11 +123,11 @@ export interface BlockCategory {
  * block (see per-entry notes below):
  *
  * - chat — 4-provider catalog (transformers + webllm + wllama + litert). Default
- *   `granite-4.0-350m-ONNX-web` (~120 MB); webllm/wllama tiers reach ~8B (~5 GB).
+ *   `granite-4.0-350m-ONNX-web` (~580 MB, q4); webllm/wllama tiers reach ~8B (~5 GB).
  * - knowledge-base — bge-small (~33 MB) → LightOnOCR-2-1B (~1 GB); + granite,
  *   rerankers, DistilBERT-SQuAD, Donut, TrOCR, GLM-OCR.
  * - audio-studio — bge-small (~34 MB) → Moonshine Base (~237 MB); + Whisper Tiny
- *   (~40 MB), Kokoro (~86 MB), DistilBART (~200 MB), Granite (~120 MB), Silero.
+ *   (~40 MB), Kokoro (~86 MB), DistilBART (~200 MB), Granite (~580 MB), Silero.
  * - vision-lab — MediaPipe landmarkers (~4 MB) + YAMNet (~15 MB) → DETR ResNet-50
  *   (~170 MB); + text embedder / language detector.
  * - device-model-lab — reads browser APIs + ~4 KB HTTP Range GGUF metadata only;
@@ -135,7 +135,8 @@ export interface BlockCategory {
  * - agent-structured-data — WebGPU-only WebLLM; default Qwen3-1.7B (1.1 GB),
  *   curated medium/large tiers reach ~8B (~5 GB).
  * - writing-tools — Chrome Built-in AI (0 MB when available) else Transformers.js
- *   fallback: Opus-MT pairs (~78 MB) / ModernBERT / DistilBART / Llama-3.2-1B.
+ *   fallback: Opus-MT pairs (~416-517 MB fp32) / ModernBERT / DistilBART (~1.13 GB fp32) /
+ *   Llama-3.2-1B.
  * - text-insights — all-MiniLM (~23 MB) / bge-small (~33 MB) / DistilBERT SST-2
  *   (~67 MB) / MobileBERT-MNLI (~100 MB).
  * - photo-search — CLIP ViT-B/32 (~150 MB) default, SigLIP base (~400 MB) alt.
@@ -159,7 +160,7 @@ export const BLOCK_CATEGORIES: BlockCategory[] = [
           'Chat with AI models running fully in your browser.',
         pageDescription: 'Chat with AI models that run entirely in your browser. Choose from dozens of models or load your own, attach images for models that can see, and switch on agent mode to let it use tools. Nothing leaves your device, and no model downloads until you pick one.',
         chips: ['4 providers', 'Vision + reasoning', 'Agent mode'],
-        modelBadge: '~120 MB - 5 GB',
+        modelBadge: '~580 MB - 5 GB',
       },
     ],
   },
@@ -455,7 +456,7 @@ export const BLOCK_CATEGORIES: BlockCategory[] = [
           'Translate text between languages, fully offline.',
         pageDescription: 'Translate text between 24 language pairs, swap the direction with one click to carry the result back into the input, and copy or clear as you go. It uses your browser\'s built-in translator when available, or a downloadable model otherwise. Nothing downloads until you ask.',
         chips: ['24 offline pairs', 'Swap + copy', 'Chrome AI + fallback'],
-        modelBadge: 'Chrome AI or ~80 MB',
+        modelBadge: 'Chrome AI or ~416-517 MB',
       },
       {
         category: 'writing-tools',
@@ -467,7 +468,7 @@ export const BLOCK_CATEGORIES: BlockCategory[] = [
           'Summarize long text at the length you choose.',
         pageDescription: 'Turn long text into a shorter summary, choosing a short, medium, or long length and either a pulled-from-the-text or reworded style. See how much you shortened it and the reading time saved. It uses your browser\'s built-in summarizer when available, or a downloadable model otherwise, and nothing downloads until you ask.',
         chips: ['Extractive + abstractive', 'Length presets', 'Compression stats'],
-        modelBadge: 'Chrome AI or ~120 MB',
+        modelBadge: 'Chrome AI or ~1.1 GB',
       },
       {
         category: 'writing-tools',

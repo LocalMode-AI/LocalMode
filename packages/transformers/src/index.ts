@@ -59,6 +59,7 @@ export type {
   ModelSettings,
   ModelLoadProgress,
   LanguageModelSettings,
+  TranslatorSettings,
 } from './types.js';
 
 // ═══════════════════════════════════════════════════════════════
@@ -143,6 +144,8 @@ export {
   isGenerativeOCRModel,
   TransformersSileroVAD,
   createSileroVAD,
+  OPUS_MT_TARGET_LANGUAGE_TOKENS,
+  resolveTargetLanguageToken,
 } from './implementations/index.js';
 
 export type { SileroVADSettings } from './implementations/silero-vad.js';

@@ -1,5 +1,22 @@
 # @localmode/chrome-ai
 
+## 2.3.0
+
+### Minor Changes
+
+- Added `chromeAI.languageDetector(settings?)` (`ChromeAILanguageDetector`), a `LanguageDetectionModel` over Chrome's built-in Language Detector API (`self.LanguageDetector`, Chrome 138+ desktop), so `detectLanguage()` from `@localmode/core` runs on it. Results map Chrome's `{ detectedLanguage, confidence }` to `{ languageCode, confidence }`, highest first, with Chrome's `und` entry dropped; `topK` (settings or `providerOptions.chromeAI.topK`) keeps the most confident candidates. Gates on `availability()` with the 3 s deadline; `allowDownload` (settings or `providerOptions.chromeAI.allowDownload`) and `onProgress` as in the other models. Errors are `TranslationError`s coded `chrome-ai-not-supported`, `chrome-ai-model-not-available`, `chrome-ai-download-required`, `chrome-ai-permissions-denied`, `chrome-ai-quota-exceeded` or `chrome-ai-detection-failed`; aborts surface as `AbortError`. `warmUp()`, `isReady()`, `destroy()`.
+- Added `isLanguageDetectorSupported()` (synchronous, never throws); `isChromeAISupported()` now also counts the Language Detector API.
+- Exported `ChromeAILanguageDetectorSettings`, `AILanguageDetector`, `AILanguageDetectorFactory`, `AILanguageDetectorCreateOptions` and `AILanguageDetectionResult`.
+- The `@localmode/core` peer range is now `>=2.2.0`, the oldest core that exports the language detection types.
+- Language detector errors coded `chrome-ai-not-supported`, `chrome-ai-model-not-available`, `chrome-ai-download-required`, `chrome-ai-permissions-denied` or `chrome-ai-quota-exceeded` carry `retryable: false`, so `detectLanguage()` (core 2.6.0+) fails at once rather than retrying after the user activation has expired; `chrome-ai-detection-failed` stays retryable.
+- Added streaming for the Summarizer and the Translator: `ChromeAISummarizer.doStreamSummarize({ text, context?, maxLength?, abortSignal?, providerOptions? })` and `ChromeAITranslator.doStreamTranslate({ text, sourceLanguage?, targetLanguage?, abortSignal? })` read Chrome's `summarizeStreaming()` / `translateStreaming()` and yield `{ text, done: false, timestamp }` per chunk (`performance.now()` on arrival), then `{ done: true, timing: { requestedAt, firstChunkAt, endedAt, chunkCount, chars }, usage }`. Errors: `chrome-ai-streaming-not-supported` (`retryable: false`), `chrome-ai-summarization-failed` / `chrome-ai-translation-failed` with Chrome's error as `cause`; an abort surfaces as `AbortError`.
+- Added `measureInputUsage()`, `getInputQuota()` and `getModelInfo()` on both (translator: per pair). `getModelInfo()` returns `availabilityAtCreate`, `requestedOptions`, `sessionOptions` as the session reports them, `inputQuota`, `browser` and `modelVersion: null` (Chrome exposes no model version to pages; read it from `chrome://components`).
+- Added `outputLanguage`, `expectedInputLanguages` and `expectedContextLanguages` to the summarizer settings (and `providerOptions.chromeAI`), forwarded to `availability()` and `create()` only when set; setting `outputLanguage` removes Chrome's "No output language was specified" console warning. `getModelInfo()` records all three.
+- Added `getChromeBuildInfo()`: `userAgent`, `brands`, `fullVersionList`, `platform`, `platformVersion`, `architecture` from `navigator.userAgentData`, `null` where absent; never throws.
+- `chromeAI.summarizer()` / `chromeAI.translator()` are now typed as `ChromeAISummarizer` / `ChromeAITranslator` (still `SummarizationModel` / `TranslationModel`).
+- Fixed: a `providerOptions.chromeAI` override of `length` alone was ignored, and any `providerOptions.chromeAI` with `type`, `format` or `sharedContext` recreated the summarizer session on every call; the session is now recreated only when a creation option changes.
+- docs: `onProgress` on every model receives a fraction (`loaded` from 0 to 1, `total` 1), not bytes; the JSDoc and README now say so.
+
 ## 2.2.1
 
 ### Patch Changes

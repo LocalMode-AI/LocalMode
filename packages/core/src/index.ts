@@ -1393,6 +1393,7 @@ export {
   AgentError,
   // Error formatting
   formatErrorForUser,
+  isRetryableError,
   formatErrorForConsole,
   formatErrorAsHTML,
   logError,
