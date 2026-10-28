@@ -29,6 +29,7 @@ import path from 'node:path';
 import { chromium, expect, test, type BrowserContext, type Page } from '@playwright/test';
 import {
   sha256HexSync,
+  TASKS_PROTOCOL_VERSION,
   validateSubmission,
   verifyRunDigest,
   type BenchRunResult,
@@ -278,7 +279,7 @@ async function expectValidRun(run: BenchRunResult, phase: string) {
   expect(report.ok).toBe(true);
   const tasks = run.harness.control!.tasks!;
   expect(run.harness.control!.kind).toBe('chrome-ai-tasks');
-  expect(tasks.protocol).toBe('tasks/1');
+  expect(tasks.protocol).toBe(TASKS_PROTOCOL_VERSION);
   expect(tasks.phase).toBe(phase);
   expect(run.protocol).toBe('localmode-bench/5');
   expect(run.fingerprint).not.toBeNull();

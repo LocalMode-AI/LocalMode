@@ -13,6 +13,7 @@ import {
   TASK_KINDS,
   TASK_PHASES,
   TASK_SUBSETS,
+  TASKS_PROTOCOL_VERSION,
   type BenchModelRef,
   type BenchRuntimeId,
   type HarnessControl,
@@ -391,7 +392,7 @@ export function taskControl(
 ): HarnessControl {
   return createHarnessControl('chrome-ai-tasks', {
     tasks: {
-      protocol: 'tasks/1',
+      protocol: TASKS_PROTOCOL_VERSION,
       phase: request.phase,
       task: request.task,
       set: request.list.set,

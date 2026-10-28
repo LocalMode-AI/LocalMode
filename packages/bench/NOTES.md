@@ -601,7 +601,7 @@ with `harness.control.kind: 'chrome-ai-tasks'`. `runBenchmarkSuite` and
 and never filed in the results dataset (the item texts and outputs it
 carries are not CC0).
 
-- **`harness.control.tasks`** (`TaskSessionRecord`, `protocol: 'tasks/1'`):
+- **`harness.control.tasks`** (`TaskSessionRecord`, `protocol: 'tasks/2'`):
   `phase` (`download | quality | latency | pilot | pilot-sizing`), `task`, `set`
   (`cnndm-test`, `cnndm-reserve`, `xsum-test` for summarize; `flores-devtest`
   for translate and detect-language; `wili-test` for detect-language),
@@ -615,7 +615,19 @@ carries are not CC0).
   `chrome://version`, `chrome://components` and `chrome://on-device-internals`
   text and parsed entries, free disk and profile folder bytes, each
   `{ start, end? }`). Any change to options, item lists or rules bumps
-  `tasks/1`; archived sessions are never re-scored.
+  `TASKS_PROTOCOL_VERSION`; archived sessions are never re-scored. A
+  submission must carry the current version; `validateRunShape(run, {
+  anyProtocol: true })` also reads an archived `tasks/<n>` session.
+- **Task protocol history.** `tasks/2` (bench 0.11.0) re-pins the
+  translation and language-identification item lists after they were
+  re-drawn from FLORES+ devtest (source commit
+  `1147e2dc59f37fbb5c22fd8478770de02cd399f9`; whitespace normalised, one
+  corrected reference, Chinese as `cmn_Hans`): every `flores-devtest` list
+  of `translate` and `detect-language`, the e2e pilot lists cut from them,
+  and the `wili-test` file, whose Chinese rows now name `cmn_Hans` (its
+  items and item digest unchanged). The summarization
+  lists are unchanged. Options and rules are those of `tasks/1` (bench
+  0.10.0 and 0.10.1).
 - **Order.** `fixed` is Chrome's built-in systems first (the options-of-record
   arm before a `-default` arm), then the fallbacks by lane
   (`transformers-wasm`, `transformers-webgpu`, `transformers-wasm-current`,

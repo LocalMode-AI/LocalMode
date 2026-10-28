@@ -111,8 +111,8 @@ const SOFTWARE_RENDERER_PATTERNS: readonly RegExp[] = [
 /** Shape-validation options. */
 export interface ValidateOptions {
   /**
-   * Accept any `localmode-bench/<n>` protocol identifier instead of only the
-   * current one. Submissions never set this; offline analysis of the archive
+   * Accept any `localmode-bench/<n>` protocol identifier (and, on a task
+   * session, any `tasks/<n>`) instead of only the current one. Submissions never set this; offline analysis of the archive
    * does, because every archived version stays readable and each row carries
    * its version.
    */
@@ -143,7 +143,7 @@ export function validateRunShape(value: unknown, options: ValidateOptions = {}):
   if (!harness || typeof harness.name !== 'string' || typeof harness.version !== 'string') {
     push('harness {name, version} is required');
   } else {
-    validateHarnessExtras(harness, push);
+    validateHarnessExtras(harness, push, options);
   }
   if (!['quick', 'standard', 'thorough', 'custom'].includes(run.suite as string)) {
     push('suite must be quick|standard|thorough|custom');
@@ -203,7 +203,7 @@ export const SERIES_MAX_IDLE_BEFORE_MS = 30 * 86_400_000;
  * accepts a well-formed control marker, so an exported control run validates
  * offline; refusing to publish it is the submission route's job.
  */
-function validateHarnessExtras(harness: Record<string, unknown>, push: (m: string) => void): void {
+function validateHarnessExtras(harness: Record<string, unknown>, push: (m: string) => void, options: ValidateOptions = {}): void {
   if ('series' in harness && harness.series !== undefined) {
     const series = harness.series as Record<string, unknown> | null;
     const isCount = (v: unknown, max: number) => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= max;
@@ -238,7 +238,9 @@ function validateHarnessExtras(harness: Record<string, unknown>, push: (m: strin
         if (!Array.isArray(order) || order.length !== expected.length || order.some((id, i) => id !== expected[i]))
           push(`harness.control.runtimeOrder must be the ${String(control.kind)} order [${expected.join(', ')}]`);
       }
-      const tasksError = controlTasksError(control as { kind: string; runtimeOrder?: unknown; tasks?: unknown });
+      const tasksError = controlTasksError(control as { kind: string; runtimeOrder?: unknown; tasks?: unknown }, {
+        anyProtocol: options.anyProtocol,
+      });
       if (tasksError) push(tasksError);
       const laneError = controlWasmLaneError(control as { kind: (typeof CONTROL_KINDS)[number]; wasmLane?: unknown });
       if (laneError) push(laneError);

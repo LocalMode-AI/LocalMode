@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.23] - 2026-10-28
+
+**Released:** `@localmode/bench` 0.11.0.
+
+### Changed
+
+- **ui:** the pinned sample item lists of the `/bench/tasks` page (`src/lib/bench/task-item-lists.ts`, regenerated with `scripts/pin-task-item-lists.ts`) follow the translation and language-identification item lists re-drawn from FLORES+ devtest (source commit `1147e2dc59f37fbb5c22fd8478770de02cd399f9`; whitespace normalised, one corrected reference, Chinese as `cmn_Hans`): the five translation and five FLORES language-ID lists get new item digests and file SHA-256s at unchanged counts, the WiLI list a new file SHA-256 (its Chinese rows name `cmn_Hans`) with its item digest unchanged, and the e2e pilot lists `pilot-e2e-translate-flores-5`, `pilot-e2e-translate-flores-1` and `pilot-e2e-detect-flores-5` new digests. The seven summarization lists are unchanged.
+- **bench 0.11.0, ui:** the task item-list protocol therefore changes for those lists: `TASKS_PROTOCOL_VERSION` is `tasks/2`, which the page records on every session (`harness.control.tasks.protocol`). Submissions must carry `tasks/2`; `validateRunShape(run, { anyProtocol: true })` still reads an archived `tasks/1` session, which is never re-scored. Options and rules are those of `tasks/1`; `localmode-bench/5`, schema 3 and plausibility rules 2 are unchanged.
+
+### Documentation
+
+- **bench (docs):** `packages/bench/NOTES.md` (Task sessions) records `tasks/2` and the task protocol history.
+
 ## [2.16.22] - 2026-10-28
 
 **Released:** `@localmode/bench` 0.10.1.

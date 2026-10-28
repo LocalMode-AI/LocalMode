@@ -1149,8 +1149,13 @@ export interface GapStats {
   histogram: number[];
 }
 
-/** Identifier of the task sub-protocol a `chrome-ai-tasks` control run records (`harness.control.tasks.protocol`). */
-export const TASKS_PROTOCOL_VERSION = 'tasks/1';
+/**
+ * Identifier of the task sub-protocol a `chrome-ai-tasks` control run records
+ * (`harness.control.tasks.protocol`). `tasks/2` (bench 0.11.0) re-pins the
+ * translation and language-identification item lists after they were re-drawn
+ * from FLORES+ devtest; `tasks/1` sessions stay readable under `anyProtocol`.
+ */
+export const TASKS_PROTOCOL_VERSION = 'tasks/2';
 
 /** The task of a `chrome-ai-tasks` session; also the workload kind of its cells. */
 export type TaskKind = 'summarize' | 'translate' | 'detect-language';

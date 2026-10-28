@@ -1,5 +1,12 @@
 # @localmode/bench
 
+## 0.11.0
+
+Task sub-protocol `tasks/2` (`localmode-bench/5`, schema 3 and plausibility rules 2 unchanged).
+
+- feat: `TASKS_PROTOCOL_VERSION` is `tasks/2`. The translation and language-identification item lists of task sessions were re-drawn from FLORES+ devtest (source commit `1147e2dc59f37fbb5c22fd8478770de02cd399f9`; whitespace normalised, one corrected reference, Chinese as `cmn_Hans`), so every `flores-devtest` list of `translate` and `detect-language` has a new digest; a changed item list bumps the task protocol. The summarization lists, the options and the rules are those of `tasks/1`. `controlTasksError(control, { anyProtocol? })` and `validateRunShape(run, { anyProtocol: true })` read an archived `tasks/<n>` session; a submission must carry `tasks/2`. Archived sessions are never re-scored.
+- docs: `NOTES.md` (Task sessions: the record's protocol and the task protocol history) and the README.
+
 ## 0.10.1
 
 - feat: `pilot-sizing` task phase: a session runs the first `limit` items of a pinned list (or `perDirection` per translation direction) and records `itemList.limitedTo { count, sha256, limit | perDirection }` beside the full list's count and digest; the validator requires the limit exactly on that phase and that every arm ran `limitedTo.count` items (`taskLimitError`). `modelBytesSource` also accepts `driver` and `page` as aliases.

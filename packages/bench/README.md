@@ -130,7 +130,7 @@ chunk) summarized per request. The host supplies the profiler through
 `chrome-ai-tasks` is not a suite run: `runTaskSession()` runs one task
 (`summarize`, `translate` or `detect-language`) over one item list, one item
 per call, on Chrome's built-in Summarizer, Translator or Language Detector
-and on-device fallbacks, recording the `tasks/1` session on
+and on-device fallbacks, recording the `tasks/2` session on
 `harness.control.tasks` and a `task` record on each cell.
 `runBenchmarkSuite` refuses the kind.
 

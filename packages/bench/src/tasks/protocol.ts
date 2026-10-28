@@ -1,5 +1,5 @@
 /**
- * The `tasks/1` sub-protocol of the `chrome-ai-tasks` control kind: its
+ * The task sub-protocol (`TASKS_PROTOCOL_VERSION`) of the `chrome-ai-tasks` control kind: its
  * constants, the system-order rule, and the shape checks of the session
  * record (`harness.control.tasks`) and of a task cell (`cells[].task` and its
  * `TaskIteration`s). Pure; shared by `createHarnessControl`,
@@ -234,7 +234,8 @@ function driverError(value: unknown): string | undefined {
  * The problem with a control marker's `tasks` record (and the run order it
  * implies), or undefined when it is right for the kind (since bench 0.10.0).
  * A `chrome-ai-tasks` marker must carry a well-formed `TaskSessionRecord`:
- * protocol `tasks/1`; a known phase, task and subset; a set that serves the
+ * protocol `TASKS_PROTOCOL_VERSION` (any `tasks/<n>` with `anyProtocol`, so
+ * archived sessions stay readable); a known phase, task and subset; a set that serves the
  * task; an item list `{ id, count, sha256 }`; a 1-based `sessionIndex`; a
  * `systemOrder` of distinct arm ids that is the task's fixed order or its
  * exact reverse, matching `order`; `repeat` only on an R session; and a
@@ -243,12 +244,16 @@ function driverError(value: unknown): string | undefined {
  * and `validateRunShape`.
  *
  * @param control - A control marker whose `kind` is one of `CONTROL_KINDS`.
+ * @param options - `anyProtocol` accepts any `tasks/<n>` identifier (offline analysis of the archive).
  * @returns The error message, or undefined.
  * @example
  * controlTasksError({ kind: 'fixed-order', runtimeOrder: [], tasks: {} });
  * // 'harness.control.tasks is set only on a chrome-ai-tasks control run, not on fixed-order'
  */
-export function controlTasksError(control: { kind: string; runtimeOrder?: unknown; tasks?: unknown }): string | undefined {
+export function controlTasksError(
+  control: { kind: string; runtimeOrder?: unknown; tasks?: unknown },
+  options: { anyProtocol?: boolean } = {},
+): string | undefined {
   const tasks = control.tasks;
   if (control.kind !== 'chrome-ai-tasks') {
     return tasks === undefined ? undefined : `harness.control.tasks is set only on a chrome-ai-tasks control run, not on ${control.kind}`;
@@ -256,7 +261,9 @@ export function controlTasksError(control: { kind: string; runtimeOrder?: unknow
   const at = 'harness.control.tasks';
   if (typeof tasks !== 'object' || tasks === null || Array.isArray(tasks)) return `${at} must be an object on a chrome-ai-tasks control run`;
   const t = tasks as Record<string, unknown>;
-  if (t.protocol !== TASKS_PROTOCOL_VERSION) return `${at}.protocol must be "${TASKS_PROTOCOL_VERSION}"`;
+  if (options.anyProtocol) {
+    if (typeof t.protocol !== 'string' || !/^tasks\/\d+$/.test(t.protocol)) return `${at}.protocol must be a "tasks/<n>" identifier`;
+  } else if (t.protocol !== TASKS_PROTOCOL_VERSION) return `${at}.protocol must be "${TASKS_PROTOCOL_VERSION}"`;
   if (!TASK_PHASES.includes(t.phase as TaskPhase)) return `${at}.phase must be one of ${TASK_PHASES.join(', ')}`;
   if (!TASK_KINDS.includes(t.task as TaskKind)) return `${at}.task must be one of ${TASK_KINDS.join(', ')}`;
   const setTasks = TASK_SETS[t.set as TaskSet];

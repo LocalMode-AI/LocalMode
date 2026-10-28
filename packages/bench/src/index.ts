@@ -85,7 +85,7 @@ export type {
   TaskIteration,
 } from './types.js';
 
-// Task sessions (the chrome-ai-tasks control kind, tasks/1)
+// Task sessions (the chrome-ai-tasks control kind, TASKS_PROTOCOL_VERSION)
 export {
   TASK_KINDS,
   TASK_PHASES,

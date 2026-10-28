@@ -153,9 +153,18 @@ describe('validateRunShape() on a chrome-ai-tasks run', () => {
     expect(shapeOf(run)[0]).toMatch(/runtimeOrder must be the runtimes of harness.control.tasks.systemOrder in executed order \[chrome-ai, transformers-wasm\]/);
   });
 
+  it('an archived tasks/1 session is refused for submission and read under anyProtocol', () => {
+    const run = makeTaskRun();
+    run.harness.control!.tasks!.protocol = 'tasks/1' as never;
+    expect(shapeOf(run)).toContain('harness.control.tasks.protocol must be "tasks/2"');
+    expect(validateRunShape(run, { anyProtocol: true })).toEqual([]);
+    run.harness.control!.tasks!.protocol = 'tasks/x' as never;
+    expect(validateRunShape(run, { anyProtocol: true })).toEqual(['harness.control.tasks.protocol must be a "tasks/<n>" identifier']);
+  });
+
   it('refuses a malformed session record field by field', () => {
     const cases: Array<[Partial<ReturnType<typeof tasksRecord>>, RegExp]> = [
-      [{ protocol: 'tasks/2' as never }, /protocol must be "tasks\/1"/],
+      [{ protocol: 'tasks/1' as never }, /protocol must be "tasks\/2"/],
       [{ phase: 'warm' as never }, /phase must be one of/],
       [{ set: 'flores-devtest' }, /does not serve the summarize task/],
       [{ subset: 'M' as never }, /subset must be one of/],
