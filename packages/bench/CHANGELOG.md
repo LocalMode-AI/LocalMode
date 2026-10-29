@@ -1,5 +1,10 @@
 # @localmode/bench
 
+## 0.11.1
+
+- fix: the `itemList.limitedTo` item count of a `pilot-sizing` session is checked per workload (`taskLimitError`): cells that completed a workload must agree, an error cell counts its own items and is no longer a shape error, and the workloads must add up to `limitedTo.count`. Before, one cell that failed at load refused the whole export.
+- Task sessions of /bench/tasks that create each later Translator pair from its own click carry this harness version; the record's fields and `tasks/2` are unchanged.
+
 ## 0.11.0
 
 Task sub-protocol `tasks/2` (`localmode-bench/5`, schema 3 and plausibility rules 2 unchanged).

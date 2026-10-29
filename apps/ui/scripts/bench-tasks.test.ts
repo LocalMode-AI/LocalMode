@@ -184,36 +184,139 @@ describe('follow-ups: sample lists, the secondary lane, the Translator pack, tru
   });
 });
 
-describe('precreateTranslators(): one create() per pair, in order, each with its own span', () => {
-  it('starts the next pair only after the previous one resolved, and records each pair separately', async () => {
-    const { precreateTranslators } = await import('../src/lib/bench/task-adapters');
-    const calls: string[] = [];
-    const g = globalThis as Record<string, unknown>;
-    const previous = g.Translator;
-    g.Translator = {
-      availability: async (o: { sourceLanguage: string; targetLanguage: string }) => (calls.push(`availability ${o.sourceLanguage}-${o.targetLanguage}`), 'downloadable'),
-      create: (o: { sourceLanguage: string; targetLanguage: string }) => {
-        calls.push(`create ${o.sourceLanguage}-${o.targetLanguage}`);
-        return new Promise((resolve) => setTimeout(() => (calls.push(`created ${o.sourceLanguage}-${o.targetLanguage}`), resolve({ destroy() {} })), 30));
+describe('precreateTranslators(): one create() per pair, each started from its own click', () => {
+  type Opts = { sourceLanguage: string; targetLanguage: string };
+  const g = globalThis as Record<string, unknown>;
+  function fakeTranslator(calls: string[], reject: Set<string> = new Set()) {
+    return {
+      availability: async (o: Opts) => (calls.push(`availability ${o.sourceLanguage}-${o.targetLanguage}`), 'downloadable'),
+      create: (o: Opts) => {
+        const key = `${o.sourceLanguage}-${o.targetLanguage}`;
+        calls.push(`create ${key}`);
+        return new Promise((resolve, rejectCreate) =>
+          setTimeout(() => {
+            calls.push(`settled ${key}`);
+            if (reject.has(key)) rejectCreate(Object.assign(new Error('Requires a user gesture'), { name: 'NotAllowedError' }));
+            else resolve({ destroy() {} });
+          }, 30),
+        );
       },
     };
+  }
+  const pairs = [
+    { src: 'en', tgt: 'de', pack: 'Chrome TranslateKit de-en 1' },
+    { src: 'de', tgt: 'en', pack: 'Chrome TranslateKit de-en 1' },
+    { src: 'en', tgt: 'zh', pack: 'Chrome TranslateKit en-zh 1' },
+  ];
+
+  it('starts only the first pair in the Run click and waits for one click per later pair, in order', async () => {
+    const { precreateTranslators } = await import('../src/lib/bench/task-adapters');
+    const calls: string[] = [];
+    const previous = g.Translator;
+    g.Translator = fakeTranslator(calls, new Set(['de-en']));
+    const changes: Array<string | null> = [];
     try {
-      const made = precreateTranslators([
-        { src: 'en', tgt: 'de', pack: 'Chrome TranslateKit de-en 1' },
-        { src: 'de', tgt: 'en', pack: 'Chrome TranslateKit de-en 1' },
-      ]);
-      // Only the first pair is started synchronously, inside the click.
+      const made = precreateTranslators(pairs, () => {
+        const p = made.pending();
+        if (changes.at(-1) !== (p ? `${p.src}-${p.tgt} ${p.n}/${p.of}` : null)) changes.push(p ? `${p.src}-${p.tgt} ${p.n}/${p.of}` : null);
+      });
+      const states = () => made.creates().map((c) => `${c.n}/${c.of} ${c.src}-${c.tgt} ${c.click} ${c.state}${c.error ? ` ${c.error}` : ''}`);
+      // Only the first pair is started synchronously, inside the Run click.
       expect(calls).toEqual(['availability en-de', 'create en-de']);
-      const a = made.get('en-de')!;
-      const b = made.get('de-en')!;
-      const [aEnd, bStart, bEnd] = [await a.endT, await b.startT, await b.endT];
-      expect(calls).toEqual(['availability en-de', 'create en-de', 'created en-de', 'availability de-en', 'create de-en', 'created de-en']);
-      expect(bStart).toBeGreaterThanOrEqual(aEnd);
+      expect(made.pending()).toBeNull();
+      expect(made.startPending()).toBe(false);
+      expect(states()).toEqual(['1/3 en-de run started', '2/3 de-en pair waiting', '3/3 en-zh pair waiting']);
+      const a = made.byPair.get('en-de')!;
+      const b = made.byPair.get('de-en')!;
+      const c = made.byPair.get('en-zh')!;
+      const aEnd = await a.endT;
+      await Promise.resolve();
+      // The second pair is not chained after the first: it waits for its own click.
+      expect(calls).toEqual(['availability en-de', 'create en-de', 'settled en-de']);
+      expect(made.pending()).toEqual({ src: 'de', tgt: 'en', n: 2, of: 3 });
+      // The click starts that pair's create() synchronously, inside its handler.
+      expect(made.startPending()).toBe(true);
+      expect(calls.slice(3)).toEqual(['availability de-en', 'create de-en']);
+      expect(made.pending()).toBeNull();
+      expect(made.startPending()).toBe(false);
+      // A rejected create() is kept on its pair and the next pair still gets its click.
+      await expect(b.session).rejects.toMatchObject({ name: 'NotAllowedError' });
+      const bEnd = await b.endT;
+      await Promise.resolve();
+      expect(made.pending()).toEqual({ src: 'en', tgt: 'zh', n: 3, of: 3 });
+      let settled = false;
+      void made.settled.then(() => (settled = true));
+      await new Promise((r) => setTimeout(r, 50));
+      expect(settled).toBe(false);
+      expect(made.startPending()).toBe(true);
+      await made.settled;
+      expect(made.pending()).toBeNull();
+      expect(made.gestureClicks()).toBe(2);
+      expect(states()).toEqual([
+        '1/3 en-de run created',
+        '2/3 de-en pair failed NotAllowedError: Requires a user gesture',
+        '3/3 en-zh pair created',
+      ]);
+      expect(made.creates().every((c) => typeof c.createMs === 'number' && c.createMs >= 25)).toBe(true);
+      expect(calls).toEqual([
+        'availability en-de', 'create en-de', 'settled en-de',
+        'availability de-en', 'create de-en', 'settled de-en',
+        'availability en-zh', 'create en-zh', 'settled en-zh',
+      ]);
+      expect(await b.startT).toBeGreaterThanOrEqual(aEnd);
+      expect(await c.startT).toBeGreaterThanOrEqual(bEnd);
       expect(aEnd - (await a.startT)).toBeGreaterThanOrEqual(25);
-      expect(bEnd - bStart).toBeGreaterThanOrEqual(25);
-      expect(a.order).toBe(1);
-      expect(b.order).toBe(2);
-      expect(await b.availability).toBe('downloadable');
+      expect([a.order, b.order, c.order]).toEqual([1, 2, 3]);
+      expect([a.click, b.click, c.click]).toEqual(['run', 'pair', 'pair']);
+      expect(await c.availability).toBe('downloadable');
+      expect(changes).toEqual(['de-en 2/3', null, 'en-zh 3/3', null]);
+    } finally {
+      g.Translator = previous;
+    }
+  });
+
+  it('records createdInRunClick only for the pair the Run click created; every pre-created pair is cached and keeps its createClick', async () => {
+    const { precreateTranslators, chromeTranslatorAdapter } = await import('../src/lib/bench/task-adapters');
+    const calls: string[] = [];
+    const previous = g.Translator;
+    g.Translator = fakeTranslator(calls);
+    try {
+      const made = precreateTranslators(pairs.slice(0, 2));
+      await made.byPair.get('en-de')!.endT;
+      await Promise.resolve();
+      expect(made.startPending()).toBe(true);
+      await made.settled;
+      const adapter = chromeTranslatorAdapter(made.byPair);
+      const cell = (src: string, tgt: string) => ({ workloadId: `translate-${src}-${tgt}`, direction: { src, tgt } }) as unknown as Parameters<typeof adapter.load>[0];
+      const first = await adapter.load(cell('en', 'de'), {} as Parameters<typeof adapter.load>[1]);
+      const second = await adapter.load(cell('de', 'en'), {} as Parameters<typeof adapter.load>[1]);
+      expect(first.runtimeConfig).toMatchObject({ createdInRunClick: true, createClick: 'run', createOrder: 1, packInComponents: 'Chrome TranslateKit de-en 1' });
+      expect(second.runtimeConfig).toMatchObject({ createdInRunClick: false, createClick: 'pair', createOrder: 2, packInComponents: 'Chrome TranslateKit de-en 1' });
+      // Both were created before the timed cells, so neither load downloads.
+      expect([first.cached, second.cached]).toEqual([true, true]);
+      expect(first.loadSpan).toBeDefined();
+      expect(second.loadSpan).toBeDefined();
+    } finally {
+      g.Translator = previous;
+    }
+  });
+
+  it('asks for no click when the plan has one pair or none', async () => {
+    const { precreateTranslators } = await import('../src/lib/bench/task-adapters');
+    const calls: string[] = [];
+    const previous = g.Translator;
+    g.Translator = fakeTranslator(calls);
+    try {
+      const one = precreateTranslators(pairs.slice(0, 1), () => calls.push('change'));
+      await one.settled;
+      expect(one.pending()).toBeNull();
+      expect(one.gestureClicks()).toBe(0);
+      const none = precreateTranslators([]);
+      await none.settled;
+      expect(none.byPair.size).toBe(0);
+      // The one change reported is pair 1's outcome; no pair ever waits for a click.
+      expect(calls).toEqual(['availability en-de', 'create en-de', 'settled en-de', 'change']);
+      expect(one.creates()).toMatchObject([{ src: 'en', tgt: 'de', n: 1, of: 1, click: 'run', state: 'created' }]);
     } finally {
       g.Translator = previous;
     }

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.16.24] - 2026-10-29
+
+**Released:** `@localmode/bench` 0.11.1.
+
+### Fixed
+
+- **ui:** on /bench/tasks only the first Translator pair is created in the Run click; each later pair gets its own `Create Translator <src>-<tgt> (<n> of <N>)` button, shown once the previous `create()` settled, because Chrome's `create()` of a `downloadable` pair consumes the user activation and the chained pairs failed with `NotAllowedError`.
+- **ui:** the timed task session starts only after every pre-created Translator pair's `create()` has settled.
+- **ui:** `window.__benchTasks.status()` reports `pendingTranslatorGesture` (`{ src, tgt, n, of }` or null) and `translatorCreates` (each pair's click and state).
+- **ui:** each pre-created Translator cell records `runtimeConfig.createClick` (`run` or `pair`), and `createdInRunClick` is true only for the pair the Run click created; a passed preflight records how many pair buttons were clicked.
+- **bench 0.11.1:** the `itemList.limitedTo` item count of a `pilot-sizing` session is checked per workload: cells that completed a workload must agree, an error cell counts its own items and is no longer a shape error, and the workloads must add up to `limitedTo.count`; before, one failed cell refused the whole export.
+
 ## [2.16.23] - 2026-10-28
 
 **Released:** `@localmode/bench` 0.11.0.

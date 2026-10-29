@@ -608,8 +608,10 @@ carries are not CC0).
   `subset` (`full | S | R | L | pilot`), `itemList { id, count, sha256 }`
   (SHA-256 over `<id>\t<text sha256>\n` per item; a `pilot-sizing` session
   that ran only the first `limit` items, or `perDirection` per direction,
-  adds `limitedTo { count, sha256, limit | perDirection }` and every arm runs
-  exactly that many items), 1-based `sessionIndex`,
+  adds `limitedTo { count, sha256, limit | perDirection }`; per workload, every
+  cell that completed it ran the same number of items, an error cell counts
+  its own items (0 when it failed at load) and is data, not a shape error, and
+  the workloads add up to `limitedTo.count`), 1-based `sessionIndex`,
   `order`, `systemOrder` (arm ids `<runtimeId>/<systemId>`), `processCold`,
   `repeat` (R only) and `driver` (`TaskDriverRecord`: launch, profile id,
   `chrome://version`, `chrome://components` and `chrome://on-device-internals`

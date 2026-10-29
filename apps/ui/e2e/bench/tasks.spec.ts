@@ -243,7 +243,11 @@ async function runSession(
     const status = await page.evaluate(() => window.__benchTasks!.status());
     if (status.phase === 'done') break;
     if (status.phase === 'failed' || status.phase === 'refused') throw new Error(`session ${status.phase}: ${status.message}`);
-    if (status.phase === 'awaiting-download-click') {
+    if (status.pendingTranslatorGesture) {
+      // As the driver does: one real click per later Translator pair, each starting that pair's create().
+      const g = status.pendingTranslatorGesture;
+      await page.getByRole('button', { name: `Create Translator ${g.src}-${g.tgt} (${g.n} of ${g.of})` }).click();
+    } else if (status.phase === 'awaiting-download-click') {
       await page.getByRole('button', { name: /^Start download:/ }).click();
     } else if (status.phase === 'awaiting-finalize') {
       const end = await captures();
@@ -467,7 +471,11 @@ test.describe('/bench/tasks in an installed Chrome', () => {
           expect(cell.task!.availabilityBefore).toBeTruthy();
           if (cell.model.benchModelId === 'chrome-translator') {
             // Created in the Run click because chrome://components lists the pack; both readings kept.
-            expect(cell.runtimeConfig).toMatchObject({ createdInRunClick: true, packInComponents: expect.stringMatching(/^Chrome TranslateKit de-en /) });
+            expect(cell.runtimeConfig).toMatchObject({ packInComponents: expect.stringMatching(/^Chrome TranslateKit de-en /) });
+            // The first pair from the Run click, the second from its own button; only the first is createdInRunClick.
+            const first = cell.runtimeConfig!.createOrder === 1;
+            expect(cell.runtimeConfig).toMatchObject({ createClick: first ? 'run' : 'pair', createdInRunClick: first });
+            expect(cell.runtimeConfig!.activationAtCreate).toBe(true);
             expect(['available', 'downloadable']).toContain(cell.task!.availabilityAtCreate);
             if (cell.task!.availabilityAtCreate === 'downloadable') {
               translatorDownloadableAtCreate.push(cell.cellId);

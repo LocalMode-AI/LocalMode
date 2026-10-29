@@ -521,30 +521,49 @@ export function taskCellOrderError(
 
 /**
  * The problem with the item count of a limited (`pilot-sizing`) run, or
- * undefined: every arm that loaded ran exactly `itemList.limitedTo.count`
- * items over its cells (an arm whose every cell errored before any item is
- * not counted).
+ * undefined. Counted per workload (one translation direction, or the whole
+ * list): every cell that completed a workload (status not `error`) ran the
+ * same number of items, which is that workload's count; an error cell counts
+ * its own items (0 when it failed at load) and may not exceed that count, so
+ * a cell that failed is data, never a shape error. The workloads' counts add
+ * up to `itemList.limitedTo.count`, or stay within it while some workload has
+ * only error cells (its count is then unknown).
  *
  * @param cells - The run's cells (shape-checked).
  * @param limitedTo - `harness.control.tasks.itemList.limitedTo`.
  * @returns The error message, or undefined.
  */
 export function taskLimitError(
-  cells: ReadonlyArray<{ runtimeId?: unknown; model?: { benchModelId?: unknown }; status?: unknown; iterations?: unknown }>,
+  cells: ReadonlyArray<{ cellId?: unknown; workloadId?: unknown; status?: unknown; iterations?: unknown }>,
   limitedTo: { count?: unknown } | undefined,
 ): string | undefined {
   if (!limitedTo || typeof limitedTo.count !== 'number') return undefined;
-  const byArm = new Map<string, { items: number; ran: boolean }>();
+  const byWorkload = new Map<string, { completed?: { cellId: string; items: number }; errored: Array<{ cellId: string; items: number }> }>();
   for (const cell of cells) {
-    const arm = taskArmId(String(cell.runtimeId), String(cell.model?.benchModelId));
-    const entry = byArm.get(arm) ?? { items: 0, ran: false };
-    const n = Array.isArray(cell.iterations) ? cell.iterations.length : 0;
-    entry.items += n;
-    entry.ran = entry.ran || cell.status !== 'error' || n > 0;
-    byArm.set(arm, entry);
+    const workload = String(cell.workloadId);
+    const entry = byWorkload.get(workload) ?? { errored: [] };
+    const items = Array.isArray(cell.iterations) ? cell.iterations.length : 0;
+    const cellId = String(cell.cellId);
+    if (cell.status === 'error') entry.errored.push({ cellId, items });
+    else if (!entry.completed) entry.completed = { cellId, items };
+    else if (entry.completed.items !== items) {
+      return `cells of workload ${workload} ran different item counts without an error: ${entry.completed.cellId} ran ${entry.completed.items}, ${cellId} ran ${items}`;
+    }
+    byWorkload.set(workload, entry);
   }
-  for (const [arm, { items, ran }] of byArm) {
-    if (ran && items !== limitedTo.count) return `arm ${arm} ran ${items} items; itemList.limitedTo.count is ${limitedTo.count}`;
+  let total = 0;
+  let unknown = false;
+  for (const { completed, errored } of byWorkload.values()) {
+    if (!completed) {
+      unknown = true;
+      continue;
+    }
+    total += completed.items;
+    const over = errored.find((e) => e.items > completed.items);
+    if (over) return `error cell ${over.cellId} ran ${over.items} items, more than the ${completed.items} of its workload`;
+  }
+  if (unknown ? total > limitedTo.count : total !== limitedTo.count) {
+    return `the workloads ran ${total} items; itemList.limitedTo.count is ${limitedTo.count}`;
   }
   return undefined;
 }

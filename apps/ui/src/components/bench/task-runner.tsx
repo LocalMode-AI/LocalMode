@@ -33,7 +33,15 @@ import {
   type TaskSessionPlan,
   type PlannedTaskCell,
 } from '@/lib/bench/tasks';
-import { chromeAvailability, precreateTranslators, taskAdapterFor, type PrecreatedTranslator } from '@/lib/bench/task-adapters';
+import {
+  chromeAvailability,
+  precreateTranslators,
+  taskAdapterFor,
+  type PrecreatedTranslator,
+  type TranslatorCreateState,
+  type TranslatorGesture,
+  type TranslatorPrecreation,
+} from '@/lib/bench/task-adapters';
 import { benchBuildCommit, benchHarnessVersion, benchRuntimeVersions } from '@/lib/bench/runtime-versions';
 import { triggerTextDownload } from '@/lib/bench/download';
 
@@ -54,6 +62,10 @@ interface BenchTasksStatus {
   itemsPlanned?: number;
   runId?: string;
   downloadCell?: string;
+  /** The Translator pair whose `create()` waits for its own click before the timed session starts, or null. */
+  pendingTranslatorGesture: TranslatorGesture | null;
+  /** Every Translator pair created from a click before the session, with its state (empty when none). */
+  translatorCreates: TranslatorCreateState[];
 }
 
 interface BenchTasksApi {
@@ -77,14 +89,17 @@ declare global {
  * also passes when it reads `downloadable` while the driver's
  * `chrome://components` record lists its pack: Chrome keeps an installed pack
  * `downloadable` in a new process until a clicked `create()`, which the Run
- * click has started), and the pinned Chrome build when one is set.
+ * click or the pair's own button has started), and the pinned Chrome build
+ * when one is set. The detail records how many pair buttons were clicked.
  */
 async function preflight(
   request: TaskRequest,
   plan: TaskSessionPlan,
   precreated: ReadonlyMap<string, PrecreatedTranslator>,
+  gestureClicks: number,
 ): Promise<{ ok: boolean; detail: string }> {
   const readings: string[] = [];
+  if (precreated.size > 1) readings.push(`translator pair clicks ${gestureClicks} of ${precreated.size - 1}`);
   if (request.chromeBuild) {
     const uaData = (navigator as { userAgentData?: { getHighEntropyValues(h: string[]): Promise<{ fullVersionList?: Array<{ brand: string; version: string }> }> } }).userAgentData;
     const list = (await uaData?.getHighEntropyValues(['fullVersionList']))?.fullVersionList ?? [];
@@ -115,7 +130,7 @@ async function preflight(
   for (const check of checks) {
     let state = await check.probe();
     if (state === 'downloadable' && check.installed) {
-      readings.push(`${check.label} downloadable, pack installed (${check.installed}); created in the Run click`);
+      readings.push(`${check.label} downloadable, pack installed (${check.installed}); created in a click`);
       continue;
     }
     while (state !== 'available' && (state === 'downloadable' || state === 'timeout') && performance.now() < deadline) {
@@ -156,7 +171,14 @@ export function TaskRunner() {
   const [request, setRequest] = useState<TaskRequest | null>(null);
   const [plan, setPlan] = useState<TaskSessionPlan | null>(null);
   const [items, setItems] = useState<TaskItem[]>([]);
-  const [status, setStatus] = useState<BenchTasksStatus>({ version: TASK_PAGE_VERSION, phase: 'loading-items', itemsDone: 0, itemsTotal: 0 });
+  const [status, setStatus] = useState<BenchTasksStatus>({
+    version: TASK_PAGE_VERSION,
+    phase: 'loading-items',
+    itemsDone: 0,
+    itemsTotal: 0,
+    pendingTranslatorGesture: null,
+    translatorCreates: [],
+  });
   const [result, setResult] = useState<BenchRunResult | null>(null);
   const statusRef = useRef(status);
   const resultRef = useRef<BenchRunResult | null>(null);
@@ -165,6 +187,7 @@ export function TaskRunner() {
   const finalizeResolve = useRef<((c: TaskFinalizeCaptures) => void) | null>(null);
   const downloadClick = useRef<(() => void) | null>(null);
   const limitedToRef = useRef<Awaited<ReturnType<typeof limitedToRecord>>>(undefined);
+  const precreationRef = useRef<TranslatorPrecreation | null>(null);
 
   const update = useCallback((patch: Partial<BenchTasksStatus>) => {
     statusRef.current = { ...statusRef.current, ...patch };
@@ -223,8 +246,9 @@ export function TaskRunner() {
 
   const run = useCallback(async () => {
     if (!request || !plan) return;
-    // Synchronously, inside the click's user activation: start create() for every Translator pair whose
-    // pack the driver's chrome://components record lists, so a new Chrome process can use it.
+    // Synchronously, inside the click's user activation: start create() for the first Translator pair whose
+    // pack the driver's chrome://components record lists, so a new Chrome process can use it. A create() of a
+    // `downloadable` pair consumes the activation, so each later pair waits for a click on its own button.
     const parsed = driverStartRef.current?.components.start.parsed;
     const pairs =
       request.phase === 'download'
@@ -233,9 +257,15 @@ export function TaskRunner() {
             .filter((c) => c.model.runtimeId === 'chrome-ai' && c.model.benchModelId === 'chrome-translator' && c.direction)
             .map((c) => ({ src: c.direction!.src, tgt: c.direction!.tgt, pack: translatorPackInComponents(parsed, c.direction!.src, c.direction!.tgt) }))
             .filter((p): p is { src: string; tgt: string; pack: string } => p.pack !== undefined);
-    const precreated = precreateTranslators(pairs);
-    update({ phase: 'running', message: undefined, itemsDone: 0 });
+    const precreation: TranslatorPrecreation = precreateTranslators(pairs, () =>
+      update({ pendingTranslatorGesture: precreation.pending(), translatorCreates: precreation.creates() }),
+    );
+    precreationRef.current = precreation;
+    const precreated = precreation.byPair;
+    update({ phase: 'running', message: undefined, itemsDone: 0, translatorCreates: precreation.creates() });
     try {
+      // With more than one pair, every pair's create() (each from its own click) settles before the timed session starts.
+      if (precreated.size > 1) await precreation.settled;
       const adapters = new Map<string, TaskSystemAdapter>();
       for (const arm of plan.systemOrder) adapters.set(arm, taskAdapterFor(arm, request.list.set, precreated));
       const params = new URLSearchParams(window.location.search);
@@ -265,7 +295,7 @@ export function TaskRunner() {
         harness,
         cells: plan.cells,
         adapters,
-        preflight: () => preflight(request, plan, precreated),
+        preflight: () => preflight(request, plan, precreated, precreation.gestureClicks()),
         beforeLoad:
           request.phase === 'download'
             ? (cell) =>
@@ -337,7 +367,10 @@ export function TaskRunner() {
       <p role="status" className="text-sm">
         {status.phase === 'loading-items' && 'Loading the item list from the local item server...'}
         {status.phase === 'ready' && `Ready: ${status.itemsTotal} items, ${status.itemsPlanned ?? 0} item calls. Nothing has loaded yet.`}
-        {status.phase === 'running' && `Running ${status.cell ?? ''} (${status.itemsDone}/${status.itemsPlanned ?? 0} item calls)`}
+        {status.phase === 'running' &&
+          (status.pendingTranslatorGesture
+            ? `Waiting for the click that creates Translator ${status.pendingTranslatorGesture.src}-${status.pendingTranslatorGesture.tgt}`
+            : `Running ${status.cell ?? ''} (${status.itemsDone}/${status.itemsPlanned ?? 0} item calls)`)}
         {status.phase === 'awaiting-download-click' && `Waiting for the download click: ${status.downloadCell}`}
         {status.phase === 'awaiting-finalize' && 'Waiting for the driver end captures'}
         {status.phase === 'done' && `Done: run ${status.runId}`}
@@ -352,6 +385,15 @@ export function TaskRunner() {
         >
           Run task session
         </button>
+        {status.pendingTranslatorGesture && (
+          <button
+            type="button"
+            onClick={() => precreationRef.current?.startPending()}
+            className="rounded-md border border-border px-4 py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {`Create Translator ${status.pendingTranslatorGesture.src}-${status.pendingTranslatorGesture.tgt} (${status.pendingTranslatorGesture.n} of ${status.pendingTranslatorGesture.of})`}
+          </button>
+        )}
         {status.phase === 'awaiting-download-click' && (
           <button
             type="button"

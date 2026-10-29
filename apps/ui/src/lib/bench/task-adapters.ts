@@ -238,23 +238,27 @@ interface ChromeTranslatorSession extends ChromeStreamingSession {
 }
 
 /**
- * A Translator `create()` started from the Run click, before the session
- * reached the pair's cell: Chrome keeps an installed pack `downloadable` in a
- * new process until a `create()` under a user activation, so each pair whose
- * pack `chrome://components` lists is created from the click, and the cell's
- * load step adopts it. Pairs are created one at a time in the plan's order,
- * so each `create()` span is that pair's own; the first one also carries the
- * translation service's start in the process.
+ * A Translator `create()` started from a click before the session reached
+ * the pair's cell: Chrome keeps an installed pack `downloadable` in a new
+ * process until a `create()` under a user activation, and a `create()` of a
+ * `downloadable` pair consumes that activation, so each pair whose pack
+ * `chrome://components` lists is created from a click of its own (the first
+ * from the Run click, each later one from its "Create Translator" button),
+ * and the cell's load step adopts it. Pairs are created one at a time in the
+ * plan's order, so each `create()` span is that pair's own; the first one
+ * also carries the translation service's start in the process.
  */
 export interface PrecreatedTranslator {
-  /** 1-based position in the creation chain. */
+  /** 1-based position in the creation order. */
   order: number;
+  /** The click that started this pair's `create()`: the Run click, or the pair's own button. */
+  click: 'run' | 'pair';
   /** The `availability()` reading taken right before this pair's `create()`. */
   availability: Promise<string>;
-  /** Whether the page still held the user activation when this pair's `create()` was called. */
+  /** Whether the page held a user activation when this pair's `create()` was called. */
   activationAtCreate: Promise<boolean>;
   session: Promise<ChromeTranslatorSession>;
-  /** When this pair's `create()` was called (after the previous pair's settled). */
+  /** When this pair's `create()` was called (in its click, after the previous pair's settled). */
   startT: Promise<number>;
   /** When it settled. */
   endT: Promise<number>;
@@ -263,60 +267,155 @@ export interface PrecreatedTranslator {
   pack: string;
 }
 
+/** A pair whose `create()` waits for its own click: `n` of `of` in the creation order. */
+export interface TranslatorGesture {
+  src: string;
+  tgt: string;
+  n: number;
+  of: number;
+}
+
+/** One pair's `create()` as the page reports it: waiting for its click, started, or settled. */
+export interface TranslatorCreateState extends TranslatorGesture {
+  click: 'run' | 'pair';
+  state: 'waiting' | 'started' | 'created' | 'failed';
+  /** `<name>: <message>` of a rejected `create()`. */
+  error?: string;
+  /** From the `create()` call to its settling. */
+  createMs?: number;
+}
+
+/** The Translator creations of a session, started one click per pair. */
+export interface TranslatorPrecreation {
+  /** The creations by `src-tgt`; a later pair's promises settle after its click. */
+  byPair: Map<string, PrecreatedTranslator>;
+  /** The pair waiting for its click, or null (none left, or the previous `create()` has not settled). */
+  pending(): TranslatorGesture | null;
+  /** Start the waiting pair's `create()` synchronously; call it inside that pair's click handler. False when no pair waits. */
+  startPending(): boolean;
+  /** Clicks used after the Run click (one per pair started from its own button). */
+  gestureClicks(): number;
+  /** Every pair's `create()` state, in the creation order. */
+  creates(): TranslatorCreateState[];
+  /** Settles when every pair's `create()` has settled. */
+  settled: Promise<void>;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
 /**
- * Create each translation pair whose pack is installed, one after another,
- * starting from a click handler: the first pair's `availability()` and
- * `create()` are called synchronously (inside the user activation), each
- * later pair's as soon as the one before it settled.
+ * Create each translation pair whose pack is installed, one click per pair:
+ * the first pair's `availability()` and `create()` are called synchronously
+ * here (inside the Run click's user activation); once a pair's `create()`
+ * settled (resolved or rejected), the next pair waits in `pending()` until
+ * `startPending()` is called from its own click.
  *
  * @param pairs - The pairs in the plan's order, with the component entry that lists each pack.
- * @returns The creations by `src-tgt`.
+ * @param onChange - Called whenever `pending()` or `creates()` changes.
+ * @returns The creations and the click state.
  */
-export function precreateTranslators(pairs: ReadonlyArray<{ src: string; tgt: string; pack: string }>): Map<string, PrecreatedTranslator> {
-  const out = new Map<string, PrecreatedTranslator>();
+export function precreateTranslators(
+  pairs: ReadonlyArray<{ src: string; tgt: string; pack: string }>,
+  onChange?: () => void,
+): TranslatorPrecreation {
+  const byPair = new Map<string, PrecreatedTranslator>();
   const factory = chromeGlobal<ChromeTranslatorSession>('Translator');
-  if (!factory) return out;
+  if (!factory || pairs.length === 0) {
+    return { byPair, pending: () => null, startPending: () => false, gestureClicks: () => 0, creates: () => [], settled: Promise.resolve() };
+  }
+  const states: TranslatorCreateState[] = pairs.map(({ src, tgt }, i) => ({ src, tgt, n: i + 1, of: pairs.length, click: i === 0 ? 'run' : 'pair', state: 'waiting' }));
   const activation = () => (navigator as { userActivation?: { isActive?: boolean } }).userActivation?.isActive === true;
-  let previous: Promise<unknown> | undefined;
+  const starters: Array<() => void> = [];
+  const ends: Array<Promise<number>> = [];
   pairs.forEach(({ src, tgt, pack }, index) => {
     const options = { sourceLanguage: src, targetLanguage: tgt };
     const events: PrecreatedTranslator['events'] = [];
-    const start = () => {
-      const availability = factory.availability(options).catch((e: unknown) => `error:${(e as Error)?.name ?? 'Error'}`.slice(0, 32));
-      const active = activation();
-      const startT = performance.now();
-      const session = factory.create({
-        ...options,
-        monitor: (m: ChromeMonitorTarget) =>
-          m.addEventListener('downloadprogress', (e) => events.push({ t: performance.now(), loaded: e.loaded ?? 0, total: e.total ?? 0 })),
-      });
-      return { availability, active, startT, session };
+    const availability = deferred<string>();
+    const active = deferred<boolean>();
+    const startT = deferred<number>();
+    const session = deferred<ChromeTranslatorSession>();
+    let calledAt = 0;
+    starters.push(() => {
+      states[index].state = 'started';
+      availability.resolve(factory.availability(options).catch((e: unknown) => `error:${(e as Error)?.name ?? 'Error'}`.slice(0, 32)));
+      active.resolve(activation());
+      calledAt = performance.now();
+      startT.resolve(calledAt);
+      let created: Promise<ChromeTranslatorSession>;
+      try {
+        created = factory.create({
+          ...options,
+          monitor: (m: ChromeMonitorTarget) =>
+            m.addEventListener('downloadprogress', (e) => events.push({ t: performance.now(), loaded: e.loaded ?? 0, total: e.total ?? 0 })),
+        });
+      } catch (error) {
+        created = Promise.reject(error);
+      }
+      session.resolve(created);
+    });
+    const settle = (error?: unknown) => {
+      const t = performance.now();
+      const entry = states[index];
+      entry.state = error === undefined ? 'created' : 'failed';
+      if (error !== undefined) entry.error = `${(error as Error)?.name ?? 'Error'}: ${(error as Error)?.message ?? String(error)}`.slice(0, 300);
+      entry.createMs = t - calledAt;
+      return t;
     };
-    const started = previous === undefined ? Promise.resolve(start()) : previous.then(start, start);
-    const session = started.then((s) => s.session);
-    const endT = session.then(
-      () => performance.now(),
-      () => performance.now(),
+    const endT = session.promise.then(
+      () => settle(),
+      (error: unknown) => settle(error ?? new Error('create() rejected')),
     );
-    previous = endT;
-    out.set(`${src}-${tgt}`, {
+    ends.push(endT);
+    byPair.set(`${src}-${tgt}`, {
       order: index + 1,
-      availability: started.then((s) => s.availability),
-      activationAtCreate: started.then((s) => s.active),
-      session,
-      startT: started.then((s) => s.startT),
+      click: index === 0 ? 'run' : 'pair',
+      availability: availability.promise,
+      activationAtCreate: active.promise,
+      session: session.promise,
+      startT: startT.promise,
       endT,
       events,
       pack,
     });
   });
-  return out;
+  let waiting: number | null = null;
+  let clicks = 0;
+  const describe = (i: number): TranslatorGesture => ({ src: pairs[i].src, tgt: pairs[i].tgt, n: i + 1, of: pairs.length });
+  ends.forEach((end, i) => {
+    void end.then(() => {
+      if (i + 1 < pairs.length) waiting = i + 1;
+      onChange?.();
+    });
+  });
+  starters[0]();
+  return {
+    byPair,
+    pending: () => (waiting === null ? null : describe(waiting)),
+    startPending: () => {
+      if (waiting === null) return false;
+      const i = waiting;
+      waiting = null;
+      clicks += 1;
+      starters[i]();
+      onChange?.();
+      return true;
+    },
+    gestureClicks: () => clicks,
+    creates: () => states.map((c) => ({ ...c })),
+    settled: Promise.all(ends).then(() => undefined),
+  };
 }
 
 /**
  * Chrome's built-in Translator, one pair per cell, streamed with
- * `translateStreaming()`. A pair created in the Run click (see
- * `precreateTranslators`) is adopted, its `create()` span recorded as the
+ * `translateStreaming()`. A pair created from a click before the session
+ * (see `precreateTranslators`) is adopted, its `create()` span recorded as the
  * load; any other pair is created in the load step.
  */
 export function chromeTranslatorAdapter(precreated: ReadonlyMap<string, PrecreatedTranslator> = new Map()): TaskSystemAdapter {
@@ -361,6 +460,8 @@ export function chromeTranslatorAdapter(precreated: ReadonlyMap<string, Precreat
         events = dl.events;
       }
       const downloaded = createDownloads(atCreate);
+      // Created from a click before the timed cells (the Run click or the pair's own button).
+      const createdBeforeCells = Boolean(early);
       const quota = quotaOf(session);
       return {
         api: 'Translator',
@@ -368,12 +469,12 @@ export function chromeTranslatorAdapter(precreated: ReadonlyMap<string, Precreat
         runtimeVersion: chromeVersion(),
         runtimeConfig: {
           langPair: key,
-          createdInRunClick: Boolean(early),
-          ...(early ? { packInComponents: early.pack, createOrder: early.order } : {}),
+          createdInRunClick: early?.click === 'run',
+          ...(early ? { packInComponents: early.pack, createOrder: early.order, createClick: early.click } : {}),
           ...(activationAtCreate !== undefined ? { activationAtCreate } : {}),
           ...(quota.raw ? { inputQuotaRaw: quota.raw } : {}),
         },
-        cached: !downloaded || Boolean(early),
+        cached: !downloaded || createdBeforeCells,
         availabilityAtCreate: atCreate,
         inputQuota: quota.inputQuota,
         ...(span ? { loadSpan: span } : {}),
